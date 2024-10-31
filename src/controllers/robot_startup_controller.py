@@ -11,7 +11,7 @@ from utils import math_utils, network_manager
 from generated_code.ssl_simulation_robot_control_pb2 import RobotControl
 
 class StartUpController:
-    def __init__(self, vision_receiver: VisionDataReceiver, address=LOCAL_HOST, port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT)):
+    def __init__(self, vision_receiver: VisionDataReceiver, address=LOCAL_HOST, port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT), debug=False):
         self.vision_receiver = vision_receiver
         
         self.net = network_manager.NetworkManager(address=(address, port[0]))
@@ -21,7 +21,9 @@ class StartUpController:
         self.pid_oren = PID(0.0167, 8, -8, 5, 0.01, 0, num_robots=6)
         self.pid_trans = PID(0.0167, 1.5, -1.5, 5, 0.01, 0, num_robots=6)
 
-        self.lock = threading.Lock()  
+        self.lock = threading.Lock() 
+        
+        self.debug = debug 
 
     def startup(self):
         while True:
@@ -37,7 +39,9 @@ class StartUpController:
                     target_coords = YELLOW_START[robot_id]
                     command = self._calculate_robot_velocities(robot_id, target_coords, robots, balls, face_ball=True)
                     self._add_robot_command(out_packet, command)
-                    
+                
+                if self.debug:
+                    print(out_packet)   
                 self.net.send_command(out_packet)
                 
             time_to_sleep = max(0, 0.0167 - (time.time() - start_time))
@@ -52,7 +56,7 @@ class StartUpController:
     
     def _calculate_robot_velocities(
             self, robot_id: int, target_coords: Tuple[float, float] | Tuple[float, float, float],
-            robot_coords: Optional[Tuple[float, float, float]], ball_coords: Tuple[float, float, float], face_ball=False
+            robots: Dict[int, Optional[Tuple[float, float, float]]], balls: Dict[int, Tuple[float, float, float]], face_ball=False
         ) -> Dict[str, float]:
         """
         Calculates the linear and angular velocities required for a robot to move towards a specified target position
@@ -63,9 +67,9 @@ class StartUpController:
             target_coords (Tuple[float, float] | Tuple[float, float, float]): Target coordinates the robot should move towards.
                 Can be a (x, y) or (x, y, orientation) tuple. If `face_ball` is True, the robot will face the ball instead of 
                 using the orientation value in target_coords.
-            robot_coords (Optional[Tuple[float, float, float]]): Current coordinates of the robot as a tuple (x, y, orientation).
-            ball_coords (Optional[Tuple[float, float, float]]): Coordinates of the ball, typically (x, y, orientation).
-            face_ball (bool, optional): If True, the robot will orient itself to face the ball's position. Defaults to False.
+robots (Dict[int, Optional[Tuple[float, float, float]]]): All the Current coordinates of the robots sepateated 
+                by thier robot_id which containts a tuple (x, y, orientation).
+            balls (Dict[int, Tuple[float, float, float]]): All the Coordinates of the detected balls (int) , typically (x, y, z/height in 3D space).            face_ball (bool, optional): If True, the robot will orient itself to face the ball's position. Defaults to False.
 
         Returns:
             Dict[str, float]: A dictionary containing the following velocity components:
@@ -82,8 +86,9 @@ class StartUpController:
         out = {"id": robot_id, "xvel": 0, "yvel": 0, "wvel": 0}
 
         # Get current positions
-        ball_x, ball_y = ball_coords[0]
-        current_x, current_y, current_oren = robot_coords
+        if balls[0] and robots[robot_id]:
+            ball_x, ball_y, ball_z = balls[0]
+            current_x, current_y, current_oren = robots[robot_id]
         
         target_x, target_y = target_coords[:2]
         

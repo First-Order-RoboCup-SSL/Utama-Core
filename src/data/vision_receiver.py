@@ -18,7 +18,7 @@ class VisionDataReceiver:
         ip (str): The IP address for receiving multicast vision data. Defaults to MULTICAST_GROUP.
         port (int): The port for receiving vision data. Defaults to VISION_PORT.
     """
-    def __init__(self, ip = MULTICAST_GROUP, port = VISION_PORT):
+    def __init__(self, ip = MULTICAST_GROUP, port = VISION_PORT, debug=False):
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
         
         self.ball_dict: Dict[int, List[float]] = {}
@@ -26,6 +26,7 @@ class VisionDataReceiver:
         self.robot_blue_dict: Dict[int, Optional[List[float]]] = {i: None for i in range(NUM_ROBOTS)}
         
         self.lock = threading.Lock()
+        self.debug = debug
     
     def _update_data(self, detection: object) -> None:
         # Update both ball and robot data incrementally.
@@ -93,7 +94,7 @@ class VisionDataReceiver:
         with self.lock:
             return self.ball_dict
         
-    def get_game_data(self, debug: bool=False) -> None:
+    def get_game_data(self) -> None:
         """
         Continuously receives vision data packets and updates the internal data structures for the game state.
         
@@ -107,6 +108,6 @@ class VisionDataReceiver:
                     vision_packet.Clear()  # Clear previous data to avoid memory bloat
                     vision_packet.ParseFromString(data)
                     self._update_data(vision_packet.detection)
-            if debug:
+            if self.debug:
                 print(f"Robots: {self.get_robot_dict(True)}\n")
             time.sleep(0.0083)  

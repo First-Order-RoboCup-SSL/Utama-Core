@@ -9,8 +9,8 @@ sys.path.insert(0, project_root)
 from data.vision_receiver import VisionDataReceiver
 
 if __name__ == "__main__":
-    game_data = VisionDataReceiver()
+    game_data = VisionDataReceiver(debug=True)
     try:
-        game_data.get_game_data(debug=True)
+        game_data.get_game_data()
     except KeyboardInterrupt:
         print("Exiting...")
