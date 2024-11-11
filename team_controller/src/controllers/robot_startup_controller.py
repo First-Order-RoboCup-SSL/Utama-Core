@@ -3,10 +3,11 @@ import threading
 import numpy as np
 from typing import Tuple, Optional, Dict, List, Union
 
+from global_utils.math_utils import rotate_vector
 from data.vision_receiver import VisionDataReceiver
 from pid.pid import PID
 from config.settings import PID_PARAMS, LOCAL_HOST, YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT, YELLOW_START
-from utils import math_utils, network_manager
+from utils import network_manager
 
 from generated_code.ssl_simulation_robot_control_pb2 import RobotControl
 
@@ -109,7 +110,7 @@ robots (Dict[int, Optional[Tuple[float, float, float]]]): All the Current coordi
             out["yvel"] = self.pid_trans.calculate(target_y, current_y, robot_id, normalize_range=3000)
             out["xvel"] = self.pid_trans.calculate(target_x, current_x, robot_id, normalize_range=4500)
 
-            out["xvel"], out["yvel"] = math_utils.rotate_vector(out["xvel"], out["yvel"], current_oren)
+            out["xvel"], out["yvel"] = rotate_vector(out["xvel"], out["yvel"], current_oren)
 
         return out
     
