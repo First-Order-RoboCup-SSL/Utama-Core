@@ -1,7 +1,7 @@
 import time
 import threading
 import numpy as np
-from typing import Tuple, Optional, Dict, List
+from typing import Tuple, Optional, Dict, List, Union
 
 from data.vision_receiver import VisionDataReceiver
 from pid.pid import PID
@@ -55,7 +55,7 @@ class StartUpController:
         return robots, balls
     
     def _calculate_robot_velocities(
-            self, robot_id: int, target_coords: Tuple[float, float] | Tuple[float, float, float],
+            self, robot_id: int, target_coords: Union[Tuple[float, float], Tuple[float, float, float]],
             robots: Dict[int, Optional[Tuple[float, float, float]]], balls: Dict[int, Tuple[float, float, float]], face_ball=False
         ) -> Dict[str, float]:
         """
