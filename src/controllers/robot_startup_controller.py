@@ -10,6 +10,8 @@ from utils import math_utils, network_manager
 
 from generated_code.ssl_simulation_robot_control_pb2 import RobotControl
 
+# TODO: To be moved to a High-level Descision making repo
+
 class StartUpController:
     def __init__(self, vision_receiver: VisionDataReceiver, address=LOCAL_HOST, port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT), debug=False):
         self.vision_receiver = vision_receiver
