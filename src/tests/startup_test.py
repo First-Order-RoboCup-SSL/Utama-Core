@@ -11,7 +11,7 @@ from data.vision_receiver import VisionDataReceiver
 from controllers.robot_startup_controller import StartUpController
 
 if __name__ == "__main__":
-    vision_receiver = VisionDataReceiver(debug=False)
+    vision_receiver = VisionDataReceiver(debug=True)
     decision_maker = StartUpController(vision_receiver, debug=False)
 
     vision_thread = threading.Thread(target=vision_receiver.get_game_data)
