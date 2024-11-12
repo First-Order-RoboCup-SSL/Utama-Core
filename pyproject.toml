@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Utama"
+version = "1.0.0"
+description = "Imperial RoboCup SSL 25 Software Algorithms Codebase."
+readme = "README.md"
+authors = [
+    { name = "Joel Ng", email = "zhi-ming.ng22@imperial.ac.uk" },
+    { name = "Fred Huang", email = "fred.huang23@imperial.ac.uk" }
+]
+
+dependencies = [
+    "numpy == 2.0.2",
+    "gymnasium == 1.0.0",
+    "pygame == 2.6.1",
+    "protobuf == 3.20.2"
+]
+requires-python = ">=3.9"
+
+[tool.setuptools]
+py-modules = []
