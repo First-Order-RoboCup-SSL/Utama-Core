@@ -10,7 +10,7 @@ For this repository to be fully implemented, you should run GrSim, SSL_Game_Cont
 > Note: GrSim Defaults to broadcasting vision data from the wrong port (we want 10006) and defaults to DivA.
 # Data flow
 This is the data flow diagram of what will be received and sent by the Team Controller:
-![Dataflow Diagram](https://github.com/ICRS-RoboCup-SSL/Team_Controller/blob/main/docs/SSL_dataflow%20diagram.jpg)
+![Dataflow Diagram](https://github.com/ICRS-RoboCup-SSL/Utama/blob/main/team_controller/docs/SSL_dataflow%20diagram.jpg)
 From the image above the Vision and Referee are UDP multicast addresses and there is more information from the [SSL Robocup official page](https://ssl.robocup.org/league-software/#:~:text=Simulation%20Protocol.-,Standard%20Network%20Parameters,-Protocol)
 # Codebase
 This will provide an overview of the current repository and what each file will do.
