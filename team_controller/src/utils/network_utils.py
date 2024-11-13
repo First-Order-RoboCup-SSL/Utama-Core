@@ -3,12 +3,17 @@ import struct
 import logging
 from typing import Optional, Any, Tuple
 
-from config.settings import MULTICAST_GROUP, LOCAL_HOST
+from team_controller.src.config.settings import MULTICAST_GROUP, LOCAL_HOST
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
-def setup_socket(sock: socket.socket, address: Tuple[str, int], bind_socket: bool = False) -> socket.socket:
+
+def setup_socket(
+    sock: socket.socket, address: Tuple[str, int], bind_socket: bool = False
+) -> socket.socket:
     """
     Configures a UDP socket with specified options, including multicast group settings if applicable.
 
@@ -19,11 +24,11 @@ def setup_socket(sock: socket.socket, address: Tuple[str, int], bind_socket: boo
 
     Returns:
         socket.socket: The configured socket.
-    
+
     Raises:
         socket.error: If socket configuration fails.
-    
-    This function sets up necessary socket options, binds the socket if required, and joins a multicast group if the 
+
+    This function sets up necessary socket options, binds the socket if required, and joins a multicast group if the
     address is not the local host. Additionally, a 1-second timeout is applied for non-blocking behavior.
     """
     try:
@@ -31,18 +36,23 @@ def setup_socket(sock: socket.socket, address: Tuple[str, int], bind_socket: boo
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8192)
         if bind_socket:
             sock.bind(address)
-            
+
         if address[0] != LOCAL_HOST:
             group = socket.inet_aton(MULTICAST_GROUP)
-            mreq = struct.pack('4sL', group, socket.INADDR_ANY)
+            mreq = struct.pack("4sL", group, socket.INADDR_ANY)
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-            
+
         sock.settimeout(1.0)  # Set timeout to 1 second
-        logging.info("Socket setup completed with address %s and bind_socket=%s", address, bind_socket)
+        logging.info(
+            "Socket setup completed with address %s and bind_socket=%s",
+            address,
+            bind_socket,
+        )
     except socket.error as e:
         logging.error("Socket setup failed for address %s with error: %s", address, e)
         raise  # Re-raise the exception to handle it further up if needed
     return sock
+
 
 def receive_data(sock: socket.socket) -> Optional[bytes]:
     """
@@ -50,10 +60,10 @@ def receive_data(sock: socket.socket) -> Optional[bytes]:
 
     Args:
         sock (socket.socket): The socket from which to receive data.
-    
+
     Returns:
         Optional[bytes]: The data received, or None if no data is received or if an error occurs.
-    
+
     This function attempts to receive up to 8192 bytes of data. If a timeout or socket error occurs, it logs a warning
     or error and returns None. Unexpected errors are logged with an exception.
     """
@@ -70,6 +80,7 @@ def receive_data(sock: socket.socket) -> Optional[bytes]:
         logging.exception("Unexpected error receiving data")
         return None
 
+
 def send_command(address: Tuple[str, int], command: object) -> None:
     """
     Sends a command to the specified address over a UDP socket.
@@ -77,9 +88,9 @@ def send_command(address: Tuple[str, int], command: object) -> None:
     Args:
         address (Tuple[str, int]): The destination IP address and port.
         command object: An object with in the form of a protocol buffer message to be serialized and sent.
-    
-    This function creates a temporary UDP socket, serializes the command, and sends it to the specified address. 
-    Errors during serialization or socket operations are logged, with specific handling if the `SerializeToString` 
+
+    This function creates a temporary UDP socket, serializes the command, and sends it to the specified address.
+    Errors during serialization or socket operations are logged, with specific handling if the `SerializeToString`
     method is missing.
     """
     try:

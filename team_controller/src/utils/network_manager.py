@@ -1,19 +1,23 @@
 import socket
 from typing import Tuple, Optional
-from utils import network_utils
+from team_controller.src.utils import network_utils
+
 
 class NetworkManager:
     """
     Manages network communication via a UDP socket for sending and receiving data.
-    
+
     Args:
         address (Tuple[str, int]): The IP address and port to connect or bind to.
         bind_socket (bool): If True, binds the socket to the specified address for receiving data.
     """
+
     def __init__(self, address: Tuple[str, int], bind_socket: bool = False):
         # Initialize the NetworkManager and set up the socket.
         self.address = address
-        self.sock = network_utils.setup_socket(socket.socket(socket.AF_INET, socket.SOCK_DGRAM), address, bind_socket)
+        self.sock = network_utils.setup_socket(
+            socket.socket(socket.AF_INET, socket.SOCK_DGRAM), address, bind_socket
+        )
 
     def send_command(self, command: object) -> None:
         """
@@ -21,24 +25,24 @@ class NetworkManager:
 
         Args:
             command object: An object with in the form of a protocol buffer message to be serialized and sent.
-        
+
         This method relies on a utility function for command transmission.
         """
         # Send a command to the server.
         network_utils.send_command(self.address, command)
-    
+
     def receive_data(self) -> Optional[bytes]:
         """
         Receives data from the server.
 
         Returns:
             Optional[bytes]: The received data as bytes if available, otherwise None.
-        
+
         This method listens for incoming data from the socket using a utility function.
         """
         # Receive data from the server.
         return network_utils.receive_data(self.sock)
-    
+
     def close(self) -> None:
         """
         Closes the socket connection safely.
