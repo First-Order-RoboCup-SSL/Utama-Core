@@ -1,11 +1,16 @@
 import threading
 import time
-from typing import Dict, Optional, Tuple, List
+from typing import Dict, Optional, Tuple, List, NamedTuple
+from collections import namedtuple
 
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT, NUM_ROBOTS
 
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
+
+Ball = namedtuple("Ball", ["x", "y", "z"])
+
+Robot = namedtuple("Robots", ["x", "y", "orientation"])
 
 
 class VisionDataReceiver:
@@ -22,13 +27,9 @@ class VisionDataReceiver:
     def __init__(self, ip=MULTICAST_GROUP, port=VISION_PORT, debug=False):
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
 
-        self.ball_dict: Dict[int, List[float]] = {}
-        self.robot_yellow_dict: Dict[int, Optional[List[float]]] = {
-            i: None for i in range(NUM_ROBOTS)
-        }
-        self.robot_blue_dict: Dict[int, Optional[List[float]]] = {
-            i: None for i in range(NUM_ROBOTS)
-        }
+        self.ball_dict: NamedTuple = None
+        self.robot_yellow_dict: List[NamedTuple] = [None] * 6
+        self.robot_blue_dict: List[NamedTuple] = [None] * 6
 
         self.lock = threading.Lock()
         self.debug = debug
@@ -40,7 +41,7 @@ class VisionDataReceiver:
 
     def _update_ball_dict(self, detection: object) -> None:
         for i, ball in enumerate(detection.balls):
-            self.ball_dict[i] = [ball.x, ball.y, ball.z if ball.HasField("z") else 0.0]
+            self.ball_dict = Ball(ball.x, ball.y, ball.z if ball.HasField("z") else 0.0)
 
     def _update_robot_dict(self, detection: object) -> None:
         # Update both yellow and blue robots from detection.
@@ -48,14 +49,18 @@ class VisionDataReceiver:
         self.__update_team_robot_dict(detection.robots_blue, self.robot_blue_dict)
 
     def __update_team_robot_dict(
-        self, robots: List[object], robot_dict: Dict[int, Optional[List[float]]]
+        self,
+        robots: List[object],
+        robot_dict: List[NamedTuple],
     ) -> None:
         # Generic method to update robot dictionaries for both teams.
-        for robot in robots:
-            pos = [robot.x, robot.y]
-            if robot.HasField("orientation"):
-                pos.append(robot.orientation)
-            robot_dict[robot.robot_id] = pos
+        for robot_id, robot in enumerate(robots):
+            robot_dict[robot_id] = Robot(
+                robot.x,
+                robot.y,
+                robot.orientation if robot.HasField("orientation") else 0,
+            )
+            # TODO: When do we not have orientation?
 
     def _print_frame_info(self, detection: object):
         # TODO: borken t_* values (time not synced with vision)
@@ -72,9 +77,8 @@ class VisionDataReceiver:
         #       f"{(t_now - detection.t_capture) * 1000.0:.3f}ms")
         return 0
 
-    def get_robot_dict(
-        self, is_yellow: bool
-    ) -> Dict[int, Optional[Tuple[float, float, float]]]:
+    def get_robot_dict(self, is_yellow: bool) -> List[NamedTuple]:
+        # ) -> Dict[int, Optional[Tuple[float, float, float]]]:
         """
         Retrieves the current position data for robots on the specified team from the vision data.
 
@@ -88,7 +92,8 @@ class VisionDataReceiver:
         with self.lock:
             return self.robot_yellow_dict if is_yellow else self.robot_blue_dict
 
-    def get_ball_dict(self) -> Dict[int, Optional[Tuple[float, float, float]]]:
+    # def get_ball_dict(self) -> Dict[int, Optional[Tuple[float, float, float]]]:
+    def get_ball_dict(self) -> NamedTuple:
         """
         Retrieves the current position data for the ball.
 
@@ -115,4 +120,5 @@ class VisionDataReceiver:
                     self._update_data(vision_packet.detection)
             if self.debug:
                 print(f"Robots: {self.get_robot_dict(True)}\n")
+                print(f"Ball: {self.get_ball_dict()}\n")
             time.sleep(0.0083)

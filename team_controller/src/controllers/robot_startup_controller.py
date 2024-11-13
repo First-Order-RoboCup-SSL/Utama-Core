@@ -51,7 +51,8 @@ class StartUpController:
 
             if robots and balls:
                 out_packet = RobotControl()
-                for robot_id, robot_data in robots.items():
+                for robot_id, robot_data in enumerate(robots):
+                    print(robot_id, robot_data)
                     if robot_data is None:
                         continue
                     target_coords = YELLOW_START[robot_id]
