@@ -5,7 +5,7 @@ from typing import Tuple, Optional, Dict, List, Union
 
 from global_utils.math_utils import rotate_vector
 from team_controller.src.data.vision_receiver import VisionDataReceiver
-from team_controller.src.pid.pid import PID
+from motion_planning.src.pid.pid import PID
 from team_controller.src.config.settings import (
     PID_PARAMS,
     LOCAL_HOST,
