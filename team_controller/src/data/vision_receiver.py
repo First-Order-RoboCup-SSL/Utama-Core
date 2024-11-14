@@ -1,6 +1,6 @@
 import threading
 import time
-from typing import Optional, Tuple, List, NamedTuple
+from typing import List, NamedTuple
 from collections import namedtuple
 
 from team_controller.src.utils import network_manager
@@ -9,7 +9,6 @@ from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT, NU
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
 
 Ball = namedtuple("Ball", ["x", "y", "z"])
-
 Robot = namedtuple("Robot", ["x", "y", "orientation"])
 
 
@@ -24,12 +23,19 @@ class VisionDataReceiver:
         port (int): The port for receiving vision data. Defaults to VISION_PORT.
     """
 
-    def __init__(self, ip=MULTICAST_GROUP, port=VISION_PORT, debug=False):
+    def __init__(
+        self,
+        ip=MULTICAST_GROUP,
+        port=VISION_PORT,
+        n_yellow_robots: int = 6,
+        n_blue_robots: int = 6,
+        debug=False,
+    ):
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
 
         self.ball_pos: List[Ball] = None
-        self.robots_yellow_pos: List[Robot] = [None] * 6
-        self.robots_blue_pos: List[Robot] = [None] * 6
+        self.robots_yellow_pos: List[Robot] = [None] * n_yellow_robots
+        self.robots_blue_pos: List[Robot] = [None] * n_blue_robots
 
         self.lock = threading.Lock()
         self.debug = debug
@@ -56,7 +62,7 @@ class VisionDataReceiver:
 
     def __update_team_robots_pos(
         self,
-        robots_data: [object],
+        robots_data: object,
         robots: List[NamedTuple],
     ) -> None:
         # Generic method to update robots for both teams.
@@ -69,7 +75,7 @@ class VisionDataReceiver:
             # TODO: When do we not have orientation?
 
     def _print_frame_info(self, detection: object):
-        # TODO: borken t_* values (time not synced with vision)
+        # TODO: broken t_* values (time not synced with vision)
 
         # t_now = time.time()
         # print(f"Time Now: {t_now:.3f}")
