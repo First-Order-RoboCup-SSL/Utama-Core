@@ -96,6 +96,7 @@ class VisionDataReceiver:
             Dict[int, Optional[Tuple[float, float, float]]]: A dictionary of all detected ball positions (x, y, z).
         """
         # Get the dictionary of ball positions.
+        print(self.ball_dict)
         with self.lock:
             return self.ball_dict
 

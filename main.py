@@ -8,13 +8,16 @@ if __name__ == "__main__":
     decision_maker = StartUpController(vision_receiver, debug=False)
 
     vision_thread = threading.Thread(target=vision_receiver.get_game_data)
-    command_thread = threading.Thread(target=decision_maker.startup)
+    # command_thread = threading.Thread(target=decision_maker.startup)
 
     vision_thread.start()
-    command_thread.start()
+    # command_thread.start()
 
     try:
         vision_thread.join()
-        command_thread.join()
+        robots = vision_thread.get_robot_dict(is_yellow=True)
+        balls = vision_thread.get_ball_dict()
+        print(balls)
+        # command_thread.join()
     except KeyboardInterrupt:
         print("Exiting...")
