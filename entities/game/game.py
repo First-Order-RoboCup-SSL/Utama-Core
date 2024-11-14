@@ -10,8 +10,9 @@ class Game:
 
     def __init__(self):
         self._field = Field()
-        self._current_state = None
         self._game_state_history = []
+        self._yellow_score = 0
+        self._blue_score = 0
 
     @property
     def field(self) -> Field:
@@ -19,11 +20,19 @@ class Game:
 
     @property
     def current_state(self) -> GameState:
-        return self._current_state
+        return self._game_state_history[-1] if self._game_state_history else None
 
     @property
     def game_state_history(self) -> list[GameState]:
         return self._game_state_history
+
+    @property
+    def yellow_score(self) -> int:
+        return self._yellow_score
+
+    @property
+    def blue_score(self) -> int:
+        return self._blue_score
 
     def add_state_from_vision(
         self,
@@ -38,5 +47,4 @@ class Game:
         self.update_state(new_state)
 
     def update_state(self, new_state: GameState) -> None:
-        self._game_state_history.append(self._current_state)
-        self._current_state = new_state
+        self._game_state_history.append(new_state)

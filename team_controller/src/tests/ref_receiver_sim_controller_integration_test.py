@@ -18,9 +18,9 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 print(project_root)
 sys.path.insert(0, project_root)
 
-from controllers.sim_controller import SimulatorController
-from data.referee_receiver import RefereeMessageReceiver
-from generated_code.ssl_gc_referee_message_pb2 import Referee
+from team_controller.src.controllers.sim_controller import SimulatorController
+from team_controller.src.data.referee_receiver import RefereeMessageReceiver
+from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Referee
 
 # Example usage:
 if __name__ == "__main__":

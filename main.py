@@ -30,11 +30,7 @@ def main():
                 game.add_state_from_vision(
                     time_received, robots_yellow_pos, robots_blue_pos, ball_pos
                 )
-                # print("Updated Ball Position:", ball_pos)
-                # print("Updated Yellow Robots Positions:", robots_yellow_pos)
-                # print("Updated Blue Robots Positions:", robots_blue_pos)
-                # print("Time Received:", time_received)
-                print(game.current_state.ts)
+                print(game.current_state.robots["yellow"][0].x)
             else:
                 print("No data update received within the timeout period.")
 
