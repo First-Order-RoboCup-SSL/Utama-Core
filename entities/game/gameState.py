@@ -1,5 +1,4 @@
-from entities.game.ball import Ball
-from entities.game.robot import Robot
+from entities.data.vision import RobotData, BallData
 
 
 # a single entry of game state at this time step
@@ -7,8 +6,8 @@ class GameState:
     def __init__(
         self,
         ts: float,
-        balls: list[Ball],
-        robots: dict[list[Robot]],
+        robots: dict[list[RobotData]],
+        balls: list[BallData],
     ):
         self._ts = ts
         self._balls = balls
@@ -19,9 +18,9 @@ class GameState:
         return self._ts
 
     @property
-    def balls(self) -> Ball:
+    def balls(self) -> list[BallData]:
         return self._balls
 
     @property
-    def robots(self) -> list:
+    def robots(self) -> dict[list[RobotData]]:
         return self._robots

@@ -1,5 +1,6 @@
 from entities.game.field import Field
 from entities.game.gameState import GameState
+from entities.data.vision import RobotData, BallData
 
 
 class Game:
@@ -24,6 +25,18 @@ class Game:
     def game_state_history(self) -> list[GameState]:
         return self._game_state_history
 
-    def update_state(self, new_state: GameState):
-        self._game_state_history[new_state.ts] = self._current_state
+    def add_state_from_vision(
+        self,
+        ts: float,
+        yellow_robots_data: list[RobotData],
+        blue_robots_data: list[RobotData],
+        balls_data: list[BallData],
+    ) -> None:
+        new_state = GameState(
+            ts, {"yellow": yellow_robots_data, "blue": blue_robots_data}, balls_data
+        )
+        self.update_state(new_state)
+
+    def update_state(self, new_state: GameState) -> None:
+        self._game_state_history.append(self._current_state)
         self._current_state = new_state

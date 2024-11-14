@@ -1,45 +1,46 @@
 import threading
-
-from team_controller.src.data.vision_receiver import VisionDataReceiver
-from team_controller.src.controllers.robot_startup_controller import StartUpController
 from entities.game import Game
+from team_controller.src.data.vision_receiver import VisionDataReceiver
 
 
-# example of accessing data from vision
-def access_vision_data(vision_receiver: VisionDataReceiver, game: Game):
-    while True:
-        robots = vision_receiver.get_robots_pos(is_yellow=True)
-        robots_blue = vision_receiver.get_robots_pos(is_yellow=False)
-        balls = vision_receiver.get_ball_pos()
-        print(robots_blue, robots)
-        print(balls)
+def data_update_listener(receiver: VisionDataReceiver):
+    # Start receiving game data; this will run in a separate thread.
+    receiver.get_game_data()
+
+
+def main():
+    game = Game()
+    # Initialize the VisionDataReceiver
+    receiver = VisionDataReceiver(debug=False)
+
+    # Start the data receiving in a separate thread
+    data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
+    data_thread.daemon = True  # Allows the thread to close when the main program exits
+    data_thread.start()
+
+    try:
+        while True:
+            # Wait for the update event with a timeout (optional)
+            if receiver.wait_for_update(timeout=0.1):
+                # An update has occurred, so process the updated data
+                ball_pos = receiver.get_ball_pos()
+                robots_yellow_pos = receiver.get_robots_pos(is_yellow=True)
+                robots_blue_pos = receiver.get_robots_pos(is_yellow=False)
+                time_received = receiver.get_time_received()
+                game.add_state_from_vision(
+                    time_received, robots_yellow_pos, robots_blue_pos, ball_pos
+                )
+                # print("Updated Ball Position:", ball_pos)
+                # print("Updated Yellow Robots Positions:", robots_yellow_pos)
+                # print("Updated Blue Robots Positions:", robots_blue_pos)
+                # print("Time Received:", time_received)
+                print(game.current_state.ts)
+            else:
+                print("No data update received within the timeout period.")
+
+    except KeyboardInterrupt:
+        print("Stopping main program.")
 
 
 if __name__ == "__main__":
-    game = Game()
-    vision_receiver = VisionDataReceiver(debug=False)
-    # decision_maker = StartUpController(vision_receiver, debug=False)
-
-    vision_thread = threading.Thread(target=vision_receiver.get_game_data)
-    access_thread = threading.Thread(
-        target=access_vision_data,
-        args=(
-            vision_receiver,
-            game,
-        ),
-    )
-    # command_thread = threading.Thread(target=decision_maker.startup)
-
-    vision_thread.start()
-    access_thread.start()
-    # command_thread.start()
-
-    try:
-        vision_thread.join()
-        # robots = vision_thread.get_robot_dict(is_yellow=True)
-        access_thread.join()
-        # command_thread.join()
-    except KeyboardInterrupt:
-        print("Exiting...")
-    except Exception as e:
-        print(e)
+    main()

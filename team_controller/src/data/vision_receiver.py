@@ -3,13 +3,10 @@ import time
 from typing import List, NamedTuple
 from collections import namedtuple
 from global_utils.math_utils import normalise_heading
+from entities.data.vision import BallData, RobotData
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT, NUM_ROBOTS
-
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
-
-Ball = namedtuple("Ball", ["x", "y", "z"])
-Robot = namedtuple("Robot", ["x", "y", "orientation"])
 
 
 class VisionDataReceiver:
@@ -33,10 +30,10 @@ class VisionDataReceiver:
     ):
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
         self.old_data = None
-        
-        self.ball_pos: List[Ball] = None
-        self.robots_yellow_pos: List[Robot] = [None] * n_yellow_robots
-        self.robots_blue_pos: List[Robot] = [None] * n_blue_robots
+        self.time_received = None
+        self.ball_pos: List[BallData] = None
+        self.robots_yellow_pos: List[RobotData] = [None] * n_yellow_robots
+        self.robots_blue_pos: List[RobotData] = [None] * n_blue_robots
 
         self.lock = threading.Lock()
         self.update_event = threading.Event()
@@ -55,7 +52,9 @@ class VisionDataReceiver:
 
         ball_pos = []
         for _, ball in enumerate(detection.balls):
-            ball_pos.append(Ball(ball.x, ball.y, ball.z if ball.HasField("z") else 0.0))
+            ball_pos.append(
+                BallData(ball.x, ball.y, ball.z if ball.HasField("z") else 0.0)
+            )
         self.ball_pos = ball_pos
 
     def _update_robots_pos(self, detection: object) -> None:
@@ -70,7 +69,7 @@ class VisionDataReceiver:
     ) -> None:
         # Generic method to update robots for both teams.
         for robot in robots_data:
-            robots[robot.robot_id] = Robot(
+            robots[robot.robot_id] = RobotData(
                 robot.x,
                 robot.y,
                 (
@@ -81,19 +80,24 @@ class VisionDataReceiver:
             )
             # TODO: When do we not have orientation?
 
-    def _print_frame_info(self, t_received:float, detection: object):
+    def _print_frame_info(self, t_received: float, detection: object):
         t_now = time.time()
         print(f"Time Now: {t_now:.3f}s")
-        print(f"Camera ID={detection.camera_id} FRAME={detection.frame_number} "
-              f"T_CAPTURE={detection.t_capture:.4f}s"
-              f" T_SENT={detection.t_sent:.4f}s")
-        print(f"SSL-Vision Processing Latency: "
-              f"{(detection.t_sent - detection.t_capture) * 1000.0:.3f}ms")
-        print(f"Total Latency: "
-              f"{((t_now - t_received) + (detection.t_sent - detection.t_capture)) * 1000.0:.3f}ms")
+        print(
+            f"Camera ID={detection.camera_id} FRAME={detection.frame_number} "
+            f"T_CAPTURE={detection.t_capture:.4f}s"
+            f" T_SENT={detection.t_sent:.4f}s"
+        )
+        print(
+            f"SSL-Vision Processing Latency: "
+            f"{(detection.t_sent - detection.t_capture) * 1000.0:.3f}ms"
+        )
+        print(
+            f"Total Latency: "
+            f"{((t_now - t_received) + (detection.t_sent - detection.t_capture)) * 1000.0:.3f}ms"
+        )
 
-
-    def get_robots_pos(self, is_yellow: bool) -> List[Robot]:
+    def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
         """
         Retrieves the current position data for robots on the specified team from the vision data.
 
@@ -106,7 +110,7 @@ class VisionDataReceiver:
         with self.lock:
             return self.robots_yellow_pos if is_yellow else self.robots_blue_pos
 
-    def get_ball_pos(self) -> Ball:
+    def get_ball_pos(self) -> BallData:
         """
         Retrieves the current position data for the ball.
 
@@ -115,7 +119,16 @@ class VisionDataReceiver:
         """
         with self.lock:
             return self.ball_pos
-    
+
+    def get_time_received(self) -> float:
+        """
+        Retrieves the time at which the most recent vision data was received.
+
+        Returns:
+            float: The time at which the most recent vision data was received.
+        """
+        return self.time_received
+
     def wait_for_update(self, timeout: float = None) -> bool:
         """
         Waits for the data to be updated, returning True if an update occurs within the timeout.
@@ -129,7 +142,7 @@ class VisionDataReceiver:
         updated = self.update_event.wait(timeout)
         self.update_event.clear()  # Reset the event for the next update.
         return updated
-    
+
     def get_game_data(self) -> None:
         """
         Continuously receives vision data packets and updates the internal data structures for the game state.
@@ -139,6 +152,7 @@ class VisionDataReceiver:
         vision_packet = SSL_WrapperPacket()
         while True:
             t_received = time.time()
+            self.time_received = t_received
             data = self.net.receive_data()
             if data != self.old_data:
                 with self.lock:

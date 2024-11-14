@@ -1,8 +1,10 @@
+### NOT CURRENTLT USED ###
+
 from typing import Tuple
 
 
 class Robot:
-    def __init(self, robot_id, team_colour, pos, heading):
+    def __init__(self, robot_id, team_colour, pos, heading):
         self._id = robot_id
         self._team_colour = team_colour
         self._has_ball = False
@@ -24,6 +26,14 @@ class Robot:
     @property
     def pos(self) -> Tuple[float, float]:
         return self._pos
+
+    @property
+    def x(self) -> float:
+        return self._pos[0]
+
+    @property
+    def y(self) -> float:
+        return self._pos[1]
 
     @property
     def heading(self) -> float:
