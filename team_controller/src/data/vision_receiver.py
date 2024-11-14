@@ -32,18 +32,21 @@ class VisionDataReceiver:
         debug=False,
     ):
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
-
+        self.old_data = None
+        
         self.ball_pos: List[Ball] = None
         self.robots_yellow_pos: List[Robot] = [None] * n_yellow_robots
         self.robots_blue_pos: List[Robot] = [None] * n_blue_robots
 
         self.lock = threading.Lock()
+        self.update_event = threading.Event()
         self.debug = debug
 
     def _update_data(self, detection: object) -> None:
         # Update both ball and robot data incrementally.
         self._update_ball_pos(detection)
         self._update_robots_pos(detection)
+        self.update_event.set()  # Signal that an update has occurred.
 
     def _update_ball_pos(self, detection: object) -> None:
 
@@ -51,7 +54,7 @@ class VisionDataReceiver:
             return
 
         ball_pos = []
-        for i, ball in enumerate(detection.balls):
+        for _, ball in enumerate(detection.balls):
             ball_pos.append(Ball(ball.x, ball.y, ball.z if ball.HasField("z") else 0.0))
         self.ball_pos = ball_pos
 
@@ -78,20 +81,17 @@ class VisionDataReceiver:
             )
             # TODO: When do we not have orientation?
 
-    def _print_frame_info(self, detection: object):
-        # TODO: broken t_* values (time not synced with vision)
+    def _print_frame_info(self, t_received:float, detection: object):
+        t_now = time.time()
+        print(f"Time Now: {t_now:.3f}s")
+        print(f"Camera ID={detection.camera_id} FRAME={detection.frame_number} "
+              f"T_CAPTURE={detection.t_capture:.4f}s"
+              f" T_SENT={detection.t_sent:.4f}s")
+        print(f"SSL-Vision Processing Latency: "
+              f"{(detection.t_sent - detection.t_capture) * 1000.0:.3f}ms")
+        print(f"Total Latency: "
+              f"{((t_now - t_received) + (detection.t_sent - detection.t_capture)) * 1000.0:.3f}ms")
 
-        # t_now = time.time()
-        # print(f"Time Now: {t_now:.3f}")
-        # print(f"Camera ID={detection.camera_id} FRAME={detection.frame_number} "
-        #       f"T_CAPTURE={detection.t_capture:.4f}")
-        # print(f"SSL-Vision Processing Latency: "
-        #       f"{(detection.t_sent - detection.t_capture) * 1000.0:.3f}ms")
-        # print(f"Network Latency: "
-        #       f"{(t_now - detection.t_sent) * 1000.0:.3f}ms")
-        # print(f"Total Latency: "
-        #       f"{(t_now - detection.t_capture) * 1000.0:.3f}ms")
-        return 0
 
     def get_robots_pos(self, is_yellow: bool) -> List[Robot]:
         """
@@ -115,7 +115,21 @@ class VisionDataReceiver:
         """
         with self.lock:
             return self.ball_pos
+    
+    def wait_for_update(self, timeout: float = None) -> bool:
+        """
+        Waits for the data to be updated, returning True if an update occurs within the timeout.
 
+        Args:
+            timeout (float): Maximum time to wait for an update in seconds. Defaults to None (wait indefinitely).
+
+        Returns:
+            bool: True if the data was updated within the timeout, False otherwise.
+        """
+        updated = self.update_event.wait(timeout)
+        self.update_event.clear()  # Reset the event for the next update.
+        return updated
+    
     def get_game_data(self) -> None:
         """
         Continuously receives vision data packets and updates the internal data structures for the game state.
@@ -124,13 +138,15 @@ class VisionDataReceiver:
         """
         vision_packet = SSL_WrapperPacket()
         while True:
+            t_received = time.time()
             data = self.net.receive_data()
-            if data:
+            if data != self.old_data:
                 with self.lock:
                     vision_packet.Clear()  # Clear previous data to avoid memory bloat
                     vision_packet.ParseFromString(data)
                     self._update_data(vision_packet.detection)
             if self.debug:
+                self._print_frame_info(t_received, vision_packet.detection)
                 print(f"Robots: {self.get_robots_pos(True)}\n")
                 print(f"Ball: {self.get_ball_pos()}\n")
             time.sleep(0.0083)

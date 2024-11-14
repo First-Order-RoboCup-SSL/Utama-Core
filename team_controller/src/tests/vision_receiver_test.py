@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import threading
 
 # Add the project root directory to sys.path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
@@ -8,23 +9,36 @@ sys.path.insert(0, project_root)
 
 from team_controller.src.data.vision_receiver import VisionDataReceiver
 
-if __name__ == "__main__":
+def data_update_listener(receiver: VisionDataReceiver):
+    # Start receiving game data; this will run in a separate thread.
+    receiver.get_game_data()
+
+def main():
     # Initialize the VisionDataReceiver
-    vision_receiver = VisionDataReceiver(debug=True)
+    receiver = VisionDataReceiver(debug=False)
 
-    # Start receiving and processing vision data in a separate thread
-    import threading
+    # Start the data receiving in a separate thread
+    data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
+    data_thread.daemon = True  # Allows the thread to close when the main program exits
+    data_thread.start()
 
-    threading.Thread(target=vision_receiver.get_game_data).start()
+    try:
+        while True:
+            # Wait for the update event with a timeout (optional)
+            if receiver.wait_for_update(timeout=1.0):
+                # An update has occurred, so process the updated data
+                ball_pos = receiver.get_ball_pos()
+                robots_yellow_pos = receiver.get_robots_pos(is_yellow=True)
+                robots_blue_pos = receiver.get_robots_pos(is_yellow=False)
 
-    # Retrieve and print the current positions of robots and the ball
-    while True:
-        yellow_robots = vision_receiver.get_robots_pos(is_yellow=True)
-        blue_robots = vision_receiver.get_robots_pos(is_yellow=False)
-        ball_position = vision_receiver.get_ball_pos()
+                print("Updated Ball Position:", ball_pos)
+                print("Updated Yellow Robots Positions:", robots_yellow_pos)
+                print("Updated Blue Robots Positions:", robots_blue_pos)
+            else:
+                print("No data update received within the timeout period.")
 
-        print(f"Yellow Team Robots: {yellow_robots}")
-        print(f"Blue Team Robots: {blue_robots}")
-        print(f"Ball Position: {ball_position}")
+    except KeyboardInterrupt:
+        print("Stopping main program.")
 
-        time.sleep(1)
+if __name__ == "__main__":
+    main()
