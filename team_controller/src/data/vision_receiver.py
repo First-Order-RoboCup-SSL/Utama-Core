@@ -2,7 +2,7 @@ import threading
 import time
 from typing import List, NamedTuple
 from collections import namedtuple
-
+from global_utils.math_utils import normalise_heading
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT, NUM_ROBOTS
 
@@ -70,7 +70,11 @@ class VisionDataReceiver:
             robots[robot.robot_id] = Robot(
                 robot.x,
                 robot.y,
-                robot.orientation if robot.HasField("orientation") else 0,
+                (
+                    normalise_heading(robot.orientation)
+                    if robot.HasField("orientation")
+                    else 0
+                ),
             )
             # TODO: When do we not have orientation?
 

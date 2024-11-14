@@ -3,6 +3,10 @@ from entities.game.gameState import GameState
 
 
 class Game:
+    """
+    Class containing states of the entire game and field information.
+    """
+
     def __init__(self):
         self._field = Field()
         self._current_state = None

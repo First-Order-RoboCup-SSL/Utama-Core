@@ -1,7 +1,10 @@
 import numpy as np
 from typing import Tuple
 
-def rotate_vector(vx_global: float, vy_global: float, theta: float) -> Tuple[float, float]:
+
+def rotate_vector(
+    vx_global: float, vy_global: float, theta: float
+) -> Tuple[float, float]:
     """
     Rotates a 2D vector from global coordinates to local coordinates based on a given angle.
 
@@ -20,3 +23,21 @@ def rotate_vector(vx_global: float, vy_global: float, theta: float) -> Tuple[flo
     vx_local = vx_global * np.cos(theta) + vy_global * np.sin(theta)
     vy_local = -vx_global * np.sin(theta) + vy_global * np.cos(theta)
     return vx_local, vy_local
+
+
+def normalise_heading(angle):
+    """
+    Normalize an angle to the range [-π, π] radians using arctan2, where 0 faces along positive x-axis.
+
+    Parameters
+    ----------
+    angle : float
+        The angle in radians to be normalized. The input angle can be any real number.
+
+    Returns
+    -------
+    float
+        The normalized angle in the range [-π, π] radians.
+    """
+    normalized_angle = np.arctan2(np.sin(angle), np.cos(angle))
+    return float(normalized_angle)
