@@ -51,7 +51,7 @@ class StartUpController:
 
             if robots and balls:
                 out_packet = RobotControl()
-                for robot_id, robot_data in robots.items():
+                for robot_id, robot_data in enumerate(robots):
                     if robot_data is None:
                         continue
                     target_coords = YELLOW_START[robot_id]
@@ -70,8 +70,8 @@ class StartUpController:
     def _get_positions(self) -> tuple:
         # Fetch the latest positions of robots and balls with thread locking.
         with self.lock:
-            robots = self.vision_receiver.get_robot_dict(is_yellow=True)
-            balls = self.vision_receiver.get_ball_dict()
+            robots = self.vision_receiver.get_robots_pos(is_yellow=True)
+            balls = self.vision_receiver.get_ball_pos()
         return robots, balls
 
     def _calculate_robot_velocities(

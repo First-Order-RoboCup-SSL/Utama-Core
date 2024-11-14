@@ -2,7 +2,7 @@
 
 ## Setup Guidelines
 
-1. cd to root folder `/Utama` and type `pip install .e` to install all dependencies.
+1. cd to root folder `/Utama` and type `pip install .` to install all dependencies.
 2. Note that this also installs all modules with `__init__.py` (so you need to run it again when you add an `__init__.py`)
 
 ## Guidelines

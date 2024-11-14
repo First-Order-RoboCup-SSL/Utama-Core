@@ -21,3 +21,5 @@ if __name__ == "__main__":
         # command_thread.join()
     except KeyboardInterrupt:
         print("Exiting...")
+    except Exception as e:
+        print(e)
