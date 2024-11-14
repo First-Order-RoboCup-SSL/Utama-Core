@@ -2,6 +2,7 @@ import threading
 
 from team_controller.src.data.vision_receiver import VisionDataReceiver
 from team_controller.src.controllers.robot_startup_controller import StartUpController
+from Utama.entities.game.gameState import GameState
 
 
 # example of accessing data from vision
@@ -14,7 +15,7 @@ def access_vision_data(vision_receiver: VisionDataReceiver):
 
 
 if __name__ == "__main__":
-
+    game_state = GameState()
     vision_receiver = VisionDataReceiver(debug=False)
     # decision_maker = StartUpController(vision_receiver, debug=False)
 
