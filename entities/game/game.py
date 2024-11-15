@@ -34,4 +34,7 @@ class Game:
         return self._blue_score
 
     def add_new_state(self, frame_data: FrameData) -> None:
-        self._records.append(frame_data)
+        if isinstance(frame_data, FrameData):
+            self._records.append(frame_data)
+        else:
+            raise ValueError("Invalid frame data.")
