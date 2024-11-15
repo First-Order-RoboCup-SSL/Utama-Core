@@ -90,6 +90,9 @@ def ray_casting(
 def find_best_shot(
     shadows: List[Tuple[float, float]], goal_y1: float, goal_y2: float
 ) -> float:
+    if not shadows:
+        return (goal_y2 + goal_y1) / 2
+
     open_spaces: List[Tuple[float, float]] = []
 
     if shadows[0][0] > goal_y1:
