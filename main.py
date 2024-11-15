@@ -5,7 +5,7 @@ from team_controller.src.data.vision_receiver import VisionDataReceiver
 
 def data_update_listener(receiver: VisionDataReceiver):
     # Start receiving game data; this will run in a separate thread.
-    receiver.get_game_data()
+    receiver.pull_game_data()
 
 
 def main():
@@ -23,14 +23,17 @@ def main():
             # Wait for the update event with a timeout (optional)
             if receiver.wait_for_update(timeout=0.1):
                 # An update has occurred, so process the updated data
-                ball_pos = receiver.get_ball_pos()
-                robots_yellow_pos = receiver.get_robots_pos(is_yellow=True)
-                robots_blue_pos = receiver.get_robots_pos(is_yellow=False)
-                time_received = receiver.get_time_received()
-                game.add_state_from_vision(
-                    time_received, robots_yellow_pos, robots_blue_pos, ball_pos
+                frame_data = receiver.get_frame_data()
+                game.add_new_state(frame_data)
+
+                # access current state data
+                print(
+                    game.current_state.yellow_robots[0].x,
+                    game.current_state.yellow_robots[0].y,
                 )
-                print(game.current_state.robots["yellow"][0].x)
+
+                # access game records from -x number of frames ago
+                print(game.records[-1].ts, game.records[-1].ball[0].x)
             else:
                 print("No data update received within the timeout period.")
 

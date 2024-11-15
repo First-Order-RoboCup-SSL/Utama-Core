@@ -1,6 +1,5 @@
 from entities.game.field import Field
-from entities.game.gameState import GameState
-from entities.data.vision import RobotData, BallData
+from entities.data.vision import FrameData
 
 
 class Game:
@@ -10,7 +9,7 @@ class Game:
 
     def __init__(self):
         self._field = Field()
-        self._game_state_history = []
+        self._records = []
         self._yellow_score = 0
         self._blue_score = 0
 
@@ -19,12 +18,12 @@ class Game:
         return self._field
 
     @property
-    def current_state(self) -> GameState:
-        return self._game_state_history[-1] if self._game_state_history else None
+    def current_state(self) -> FrameData:
+        return self._records[-1] if self._records else None
 
     @property
-    def game_state_history(self) -> list[GameState]:
-        return self._game_state_history
+    def records(self) -> list[FrameData]:
+        return self._records
 
     @property
     def yellow_score(self) -> int:
@@ -34,17 +33,5 @@ class Game:
     def blue_score(self) -> int:
         return self._blue_score
 
-    def add_state_from_vision(
-        self,
-        ts: float,
-        yellow_robots_data: list[RobotData],
-        blue_robots_data: list[RobotData],
-        balls_data: list[BallData],
-    ) -> None:
-        new_state = GameState(
-            ts, {"yellow": yellow_robots_data, "blue": blue_robots_data}, balls_data
-        )
-        self.update_state(new_state)
-
-    def update_state(self, new_state: GameState) -> None:
-        self._game_state_history.append(new_state)
+    def add_new_state(self, frame_data: FrameData) -> None:
+        self._records.append(frame_data)

@@ -14,7 +14,7 @@ if __name__ == "__main__":
     vision_receiver = VisionDataReceiver(debug=True)
     decision_maker = StartUpController(vision_receiver, debug=False)
 
-    vision_thread = threading.Thread(target=vision_receiver.get_game_data)
+    vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
     command_thread = threading.Thread(target=decision_maker.startup)
 
     vision_thread.start()

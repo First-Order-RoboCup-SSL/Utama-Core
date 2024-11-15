@@ -1,15 +1,16 @@
-### NOT CURRENTLT USED ###
+## NOT CURRENTLY USED ###
 
 from typing import Tuple
 
 
 class Robot:
-    def __init__(self, robot_id, team_colour, pos, heading):
+    def __init__(self, robot_id, team_colour):
         self._id = robot_id
         self._team_colour = team_colour
         self._has_ball = False
-        self._pos = pos
-        self._heading = heading
+        self._pos = None
+        self._heading = None
+        self._records = []
 
     @property
     def id(self) -> int:

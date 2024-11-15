@@ -2,10 +2,8 @@
 
 ## Setup Guidelines
 
-1. cd to root folder `/Utama` and type `pip install .` to install all dependencies.
+1. cd to root folder `/Utama` and type `pip install -e .` to install all dependencies.
 2. Note that this also installs all modules with `__init__.py` (so you need to run it again when you add an `__init__.py`)
-
-**NOTE: when you want to call newly added modules from other parts of the repo, you may need to run `pip install .` again. A hackish workaround is to add `export PYTHONPATH={path to your Utama repo}` in your .bashrc, but do at your own risk!**
 
 ## Guidelines
 

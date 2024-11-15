@@ -1,22 +1,55 @@
 import numpy as np
-from shapely import Polygon
+from shapely import Polygon, LineString
+from shapely.geometry import Point
 
 
 class Field:
     def __init__(self):
-        self.HALF_LENGTH = 9000  # x value
-        self.HALF_WIDTH = 6000  # y value
-        self.HALF_GOAL_WIDTH = 1000
-        self.YELLOW_GOAL_POS = np.array(
-            [(self.HALF_LENGTH, self.HALF_WIDTH), (self.HALF_LENGTH, -self.HALF_WIDTH)],
-            dtype=np.float32,
-        )
-        self.BLUE_GOAL_POS = np.array(
+        self.HALF_LENGTH = 4500  # x value
+        self.HALF_WIDTH = 3000  # y value
+        self.HALF_GOAL_WIDTH = 500
+        self.HALF_DEFENSE_AREA_LENGTH = 500
+        self.HALF_DEFENSE_AREA_WIDTH = 1000
+        self.YELLOW_GOAL_LINE = LineString(
             [
-                (-self.HALF_LENGTH, self.HALF_WIDTH),
-                (-self.HALF_LENGTH, -self.HALF_WIDTH),
-            ],
-            dtype=np.float32,
+                (self.HALF_LENGTH, self.HALF_GOAL_WIDTH),
+                (self.HALF_LENGTH, -self.HALF_GOAL_WIDTH),
+            ]
+        )
+        self.BLUE_GOAL_LINE = LineString(
+            [
+                (-self.HALF_LENGTH, self.HALF_GOAL_WIDTH),
+                (-self.HALF_LENGTH, -self.HALF_GOAL_WIDTH),
+            ]
+        )
+        self.CENTER_CIRCLE = Point(0, 0).buffer(500)  # center circle with radius 500
+        self.YELLOW_DEFENSE_AREA = Polygon(
+            [
+                (self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
+                (
+                    self.HALF_LENGTH - self.HALF_DEFENSE_AREA_LENGTH,
+                    self.HALF_DEFENSE_AREA_WIDTH,
+                ),
+                (
+                    self.HALF_LENGTH - self.HALF_DEFENSE_AREA_LENGTH,
+                    -self.HALF_DEFENSE_AREA_WIDTH,
+                ),
+                (self.HALF_LENGTH, -self.HALF_DEFENSE_AREA_WIDTH),
+            ]
+        )
+        self.BLUE_DEFENSE_AREA = Polygon(
+            [
+                (-self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
+                (
+                    -self.HALF_LENGTH + self.HALF_DEFENSE_AREA_LENGTH,
+                    self.HALF_DEFENSE_AREA_WIDTH,
+                ),
+                (
+                    -self.HALF_LENGTH + self.HALF_DEFENSE_AREA_LENGTH,
+                    -self.HALF_DEFENSE_AREA_WIDTH,
+                ),
+                (-self.HALF_LENGTH, -self.HALF_DEFENSE_AREA_WIDTH),
+            ]
         )
 
     @property
@@ -32,9 +65,21 @@ class Field:
         return self.HALF_GOAL_WIDTH
 
     @property
-    def yellow_goal_pos(self) -> np.array:
-        return self.YELLOW_GOAL_POS
+    def yellow_goal_line(self) -> LineString:
+        return self.YELLOW_GOAL_LINE
 
     @property
-    def blue_goal_pos(self) -> np.array:
-        return self.BLUE_GOAL_POS
+    def blue_goal_line(self) -> LineString:
+        return self.BLUE_GOAL_LINE
+
+    @property
+    def center_circle(self) -> Point:
+        return self.CENTER_CIRCLE
+
+    @property
+    def yellow_defense_area(self) -> Polygon:
+        return self.YELLOW_DEFENSE_AREA
+
+    @property
+    def blue_defense_area(self) -> Polygon:
+        return self.BLUE_DEFENSE_AREA

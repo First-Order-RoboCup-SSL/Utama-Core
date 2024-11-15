@@ -1,9 +1,7 @@
 import threading
 import time
-from typing import List, NamedTuple
-from collections import namedtuple
-from global_utils.math_utils import normalise_heading
-from entities.data.vision import BallData, RobotData
+from typing import List
+from entities.data.vision import BallData, RobotData, FrameData
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT, NUM_ROBOTS
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
@@ -65,18 +63,14 @@ class VisionDataReceiver:
     def __update_team_robots_pos(
         self,
         robots_data: object,
-        robots: List[NamedTuple],
+        robots: List[RobotData],
     ) -> None:
         # Generic method to update robots for both teams.
         for robot in robots_data:
             robots[robot.robot_id] = RobotData(
                 robot.x,
                 robot.y,
-                (
-                    normalise_heading(robot.orientation)
-                    if robot.HasField("orientation")
-                    else 0
-                ),
+                robot.orientation if robot.HasField("orientation") else 0,
             )
             # TODO: When do we not have orientation?
 
@@ -97,6 +91,22 @@ class VisionDataReceiver:
             f"{((t_now - t_received) + (detection.t_sent - detection.t_capture)) * 1000.0:.3f}ms"
         )
 
+    def get_frame_data(self):
+        """
+        Retrieve all relevant data for this frame. Combination of timestep, ball and robot data.
+
+        Returns:
+            FrameData: A named tuple containing the time received, robot positions, and ball position.
+
+        """
+        with self.lock:
+            return FrameData(
+                self.time_received,
+                self.robots_yellow_pos,
+                self.robots_blue_pos,
+                self.ball_pos,
+            )
+
     def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
         """
         Retrieves the current position data for robots on the specified team from the vision data.
@@ -105,7 +115,7 @@ class VisionDataReceiver:
             is_yellow (bool): If True, retrieves data for the yellow team. If False, retrieves data for the blue team.
 
         Returns:
-            List[Robot]: A list of all detected robot positions {robot_id: (x, y, orientation)} for the specified team.
+            List[RobotData]: A list of all detected robot positions {robot_id: (x, y, orientation)} for the specified team.
         """
         with self.lock:
             return self.robots_yellow_pos if is_yellow else self.robots_blue_pos
@@ -115,7 +125,7 @@ class VisionDataReceiver:
         Retrieves the current position data for the ball.
 
         Returns:
-            Ball: A named tuple of all detected ball positions (x, y, z).
+            BallData: A named tuple of all detected ball positions (x, y, z).
         """
         with self.lock:
             return self.ball_pos
@@ -143,7 +153,7 @@ class VisionDataReceiver:
         self.update_event.clear()  # Reset the event for the next update.
         return updated
 
-    def get_game_data(self) -> None:
+    def pull_game_data(self) -> None:
         """
         Continuously receives vision data packets and updates the internal data structures for the game state.
 

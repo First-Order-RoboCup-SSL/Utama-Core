@@ -9,9 +9,11 @@ sys.path.insert(0, project_root)
 
 from team_controller.src.data.vision_receiver import VisionDataReceiver
 
+
 def data_update_listener(receiver: VisionDataReceiver):
     # Start receiving game data; this will run in a separate thread.
-    receiver.get_game_data()
+    receiver.pull_game_data()
+
 
 def main():
     # Initialize the VisionDataReceiver
@@ -39,6 +41,7 @@ def main():
 
     except KeyboardInterrupt:
         print("Stopping main program.")
+
 
 if __name__ == "__main__":
     main()

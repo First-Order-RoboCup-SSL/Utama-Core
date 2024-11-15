@@ -12,7 +12,7 @@ This page contains an overview of how this repository interacts with other compo
 
 ## Usage
 
-For this repository to be fully implemented, you should run GrSim, SSL_Game_Controller, and an AutoReferee simultaneously in different terminals.
+For this repository to be fully implemented, you should run grSim, SSL_Game_Controller, and an AutoReferee simultaneously in different terminals.
 
 > Note: GrSim Defaults to broadcasting vision data from the wrong port (we want 10006) and defaults to DivA.
 
@@ -59,7 +59,7 @@ This folder contains all the files which perform the initial processing of data 
   - **Methods**:
     - `get_robots_pos(is_yellow: bool) -> List[Robot]`: Retrieves the current position data for robots on the specified team. If `is_yellow` is `True`, it retrieves data for the yellow team; otherwise, it retrieves data for the blue team.
     - `get_ball_pos() -> Ball`: Retrieves the current position data for the ball.
-    - `get_game_data() -> None`: Continuously receives vision data packets and updates the internal data structures for the game state. This method runs indefinitely and should typically be started in a separate thread.
+    - `pull_game_data() -> None`: Continuously receives vision data packets and updates the internal data structures for the game state. This method runs indefinitely and should typically be started in a separate thread.
 
 ## Utils
 
