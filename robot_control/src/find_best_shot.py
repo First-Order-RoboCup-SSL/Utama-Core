@@ -38,10 +38,11 @@ def filter_and_merge_shadows(
         if start > goal_y1 and start < goal_y2:
             if end > goal_y2:
                 end = goal_y2
+            valid_shadows.append((start, end))
         elif end > goal_y1 and end < goal_y2:
             if start < goal_y1:
                 start = goal_y1
-        valid_shadows.append((start, end))
+            valid_shadows.append((start, end))
 
     valid_shadows.sort()
 
