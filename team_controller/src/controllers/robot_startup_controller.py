@@ -1,19 +1,16 @@
 import time
 import threading
 import numpy as np
-from typing import Tuple, Optional, Dict, List, Union
+from typing import Tuple, Optional, Dict, Union
 
 from global_utils.math_utils import rotate_vector
 from team_controller.src.data.vision_receiver import VisionDataReceiver
+from team_controller.src.controllers.sim_robot_controller import SimRobotController
 from motion_planning.src.pid.pid import PID
 from team_controller.src.config.settings import (
     PID_PARAMS,
-    LOCAL_HOST,
-    YELLOW_TEAM_SIM_PORT,
-    BLUE_TEAM_SIM_PORT,
     YELLOW_START,
 )
-from team_controller.src.utils import network_manager
 
 from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
     RobotControl,
@@ -21,23 +18,19 @@ from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import 
 
 # TODO: To be moved to a High-level Descision making repo
 
-
 class StartUpController:
     def __init__(
         self,
         vision_receiver: VisionDataReceiver,
-        address=LOCAL_HOST,
-        port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT),
         debug=False,
     ):
         self.vision_receiver = vision_receiver
-
-        self.net = network_manager.NetworkManager(address=(address, port[0]))
+        self.sim_robot_controller = SimRobotController(debug=debug)
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
         # potentially have a set tunig parameters for each robot
-        self.pid_oren = PID(0.0167, 8, -8, 5, 0.01, 0, num_robots=6)
-        self.pid_trans = PID(0.0167, 1.5, -1.5, 5, 0.01, 0, num_robots=6)
+        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0, num_robots=6)
+        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0, num_robots=6)
 
         self.lock = threading.Lock()
 
@@ -58,11 +51,12 @@ class StartUpController:
                     command = self._calculate_robot_velocities(
                         robot_id, target_coords, robots, balls, face_ball=True
                     )
-                    self._add_robot_command(out_packet, command)
+                    self.sim_robot_controller.add_robot_command(command)
 
                 if self.debug:
                     print(out_packet)
-                self.net.send_command(out_packet)
+                self.sim_robot_controller.send_robot_commands(team_is_yellow=True)
+                self.sim_robot_controller.robot_has_ball(robot_id=3, team_is_yellow=True)
 
             time_to_sleep = max(0, 0.0167 - (time.time() - start_time))
             time.sleep(time_to_sleep)
@@ -91,7 +85,7 @@ class StartUpController:
                     target_coords (Tuple[float, float] | Tuple[float, float, float]): Target coordinates the robot should move towards.
                         Can be a (x, y) or (x, y, orientation) tuple. If `face_ball` is True, the robot will face the ball instead of
                         using the orientation value in target_coords.
-        robots (Dict[int, Optional[Tuple[float, float, float]]]): All the Current coordinates of the robots sepateated
+                    robots (Dict[int, Optional[Tuple[float, float, float]]]): All the Current coordinates of the robots sepateated
                         by thier robot_id which containts a tuple (x, y, orientation).
                     balls (Dict[int, Tuple[float, float, float]]): All the Coordinates of the detected balls (int) , typically (x, y, z/height in 3D space).            face_ball (bool, optional): If True, the robot will orient itself to face the ball's position. Defaults to False.
 
@@ -142,12 +136,3 @@ class StartUpController:
             )
 
         return out
-
-    def _add_robot_command(self, out_packet, command) -> None:
-        robot = out_packet.robot_commands.add()
-        robot.id = command["id"]
-        local_vel = robot.move_command.local_velocity
-        local_vel.forward = command["xvel"]
-        local_vel.left = command["yvel"]
-        local_vel.angular = command["wvel"]
-        # print(f"Robot {command['id']} command: ({command['xvel']:.3f}, {command['yvel']:.3f}, {command['wvel']:.3f})")
