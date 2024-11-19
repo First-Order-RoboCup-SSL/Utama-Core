@@ -74,7 +74,7 @@ class VisionDataReceiver:
             )
             # TODO: When do we not have orientation?
 
-    def _print_frame_info(self, t_received: float, detection: object):
+    def _print_frame_info(self, t_received: float, detection: object) -> None:
         t_now = time.time()
         print(f"Time Now: {t_now:.3f}s")
         print(
@@ -91,7 +91,7 @@ class VisionDataReceiver:
             f"{((t_now - t_received) + (detection.t_sent - detection.t_capture)) * 1000.0:.3f}ms"
         )
 
-    def get_frame_data(self):
+    def get_frame_data(self) -> FrameData:
         """
         Retrieve all relevant data for this frame. Combination of timestep, ball and robot data.
 
