@@ -54,13 +54,13 @@ class SimRobotController:
             print(f"Sending Robot Commands")
             
         if team_is_yellow:   
-            data = self.net_yellow.send_command(self.out_packet, is_sim=True)
+            data = self.net_yellow.send_command(self.out_packet, is_sim_robot_cmd=True)
             if data:
                 self.yellow_robot_info = RobotControlResponse()
                 self.yellow_robot_info.ParseFromString(data)
             self.out_packet.Clear()
         else:
-            data = self.net_blue.send_command(self.out_packet, is_sim=True)
+            data = self.net_blue.send_command(self.out_packet, is_sim_robot_cmd=True)
             if data:
                 self.blue_robot_info = RobotControlResponse()
                 self.blue_robot_info.ParseFromString(data)
