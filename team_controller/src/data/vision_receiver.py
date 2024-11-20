@@ -67,12 +67,13 @@ class VisionDataReceiver:
     ) -> None:
         # Generic method to update robots for both teams.
         for robot in robots_data:
-            robots[robot.robot_id] = RobotData(
-                robot.x,
-                robot.y,
-                robot.orientation if robot.HasField("orientation") else 0,
-            )
-            # TODO: When do we not have orientation?
+            if 0 <= robot.robot_id < len(robots):
+                robots[robot.robot_id] = RobotData(
+                    robot.x,
+                    robot.y,
+                    robot.orientation if robot.HasField("orientation") else 0,
+                )
+                # TODO: When do we not have orientation?
 
     def _print_frame_info(self, t_received: float, detection: object) -> None:
         t_now = time.time()
