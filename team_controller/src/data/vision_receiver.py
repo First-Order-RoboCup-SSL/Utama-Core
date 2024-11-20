@@ -1,7 +1,7 @@
 import threading
 import time
 from typing import List
-from entities.data.vision import BallData, RobotData, FrameData
+from entities.data.vision import BallData, RobotData, FrameData, TeamRobotCoords
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT, NUM_ROBOTS
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
@@ -67,14 +67,15 @@ class VisionDataReceiver:
     ) -> None:
         # Generic method to update robots for both teams.
         for robot in robots_data:
-            robots[robot.robot_id] = RobotData(
-                robot.x,
-                robot.y,
-                robot.orientation if robot.HasField("orientation") else 0,
-            )
-            # TODO: When do we not have orientation?
+            if 0 <= robot.robot_id < len(robots):
+                robots[robot.robot_id] = RobotData(
+                    robot.x,
+                    robot.y,
+                    robot.orientation if robot.HasField("orientation") else 0,
+                )
+                # TODO: When do we not have orientation?
 
-    def _print_frame_info(self, t_received: float, detection: object):
+    def _print_frame_info(self, t_received: float, detection: object) -> None:
         t_now = time.time()
         print(f"Time Now: {t_now:.3f}s")
         print(
@@ -91,7 +92,7 @@ class VisionDataReceiver:
             f"{((t_now - t_received) + (detection.t_sent - detection.t_capture)) * 1000.0:.3f}ms"
         )
 
-    def get_frame_data(self):
+    def get_frame_data(self) -> FrameData:
         """
         Retrieve all relevant data for this frame. Combination of timestep, ball and robot data.
 
@@ -174,3 +175,81 @@ class VisionDataReceiver:
                 print(f"Robots: {self.get_robots_pos(True)}\n")
                 print(f"Ball: {self.get_ball_pos()}\n")
             time.sleep(0.0083)
+
+    def get_robot_coords(self, is_yellow: bool) -> TeamRobotCoords:
+        """
+        Retrieves the current positions of all robots on the specified team.
+
+        Args:
+            is_yellow (bool): If True, retrieves data for the yellow team; otherwise, for the blue team.
+
+        Returns:
+            TeamRobotCoords: A named tuple containing the team color and a list of RobotData.
+        """
+        with self.lock:
+            team_color = "yellow" if is_yellow else "blue"
+            robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
+            return TeamRobotCoords(team_color=team_color, robots=robots)
+        
+    def get_robot_by_id(self, is_yellow: bool, robot_id: int) -> RobotData:
+        """
+        Retrieves the position data for a specific robot by ID.
+
+        Args:
+            is_yellow (bool): If True, retrieves data for the yellow team; otherwise, for the blue team.
+            robot_id (int): The ID of the robot.
+
+        Returns:
+            RobotData: The position data of the specified robot.
+        """
+        with self.lock:
+            robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
+            if 0 <= robot_id < len(robots) and robots[robot_id] is not None:
+                return robots[robot_id]
+            else:
+                return None  # Or raise an exception. TODO
+    
+    def get_closest_robot_to_point(self, is_yellow: bool, x: float, y: float) -> RobotData:
+        """
+        Finds the robot closest to a given point.
+
+        Args:
+            is_yellow (bool): If True, searches within the yellow team; otherwise, within the blue team.
+            x (float): The x-coordinate of the point.
+            y (float): The y-coordinate of the point.
+
+        Returns:
+            RobotData: The position data of the closest robot.
+        """
+        with self.lock:
+            robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
+            min_distance = float('inf')
+            closest_robot = None
+            for robot in robots:
+                if robot is not None:
+                    distance = ((robot.x - x) ** 2 + (robot.y - y) ** 2) ** 0.5
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_robot = robot
+        # Haven't been tested TODO
+        return closest_robot
+    
+    def get_ball_velocity(self) -> tuple:
+        """
+        Calculates the ball's velocity based on position changes over time.
+
+        Returns:
+            tuple: The velocity components (vx, vy).
+        """
+        # TODO Find a method to store the data and get velocity. --> self.previour_ball_pos
+        # with self.lock:
+        #     if self.previous_ball_pos and self.ball_pos:
+        #         dt = self.time_received - self.previous_time_received
+        #         if dt > 0:
+        #             vx = (self.ball_pos.x - self.previous_ball_pos.x) / dt
+        #             vy = (self.ball_pos.y - self.previous_ball_pos.y) / dt
+        #             return (vx, vy)
+        # return (0.0, 0.0)
+        pass
+
+

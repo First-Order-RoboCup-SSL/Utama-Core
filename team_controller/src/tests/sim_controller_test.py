@@ -2,11 +2,11 @@ import os
 import sys
 
 # Add the project root directory to sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
 print(project_root)
 sys.path.insert(0, project_root)
 
-from controllers.sim_controller import SimulatorController
+from team_controller.src.controllers.sim_controller import SimulatorController
 
 def main():
     controller = SimulatorController()

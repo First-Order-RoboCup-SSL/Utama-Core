@@ -19,17 +19,19 @@ class NetworkManager:
             socket.socket(socket.AF_INET, socket.SOCK_DGRAM), address, bind_socket
         )
 
-    def send_command(self, command: object) -> None:
+    def send_command(self, command: object, is_sim_robot_cmd: bool = False) -> None:
         """
         Sends a command to the server at the specified address.
 
         Args:
-            command object: An object with in the form of a protocol buffer message to be serialized and sent.
+            command (object): An object with in the form of a protocol buffer message to be serialized and sent.
+            is_sim_robot_cmd (bool): If True, the function will attempt to receive a response from the server. (only used when sending robot control cmd)
 
         This method relies on a utility function for command transmission.
         """
         # Send a command to the server.
-        network_utils.send_command(self.address, command)
+        return network_utils.send_command(self.address, command, is_sim_robot_cmd)
+        
 
     def receive_data(self) -> Optional[bytes]:
         """

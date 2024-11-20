@@ -1,7 +1,7 @@
 import socket
 import struct
 import logging
-from typing import Optional, Any, Tuple
+from typing import Optional, Tuple
 
 from team_controller.src.config.settings import MULTICAST_GROUP, LOCAL_HOST
 
@@ -42,7 +42,7 @@ def setup_socket(
             mreq = struct.pack("4sL", group, socket.INADDR_ANY)
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
-        sock.settimeout(1.0)  # Set timeout to 1 second
+        sock.settimeout(0.005)  # Set timeout to 1 frame period (60 FPS)
         logging.info(
             "Socket setup completed with address %s and bind_socket=%s",
             address,
@@ -81,15 +81,20 @@ def receive_data(sock: socket.socket) -> Optional[bytes]:
         return None
 
 
-def send_command(address: Tuple[str, int], command: object) -> None:
+def send_command(address: Tuple[str, int], command: object, is_sim_robot_cmd: bool = False) -> Optional[bytes]:
     """
     Sends a command to the specified address over a UDP socket.
 
     Args:
         address (Tuple[str, int]): The destination IP address and port.
         command object: An object with in the form of a protocol buffer message to be serialized and sent.
+        is_sim_robot_cmd (bool): If True, the function will attempt to receive a response from the server.
 
+    Returns:
+        Optional[bytes]: The data received, or None if no data is received or if an error occurs.   
+     
     This function creates a temporary UDP socket, serializes the command, and sends it to the specified address.
+    If the command being sent is a RobotControl packet there will be a response packet which will be received.
     Errors during serialization or socket operations are logged, with specific handling if the `SerializeToString`
     method is missing.
     """
@@ -97,6 +102,9 @@ def send_command(address: Tuple[str, int], command: object) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as send_sock:
             serialized_command = command.SerializeToString()
             send_sock.sendto(serialized_command, address)
+            if is_sim_robot_cmd:
+                data = receive_data(send_sock)
+                return data
             logging.info("Command sent to %s", address)
     except AttributeError:
         logging.error("Command object has no SerializeToString method")

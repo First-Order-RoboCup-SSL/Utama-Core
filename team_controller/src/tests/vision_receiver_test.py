@@ -32,10 +32,16 @@ def main():
                 ball_pos = receiver.get_ball_pos()
                 robots_yellow_pos = receiver.get_robots_pos(is_yellow=True)
                 robots_blue_pos = receiver.get_robots_pos(is_yellow=False)
+                robot_coords = receiver.get_robot_coords(is_yellow=False)
 
                 print("Updated Ball Position:", ball_pos)
+                print()
                 print("Updated Yellow Robots Positions:", robots_yellow_pos)
+                print()
                 print("Updated Blue Robots Positions:", robots_blue_pos)
+                print()
+                print("Update Blue Robots Coords:", robot_coords)
+                print()
             else:
                 print("No data update received within the timeout period.")
 
