@@ -1,6 +1,10 @@
 from collections import namedtuple
 
-RSoccerSimCommand = namedtuple(
-    "RSoccerSimCommand",
-    ["glb_x_vel", "glb_y_vel", "angular_vel", "kick_vel", "dribbler_vel"],
+RobotSimCommand = namedtuple(
+    "RobotSimCommand",
+    ["local_forward_vel", "local_left_vel", "angular_vel", "kick_vel", "dribbler_vel"],
+)
+RobotInfo = namedtuple(
+    "RobotInfo",
+    ["has_ball"],
 )
