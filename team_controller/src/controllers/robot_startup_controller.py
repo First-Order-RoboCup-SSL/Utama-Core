@@ -12,10 +12,6 @@ from team_controller.src.config.settings import (
     YELLOW_START,
 )
 
-from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
-    RobotControl,
-)
-
 # TODO: To be moved to a High-level Descision making repo
 
 class StartUpController:
@@ -43,7 +39,6 @@ class StartUpController:
             robots, balls = self._get_positions()
 
             if robots and balls:
-                out_packet = RobotControl()
                 for robot_id, robot_data in enumerate(robots):
                     if robot_data is None:
                         continue
@@ -52,9 +47,7 @@ class StartUpController:
                         robot_id, target_coords, robots, balls, face_ball=True
                     )
                     self.sim_robot_controller.add_robot_command(command)
-
-                if self.debug:
-                    print(out_packet)
+                    
                 self.sim_robot_controller.send_robot_commands(team_is_yellow=True)
                 self.sim_robot_controller.robot_has_ball(robot_id=3, team_is_yellow=True)
 
