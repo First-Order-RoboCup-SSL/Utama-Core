@@ -3,6 +3,7 @@ import threading
 import numpy as np
 from typing import Tuple, Optional, Dict, Union
 
+from entities.game.game import Game
 from global_utils.math_utils import rotate_vector
 from team_controller.src.data.vision_receiver import VisionDataReceiver
 from team_controller.src.controllers.sim_robot_controller import SimRobotController
@@ -16,15 +17,13 @@ from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import 
     RobotControl,
 )
 
-# TODO: To be moved to a High-level Descision making repo
-
 class StartUpController:
     def __init__(
         self,
-        vision_receiver: VisionDataReceiver,
+        game: Game,
         debug=False,
     ):
-        self.vision_receiver = vision_receiver
+        self.game = game
         self.sim_robot_controller = SimRobotController(debug=debug)
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
@@ -32,41 +31,27 @@ class StartUpController:
         self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0, num_robots=6)
         self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0, num_robots=6)
 
-        self.lock = threading.Lock()
-
         self.debug = debug
 
-    def startup(self):
-        while True:
-            start_time = time.time()
+    def make_decision(self):
+        robots = self.game.get_robots_pos(is_yellow=True)
+        balls = self.game.get_ball_pos()
 
-            robots, balls = self._get_positions()
+        if robots and balls:
+            out_packet = RobotControl()
+            for robot_id, robot_data in enumerate(robots):
+                if robot_data is None:
+                    continue
+                target_coords = YELLOW_START[robot_id]
+                command = self._calculate_robot_velocities(
+                    robot_id, target_coords, robots, balls, face_ball=True
+                )
+                self.sim_robot_controller.add_robot_command(command)
 
-            if robots and balls:
-                out_packet = RobotControl()
-                for robot_id, robot_data in enumerate(robots):
-                    if robot_data is None:
-                        continue
-                    target_coords = YELLOW_START[robot_id]
-                    command = self._calculate_robot_velocities(
-                        robot_id, target_coords, robots, balls, face_ball=True
-                    )
-                    self.sim_robot_controller.add_robot_command(command)
-
-                if self.debug:
-                    print(out_packet)
-                self.sim_robot_controller.send_robot_commands(team_is_yellow=True)
-                self.sim_robot_controller.robot_has_ball(robot_id=3, team_is_yellow=True)
-
-            time_to_sleep = max(0, 0.0167 - (time.time() - start_time))
-            time.sleep(time_to_sleep)
-
-    def _get_positions(self) -> tuple:
-        # Fetch the latest positions of robots and balls with thread locking.
-        with self.lock:
-            robots = self.vision_receiver.get_robots_pos(is_yellow=True)
-            balls = self.vision_receiver.get_ball_pos()
-        return robots, balls
+            if self.debug:
+                print(out_packet)
+            self.sim_robot_controller.send_robot_commands(team_is_yellow=True)
+            self.sim_robot_controller.robot_has_ball(robot_id=3, team_is_yellow=True)
 
     def _calculate_robot_velocities(
         self,

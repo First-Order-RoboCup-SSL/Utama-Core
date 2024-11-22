@@ -7,7 +7,7 @@ from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Refere
 
 
 class RefereeMessageReceiver:
-    def __init__(self, ip=MULTICAST_GROUP_REFEREE, port=REFEREE_PORT):
+    def __init__(self, ip=MULTICAST_GROUP_REFEREE, port=REFEREE_PORT): # TODO: add message queue
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
 
         self.prev_command_counter = -1

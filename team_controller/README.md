@@ -57,7 +57,7 @@ This folder contains all the files which perform the initial processing of data 
     - `Ball`: A named tuple representing the ball's position with fields `x`, `y`, and `z`.
     - `Robot`: A named tuple representing a robot's position with fields `x`, `y`, and `orientation`.
   - **Methods**:
-    - `get_robots_pos(is_yellow: bool) -> List[Robot]`: Retrieves the current position data for robots on the specified team. If `is_yellow` is `True`, it retrieves data for the yellow team; otherwise, it retrieves data for the blue team.
+    - DOCTODO `get_robots_pos(is_yellow: bool) -> List[Robot]`: Retrieves the current position data for robots on the specified team. If `is_yellow` is `True`, it retrieves data for the yellow team; otherwise, it retrieves data for the blue team.
     - `get_ball_pos() -> Ball`: Retrieves the current position data for the ball.
     - `pull_game_data() -> None`: Continuously receives vision data packets and updates the internal data structures for the game state. This method runs indefinitely and should typically be started in a separate thread.
 
