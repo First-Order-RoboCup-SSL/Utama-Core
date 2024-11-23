@@ -190,7 +190,7 @@ class VisionDataReceiver:
             team_color = "yellow" if is_yellow else "blue"
             robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
             return TeamRobotCoords(team_color=team_color, robots=robots)
-        
+
     def get_robot_by_id(self, is_yellow: bool, robot_id: int) -> RobotData:
         """
         Retrieves the position data for a specific robot by ID.
@@ -208,8 +208,10 @@ class VisionDataReceiver:
                 return robots[robot_id]
             else:
                 return None  # Or raise an exception. TODO
-    
-    def get_closest_robot_to_point(self, is_yellow: bool, x: float, y: float) -> RobotData:
+
+    def get_closest_robot_to_point(
+        self, is_yellow: bool, x: float, y: float
+    ) -> RobotData:
         """
         Finds the robot closest to a given point.
 
@@ -223,7 +225,7 @@ class VisionDataReceiver:
         """
         with self.lock:
             robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
-            min_distance = float('inf')
+            min_distance = float("inf")
             closest_robot = None
             for robot in robots:
                 if robot is not None:
@@ -233,7 +235,7 @@ class VisionDataReceiver:
                         closest_robot = robot
         # Haven't been tested TODO
         return closest_robot
-    
+
     def get_ball_velocity(self) -> tuple:
         """
         Calculates the ball's velocity based on position changes over time.
@@ -251,5 +253,3 @@ class VisionDataReceiver:
         #             return (vx, vy)
         # return (0.0, 0.0)
         pass
-
-
