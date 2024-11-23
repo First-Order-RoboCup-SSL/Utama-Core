@@ -165,19 +165,21 @@ class ShootingController:
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
         # potentially have a set tunig parameters for each robot
-        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0, num_robots=6)
-        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0, num_robots=6)
+        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0.045, num_robots=6)
+        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0.045, num_robots=6)
 
         self.lock = threading.Lock()
 
         self.debug = debug
         self.shooter_id = shooter_id
 
+    # Added this function
     def kick_ball(self, current_oren: float = None, target_oren: float = None):
         if np.round(target_oren, 1) and np.round(current_oren, 1):
-            if abs(np.round(target_oren, 1) - np.round(current_oren, 1)) == 0:
+            print(f"{np.round(target_oren, 2) - np.round(current_oren, 2)}")
+            if abs(np.round(target_oren, 2) - np.round(current_oren, 2)) <= 0.02:
                 self.robot_command = self.robot_command._replace(
-                    kick_spd=5, 
+                    kick_spd=3, 
                     kick_angle=0, 
                     dribbler_spd=0
                 )
@@ -194,7 +196,6 @@ class ShootingController:
         
     def approach_ball(self):     
         first_action = True
-        facing_ball = False
         while True:
             start_time = time.time()
 
@@ -205,24 +206,21 @@ class ShootingController:
                     balls[0], enemy_robots, self.goal_x, self.goal_y1, self.goal_y2
                 )
                 best_shot = find_best_shot(shadows, self.goal_y1, self.goal_y2)
-
-                shot_orientation = np.pi + np.atan(
-                    (best_shot - balls[0].y) / (self.goal_x - balls[0].x)
+                
+                # Changed to atan2 to get the correct angle
+                shot_orientation = np.atan2(
+                    (best_shot - balls[0].y), (self.goal_x - balls[0].x)
                 )
 
                 robot_data = (
                     robots[self.shooter_id] if self.shooter_id < len(robots) else None
                 )
                 
+                # Lost of changed here, added a lot of print statements to debug
                 if balls[0] != None and robot_data != None:
                     target_oren = np.atan2(balls[0].y - robot_data.y, balls[0].x - robot_data.x)
                     if robot_data is not None:
-                        target_shot_coords = (
-                            balls[0].x - 15,
-                            balls[0].y - 15,
-                            shot_orientation,
-                        )
-                        if first_action or abs(np.round(target_oren, 1) - np.round(robot_data.orientation, 1)) >= 0.5:
+                        if first_action or abs(np.round(target_oren, 1) - np.round(robot_data.orientation, 1)) >= 0.3:
                             print("first action")
                             target_coords = (None, None, None)
                             face_ball = True
@@ -234,15 +232,18 @@ class ShootingController:
                             print("robot has ball")
                             current_oren = robots[self.shooter_id].orientation
                             face_ball = False
+                            target_coords = (None, None, shot_orientation)  
+                            print(f"Shot orientation: {shot_orientation}, current orientation: {current_oren}")
                             self.robot_command = self._calculate_robot_velocities(
-                            self.shooter_id, target_shot_coords, robots, balls, face_ball=face_ball
+                            self.shooter_id, target_coords, robots, balls, face_ball=face_ball
                             )
                             first_action = self.kick_ball(current_oren, shot_orientation)
                         else:
                             print("approaching ball")
                             face_ball = True
+                            target_coords = (balls[0].x, balls[0].y, None)   
                             self.robot_command = self._calculate_robot_velocities(
-                            self.shooter_id, target_shot_coords, robots, balls, face_ball=face_ball
+                            self.shooter_id, target_coords, robots, balls, face_ball=face_ball
                             ) 
                     
                     # print(self.robot_command, "\n")
