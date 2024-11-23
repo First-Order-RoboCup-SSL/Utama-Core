@@ -176,7 +176,7 @@ class ShootingController:
     # Added this function
     def kick_ball(self, current_oren: float = None, target_oren: float = None):
         if np.round(target_oren, 1) and np.round(current_oren, 1):
-            print(f"{np.round(target_oren, 2) - np.round(current_oren, 2)}")
+            # print(f"{np.round(target_oren, 2) - np.round(current_oren, 2)}")
             if abs(np.round(target_oren, 2) - np.round(current_oren, 2)) <= 0.02:
                 self.robot_command = self.robot_command._replace(
                     kick_spd=3, 
@@ -233,7 +233,7 @@ class ShootingController:
                             current_oren = robots[self.shooter_id].orientation
                             face_ball = False
                             target_coords = (None, None, shot_orientation)  
-                            print(f"Shot orientation: {shot_orientation}, current orientation: {current_oren}")
+                            
                             self.robot_command = self._calculate_robot_velocities(
                             self.shooter_id, target_coords, robots, balls, face_ball=face_ball
                             )
