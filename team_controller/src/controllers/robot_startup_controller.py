@@ -75,21 +75,15 @@ class StartUpController:
                     and orientation.
 
                     Args:
-                        robot_id (int): Unique identifier for the robot.
-                        target_coords (Tuple[float, float] | Tuple[float, float, float]): Target coordinates the robot should move towards.
-                            Can be a (x, y) or (x, y, orientation) tuple. If `face_ball` is True, the robot will face the ball instead of
-                            using the orientation value in target_coords.
-                        robots (Dict[int, Optional[Tuple[float, float, float]]]): All the Current coordinates of the robots sepateated
-                            by thier robot_id which containts a tuple (x, y, orientation).
-                        balls (Dict[int, Tuple[float, float, float]]): All the Coordinates of the detected balls (int) , typically (x, y, z/height in 3D space).            face_ball (bool, optional): If True, the robot will orient itself to face the ball's position. Defaults to False.
+                        robot_id (int): The identifier of the robot.
+                        target_coords (Tuple[float, float] or Tuple[float, float, float]): The target position and orientation.
+                        robots (Dict[int, Optional[Tuple[float, float, float]]]): A dictionary containing the positions of all robots.
+                        balls (Dict[int, Tuple[float, float, float]]): A dictionary containing the positions of all balls.
+                        face_ball (bool, optional): Whether the robot should face the ball. Defaults to False.
 
                     Returns:
-                        Dict[str, float]: A dictionary containing the following velocity components:
-                            - "id" (int): Robot identifier.
-                            - "xvel" (float): X-axis velocity to move towards the target.
-                            - "yvel" (float): Y-axis velocity to move towards the target.
-                            - "wvel" (float): Angular velocity to adjust the robot's orientation.
-
+                        RobotSimCommand: A named tuple containing the linear and angular velocities, kick speed, kick angle, and dribbler speed.
+                        
                     The method uses PID controllers to calculate velocities for linear and angular movement. If `face_ball` is set,
                     the robot will calculate the angular velocity to face the ball. The resulting x and y velocities are rotated to align
                     with the robot's current orientation.
