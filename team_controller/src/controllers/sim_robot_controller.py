@@ -1,11 +1,7 @@
-import time
-import threading
-import numpy as np
 from typing import Tuple, Optional, Dict, List, Union
+import warnings
 
-from global_utils.math_utils import rotate_vector
-from team_controller.src.data.vision_receiver import VisionDataReceiver
-from motion_planning.src.pid.pid import PID
+from entities.data.command import RobotSimCommand, RobotInfo
 from team_controller.src.config.settings import (
     PID_PARAMS,
     LOCAL_HOST,
@@ -22,84 +18,99 @@ from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import
     RobotControlResponse, RobotFeedback
 )
 
-# TODO: To be moved to a High-level Descision making repo
-
-
 class SimRobotController:
     def __init__(
         self,
+        is_team_yellow: bool,
         address=LOCAL_HOST,
         port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT),
         debug=False,
     ):
-
+        self.is_team_yellow = is_team_yellow
+        
         self.out_packet = RobotControl()
         
-        self.net_yellow = network_manager.NetworkManager(address=(address, port[0]))
-        self.net_blue = network_manager.NetworkManager(address=(address, port[1]))
+        if is_team_yellow:
+            self.net = network_manager.NetworkManager(address=(address, port[0]))
+        else:
+            self.net = network_manager.NetworkManager(address=(address, port[1]))
         
-        self.yellow_robot_info = RobotControlResponse()
-        self.blue_robot_info = RobotControlResponse()
-
+        self.robots_info: List[RobotInfo] = [None] * 6
+        
         self.debug = debug
 
-    def send_robot_commands(self, team_is_yellow: bool) -> None:
+    def send_robot_commands(self) -> None:
         """
         Sends the robot commands to the appropriate team (yellow or blue).
-
-        Args:
-            team_is_yellow (bool): True if the team is yellow, False if the team is blue.
         """
         if self.debug:
             print(f"Sending Robot Commands")
-            
-        if team_is_yellow:   
-            data = self.net_yellow.send_command(self.out_packet, is_sim_robot_cmd=True)
-            if data:
-                self.yellow_robot_info = RobotControlResponse()
-                self.yellow_robot_info.ParseFromString(data)
-            self.out_packet.Clear()
-        else:
-            data = self.net_blue.send_command(self.out_packet, is_sim_robot_cmd=True)
-            if data:
-                self.blue_robot_info = RobotControlResponse()
-                self.blue_robot_info.ParseFromString(data)
-            self.out_packet.Clear()
+             
+        data = self.net.send_command(self.out_packet, is_sim_robot_cmd=True)
         
-    def add_robot_command(self, command: Dict) -> None:
+        # manages the response packet that is received
+        if data:
+            robots_info = RobotControlResponse()
+            robots_info.ParseFromString(data)               
+            for _, robot_info in enumerate(robots_info.feedback):
+                if robot_info.HasField("dribbler_ball_contact") and robot_info.id < 6:
+                    self.robots_info[robot_info.id] = RobotInfo(robot_info.dribbler_ball_contact)
+                elif robot_info.HasField("dribbler_ball_contact") and robot_info.id >= 6:
+                    warnings.warn("Invalid robot info received, robot id >= 6", SyntaxWarning)
+        self.out_packet.Clear()
+    
+    def add_robot_commands(self, robot_commands: Union[RobotSimCommand, Dict[int, RobotSimCommand]], robot_id: Optional[int]=None) -> None:
+        """
+        Adds robot commands to the out_packet.
+        
+        Args:
+            robot_commands (Union[RobotSimCommand, Dict[int, RobotSimCommand]]): A single RobotSimCommand or a dictionary of RobotSimCommand with robot_id as the key.
+            robot_id (Optional[int]): The ID of the robot which is ONLY used when adding one Robot command. Defaults to None.
+            
+        Raises:
+            SyntaxWarning: If invalid hyperparameters are passed to the function. 
+        """
+        if type(robot_commands) == RobotSimCommand and robot_id != None:
+            self._add_robot_command(robot_commands, robot_id)
+        elif type(robot_commands) == dict:
+            for robot_id, command in robot_commands.items():    
+                self._add_robot_command(command, robot_id)
+        else:
+            warnings.warn("Invalid hyperparamters passed to add_robot_commands", SyntaxWarning)
+       
+    def _add_robot_command(self, command: RobotSimCommand, robot_id:int) -> None:
         """
         Adds a robot command to the out_packet.
 
         Args:
-            command (dict): A dictionary containing the robot command with keys 'id', 'xvel', 'yvel', and 'wvel'.
+            robot_id (int): The ID of the robot.
+            command (RobotSimCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick_spd', 'kick_angle', 'dribbler_spd'.
         """
         robot = self.out_packet.robot_commands.add()
-        robot.id = command["id"]
+        robot.id = robot_id
+        robot.kick_speed = command.kick_spd
+        robot.kick_angle = command.kick_angle
+        robot.dribbler_speed = command.dribbler_spd
+        
         local_vel = robot.move_command.local_velocity
-        local_vel.forward = command["xvel"]
-        local_vel.left = command["yvel"]
-        local_vel.angular = command["wvel"]
-        # print(f"Robot {command['id']} command: ({command['xvel']:.3f}, {command['yvel']:.3f}, {command['wvel']:.3f})")
+        local_vel.forward = command.local_forward_vel
+        local_vel.left = command.local_left_vel
+        local_vel.angular = command.angular_vel
     
-    def robot_has_ball(self, robot_id: int, team_is_yellow: bool) -> bool:
+    def robot_has_ball(self, robot_id: int) -> bool:
         """
         Checks if the specified robot has the ball.
 
         Args:
             robot_id (int): The ID of the robot.
-            team_is_yellow (bool): True if the team is yellow, False if the team is blue.
 
         Returns:
             bool: True if the robot has the ball, False otherwise.
         """
-        if team_is_yellow:
-            response = self.yellow_robot_info
-        else:
-            response = self.blue_robot_info
-        
-        for robot_feedback in response.feedback:
-            if robot_feedback.HasField("dribbler_ball_contact") and robot_feedback.id == robot_id:
-                if robot_feedback.dribbler_ball_contact:
+        robots_info = self.robots_info
+        for id, robot_feedback in enumerate(robots_info):
+            if robot_feedback != None:
+                if robot_feedback.has_ball and id == robot_id:
                     if self.debug:
                         print(f"Robot: {robot_id}: HAS the Ball")
                     return True
