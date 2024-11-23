@@ -12,7 +12,7 @@ def data_update_listener(receiver: VisionDataReceiver):
 def main():
     game = Game()
     # Initialize the VisionDataReceiver
-    receiver = VisionDataReceiver(debug=True)
+    receiver = VisionDataReceiver(debug=False)
     referee_receiver = RefereeMessageReceiver(debug=True)
 
     # Start the data receiving in a separate thread

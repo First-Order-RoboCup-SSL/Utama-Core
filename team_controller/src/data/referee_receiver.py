@@ -2,6 +2,9 @@ import threading
 import time
 from typing import Tuple, Optional, List
 
+from entities.game.referee_command import RefereeCommand
+from entities.game.stage import Stage
+from entities.game.team_info import TeamInfo
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP_REFEREE, REFEREE_PORT
 
@@ -38,8 +41,8 @@ class RefereeMessageReceiver:
         self.stage_time_left = None
         self.command_counter = None
         self.command_timestamp = None
-        self.yellow_info = None
-        self.blue_info = None
+        self.yellow_info = TeamInfo("yellow")
+        self.blue_info = TeamInfo("blue")
 
     def string_from_stage(self, stage: int) -> str:
         """
@@ -133,8 +136,8 @@ class RefereeMessageReceiver:
         self.update_event.set()  # Signal that an update has occurred.
 
         # Update state variables
-        self.stage = referee_packet.stage
-        self.command = referee_packet.command
+        self.stage = Stage.from_id(referee_packet.stage)
+        self.command = RefereeCommand.from_id(referee_packet.command)
         self.sent_time = (
             referee_packet.packet_timestamp / 1e6
         )  # Convert microseconds to seconds
@@ -145,8 +148,8 @@ class RefereeMessageReceiver:
         self.command_timestamp = (
             referee_packet.command_timestamp / 1e6
         )  # Convert microseconds to seconds
-        self.yellow_info = referee_packet.yellow
-        self.blue_info = referee_packet.blue
+        self.yellow_info.parse_referee_packet(referee_packet.yellow)
+        self.blue_info.parse_referee_packet(referee_packet.blue)
 
     def check_new_message(self) -> bool:
         """
@@ -225,25 +228,34 @@ class RefereeMessageReceiver:
         """
         return self.sent_time
 
-    def yellow_team_info(self) -> object:
+    def yellow_team_info(self) -> TeamInfo:
         """
         Get the information for the yellow team.
 
         Returns:
-            object: The yellow team information.
+            TeamInfo: The yellow team information.
         """
         return self.yellow_info
 
-    def blue_team_info(self) -> object:
+    def blue_team_info(self) -> TeamInfo:
         """
         Get the information for the blue team.
 
         Returns:
-            object: The blue team information.
+            TeamInfo: The blue team information.
         """
         return self.blue_info
 
-    def get_next_command(self) -> Optional[int]:
+    def get_stage(self) -> Optional[Stage]:
+        """
+        Get the current state.
+
+        Returns:
+            Optional[Stage]: Current state, otherwise None
+        """
+        return self.stage
+
+    def get_next_command(self) -> Optional[RefereeCommand]:
         """
         Get the next command if available.
 
@@ -251,7 +263,7 @@ class RefereeMessageReceiver:
             Optional[int]: The next command if available, None otherwise.
         """
         if self.referee.next_command:
-            return self.referee.next_command
+            return RefereeCommand.from_id(self.referee.next_command)
         return None
 
     def get_designated_position(self) -> Optional[Tuple[float, float]]:
@@ -277,7 +289,7 @@ class RefereeMessageReceiver:
         """
         return self.command_counter
 
-    def check_command_sequence(self, sequence: List[int]) -> bool:
+    def check_command_sequence(self, sequence: List[RefereeCommand]) -> bool:
         """
         Check if the last commands match the given sequence.
 
@@ -349,7 +361,8 @@ class RefereeMessageReceiver:
         print(f"Stage Time Left   : {self.stage_time_left} ms")
         print(f"Command Counter   : {self.command_counter}")
         print(f"Command Timestamp : {self.command_timestamp} us")
-
-        print(f"Yellow Team Info  : {self.yellow_info}")
-        print(f"Blue Team Info    : {self.blue_info}")
+        print("--- YELLOW TEAM ---------------------------")
+        print(f"{self.yellow_info}")
+        print("--- BLUE TEAM -----------------------------")
+        print(f"{self.blue_info}")
         print("-------------------------------------------")
