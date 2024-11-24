@@ -46,6 +46,7 @@ class VisionDataReceiver(BaseReceiver):
 
         # Put the latest game state into the thread-safe queue which will wake up
         # main if it was empty.
+        # TODO: we should modify how Game is updated. Instead of appending to the records list, we should really keep any data we don't have updates for.
         self._message_queue.put_nowait((MessageType.VISION, FrameData(
             self.time_received,
             self.robots_yellow_pos,
@@ -113,7 +114,7 @@ class VisionDataReceiver(BaseReceiver):
             t_received = time.time()
             self.time_received = t_received
             data = self.net.receive_data()
-            if data != None:
+            if data is not None:
                 vision_packet.Clear()  # Clear previous data to avoid memory bloat
                 vision_packet.ParseFromString(data)
                 self._update_data(vision_packet.detection)
@@ -123,14 +124,75 @@ class VisionDataReceiver(BaseReceiver):
 
 
     # MOVE INTO GAME
-    # def get_time_received(self) -> float: # UNUSED
+    
+    # # UNUSED
+    # def get_time_received(self) -> float:
+    #     """
+    #     Retrieves the time at which the most recent vision data was received.
+    #     Returns:
+    #         float: The time at which the most recent vision data was received.
+    #     """
+    #     return self.time_received
 
     # def get_robot_coords(self, is_yellow: bool) -> TeamRobotCoords:
+    #     """
+    #     Retrieves the current positions of all robots on the specified team.
         
-    # def get_robot_by_id(self, is_yellow: bool, robot_id: int) -> RobotData: # UNUSED
+    #     Args:
+    #         is_yellow (bool): If True, retrieves data for the yellow team; otherwise, for the blue team.        
+        
+    #     Returns:
+    #         TeamRobotCoords: A named tuple containing the team color and a list of RobotData.
+    #     """    
+    #     with self.lock:
+    #         team_color = "yellow" if is_yellow else "blue"
+    #         robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
+    #         return TeamRobotCoords(team_color=team_color, robots=robots)
     
-    # def get_closest_robot_to_point(self, is_yellow: bool, x: float, y: float) -> RobotData: # UNUSED
+    # # UNUSED   
+    # def get_robot_by_id(self, is_yellow: bool, robot_id: int) -> RobotData:
+    #         """
+    #         Retrieves the position data for a specific robot by ID.
+    #         Args:
+    #             is_yellow (bool): If True, retrieves data for the yellow team; otherwise, for the blue team.
+    #             robot_id (int): The ID of the robot.
+    #         Returns:
+    #             RobotData: The position data of the specified robot.
+    #         """
+    #         with self.lock:
+    #             robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
+    #             if 0 <= robot_id < len(robots) and robots[robot_id] is not None:
+    #                 return robots[robot_id]
+    #             else:
+    #                 return None  # TODO: Or raise an exception.    
     
+    # # UNUSED            
+    # def get_closest_robot_to_point(self, is_yellow: bool, x: float, y: float) -> RobotData:
+    #     """
+    #     Finds the robot closest to a given point.
+        
+    #     Args:
+    #         is_yellow (bool): If True, searches within the yellow team; otherwise, within the blue team.
+    #         x (float): The x-coordinate of the point.
+    #         y (float): The y-coordinate of the point.
+
+    #     Returns:
+    #         RobotData: The position data of the closest robot.
+    #     """
+    #     with self.lock:
+    #         robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
+    #         min_distance = float('inf')
+    #         closest_robot = None
+    #         for robot in robots:
+    #             if robot is not None:
+    #                 distance = ((robot.x - x) ** 2 + (robot.y - y) ** 2) ** 0.5
+    #                 if distance < min_distance:
+    #                     min_distance = distance
+    #                     closest_robot = robot
+    #     # TODO: Haven't been tested 
+    #     return closest_robot   
+    
+    # # UNUSED
     # def get_ball_velocity(self) -> Optional[tuple]: # UNUSED
     #     """
     #     Calculates the ball's velocity based on position changes over time.

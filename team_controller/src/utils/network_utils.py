@@ -71,7 +71,7 @@ def receive_data(sock: socket.socket) -> Optional[bytes]:
         data, _ = sock.recvfrom(8192)
         return data
     except socket.timeout:
-        # logging.warning("Socket timed out while receiving data")
+        logging.warning("Socket timed out while receiving data")
         return None
     except socket.error as e:
         logging.error("Socket error occurred while receiving data: %s", e)
