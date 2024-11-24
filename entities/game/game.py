@@ -1,6 +1,6 @@
+from typing import List
 from entities.game.field import Field
-from entities.data.vision import FrameData
-
+from entities.data.vision import FrameData, RobotData, BallData
 
 class Game:
     """
@@ -38,3 +38,10 @@ class Game:
             self._records.append(frame_data)
         else:
             raise ValueError("Invalid frame data.")
+    
+    def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
+        record = self._records[-1] 
+        return record.yellow_robots if is_yellow else record.blue_robots
+
+    def get_ball_pos(self) -> BallData:
+        return self._records[-1].ball
