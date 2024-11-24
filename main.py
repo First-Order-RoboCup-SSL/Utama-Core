@@ -3,9 +3,8 @@ import queue
 from entities.game import Game
 
 from team_controller.src.controllers.robot_startup_controller import StartUpController
-from team_controller.src.data.vision_receiver import VisionDataReceiver
+from team_controller.src.data import VisionDataReceiver, RefereeMessageReceiver
 from team_controller.src.data.message_enum import MessageType
-
 
 
 def data_update_listener(receiver: VisionDataReceiver):
@@ -25,13 +24,14 @@ def main():
     data_thread.daemon = True  # Allows the thread to close when the main program exits
     data_thread.start()
 
-    referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
-    referee_thread.daemon = True
-    referee_thread.start()
+    # TODO: Not implemented
+    # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
+    # referee_thread.daemon = True
+    # referee_thread.start()
 
     try:
         while True:
-            (message_type, message) = message_queue.get() # Infinite timeout for now
+            (message_type, message) = message_queue.get()  # Infinite timeout for now
 
             if message_type == MessageType.VISION:
                 # message = FrameData(...)
@@ -47,11 +47,12 @@ def main():
 
             elif message_type == MessageType.REF:
                 pass
-        
+
             decision_maker.make_decision()
 
     except KeyboardInterrupt:
         print("Stopping main program.")
+
 
 if __name__ == "__main__":
     main()
