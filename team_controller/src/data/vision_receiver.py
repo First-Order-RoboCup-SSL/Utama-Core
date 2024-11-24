@@ -122,7 +122,6 @@ class VisionDataReceiver(BaseReceiver):
                 self._print_frame_info(t_received, vision_packet.detection)
             time.sleep(0.0083) # TODO : Block on data?
 
-
     # MOVE INTO GAME
     
     # # UNUSED
@@ -224,8 +223,3 @@ class VisionDataReceiver(BaseReceiver):
     #         vx = (ball_pos.x - previous_ball_pos.x) / dt
     #         vy = (ball_pos.y - previous_ball_pos.y) / dt
     #         return (vx, vy)
-
-
-
-
-

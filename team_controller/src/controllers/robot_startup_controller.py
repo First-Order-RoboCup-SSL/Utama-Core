@@ -1,10 +1,12 @@
 import time
 import threading
 import numpy as np
-from typing import Tuple, Optional, Dict, Union
+from typing import Tuple, Optional, Dict, Union, List
 
 from entities.game.game import Game
 from global_utils.math_utils import rotate_vector
+from entities.data.command import RobotSimCommand
+from entities.data.vision import RobotData, BallData
 from team_controller.src.data.vision_receiver import VisionDataReceiver
 from team_controller.src.controllers.sim_robot_controller import SimRobotController
 from motion_planning.src.pid.pid import PID
@@ -12,11 +14,11 @@ from team_controller.src.config.settings import (
     PID_PARAMS,
     YELLOW_START,
 )
-
 from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
     RobotControl,
 )
 
+# TODO: To be moved to a High-level Descision making repo
 class StartUpController:
     def __init__(
         self,
@@ -28,8 +30,8 @@ class StartUpController:
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
         # potentially have a set tunig parameters for each robot
-        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0, num_robots=6)
-        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0, num_robots=6)
+        self.pid_oren = PID(0.0167, 8, -8, 5, 0, 0.03, num_robots=6)
+        self.pid_trans = PID(0.0167, 1.5, -1.5, 5, 0, 0.02, num_robots=6)
 
         self.debug = debug
 
@@ -53,14 +55,14 @@ class StartUpController:
             self.sim_robot_controller.send_robot_commands(team_is_yellow=True)
             self.sim_robot_controller.robot_has_ball(robot_id=3, team_is_yellow=True)
 
-    def _calculate_robot_velocities(
+def _calculate_robot_velocities(
         self,
         robot_id: int,
         target_coords: Union[Tuple[float, float], Tuple[float, float, float]],
-        robots: Dict[int, Optional[Tuple[float, float, float]]],
-        balls: Dict[int, Tuple[float, float, float]],
+        robots: List[RobotData],
+        balls: List[BallData],
         face_ball=False,
-    ) -> Dict[str, float]:
+    ) -> RobotSimCommand:
         """
                 Calculates the linear and angular velocities required for a robot to move towards a specified target position
                 and orientation.
@@ -85,9 +87,7 @@ class StartUpController:
                 the robot will calculate the angular velocity to face the ball. The resulting x and y velocities are rotated to align
                 with the robot's current orientation.
         """
-
-        out = {"id": robot_id, "xvel": 0, "yvel": 0, "wvel": 0}
-
+        
         # Get current positions
         if balls[0] and robots[robot_id]:
             ball_x, ball_y, ball_z = balls[0]
@@ -104,20 +104,26 @@ class StartUpController:
         # print(f"Robot {robot_id} target position: ({target_x:.3f}, {target_y:.3f}, {target_oren:.3f})")
 
         if target_oren != None:
-            out["wvel"] = self.pid_oren.calculate(
+            angular_vel = self.pid_oren.calculate(
                 target_oren, current_oren, robot_id, oren=True
             )
+        else:
+            angular_vel = 0
 
         if target_x != None and target_y != None:
-            out["yvel"] = self.pid_trans.calculate(
+            left_vel = self.pid_trans.calculate(
                 target_y, current_y, robot_id, normalize_range=3000
             )
-            out["xvel"] = self.pid_trans.calculate(
+            forward_vel = self.pid_trans.calculate(
                 target_x, current_x, robot_id, normalize_range=4500
             )
 
-            out["xvel"], out["yvel"] = rotate_vector(
-                out["xvel"], out["yvel"], current_oren
+            forward_vel, left_vel = rotate_vector(
+                forward_vel, left_vel, current_oren
             )
+        else:
+            forward_vel = 0
+            left_vel = 0
 
-        return out
+        # print(f"Output: {forward_vel}, {left_vel}, {angular_vel}")
+        return RobotSimCommand(local_forward_vel=forward_vel, local_left_vel=left_vel, angular_vel=angular_vel, kick_spd=0, kick_angle=0, dribbler_spd=0)

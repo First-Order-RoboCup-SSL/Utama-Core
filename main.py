@@ -1,6 +1,7 @@
 import threading
 import queue
 from entities.game import Game
+
 from team_controller.src.controllers.robot_startup_controller import StartUpController
 from team_controller.src.data.vision_receiver import VisionDataReceiver
 from team_controller.src.data.message_enum import MessageType
@@ -24,6 +25,10 @@ def main():
     data_thread.daemon = True  # Allows the thread to close when the main program exits
     data_thread.start()
 
+    referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
+    referee_thread.daemon = True
+    referee_thread.start()
+
     try:
         while True:
             (message_type, message) = message_queue.get() # Infinite timeout for now
@@ -32,10 +37,10 @@ def main():
                 # message = FrameData(...)
                 game.add_new_state(message)
                 # access current state data
-                print(
-                    game.current_state.yellow_robots[0].x,
-                    game.current_state.yellow_robots[0].y,
-                )
+                # print(
+                #     game.current_state.yellow_robots[0].x,
+                #     game.current_state.yellow_robots[0].y,
+                # )
 
                 # access game records from -x number of frames ago
                 print(game.records[-1].ts, game.records[-1].ball[0].x)
