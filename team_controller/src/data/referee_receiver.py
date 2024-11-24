@@ -2,8 +2,8 @@ import threading
 import time
 from typing import Tuple, Optional, List
 
-from entities.game.referee_command import RefereeCommand
-from entities.game.stage import Stage
+from entities.referee.referee_command import RefereeCommand
+from entities.referee.stage import Stage
 from entities.game.team_info import TeamInfo
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP_REFEREE, REFEREE_PORT

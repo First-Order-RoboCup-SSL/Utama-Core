@@ -26,7 +26,7 @@ class StartUpController:
         debug=False,
     ):
         self.game = game
-        self.sim_robot_controller = SimRobotController(debug=debug)
+        self.sim_robot_controller = SimRobotController(is_team_yellow=True, debug=debug)
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
         # potentially have a set tunig parameters for each robot
@@ -48,14 +48,14 @@ class StartUpController:
                 command = self._calculate_robot_velocities(
                     robot_id, target_coords, robots, balls, face_ball=True
                 )
-                self.sim_robot_controller.add_robot_command(command)
+                self.sim_robot_controller.add_robot_commands(command, robot_id)
 
             if self.debug:
                 print(out_packet)
-            self.sim_robot_controller.send_robot_commands(team_is_yellow=True)
-            self.sim_robot_controller.robot_has_ball(robot_id=3, team_is_yellow=True)
+            self.sim_robot_controller.send_robot_commands()
+            self.sim_robot_controller.robot_has_ball(robot_id=3)
 
-def _calculate_robot_velocities(
+    def _calculate_robot_velocities(
         self,
         robot_id: int,
         target_coords: Union[Tuple[float, float], Tuple[float, float, float]],
@@ -124,6 +124,7 @@ def _calculate_robot_velocities(
         else:
             forward_vel = 0
             left_vel = 0
+
 
         # print(f"Output: {forward_vel}, {left_vel}, {angular_vel}")
         return RobotSimCommand(local_forward_vel=forward_vel, local_left_vel=left_vel, angular_vel=angular_vel, kick_spd=0, kick_angle=0, dribbler_spd=0)
