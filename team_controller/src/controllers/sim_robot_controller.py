@@ -2,6 +2,9 @@ from typing import Tuple, Optional, Dict, List, Union
 import warnings
 
 from entities.data.command import RobotSimCommand, RobotInfo
+from team_controller.src.controllers.common.robot_controller_abstract import (
+    AbstractRobotController,
+)
 from team_controller.src.config.settings import (
     PID_PARAMS,
     LOCAL_HOST,
@@ -15,10 +18,12 @@ from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import 
     RobotControl,
 )
 from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import (
-    RobotControlResponse, RobotFeedback
+    RobotControlResponse,
+    RobotFeedback,
 )
 
-class SimRobotController:
+
+class SimRobotController(AbstractRobotController):
     def __init__(
         self,
         is_team_yellow: bool,
@@ -27,16 +32,16 @@ class SimRobotController:
         debug=False,
     ):
         self.is_team_yellow = is_team_yellow
-        
+
         self.out_packet = RobotControl()
-        
+
         if is_team_yellow:
             self.net = network_manager.NetworkManager(address=(address, port[0]))
         else:
             self.net = network_manager.NetworkManager(address=(address, port[1]))
-        
+
         self.robots_info: List[RobotInfo] = [None] * 6
-        
+
         self.debug = debug
 
     def send_robot_commands(self) -> None:
@@ -45,40 +50,52 @@ class SimRobotController:
         """
         if self.debug:
             print(f"Sending Robot Commands")
-             
+
         data = self.net.send_command(self.out_packet, is_sim_robot_cmd=True)
-        
+
         # manages the response packet that is received
         if data:
             robots_info = RobotControlResponse()
-            robots_info.ParseFromString(data)               
+            robots_info.ParseFromString(data)
             for _, robot_info in enumerate(robots_info.feedback):
                 if robot_info.HasField("dribbler_ball_contact") and robot_info.id < 6:
-                    self.robots_info[robot_info.id] = RobotInfo(robot_info.dribbler_ball_contact)
-                elif robot_info.HasField("dribbler_ball_contact") and robot_info.id >= 6:
-                    warnings.warn("Invalid robot info received, robot id >= 6", SyntaxWarning)
+                    self.robots_info[robot_info.id] = RobotInfo(
+                        robot_info.dribbler_ball_contact
+                    )
+                elif (
+                    robot_info.HasField("dribbler_ball_contact") and robot_info.id >= 6
+                ):
+                    warnings.warn(
+                        "Invalid robot info received, robot id >= 6", SyntaxWarning
+                    )
         self.out_packet.Clear()
-    
-    def add_robot_commands(self, robot_commands: Union[RobotSimCommand, Dict[int, RobotSimCommand]], robot_id: Optional[int]=None) -> None:
+
+    def add_robot_commands(
+        self,
+        robot_commands: Union[RobotSimCommand, Dict[int, RobotSimCommand]],
+        robot_id: Optional[int] = None,
+    ) -> None:
         """
         Adds robot commands to the out_packet.
-        
+
         Args:
             robot_commands (Union[RobotSimCommand, Dict[int, RobotSimCommand]]): A single RobotSimCommand or a dictionary of RobotSimCommand with robot_id as the key.
             robot_id (Optional[int]): The ID of the robot which is ONLY used when adding one Robot command. Defaults to None.
-            
+
         Raises:
-            SyntaxWarning: If invalid hyperparameters are passed to the function. 
+            SyntaxWarning: If invalid hyperparameters are passed to the function.
         """
-        if type(robot_commands) == RobotSimCommand and robot_id != None:
+        if type(robot_commands) == RobotSimCommand and robot_id is not None:
             self._add_robot_command(robot_commands, robot_id)
         elif type(robot_commands) == dict:
-            for robot_id, command in robot_commands.items():    
+            for robot_id, command in robot_commands.items():
                 self._add_robot_command(command, robot_id)
         else:
-            warnings.warn("Invalid hyperparamters passed to add_robot_commands", SyntaxWarning)
-       
-    def _add_robot_command(self, command: RobotSimCommand, robot_id:int) -> None:
+            warnings.warn(
+                "Invalid hyperparamters passed to add_robot_commands", SyntaxWarning
+            )
+
+    def _add_robot_command(self, command: RobotSimCommand, robot_id: int) -> None:
         """
         Adds a robot command to the out_packet.
 
@@ -91,12 +108,12 @@ class SimRobotController:
         robot.kick_speed = command.kick_spd
         robot.kick_angle = command.kick_angle
         robot.dribbler_speed = command.dribbler_spd
-        
+
         local_vel = robot.move_command.local_velocity
         local_vel.forward = command.local_forward_vel
         local_vel.left = command.local_left_vel
         local_vel.angular = command.angular_vel
-    
+
     def robot_has_ball(self, robot_id: int) -> bool:
         """
         Checks if the specified robot has the ball.

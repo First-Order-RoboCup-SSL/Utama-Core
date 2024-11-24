@@ -17,8 +17,12 @@ from team_controller.src.generated_code.ssl_simulation_control_pb2 import (
 )
 from team_controller.src.generated_code.ssl_gc_common_pb2 import RobotId, Team
 
+from team_controller.src.controllers.common.sim_controller_abstract import (
+    AbstractSimController,
+)
 
-class SimulatorController:
+
+class SimulatorController(AbstractSimController):
     """
     A controller for interacting with a simulation environment for robot soccer, allowing actions such as teleporting the ball
     and setting robot presence on the field.
