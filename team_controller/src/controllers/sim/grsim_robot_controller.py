@@ -1,7 +1,7 @@
 from typing import Tuple, Optional, Dict, List, Union
 import warnings
 
-from entities.data.command import RobotSimCommand, RobotInfo
+from entities.data.command import RobotCommand, RobotInfo
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -23,7 +23,7 @@ from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import
 )
 
 
-class SimRobotController(AbstractRobotController):
+class GRSimRobotController(AbstractRobotController):
     def __init__(
         self,
         is_team_yellow: bool,
@@ -72,36 +72,30 @@ class SimRobotController(AbstractRobotController):
 
     def add_robot_commands(
         self,
-        robot_commands: Union[RobotSimCommand, Dict[int, RobotSimCommand]],
+        robot_commands: Union[RobotCommand, Dict[int, RobotCommand]],
         robot_id: Optional[int] = None,
     ) -> None:
         """
         Adds robot commands to the out_packet.
 
         Args:
-            robot_commands (Union[RobotSimCommand, Dict[int, RobotSimCommand]]): A single RobotSimCommand or a dictionary of RobotSimCommand with robot_id as the key.
+            robot_commands (Union[RobotCommand, Dict[int, RobotCommand]]): A single RobotCommand or a dictionary of RobotCommand with robot_id as the key.
             robot_id (Optional[int]): The ID of the robot which is ONLY used when adding one Robot command. Defaults to None.
 
         Raises:
             SyntaxWarning: If invalid hyperparameters are passed to the function.
-        """
-        if type(robot_commands) == RobotSimCommand and robot_id is not None:
-            self._add_robot_command(robot_commands, robot_id)
-        elif type(robot_commands) == dict:
-            for robot_id, command in robot_commands.items():
-                self._add_robot_command(command, robot_id)
-        else:
-            warnings.warn(
-                "Invalid hyperparamters passed to add_robot_commands", SyntaxWarning
-            )
 
-    def _add_robot_command(self, command: RobotSimCommand, robot_id: int) -> None:
+        Calls _add_robot_command for each entered command
+        """
+        super().add_robot_commands(robot_commands, robot_id)
+
+    def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
         """
         Adds a robot command to the out_packet.
 
         Args:
             robot_id (int): The ID of the robot.
-            command (RobotSimCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick_spd', 'kick_angle', 'dribbler_spd'.
+            command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick_spd', 'kick_angle', 'dribbler_spd'.
         """
         robot = self.out_packet.robot_commands.add()
         robot.id = robot_id

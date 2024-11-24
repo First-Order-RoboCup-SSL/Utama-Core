@@ -7,8 +7,10 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..
 print(project_root)
 sys.path.insert(0, project_root)
 
-from team_controller.src.data.vision_receiver import VisionDataReceiver
-from team_controller.src.controllers.robot_startup_controller import StartUpController
+from team_controller.src.data import VisionDataReceiver
+from team_controller.src.controllers.sim.robot_startup_controller import (
+    StartUpController,
+)
 
 if __name__ == "__main__":
     vision_receiver = VisionDataReceiver(debug=False)

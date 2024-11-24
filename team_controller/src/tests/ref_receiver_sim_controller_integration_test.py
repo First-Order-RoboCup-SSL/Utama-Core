@@ -18,14 +18,14 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..
 print(project_root)
 sys.path.insert(0, project_root)
 
-from team_controller.src.controllers.sim_controller import SimulatorController
-from team_controller.src.data.referee_receiver import RefereeMessageReceiver
+from team_controller.src.controllers import GRSimController
+from team_controller.src.data import RefereeMessageReceiver
 from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Referee
 
 # Example usage:
 if __name__ == "__main__":
     receiver = RefereeMessageReceiver()
-    sim_control = SimulatorController()
+    sim_control = GRSimController()
     # TODO: implement place -> stop -> place -> stop sequence
     desired_sequenceA = [
         Referee.BALL_PLACEMENT_YELLOW,

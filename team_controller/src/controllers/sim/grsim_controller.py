@@ -22,7 +22,7 @@ from team_controller.src.controllers.common.sim_controller_abstract import (
 )
 
 
-class SimulatorController(AbstractSimController):
+class GRSimController(AbstractSimController):
     """
     A controller for interacting with a simulation environment for robot soccer, allowing actions such as teleporting the ball
     and setting robot presence on the field.

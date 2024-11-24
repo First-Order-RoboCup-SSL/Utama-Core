@@ -11,12 +11,12 @@ print(project_root)
 sys.path.insert(0, project_root)
 
 from entities.game import Field
-from entities.data.command import RobotSimCommand
+from entities.data.command import RobotCommand
 from entities.data.vision import BallData, RobotData
 from global_utils.math_utils import rotate_vector
 from motion_planning.src.pid.pid import PID
 from team_controller.src.data.vision_receiver import VisionDataReceiver
-from team_controller.src.controllers.sim_robot_controller import SimRobotController
+from team_controller.src.controllers import GRSimRobotController
 from team_controller.src.config.settings import (
     LOCAL_HOST,
     YELLOW_TEAM_SIM_PORT,
@@ -26,6 +26,7 @@ from team_controller.src.utils import network_manager
 
 # Constants
 ROBOT_RADIUS = 0.18
+
 
 def ball_to_robot_dist(
     ball_x: float, ball_y: float, robot_x: float, robot_y: float
@@ -135,6 +136,7 @@ def find_best_shot(
     best_shot: float = (largest_gap[0] + largest_gap[1]) / 2
     return best_shot
 
+
 class ShootingController:
     def __init__(
         self,
@@ -143,16 +145,23 @@ class ShootingController:
         goal_y1,
         goal_y2,
         vision_receiver: VisionDataReceiver,
-        robot_controller: SimRobotController,
+        robot_controller: GRSimRobotController,
         address=LOCAL_HOST,
         port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT),
         debug=False,
     ):
         self.vision_receiver = vision_receiver
         self.robot_controller = robot_controller
-        
-        self.robot_command = RobotSimCommand(local_forward_vel=0, local_left_vel=0, angular_vel=0, kick_spd=0, kick_angle=0, dribbler_spd=0)
-        
+
+        self.robot_command = RobotCommand(
+            local_forward_vel=0,
+            local_left_vel=0,
+            angular_vel=0,
+            kick_spd=0,
+            kick_angle=0,
+            dribbler_spd=0,
+        )
+
         self.goal_x = goal_x
         self.goal_y1 = goal_y1
         self.goal_y2 = goal_y2
@@ -175,22 +184,18 @@ class ShootingController:
             # print(f"{np.round(target_oren, 2) - np.round(current_oren, 2)}")
             if abs(np.round(target_oren, 2) - np.round(current_oren, 2)) <= 0.02:
                 self.robot_command = self.robot_command._replace(
-                    kick_spd=3, 
-                    kick_angle=0, 
-                    dribbler_spd=0
+                    kick_spd=3, kick_angle=0, dribbler_spd=0
                 )
                 print("Kicking ball\n")
                 return True
             else:
                 self.robot_command = self.robot_command._replace(
-                    kick_spd=0, 
-                    kick_angle=0, 
-                    dribbler_spd=1
+                    kick_spd=0, kick_angle=0, dribbler_spd=1
                 )
                 print("Dribbling ball\n")
                 return False
-        
-    def approach_ball(self):     
+
+    def approach_ball(self):
         first_action = True
         while True:
             start_time = time.time()
@@ -202,7 +207,7 @@ class ShootingController:
                     balls[0], enemy_robots, self.goal_x, self.goal_y1, self.goal_y2
                 )
                 best_shot = find_best_shot(shadows, self.goal_y1, self.goal_y2)
-                
+
                 # Changed to atan2 to get the correct angle
                 shot_orientation = np.atan2(
                     (best_shot - balls[0].y), (self.goal_x - balls[0].x)
@@ -211,39 +216,64 @@ class ShootingController:
                 robot_data = (
                     robots[self.shooter_id] if self.shooter_id < len(robots) else None
                 )
-                
+
                 # Lost of changed here, added a lot of print statements to debug
                 if balls[0] != None and robot_data != None:
-                    target_oren = np.atan2(balls[0].y - robot_data.y, balls[0].x - robot_data.x)
+                    target_oren = np.atan2(
+                        balls[0].y - robot_data.y, balls[0].x - robot_data.x
+                    )
                     if robot_data is not None:
-                        if first_action or abs(np.round(target_oren, 1) - np.round(robot_data.orientation, 1)) >= 0.3:
+                        if (
+                            first_action
+                            or abs(
+                                np.round(target_oren, 1)
+                                - np.round(robot_data.orientation, 1)
+                            )
+                            >= 0.3
+                        ):
                             print("first action")
                             target_coords = (None, None, None)
                             face_ball = True
                             self.robot_command = self._calculate_robot_velocities(
-                            self.shooter_id, target_coords, robots, balls, face_ball=face_ball
+                                self.shooter_id,
+                                target_coords,
+                                robots,
+                                balls,
+                                face_ball=face_ball,
                             )
                             first_action = False
                         elif self.robot_controller.robot_has_ball(self.shooter_id):
                             print("robot has ball")
                             current_oren = robots[self.shooter_id].orientation
                             face_ball = False
-                            target_coords = (None, None, shot_orientation)  
-                            
+                            target_coords = (None, None, shot_orientation)
+
                             self.robot_command = self._calculate_robot_velocities(
-                            self.shooter_id, target_coords, robots, balls, face_ball=face_ball
+                                self.shooter_id,
+                                target_coords,
+                                robots,
+                                balls,
+                                face_ball=face_ball,
                             )
-                            first_action = self.kick_ball(current_oren, shot_orientation)
+                            first_action = self.kick_ball(
+                                current_oren, shot_orientation
+                            )
                         else:
                             print("approaching ball")
                             face_ball = True
-                            target_coords = (balls[0].x, balls[0].y, None)   
+                            target_coords = (balls[0].x, balls[0].y, None)
                             self.robot_command = self._calculate_robot_velocities(
-                            self.shooter_id, target_coords, robots, balls, face_ball=face_ball
-                            ) 
-                    
+                                self.shooter_id,
+                                target_coords,
+                                robots,
+                                balls,
+                                face_ball=face_ball,
+                            )
+
                     # print(self.robot_command, "\n")
-                    self.robot_controller.add_robot_commands(self.robot_command, robot_id=self.shooter_id)
+                    self.robot_controller.add_robot_commands(
+                        self.robot_command, robot_id=self.shooter_id
+                    )
                     # print(self.robot_controller.out_packet)
                     self.robot_controller.send_robot_commands()
 
@@ -265,32 +295,32 @@ class ShootingController:
         robots: List[RobotData],
         balls: List[BallData],
         face_ball=False,
-    ) -> RobotSimCommand:
+    ) -> RobotCommand:
         """
-                Calculates the linear and angular velocities required for a robot to move towards a specified target position
-                and orientation.
+        Calculates the linear and angular velocities required for a robot to move towards a specified target position
+        and orientation.
 
-                Args:
-                    robot_id (int): Unique identifier for the robot.
-                    target_coords (Tuple[float, float] | Tuple[float, float, float]): Target coordinates the robot should move towards.
-                        Can be a (x, y) or (x, y, orientation) tuple. If `face_ball` is True, the robot will face the ball instead of
-                        using the orientation value in target_coords.
-                    robots (Dict[int, Optional[Tuple[float, float, float]]]): All the Current coordinates of the robots sepateated
-                        by thier robot_id which containts a tuple (x, y, orientation).
-                    balls (Dict[int, Tuple[float, float, float]]): All the Coordinates of the detected balls (int) , typically (x, y, z/height in 3D space).            face_ball (bool, optional): If True, the robot will orient itself to face the ball's position. Defaults to False.
+        Args:
+            robot_id (int): Unique identifier for the robot.
+            target_coords (Tuple[float, float] | Tuple[float, float, float]): Target coordinates the robot should move towards.
+                Can be a (x, y) or (x, y, orientation) tuple. If `face_ball` is True, the robot will face the ball instead of
+                using the orientation value in target_coords.
+            robots (Dict[int, Optional[Tuple[float, float, float]]]): All the Current coordinates of the robots sepateated
+                by thier robot_id which containts a tuple (x, y, orientation).
+            balls (Dict[int, Tuple[float, float, float]]): All the Coordinates of the detected balls (int) , typically (x, y, z/height in 3D space).            face_ball (bool, optional): If True, the robot will orient itself to face the ball's position. Defaults to False.
 
-                Returns:
-                    Dict[str, float]: A dictionary containing the following velocity components:
-                        - "id" (int): Robot identifier.
-                        - "xvel" (float): X-axis velocity to move towards the target.
-                        - "yvel" (float): Y-axis velocity to move towards the target.
-                        - "wvel" (float): Angular velocity to adjust the robot's orientation.
+        Returns:
+            Dict[str, float]: A dictionary containing the following velocity components:
+                - "id" (int): Robot identifier.
+                - "xvel" (float): X-axis velocity to move towards the target.
+                - "yvel" (float): Y-axis velocity to move towards the target.
+                - "wvel" (float): Angular velocity to adjust the robot's orientation.
 
-                The method uses PID controllers to calculate velocities for linear and angular movement. If `face_ball` is set,
-                the robot will calculate the angular velocity to face the ball. The resulting x and y velocities are rotated to align
-                with the robot's current orientation.
+        The method uses PID controllers to calculate velocities for linear and angular movement. If `face_ball` is set,
+        the robot will calculate the angular velocity to face the ball. The resulting x and y velocities are rotated to align
+        with the robot's current orientation.
         """
-        
+
         # Get current positions
         if balls[0] and robots[robot_id]:
             ball_x, ball_y, ball_z = balls[0]
@@ -321,16 +351,21 @@ class ShootingController:
                 target_x, current_x, robot_id, normalize_range=4500
             )
 
-            forward_vel, left_vel = rotate_vector(
-                forward_vel, left_vel, current_oren
-            )
+            forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren)
         else:
             forward_vel = 0
             left_vel = 0
 
-
         # print(f"Output: {forward_vel}, {left_vel}, {angular_vel}")
-        return RobotSimCommand(local_forward_vel=forward_vel, local_left_vel=left_vel, angular_vel=angular_vel, kick_spd=0, kick_angle=0, dribbler_spd=0)
+        return RobotCommand(
+            local_forward_vel=forward_vel,
+            local_left_vel=left_vel,
+            angular_vel=angular_vel,
+            kick_spd=0,
+            kick_angle=0,
+            dribbler_spd=0,
+        )
+
 
 field = Field()
 
@@ -341,9 +376,15 @@ goal_y2 = field.half_goal_width
 
 if __name__ == "__main__":
     vision_receiver = VisionDataReceiver(debug=False)
-    sim_robot_controller = SimRobotController(is_team_yellow=True, debug=False)
+    sim_robot_controller = GRSimRobotController(is_team_yellow=True, debug=False)
     decision_maker = ShootingController(
-        shooter_id, goal_x, goal_y1, goal_y2, vision_receiver, sim_robot_controller, debug=True
+        shooter_id,
+        goal_x,
+        goal_y1,
+        goal_y2,
+        vision_receiver,
+        sim_robot_controller,
+        debug=True,
     )
 
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)

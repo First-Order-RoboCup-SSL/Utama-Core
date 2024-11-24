@@ -9,7 +9,7 @@ import threading
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
 sys.path.insert(0, project_root)
 
-from team_controller.src.data.vision_receiver import VisionDataReceiver
+from team_controller.src.data import VisionDataReceiver
 
 
 def data_update_listener(receiver: VisionDataReceiver):
@@ -31,10 +31,10 @@ def main():
             # Wait for the update event with a timeout (optional)
             if receiver.wait_for_update(timeout=1.0):
                 # An update has occurred, so process the updated data
-                ball_pos = receiver.get_ball_pos() # TEST TODO
-                robots_yellow_pos = receiver.get_robots_pos(is_yellow=True) # TESTTODO
-                robots_blue_pos = receiver.get_robots_pos(is_yellow=False) # TESTTODO
-                robot_coords = receiver.get_robot_coords(is_yellow=False) # TESTTODO
+                ball_pos = receiver.get_ball_pos()  # TEST TODO
+                robots_yellow_pos = receiver.get_robots_pos(is_yellow=True)  # TESTTODO
+                robots_blue_pos = receiver.get_robots_pos(is_yellow=False)  # TESTTODO
+                robot_coords = receiver.get_robot_coords(is_yellow=False)  # TESTTODO
 
                 print("Updated Ball Position:", ball_pos)
                 print()
