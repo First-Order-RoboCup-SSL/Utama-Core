@@ -23,13 +23,9 @@ from team_controller.src.config.settings import (
     BLUE_TEAM_SIM_PORT,
 )
 from team_controller.src.utils import network_manager
-from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
-    RobotControl, 
-)
 
 # Constants
 ROBOT_RADIUS = 0.18
-
 
 def ball_to_robot_dist(
     ball_x: float, ball_y: float, robot_x: float, robot_y: float

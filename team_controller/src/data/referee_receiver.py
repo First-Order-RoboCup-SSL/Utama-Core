@@ -2,8 +2,8 @@ import threading
 import time
 from typing import Tuple, Optional, List
 
-from entities.game.referee_command import RefereeCommand
-from entities.game.stage import Stage
+from entities.referee.referee_command import RefereeCommand
+from entities.referee.stage import Stage
 from entities.game.team_info import TeamInfo
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP_REFEREE, REFEREE_PORT
@@ -22,8 +22,7 @@ class RefereeMessageReceiver:
         port (int): The port for receiving referee data. Defaults to REFEREE_PORT.
         debug (bool): Whether to print debug information. Defaults to False.
     """
-
-    def __init__(self, ip=MULTICAST_GROUP_REFEREE, port=REFEREE_PORT, debug=False):
+    def __init__(self, ip=MULTICAST_GROUP_REFEREE, port=REFEREE_PORT, debug=False): # TODO: add message queue
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
         self.prev_command_counter = -1
         self.command_history = []
