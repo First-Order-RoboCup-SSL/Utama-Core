@@ -1,6 +1,6 @@
 import numpy as np
 import pygame
-from rsoccer_gym.Render.utils import COLORS, TAG_ID_COLORS
+from rsoccer_simulator.src.Render.utils import COLORS, TAG_ID_COLORS
 
 
 class Robot:
@@ -113,7 +113,7 @@ class VSSRobot(Robot):
                 self.x + self.size * np.cos(np.deg2rad(self.direction)),
                 self.y + self.size * np.sin(np.deg2rad(self.direction)),
             ),
-            1
+            1,
         )
 
     def draw_team_tag(self, surface):
@@ -171,31 +171,30 @@ class SSLRobot(Robot):
 
         rotated_surface = pygame.transform.rotate(rotated_surface, -self.direction)
         new_rect = rotated_surface.get_rect(center=(self.x, self.y))
-        
+
         screen.blit(rotated_surface, new_rect.topleft)
-    
+
     def draw_team_tag(self, surface):
         tag_radius = 0.025 * self.scale
-        pygame.draw.circle(
-            surface, self.team_color, (self.size, self.size), tag_radius
-        )
-        
+        pygame.draw.circle(surface, self.team_color, (self.size, self.size), tag_radius)
+
     def draw_id_tag(self, surface):
         tag_radius = 0.02 * self.scale
-        translations = np.array([
-            [0.035, 0.054772],
-            [-0.054772, 0.035],
-            [-0.054772, -0.035],
-            [0.035, -0.054772],
-        ])
+        translations = np.array(
+            [
+                [0.035, 0.054772],
+                [-0.054772, 0.035],
+                [-0.054772, -0.035],
+                [0.035, -0.054772],
+            ]
+        )
         translations *= self.scale
         tags_position = translations + np.array([self.size, self.size])
         for i, tag_position in enumerate(tags_position):
             pygame.draw.circle(
                 surface, self.id_color[i], tag_position.astype(int), tag_radius
             )
-        
-    
+
     def draw_direction(self, screen):
         pygame.draw.line(
             screen,

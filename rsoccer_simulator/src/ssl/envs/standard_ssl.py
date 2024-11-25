@@ -4,20 +4,19 @@ from typing import Dict
 
 import gymnasium as gym
 import numpy as np
-from rsoccer_gym.Entities import Frame, Robot, Ball
-from rsoccer_gym.ssl.ssl_gym_base import SSLBaseEnv
-from rsoccer_gym.Utils import KDTree
+from rsoccer_simulator.src.Entities import Frame, Robot, Ball
+from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
+from rsoccer_simulator.src.Utils import KDTree
 
 
 class SSLStandardEnv(SSLBaseEnv):
-    """The SSL robot needs to make a goal on a field with static defenders
-
-
+    """
     Description:
         The controlled robot is started on the field center and needs to
         score on the positive side field.
     Observation:
-        Type: Box(4 + 8*n_robots_blue + 8*n_robots_yellow)
+        # TODO: Update observation
+        Type: [ball_obs, robot_obs]
         Normalized Bounds to [-1.2, 1.2]
         Num      Observation normalized
         0->3     Ball [X, Y, V_x, V_y]
@@ -129,28 +128,33 @@ class SSLStandardEnv(SSLBaseEnv):
     def _frame_to_observations(self):
         # Ball observation shared by all robots
         ball_obs = [
-            self.norm_pos(self.frame.ball.x),
-            self.norm_pos(self.frame.ball.y),
+            self.frame.ball.x,
+            self.frame.ball.y,
             self.norm_v(self.frame.ball.v_x),
             self.norm_v(self.frame.ball.v_y),
         ]
 
         # Robots observation (Blue + Yellow)
-        robots_obs = []
-        for robot in self.frame.robots_blue.values():
-            robots_obs.extend(self._get_robot_observation(robot))
-        for robot in self.frame.robots_yellow.values():
-            robots_obs.extend(self._get_robot_observation(robot))
+        # amended this to be a dict so it is easier to read and use for our current use case.
+        robots_obs = {
+            "team_blue": [
+                self._get_robot_observation(robot)
+                for robot in self.frame.robots_blue.values()
+            ],
+            "team_yellow": [
+                self._get_robot_observation(robot)
+                for robot in self.frame.robots_yellow.values()
+            ],
+        }
 
         # Return the complete shared observation
-        return np.array(ball_obs + robots_obs, dtype=np.float32)
+        return [ball_obs, robots_obs]
 
     def _get_robot_observation(self, robot):
         return [
-            self.norm_pos(robot.x),
-            self.norm_pos(robot.y),
-            np.sin(np.deg2rad(robot.theta)),
-            np.cos(np.deg2rad(robot.theta)),
+            robot.x,
+            robot.y,
+            np.deg2rad(robot.theta),
             self.norm_v(robot.v_x),
             self.norm_v(robot.v_y),
             self.norm_w(robot.v_theta),

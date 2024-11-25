@@ -6,7 +6,7 @@ from team_controller.src.controllers.common.robot_controller_abstract import (
 import numpy as np
 from numpy.typing import NDArray
 from entities.data.command import RobotCommand, RobotInfo
-from rsoccer_gym.ssl.ssl_gym_base import SSLBaseEnv
+from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 
 
 class RSimRobotController(AbstractRobotController):
@@ -32,10 +32,11 @@ class RSimRobotController(AbstractRobotController):
             "team_blue": tuple(self._empty_command()),
             "team_yellow": tuple(self.out_packet),
         }
-        print(action)
+        # print(action)
         next_state, reward, terminated, truncated, reward_shaping = self.env.step(
             action
         )
+        print(next_state)
         # flush out_packet
         self.out_packet = self._empty_command()
 
@@ -78,5 +79,6 @@ class RSimRobotController(AbstractRobotController):
         )
         self.out_packet[robot_id] = action
 
+    # create an empty command array
     def _empty_command(self) -> list[NDArray]:
         return [np.zeros((6,), dtype=float) for _ in range(6)]

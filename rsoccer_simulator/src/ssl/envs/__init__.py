@@ -1,5 +1,11 @@
-from rsoccer_gym.ssl.ssl_hw_challenge.static_defenders import SSLHWStaticDefendersEnv
-from rsoccer_gym.ssl.ssl_hw_challenge.dribbling import SSLHWDribblingEnv
-from rsoccer_gym.ssl.ssl_hw_challenge.contested_possession import SSLContestedPossessionEnv
-from rsoccer_gym.ssl.ssl_hw_challenge.pass_endurance import SSLPassEnduranceEnv
-from rsoccer_gym.ssl.ssl_hw_challenge.standard_ssl import SSLStandardEnv
+from rsoccer_simulator.src.ssl.envs.static_defenders import (
+    SSLHWStaticDefendersEnv,
+)
+from rsoccer_simulator.src.ssl.envs.dribbling import SSLHWDribblingEnv
+from rsoccer_simulator.src.ssl.envs.contested_possession import (
+    SSLContestedPossessionEnv,
+)
+from rsoccer_simulator.src.ssl.envs.pass_endurance import (
+    SSLPassEnduranceEnv,
+)
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
