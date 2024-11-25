@@ -8,6 +8,8 @@ from rsoccer_simulator.src.Entities import Frame, Robot, Ball
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from rsoccer_simulator.src.Utils import KDTree
 
+from entities.data.vision import BallData, RobotData
+
 
 class SSLStandardEnv(SSLBaseEnv):
     """
@@ -127,39 +129,31 @@ class SSLStandardEnv(SSLBaseEnv):
 
     def _frame_to_observations(self):
         # Ball observation shared by all robots
-        ball_obs = [
-            self.frame.ball.x,
-            self.frame.ball.y,
-            self.norm_v(self.frame.ball.v_x),
-            self.norm_v(self.frame.ball.v_y),
-        ]
+        ball_obs = BallData(self.frame.ball.x, self.frame.ball.y, self.frame.ball.z)
+        # self.norm_v(self.frame.ball.v_x),
+        # self.norm_v(self.frame.ball.v_y),
 
         # Robots observation (Blue + Yellow)
         # amended this to be a dict so it is easier to read and use for our current use case.
-        robots_obs = {
-            "team_blue": [
-                self._get_robot_observation(robot)
-                for robot in self.frame.robots_blue.values()
-            ],
-            "team_yellow": [
-                self._get_robot_observation(robot)
-                for robot in self.frame.robots_yellow.values()
-            ],
-        }
+        blue_obs = [
+            self._get_robot_observation(robot)
+            for robot in self.frame.robots_blue.values()
+        ]
+        yellow_obs = [
+            self._get_robot_observation(robot)
+            for robot in self.frame.robots_yellow.values()
+        ]
 
         # Return the complete shared observation
-        return [ball_obs, robots_obs]
+        return (yellow_obs, blue_obs, ball_obs)
 
     def _get_robot_observation(self, robot):
-        return [
-            robot.x,
-            robot.y,
-            np.deg2rad(robot.theta),
-            self.norm_v(robot.v_x),
-            self.norm_v(robot.v_y),
-            self.norm_w(robot.v_theta),
-            1 if robot.infrared else 0,
-        ]
+        return RobotData(robot.x, robot.y, float(np.deg2rad(robot.theta)))
+        #   1 if robot.infrared else 0,
+
+        # self.norm_v(robot.v_x),
+        # self.norm_v(robot.v_y),
+        # self.norm_w(robot.v_theta),
 
     def _get_commands(self, actions):
         commands = []

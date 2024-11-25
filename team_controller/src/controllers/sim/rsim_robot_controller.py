@@ -1,5 +1,8 @@
-from typing import Dict, Union, Optional
+from typing import Dict, Union, Optional, Tuple
+import queue
+from entities.game import Game
 from entities.data.command import RobotCommand
+from entities.data.vision import BallData, RobotData, FrameData
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -10,35 +13,43 @@ from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 
 
 class RSimRobotController(AbstractRobotController):
+    """
+    Robot Controller (and Vision Receiver) for RSim.
+
+    There is no need for a separate Vision Receiver for RSim.
+    """
+
     def __init__(
         self,
         is_team_yellow: bool,
         env: SSLBaseEnv,
+        game: Game,
         debug: bool = False,
     ):
         self._is_team_yellow = is_team_yellow
-        self.debug = debug
-        self.env = env
-        self.out_packet = self._empty_command()
+        self._game_obj = game
+        self._debug = debug
+        self._env = env
+        self._out_packet = self._empty_command()
 
     def send_robot_commands(self) -> None:
         """
         Sends the robot commands to the appropriate team (yellow or blue),
         """
-        if self.debug:
+        if self._debug:
             print(f"Sending Robot Commands")
 
         action = {
             "team_blue": tuple(self._empty_command()),
-            "team_yellow": tuple(self.out_packet),
+            "team_yellow": tuple(self._out_packet),
         }
         # print(action)
-        next_state, reward, terminated, truncated, reward_shaping = self.env.step(
+        next_state, reward, terminated, truncated, reward_shaping = self._env.step(
             action
         )
         print(next_state)
         # flush out_packet
-        self.out_packet = self._empty_command()
+        self._out_packet = self._empty_command()
 
     def add_robot_commands(
         self,
@@ -77,8 +88,34 @@ class RSimRobotController(AbstractRobotController):
             ],
             dtype=np.float32,
         )
-        self.out_packet[robot_id] = action
+        self._out_packet[robot_id] = action
+
+    def _write_to_game_obj(self, observation: Tuple) -> None:
+        """
+        Supersedes the VisionReceiver and queue procedure to write to game obj directly.
+
+        Done this way, because there's no separate vision receivere for RSim.
+        """
+
+        # TODO: the magnitude of values don't match currently.
+        pass
 
     # create an empty command array
     def _empty_command(self) -> list[NDArray]:
         return [np.zeros((6,), dtype=float) for _ in range(6)]
+
+    @property
+    def is_team_yellow(self):
+        return self._is_team_yellow
+
+    @property
+    def env(self):
+        return self._env
+
+    @property
+    def game_obj(self):
+        return self._game_obj
+
+    @property
+    def debug(self):
+        return self._debug
