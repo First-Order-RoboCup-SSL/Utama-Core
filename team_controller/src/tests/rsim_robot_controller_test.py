@@ -16,7 +16,7 @@ robot_controller = RSimRobotController(is_team_yellow=True, env=env, game=game)
 for i in range(10000):
     terminated = False
     truncated = False
-    if i > 100 and i < 200:
-        robot_controller.add_robot_commands(RobotCommand(0, 0.1, 0, 0, 0, 0), 3)
+    if i > 100:
+        robot_controller.add_robot_commands(RobotCommand(1, 0, 1, 0, 0, 0), 3)
         robot_controller.add_robot_commands(RobotCommand(0, 0, 1, 0, 0, 0), 4)
     robot_controller.send_robot_commands()

@@ -8,14 +8,13 @@ from rsoccer_simulator.src.Entities import Frame, Robot, Ball
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from rsoccer_simulator.src.Utils import KDTree
 
-from entities.data.vision import BallData, RobotData
+from entities.data.vision import BallData, RobotData, FrameData
 
 
 class SSLStandardEnv(SSLBaseEnv):
     """
     Description:
-        The controlled robot is started on the field center and needs to
-        score on the positive side field.
+        Environment stripped to be a lightweight simulator for testing and development.
     Observation:
         # TODO: Update observation
         Type: [ball_obs, robot_obs]
@@ -102,8 +101,24 @@ class SSLStandardEnv(SSLBaseEnv):
         print(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
     def reset(self, *, seed=None, options=None):
+        """
+        Note reset does not restart step counter
+        Used for manual ball or robot placement
+        """
         self.reward_shaping_total = None
-        return super().reset(seed=seed, options=options)
+        super().reset(seed=seed, options=options)
+        self.last_frame = None
+        self.sent_commands = None
+
+        initial_pos_frame: Frame = self._get_initial_positions_frame()
+        self.rsim.reset(initial_pos_frame)
+
+        # Get frame from simulator
+        self.frame = self.rsim.get_frame()
+        obs = self._frame_to_observations()
+        if self.render_mode == "human":
+            self.render()
+        return obs, {}
 
     def step(self, action):
         # Apply the actions to all robots in both teams
@@ -145,7 +160,7 @@ class SSLStandardEnv(SSLBaseEnv):
         ]
 
         # Return the complete shared observation
-        return (yellow_obs, blue_obs, ball_obs)
+        return FrameData(self.time_step * self.steps, yellow_obs, blue_obs, ball_obs)
 
     def _get_robot_observation(self, robot):
         return RobotData(robot.x, robot.y, float(np.deg2rad(robot.theta)))
@@ -199,11 +214,12 @@ class SSLStandardEnv(SSLBaseEnv):
         v_y = action[1] * self.max_v
         v_theta = action[2] * self.max_w
         # Convert to local
-        v_x, v_y = v_x * np.cos(angle) + v_y * np.sin(angle), -v_x * np.sin(
-            angle
-        ) + v_y * np.cos(angle)
+        # v_x, v_y = v_x * np.cos(angle) + v_y * np.sin(angle), -v_x * np.sin(
+        #     angle
+        # ) + v_y * np.cos(angle)
 
         # clip by max absolute
+        # TODO: Not sure if clipping it this way makes sense. We'll see.
         v_norm = np.linalg.norm([v_x, v_y])
         c = v_norm < self.max_v or self.max_v / v_norm
         v_x, v_y = v_x * c, v_y * c
@@ -335,7 +351,7 @@ class SSLStandardEnv(SSLBaseEnv):
         def in_gk_area(obj):
             return obj.x > half_len - pen_len and abs(obj.y) < half_pen_wid
 
-        pos_frame.ball = Ball(x=x(), y=y())
+        pos_frame.ball = Ball(x=4.5, y=3)
         while in_gk_area(pos_frame.ball):
             pos_frame.ball = Ball(x=x(), y=y())
 
