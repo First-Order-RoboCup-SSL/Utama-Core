@@ -1,7 +1,6 @@
 from typing import Dict, Union, Optional
-import queue
 from entities.game import Game
-from entities.data.command import RobotCommand
+from entities.data.command import RobotCommand, RobotInfo
 from entities.data.vision import FrameData
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
@@ -16,10 +15,6 @@ class RSimRobotController(AbstractRobotController):
     """
     Robot Controller (and Vision Receiver) for RSim.
 
-    mode:
-    0: controller v controller (yellow)
-    1: controller v controller (blue)
-
     There is no need for a separate Vision Receiver for RSim.
     """
 
@@ -27,31 +22,40 @@ class RSimRobotController(AbstractRobotController):
         self,
         is_team_yellow: bool,
         env: SSLBaseEnv,
-        game: Game,
+        game_obj: Game,
         debug: bool = False,
     ):
         self._is_team_yellow = is_team_yellow
-        self._game_obj = game
+        self._game_obj = game_obj
         self._debug = debug
         self._env = env
         self._out_packet = self._empty_command()
+        self._robots_info: list[RobotInfo] = [None] * 6
+
+        initial_obs, _ = self._env.reset()
+        initial_frame = initial_obs[0]
+        self._write_to_game_obj(initial_frame)
 
     def send_robot_commands(self) -> None:
         """
-        Sends the robot commands to the appropriate team (yellow or blue),
+        Sends the robot commands to the appropriate team (yellow or blue).
         """
-        if self._debug:
-            print(f"Sending Robot Commands")
-
         action = {
             "team_blue": tuple(self._empty_command()),
             "team_yellow": tuple(self._out_packet),
         }
         # print(action)
-        next_state, reward, terminated, truncated, reward_shaping = self._env.step(
+        observation, reward, terminated, truncated, reward_shaping = self._env.step(
             action
         )
-        self._write_to_game_obj(next_state)
+
+        # note that we should not technically be able to view the opponent's robots_info!!
+        new_frame, yellow_robots_info, blue_robots_info = observation
+
+        if self._debug:
+            print(new_frame, terminated, truncated, reward_shaping)
+
+        self._write_to_game_obj(new_frame)
         # flush out_packet
         self._out_packet = self._empty_command()
 
@@ -94,17 +98,36 @@ class RSimRobotController(AbstractRobotController):
         )
         self._out_packet[robot_id] = action
 
-    def _write_to_game_obj(self, next_state: FrameData) -> None:
+    def _write_to_game_obj(self, new_frame: FrameData) -> None:
         """
         Supersedes the VisionReceiver and queue procedure to write to game obj directly.
 
         Done this way, because there's no separate vision receivere for RSim.
         """
-        self._game_obj.add_new_state(next_state)
+        self._game_obj.add_new_state(new_frame)
 
     # create an empty command array
     def _empty_command(self) -> list[NDArray]:
         return [np.zeros((6,), dtype=float) for _ in range(6)]
+
+    def robot_has_ball(self, robot_id: int) -> bool:
+        """
+        Checks if the specified robot has the ball.
+
+        Args:
+            robot_id (int): The ID of the robot.
+
+        Returns:
+            bool: True if the robot has the ball, False otherwise.
+        """
+        for id, robot_feedback in enumerate(self.robots_info):
+            if robot_feedback != None:
+                if robot_feedback.has_ball and id == robot_id:
+                    if self.debug:
+                        print(f"Robot: {robot_id}: HAS the Ball")
+                    return True
+                else:
+                    return False
 
     @property
     def is_team_yellow(self):
@@ -121,3 +144,7 @@ class RSimRobotController(AbstractRobotController):
     @property
     def debug(self):
         return self._debug
+
+    @property
+    def robots_info(self):
+        return self._robots_info

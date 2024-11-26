@@ -52,3 +52,16 @@ class AbstractRobotController:
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick_spd', 'kick_angle', 'dribbler_spd'.
         """
         pass
+
+    @abc.abstractmethod
+    def robot_has_ball(self, robot_id: int) -> bool:
+        """
+        Checks if the specified robot has the ball.
+
+        Args:
+            robot_id (int): The ID of the robot.
+
+        Returns:
+            bool: True if the robot has the ball, False otherwise.
+        """
+        pass

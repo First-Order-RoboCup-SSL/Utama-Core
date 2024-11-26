@@ -9,12 +9,13 @@ game = Game()
 # making environment
 env = SSLStandardEnv()
 env.reset()
-robot_controller = RSimRobotController(is_team_yellow=True, env=env, game=game)
+robot_controller = RSimRobotController(is_team_yellow=True, env=env, game_obj=game)
 
 # Run for 1 episode and print reward at the end
 for i in range(10000):
     terminated = False
     truncated = False
-    # robot_controller.add_robot_commands(RobotCommand(1, 0, 0, 0, 0, 0), 3)
-    # robot_controller.add_robot_commands(RobotCommand(0, 0, 1, 0, 0, 0), 4)
+    if i > 100 and i < 200:
+        robot_controller.add_robot_commands(RobotCommand(1, 0, 0, 0, 0, 0), 3)
+        robot_controller.add_robot_commands(RobotCommand(0, 0, 1, 0, 0, 0), 4)
     robot_controller.send_robot_commands()

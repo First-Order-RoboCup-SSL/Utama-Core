@@ -109,43 +109,29 @@ class SSLStandardEnv(SSLBaseEnv):
 
         print(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
-    def set_positions(
+    def set_ball_pos(
         self,
     ):
+        # TODO: enable ball and robot teleport
         return
 
     def reset(self, *, seed=None, options=None):
-        """
-        Note reset does not restart step counter
-        Used for manual ball or robot placement
-        """
         self.reward_shaping_total = None
-        super().reset(seed=seed, options=options)
-        self.last_frame = None
-        self.sent_commands = None
-
-        initial_pos_frame: Frame = self._get_initial_positions_frame()
-        self.rsim.reset(initial_pos_frame)
-
-        # Get frame from simulator
-        self.frame = self.rsim.get_frame()
-        obs = self._frame_to_observations()
-        if self.render_mode == "human":
-            self.render()
-        return obs, {}
+        return super().reset(seed=seed, options=options)
 
     def step(self, action):
         # Apply the actions to all robots in both teams
         for i in range(self.n_robots_blue):
-            self._apply_action(i, action["team_blue"][i], self.frame.robots_blue[i])
+            self._apply_action(action["team_blue"][i], self.frame.robots_blue[i])
         for i in range(self.n_robots_yellow):
-            self._apply_action(i, action["team_yellow"][i], self.frame.robots_yellow[i])
+            self._apply_action(action["team_yellow"][i], self.frame.robots_yellow[i])
 
         # Proceed with step calculations (including reward and done check)
         observation, reward, terminated, truncated, _ = super().step(action)
+
         return observation, reward, terminated, truncated, self.reward_shaping_total
 
-    def _apply_action(self, robot_id, action, robot):
+    def _apply_action(self, action, robot):
         # Convert and apply movement and control actions for each robot
         angle = robot.theta
         v_x, v_y, v_theta = self.convert_actions(action, np.deg2rad(angle))
@@ -157,6 +143,14 @@ class SSLStandardEnv(SSLBaseEnv):
         robot.dribbler = True if action[4] == 0 else False
 
     def _frame_to_observations(self):
+        """
+        return observation data that aligns with grSim
+
+        Returns (vision_observation, yellow_robot_feedback, blue_robot_feedback)
+        vision_observation: closely aligned to SSLVision that returns a FramData object
+        yellow_robot_feedback: feedback from individual yellow robots that returns a List[RobotInfo]
+        blue_robot_feedback: feedback from individual blue robots that returns a List[RobotInfo]
+        """
         # Ball observation shared by all robots
         ball_obs = BallData(
             self.frame.ball.x * 1000, self.frame.ball.y * 1000, self.frame.ball.z * 1000
@@ -165,21 +159,35 @@ class SSLStandardEnv(SSLBaseEnv):
         # self.norm_v(self.frame.ball.v_y),
 
         # Robots observation (Blue + Yellow)
-        blue_obs = [
-            self._get_robot_observation(robot)
-            for robot in self.frame.robots_blue.values()
-        ]
-        yellow_obs = [
-            self._get_robot_observation(robot)
-            for robot in self.frame.robots_yellow.values()
-        ]
+        blue_obs = []
+        blue_robots_info = []
+        for robot in self.frame.robots_blue.values():
+            robot_pos, robot_info = self._get_robot_observation(robot)
+            blue_obs.append(robot_pos)
+            blue_robots_info.append(robot_info)
+
+        yellow_obs = []
+        yellow_robots_info = []
+        for robot in self.frame.robots_blue.values():
+            robot_pos, robot_info = self._get_robot_observation(robot)
+            yellow_obs.append(robot_pos)
+            yellow_robots_info.append(robot_info)
 
         # Return the complete shared observation
-        return FrameData(self.time_step * self.steps, yellow_obs, blue_obs, ball_obs)
+        # note that ball_obs stored in list to standardise with SSLVision
+        # As there is sometimes multiple possible positions for the ball
+        return (
+            FrameData(self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs]),
+            yellow_robots_info,
+            blue_robots_info,
+        )
 
     def _get_robot_observation(self, robot):
-        return RobotData(robot.x * 1000, robot.y * 1000, deg_to_rad(robot.theta))
-        #   1 if robot.infrared else 0,
+        robot_pos = RobotData(
+            robot.x * 1000, robot.y * 1000, float(deg_to_rad(robot.theta))
+        )
+        has_ball = robot.infrared
+        return robot_pos, has_ball
 
     def _get_commands(self, actions):
         commands = []
