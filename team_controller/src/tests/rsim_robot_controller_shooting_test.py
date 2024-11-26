@@ -166,8 +166,8 @@ class ShootingController:
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
         # potentially have a set tunig parameters for each robot
-        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0.045, num_robots=6)
-        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0.045, num_robots=6)
+        self.pid_oren = PID(0.025, 8, -8, 4.5, 0, 0.045, num_robots=6)
+        self.pid_trans = PID(0.025, 1.5, -1.5, 4.5, 0, 0.045, num_robots=6)
 
         self.debug = debug
         self.shooter_id = shooter_id
@@ -271,7 +271,7 @@ class ShootingController:
                     # print(self.robot_controller.out_packet)
                     self.robot_controller.send_robot_commands()
 
-            time_to_sleep = max(0, 0.0167 - (time.time() - start_time))
+            time_to_sleep = max(0, 0.025 - (time.time() - start_time))
             time.sleep(time_to_sleep)
 
     def _get_positions(self) -> tuple:
