@@ -10,7 +10,6 @@ from team_controller.src.config.settings import (
     LOCAL_HOST,
     YELLOW_TEAM_SIM_PORT,
     BLUE_TEAM_SIM_PORT,
-    YELLOW_START,
 )
 from team_controller.src.utils import network_manager
 

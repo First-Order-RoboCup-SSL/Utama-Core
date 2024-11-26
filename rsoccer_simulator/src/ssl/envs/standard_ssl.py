@@ -7,6 +7,11 @@ import numpy as np
 from rsoccer_simulator.src.Entities import Frame, Robot, Ball
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from rsoccer_simulator.src.Utils import KDTree
+from team_controller.src.config.starting_formation import (
+    BLUE_START_ONE,
+    YELLOW_START_ONE,
+)
+from global_utils.math_utils import deg_to_rad, rad_to_deg
 
 from entities.data.vision import BallData, RobotData, FrameData
 
@@ -98,7 +103,16 @@ class SSLStandardEnv(SSLBaseEnv):
         self.max_w = 10  # max angular velocity
         self.kick_speed_x = 5.0  # kick speed
 
+        # set starting formation style for
+        self.blue_formation = BLUE_START_ONE
+        self.yellow_formation = YELLOW_START_ONE
+
         print(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
+
+    def set_positions(
+        self,
+    ):
+        return
 
     def reset(self, *, seed=None, options=None):
         """
@@ -144,12 +158,13 @@ class SSLStandardEnv(SSLBaseEnv):
 
     def _frame_to_observations(self):
         # Ball observation shared by all robots
-        ball_obs = BallData(self.frame.ball.x, self.frame.ball.y, self.frame.ball.z)
+        ball_obs = BallData(
+            self.frame.ball.x * 1000, self.frame.ball.y * 1000, self.frame.ball.z * 1000
+        )
         # self.norm_v(self.frame.ball.v_x),
         # self.norm_v(self.frame.ball.v_y),
 
         # Robots observation (Blue + Yellow)
-        # amended this to be a dict so it is easier to read and use for our current use case.
         blue_obs = [
             self._get_robot_observation(robot)
             for robot in self.frame.robots_blue.values()
@@ -163,12 +178,8 @@ class SSLStandardEnv(SSLBaseEnv):
         return FrameData(self.time_step * self.steps, yellow_obs, blue_obs, ball_obs)
 
     def _get_robot_observation(self, robot):
-        return RobotData(robot.x, robot.y, float(np.deg2rad(robot.theta)))
+        return RobotData(robot.x * 1000, robot.y * 1000, deg_to_rad(robot.theta))
         #   1 if robot.infrared else 0,
-
-        # self.norm_v(robot.v_x),
-        # self.norm_v(robot.v_y),
-        # self.norm_w(robot.v_theta),
 
     def _get_commands(self, actions):
         commands = []
@@ -248,8 +259,8 @@ class SSLStandardEnv(SSLBaseEnv):
                 },
             }
 
-        reward_blue = 0
-        reward_yellow = 0
+        # reward_blue = 0
+        # reward_yellow = 0
         done = False
 
         # Field parameters
@@ -268,16 +279,10 @@ class SSLStandardEnv(SSLBaseEnv):
         for (_, robot_b), (_, robot_y) in zip(
             self.frame.robots_blue.items(), self.frame.robots_yellow.items()
         ):
-            print(
-                robot_y.x,
-                robot_y.y,
-                abs(robot_y.y) > half_wid,
-                robot_in_gk_area(robot_y),
-            )
-            if abs(robot_b.y) > half_wid:
+            if abs(robot_y.y) > half_wid or abs(robot_y.x) > half_len:
                 done = True
                 self.reward_shaping_total["blue_team"]["done_rbt_out"] += 1
-            elif abs(robot_y.y) > half_wid:
+            elif abs(robot_y.y) > half_wid or abs(robot_y.x) > half_len:
                 done = True
                 self.reward_shaping_total["yellow_team"]["done_rbt_out"] += 1
             elif robot_in_gk_area(robot_b):
@@ -289,7 +294,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Check if ball exited field or a goal was made (if blue was attacking)
         # TODO: Add reward shaping for yellow team (obtaining possession of the ball)
-        if ball.x < 0 or abs(ball.y) > half_wid:
+        if abs(ball.y) > half_wid or abs(ball.x) > half_len:
             done = True
             self.reward_shaping_total["blue_team"]["done_ball_out"] += 1
         # if the ball is outside the attacking half for blue team (right half of the field)
@@ -304,37 +309,57 @@ class SSLStandardEnv(SSLBaseEnv):
             else:
                 reward = 0
                 self.reward_shaping_total["team_blue"]["done_ball_out_right"] += 1
-        elif self.last_frame is not None:
-            # # TODO: Creating non stopping reward functions (rewards that are calculated per action) ->
+        # elif self.last_frame is not None:
 
-            # Example: Energy penalty for all blue robots
-            total_energy_rw_b = 0
-            total_energy_rw_y = 0
-            for (_, robot_b), (_, robot_y) in zip(
-                self.frame.robots_blue.items(), self.frame.robots_yellow.items()
-            ):
-                total_energy_rw_b += self.__energy_pen(robot_b)
-                total_energy_rw_y += self.__energy_pen(robot_y)
+        # Example: Energy penalty for all blue robots
+        # total_energy_rw_b = 0
+        # total_energy_rw_y = 0
+        # for (_, robot_b), (_, robot_y) in zip(
+        #     self.frame.robots_blue.items(), self.frame.robots_yellow.items()
+        # ):
+        #     total_energy_rw_b += self.__energy_pen(robot_b)
+        #     total_energy_rw_y += self.__energy_pen(robot_y)
 
-            avg_energy_rw_b = total_energy_rw_b / len(self.frame.robots_blue)
-            avg_energy_rw_y = total_energy_rw_y / len(self.frame.robots_yellow)
+        # avg_energy_rw_b = total_energy_rw_b / len(self.frame.robots_blue)
+        # avg_energy_rw_y = total_energy_rw_y / len(self.frame.robots_yellow)
 
-            energy_rw_b = -(avg_energy_rw_b / self.energy_scale)
-            energy_rw_y = -(avg_energy_rw_y / self.energy_scale)
+        # energy_rw_b = -(avg_energy_rw_b / self.energy_scale)
+        # energy_rw_y = -(avg_energy_rw_y / self.energy_scale)
 
-            self.reward_shaping_total["blue_team"]["energy"] += energy_rw_b
-            self.reward_shaping_total["yellow_team"]["energy"] += energy_rw_y
+        # self.reward_shaping_total["blue_team"]["energy"] += energy_rw_b
+        # self.reward_shaping_total["yellow_team"]["energy"] += energy_rw_y
 
-            # Total reward (Scoring reward + Energy penalty v )
-            reward_blue = reward_blue + energy_rw_b
-            reward_yellow = reward_yellow + energy_rw_y
+        # # Total reward (Scoring reward + Energy penalty v )
+        # reward_blue = reward_blue + energy_rw_b
+        # reward_yellow = reward_yellow + energy_rw_y
 
-        reward = {"blue_team": reward_blue, "yellow_team": reward_yellow}
+        # reward = {"blue_team": reward_blue, "yellow_team": reward_yellow}
+
+        reward = 0  # NB: We are not using reward for now
 
         return reward, done
 
     def _get_initial_positions_frame(self):
         """Returns the position of each robot and ball for the initial frame (random placement)"""
+        pos_frame: Frame = Frame()
+
+        for i in range(self.n_robots_blue):
+            x, y, heading = self.blue_formation[i]
+            pos_frame.robots_blue[i] = Robot(
+                id=i, x=x / 1e3, y=y / 1e3, theta=rad_to_deg(heading)
+            )
+
+        for i in range(self.n_robots_yellow):
+            x, y, heading = self.yellow_formation[i]
+            pos_frame.robots_yellow[i] = Robot(
+                id=i, x=x / 1e3, y=y / 1e3, theta=rad_to_deg(heading)
+            )
+
+        pos_frame.ball = Ball(x=0, y=0)
+
+        return pos_frame
+
+    def _get_random_position_frame(self):
         half_len = self.field.length / 2
         half_wid = self.field.width / 2
         pen_len = self.field.penalty_length
@@ -357,7 +382,7 @@ class SSLStandardEnv(SSLBaseEnv):
         def in_gk_area(obj):
             return obj.x > half_len - pen_len and abs(obj.y) < half_pen_wid
 
-        pos_frame.ball = Ball(x=0, y=0)
+        pos_frame.ball = Ball(x=x(), y=y())
         while in_gk_area(pos_frame.ball):
             pos_frame.ball = Ball(x=x(), y=y())
 
@@ -384,13 +409,13 @@ class SSLStandardEnv(SSLBaseEnv):
 
         return pos_frame
 
-    def __energy_pen(self, robot):
-        # Sum of abs each wheel speed sent
-        energy = (
-            abs(robot.v_wheel0)
-            + abs(robot.v_wheel1)
-            + abs(robot.v_wheel2)
-            + abs(robot.v_wheel3)
-        )
+    # def __energy_pen(self, robot):
+    #     # Sum of abs each wheel speed sent
+    #     energy = (
+    #         abs(robot.v_wheel0)
+    #         + abs(robot.v_wheel1)
+    #         + abs(robot.v_wheel2)
+    #         + abs(robot.v_wheel3)
+    #     )
 
-        return energy
+    #     return energy

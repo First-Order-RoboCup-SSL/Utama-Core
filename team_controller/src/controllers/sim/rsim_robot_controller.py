@@ -1,8 +1,8 @@
-from typing import Dict, Union, Optional, Tuple
+from typing import Dict, Union, Optional
 import queue
 from entities.game import Game
 from entities.data.command import RobotCommand
-from entities.data.vision import BallData, RobotData, FrameData
+from entities.data.vision import FrameData
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -51,9 +51,7 @@ class RSimRobotController(AbstractRobotController):
         next_state, reward, terminated, truncated, reward_shaping = self._env.step(
             action
         )
-        print(reward_shaping)
-        print(next_state[1][3])
-        self._game_obj.add_new_state(next_state)
+        self._write_to_game_obj(next_state)
         # flush out_packet
         self._out_packet = self._empty_command()
 
@@ -96,15 +94,13 @@ class RSimRobotController(AbstractRobotController):
         )
         self._out_packet[robot_id] = action
 
-    def _write_to_game_obj(self, observation: Tuple) -> None:
+    def _write_to_game_obj(self, next_state: FrameData) -> None:
         """
         Supersedes the VisionReceiver and queue procedure to write to game obj directly.
 
         Done this way, because there's no separate vision receivere for RSim.
         """
-
-        # TODO: the magnitude of values don't match currently.
-        pass
+        self._game_obj.add_new_state(next_state)
 
     # create an empty command array
     def _empty_command(self) -> list[NDArray]:

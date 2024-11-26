@@ -27,7 +27,7 @@ def rotate_vector(
 
 def normalise_heading(angle):
     """
-    Normalize an angle to the range [-π, π] radians using arctan2, where 0 faces along positive x-axis.
+    Normalize an angle to the range [-π, π] radians, where 0 faces along positive x-axis.
 
     Parameters
     ----------
@@ -39,5 +39,20 @@ def normalise_heading(angle):
     float
         The normalized angle in the range [-π, π] radians.
     """
-    normalized_angle = np.arctan2(np.sin(angle), np.cos(angle))
-    return float(normalized_angle)
+    return (angle + np.pi) % (2 * np.pi) - np.pi
+
+
+def deg_to_rad(degrees: float):
+    """
+    Convert degrees to radians, then normalise to range [-π, π]
+    """
+    radians = np.deg2rad(degrees)
+    return normalise_heading(radians)
+
+
+def rad_to_deg(radians: float):
+    """
+    Convert radians to degrees, then normalise to range [0, 360]
+    """
+    degrees = np.rad2deg(radians)
+    return degrees % 360

@@ -12,8 +12,8 @@ from team_controller.src.controllers import GRSimRobotController
 from motion_planning.src.pid.pid import PID
 from team_controller.src.config.settings import (
     PID_PARAMS,
-    YELLOW_START,
 )
+from team_controller.src.config.starting_formation import YELLOW_START_ONE
 from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
     RobotControl,
 )
@@ -48,7 +48,7 @@ class StartUpController:
             for robot_id, robot_data in enumerate(robots):
                 if robot_data is None:
                     continue
-                target_coords = YELLOW_START[robot_id]
+                target_coords = YELLOW_START_ONE[robot_id]
                 command = self._calculate_robot_velocities(
                     robot_id, target_coords, robots, balls, face_ball=True
                 )
