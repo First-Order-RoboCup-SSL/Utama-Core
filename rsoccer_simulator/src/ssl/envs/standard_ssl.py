@@ -43,7 +43,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
     def __init__(
         self,
-        field_type=2,
+        field_type=1,
         render_mode="human",
         n_robots_blue=6,
         n_robots_yellow=6,
@@ -268,10 +268,16 @@ class SSLStandardEnv(SSLBaseEnv):
         for (_, robot_b), (_, robot_y) in zip(
             self.frame.robots_blue.items(), self.frame.robots_yellow.items()
         ):
-            if robot_b.x < -0.2 or abs(robot_b.y) > half_wid:
+            print(
+                robot_y.x,
+                robot_y.y,
+                abs(robot_y.y) > half_wid,
+                robot_in_gk_area(robot_y),
+            )
+            if abs(robot_b.y) > half_wid:
                 done = True
                 self.reward_shaping_total["blue_team"]["done_rbt_out"] += 1
-            elif robot_y.x > 0.2 or abs(robot_y.y) > half_wid:
+            elif abs(robot_y.y) > half_wid:
                 done = True
                 self.reward_shaping_total["yellow_team"]["done_rbt_out"] += 1
             elif robot_in_gk_area(robot_b):
@@ -351,7 +357,7 @@ class SSLStandardEnv(SSLBaseEnv):
         def in_gk_area(obj):
             return obj.x > half_len - pen_len and abs(obj.y) < half_pen_wid
 
-        pos_frame.ball = Ball(x=4.5, y=3)
+        pos_frame.ball = Ball(x=0, y=0)
         while in_gk_area(pos_frame.ball):
             pos_frame.ball = Ball(x=x(), y=y())
 

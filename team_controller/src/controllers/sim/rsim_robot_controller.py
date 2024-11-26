@@ -16,6 +16,10 @@ class RSimRobotController(AbstractRobotController):
     """
     Robot Controller (and Vision Receiver) for RSim.
 
+    mode:
+    0: controller v controller (yellow)
+    1: controller v controller (blue)
+
     There is no need for a separate Vision Receiver for RSim.
     """
 
@@ -47,6 +51,8 @@ class RSimRobotController(AbstractRobotController):
         next_state, reward, terminated, truncated, reward_shaping = self._env.step(
             action
         )
+        print(reward_shaping)
+        print(next_state[1][3])
         self._game_obj.add_new_state(next_state)
         # flush out_packet
         self._out_packet = self._empty_command()
