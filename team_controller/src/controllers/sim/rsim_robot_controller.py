@@ -96,7 +96,7 @@ class RSimRobotController(AbstractRobotController):
                 -command.local_left_vel,
                 command.angular_vel,
                 command.kick_spd,
-                command.kick_angle,
+                command.dribbler_spd,
             ],
             dtype=np.float32,
         )

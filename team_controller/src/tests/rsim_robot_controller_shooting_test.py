@@ -20,7 +20,6 @@ from entities.data.command import RobotCommand
 from entities.data.vision import BallData, RobotData
 from global_utils.math_utils import rotate_vector
 from motion_planning.src.pid.pid import PID
-from team_controller.src.data.vision_receiver import VisionDataReceiver
 from team_controller.src.controllers import RSimRobotController
 
 # Constants

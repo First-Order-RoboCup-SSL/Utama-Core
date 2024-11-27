@@ -52,7 +52,7 @@ class SSLStandardEnv(SSLBaseEnv):
         render_mode="human",
         n_robots_blue=6,
         n_robots_yellow=6,
-        time_step=0.025,
+        time_step=0.0,
     ):
         super().__init__(
             field_type=field_type,
@@ -120,27 +120,9 @@ class SSLStandardEnv(SSLBaseEnv):
         return super().reset(seed=seed, options=options)
 
     def step(self, action):
-        # Apply the actions to all robots in both teams
-        for i in range(self.n_robots_blue):
-            self._apply_action(action["team_blue"][i], self.frame.robots_blue[i])
-        for i in range(self.n_robots_yellow):
-            self._apply_action(action["team_yellow"][i], self.frame.robots_yellow[i])
-
-        # Proceed with step calculations (including reward and done check)
         observation, reward, terminated, truncated, _ = super().step(action)
 
         return observation, reward, terminated, truncated, self.reward_shaping_total
-
-    def _apply_action(self, action, robot) -> None:
-        # Convert and apply movement and control actions for each robot
-        angle = robot.theta
-        v_x, v_y, v_theta = self.convert_actions(action)
-
-        robot.v_x = v_x
-        robot.v_y = v_y
-        robot.v_theta = v_theta
-        robot.kick_v_x = self.kick_speed_x if action[3] > 0 else 0.0
-        robot.dribbler = True if action[4] == 0 else False
 
     def _frame_to_observations(self) -> Tuple[FrameData, RobotInfo, RobotInfo]:
         """
@@ -159,14 +141,16 @@ class SSLStandardEnv(SSLBaseEnv):
         # Robots observation (Blue + Yellow)
         blue_obs = []
         blue_robots_info = []
-        for robot in self.frame.robots_blue.values():
+        for i in range(len(self.frame.robots_blue)):
+            robot = self.frame.robots_blue[i]
             robot_pos, robot_info = self._get_robot_observation(robot)
             blue_obs.append(robot_pos)
             blue_robots_info.append(robot_info)
 
         yellow_obs = []
         yellow_robots_info = []
-        for robot in self.frame.robots_blue.values():
+        for i in range(len(self.frame.robots_yellow)):
+            robot = self.frame.robots_yellow[i]
             robot_pos, robot_info = self._get_robot_observation(robot)
             yellow_obs.append(robot_pos)
             yellow_robots_info.append(robot_info)
@@ -191,7 +175,9 @@ class SSLStandardEnv(SSLBaseEnv):
         commands = []
 
         for i in range(self.n_robots_blue):
-            v_x, v_y, v_theta = self.convert_actions(actions["team_blue"][i])
+            v_x = actions["team_blue"][i][0]
+            v_y = actions["team_blue"][i][1]
+            v_theta = actions["team_blue"][i][2]
             cmd = Robot(
                 yellow=False,  # Blue team
                 id=i,  # ID of the robot
@@ -204,7 +190,9 @@ class SSLStandardEnv(SSLBaseEnv):
             commands.append(cmd)
 
         for i in range(self.n_robots_yellow):
-            v_x, v_y, v_theta = self.convert_actions(actions["team_yellow"][i])
+            v_x = actions["team_yellow"][i][0]
+            v_y = actions["team_yellow"][i][1]
+            v_theta = actions["team_yellow"][i][2]
             cmd = Robot(
                 yellow=True,  # Yellow team
                 id=i,  # ID of the robot
