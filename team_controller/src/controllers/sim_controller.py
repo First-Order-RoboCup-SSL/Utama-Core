@@ -3,7 +3,7 @@ from typing import Tuple
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import (
     LOCAL_HOST,
-    SIM_COMTROL_PORT,
+    SIM_CONTROL_PORT,
     TELEPORT_X_COORDS,
     FIELD_Y_COORD,
     REMOVAL_Y_COORD,
@@ -28,7 +28,7 @@ class SimulatorController:
         port (int): Port of the simulator. Defaults to SIM_COMTROL_PORT.
     """
 
-    def __init__(self, ip: str = LOCAL_HOST, port: int = SIM_COMTROL_PORT):
+    def __init__(self, ip: str = LOCAL_HOST, port: int = SIM_CONTROL_PORT):
         self.net = network_manager.NetworkManager(address=(ip, port))
 
     def _create_simulator_command(self, control_message: object) -> object:
@@ -36,7 +36,7 @@ class SimulatorController:
         sim_command.control.CopyFrom(control_message)
         return sim_command
 
-    def teleport_ball(self, x: float, y: float) -> None:
+    def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0) -> None:
         """
         Teleports the ball to a specific location on the field.
 
@@ -46,12 +46,12 @@ class SimulatorController:
 
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
-        sim_control = self._create_teleport_ball_command(x, y)
+        sim_control = self._create_teleport_ball_command(x, y, vx, vy)
         sim_command = self._create_simulator_command(sim_control)
         self.net.send_command(sim_command)
 
-    def _create_teleport_ball_command(self, x: float, y: float) -> object:
-        tele_ball = TeleportBall(x=x, y=y)
+    def _create_teleport_ball_command(self, x: float, y: float, vx: float, vy: float) -> object:
+        tele_ball = TeleportBall(x=x, y=y, vx=vx, vy=vy)
         sim_control = SimulatorControl()
         sim_control.teleport_ball.CopyFrom(tele_ball)
         return sim_control

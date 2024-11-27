@@ -1,8 +1,10 @@
 import threading
 import queue
 from entities.game import Game
+import time
 
 from team_controller.src.controllers.robot_startup_controller import StartUpController
+from team_controller.src.controllers.sim_controller import SimulatorController
 from team_controller.src.data import VisionDataReceiver, RefereeMessageReceiver
 from team_controller.src.data.message_enum import MessageType
 
@@ -14,6 +16,8 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 def main():
     game = Game()
+    SimulatorController().teleport_ball(0, 0, 2, 2.5)
+    time.sleep(0.2)
 
     message_queue = queue.SimpleQueue()
     receiver = VisionDataReceiver(message_queue, debug=False)
@@ -29,11 +33,22 @@ def main():
     # referee_thread.daemon = True
     # referee_thread.start()
 
+    start = time.time()
+    frames = 0
+
     try:
+        print("LOCATED BALL")
         while True:
             (message_type, message) = message_queue.get()  # Infinite timeout for now
-
+            
             if message_type == MessageType.VISION:
+                frames += 1
+
+                if frames % 10 == 0:
+                    # print((message_queue.qsize() + frames) / (time.time() - start))
+                    print("Ball Pos prediction", game.predict_ball_pos_after(1), game.get_ball_pos()[0])
+
+                    # print(message_queue.qsize())
                 # message = FrameData(...)
                 game.add_new_state(message)
                 # access current state data
@@ -43,7 +58,7 @@ def main():
                 # )
 
                 # access game records from -x number of frames ago
-                print(game.records[-1].ts, game.records[-1].ball[0].x)
+                # print(game.records[-1].ts, game.records[-1].ball[0].x)
 
             elif message_type == MessageType.REF:
                 pass
