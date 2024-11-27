@@ -62,20 +62,20 @@ Dribbling          |  Pass Endurance     |
 
 |       Environment Id                                                       | Observation Space | Action Space | Step limit |
 |:--------------------------------------------------------------------------:|:-----------------:|:------------:|:----------:|
-|[VSS-v0](rsoccer_gym/vss/README.md#vss-v0)                                       |      Box(40,)     |    Box(2,)   |    1200    |
-|[SSLStaticDefenders-v0](rsoccer_gym/ssl/README.md#sslstaticdefenders-v0)         |      Box(24,)     |    Box(5,)   |    1000    |
-|[SSLStandard-v0](rsoccer_gym/ssl/README.md#sslstandard-v0)             |      Box(4 + 8*n_robots_blue + 8*n_robots_yellow,)     |    Box(5,)   |    1000    |
-|[SSLDribbling-v0](rsoccer_gym/ssl/README.md#ssldribbling-v0)                     |      Box(21,)     |    Box(4,)   |    4800    |
-|[SSLContestedPossession-v0](rsoccer_gym/ssl/README.md#sslcontestedpossession-v0) |      Box(14,)     |    Box(5,)   |    1200    |
-|[SSLPassEndurance-v0](rsoccer_gym/ssl/README.md#sslpassendurance-v0)             |      Box(18,)     |    Box(3,)   |    1200    |
+|[VSS-v0](rsoccer_simulator.src/vss/README.md#vss-v0)                                       |      Box(40,)     |    Box(2,)   |    1200    |
+|[SSLStaticDefenders-v0](rsoccer_simulator.src/ssl/README.md#sslstaticdefenders-v0)         |      Box(24,)     |    Box(5,)   |    1000    |
+|[SSLStandard-v0](rsoccer_simulator.src/ssl/README.md#sslstandard-v0)             |      Box(4 + 8*n_robots_blue + 8*n_robots_yellow,)     |    Box(5,)   |    1000    |
+|[SSLDribbling-v0](rsoccer_simulator.src/ssl/README.md#ssldribbling-v0)                     |      Box(21,)     |    Box(4,)   |    4800    |
+|[SSLContestedPossession-v0](rsoccer_simulator.src/ssl/README.md#sslcontestedpossession-v0) |      Box(14,)     |    Box(5,)   |    1200    |
+|[SSLPassEndurance-v0](rsoccer_simulator.src/ssl/README.md#sslpassendurance-v0)             |      Box(18,)     |    Box(3,)   |    1200    |
 
 # Example code - Environment
 
 ```python
 import numpy as np
 from gymnasium.spaces import Box
-from rsoccer_gym.Entities import Ball, Frame, Robot
-from rsoccer_gym.ssl.ssl_gym_base import SSLBaseEnv
+from rsoccer_simulator.src.Entities import Ball, Frame, Robot
+from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 
 
 class SSLExampleEnv(SSLBaseEnv):
@@ -118,7 +118,7 @@ class SSLExampleEnv(SSLBaseEnv):
 
 ```python
 import gymnasium as gym
-import rsoccer_gym
+import rsoccer_simulator.src
 
 # Using VSS Single Agent env
 env = gym.make('VSS-v0', render_mode="human")

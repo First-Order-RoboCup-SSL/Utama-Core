@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Dict
-from rsoccer_gym.Entities.Ball import Ball
-from rsoccer_gym.Entities.Robot import Robot
+from rsoccer_simulator.src.Entities.Ball import Ball
+from rsoccer_simulator.src.Entities.Robot import Robot
 
 
 class Frame:
@@ -24,28 +24,28 @@ class FrameVSS(Frame):
         self.ball.v_y = state[4]
 
         rbt_obs = 6
-        
+
         for i in range(n_blues):
             robot = Robot()
             robot.id = i
-            robot.x = state[5 + (rbt_obs*i) + 0]
-            robot.y = state[5 + (rbt_obs*i) + 1]
-            robot.theta = state[5 + (rbt_obs*i) + 2]
-            robot.v_x = state[5 + (rbt_obs*i) + 3]
-            robot.v_y = state[5 + (rbt_obs*i) + 4]
-            robot.v_theta = state[5 + (rbt_obs*i) + 5]
+            robot.x = state[5 + (rbt_obs * i) + 0]
+            robot.y = state[5 + (rbt_obs * i) + 1]
+            robot.theta = state[5 + (rbt_obs * i) + 2]
+            robot.v_x = state[5 + (rbt_obs * i) + 3]
+            robot.v_y = state[5 + (rbt_obs * i) + 4]
+            robot.v_theta = state[5 + (rbt_obs * i) + 5]
             self.robots_blue[robot.id] = robot
 
         for i in range(n_yellows):
             robot = Robot()
             robot.id = i
-            robot.x = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 0]
-            robot.y = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 1]
-            robot.theta = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 2]
-            robot.v_x = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 3]
-            robot.v_y = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 4]
-            robot.v_theta = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 5]
-            
+            robot.x = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 0]
+            robot.y = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 1]
+            robot.theta = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 2]
+            robot.v_x = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 3]
+            robot.v_y = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 4]
+            robot.v_theta = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 5]
+
             self.robots_yellow[robot.id] = robot
 
 
@@ -59,35 +59,35 @@ class FrameSSL(Frame):
         self.ball.v_y = state[4]
 
         rbt_obs = 11
-        
+
         for i in range(n_blues):
             robot = Robot()
             robot.id = i
-            robot.x = state[5 + (rbt_obs*i) + 0]
-            robot.y = state[5 + (rbt_obs*i) + 1]
-            robot.theta = state[5 + (rbt_obs*i) + 2]
-            robot.v_x = state[5 + (rbt_obs*i) + 3]
-            robot.v_y = state[5 + (rbt_obs*i) + 4]
-            robot.v_theta = state[5 + (rbt_obs*i) + 5]
-            robot.infrared = bool(state[5 + (rbt_obs*i) + 6])
-            robot.v_wheel0 = state[5 + (rbt_obs*i) + 7]
-            robot.v_wheel1 = state[5 + (rbt_obs*i) + 8]
-            robot.v_wheel2 = state[5 + (rbt_obs*i) + 9]
-            robot.v_wheel3 = state[5 + (rbt_obs*i) + 10]
+            robot.x = state[5 + (rbt_obs * i) + 0]
+            robot.y = state[5 + (rbt_obs * i) + 1]
+            robot.theta = state[5 + (rbt_obs * i) + 2]
+            robot.v_x = state[5 + (rbt_obs * i) + 3]
+            robot.v_y = state[5 + (rbt_obs * i) + 4]
+            robot.v_theta = state[5 + (rbt_obs * i) + 5]
+            robot.infrared = bool(state[5 + (rbt_obs * i) + 6])
+            robot.v_wheel0 = state[5 + (rbt_obs * i) + 7]
+            robot.v_wheel1 = state[5 + (rbt_obs * i) + 8]
+            robot.v_wheel2 = state[5 + (rbt_obs * i) + 9]
+            robot.v_wheel3 = state[5 + (rbt_obs * i) + 10]
             self.robots_blue[robot.id] = robot
 
         for i in range(n_yellows):
             robot = Robot()
             robot.id = i
-            robot.x = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 0]
-            robot.y = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 1]
-            robot.theta = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 2]
-            robot.v_x = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 3]
-            robot.v_y = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 4]
-            robot.v_theta = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 5]
-            robot.infrared = bool(state[5 + n_blues*rbt_obs + (rbt_obs*i) + 6])
-            robot.v_wheel0 = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 7]
-            robot.v_wheel1 = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 8]
-            robot.v_wheel2 = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 9]
-            robot.v_wheel3 = state[5 + n_blues*rbt_obs + (rbt_obs*i) + 10]
+            robot.x = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 0]
+            robot.y = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 1]
+            robot.theta = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 2]
+            robot.v_x = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 3]
+            robot.v_y = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 4]
+            robot.v_theta = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 5]
+            robot.infrared = bool(state[5 + n_blues * rbt_obs + (rbt_obs * i) + 6])
+            robot.v_wheel0 = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 7]
+            robot.v_wheel1 = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 8]
+            robot.v_wheel2 = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 9]
+            robot.v_wheel3 = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 10]
             self.robots_yellow[robot.id] = robot

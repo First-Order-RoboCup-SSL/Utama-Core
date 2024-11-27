@@ -1,2 +1,2 @@
-from rsoccer_gym.Utils.Utils import *
-from rsoccer_gym.Utils.kdtree import KDTree
+from rsoccer_simulator.src.Utils.Utils import *
+from rsoccer_simulator.src.Utils.kdtree import KDTree

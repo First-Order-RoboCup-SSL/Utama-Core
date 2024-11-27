@@ -2,7 +2,9 @@ import threading
 import queue
 from entities.game import Game
 
-from team_controller.src.controllers.robot_startup_controller import StartUpController
+from team_controller.src.controllers.sim.robot_startup_controller import (
+    StartUpController,
+)
 from team_controller.src.data import VisionDataReceiver, RefereeMessageReceiver
 from team_controller.src.data.message_enum import MessageType
 

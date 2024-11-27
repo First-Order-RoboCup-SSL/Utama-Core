@@ -4,7 +4,6 @@
 #    - To create your wrapper from env to communcation, use inherit from this class! 
 """
 
-
 import time
 from typing import Dict, List, Optional
 
@@ -12,9 +11,9 @@ import gymnasium as gym
 import numpy as np
 import pygame
 
-from rsoccer_gym.Entities import Field, Frame, Robot
-from rsoccer_gym.Render import COLORS, Ball, SSLRenderField, SSLRobot
-from rsoccer_gym.Simulators.rsim import RSimSSL
+from rsoccer_simulator.src.Entities import Field, Frame, Robot
+from rsoccer_simulator.src.Render import COLORS, Ball, SSLRenderField, SSLRobot
+from rsoccer_simulator.src.Simulators.rsim import RSimSSL
 
 
 class SSLBaseEnv(gym.Env):
@@ -114,7 +113,7 @@ class SSLBaseEnv(gym.Env):
 
         ball = Ball(
             *pos_transform(self.frame.ball.x, self.frame.ball.y),
-            self.field_renderer.scale
+            self.field_renderer.scale,
         )
         self.field_renderer.draw(self.window_surface)
 

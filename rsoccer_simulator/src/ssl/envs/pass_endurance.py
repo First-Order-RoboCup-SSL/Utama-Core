@@ -4,8 +4,8 @@ from typing import Dict
 
 import gymnasium as gym
 import numpy as np
-from rsoccer_gym.Entities import Ball, Frame, Robot
-from rsoccer_gym.ssl.ssl_gym_base import SSLBaseEnv
+from rsoccer_simulator.src.Entities import Ball, Frame, Robot
+from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 
 
 class SSLPassEnduranceEnv(SSLBaseEnv):

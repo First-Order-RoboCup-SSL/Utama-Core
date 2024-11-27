@@ -17,8 +17,12 @@ from team_controller.src.generated_code.ssl_simulation_control_pb2 import (
 )
 from team_controller.src.generated_code.ssl_gc_common_pb2 import RobotId, Team
 
+from team_controller.src.controllers.common.sim_controller_abstract import (
+    AbstractSimController,
+)
 
-class SimulatorController:
+
+class GRSimController(AbstractSimController):
     """
     A controller for interacting with a simulation environment for robot soccer, allowing actions such as teleporting the ball
     and setting robot presence on the field.
@@ -41,8 +45,8 @@ class SimulatorController:
         Teleports the ball to a specific location on the field.
 
         Args:
-            x (float): The x-coordinate to place the ball at.
-            y (float): The y-coordinate to place the ball at.
+            x (float): The x-coordinate to place the ball at (in meters [-4.5, 4.5]).
+            y (float): The y-coordinate to place the ball at (in meters [-3.0, 3.0]).
 
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
@@ -55,6 +59,29 @@ class SimulatorController:
         sim_control = SimulatorControl()
         sim_control.teleport_ball.CopyFrom(tele_ball)
         return sim_control
+
+    def teleport_robot(
+        self,
+        is_team_yellow: bool,
+        robot_id: int,
+        x: float,
+        y: float,
+        theta: float = None,
+    ) -> None:
+        """
+        Teleports a robot to a specific location on the field.
+
+        Args:
+            is_team_yellow (bool): if the robot is team yellow, else blue
+            robot_id (int): robot id
+            x (float): The x-coordinate to place the ball at (in meters [-4.5, 4.5]).
+            y (float): The y-coordinate to place the ball at (in meters [-3.0, 3.0]).
+            theta (float): radian angle of the robot heading, 0 degrees faces towards positive x axis
+
+        This method creates a command for teleporting the ball and sends it to the simulator.
+        """
+        # TODO: please add a function that can teleport a robot to any position
+        pass
 
     def set_robot_presence(
         self, robot_id: int, team_colour_is_blue: bool, should_robot_be_present: bool
