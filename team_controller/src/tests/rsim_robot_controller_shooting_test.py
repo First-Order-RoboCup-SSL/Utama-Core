@@ -7,7 +7,6 @@ from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 import os
 import sys
 import time
-import threading
 import numpy as np
 from typing import Tuple, List, Union, Dict, Optional
 
@@ -369,7 +368,7 @@ if __name__ == "__main__":
     game = Game()
 
     # making environment
-    env = SSLStandardEnv(n_robots_blue=6)
+    env = SSLStandardEnv()
     # Note we don't need a vision receiver for rsim
     sim_robot_controller = RSimRobotController(
         is_team_yellow=True, env=env, game_obj=game, debug=False

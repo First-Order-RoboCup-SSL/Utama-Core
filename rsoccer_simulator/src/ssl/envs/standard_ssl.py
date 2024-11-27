@@ -22,20 +22,19 @@ class SSLStandardEnv(SSLBaseEnv):
     Description:
         Environment stripped to be a lightweight simulator for testing and development.
     Observation:
-        # TODO: Update observation
-        Type: [ball_obs, robot_obs]
-        Normalized Bounds to [-1.2, 1.2]
-        Num      Observation normalized
-        0->3     Ball [X, Y, V_x, V_y]
-        +8*i    id i Blue [X, Y, sin(theta), cos(theta), v_x, v_y, v_theta, infra_red]
-        +8*i     id i Yellow Robot [X, Y, sin(theta), cos(theta), v_x, v_y, v_theta, infra_red]
+        Type: Tuple[FrameData, List[RobotInfo], List[RobotInfo]]
+        Num     Item
+        0       contains position info of ball and robots on the field
+        1       contains RobotInfo data (robot.has_ball) for yellow_robots
+        2       contains RobotInfo data (robot.has_ball) for blue_robots
+
     Actions:
         Type: Box(5, )
         Num     Action
-        0       id 0 Blue Global X Direction Speed
+        0       id 0 Blue Global X Direction Speed (max set by self.max_v)
         1       id 0 Blue Global Y Direction Speed
-        2       id 0 Blue Angular Speed
-        3       id 0 Blue Kick x Speed
+        2       id 0 Blue Angular Speed (max set by self.max_w)
+        3       id 0 Blue Kick x Speed (max set by self.kick_speed_x)
         4       id 0 Blue Dribbler (true if positive)
 
     Reward:
@@ -156,8 +155,6 @@ class SSLStandardEnv(SSLBaseEnv):
         ball_obs = BallData(
             self.frame.ball.x * 1e3, self.frame.ball.y * 1e3, self.frame.ball.z * 1e3
         )
-        # self.norm_v(self.frame.ball.v_x),
-        # self.norm_v(self.frame.ball.v_y),
 
         # Robots observation (Blue + Yellow)
         blue_obs = []
