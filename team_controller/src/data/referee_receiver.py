@@ -1,10 +1,14 @@
 import threading
 import time
+import queue
 from typing import Tuple, Optional, List
 
 from entities.referee.referee_command import RefereeCommand
 from entities.referee.stage import Stage
 from entities.game.team_info import TeamInfo
+from entities.data.referee import RefereeData
+from team_controller.src.data.base_receiver import BaseReceiver
+from team_controller.src.data.message_enum import MessageType
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP_REFEREE, REFEREE_PORT
 
@@ -13,7 +17,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class RefereeMessageReceiver:
+
+class RefereeMessageReceiver(BaseReceiver):
     """
     A class responsible for receiving and managing referee messages in a multi-robot game environment.
     The class interfaces with a network manager to receive packets, which contain game state information,
@@ -23,7 +28,16 @@ class RefereeMessageReceiver:
         ip (str): The IP address for receiving multicast referee data. Defaults to MULTICAST_GROUP_REFEREE.
         port (int): The port for receiving referee data. Defaults to REFEREE_PORT.
     """
-    def __init__(self, ip=MULTICAST_GROUP_REFEREE, port=REFEREE_PORT): # TODO: add message queue
+
+    def __init__(
+        self,
+        message_queue: queue.SimpleQueue,
+        ip=MULTICAST_GROUP_REFEREE,
+        port=REFEREE_PORT,
+        debug=False,
+    ):
+        super().__init__(message_queue)
+
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
         self.prev_command_counter = -1
         self.command_history = []
@@ -149,6 +163,18 @@ class RefereeMessageReceiver:
         )  # Convert microseconds to seconds
         self.yellow_info.parse_referee_packet(referee_packet.yellow)
         self.blue_info.parse_referee_packet(referee_packet.blue)
+        self._message_queue.put_nowait(
+            (
+                MessageType.REF,
+                RefereeData(
+                    self.time_received,
+                    self.command,
+                    self.stage,
+                    self.yellow_info,
+                    self.blue_info,
+                ),
+            )
+        )
 
     def check_new_message(self) -> bool:
         """

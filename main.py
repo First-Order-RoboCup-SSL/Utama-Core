@@ -24,6 +24,7 @@ import warnings
 # Enable all warnings, including DeprecationWarning
 warnings.simplefilter("default", DeprecationWarning)
 
+
 def data_update_listener(receiver: VisionDataReceiver):
     # Start receiving game data; this will run in a separate thread.
     receiver.pull_game_data()
@@ -35,28 +36,33 @@ def main():
     time.sleep(0.2)
 
     message_queue = queue.SimpleQueue()
-    receiver = VisionDataReceiver(message_queue)
-    decision_maker = StartUpController(game)
 
-    # Start the data receiving in a separate thread
-    data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
-    data_thread.daemon = True  # Allows the thread to close when the main program exits
-    data_thread.start()
+    referee_receiver = RefereeMessageReceiver(message_queue, debug=False)
+    vision_receiver = VisionDataReceiver(message_queue, debug=False)
+    decision_maker = StartUpController(game, debug=False)
 
-    TIME = 1/60 * 10 # frames in seconds
+    # Start the data receiving in separate threads
+    vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
+    referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
+
+    # Allows the thread to close when the main program exits
+    vision_thread.daemon = True
+    referee_thread.daemon = True
+
+    # Start both thread
+    vision_thread.start()
+    referee_thread.start()
+
+    TIME = 1 / 60 * 10  # frames in seconds
     FRAMES_IN_TIME = round(60 * TIME)
-
-    # TODO: Not implemented
-    # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
-    # referee_thread.daemon = True
-    # referee_thread.start()
-
     frames = 0
 
     try:
         logger.debug("LOCATED BALL")
-        logger.debug(f"Predicting robot position with {FRAMES_IN_TIME} frames of motion")
-        
+        logger.debug(
+            f"Predicting robot position with {FRAMES_IN_TIME} frames of motion"
+        )
+
         predictions: List[PredictedFrame] = []
         while True:
             (message_type, message) = message_queue.get()  # Infinite timeout for now
@@ -64,36 +70,30 @@ def main():
             if message_type == MessageType.VISION:
                 frames += 1
                 game.add_new_state(message)
-                
+
                 if (
                     len(predictions) >= FRAMES_IN_TIME
                     and predictions[-FRAMES_IN_TIME] != None
-                ):  
+                ):
                     logger.debug(
-                        "Ball prediction inaccuracy delta (cm): " +
-                        "{:.5f}".format(
+                        "Ball prediction inaccuracy delta (cm): "
+                        + "{:.5f}".format(
                             100
                             * math.sqrt(
-                                (
-                                    game.ball.x
-                                    - predictions[-FRAMES_IN_TIME].ball[0].x
-                                )
+                                (game.ball.x - predictions[-FRAMES_IN_TIME].ball[0].x)
                                 ** 2
-                                + (
-                                    game.ball.y
-                                    - predictions[-FRAMES_IN_TIME].ball[0].y
-                                )
+                                + (game.ball.y - predictions[-FRAMES_IN_TIME].ball[0].y)
                                 ** 2
                             )
                         )
                     )
                     for i in range(6):
                         logger.debug(
-                            f"Enemy(Blue) robot {i} prediction inaccuracy delta (cm): " +
-                            "{:.5f}".format(
+                            f"Enemy(Blue) robot {i} prediction inaccuracy delta (cm): "
+                            + "{:.5f}".format(
                                 100
                                 * math.sqrt(
-                                    (   
+                                    (
                                         # proposed implementation
                                         game.enemy_robots[i].x
                                         - predictions[-FRAMES_IN_TIME].enemy_robots[i].x
@@ -110,45 +110,49 @@ def main():
                         )
                     for i in range(6):
                         logger.debug(
-                            f"Friendly(Yellow) robot {i} prediction inaccuracy delta (cm): " +
-                            "{:.5f}".format(
+                            f"Friendly(Yellow) robot {i} prediction inaccuracy delta (cm): "
+                            + "{:.5f}".format(
                                 100
                                 * math.sqrt(
                                     (
                                         # original implementation
                                         game.friendly_robots[i].x
-                                        - predictions[-FRAMES_IN_TIME].friendly_robots[i].x
+                                        - predictions[-FRAMES_IN_TIME]
+                                        .friendly_robots[i]
+                                        .x
                                     )
                                     ** 2
                                     + (
                                         # proposed implementation
                                         game.friendly_robots[i].y
-                                        - predictions[-FRAMES_IN_TIME].friendly_robots[i].y
+                                        - predictions[-FRAMES_IN_TIME]
+                                        .friendly_robots[i]
+                                        .y
                                     )
                                     ** 2
                                 )
                             )
                         )
 
-                
                 predictions.append(game.predicted_next_frame)
-                
+
             elif message_type == MessageType.REF:
-                pass
-            
+                game.add_new_referee_data(message)
+
             decision_maker.make_decision()
-       
+
     except KeyboardInterrupt:
         print("Stopping main program.")
+
 
 def main1():
     """
     This is a test function to demonstrate the use of the Game class and the Robot class.
-    
-    In terms of RobotInfo and the way it is currently implemented is not confirmed and may change. 
-    (have the robot info update game directly in the main thread as robot commands are sent on the main thread) 
-    
-    We will need to implement a way to update the robot info with grsim and rsim in the controllers 
+
+    In terms of RobotInfo and the way it is currently implemented is not confirmed and may change.
+    (have the robot info update game directly in the main thread as robot commands are sent on the main thread)
+
+    We will need to implement a way to update the robot info with grsim and rsim in the controllers
     """
     ### Standard setup for the game ###
     game = Game(my_team_is_yellow=True)
@@ -168,45 +172,58 @@ def main1():
     # referee_thread.start()
 
     #### Demo ####
-    
+
     ### Creates the made up robot info message ###
-    madeup_recieved_message = [RobotInfo(True), RobotInfo(False), RobotInfo(False), RobotInfo(False), RobotInfo(False), RobotInfo(False)]
+    madeup_recieved_message = [
+        RobotInfo(True),
+        RobotInfo(False),
+        RobotInfo(False),
+        RobotInfo(False),
+        RobotInfo(False),
+        RobotInfo(False),
+    ]
     message_type = MessageType.ROBOT_INFO
     message_queue.put((message_type, madeup_recieved_message))
 
     try:
         while True:
-            (message_type, message) = message_queue.get() 
+            (message_type, message) = message_queue.get()
 
             if message_type == MessageType.VISION:
                 game.add_new_state(message)
-                
+
                 ### for demo purposes (displays when vision is received) ###
-                print(f"Before robot is_active( {game.friendly_robots[0].inactive} ) coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}")
+                print(
+                    f"Before robot is_active( {game.friendly_robots[0].inactive} ) coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}"
+                )
                 # TODO: create a check with referee to see if robot is inactive
                 game.friendly_robots[0].inactive = True
-                print(f"After robot is_active( {game.friendly_robots[0].inactive} ) Coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}\n")
-   
+                print(
+                    f"After robot is_active( {game.friendly_robots[0].inactive} ) Coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}\n"
+                )
+
             if message_type == MessageType.REF:
                 pass
-            
-            if message_type == MessageType.ROBOT_INFO: 
+
+            if message_type == MessageType.ROBOT_INFO:
                 game.add_robot_info(message)
-                
+
                 ### for demo purposes (displays when robot info is received) ####
                 for i in range(6):
-                    print(f"Robot {i} has ball: {game.friendly_robots[i].has_ball}")   
-             
-             
+                    print(f"Robot {i} has ball: {game.friendly_robots[i].has_ball}")
+
             ### Getting coordinate data ###
-            print(f"Friendly(Yellow) Robot 1 coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}, {game.friendly_robots[0].orientation}")
+            print(
+                f"Friendly(Yellow) Robot 1 coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}, {game.friendly_robots[0].orientation}"
+            )
             print(f"Ball coords: {game.ball.x}, {game.ball.y}, {game.ball.z}\n")
-            
-            # to just demonstrate the print statements   
-            break    
+
+            # to just demonstrate the print statements
+            break
 
     except KeyboardInterrupt:
         print("Stopping main program.")
+
 
 if __name__ == "__main__":
     main1()
