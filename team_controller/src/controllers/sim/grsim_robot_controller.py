@@ -117,12 +117,12 @@ class GRSimRobotController(AbstractRobotController):
         Returns:
             bool: True if the robot has the ball, False otherwise.
         """
-        robots_info = self.robots_info
-        for id, robot_feedback in enumerate(robots_info):
-            if robot_feedback != None:
-                if robot_feedback.has_ball and id == robot_id:
-                    if self.debug:
-                        print(f"Robot: {robot_id}: HAS the Ball")
-                    return True
-                else:
-                    return False
+        if self.robots_info[robot_id] is None:
+            return False
+
+        if self.robots_info[robot_id].has_ball:
+            if self.debug:
+                print(f"Robot: {robot_id}: HAS the Ball")
+            return True
+        else:
+            return False

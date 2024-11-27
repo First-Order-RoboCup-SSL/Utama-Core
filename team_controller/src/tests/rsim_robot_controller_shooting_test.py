@@ -211,7 +211,7 @@ class ShootingController:
                     robots[self.shooter_id] if self.shooter_id < len(robots) else None
                 )
 
-                # Lost of changed here, added a lot of print statements to debug
+                # Lots of changes here, added a lot of print statements to debug
                 if balls[0] != None and robot_data != None:
                     target_oren = np.atan2(
                         balls[0].y - robot_data.y, balls[0].x - robot_data.x
@@ -369,7 +369,7 @@ if __name__ == "__main__":
     game = Game()
 
     # making environment
-    env = SSLStandardEnv()
+    env = SSLStandardEnv(n_robots_blue=6)
     # Note we don't need a vision receiver for rsim
     sim_robot_controller = RSimRobotController(
         is_team_yellow=True, env=env, game_obj=game, debug=False

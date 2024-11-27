@@ -51,6 +51,10 @@ class RSimRobotController(AbstractRobotController):
 
         # note that we should not technically be able to view the opponent's robots_info!!
         new_frame, yellow_robots_info, blue_robots_info = observation
+        if self.is_team_yellow:
+            self._robots_info = yellow_robots_info
+        else:
+            self._robots_info = blue_robots_info
 
         if self._debug:
             print(new_frame, terminated, truncated, reward_shaping)
@@ -89,7 +93,7 @@ class RSimRobotController(AbstractRobotController):
         action = np.array(
             [
                 command.local_forward_vel,
-                command.local_left_vel,
+                -command.local_left_vel,
                 command.angular_vel,
                 command.kick_spd,
                 command.kick_angle,
@@ -120,14 +124,15 @@ class RSimRobotController(AbstractRobotController):
         Returns:
             bool: True if the robot has the ball, False otherwise.
         """
-        for id, robot_feedback in enumerate(self.robots_info):
-            if robot_feedback != None:
-                if robot_feedback.has_ball and id == robot_id:
-                    if self.debug:
-                        print(f"Robot: {robot_id}: HAS the Ball")
-                    return True
-                else:
-                    return False
+        if self._robots_info[robot_id] is None:
+            return False
+
+        if self._robots_info[robot_id].has_ball:
+            if self.debug:
+                print(f"Robot: {robot_id}: HAS the Ball")
+            return True
+        else:
+            return False
 
     @property
     def is_team_yellow(self):

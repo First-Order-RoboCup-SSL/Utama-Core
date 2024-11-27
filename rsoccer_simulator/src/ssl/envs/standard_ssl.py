@@ -1,6 +1,6 @@
 import math
 import random
-from typing import Dict
+from typing import Dict, Tuple
 
 import gymnasium as gym
 import numpy as np
@@ -14,6 +14,7 @@ from team_controller.src.config.starting_formation import (
 from global_utils.math_utils import deg_to_rad, rad_to_deg
 
 from entities.data.vision import BallData, RobotData, FrameData
+from entities.data.command import RobotInfo
 
 
 class SSLStandardEnv(SSLBaseEnv):
@@ -31,11 +32,11 @@ class SSLStandardEnv(SSLBaseEnv):
     Actions:
         Type: Box(5, )
         Num     Action
-        0       id 0 Blue Global X Direction Speed  (%)
-        1       id 0 Blue Global Y Direction Speed  (%)
-        2       id 0 Blue Angular Speed  (%)
-        3       id 0 Blue Kick x Speed  (%)
-        4       id 0 Blue Dribbler  (%) (true if % is positive)
+        0       id 0 Blue Global X Direction Speed
+        1       id 0 Blue Global Y Direction Speed
+        2       id 0 Blue Angular Speed
+        3       id 0 Blue Kick x Speed
+        4       id 0 Blue Dribbler (true if positive)
 
     Reward:
         +5 if goal (blue)
@@ -131,10 +132,10 @@ class SSLStandardEnv(SSLBaseEnv):
 
         return observation, reward, terminated, truncated, self.reward_shaping_total
 
-    def _apply_action(self, action, robot):
+    def _apply_action(self, action, robot) -> None:
         # Convert and apply movement and control actions for each robot
         angle = robot.theta
-        v_x, v_y, v_theta = self.convert_actions(action, np.deg2rad(angle))
+        v_x, v_y, v_theta = self.convert_actions(action)
 
         robot.v_x = v_x
         robot.v_y = v_y
@@ -142,18 +143,18 @@ class SSLStandardEnv(SSLBaseEnv):
         robot.kick_v_x = self.kick_speed_x if action[3] > 0 else 0.0
         robot.dribbler = True if action[4] == 0 else False
 
-    def _frame_to_observations(self):
+    def _frame_to_observations(self) -> Tuple[FrameData, RobotInfo, RobotInfo]:
         """
         return observation data that aligns with grSim
 
         Returns (vision_observation, yellow_robot_feedback, blue_robot_feedback)
         vision_observation: closely aligned to SSLVision that returns a FramData object
-        yellow_robot_feedback: feedback from individual yellow robots that returns a List[RobotInfo]
-        blue_robot_feedback: feedback from individual blue robots that returns a List[RobotInfo]
+        yellow_robots_info: feedback from individual yellow robots that returns a List[RobotInfo]
+        blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
         """
         # Ball observation shared by all robots
         ball_obs = BallData(
-            self.frame.ball.x * 1000, self.frame.ball.y * 1000, self.frame.ball.z * 1000
+            self.frame.ball.x * 1e3, self.frame.ball.y * 1e3, self.frame.ball.z * 1e3
         )
         # self.norm_v(self.frame.ball.v_x),
         # self.norm_v(self.frame.ball.v_y),
@@ -184,19 +185,16 @@ class SSLStandardEnv(SSLBaseEnv):
 
     def _get_robot_observation(self, robot):
         robot_pos = RobotData(
-            robot.x * 1000, robot.y * 1000, float(deg_to_rad(robot.theta))
+            robot.x * 1e3, robot.y * 1e3, float(deg_to_rad(robot.theta))
         )
-        has_ball = robot.infrared
-        return robot_pos, has_ball
+        robot_info = RobotInfo(robot.infrared)
+        return robot_pos, robot_info
 
-    def _get_commands(self, actions):
+    def _get_commands(self, actions) -> list[Robot]:
         commands = []
 
         for i in range(self.n_robots_blue):
-            angle = self.frame.robots_blue[i].theta
-            v_x, v_y, v_theta = self.convert_actions(
-                actions["team_blue"][i], np.deg2rad(angle)
-            )
+            v_x, v_y, v_theta = self.convert_actions(actions["team_blue"][i])
             cmd = Robot(
                 yellow=False,  # Blue team
                 id=i,  # ID of the robot
@@ -209,10 +207,7 @@ class SSLStandardEnv(SSLBaseEnv):
             commands.append(cmd)
 
         for i in range(self.n_robots_yellow):
-            angle = self.frame.robots_yellow[i].theta
-            v_x, v_y, v_theta = self.convert_actions(
-                actions["team_yellow"][i], np.deg2rad(angle)
-            )
+            v_x, v_y, v_theta = self.convert_actions(actions["team_yellow"][i])
             cmd = Robot(
                 yellow=True,  # Yellow team
                 id=i,  # ID of the robot
@@ -226,17 +221,11 @@ class SSLStandardEnv(SSLBaseEnv):
 
         return commands
 
-    def convert_actions(self, action, angle):
-        """Denormalize, clip to absolute max and convert to local"""
-        # Denormalize
-        v_x = action[0] * self.max_v
-        v_y = action[1] * self.max_v
-        v_theta = action[2] * self.max_w
-        # Convert to local
-        # v_x, v_y = v_x * np.cos(angle) + v_y * np.sin(angle), -v_x * np.sin(
-        #     angle
-        # ) + v_y * np.cos(angle)
-
+    def convert_actions(self, action):
+        """Clip to absolute max and convert to local"""
+        v_x = action[0]
+        v_y = action[1]
+        v_theta = action[2]
         # clip by max absolute
         # TODO: Not sure if clipping it this way makes sense. We'll see.
         v_norm = np.linalg.norm([v_x, v_y])
