@@ -95,12 +95,12 @@ class SimulatorController:
         return sim_control
 
     def _get_teleport_location(
-        self, robot_id: int, team_colour_is_blue: bool, add: bool
+        self, robot_id: int, team_is_yellow: bool, add: bool
     ) -> Tuple[float, float]:
         y_coord = FIELD_Y_COORD if add else REMOVAL_Y_COORD
         x_coord = (
             -TELEPORT_X_COORDS[robot_id]
-            if team_colour_is_blue
+            if team_is_yellow
             else TELEPORT_X_COORDS[robot_id]
         )
         return x_coord, y_coord
