@@ -19,6 +19,20 @@ from entities.data.command import RobotInfo
 
 class SSLStandardEnv(SSLBaseEnv):
     """
+
+    args:
+        field_type
+        Num
+        0       Divison A pitch
+        1       Division B pitch
+        2       HW Challenge
+
+        blue/yellow_starting_formation
+        Type: List[Tuple[float, float, float]]
+        Description:
+            list of (x, y, theta) coords for each robot to spawn in.
+            See the default BLUE_START_ONE/YELLOW_START_ONE for reference.
+
     Description:
         Environment stripped to be a lightweight simulator for testing and development.
     Observation:
@@ -48,11 +62,13 @@ class SSLStandardEnv(SSLBaseEnv):
 
     def __init__(
         self,
-        field_type=1,
-        render_mode="human",
-        n_robots_blue=6,
-        n_robots_yellow=6,
-        time_step=0.0167,
+        field_type: int = 1,
+        render_mode: str = "human",
+        n_robots_blue: int = 6,
+        n_robots_yellow: int = 6,
+        time_step: float = 0.0167,
+        blue_starting_formation: list[tuple] = None,
+        yellow_starting_formation: list[tuple] = None,
     ):
         super().__init__(
             field_type=field_type,
@@ -104,16 +120,55 @@ class SSLStandardEnv(SSLBaseEnv):
         self.kick_speed_x = 5.0  # kick speed
 
         # set starting formation style for
-        self.blue_formation = BLUE_START_ONE
-        self.yellow_formation = YELLOW_START_ONE
+        self.blue_formation = (
+            BLUE_START_ONE if not blue_starting_formation else blue_starting_formation
+        )
+        self.yellow_formation = (
+            YELLOW_START_ONE
+            if not yellow_starting_formation
+            else yellow_starting_formation
+        )
 
         print(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
-    def set_ball_pos(
+    def teleport_ball(self, x: float, y: float):
+        """
+        teleport ball to new position in meters
+
+        Note: this does not create a new frame, but mutates the current frame
+        """
+        ball = Ball(x=x, y=y)
+        self.frame.ball = ball
+        self.rsim.reset(self.frame)
+
+    def teleport_robot(
         self,
+        is_team_yellow: bool,
+        robot_id: bool,
+        x: float,
+        y: float,
+        theta: float = None,
     ):
-        # TODO: enable ball and robot teleport
-        return
+        """
+        teleport robot to new position in meters, radians
+
+        Note: this does not create a new frame, but mutates the current frame
+        """
+        if theta is None:
+            if is_team_yellow:
+                theta = self.frame.robots_yellow[robot_id].theta
+            else:
+                theta = self.frame.robots_blue[robot_id].theta
+        else:
+            theta = rad_to_deg(theta)
+
+        robot = Robot(yellow=is_team_yellow, id=robot_id, x=x, y=y, theta=theta)
+        if is_team_yellow:
+            self.frame.robots_yellow[robot_id] = robot
+        else:
+            self.frame.robots_blue[robot_id] = robot
+
+        self.rsim.reset(self.frame)
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None

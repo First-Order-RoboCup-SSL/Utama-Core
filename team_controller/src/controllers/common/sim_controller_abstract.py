@@ -20,6 +20,29 @@ class AbstractSimController:
         pass
 
     @abc.abstractmethod
+    def teleport_robot(
+        self,
+        is_team_yellow: bool,
+        robot_id: int,
+        x: float,
+        y: float,
+        theta: float = None,
+    ) -> None:
+        """
+        Teleports a robot to a specific location on the field.
+
+        Args:
+            is_team_yellow (bool): if the robot is team yellow, else blue
+            robot_id (int): robot id
+            x (float): The x-coordinate to place the ball at (in meters [-4.5, 4.5]).
+            y (float): The y-coordinate to place the ball at (in meters [-3.0, 3.0]).
+            theta (float): radian angle of the robot heading, 0 degrees faces towards positive x axis
+
+        This method creates a command for teleporting the ball and sends it to the simulator.
+        """
+        pass
+
+    @abc.abstractmethod
     def set_robot_presence(
         self, robot_id: int, team_colour_is_blue: bool, should_robot_be_present: bool
     ) -> None:
