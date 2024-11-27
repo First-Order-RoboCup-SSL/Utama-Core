@@ -52,7 +52,7 @@ class SSLStandardEnv(SSLBaseEnv):
         render_mode="human",
         n_robots_blue=6,
         n_robots_yellow=6,
-        time_step=0.0,
+        time_step=0.0167,
     ):
         super().__init__(
             field_type=field_type,

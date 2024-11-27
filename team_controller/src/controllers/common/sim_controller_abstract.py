@@ -12,8 +12,8 @@ class AbstractSimController:
         Teleports the ball to a specific location on the field.
 
         Args:
-            x (float): The x-coordinate to place the ball at.
-            y (float): The y-coordinate to place the ball at.
+            x (float): The x-coordinate to place the ball at (in meters [-4.5, 4.5]).
+            y (float): The y-coordinate to place the ball at (in meters [-3.0, 3.0]).
 
         This method creates a command for teleporting the ball and sends it to the simulator.
         """

@@ -1,4 +1,4 @@
-from typing import Dict, Union, Optional
+from typing import Dict, Union, Optional, Tuple
 from entities.game import Game
 from entities.data.command import RobotCommand, RobotInfo
 from entities.data.vision import FrameData
@@ -15,6 +15,9 @@ class RSimRobotController(AbstractRobotController):
     """
     Robot Controller (and Vision Receiver) for RSim.
 
+    is_pvp:
+    if pvp, two controllers are playing against each other. Else, play against static
+
     There is no need for a separate Vision Receiver for RSim.
     """
 
@@ -23,14 +26,17 @@ class RSimRobotController(AbstractRobotController):
         is_team_yellow: bool,
         env: SSLBaseEnv,
         game_obj: Game,
+        is_pvp: bool = False,
         debug: bool = False,
     ):
         self._is_team_yellow = is_team_yellow
         self._game_obj = game_obj
         self._debug = debug
         self._env = env
-        self._out_packet = self._empty_command()
-        self._robots_info: list[RobotInfo] = [None] * 6
+        self._n_friendly_robots, self._n_enemy_robots = self._get_n_robots()
+        self._is_pvp = is_pvp
+        self._out_packet = self._empty_command(self.n_friendly_robots)
+        self._robots_info: list[RobotInfo] = [None] * self.n_friendly_robots
 
         initial_obs, _ = self._env.reset()
         initial_frame = initial_obs[0]
@@ -40,10 +46,21 @@ class RSimRobotController(AbstractRobotController):
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
-        action = {
-            "team_blue": tuple(self._empty_command()),
-            "team_yellow": tuple(self._out_packet),
-        }
+        if self.is_pvp:
+            raise NotImplementedError()
+            # TODO: implement Controller v Controller system
+        else:
+            if self.is_team_yellow:
+                action = {
+                    "team_blue": tuple(self._empty_command(self.n_enemy_robots)),
+                    "team_yellow": tuple(self._out_packet),
+                }
+            else:
+                action = {
+                    "team_blue": tuple(self._out_packet),
+                    "team_yellow": tuple(self._empty_command(self.n_enemy_robots)),
+                }
+
         # print(action)
         observation, reward, terminated, truncated, reward_shaping = self._env.step(
             action
@@ -61,7 +78,7 @@ class RSimRobotController(AbstractRobotController):
 
         self._write_to_game_obj(new_frame)
         # flush out_packet
-        self._out_packet = self._empty_command()
+        self._out_packet = self._empty_command(self.n_friendly_robots)
 
     def add_robot_commands(
         self,
@@ -111,8 +128,8 @@ class RSimRobotController(AbstractRobotController):
         self._game_obj.add_new_state(new_frame)
 
     # create an empty command array
-    def _empty_command(self) -> list[NDArray]:
-        return [np.zeros((6,), dtype=float) for _ in range(6)]
+    def _empty_command(self, n_robots: int) -> list[NDArray]:
+        return [np.zeros((6,), dtype=float) for _ in range(n_robots)]
 
     def robot_has_ball(self, robot_id: int) -> bool:
         """
@@ -129,10 +146,18 @@ class RSimRobotController(AbstractRobotController):
 
         if self._robots_info[robot_id].has_ball:
             if self.debug:
-                print(f"Robot: {robot_id}: HAS the Ball")
+                print(f"Robot: {robot_id} has the Ball")
             return True
         else:
             return False
+
+    def _get_n_robots(self) -> Tuple[int, int]:
+        n_yellow = self._env.n_robots_yellow
+        n_blue = self._env.n_robots_blue
+        if self._is_team_yellow:
+            return n_yellow, n_blue
+        else:
+            return n_blue, n_yellow
 
     @property
     def is_team_yellow(self):
@@ -153,3 +178,15 @@ class RSimRobotController(AbstractRobotController):
     @property
     def robots_info(self):
         return self._robots_info
+
+    @property
+    def is_pvp(self):
+        return self._is_pvp
+
+    @property
+    def n_friendly_robots(self):
+        return self._n_friendly_robots
+
+    @property
+    def n_enemy_robots(self):
+        return self._n_enemy_robots

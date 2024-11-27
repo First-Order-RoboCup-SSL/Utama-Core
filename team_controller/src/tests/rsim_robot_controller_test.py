@@ -7,7 +7,7 @@ from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 game = Game()
 
 # making environment
-env = SSLStandardEnv()
+env = SSLStandardEnv(n_robots_blue=3, n_robots_yellow=5)
 env.reset()
 robot_controller = RSimRobotController(is_team_yellow=True, env=env, game_obj=game)
 
