@@ -61,12 +61,12 @@ class VisionDataReceiver(BaseReceiver):
         
         self.camera_frames[detection.camera_id] = new_frame
         
-        if self.frames_recvd % self.n_cameras == 0: # TODO : Do something more advanced than an average because cameras might not be round robin 
+        if self.frames_recvd % self.n_cameras == 0 and not None in self.camera_frames: # TODO : Do something more advanced than an average because cameras might not be round robin 
             # Put the latest game state into the thread-safe queue which will wake up
             # main if it was empty.
             # TODO: we should modify how Game is updated. Instead of appending to the records list, we should really keep any data we don't have updates for.
             self._message_queue.put_nowait((MessageType.VISION, self._avg_frames(self.camera_frames)))
-
+    
     def _avg_frames(self, frames) -> FrameData:
         sum_frame = frames[0]
         for frame in frames[1:]:
