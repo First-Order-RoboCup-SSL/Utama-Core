@@ -1,6 +1,12 @@
 import threading
+import queue
 from entities.game import Game
-from team_controller.src.data.vision_receiver import VisionDataReceiver
+
+from team_controller.src.controllers.sim.robot_startup_controller import (
+    StartUpController,
+)
+from team_controller.src.data import VisionDataReceiver, RefereeMessageReceiver
+from team_controller.src.data.message_enum import MessageType
 
 
 def data_update_listener(receiver: VisionDataReceiver):
@@ -10,32 +16,41 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 def main():
     game = Game()
-    # Initialize the VisionDataReceiver
-    receiver = VisionDataReceiver(debug=False)
+
+    message_queue = queue.SimpleQueue()
+    receiver = VisionDataReceiver(message_queue, debug=False)
+    decision_maker = StartUpController(game, debug=False)
 
     # Start the data receiving in a separate thread
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
     data_thread.daemon = True  # Allows the thread to close when the main program exits
     data_thread.start()
 
+    # TODO: Not implemented
+    # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
+    # referee_thread.daemon = True
+    # referee_thread.start()
+
     try:
         while True:
-            # Wait for the update event with a timeout (optional)
-            if receiver.wait_for_update(timeout=0.1):
-                # An update has occurred, so process the updated data
-                frame_data = receiver.get_frame_data()
-                game.add_new_state(frame_data)
+            (message_type, message) = message_queue.get()  # Infinite timeout for now
 
+            if message_type == MessageType.VISION:
+                # message = FrameData(...)
+                game.add_new_state(message)
                 # access current state data
-                print(
-                    game.current_state.yellow_robots[0].x,
-                    game.current_state.yellow_robots[0].y,
-                )
+                # print(
+                #     game.current_state.yellow_robots[0].x,
+                #     game.current_state.yellow_robots[0].y,
+                # )
 
                 # access game records from -x number of frames ago
                 print(game.records[-1].ts, game.records[-1].ball[0].x)
-            else:
-                print("No data update received within the timeout period.")
+
+            elif message_type == MessageType.REF:
+                pass
+
+            decision_maker.make_decision()
 
     except KeyboardInterrupt:
         print("Stopping main program.")

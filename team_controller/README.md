@@ -50,14 +50,16 @@ This folder contains all the different controller classes for communication with
 This folder contains all the files which perform the initial processing of data being received, this includes:
 
 - **Referee Data**
-  > Note: Referee Message Parsing is not yet implemented.
+  - Receives and processes referee messages containing game state information.
+  - Updates internal data structures with the latest referee commands, stage, team information, and designated ball placement positions.
+  - Provides methods to retrieve the latest referee data, command, stage, and other relevant information.
 - **Vision Data**
   - The `VisionDataReceiver` class is responsible for receiving and managing vision data for robots and the ball in a multi-robot game environment. It interfaces with a network manager to receive packets containing positional data for the ball and robots on both teams. The class updates internal data structures accordingly. Here is an [example usage](src/tests/vision_receiver_test.py).
   - **Data Types**:
     - `Ball`: A named tuple representing the ball's position with fields `x`, `y`, and `z`.
     - `Robot`: A named tuple representing a robot's position with fields `x`, `y`, and `orientation`.
   - **Methods**:
-    - `get_robots_pos(is_yellow: bool) -> List[Robot]`: Retrieves the current position data for robots on the specified team. If `is_yellow` is `True`, it retrieves data for the yellow team; otherwise, it retrieves data for the blue team.
+    - DOCTODO `get_robots_pos(is_yellow: bool) -> List[Robot]`: Retrieves the current position data for robots on the specified team. If `is_yellow` is `True`, it retrieves data for the yellow team; otherwise, it retrieves data for the blue team.
     - `get_ball_pos() -> Ball`: Retrieves the current position data for the ball.
     - `pull_game_data() -> None`: Continuously receives vision data packets and updates the internal data structures for the game state. This method runs indefinitely and should typically be started in a separate thread.
 

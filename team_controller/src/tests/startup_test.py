@@ -3,16 +3,18 @@ import sys
 import threading
 
 # Add the project root directory to sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
 print(project_root)
 sys.path.insert(0, project_root)
 
-from data.vision_receiver import VisionDataReceiver
-from controllers.robot_startup_controller import StartUpController
+from team_controller.src.data import VisionDataReceiver
+from team_controller.src.controllers.sim.robot_startup_controller import (
+    StartUpController,
+)
 
 if __name__ == "__main__":
-    vision_receiver = VisionDataReceiver(debug=True)
-    decision_maker = StartUpController(vision_receiver, debug=False)
+    vision_receiver = VisionDataReceiver(debug=False)
+    decision_maker = StartUpController(vision_receiver=vision_receiver, debug=True)
 
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
     command_thread = threading.Thread(target=decision_maker.startup)

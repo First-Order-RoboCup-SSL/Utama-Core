@@ -1,47 +1,58 @@
 import threading
+import queue
 import time
-from typing import List
-from entities.data.vision import BallData, RobotData, FrameData
+from team_controller.src.data.message_enum import MessageType
+from typing import List, Optional
+from entities.data.vision import BallData, RobotData, FrameData, TeamRobotCoords
+from team_controller.src.data.base_receiver import BaseReceiver
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT, NUM_ROBOTS
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
 
 
-class VisionDataReceiver:
+class VisionDataReceiver(BaseReceiver):
     """
     A class responsible for receiving and managing vision data for robots and the ball in a multi-robot game environment.
     The class interfaces with a network manager to receive packets, which contain positional data for the ball and robots
-    on both teams, and updates the internal data structures accordingly.
+    on both teams, and passes decoded messages (object positions) over the provided message_queue.
 
     Args:
         ip (str): The IP address for receiving multicast vision data. Defaults to MULTICAST_GROUP.
         port (int): The port for receiving vision data. Defaults to VISION_PORT.
     """
-
     def __init__(
         self,
+        messsage_queue: queue.SimpleQueue,
         ip=MULTICAST_GROUP,
         port=VISION_PORT,
         n_yellow_robots: int = 6,
         n_blue_robots: int = 6,
         debug=False,
     ):
+        super().__init__(messsage_queue) # Setup the message queue
+
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
-        self.old_data = None
         self.time_received = None
         self.ball_pos: List[BallData] = None
         self.robots_yellow_pos: List[RobotData] = [None] * n_yellow_robots
         self.robots_blue_pos: List[RobotData] = [None] * n_blue_robots
 
-        self.lock = threading.Lock()
-        self.update_event = threading.Event()
         self.debug = debug
 
     def _update_data(self, detection: object) -> None:
         # Update both ball and robot data incrementally.
         self._update_ball_pos(detection)
         self._update_robots_pos(detection)
-        self.update_event.set()  # Signal that an update has occurred.
+
+        # Put the latest game state into the thread-safe queue which will wake up
+        # main if it was empty.
+        # TODO: we should modify how Game is updated. Instead of appending to the records list, we should really keep any data we don't have updates for.
+        self._message_queue.put_nowait((MessageType.VISION, FrameData(
+            self.time_received,
+            self.robots_yellow_pos,
+            self.robots_blue_pos,
+            self.ball_pos,
+        )))
 
     def _update_ball_pos(self, detection: object) -> None:
 
@@ -67,14 +78,15 @@ class VisionDataReceiver:
     ) -> None:
         # Generic method to update robots for both teams.
         for robot in robots_data:
-            robots[robot.robot_id] = RobotData(
-                robot.x,
-                robot.y,
-                robot.orientation if robot.HasField("orientation") else 0,
-            )
-            # TODO: When do we not have orientation?
+            if 0 <= robot.robot_id < len(robots):
+                robots[robot.robot_id] = RobotData(
+                    robot.x,
+                    robot.y,
+                    robot.orientation if robot.HasField("orientation") else 0,
+                )
+                # TODO: When do we not have orientation?
 
-    def _print_frame_info(self, t_received: float, detection: object):
+    def _print_frame_info(self, t_received: float, detection: object) -> None:
         t_now = time.time()
         print(f"Time Now: {t_now:.3f}s")
         print(
@@ -91,68 +103,6 @@ class VisionDataReceiver:
             f"{((t_now - t_received) + (detection.t_sent - detection.t_capture)) * 1000.0:.3f}ms"
         )
 
-    def get_frame_data(self):
-        """
-        Retrieve all relevant data for this frame. Combination of timestep, ball and robot data.
-
-        Returns:
-            FrameData: A named tuple containing the time received, robot positions, and ball position.
-
-        """
-        with self.lock:
-            return FrameData(
-                self.time_received,
-                self.robots_yellow_pos,
-                self.robots_blue_pos,
-                self.ball_pos,
-            )
-
-    def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
-        """
-        Retrieves the current position data for robots on the specified team from the vision data.
-
-        Args:
-            is_yellow (bool): If True, retrieves data for the yellow team. If False, retrieves data for the blue team.
-
-        Returns:
-            List[RobotData]: A list of all detected robot positions {robot_id: (x, y, orientation)} for the specified team.
-        """
-        with self.lock:
-            return self.robots_yellow_pos if is_yellow else self.robots_blue_pos
-
-    def get_ball_pos(self) -> BallData:
-        """
-        Retrieves the current position data for the ball.
-
-        Returns:
-            BallData: A named tuple of all detected ball positions (x, y, z).
-        """
-        with self.lock:
-            return self.ball_pos
-
-    def get_time_received(self) -> float:
-        """
-        Retrieves the time at which the most recent vision data was received.
-
-        Returns:
-            float: The time at which the most recent vision data was received.
-        """
-        return self.time_received
-
-    def wait_for_update(self, timeout: float = None) -> bool:
-        """
-        Waits for the data to be updated, returning True if an update occurs within the timeout.
-
-        Args:
-            timeout (float): Maximum time to wait for an update in seconds. Defaults to None (wait indefinitely).
-
-        Returns:
-            bool: True if the data was updated within the timeout, False otherwise.
-        """
-        updated = self.update_event.wait(timeout)
-        self.update_event.clear()  # Reset the event for the next update.
-        return updated
-
     def pull_game_data(self) -> None:
         """
         Continuously receives vision data packets and updates the internal data structures for the game state.
@@ -164,13 +114,112 @@ class VisionDataReceiver:
             t_received = time.time()
             self.time_received = t_received
             data = self.net.receive_data()
-            if data != self.old_data:
-                with self.lock:
-                    vision_packet.Clear()  # Clear previous data to avoid memory bloat
-                    vision_packet.ParseFromString(data)
-                    self._update_data(vision_packet.detection)
+            if data is not None:
+                vision_packet.Clear()  # Clear previous data to avoid memory bloat
+                vision_packet.ParseFromString(data)
+                self._update_data(vision_packet.detection)
             if self.debug:
                 self._print_frame_info(t_received, vision_packet.detection)
-                print(f"Robots: {self.get_robots_pos(True)}\n")
-                print(f"Ball: {self.get_ball_pos()}\n")
-            time.sleep(0.0083)
+            time.sleep(0.0083) # TODO : Block on data?
+
+    # MOVE INTO GAME
+    
+    # # UNUSED
+    # def get_time_received(self) -> float:
+    #     """
+    #     Retrieves the time at which the most recent vision data was received.
+    #     Returns:
+    #         float: The time at which the most recent vision data was received.
+    #     """
+    #     return self.time_received
+
+    # def get_robot_coords(self, is_yellow: bool) -> TeamRobotCoords:
+    #     """
+    #     Retrieves the current positions of all robots on the specified team.
+        
+    #     Args:
+    #         is_yellow (bool): If True, retrieves data for the yellow team; otherwise, for the blue team.        
+        
+    #     Returns:
+    #         TeamRobotCoords: A named tuple containing the team color and a list of RobotData.
+    #     """    
+    #     with self.lock:
+    #         team_color = "yellow" if is_yellow else "blue"
+    #         robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
+    #         return TeamRobotCoords(team_color=team_color, robots=robots)
+    
+    # # UNUSED   
+    # def get_robot_by_id(self, is_yellow: bool, robot_id: int) -> RobotData:
+    #         """
+    #         Retrieves the position data for a specific robot by ID.
+    #         Args:
+    #             is_yellow (bool): If True, retrieves data for the yellow team; otherwise, for the blue team.
+    #             robot_id (int): The ID of the robot.
+    #         Returns:
+    #             RobotData: The position data of the specified robot.
+    #         """
+    #         with self.lock:
+    #             robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
+    #             if 0 <= robot_id < len(robots) and robots[robot_id] is not None:
+    #                 return robots[robot_id]
+    #             else:
+    #                 return None  # TODO: Or raise an exception.    
+    
+    # # UNUSED            
+    # def get_closest_robot_to_point(self, is_yellow: bool, x: float, y: float) -> RobotData:
+    #     """
+    #     Finds the robot closest to a given point.
+        
+    #     Args:
+    #         is_yellow (bool): If True, searches within the yellow team; otherwise, within the blue team.
+    #         x (float): The x-coordinate of the point.
+    #         y (float): The y-coordinate of the point.
+
+    #     Returns:
+    #         RobotData: The position data of the closest robot.
+    #     """
+    #     with self.lock:
+    #         robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
+    #         min_distance = float('inf')
+    #         closest_robot = None
+    #         for robot in robots:
+    #             if robot is not None:
+    #                 distance = ((robot.x - x) ** 2 + (robot.y - y) ** 2) ** 0.5
+    #                 if distance < min_distance:
+    #                     min_distance = distance
+    #                     closest_robot = robot
+    #     # TODO: Haven't been tested 
+    #     return closest_robot   
+    
+    # # UNUSED
+    # def get_ball_velocity(self) -> Optional[tuple]: # UNUSED
+    #     """
+    #     Calculates the ball's velocity based on position changes over time.
+
+    #     Returns:
+    #         tuple: The velocity components (vx, vy).
+    #     """
+    #     # TODO Find a method to store the data and get velocity. --> self.previour_ball_pos
+    #     with self.lock:
+    #         if len(self.history) < 2:
+    #             # Not suffucient data to extrapolate velocity
+    #             return None
+    #         # Otherwise get the previous and current frames
+    #         previous_frame = self.history[-2]
+    #         current_frame = self.history[-1]
+            
+    #         previous_ball_pos = previous_frame.ball[0] #TODO don't always take first ball pos
+    #         ball_pos = current_frame.ball[0]
+    #         previous_time_received = previous_frame.ts
+    #         time_received = current_frame.ts
+
+    #         # Latest frame should always be ahead of last one    
+    #         if time_received < previous_time_received:
+    #             # TODO log a warning
+    #             print("Timestamps out of order for vision data ")
+    #             return None        
+            
+    #         dt = time_received - previous_time_received
+    #         vx = (ball_pos.x - previous_ball_pos.x) / dt
+    #         vy = (ball_pos.y - previous_ball_pos.y) / dt
+    #         return (vx, vy)
