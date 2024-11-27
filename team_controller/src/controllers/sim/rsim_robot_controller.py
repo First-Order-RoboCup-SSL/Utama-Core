@@ -38,8 +38,12 @@ class RSimRobotController(AbstractRobotController):
         self._out_packet = self._empty_command(self.n_friendly_robots)
         self._robots_info: list[RobotInfo] = [None] * self.n_friendly_robots
 
-        initial_obs, _ = self._env.reset()
-        initial_frame = initial_obs[0]
+        # if environment was not reset beforehand, reset now
+        if self._env.frame is None:
+            initial_obs, _ = self._env.reset()
+            initial_frame = initial_obs[0]
+        else:
+            initial_frame, _, _ = self._env._frame_to_observations()
         self._write_to_game_obj(initial_frame)
 
     def send_robot_commands(self) -> None:

@@ -137,7 +137,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         Note: this does not create a new frame, but mutates the current frame
         """
-        ball = Ball(x=x, y=y)
+        ball = Ball(x=x, y=y, z=self.frame.ball.z)
         self.frame.ball = ball
         self.rsim.reset(self.frame)
 

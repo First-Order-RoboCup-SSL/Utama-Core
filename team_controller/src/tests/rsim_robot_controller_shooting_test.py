@@ -367,7 +367,10 @@ if __name__ == "__main__":
     game = Game()
 
     # making environment
-    env = SSLStandardEnv()
+    env = SSLStandardEnv(n_robots_blue=3)
+    env.reset()
+    env.teleport_robot(False, 0, x=1, y=1)
+    env.teleport_ball(1, 1)
     # Note we don't need a vision receiver for rsim
     sim_robot_controller = RSimRobotController(
         is_team_yellow=True, env=env, game_obj=game, debug=False
