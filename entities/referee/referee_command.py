@@ -23,8 +23,8 @@ class RefereeCommand:
             7: "PREPARE_PENALTY_BLUE",
             8: "DIRECT_FREE_YELLOW",
             9: "DIRECT_FREE_BLUE",
-            10: "INDIRECT_FREE_YELLOW",
-            11: "INDIRECT_FREE_BLUE",
+            10: "INDIRECT_FREE_YELLOW", # depreceated
+            11: "INDIRECT_FREE_BLUE", # depreceated
             12: "TIMEOUT_YELLOW",
             13: "TIMEOUT_BLUE",
             14: "GOAL_YELLOW",
