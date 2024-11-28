@@ -176,23 +176,6 @@ class RefereeMessageReceiver(BaseReceiver):
             )
         )
 
-    def check_new_message(self) -> bool:
-        """
-        Check if a new referee message has been received.
-
-        Returns:
-            bool: True if a new message has been received, False otherwise.
-        """
-        data = self.net.receive_data()
-        if data:
-            serialized_data = self._serialize_relevant_fields(data)
-
-        if serialized_data != self.old_serialized_data:
-            self.referee.ParseFromString(data)
-            self.old_serialized_data = serialized_data
-            return True
-        return False
-
     def check_new_command(self) -> bool:
         """
         Check if a new command has been received and update the command history.
@@ -200,7 +183,6 @@ class RefereeMessageReceiver(BaseReceiver):
         Returns:
             bool: True if a new command has been received, False otherwise.
         """
-        data = self.net.receive_data()
         history_length = 5
 
         if data:
@@ -212,17 +194,6 @@ class RefereeMessageReceiver(BaseReceiver):
                     self.command_history.pop(0)  # Maintain a fixed-length history
                 return True
         return False
-
-    def get_latest_command(self) -> Tuple[int, Tuple[float, float]]:
-        """
-        Get the latest command and its designated position.
-
-        Returns:
-            Tuple[int, Tuple[float, float]]: The latest command and its designated position.
-        """
-        command = self.referee.command
-        designated_position = self.referee.designated_position
-        return command, (designated_position.x, designated_position.y)
 
     def get_latest_message(self) -> Referee:
         """
