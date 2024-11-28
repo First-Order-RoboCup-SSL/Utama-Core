@@ -62,7 +62,7 @@ class VisionDataReceiver(BaseReceiver):
         ball_pos = []
         for _, ball in enumerate(detection.balls):
             ball_pos.append(
-                BallData(ball.x, ball.y, ball.z if ball.HasField("z") else 0.0)
+                BallData(ball.x / 1000, ball.y / 1000, (ball.z / 1000) if ball.HasField("z") else 0.0)
             )
         self.ball_pos = ball_pos
 
@@ -80,8 +80,8 @@ class VisionDataReceiver(BaseReceiver):
         for robot in robots_data:
             if 0 <= robot.robot_id < len(robots):
                 robots[robot.robot_id] = RobotData(
-                    robot.x,
-                    robot.y,
+                    robot.x / 1000,
+                    robot.y / 1000,
                     robot.orientation if robot.HasField("orientation") else 0,
                 )
                 # TODO: When do we not have orientation?
