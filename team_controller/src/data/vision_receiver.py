@@ -122,32 +122,8 @@ class VisionDataReceiver(BaseReceiver):
                 self._print_frame_info(t_received, vision_packet.detection)
             time.sleep(0.0083) # TODO : Block on data?
 
-    # MOVE INTO GAME
-    
-    # # UNUSED
-    # def get_time_received(self) -> float:
-    #     """
-    #     Retrieves the time at which the most recent vision data was received.
-    #     Returns:
-    #         float: The time at which the most recent vision data was received.
-    #     """
-    #     return self.time_received
-
-    # def get_robot_coords(self, is_yellow: bool) -> TeamRobotCoords:
-    #     """
-    #     Retrieves the current positions of all robots on the specified team.
-        
-    #     Args:
-    #         is_yellow (bool): If True, retrieves data for the yellow team; otherwise, for the blue team.        
-        
-    #     Returns:
-    #         TeamRobotCoords: A named tuple containing the team color and a list of RobotData.
-    #     """    
-    #     with self.lock:
-    #         team_color = "yellow" if is_yellow else "blue"
-    #         robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
-    #         return TeamRobotCoords(team_color=team_color, robots=robots)
-    
+    # MOVE INTO GAME  
+  
     # # UNUSED   
     # def get_robot_by_id(self, is_yellow: bool, robot_id: int) -> RobotData:
     #         """
@@ -165,8 +141,8 @@ class VisionDataReceiver(BaseReceiver):
     #             else:
     #                 return None  # TODO: Or raise an exception.    
     
-    # # UNUSED            
-    # def get_closest_robot_to_point(self, is_yellow: bool, x: float, y: float) -> RobotData:
+    #            
+    # def get_closest_robot_at_point(self, is_yellow: bool, x: float, y: float) -> RobotData:
     #     """
     #     Finds the robot closest to a given point.
         
@@ -191,7 +167,7 @@ class VisionDataReceiver(BaseReceiver):
     #     # TODO: Haven't been tested 
     #     return closest_robot   
     
-    # # UNUSED
+    # # Implemented Already
     # def get_ball_velocity(self) -> Optional[tuple]: # UNUSED
     #     """
     #     Calculates the ball's velocity based on position changes over time.
