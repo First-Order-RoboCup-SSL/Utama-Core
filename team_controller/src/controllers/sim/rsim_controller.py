@@ -6,7 +6,7 @@ from team_controller.src.config.settings import (
     LOCAL_HOST,
     SIM_COMTROL_PORT,
     TELEPORT_X_COORDS,
-    FIELD_Y_COORD,
+    ADD_Y_COORD,
     REMOVAL_Y_COORD,
 )
 from typing import Tuple
@@ -76,7 +76,7 @@ class RSimController(AbstractSimController):
     def _get_teleport_location(
         self, robot_id: int, is_team_yellow: bool, add: bool
     ) -> Tuple[float, float]:
-        y_coord = FIELD_Y_COORD if add else REMOVAL_Y_COORD
+        y_coord = ADD_Y_COORD if add else REMOVAL_Y_COORD
         x_coord = (
             -TELEPORT_X_COORDS[robot_id]
             if not is_team_yellow
