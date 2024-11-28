@@ -116,10 +116,10 @@ class StartUpController:
 
         if target_x != None and target_y != None:
             left_vel = self.pid_trans.calculate(
-                target_y, current_y, robot_id, normalize_range=3000
+                target_y, current_y, robot_id, normalize_range=3
             )
             forward_vel = self.pid_trans.calculate(
-                target_x, current_x, robot_id, normalize_range=4500
+                target_x, current_x, robot_id, normalize_range=4.5
             )
 
             forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren)
