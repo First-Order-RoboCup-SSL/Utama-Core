@@ -41,6 +41,7 @@ def setup_socket(
 
         # sock.settimeout(0.005)  # Set timeout to 1 frame period (60 FPS)
         logger.info(
+        logging.info(
             "Socket setup completed with address %s and bind_socket=%s",
             address,
             bind_socket,
