@@ -19,7 +19,8 @@ from entities.data.command import RobotInfo
 
 class SSLStandardEnv(SSLBaseEnv):
     """
-
+    Description:
+        Environment stripped to be a lightweight simulator for testing and development.
     args:
         field_type
         Num
@@ -30,11 +31,8 @@ class SSLStandardEnv(SSLBaseEnv):
         blue/yellow_starting_formation
         Type: List[Tuple[float, float, float]]
         Description:
-            list of (x, y, theta) coords for each robot to spawn in.
+            list of (x, y, theta) coords for each robot to spawn in (in meters and radians).
             See the default BLUE_START_ONE/YELLOW_START_ONE for reference.
-
-    Description:
-        Environment stripped to be a lightweight simulator for testing and development.
     Observation:
         Type: Tuple[FrameData, List[RobotInfo], List[RobotInfo]]
         Num     Item
@@ -189,9 +187,7 @@ class SSLStandardEnv(SSLBaseEnv):
         blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
         """
         # Ball observation shared by all robots
-        ball_obs = BallData(
-            self.frame.ball.x * 1e3, self.frame.ball.y * 1e3, self.frame.ball.z * 1e3
-        )
+        ball_obs = BallData(self.frame.ball.x, self.frame.ball.y, self.frame.ball.z)
 
         # Robots observation (Blue + Yellow)
         blue_obs = []
@@ -220,9 +216,7 @@ class SSLStandardEnv(SSLBaseEnv):
         )
 
     def _get_robot_observation(self, robot):
-        robot_pos = RobotData(
-            robot.x * 1e3, robot.y * 1e3, float(deg_to_rad(robot.theta))
-        )
+        robot_pos = RobotData(robot.x, robot.y, float(deg_to_rad(robot.theta)))
         robot_info = RobotInfo(robot.infrared)
         return robot_pos, robot_info
 
@@ -382,14 +376,12 @@ class SSLStandardEnv(SSLBaseEnv):
 
         for i in range(self.n_robots_blue):
             x, y, heading = self.blue_formation[i]
-            pos_frame.robots_blue[i] = Robot(
-                id=i, x=x / 1e3, y=y / 1e3, theta=rad_to_deg(heading)
-            )
+            pos_frame.robots_blue[i] = Robot(id=i, x=x, y=y, theta=rad_to_deg(heading))
 
         for i in range(self.n_robots_yellow):
             x, y, heading = self.yellow_formation[i]
             pos_frame.robots_yellow[i] = Robot(
-                id=i, x=x / 1e3, y=y / 1e3, theta=rad_to_deg(heading)
+                id=i, x=x, y=y, theta=rad_to_deg(heading)
             )
 
         pos_frame.ball = Ball(x=0, y=0)
