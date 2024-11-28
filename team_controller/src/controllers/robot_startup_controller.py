@@ -53,7 +53,6 @@ class StartUpController:
             if self.debug:
                 print(out_packet)
             self.sim_robot_controller.send_robot_commands()
-            self.sim_robot_controller.robot_has_ball(robot_id=3)
 
     def _calculate_robot_velocities(
         self,
