@@ -29,7 +29,7 @@ class GRSimController(AbstractSimController):
 
     Args:
         ip (str): IP address of the simulator. Defaults to LOCAL_HOST.
-        port (int): Port of the simulator. Defaults to SIM_COMTROL_PORT.
+        port (int): Port of the simulator. Defaults to SIM_CONTROL_PORT.
     """
 
     def __init__(self, ip: str = LOCAL_HOST, port: int = SIM_CONTROL_PORT):

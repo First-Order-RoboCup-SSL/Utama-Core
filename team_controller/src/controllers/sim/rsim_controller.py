@@ -4,7 +4,7 @@ from team_controller.src.controllers.common.sim_controller_abstract import (
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from team_controller.src.config.settings import (
     LOCAL_HOST,
-    SIM_COMTROL_PORT,
+    SIM_CONTROL_PORT,
     TELEPORT_X_COORDS,
     ADD_Y_COORD,
     REMOVAL_Y_COORD,
