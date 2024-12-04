@@ -42,7 +42,7 @@ def setup_socket(
             mreq = struct.pack("4sL", group, socket.INADDR_ANY)
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
-        sock.settimeout(0.005)  # Set timeout to 1 frame period (60 FPS)
+        # sock.settimeout(0.005)  # Set timeout to 1 frame period (60 FPS)
         logging.info(
             "Socket setup completed with address %s and bind_socket=%s",
             address,
