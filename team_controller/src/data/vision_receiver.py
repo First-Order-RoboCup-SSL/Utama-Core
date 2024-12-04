@@ -66,7 +66,7 @@ class VisionDataReceiver(BaseReceiver):
             # main if it was empty.
             # TODO: we should modify how Game is updated. Instead of appending to the records list, we should really keep any data we don't have updates for.
             self._message_queue.put_nowait((MessageType.VISION, self._avg_frames(self.camera_frames)))
-    
+
     def _avg_frames(self, frames) -> FrameData:
         sum_frame = frames[0]
         for frame in frames[1:]:
@@ -148,6 +148,8 @@ class VisionDataReceiver(BaseReceiver):
                 vision_packet.Clear()  # Clear previous data to avoid memory bloat
                 vision_packet.ParseFromString(data)
                 self._update_data(vision_packet.detection)
+                # print(vision_packet.detection.frame_number)
+                # print(vision_packet.frame_number)
             if self.debug:
                 self._print_frame_info(t_received, vision_packet.detection)
             # time.sleep(0.0083) # TODO : Block on data?

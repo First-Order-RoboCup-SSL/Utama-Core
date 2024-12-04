@@ -60,6 +60,7 @@ class Game:
         """
         if frame >= len(self._records) or frame == 0:
             # Cannot provide velocity at frame that does not exist
+            print(frame)
             return None
         
         # Otherwise get the previous and current frames
@@ -86,24 +87,41 @@ class Game:
         return (vx, vy) ## mm/sec
 
     def get_ball_acceleration(self) -> Optional[tuple]:
-        if len(self._records) < 10:
-            return None
-        
         totalX = 0
         totalY = 0
-        for i in range(1, 6):
-            curr_vel = self._get_ball_velocity_at_frame(len(self._records) - i)
-            prev_vel = self._get_ball_velocity_at_frame(len(self._records) - i - 1)
-            
-            dt = self._records[-i].ts - self._records[-i - 1].ts
+        WINDOW = 5
+        N_WINDOWS = 6
+        iter = 0
+        
+        if len(self._records) < WINDOW * N_WINDOWS + 1:
+            return None
+        
+        for i in range(N_WINDOWS):
+            averageVelocity = [0, 0]
+            windowStart = 1 + i * WINDOW
+            windowEnd = windowStart + WINDOW # Excluded
+            windowMiddle = (windowStart + windowEnd) // 2
 
-            accX = (curr_vel[0] - prev_vel[0]) / dt    # TODO vec
-            accY = (curr_vel[1] - prev_vel[1]) / dt
-            # print(accX, accY)
-            # print(prev_vel, curr_vel, dt)
-            totalX += accX
-            totalY += accY
-        return (totalX / 5, totalY / 5) ## mm/(sec^2)
+            for j in range(windowStart, windowEnd):
+                curr_vel = self._get_ball_velocity_at_frame(len(self._records) - j)
+                averageVelocity[0] += curr_vel[0]
+                averageVelocity[1] += curr_vel[1]
+            
+            averageVelocity[0] /= WINDOW
+            averageVelocity[1] /= WINDOW
+
+            if i != 0:
+                dt = self._records[-windowMiddle + WINDOW].ts - self._records[- windowMiddle].ts
+                accX = (futureAverageVelocity[0] - averageVelocity[0]) / dt    # TODO vec
+                accY = (futureAverageVelocity[1] - averageVelocity[1]) / dt
+                totalX += accX
+                totalY += accY
+                iter += 1    
+
+            futureAverageVelocity = tuple(averageVelocity)
+            
+         
+        return (totalX / iter, totalY / iter) ## mm/(sec^2)
 
     def predict_ball_pos_after(self, t: float) -> Optional[tuple]: # t in secs
         # If t is after the ball has stopped we return the position at which ball stopped.
@@ -119,7 +137,8 @@ class Game:
         start_x, start_y = ball[0].x, ball[0].y
 
         # print(acc)
-        # print(self.get_ball_velocity())
+        print("VEL", self.get_ball_velocity())
+        print("ACC", self.get_ball_acceleration())
 
         if ax == 0: # Due to friction, if acc = 0 then stopped. 
             sx = 0

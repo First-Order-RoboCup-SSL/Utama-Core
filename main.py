@@ -38,6 +38,7 @@ def main():
 
     try:
         print("LOCATED BALL")
+        predictions = []
         while True:
             (message_type, message) = message_queue.get()  # Infinite timeout for now
             
@@ -46,7 +47,10 @@ def main():
 
                 if frames % 10 == 0:
                     # print((message_queue.qsize() + frames) / (time.time() - start))
-                    print("Ball Pos prediction", game.predict_ball_pos_after(1), game.get_ball_pos()[0])
+                    predictions.append(game.predict_ball_pos_after(0.5))
+                    print("POS", game.get_ball_pos(), time.time())
+                    if (len(predictions)) >= 4:
+                      print("PRED_NOW", predictions[-4])
 
                     # print(message_queue.qsize())
                 # message = FrameData(...)
