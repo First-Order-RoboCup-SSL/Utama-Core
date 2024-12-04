@@ -175,8 +175,8 @@ class ShootingController:
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
         # potentially have a set tunig parameters for each robot
-        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0.03, num_robots=6)
-        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0.02, num_robots=6)
+        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0.045, num_robots=6)
+        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0.035, num_robots=6)
 
         self.lock = threading.Lock()
 
@@ -214,9 +214,7 @@ class ShootingController:
             shot_orientation = np.atan2(
                 (best_shot - balls[0].y), (self.goal_x - balls[0].x)
             )
-
-            print(f"Shot orientation: {shot_orientation}")
-            
+           
             robot_data = (
                 robots[self.shooter_id] if self.shooter_id < len(robots) else None
             )
