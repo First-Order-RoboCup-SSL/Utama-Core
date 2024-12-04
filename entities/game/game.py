@@ -136,10 +136,6 @@ class Game:
         ball = self.get_ball_pos()
         start_x, start_y = ball[0].x, ball[0].y
 
-        # print(acc)
-        print("VEL", self.get_ball_velocity())
-        print("ACC", self.get_ball_acceleration())
-
         if ax == 0: # Due to friction, if acc = 0 then stopped. 
             sx = 0
         else:
