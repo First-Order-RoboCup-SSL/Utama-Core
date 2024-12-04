@@ -156,6 +156,8 @@ class ShootingController:
         self.game_obj = game_obj
         self.robot_controller = robot_controller
 
+        self.first_action = False
+        
         self.robot_command = RobotCommand(
             local_forward_vel=0,
             local_left_vel=0,
@@ -173,8 +175,8 @@ class ShootingController:
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
         # potentially have a set tunig parameters for each robot
-        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0.045, num_robots=6)
-        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0.045, num_robots=6)
+        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0.03, num_robots=6)
+        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0.02, num_robots=6)
 
         self.lock = threading.Lock()
 
@@ -199,9 +201,6 @@ class ShootingController:
                 return False
 
     def approach_ball(self):
-        first_action = True
-        start_time = time.time()
-
         robots, enemy_robots, balls = self._get_positions()
 
         if robots and balls:
@@ -226,14 +225,14 @@ class ShootingController:
                 )
                 if robot_data is not None:
                     if (
-                        first_action
+                        self.first_action
                         or abs(
                             np.round(target_oren, 1)
                             - np.round(robot_data.orientation, 1)
                         )
                         >= 0.3
                     ):
-                        # print("first action")
+                        print("first action")
                         target_coords = (None, None, None)
                         face_ball = True
                         self.robot_command = self._calculate_robot_velocities(
@@ -243,7 +242,7 @@ class ShootingController:
                             balls,
                             face_ball=face_ball,
                         )
-                        first_action = False
+                        self.first_action = False
                     elif self.robot_controller.robot_has_ball(self.shooter_id):
                         print("robot has ball")
                         current_oren = robots[self.shooter_id].orientation
@@ -257,7 +256,7 @@ class ShootingController:
                             balls,
                             face_ball=face_ball,
                         )
-                        first_action = self.kick_ball(
+                        self.first_action = self.kick_ball(
                             current_oren, shot_orientation
                         )
                     else:
@@ -393,16 +392,13 @@ if __name__ == "__main__":
     vision_thread.start()
     try:
         while True:
-            t_s = time.time()
             (message_type, message) = message_queue.get()
-            t_2 = time.time()
             if message_type == MessageType.VISION:
                 game.add_new_state(message)
             elif message_type == MessageType.REF:
                 pass
 
             decision_maker.approach_ball()
-            # print(f"Time taken for one loop: {time.time() - t_s:.3f}\n")
     except KeyboardInterrupt:
         print("Exiting...")
 
