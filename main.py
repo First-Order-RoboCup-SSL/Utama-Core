@@ -4,6 +4,7 @@ from entities.game import Game
 import time
 import math
 
+from entities.game.game_object import Ball, Colour, Robot
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.robot_startup_controller import (
     StartUpController,
@@ -31,6 +32,10 @@ def main():
     data_thread.daemon = True  # Allows the thread to close when the main program exits
     data_thread.start()
 
+
+    TIME = 0.5
+    FRAMES_IN_TIME = round(60 * TIME)
+
     # TODO: Not implemented
     # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
     # referee_thread.daemon = True
@@ -40,7 +45,7 @@ def main():
 
     try:
         print("LOCATED BALL")
-        print("Predicting ball position with 0.5 seconds of motion")
+        print(f"Predicting robot position with {TIME} seconds of motion")
 
         predictions = []
         while True:
@@ -48,14 +53,18 @@ def main():
             
             if message_type == MessageType.VISION:
                 frames += 1
-
-                if frames % 10 == 0:
-                    predictions.append(game.predict_ball_pos_after(0.5))
-                    actual = game.get_ball_pos()
-                    if (len(predictions)) >= 4 and predictions[-4] != None:
-                      print("Prediction inaccuracy delta (cm): ", 100 * math.sqrt((actual[0].x - predictions[-4][0])**2 + (actual[0].y - predictions[-4][1])**2))
-
                 game.add_new_state(message)
+
+                actual = game._records[-1] # JUST FOR TESTING - don't do this irl
+
+                if len(predictions) >= FRAMES_IN_TIME  and predictions[-FRAMES_IN_TIME] != None:
+                    print("Ball prediction inaccuracy delta (cm): ", '{:.20f}'.format(100 * math.sqrt((actual.ball[0].x - predictions[-FRAMES_IN_TIME].ball[0].x)**2 + (actual.ball[0].y - predictions[-FRAMES_IN_TIME].ball[0].y)**2)))
+                    for i in range(6):
+                        print(f"Blue robot {i} prediction inaccuracy delta (cm): ", '{:.20f}'.format(100 * math.sqrt((actual.blue_robots[i].x - predictions[-FRAMES_IN_TIME].blue_robots[i].x)**2 + (actual.blue_robots[i].y - predictions[-FRAMES_IN_TIME].blue_robots[i].y)**2)))
+                    for i in range(6):
+                        print(f"Yellow robot {i} prediction inaccuracy delta (cm): ", '{:.20f}'.format(100 * math.sqrt((actual.yellow_robots[i].x - predictions[-FRAMES_IN_TIME].yellow_robots[i].x)**2 + (actual.yellow_robots[i].y - predictions[-FRAMES_IN_TIME].yellow_robots[i].y)**2)))
+
+                predictions.append(game.predict_frame_after(TIME))
 
             elif message_type == MessageType.REF:
                 pass

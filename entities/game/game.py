@@ -1,6 +1,9 @@
 from typing import List, Optional
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData
+from enum import Enum
+
+from entities.game.game_object import Ball, Colour, GameObject, Robot
 
 
 class Game:
@@ -68,15 +71,21 @@ class Game:
         record = self._records[-1] 
         return record.yellow_robots if is_yellow else record.blue_robots
 
-    def get_ball_pos(self) -> BallData:
-        return self._records[-1].ball
+    def get_object_velocity(self, object: GameObject):
+        return self._get_object_velocity_at_frame(len(self._records) - 1, object)
 
-    def get_ball_velocity(self):
-        return self._get_ball_velocity_at_frame(len(self._records) - 1)
+    def _get_object_position_at_frame(self, frame: int, object: GameObject):
+        if object == Ball:
+            return self._records[frame].ball[0] # TODO don't always take first ball pos
+        elif isinstance(object, Robot):
+            if object.colour == Colour.YELLOW:
+                return self._records[frame].yellow_robots[object.id]
+            else:
+                return self._records[frame].blue_robots[object.id]
 
-    def _get_ball_velocity_at_frame(self, frame: int) -> Optional[tuple]:
+    def _get_object_velocity_at_frame(self, frame: int, object: GameObject) -> Optional[tuple]:
         """
-        Calculates the ball's velocity based on position changes over time,
+        Calculates the object's velocity based on position changes over time,
           at frame f.
 
         Returns:
@@ -92,8 +101,8 @@ class Game:
         previous_frame = self._records[frame - 1]
         current_frame = self._records[frame]
         
-        previous_ball_pos = previous_frame.ball[0] # TODO don't always take first ball pos
-        ball_pos = current_frame.ball[0] # TODO don't always take first ball pos
+        previous_pos = self._get_object_position_at_frame(frame - 1, object)
+        current_pos = self._get_object_position_at_frame(frame, object)
 
         previous_time_received = previous_frame.ts
         time_received = current_frame.ts
@@ -106,12 +115,12 @@ class Game:
         
         dt_secs = time_received - previous_time_received
         
-        vx = (ball_pos.x - previous_ball_pos.x) / dt_secs
-        vy = (ball_pos.y - previous_ball_pos.y) / dt_secs
+        vx = (current_pos.x - previous_pos.x) / dt_secs
+        vy = (current_pos.y - previous_pos.y) / dt_secs
         
         return (vx, vy)
 
-    def get_ball_acceleration(self) -> Optional[tuple]:
+    def get_object_acceleration(self, object: GameObject) -> Optional[tuple]:
         totalX = 0
         totalY = 0
         WINDOW = 5
@@ -128,7 +137,7 @@ class Game:
             windowMiddle = (windowStart + windowEnd) // 2
 
             for j in range(windowStart, windowEnd):
-                curr_vel = self._get_ball_velocity_at_frame(len(self._records) - j)
+                curr_vel = self._get_object_velocity_at_frame(len(self._records) - j, object)
                 averageVelocity[0] += curr_vel[0]
                 averageVelocity[1] += curr_vel[1]
             
@@ -148,21 +157,27 @@ class Game:
          
         return (totalX / iter, totalY / iter)
 
-    def predict_ball_pos_after(self, t: float) -> Optional[tuple]:
-        # If t is after the ball has stopped we return the position at which ball stopped.
+    def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
+        # If t is after the object has stopped we return the position at which object stopped.
         
-        acc = self.get_ball_acceleration()
+        acc = self.get_object_acceleration(object)
         
         if acc is None:
             return None
         
         ax, ay = acc
-        ux, uy = self.get_ball_velocity()
-        ball = self.get_ball_pos()
-        start_x, start_y = ball[0].x, ball[0].y
+        ux, uy = self.get_object_velocity(object)
+
+        
+        if object is Ball:
+            ball = self.get_ball_pos()
+            start_x, start_y = ball[0].x, ball[0].y
+        else:
+            posn = self._get_object_position_at_frame(len(self._records) - 1, object)
+            start_x, start_y = posn.x, posn.y
 
         if ax == 0: # Due to friction, if acc = 0 then stopped. 
-            sx = 0
+            sx = 0 # TODO: Not sure what to do about robots with respect to friction - we never know if they are slowing down to stop or if they are slowing down to change direction 
         else:
             tx_stop = - ux / ax
             tx = min(t, tx_stop)
@@ -177,4 +192,16 @@ class Game:
 
         return (start_x + sx, start_y + sy) # TODO: Doesn't take into account spin / angular vel
     
-    def 
+    def predict_frame_after(self, t: float):
+        yellow_pos = [self.predict_object_pos_after(t, Robot(Colour.YELLOW, i)) for i in range(6)]
+        blue_pos = [self.predict_object_pos_after(t, Robot(Colour.BLUE, i)) for i in range(6)]
+        ball_pos = self.predict_object_pos_after(t, Ball)
+        if ball_pos is None or None in yellow_pos or None in blue_pos:
+            return None
+        else:
+            return FrameData(
+                self._records[-1].ts + t,
+                list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),            
+                list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
+                [BallData(ball_pos[0], ball_pos[1], 0)] # TODO : Support z axis            
+            )
