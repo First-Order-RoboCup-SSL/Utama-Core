@@ -200,6 +200,7 @@ class ShootingController:
                 print("Dribbling ball\n")
                 return False
 
+    # makes all the descisions for the robot
     def approach_ball(self):
         robots, enemy_robots, balls = self._get_positions()
 
@@ -208,12 +209,14 @@ class ShootingController:
                 balls[0], enemy_robots, self.goal_x, self.goal_y1, self.goal_y2
             )
             best_shot = find_best_shot(shadows, self.goal_y1, self.goal_y2)
-
+            
             # Changed to atan2 to get the correct angle
             shot_orientation = np.atan2(
                 (best_shot - balls[0].y), (self.goal_x - balls[0].x)
             )
 
+            print(f"Shot orientation: {shot_orientation}")
+            
             robot_data = (
                 robots[self.shooter_id] if self.shooter_id < len(robots) else None
             )
@@ -248,7 +251,7 @@ class ShootingController:
                         current_oren = robots[self.shooter_id].orientation
                         face_ball = False
                         target_coords = (None, None, shot_orientation)
-
+                        
                         self.robot_command = self._calculate_robot_velocities(
                             self.shooter_id,
                             target_coords,
@@ -343,10 +346,10 @@ class ShootingController:
 
         if target_x != None and target_y != None:
             left_vel = self.pid_trans.calculate(
-                target_y, current_y, robot_id, normalize_range=3000
+                target_y, current_y, robot_id, normalize_range=3
             )
             forward_vel = self.pid_trans.calculate(
-                target_x, current_x, robot_id, normalize_range=4500
+                target_x, current_x, robot_id, normalize_range=4.5
             )
 
             forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren)
