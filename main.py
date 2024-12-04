@@ -2,6 +2,7 @@ import threading
 import queue
 from entities.game import Game
 import time
+import math
 
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.robot_startup_controller import (
@@ -35,11 +36,12 @@ def main():
     # referee_thread.daemon = True
     # referee_thread.start()
 
-    start = time.time()
     frames = 0
 
     try:
         print("LOCATED BALL")
+        print("Predicting ball position with 0.5 seconds of motion")
+
         predictions = []
         while True:
             (message_type, message) = message_queue.get()  # Infinite timeout for now
@@ -48,23 +50,12 @@ def main():
                 frames += 1
 
                 if frames % 10 == 0:
-                    # print((message_queue.qsize() + frames) / (time.time() - start))
                     predictions.append(game.predict_ball_pos_after(0.5))
-                    print("POS", game.get_ball_pos(), time.time())
-                    if (len(predictions)) >= 4:
-                      print("PRED_NOW", predictions[-4])
+                    actual = game.get_ball_pos()
+                    if (len(predictions)) >= 4 and predictions[-4] != None:
+                      print("Prediction inaccuracy delta (cm): ", 100 * math.sqrt((actual[0].x - predictions[-4][0])**2 + (actual[0].y - predictions[-4][1])**2))
 
-                    # print(message_queue.qsize())
-                # message = FrameData(...)
                 game.add_new_state(message)
-                # access current state data
-                # print(
-                #     game.current_state.yellow_robots[0].x,
-                #     game.current_state.yellow_robots[0].y,
-                # )
-
-                # access game records from -x number of frames ago
-                # print(game.records[-1].ts, game.records[-1].ball[0].x)
 
             elif message_type == MessageType.REF:
                 pass

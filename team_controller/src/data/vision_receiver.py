@@ -68,6 +68,7 @@ class VisionDataReceiver(BaseReceiver):
             self._message_queue.put_nowait((MessageType.VISION, self._avg_frames(self.camera_frames)))
 
     def _avg_frames(self, frames) -> FrameData:
+        frames = [*filter(lambda x : x.ball is not None, frames)]
         sum_frame = frames[0]
         for frame in frames[1:]:
             sum_frame = FrameData(
