@@ -146,9 +146,9 @@ class Game:
             futureAverageVelocity = tuple(averageVelocity)
             
          
-        return (totalX / iter, totalY / iter) ## mm/(sec^2)
+        return (totalX / iter, totalY / iter)
 
-    def predict_ball_pos_after(self, t: float) -> Optional[tuple]: # t in secs
+    def predict_ball_pos_after(self, t: float) -> Optional[tuple]:
         # If t is after the ball has stopped we return the position at which ball stopped.
         
         acc = self.get_ball_acceleration()
@@ -166,14 +166,15 @@ class Game:
         else:
             tx_stop = - ux / ax
             tx = min(t, tx_stop)
-            sx = ux * tx + 0.5 * ax * tx * tx # mm
+            sx = ux * tx + 0.5 * ax * tx * tx
 
         if ay == 0:
             sy = 0
         else:
             ty_stop = - uy / ay
             ty = min(t, ty_stop)
-            sy = uy * ty + 0.5 * ay * ty * ty # mm
+            sy = uy * ty + 0.5 * ay * ty * ty
 
         return (start_x + sx, start_y + sy) # TODO: Doesn't take into account spin / angular vel
     
+    def 
