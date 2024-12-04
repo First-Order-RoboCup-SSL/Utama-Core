@@ -109,7 +109,7 @@ class Game:
         vx = (ball_pos.x - previous_ball_pos.x) / dt_secs
         vy = (ball_pos.y - previous_ball_pos.y) / dt_secs
         
-        return (vx, vy) ## mm/sec
+        return (vx, vy)
 
     def get_ball_acceleration(self) -> Optional[tuple]:
         totalX = 0
