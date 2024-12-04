@@ -1,6 +1,6 @@
 .DS_Store
 *.pyc
-rsoccer_gym.egg-info/
+rsoccer_simulator.src.egg-info/
 .vscode/*
 __pycache__
 .idea/

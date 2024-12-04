@@ -1,7 +1,7 @@
 import gymnasium as gym
 
-# importing this as this test is run within the rsoccer_gym package (to perform the __init__.py registration)
-import rsoccer_gym
+# importing this as this test is run within the rsoccer_simulator.src package (to perform the __init__.py registration)
+import rsoccer_simulator.src
 
 # making environment
 env = gym.make("SSLStandard-v0")

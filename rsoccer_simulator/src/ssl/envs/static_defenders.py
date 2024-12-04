@@ -4,9 +4,9 @@ from typing import Dict
 
 import gymnasium as gym
 import numpy as np
-from rsoccer_gym.Entities import Frame, Robot, Ball
-from rsoccer_gym.ssl.ssl_gym_base import SSLBaseEnv
-from rsoccer_gym.Utils import KDTree
+from rsoccer_simulator.src.Entities import Frame, Robot, Ball
+from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
+from rsoccer_simulator.src.Utils import KDTree
 
 
 class SSLHWStaticDefendersEnv(SSLBaseEnv):

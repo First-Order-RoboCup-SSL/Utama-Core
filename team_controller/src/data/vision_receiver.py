@@ -92,7 +92,7 @@ class VisionDataReceiver(BaseReceiver):
         ball_pos = []
         for _, ball in enumerate(detection.balls):
             ball_pos.append(
-                BallData(ball.x, ball.y, ball.z if ball.HasField("z") else 0.0)
+                BallData(ball.x / 1000, ball.y / 1000, (ball.z / 1000) if ball.HasField("z") else 0.0)
             )
         self.ball_pos = ball_pos
 
@@ -110,8 +110,8 @@ class VisionDataReceiver(BaseReceiver):
         for robot in robots_data:
             if 0 <= robot.robot_id < len(robots):
                 robots[robot.robot_id] = RobotData(
-                    robot.x,
-                    robot.y,
+                    robot.x / 1000,
+                    robot.y / 1000,
                     robot.orientation if robot.HasField("orientation") else 0,
                 )
                 # TODO: When do we not have orientation?
@@ -154,33 +154,9 @@ class VisionDataReceiver(BaseReceiver):
                 self._print_frame_info(t_received, vision_packet.detection)
             # time.sleep(0.0083) # TODO : Block on data?
 
-    # MOVE INTO GAME
-    
-    # # UNUSED
-    # def get_time_received(self) -> float:
-    #     """
-    #     Retrieves the time at which the most recent vision data was received.
-    #     Returns:
-    #         float: The time at which the most recent vision data was received.
-    #     """
-    #     return self.time_received
-
-    # def get_robot_coords(self, is_yellow: bool) -> TeamRobotCoords:
-    #     """
-    #     Retrieves the current positions of all robots on the specified team.
-        
-    #     Args:
-    #         is_yellow (bool): If True, retrieves data for the yellow team; otherwise, for the blue team.        
-        
-    #     Returns:
-    #         TeamRobotCoords: A named tuple containing the team color and a list of RobotData.
-    #     """    
-    #     with self.lock:
-    #         team_color = "yellow" if is_yellow else "blue"
-    #         robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
-    #         return TeamRobotCoords(team_color=team_color, robots=robots)
-    
-    # # UNUSED   
+    # MOVE INTO GAME  
+  
+    # # Implemented already  
     # def get_robot_by_id(self, is_yellow: bool, robot_id: int) -> RobotData:
     #         """
     #         Retrieves the position data for a specific robot by ID.
@@ -197,8 +173,8 @@ class VisionDataReceiver(BaseReceiver):
     #             else:
     #                 return None  # TODO: Or raise an exception.    
     
-    # # UNUSED            
-    # def get_closest_robot_to_point(self, is_yellow: bool, x: float, y: float) -> RobotData:
+    #            
+    # def get_closest_robot_at_point(self, is_yellow: bool, x: float, y: float) -> RobotData:
     #     """
     #     Finds the robot closest to a given point.
         

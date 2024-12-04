@@ -1,36 +1,53 @@
 import math
 import random
-from typing import Dict
+from typing import Dict, Tuple
 
 import gymnasium as gym
 import numpy as np
-from rsoccer_gym.Entities import Frame, Robot, Ball
-from rsoccer_gym.ssl.ssl_gym_base import SSLBaseEnv
-from rsoccer_gym.Utils import KDTree
+from rsoccer_simulator.src.Entities import Frame, Robot, Ball
+from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
+from rsoccer_simulator.src.Utils import KDTree
+from team_controller.src.config.starting_formation import (
+    BLUE_START_ONE,
+    YELLOW_START_ONE,
+)
+from global_utils.math_utils import deg_to_rad, rad_to_deg
+
+from entities.data.vision import BallData, RobotData, FrameData
+from entities.data.command import RobotInfo
 
 
 class SSLStandardEnv(SSLBaseEnv):
-    """The SSL robot needs to make a goal on a field with static defenders
-
-
+    """
     Description:
-        The controlled robot is started on the field center and needs to
-        score on the positive side field.
+        Environment stripped to be a lightweight simulator for testing and development.
+    args:
+        field_type
+        Num
+        0       Divison A pitch
+        1       Division B pitch
+        2       HW Challenge
+
+        blue/yellow_starting_formation
+        Type: List[Tuple[float, float, float]]
+        Description:
+            list of (x, y, theta) coords for each robot to spawn in (in meters and radians).
+            See the default BLUE_START_ONE/YELLOW_START_ONE for reference.
     Observation:
-        Type: Box(4 + 8*n_robots_blue + 8*n_robots_yellow)
-        Normalized Bounds to [-1.2, 1.2]
-        Num      Observation normalized
-        0->3     Ball [X, Y, V_x, V_y]
-        +8*i    id i Blue [X, Y, sin(theta), cos(theta), v_x, v_y, v_theta, infra_red]
-        +8*i     id i Yellow Robot [X, Y, sin(theta), cos(theta), v_x, v_y, v_theta, infra_red]
+        Type: Tuple[FrameData, List[RobotInfo], List[RobotInfo]]
+        Num     Item
+        0       contains position info of ball and robots on the field
+        1       contains RobotInfo data (robot.has_ball) for yellow_robots
+        2       contains RobotInfo data (robot.has_ball) for blue_robots
+
     Actions:
         Type: Box(5, )
         Num     Action
-        0       id 0 Blue Global X Direction Speed  (%)
-        1       id 0 Blue Global Y Direction Speed  (%)
-        2       id 0 Blue Angular Speed  (%)
-        3       id 0 Blue Kick x Speed  (%)
-        4       id 0 Blue Dribbler  (%) (true if % is positive)
+        0       id 0 Blue Global X Direction Speed (max set by self.max_v)
+        1       id 0 Blue Global Y Direction Speed
+        2       id 0 Blue Angular Speed (max set by self.max_w)
+        3       id 0 Blue Kick x Speed (max set by self.kick_speed_x)
+        4       id 0 Blue Dribbler (true if positive)
 
     Reward:
         +5 if goal (blue)
@@ -43,11 +60,13 @@ class SSLStandardEnv(SSLBaseEnv):
 
     def __init__(
         self,
-        field_type=2,
-        render_mode="human",
-        n_robots_blue=6,
-        n_robots_yellow=6,
-        time_step=0.025,
+        field_type: int = 1,
+        render_mode: str = "human",
+        n_robots_blue: int = 6,
+        n_robots_yellow: int = 6,
+        time_step: float = 0.0167,
+        blue_starting_formation: list[tuple] = None,
+        yellow_starting_formation: list[tuple] = None,
     ):
         super().__init__(
             field_type=field_type,
@@ -98,73 +117,116 @@ class SSLStandardEnv(SSLBaseEnv):
         self.max_w = 10  # max angular velocity
         self.kick_speed_x = 5.0  # kick speed
 
+        # set starting formation style for
+        self.blue_formation = (
+            BLUE_START_ONE if not blue_starting_formation else blue_starting_formation
+        )
+        self.yellow_formation = (
+            YELLOW_START_ONE
+            if not yellow_starting_formation
+            else yellow_starting_formation
+        )
+
         print(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
+
+    def teleport_ball(self, x: float, y: float):
+        """
+        teleport ball to new position in meters
+
+        Note: this does not create a new frame, but mutates the current frame
+        """
+        ball = Ball(x=x, y=y, z=self.frame.ball.z)
+        self.frame.ball = ball
+        self.rsim.reset(self.frame)
+
+    def teleport_robot(
+        self,
+        is_team_yellow: bool,
+        robot_id: bool,
+        x: float,
+        y: float,
+        theta: float = None,
+    ):
+        """
+        teleport robot to new position in meters, radians
+
+        Note: this does not create a new frame, but mutates the current frame
+        """
+        if theta is None:
+            if is_team_yellow:
+                theta = self.frame.robots_yellow[robot_id].theta
+            else:
+                theta = self.frame.robots_blue[robot_id].theta
+        else:
+            theta = rad_to_deg(theta)
+
+        robot = Robot(yellow=is_team_yellow, id=robot_id, x=x, y=y, theta=theta)
+        if is_team_yellow:
+            self.frame.robots_yellow[robot_id] = robot
+        else:
+            self.frame.robots_blue[robot_id] = robot
+
+        self.rsim.reset(self.frame)
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
         return super().reset(seed=seed, options=options)
 
     def step(self, action):
-        # Apply the actions to all robots in both teams
-        for i in range(self.n_robots_blue):
-            self._apply_action(i, action["team_blue"][i], self.frame.robots_blue[i])
-        for i in range(self.n_robots_yellow):
-            self._apply_action(i, action["team_yellow"][i], self.frame.robots_yellow[i])
-
-        # Proceed with step calculations (including reward and done check)
         observation, reward, terminated, truncated, _ = super().step(action)
+
         return observation, reward, terminated, truncated, self.reward_shaping_total
 
-    def _apply_action(self, robot_id, action, robot):
-        # Convert and apply movement and control actions for each robot
-        angle = robot.theta
-        v_x, v_y, v_theta = self.convert_actions(action, np.deg2rad(angle))
+    def _frame_to_observations(self) -> Tuple[FrameData, RobotInfo, RobotInfo]:
+        """
+        return observation data that aligns with grSim
 
-        robot.v_x = v_x
-        robot.v_y = v_y
-        robot.v_theta = v_theta
-        robot.kick_v_x = self.kick_speed_x if action[3] > 0 else 0.0
-        robot.dribbler = True if action[4] == 0 else False
-
-    def _frame_to_observations(self):
+        Returns (vision_observation, yellow_robot_feedback, blue_robot_feedback)
+        vision_observation: closely aligned to SSLVision that returns a FramData object
+        yellow_robots_info: feedback from individual yellow robots that returns a List[RobotInfo]
+        blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
+        """
         # Ball observation shared by all robots
-        ball_obs = [
-            self.norm_pos(self.frame.ball.x),
-            self.norm_pos(self.frame.ball.y),
-            self.norm_v(self.frame.ball.v_x),
-            self.norm_v(self.frame.ball.v_y),
-        ]
+        ball_obs = BallData(self.frame.ball.x, self.frame.ball.y, self.frame.ball.z)
 
         # Robots observation (Blue + Yellow)
-        robots_obs = []
-        for robot in self.frame.robots_blue.values():
-            robots_obs.extend(self._get_robot_observation(robot))
-        for robot in self.frame.robots_yellow.values():
-            robots_obs.extend(self._get_robot_observation(robot))
+        blue_obs = []
+        blue_robots_info = []
+        for i in range(len(self.frame.robots_blue)):
+            robot = self.frame.robots_blue[i]
+            robot_pos, robot_info = self._get_robot_observation(robot)
+            blue_obs.append(robot_pos)
+            blue_robots_info.append(robot_info)
+
+        yellow_obs = []
+        yellow_robots_info = []
+        for i in range(len(self.frame.robots_yellow)):
+            robot = self.frame.robots_yellow[i]
+            robot_pos, robot_info = self._get_robot_observation(robot)
+            yellow_obs.append(robot_pos)
+            yellow_robots_info.append(robot_info)
 
         # Return the complete shared observation
-        return np.array(ball_obs + robots_obs, dtype=np.float32)
+        # note that ball_obs stored in list to standardise with SSLVision
+        # As there is sometimes multiple possible positions for the ball
+        return (
+            FrameData(self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs]),
+            yellow_robots_info,
+            blue_robots_info,
+        )
 
     def _get_robot_observation(self, robot):
-        return [
-            self.norm_pos(robot.x),
-            self.norm_pos(robot.y),
-            np.sin(np.deg2rad(robot.theta)),
-            np.cos(np.deg2rad(robot.theta)),
-            self.norm_v(robot.v_x),
-            self.norm_v(robot.v_y),
-            self.norm_w(robot.v_theta),
-            1 if robot.infrared else 0,
-        ]
+        robot_pos = RobotData(robot.x, robot.y, float(deg_to_rad(robot.theta)))
+        robot_info = RobotInfo(robot.infrared)
+        return robot_pos, robot_info
 
-    def _get_commands(self, actions):
+    def _get_commands(self, actions) -> list[Robot]:
         commands = []
 
         for i in range(self.n_robots_blue):
-            angle = self.frame.robots_blue[i].theta
-            v_x, v_y, v_theta = self.convert_actions(
-                actions["team_blue"][i], np.deg2rad(angle)
-            )
+            v_x = actions["team_blue"][i][0]
+            v_y = actions["team_blue"][i][1]
+            v_theta = actions["team_blue"][i][2]
             cmd = Robot(
                 yellow=False,  # Blue team
                 id=i,  # ID of the robot
@@ -177,10 +239,9 @@ class SSLStandardEnv(SSLBaseEnv):
             commands.append(cmd)
 
         for i in range(self.n_robots_yellow):
-            angle = self.frame.robots_yellow[i].theta
-            v_x, v_y, v_theta = self.convert_actions(
-                actions["team_yellow"][i], np.deg2rad(angle)
-            )
+            v_x = actions["team_yellow"][i][0]
+            v_y = actions["team_yellow"][i][1]
+            v_theta = actions["team_yellow"][i][2]
             cmd = Robot(
                 yellow=True,  # Yellow team
                 id=i,  # ID of the robot
@@ -194,18 +255,13 @@ class SSLStandardEnv(SSLBaseEnv):
 
         return commands
 
-    def convert_actions(self, action, angle):
-        """Denormalize, clip to absolute max and convert to local"""
-        # Denormalize
-        v_x = action[0] * self.max_v
-        v_y = action[1] * self.max_v
-        v_theta = action[2] * self.max_w
-        # Convert to local
-        v_x, v_y = v_x * np.cos(angle) + v_y * np.sin(angle), -v_x * np.sin(
-            angle
-        ) + v_y * np.cos(angle)
-
+    def convert_actions(self, action):
+        """Clip to absolute max and convert to local"""
+        v_x = action[0]
+        v_y = action[1]
+        v_theta = action[2]
         # clip by max absolute
+        # TODO: Not sure if clipping it this way makes sense. We'll see.
         v_norm = np.linalg.norm([v_x, v_y])
         c = v_norm < self.max_v or self.max_v / v_norm
         v_x, v_y = v_x * c, v_y * c
@@ -234,8 +290,8 @@ class SSLStandardEnv(SSLBaseEnv):
                 },
             }
 
-        reward_blue = 0
-        reward_yellow = 0
+        # reward_blue = 0
+        # reward_yellow = 0
         done = False
 
         # Field parameters
@@ -254,10 +310,10 @@ class SSLStandardEnv(SSLBaseEnv):
         for (_, robot_b), (_, robot_y) in zip(
             self.frame.robots_blue.items(), self.frame.robots_yellow.items()
         ):
-            if robot_b.x < -0.2 or abs(robot_b.y) > half_wid:
+            if abs(robot_y.y) > half_wid or abs(robot_y.x) > half_len:
                 done = True
                 self.reward_shaping_total["blue_team"]["done_rbt_out"] += 1
-            elif robot_y.x > 0.2 or abs(robot_y.y) > half_wid:
+            elif abs(robot_y.y) > half_wid or abs(robot_y.x) > half_len:
                 done = True
                 self.reward_shaping_total["yellow_team"]["done_rbt_out"] += 1
             elif robot_in_gk_area(robot_b):
@@ -269,7 +325,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Check if ball exited field or a goal was made (if blue was attacking)
         # TODO: Add reward shaping for yellow team (obtaining possession of the ball)
-        if ball.x < 0 or abs(ball.y) > half_wid:
+        if abs(ball.y) > half_wid or abs(ball.x) > half_len:
             done = True
             self.reward_shaping_total["blue_team"]["done_ball_out"] += 1
         # if the ball is outside the attacking half for blue team (right half of the field)
@@ -284,37 +340,55 @@ class SSLStandardEnv(SSLBaseEnv):
             else:
                 reward = 0
                 self.reward_shaping_total["team_blue"]["done_ball_out_right"] += 1
-        elif self.last_frame is not None:
-            # # TODO: Creating non stopping reward functions (rewards that are calculated per action) ->
+        # elif self.last_frame is not None:
 
-            # Example: Energy penalty for all blue robots
-            total_energy_rw_b = 0
-            total_energy_rw_y = 0
-            for (_, robot_b), (_, robot_y) in zip(
-                self.frame.robots_blue.items(), self.frame.robots_yellow.items()
-            ):
-                total_energy_rw_b += self.__energy_pen(robot_b)
-                total_energy_rw_y += self.__energy_pen(robot_y)
+        # Example: Energy penalty for all blue robots
+        # total_energy_rw_b = 0
+        # total_energy_rw_y = 0
+        # for (_, robot_b), (_, robot_y) in zip(
+        #     self.frame.robots_blue.items(), self.frame.robots_yellow.items()
+        # ):
+        #     total_energy_rw_b += self.__energy_pen(robot_b)
+        #     total_energy_rw_y += self.__energy_pen(robot_y)
 
-            avg_energy_rw_b = total_energy_rw_b / len(self.frame.robots_blue)
-            avg_energy_rw_y = total_energy_rw_y / len(self.frame.robots_yellow)
+        # avg_energy_rw_b = total_energy_rw_b / len(self.frame.robots_blue)
+        # avg_energy_rw_y = total_energy_rw_y / len(self.frame.robots_yellow)
 
-            energy_rw_b = -(avg_energy_rw_b / self.energy_scale)
-            energy_rw_y = -(avg_energy_rw_y / self.energy_scale)
+        # energy_rw_b = -(avg_energy_rw_b / self.energy_scale)
+        # energy_rw_y = -(avg_energy_rw_y / self.energy_scale)
 
-            self.reward_shaping_total["blue_team"]["energy"] += energy_rw_b
-            self.reward_shaping_total["yellow_team"]["energy"] += energy_rw_y
+        # self.reward_shaping_total["blue_team"]["energy"] += energy_rw_b
+        # self.reward_shaping_total["yellow_team"]["energy"] += energy_rw_y
 
-            # Total reward (Scoring reward + Energy penalty v )
-            reward_blue = reward_blue + energy_rw_b
-            reward_yellow = reward_yellow + energy_rw_y
+        # # Total reward (Scoring reward + Energy penalty v )
+        # reward_blue = reward_blue + energy_rw_b
+        # reward_yellow = reward_yellow + energy_rw_y
 
-        reward = {"blue_team": reward_blue, "yellow_team": reward_yellow}
+        # reward = {"blue_team": reward_blue, "yellow_team": reward_yellow}
+
+        reward = 0  # NB: We are not using reward for now
 
         return reward, done
 
     def _get_initial_positions_frame(self):
         """Returns the position of each robot and ball for the initial frame (random placement)"""
+        pos_frame: Frame = Frame()
+
+        for i in range(self.n_robots_blue):
+            x, y, heading = self.blue_formation[i]
+            pos_frame.robots_blue[i] = Robot(id=i, x=x, y=y, theta=rad_to_deg(heading))
+
+        for i in range(self.n_robots_yellow):
+            x, y, heading = self.yellow_formation[i]
+            pos_frame.robots_yellow[i] = Robot(
+                id=i, x=x, y=y, theta=rad_to_deg(heading)
+            )
+
+        pos_frame.ball = Ball(x=0, y=0)
+
+        return pos_frame
+
+    def _get_random_position_frame(self):
         half_len = self.field.length / 2
         half_wid = self.field.width / 2
         pen_len = self.field.penalty_length
@@ -364,13 +438,13 @@ class SSLStandardEnv(SSLBaseEnv):
 
         return pos_frame
 
-    def __energy_pen(self, robot):
-        # Sum of abs each wheel speed sent
-        energy = (
-            abs(robot.v_wheel0)
-            + abs(robot.v_wheel1)
-            + abs(robot.v_wheel2)
-            + abs(robot.v_wheel3)
-        )
+    # def __energy_pen(self, robot):
+    #     # Sum of abs each wheel speed sent
+    #     energy = (
+    #         abs(robot.v_wheel0)
+    #         + abs(robot.v_wheel1)
+    #         + abs(robot.v_wheel2)
+    #         + abs(robot.v_wheel3)
+    #     )
 
-        return energy
+    #     return energy

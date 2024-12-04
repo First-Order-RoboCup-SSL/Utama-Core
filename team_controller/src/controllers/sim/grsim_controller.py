@@ -5,7 +5,7 @@ from team_controller.src.config.settings import (
     LOCAL_HOST,
     SIM_CONTROL_PORT,
     TELEPORT_X_COORDS,
-    FIELD_Y_COORD,
+    ADD_Y_COORD,
     REMOVAL_Y_COORD,
 )
 
@@ -17,8 +17,12 @@ from team_controller.src.generated_code.ssl_simulation_control_pb2 import (
 )
 from team_controller.src.generated_code.ssl_gc_common_pb2 import RobotId, Team
 
+from team_controller.src.controllers.common.sim_controller_abstract import (
+    AbstractSimController,
+)
 
-class SimulatorController:
+
+class GRSimController(AbstractSimController):
     """
     A controller for interacting with a simulation environment for robot soccer, allowing actions such as teleporting the ball
     and setting robot presence on the field.
@@ -41,8 +45,8 @@ class SimulatorController:
         Teleports the ball to a specific location on the field.
 
         Args:
-            x (float): The x-coordinate to place the ball at.
-            y (float): The y-coordinate to place the ball at.
+            x (float): The x-coordinate to place the ball at (in meters [-4.5, 4.5]).
+            y (float): The y-coordinate to place the ball at (in meters [-3.0, 3.0]).
 
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
@@ -56,8 +60,34 @@ class SimulatorController:
         sim_control.teleport_ball.CopyFrom(tele_ball)
         return sim_control
 
+    def teleport_robot(
+        self,
+        is_team_yellow: bool,
+        robot_id: int,
+        x: float,
+        y: float,
+        theta: float = None,
+    ) -> None:
+        """
+        Teleports a robot to a specific location on the field.
+
+        Args:
+            is_team_yellow (bool): if the robot is team yellow, else blue
+            robot_id (int): robot id
+            x (float): The x-coordinate to place the ball at (in meters [-4.5, 4.5]).
+            y (float): The y-coordinate to place the ball at (in meters [-3.0, 3.0]).
+            theta (float): radian angle of the robot heading, 0 degrees faces towards positive x axis
+
+        This method creates a command for teleporting the ball and sends it to the simulator.
+        """
+        sim_control = self._create_teleport_robot_command(
+            robot_id, is_team_yellow, x, y, theta
+        )
+        sim_command = self._create_simulator_command(sim_control)
+        self.net.send_command(sim_command)
+
     def set_robot_presence(
-        self, robot_id: int, team_colour_is_blue: bool, should_robot_be_present: bool
+        self, robot_id: int, is_team_yellow: bool, is_present: bool
     ) -> None:
         """
         Sets a robot's presence on the field by teleporting it to a specific location or removing it from the field.
@@ -65,15 +95,16 @@ class SimulatorController:
         Args:
             robot_id (int): The unique ID of the robot.
             team_colour_is_blue (bool): Whether the robot belongs to the blue team. If False, it's assumed to be yellow.
-            should_robot_be_present (bool): If True, the robot will be placed on the field; if False, it will be removed.
+            is_present (bool): If True, the robot will be placed on the field; if False, it will be despawned.
 
         The method calculates a teleport location based on the team and presence status, then sends a command to the simulator.
         """
         x, y = self._get_teleport_location(
-            robot_id, team_colour_is_blue, should_robot_be_present
+            robot_id, is_team_yellow, is_present
         )
+        print(x, y)
         sim_control = self._create_teleport_robot_command(
-            robot_id, team_colour_is_blue, x, y, should_robot_be_present
+            robot_id, is_team_yellow, x, y, is_present
         )
         sim_command = self._create_simulator_command(sim_control)
         self.net.send_command(sim_command)
@@ -81,26 +112,27 @@ class SimulatorController:
     def _create_teleport_robot_command(
         self,
         robot_id: int,
-        team_colour_is_blue: bool,
+        is_team_yellow: bool,
         x: float,
         y: float,
-        present: bool,
+        theta: float,
+        is_present: bool = True,
     ) -> object:
         robot = RobotId(
-            id=robot_id, team=Team.BLUE if team_colour_is_blue else Team.YELLOW
+            id=robot_id, team=Team.YELLOW if is_team_yellow else Team.BLUE
         )
-        tele_robot = TeleportRobot(id=robot, x=x / 1000, y=y / 1000, present=present)
+        tele_robot = TeleportRobot(id=robot, x=x, y=y, orientation=theta, present=is_present)
         sim_control = SimulatorControl()
         sim_control.teleport_robot.add().CopyFrom(tele_robot)
         return sim_control
 
     def _get_teleport_location(
-        self, robot_id: int, team_colour_is_blue: bool, add: bool
+        self, robot_id: int, is_team_yellow: bool, add: bool
     ) -> Tuple[float, float]:
-        y_coord = FIELD_Y_COORD if add else REMOVAL_Y_COORD
+        y_coord = REMOVAL_Y_COORD if add else ADD_Y_COORD
         x_coord = (
             -TELEPORT_X_COORDS[robot_id]
-            if team_colour_is_blue
+            if is_team_yellow
             else TELEPORT_X_COORDS[robot_id]
         )
         return x_coord, y_coord

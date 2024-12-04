@@ -3,8 +3,10 @@ import queue
 from entities.game import Game
 import time
 
-from team_controller.src.controllers.robot_startup_controller import StartUpController
-from team_controller.src.controllers.sim_controller import SimulatorController
+from team_controller.src.controllers.sim.grsim_controller import GRSimController
+from team_controller.src.controllers.sim.robot_startup_controller import (
+    StartUpController,
+)
 from team_controller.src.data import VisionDataReceiver, RefereeMessageReceiver
 from team_controller.src.data.message_enum import MessageType
 
@@ -16,7 +18,7 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 def main():
     game = Game()
-    SimulatorController().teleport_ball(0, 0, 2, 2.5)
+    GRSimController().teleport_ball(0, 0, 2, 2.5)
     time.sleep(0.2)
 
     message_queue = queue.SimpleQueue()

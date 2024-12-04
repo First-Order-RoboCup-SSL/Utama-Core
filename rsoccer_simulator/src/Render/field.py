@@ -1,6 +1,6 @@
 import pygame
 
-from rsoccer_gym.Render.utils import COLORS
+from rsoccer_simulator.src.Render.utils import COLORS
 
 
 class RenderField:
