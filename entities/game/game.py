@@ -10,6 +10,8 @@ from entities.game.game_object import Robot as RobotEntity
 from entities.game.robot import Robot
 from entities.game.ball import Ball
 
+from entities.game.team_info import TeamInfo
+from entities.referee.referee_command import RefereeCommand
 from team_controller.src.config.settings import TIMESTEP
 
 # TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
@@ -475,6 +477,190 @@ class Game:
         # TODO: investigate potential namedtuple __eq__  issue
         if referee_data[1:] != self._referee_records[-1][1:]:
             self._referee_records.append(referee_data)
+
+    @property
+    def source_identifier(self) -> Optional[str]:
+        """Get the source identifier."""
+        if self._referee_records:
+            return self._referee_records[-1].source_identifier
+        return None
+
+    @property
+    def last_time_sent(self) -> float:
+        """Get the time sent."""
+        if self._referee_records:
+            return self._referee_records[-1].time_sent
+        return 0.0
+
+    @property
+    def last_time_received(self) -> float:
+        """Get the time received."""
+        if self._referee_records:
+            return self._referee_records[-1].time_received
+        return 0.0
+
+    @property
+    def last_command(self) -> RefereeCommand:
+        """Get the last command."""
+        if self._referee_records:
+            return self._referee_records[-1].referee_command
+        return RefereeCommand.HALT
+
+    @property
+    def last_command_timestamp(self) -> float:
+        """Get the command timestamp."""
+        if self._referee_records:
+            return self._referee_records[-1].referee_command_timestamp
+        return 0.0
+
+    @property
+    def stage(self) -> Stage:
+        """Get the current stage."""
+        if self._referee_records:
+            return self._referee_records[-1].stage
+        return Stage.NORMAL_FIRST_HALF_PRE
+
+    @property
+    def stage_time_left(self) -> float:
+        """Get the time left in the current stage."""
+        if self._referee_records:
+            return self._referee_records[-1].stage_time_left
+        return 0.0
+
+    @property
+    def blue_team(self) -> TeamInfo:
+        """Get the blue team info."""
+        if self._referee_records:
+            return self._referee_records[-1].blue_team
+        return TeamInfo(
+            name="",
+            score=0,
+            red_cards=0,
+            yellow_card_times=[],
+            yellow_cards=0,
+            timeouts=0,
+            timeout_time=0,
+            goalkeeper=0,
+        )
+
+    @property
+    def yellow_team(self) -> TeamInfo:
+        """Get the yellow team info."""
+        if self._referee_records:
+            return self._referee_records[-1].yellow_team
+        return TeamInfo(
+            name="",
+            score=0,
+            red_cards=0,
+            yellow_card_times=[],
+            yellow_cards=0,
+            timeouts=0,
+            timeout_time=0,
+            goalkeeper=0,
+        )
+
+    @property
+    def designated_position(self) -> Optional[tuple[float]]:
+        """Get the designated position."""
+        if self._referee_records:
+            return self._referee_records[-1].designated_position
+        return None
+
+    @property
+    def blue_team_on_positive_half(self) -> Optional[bool]:
+        """Get the blue team on positive half."""
+        if self._referee_records:
+            return self._referee_records[-1].blue_team_on_positive_half
+        return None
+
+    @property
+    def next_command(self) -> Optional[RefereeCommand]:
+        """Get the next command."""
+        if self._referee_records:
+            return self._referee_records[-1].next_command
+        return None
+
+    @property
+    def current_action_time_remaining(self) -> Optional[int]:
+        """Get the current action time remaining."""
+        if self._referee_records:
+            return self._referee_records[-1].current_action_time_remaining
+        return None
+
+    def is_halt(self) -> bool:
+        """Check if the command is HALT."""
+        return self.referee_data_handler.last_command == RefereeCommand.HALT
+
+    def is_stop(self) -> bool:
+        """Check if the command is STOP."""
+        return self.referee_data_handler.last_command == RefereeCommand.STOP
+
+    def is_normal_start(self) -> bool:
+        """Check if the command is NORMAL_START."""
+        return self.referee_data_handler.last_command == RefereeCommand.NORMAL_START
+
+    def is_force_start(self) -> bool:
+        """Check if the command is FORCE_START."""
+        return self.referee_data_handler.last_command == RefereeCommand.FORCE_START
+
+    def is_prepare_kickoff_yellow(self) -> bool:
+        """Check if the command is PREPARE_KICKOFF_YELLOW."""
+        return (
+            self.referee_data_handler.last_command
+            == RefereeCommand.PREPARE_KICKOFF_YELLOW
+        )
+
+    def is_prepare_kickoff_blue(self) -> bool:
+        """Check if the command is PREPARE_KICKOFF_BLUE."""
+        return (
+            self.referee_data_handler.last_command
+            == RefereeCommand.PREPARE_KICKOFF_BLUE
+        )
+
+    def is_prepare_penalty_yellow(self) -> bool:
+        """Check if the command is PREPARE_PENALTY_YELLOW."""
+        return (
+            self.referee_data_handler.last_command
+            == RefereeCommand.PREPARE_PENALTY_YELLOW
+        )
+
+    def is_prepare_penalty_blue(self) -> bool:
+        """Check if the command is PREPARE_PENALTY_BLUE."""
+        return (
+            self.referee_data_handler.last_command
+            == RefereeCommand.PREPARE_PENALTY_BLUE
+        )
+
+    def is_direct_free_yellow(self) -> bool:
+        """Check if the command is DIRECT_FREE_YELLOW."""
+        return (
+            self.referee_data_handler.last_command == RefereeCommand.DIRECT_FREE_YELLOW
+        )
+
+    def is_direct_free_blue(self) -> bool:
+        """Check if the command is DIRECT_FREE_BLUE."""
+        return self.referee_data_handler.last_command == RefereeCommand.DIRECT_FREE_BLUE
+
+    def is_timeout_yellow(self) -> bool:
+        """Check if the command is TIMEOUT_YELLOW."""
+        return self.referee_data_handler.last_command == RefereeCommand.TIMEOUT_YELLOW
+
+    def is_timeout_blue(self) -> bool:
+        """Check if the command is TIMEOUT_BLUE."""
+        return self.referee_data_handler.last_command == RefereeCommand.TIMEOUT_BLUE
+
+    def is_ball_placement_yellow(self) -> bool:
+        """Check if the command is BALL_PLACEMENT_YELLOW."""
+        return (
+            self.referee_data_handler.last_command
+            == RefereeCommand.BALL_PLACEMENT_YELLOW
+        )
+
+    def is_ball_placement_blue(self) -> bool:
+        """Check if the command is BALL_PLACEMENT_BLUE."""
+        return (
+            self.referee_data_handler.last_command == RefereeCommand.BALL_PLACEMENT_BLUE
+        )
 
 
 if __name__ == "__main__":
