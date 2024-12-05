@@ -50,7 +50,7 @@ class RefereeMessageReceiver(BaseReceiver):
         # Initialize state variables
         self.stage = None
         self.command = None
-        self.sent_time = None
+        self.time_sent = None
         self.stage_time_left = None
         self.command_counter = None
         self.command_timestamp = None
@@ -151,7 +151,7 @@ class RefereeMessageReceiver(BaseReceiver):
         # Update state variables
         self.stage = Stage.from_id(referee_packet.stage)
         self.command = RefereeCommand.from_id(referee_packet.command)
-        self.sent_time = (
+        self.time_sent = (
             referee_packet.packet_timestamp / 1e6
         )  # Convert microseconds to seconds
         self.stage_time_left = (
@@ -163,18 +163,41 @@ class RefereeMessageReceiver(BaseReceiver):
         )  # Convert microseconds to seconds
         self.yellow_info.parse_referee_packet(referee_packet.yellow)
         self.blue_info.parse_referee_packet(referee_packet.blue)
-        self._message_queue.put_nowait(
-            (
-                MessageType.REF,
-                RefereeData(
-                    self.time_received,
-                    self.command,
-                    self.stage,
-                    self.yellow_info,
-                    self.blue_info,
-                ),
+
+        # Construct the designated position tuple if available
+        designated_position = None
+        if referee_packet.HasField("designated_position"):
+            designated_position = (
+                referee_packet.designated_position.x,
+                referee_packet.designated_position.y,
             )
+
+        # Construct the RefereeData instance
+        referee_data = RefereeData(
+            source_identifier=referee_packet.source_identifier,
+            time_sent=self.time_sent,
+            time_received=self.time_received,
+            referee_command=self.command,
+            referee_command_timestamp=self.command_timestamp,
+            stage=self.stage,
+            stage_time_left=self.stage_time_left,
+            blue_team=self.blue_info,
+            yellow_team=self.yellow_info,
+            designated_position=designated_position,
+            blue_team_on_positive_half=referee_packet.blue_team_on_positive_half,
+            next_command=(
+                RefereeCommand.from_id(referee_packet.next_command)
+                if referee_packet.HasField("next_command")
+                else None
+            ),
+            current_action_time_remaining=(
+                referee_packet.current_action_time_remaining
+                if referee_packet.HasField("current_action_time_remaining")
+                else None
+            ),
         )
+
+        self._message_queue.put_nowait((MessageType.REF, referee_data))
 
     def check_new_command(self) -> bool:
         """
@@ -204,62 +227,6 @@ class RefereeMessageReceiver(BaseReceiver):
         """
         with self.lock:
             return self.referee
-
-    def get_stage_time_left(self) -> float:
-        """
-        Get the time left in the current stage in seconds.
-
-        Returns:
-            float: The time left in the current stage in seconds.
-        """
-        return self.stage_time_left
-
-    def get_packet_timestamp(self) -> float:
-        """
-        Get the packet timestamp in seconds.
-
-        Returns:
-            float: The packet timestamp in seconds.
-        """
-        return self.sent_time
-
-    def yellow_team_info(self) -> TeamInfo:
-        """
-        Get the information for the yellow team.
-
-        Returns:
-            TeamInfo: The yellow team information.
-        """
-        return self.yellow_info
-
-    def blue_team_info(self) -> TeamInfo:
-        """
-        Get the information for the blue team.
-
-        Returns:
-            TeamInfo: The blue team information.
-        """
-        return self.blue_info
-
-    def get_stage(self) -> Optional[Stage]:
-        """
-        Get the current state.
-
-        Returns:
-            Optional[Stage]: Current state, otherwise None
-        """
-        return self.stage
-
-    def get_next_command(self) -> Optional[RefereeCommand]:
-        """
-        Get the next command if available.
-
-        Returns:
-            Optional[int]: The next command if available, None otherwise.
-        """
-        if self.referee.next_command:
-            return RefereeCommand.from_id(self.referee.next_command)
-        return None
 
     def get_designated_position(self) -> Optional[Tuple[float, float]]:
         """
@@ -297,15 +264,6 @@ class RefereeMessageReceiver(BaseReceiver):
         if len(sequence) > len(self.command_history):
             return False
         return self.command_history[-len(sequence) :] == sequence
-
-    def get_time_received(self) -> float:
-        """
-        Retrieves the time at which the most recent referee data was received.
-
-        Returns:
-            float: The time at which the most recent referee data was received.
-        """
-        return self.time_received
 
     def wait_for_update(self, timeout: float = None) -> bool:
         """

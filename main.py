@@ -1,5 +1,6 @@
 import threading
 import queue
+import time
 from entities.game import Game
 import time
 import math
@@ -57,6 +58,7 @@ def main():
     FRAMES_IN_TIME = round(60 * TIME)
     frames = 0
 
+    begin = time.time()
     try:
         logger.debug("LOCATED BALL")
         logger.debug(
