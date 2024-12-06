@@ -52,6 +52,9 @@ class StartUpController:
                 command = self._calculate_robot_velocities(
                     robot_id, target_coords, robots, balls, face_ball=True
                 )
+
+                if self.game.last_command.name == "HALT":
+                    continue
                 self.sim_robot_controller.add_robot_commands(command, robot_id)
 
             logger.debug(out_packet)

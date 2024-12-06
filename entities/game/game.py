@@ -3,6 +3,7 @@ from entities.game import game_object
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData, PredictedFrame
 from entities.data.referee import RefereeData
+<<<<<<< HEAD
 from entities.data.command import RobotInfo
 
 from entities.game.game_object import Colour, GameObject, Robot
@@ -12,6 +13,13 @@ from entities.game.ball import Ball
 
 from entities.game.team_info import TeamInfo
 from entities.referee.referee_command import RefereeCommand
+=======
+from entities.game.game_object import Ball, Colour, GameObject, Robot
+from entities.game.team_info import TeamInfo
+from entities.referee.referee_command import RefereeCommand
+from entities.referee.stage import Stage
+
+>>>>>>> 31d8bcc (Change RefereeCommand and Stage to enum class)
 from team_controller.src.config.settings import TIMESTEP
 
 # TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
@@ -478,7 +486,6 @@ class Game:
         if referee_data[1:] != self._referee_records[-1][1:]:
             self._referee_records.append(referee_data)
 
-    @property
     def source_identifier(self) -> Optional[str]:
         """Get the source identifier."""
         if self._referee_records:
@@ -587,78 +594,202 @@ class Game:
             return self._referee_records[-1].current_action_time_remaining
         return None
 
+    @property
     def is_halt(self) -> bool:
         """Check if the command is HALT."""
-        return self.referee_data_handler.last_command == RefereeCommand.HALT
+        return self.last_command == RefereeCommand.HALT
 
+    @property
     def is_stop(self) -> bool:
         """Check if the command is STOP."""
-        return self.referee_data_handler.last_command == RefereeCommand.STOP
+        return self.last_command == RefereeCommand.STOP
 
+    @property
     def is_normal_start(self) -> bool:
         """Check if the command is NORMAL_START."""
-        return self.referee_data_handler.last_command == RefereeCommand.NORMAL_START
+        return self.last_command == RefereeCommand.NORMAL_START
 
+    @property
     def is_force_start(self) -> bool:
         """Check if the command is FORCE_START."""
-        return self.referee_data_handler.last_command == RefereeCommand.FORCE_START
+        return self.last_command == RefereeCommand.FORCE_START
 
+    @property
     def is_prepare_kickoff_yellow(self) -> bool:
         """Check if the command is PREPARE_KICKOFF_YELLOW."""
-        return (
-            self.referee_data_handler.last_command
-            == RefereeCommand.PREPARE_KICKOFF_YELLOW
-        )
+        return self.last_command == RefereeCommand.PREPARE_KICKOFF_YELLOW
 
+    @property
     def is_prepare_kickoff_blue(self) -> bool:
         """Check if the command is PREPARE_KICKOFF_BLUE."""
-        return (
-            self.referee_data_handler.last_command
-            == RefereeCommand.PREPARE_KICKOFF_BLUE
-        )
+        return self.last_command == RefereeCommand.PREPARE_KICKOFF_BLUE
 
+    @property
     def is_prepare_penalty_yellow(self) -> bool:
         """Check if the command is PREPARE_PENALTY_YELLOW."""
-        return (
-            self.referee_data_handler.last_command
-            == RefereeCommand.PREPARE_PENALTY_YELLOW
-        )
+        return self.last_command == RefereeCommand.PREPARE_PENALTY_YELLOW
 
+    @property
     def is_prepare_penalty_blue(self) -> bool:
         """Check if the command is PREPARE_PENALTY_BLUE."""
-        return (
-            self.referee_data_handler.last_command
-            == RefereeCommand.PREPARE_PENALTY_BLUE
-        )
+        return self.last_command == RefereeCommand.PREPARE_PENALTY_BLUE
 
+    @property
     def is_direct_free_yellow(self) -> bool:
         """Check if the command is DIRECT_FREE_YELLOW."""
-        return (
-            self.referee_data_handler.last_command == RefereeCommand.DIRECT_FREE_YELLOW
-        )
+        return self.last_command == RefereeCommand.DIRECT_FREE_YELLOW
 
+    @property
     def is_direct_free_blue(self) -> bool:
         """Check if the command is DIRECT_FREE_BLUE."""
-        return self.referee_data_handler.last_command == RefereeCommand.DIRECT_FREE_BLUE
+        return self.last_command == RefereeCommand.DIRECT_FREE_BLUE
 
+    @property
     def is_timeout_yellow(self) -> bool:
         """Check if the command is TIMEOUT_YELLOW."""
-        return self.referee_data_handler.last_command == RefereeCommand.TIMEOUT_YELLOW
+        return self.last_command == RefereeCommand.TIMEOUT_YELLOW
 
+    @property
     def is_timeout_blue(self) -> bool:
         """Check if the command is TIMEOUT_BLUE."""
-        return self.referee_data_handler.last_command == RefereeCommand.TIMEOUT_BLUE
+        return self.last_command == RefereeCommand.TIMEOUT_BLUE
 
+    @property
     def is_ball_placement_yellow(self) -> bool:
         """Check if the command is BALL_PLACEMENT_YELLOW."""
-        return (
-            self.referee_data_handler.last_command
-            == RefereeCommand.BALL_PLACEMENT_YELLOW
-        )
+        return self.last_command == RefereeCommand.BALL_PLACEMENT_YELLOW
 
+    @property
     def is_ball_placement_blue(self) -> bool:
         """Check if the command is BALL_PLACEMENT_BLUE."""
+        return self.last_command == RefereeCommand.BALL_PLACEMENT_BLUE
+
+    def get_object_velocity(self, object: GameObject):
+        return self._get_object_velocity_at_frame(len(self._records) - 1, object)
+
+    def _get_object_position_at_frame(self, frame: int, object: GameObject):
+        if object == Ball:
+            return self._records[frame].ball[0]  # TODO don't always take first ball pos
+        elif isinstance(object, Robot):
+            if object.colour == Colour.YELLOW:
+                return self._records[frame].yellow_robots[object.id]
+            else:
+                return self._records[frame].blue_robots[object.id]
+
+    def _get_object_velocity_at_frame(
+        self, frame: int, object: GameObject
+    ) -> Optional[tuple]:
+        """
+        Calculates the object's velocity based on position changes over time,
+          at frame f.
+
+        Returns:
+            tuple: The velocity components (vx, vy).
+
+        """
+        if frame >= len(self._records) or frame == 0:
+            # Cannot provide velocity at frame that does not exist
+            print(frame)
+            return None
+
+        # Otherwise get the previous and current frames
+        previous_frame = self._records[frame - 1]
+        current_frame = self._records[frame]
+
+        previous_pos = self._get_object_position_at_frame(frame - 1, object)
+        current_pos = self._get_object_position_at_frame(frame, object)
+
+        previous_time_received = previous_frame.ts
+        time_received = current_frame.ts
+
+        # Latest frame should always be ahead of last one
+        if time_received < previous_time_received:
+            # TODO log a warning
+            print("Timestamps out of order for vision data ")
+            return None
+
+        dt_secs = time_received - previous_time_received
+
+        vx = (current_pos.x - previous_pos.x) / dt_secs
+        vy = (current_pos.y - previous_pos.y) / dt_secs
+
+        return (vx, vy)
+
+    def get_object_acceleration(self, object: GameObject) -> Optional[tuple]:
+        totalX = 0
+        totalY = 0
+        WINDOW = 5
+        N_WINDOWS = 6
+        iter = 0
+
+        if len(self._records) < WINDOW * N_WINDOWS + 1:
+            return None
+
+        for i in range(N_WINDOWS):
+            averageVelocity = [0, 0]
+            windowStart = 1 + i * WINDOW
+            windowEnd = windowStart + WINDOW  # Excluded
+            windowMiddle = (windowStart + windowEnd) // 2
+
+            for j in range(windowStart, windowEnd):
+                curr_vel = self._get_object_velocity_at_frame(
+                    len(self._records) - j, object
+                )
+                averageVelocity[0] += curr_vel[0]
+                averageVelocity[1] += curr_vel[1]
+
+            averageVelocity[0] /= WINDOW
+            averageVelocity[1] /= WINDOW
+
+            if i != 0:
+                dt = (
+                    self._records[-windowMiddle + WINDOW].ts
+                    - self._records[-windowMiddle].ts
+                )
+                accX = (futureAverageVelocity[0] - averageVelocity[0]) / dt  # TODO vec
+                accY = (futureAverageVelocity[1] - averageVelocity[1]) / dt
+                totalX += accX
+                totalY += accY
+                iter += 1
+
+            futureAverageVelocity = tuple(averageVelocity)
+
+        return (totalX / iter, totalY / iter)
+
+    def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
+        # If t is after the object has stopped we return the position at which object stopped.
+
+        acc = self.get_object_acceleration(object)
+
+        if acc is None:
+            return None
+
+        ax, ay = acc
+        ux, uy = self.get_object_velocity(object)
+
+        if object is Ball:
+            ball = self.get_ball_pos()
+            start_x, start_y = ball[0].x, ball[0].y
+        else:
+            posn = self._get_object_position_at_frame(len(self._records) - 1, object)
+            start_x, start_y = posn.x, posn.y
+
+        if ax == 0:  # Due to friction, if acc = 0 then stopped.
+            sx = 0  # TODO: Not sure what to do about robots with respect to friction - we never know if they are slowing down to stop or if they are slowing down to change direction
+        else:
+            tx_stop = -ux / ax
+            tx = min(t, tx_stop)
+            sx = ux * tx + 0.5 * ax * tx * tx
+
+        if ay == 0:
+            sy = 0
+        else:
+            ty_stop = -uy / ay
+            ty = min(t, ty_stop)
+            sy = uy * ty + 0.5 * ay * ty * ty
+
         return (
+<<<<<<< HEAD
             self.referee_data_handler.last_command == RefereeCommand.BALL_PLACEMENT_BLUE
         )
 
@@ -674,3 +805,26 @@ if __name__ == "__main__":
     print(game.ball.x)
     print(game.ball.y)
     print(game.ball.z)
+=======
+            start_x + sx,
+            start_y + sy,
+        )  # TODO: Doesn't take into account spin / angular vel
+
+    def predict_frame_after(self, t: float):
+        yellow_pos = [
+            self.predict_object_pos_after(t, Robot(Colour.YELLOW, i)) for i in range(6)
+        ]
+        blue_pos = [
+            self.predict_object_pos_after(t, Robot(Colour.BLUE, i)) for i in range(6)
+        ]
+        ball_pos = self.predict_object_pos_after(t, Ball)
+        if ball_pos is None or None in yellow_pos or None in blue_pos:
+            return None
+        else:
+            return FrameData(
+                self._records[-1].ts + t,
+                list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),
+                list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
+                [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
+            )
+>>>>>>> 31d8bcc (Change RefereeCommand and Stage to enum class)

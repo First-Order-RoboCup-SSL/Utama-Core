@@ -23,7 +23,7 @@ cd ..
 
 # Change to the AutoReferee directory and run the run.sh script
 cd AutoReferee/
-./run.sh &
+./run.sh -a &
 AUTOREFEREE_PID=$!
 cd ..
 
