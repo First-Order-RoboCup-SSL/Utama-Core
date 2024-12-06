@@ -1,6 +1,5 @@
 import threading
 import queue
-import time
 from entities.game import Game
 import time
 import math
@@ -32,7 +31,7 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 
 def main():
-    game = Game()
+    game = Game(my_team_is_yellow=True)
     GRSimController().teleport_ball(0, 0, 2, 2.5)
     time.sleep(0.2)
 
@@ -54,13 +53,10 @@ def main():
     vision_thread.start()
     referee_thread.start()
 
-    TIME = 0.5
+    TIME = 1 / 60 * 10  # frames in seconds
     FRAMES_IN_TIME = round(60 * TIME)
-
->>>>>>> 05bd7f6 (Change RefereeCommand and Stage to enum class)
     frames = 0
 
-    begin = time.time()
     try:
         logger.debug("LOCATED BALL")
         logger.debug(
@@ -74,15 +70,14 @@ def main():
             if message_type == MessageType.VISION:
                 frames += 1
                 game.add_new_state(message)
-                actual = game.records[-1]  # JUST FOR TESTING - don't do this irl
+
                 if (
                     len(predictions) >= FRAMES_IN_TIME
                     and predictions[-FRAMES_IN_TIME] != None
                 ):
-<<<<<<< HEAD
                     logger.debug(
                         "Ball prediction inaccuracy delta (cm): "
-                        + "{:.20f}".format(
+                        + "{:.5f}".format(
                             100
                             * math.sqrt(
                                 (game.ball.x - predictions[-FRAMES_IN_TIME].ball[0].x)
@@ -90,7 +85,6 @@ def main():
                                 + (game.ball.y - predictions[-FRAMES_IN_TIME].ball[0].y)
                                 ** 2
                             )
-<<<<<<< HEAD
                         )
                     )
                     for i in range(6):
@@ -139,21 +133,11 @@ def main():
                                 )
                             )
                         )
-=======
-                        ),
-                    )
-                    # for i in range(6):
-                    #     print(f"Blue robot {i} prediction inaccuracy delta (cm): ", '{:.20f}'.format(100 * math.sqrt((actual.blue_robots[i].x - predictions[-FRAMES_IN_TIME].blue_robots[i].x)**2 + (actual.blue_robots[i].y - predictions[-FRAMES_IN_TIME].blue_robots[i].y)**2)))
-                    # for i in range(6):
-                    #     print(f"Yellow robot {i} prediction inaccuracy delta (cm): ", '{:.20f}'.format(100 * math.sqrt((actual.yellow_robots[i].x - predictions[-FRAMES_IN_TIME].yellow_robots[i].x)**2 + (actual.yellow_robots[i].y - predictions[-FRAMES_IN_TIME].yellow_robots[i].y)**2)))
->>>>>>> 05bd7f6 (Change RefereeCommand and Stage to enum class)
 
                 predictions.append(game.predicted_next_frame)
 
             elif message_type == MessageType.REF:
                 game.add_new_referee_data(message)
-                print(game.last_command)
-                print(game.stage)
 
             decision_maker.make_decision()
 

@@ -3,29 +3,86 @@
 # Function to handle cleanup on script exit
 cleanup() {
     echo "Caught SIGINT signal! Cleaning up..."
-    kill $GRSIM_PID $GAME_CONTROLLER_PID 2>/dev/null
-    pkill -f "AutoReferee"
+
+    # Kill grSim, game controller, and AutoReferee processes if they exist
+    if [ ! -z "$GRSIM_PID" ]; then
+        echo "Stopping grSim..."
+        kill $GRSIM_PID 2>/dev/null
+    fi
+
+    if [ ! -z "$GAME_CONTROLLER_PID" ]; then
+        echo "Stopping game controller..."
+        kill $GAME_CONTROLLER_PID 2>/dev/null
+    fi
+
+    if [ ! -z "$AUTOREFEREE_PID" ]; then
+        echo "Stopping AutoReferee..."
+        kill $AUTOREFEREE_PID 2>/dev/null
+    fi
+
+    echo "Cleanup complete. Exiting."
     exit
 }
 
 # Trap SIGINT (Ctrl+C) and call the cleanup function
 trap cleanup SIGINT
 
-# Start grSim in the background
-grSim &
+# Open the website based on the operating system
+echo "Opening website..."
+
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # Linux
+    xdg-open "http://localhost:8081/#/match" &
+
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    open "http://localhost:8081/#/match" &
+
+elif [[ "$OSTYPE" == "cygwin" || "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+    # Windows
+    start "" "http://localhost:8081/#/match" &
+
+else
+    echo "Unsupported operating system. Cannot open the website."
+    exit 1
+fi
+
+# Start grSim in the background, suppressing output
+echo "Starting grSim..."
+grSim > /dev/null 2>&1 &
 GRSIM_PID=$!
 
-# Change to the ssl-game-controller directory and run the game controller
+# Check if grSim started successfully
+if [ $? -ne 0 ]; then
+    echo "Failed to start grSim. Exiting."
+    exit 1
+fi
+
+# Change to the ssl-game-controller directory and run the game controller, suppressing output
+echo "Starting game controller..."
 cd ssl-game-controller/
-./ssl-game-controller_v3.12.7_linux_amd64 &
+./ssl-game-controller_v3.12.7_linux_amd64 > /dev/null 2>&1 &
 GAME_CONTROLLER_PID=$!
 cd ..
 
-# Change to the AutoReferee directory and run the run.sh script
+# Check if the game controller started successfully
+if [ $? -ne 0 ]; then
+    echo "Failed to start game controller. Exiting."
+    cleanup
+fi
+
+# Change to the AutoReferee directory and run the run.sh script, suppressing output
+echo "Starting AutoReferee..."
 cd AutoReferee/
-./run.sh -a &
+./gradlew run > /dev/null 2>&1 &
 AUTOREFEREE_PID=$!
 cd ..
+
+# Check if AutoReferee started successfully
+if [ $? -ne 0 ]; then
+    echo "Failed to start AutoReferee. Exiting."
+    cleanup
+fi
 
 # Wait for all background processes to finish
 wait
