@@ -112,9 +112,7 @@ class SSLStandardEnv(SSLBaseEnv):
             160 * 4
         ) * 1000  # max wheel speed (rad/s) * 4 wheels * steps
 
-        # Limit robot speeds
-        self.max_v = 2.5  # robot max velocity
-        self.max_w = 10  # max angular velocity
+        # default kick speed
         self.kick_speed_x = 5.0  # kick speed
 
         # set starting formation style for
@@ -254,19 +252,6 @@ class SSLStandardEnv(SSLBaseEnv):
             commands.append(cmd)
 
         return commands
-
-    def convert_actions(self, action):
-        """Clip to absolute max and convert to local"""
-        v_x = action[0]
-        v_y = action[1]
-        v_theta = action[2]
-        # clip by max absolute
-        # TODO: Not sure if clipping it this way makes sense. We'll see.
-        v_norm = np.linalg.norm([v_x, v_y])
-        c = v_norm < self.max_v or self.max_v / v_norm
-        v_x, v_y = v_x * c, v_y * c
-
-        return v_x, v_y, v_theta
 
     def _calculate_reward_and_done(self):
         if self.reward_shaping_total is None:
