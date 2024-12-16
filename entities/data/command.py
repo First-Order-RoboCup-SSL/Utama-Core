@@ -1,5 +1,7 @@
 from collections import namedtuple
 
+# velocities: meters per second
+# angular_vel: radians per second
 RobotCommand = namedtuple(
     "RobotCommand",
     [

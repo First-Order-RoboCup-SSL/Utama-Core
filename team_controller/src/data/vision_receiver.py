@@ -28,6 +28,7 @@ class VisionDataReceiver(BaseReceiver):
         n_yellow_robots: int = 6,
         n_blue_robots: int = 6,
         debug=False,
+        n_cameras=4
     ):
         super().__init__(messsage_queue) # Setup the message queue
 
@@ -36,23 +37,53 @@ class VisionDataReceiver(BaseReceiver):
         self.ball_pos: List[BallData] = None
         self.robots_yellow_pos: List[RobotData] = [None] * n_yellow_robots
         self.robots_blue_pos: List[RobotData] = [None] * n_blue_robots
-
+        self.camera_frames = [None for i in range(n_cameras)] # TODO: Use GEOMETRY
         self.debug = debug
+        self.frames_recvd = 0
+        self.n_cameras = n_cameras
 
-    def _update_data(self, detection: object) -> None:
+    def _update_data(self, detection: object) -> None: # SSL_DetectionPacket
         # Update both ball and robot data incrementally.
+
+        # print("CAMERA_ID:", detection.camera_id)
+
         self._update_ball_pos(detection)
         self._update_robots_pos(detection)
 
-        # Put the latest game state into the thread-safe queue which will wake up
-        # main if it was empty.
-        # TODO: we should modify how Game is updated. Instead of appending to the records list, we should really keep any data we don't have updates for.
-        self._message_queue.put_nowait((MessageType.VISION, FrameData(
+        self.frames_recvd += 1
+
+        new_frame = FrameData(
             self.time_received,
             self.robots_yellow_pos,
             self.robots_blue_pos,
             self.ball_pos,
-        )))
+        )
+        
+        self.camera_frames[detection.camera_id] = new_frame
+        
+        if self.frames_recvd % self.n_cameras == 0 and not None in self.camera_frames: # TODO : Do something more advanced than an average because cameras might not be round robin 
+            # Put the latest game state into the thread-safe queue which will wake up
+            # main if it was empty.
+            # TODO: we should modify how Game is updated. Instead of appending to the records list, we should really keep any data we don't have updates for.
+            self._message_queue.put_nowait((MessageType.VISION, self._avg_frames(self.camera_frames)))
+
+    def _avg_frames(self, frames) -> FrameData:
+        frames = [*filter(lambda x : x.ball is not None, frames)]
+        sum_frame = frames[0]
+        for frame in frames[1:]:
+            sum_frame = FrameData(
+                sum_frame.ts + frame.ts,
+                [*map(lambda r1, r2 : RobotData(r1.x + r2.x, r1.y + r2.y, r1.orientation + r2.orientation), sum_frame.yellow_robots, frame.yellow_robots)],
+                [*map(lambda r1, r2 : RobotData(r1.x + r2.x, r1.y + r2.y, r1.orientation + r2.orientation), sum_frame.blue_robots, frame.blue_robots)],
+                [*map(lambda b1, b2 : BallData(b1.x + b2.x, b1.y + b2.y, b1.z + b2.z), sum_frame.ball, frame.ball)]
+            )
+        sum_frame = FrameData(
+            sum_frame.ts / self.n_cameras,
+            [*map(lambda r : RobotData(r.x / self.n_cameras, r.y / self.n_cameras, r.orientation / self.n_cameras), sum_frame.yellow_robots)],
+            [*map(lambda r : RobotData(r.x / self.n_cameras, r.y / self.n_cameras, r.orientation / self.n_cameras), sum_frame.blue_robots)],
+            [*map(lambda b : BallData(b.x / self.n_cameras, b.y / self.n_cameras, b.z / self.n_cameras), sum_frame.ball)]
+        )
+        return sum_frame
 
     def _update_ball_pos(self, detection: object) -> None:
 
@@ -62,7 +93,7 @@ class VisionDataReceiver(BaseReceiver):
         ball_pos = []
         for _, ball in enumerate(detection.balls):
             ball_pos.append(
-                BallData(ball.x, ball.y, ball.z if ball.HasField("z") else 0.0)
+                BallData(ball.x / 1000, ball.y / 1000, (ball.z / 1000) if ball.HasField("z") else 0.0)
             )
         self.ball_pos = ball_pos
 
@@ -80,8 +111,8 @@ class VisionDataReceiver(BaseReceiver):
         for robot in robots_data:
             if 0 <= robot.robot_id < len(robots):
                 robots[robot.robot_id] = RobotData(
-                    robot.x,
-                    robot.y,
+                    robot.x / 1000,
+                    robot.y / 1000,
                     robot.orientation if robot.HasField("orientation") else 0,
                 )
                 # TODO: When do we not have orientation?
@@ -111,44 +142,22 @@ class VisionDataReceiver(BaseReceiver):
         """
         vision_packet = SSL_WrapperPacket()
         while True:
-            t_received = time.time()
-            self.time_received = t_received
             data = self.net.receive_data()
+            t_received = time.time() # TODO: DUBIOUS because of thread scheduling?
+            self.time_received = t_received
             if data is not None:
                 vision_packet.Clear()  # Clear previous data to avoid memory bloat
                 vision_packet.ParseFromString(data)
                 self._update_data(vision_packet.detection)
+                # print(vision_packet.detection.frame_number)
+                # print(vision_packet.frame_number)
             if self.debug:
                 self._print_frame_info(t_received, vision_packet.detection)
-            time.sleep(0.0083) # TODO : Block on data?
+            # time.sleep(0.0083) # TODO : Block on data?
 
-    # MOVE INTO GAME
-    
-    # # UNUSED
-    # def get_time_received(self) -> float:
-    #     """
-    #     Retrieves the time at which the most recent vision data was received.
-    #     Returns:
-    #         float: The time at which the most recent vision data was received.
-    #     """
-    #     return self.time_received
-
-    # def get_robot_coords(self, is_yellow: bool) -> TeamRobotCoords:
-    #     """
-    #     Retrieves the current positions of all robots on the specified team.
-        
-    #     Args:
-    #         is_yellow (bool): If True, retrieves data for the yellow team; otherwise, for the blue team.        
-        
-    #     Returns:
-    #         TeamRobotCoords: A named tuple containing the team color and a list of RobotData.
-    #     """    
-    #     with self.lock:
-    #         team_color = "yellow" if is_yellow else "blue"
-    #         robots = self.robots_yellow_pos if is_yellow else self.robots_blue_pos
-    #         return TeamRobotCoords(team_color=team_color, robots=robots)
-    
-    # # UNUSED   
+    # MOVE INTO GAME  
+  
+    # # Implemented already  
     # def get_robot_by_id(self, is_yellow: bool, robot_id: int) -> RobotData:
     #         """
     #         Retrieves the position data for a specific robot by ID.
@@ -165,8 +174,8 @@ class VisionDataReceiver(BaseReceiver):
     #             else:
     #                 return None  # TODO: Or raise an exception.    
     
-    # # UNUSED            
-    # def get_closest_robot_to_point(self, is_yellow: bool, x: float, y: float) -> RobotData:
+    #            
+    # def get_closest_robot_at_point(self, is_yellow: bool, x: float, y: float) -> RobotData:
     #     """
     #     Finds the robot closest to a given point.
         
@@ -191,35 +200,3 @@ class VisionDataReceiver(BaseReceiver):
     #     # TODO: Haven't been tested 
     #     return closest_robot   
     
-    # # UNUSED
-    # def get_ball_velocity(self) -> Optional[tuple]: # UNUSED
-    #     """
-    #     Calculates the ball's velocity based on position changes over time.
-
-    #     Returns:
-    #         tuple: The velocity components (vx, vy).
-    #     """
-    #     # TODO Find a method to store the data and get velocity. --> self.previour_ball_pos
-    #     with self.lock:
-    #         if len(self.history) < 2:
-    #             # Not suffucient data to extrapolate velocity
-    #             return None
-    #         # Otherwise get the previous and current frames
-    #         previous_frame = self.history[-2]
-    #         current_frame = self.history[-1]
-            
-    #         previous_ball_pos = previous_frame.ball[0] #TODO don't always take first ball pos
-    #         ball_pos = current_frame.ball[0]
-    #         previous_time_received = previous_frame.ts
-    #         time_received = current_frame.ts
-
-    #         # Latest frame should always be ahead of last one    
-    #         if time_received < previous_time_received:
-    #             # TODO log a warning
-    #             print("Timestamps out of order for vision data ")
-    #             return None        
-            
-    #         dt = time_received - previous_time_received
-    #         vx = (ball_pos.x - previous_ball_pos.x) / dt
-    #         vy = (ball_pos.y - previous_ball_pos.y) / dt
-    #         return (vx, vy)

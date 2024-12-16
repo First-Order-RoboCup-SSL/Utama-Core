@@ -5,11 +5,11 @@ from shapely.geometry import Point
 
 class Field:
     def __init__(self):
-        self.HALF_LENGTH = 4500  # x value
-        self.HALF_WIDTH = 3000  # y value
-        self.HALF_GOAL_WIDTH = 500
-        self.HALF_DEFENSE_AREA_LENGTH = 500
-        self.HALF_DEFENSE_AREA_WIDTH = 1000
+        self.HALF_LENGTH = 4.5  # x value
+        self.HALF_WIDTH = 3 # y value
+        self.HALF_GOAL_WIDTH = .5
+        self.HALF_DEFENSE_AREA_LENGTH = .5
+        self.HALF_DEFENSE_AREA_WIDTH = 1
         self.YELLOW_GOAL_LINE = LineString(
             [
                 (self.HALF_LENGTH, self.HALF_GOAL_WIDTH),
@@ -22,7 +22,7 @@ class Field:
                 (-self.HALF_LENGTH, -self.HALF_GOAL_WIDTH),
             ]
         )
-        self.CENTER_CIRCLE = Point(0, 0).buffer(500)  # center circle with radius 500
+        self.CENTER_CIRCLE = Point(0, 0).buffer(.5)  # center circle with radius 500
         self.YELLOW_DEFENSE_AREA = Polygon(
             [
                 (self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),

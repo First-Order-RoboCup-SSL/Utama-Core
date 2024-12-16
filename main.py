@@ -1,7 +1,11 @@
 import threading
 import queue
 from entities.game import Game
+import time
+import math
 
+from entities.game.game_object import Ball, Colour, Robot
+from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.robot_startup_controller import (
     StartUpController,
 )
@@ -16,6 +20,8 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 def main():
     game = Game()
+    GRSimController().teleport_ball(0, 0, 2, 2.5)
+    time.sleep(0.2)
 
     message_queue = queue.SimpleQueue()
     receiver = VisionDataReceiver(message_queue, debug=False)
@@ -26,26 +32,39 @@ def main():
     data_thread.daemon = True  # Allows the thread to close when the main program exits
     data_thread.start()
 
+
+    TIME = 0.5
+    FRAMES_IN_TIME = round(60 * TIME)
+
     # TODO: Not implemented
     # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
     # referee_thread.daemon = True
     # referee_thread.start()
 
+    frames = 0
+
     try:
+        print("LOCATED BALL")
+        print(f"Predicting robot position with {TIME} seconds of motion")
+
+        predictions = []
         while True:
             (message_type, message) = message_queue.get()  # Infinite timeout for now
-
+            
             if message_type == MessageType.VISION:
-                # message = FrameData(...)
+                frames += 1
                 game.add_new_state(message)
-                # access current state data
-                # print(
-                #     game.current_state.yellow_robots[0].x,
-                #     game.current_state.yellow_robots[0].y,
-                # )
 
-                # access game records from -x number of frames ago
-                print(game.records[-1].ts, game.records[-1].ball[0].x)
+                actual = game._records[-1] # JUST FOR TESTING - don't do this irl
+
+                if len(predictions) >= FRAMES_IN_TIME  and predictions[-FRAMES_IN_TIME] != None:
+                    print("Ball prediction inaccuracy delta (cm): ", '{:.20f}'.format(100 * math.sqrt((actual.ball[0].x - predictions[-FRAMES_IN_TIME].ball[0].x)**2 + (actual.ball[0].y - predictions[-FRAMES_IN_TIME].ball[0].y)**2)))
+                    for i in range(6):
+                        print(f"Blue robot {i} prediction inaccuracy delta (cm): ", '{:.20f}'.format(100 * math.sqrt((actual.blue_robots[i].x - predictions[-FRAMES_IN_TIME].blue_robots[i].x)**2 + (actual.blue_robots[i].y - predictions[-FRAMES_IN_TIME].blue_robots[i].y)**2)))
+                    for i in range(6):
+                        print(f"Yellow robot {i} prediction inaccuracy delta (cm): ", '{:.20f}'.format(100 * math.sqrt((actual.yellow_robots[i].x - predictions[-FRAMES_IN_TIME].yellow_robots[i].x)**2 + (actual.yellow_robots[i].y - predictions[-FRAMES_IN_TIME].yellow_robots[i].y)**2)))
+
+                predictions.append(game.predict_frame_after(TIME))
 
             elif message_type == MessageType.REF:
                 pass

@@ -3,9 +3,9 @@ from typing import Tuple
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import (
     LOCAL_HOST,
-    SIM_COMTROL_PORT,
+    SIM_CONTROL_PORT,
     TELEPORT_X_COORDS,
-    FIELD_Y_COORD,
+    ADD_Y_COORD,
     REMOVAL_Y_COORD,
 )
 
@@ -29,10 +29,10 @@ class GRSimController(AbstractSimController):
 
     Args:
         ip (str): IP address of the simulator. Defaults to LOCAL_HOST.
-        port (int): Port of the simulator. Defaults to SIM_COMTROL_PORT.
+        port (int): Port of the simulator. Defaults to SIM_CONTROL_PORT.
     """
 
-    def __init__(self, ip: str = LOCAL_HOST, port: int = SIM_COMTROL_PORT):
+    def __init__(self, ip: str = LOCAL_HOST, port: int = SIM_CONTROL_PORT):
         self.net = network_manager.NetworkManager(address=(ip, port))
 
     def _create_simulator_command(self, control_message: object) -> object:
@@ -40,7 +40,7 @@ class GRSimController(AbstractSimController):
         sim_command.control.CopyFrom(control_message)
         return sim_command
 
-    def teleport_ball(self, x: float, y: float) -> None:
+    def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0) -> None:
         """
         Teleports the ball to a specific location on the field.
 
@@ -50,12 +50,12 @@ class GRSimController(AbstractSimController):
 
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
-        sim_control = self._create_teleport_ball_command(x, y)
+        sim_control = self._create_teleport_ball_command(x, y, vx, vy)
         sim_command = self._create_simulator_command(sim_control)
         self.net.send_command(sim_command)
 
-    def _create_teleport_ball_command(self, x: float, y: float) -> object:
-        tele_ball = TeleportBall(x=x, y=y)
+    def _create_teleport_ball_command(self, x: float, y: float, vx: float, vy: float) -> object:
+        tele_ball = TeleportBall(x=x, y=y, vx=vx, vy=vy)
         sim_control = SimulatorControl()
         sim_control.teleport_ball.CopyFrom(tele_ball)
         return sim_control
@@ -80,11 +80,14 @@ class GRSimController(AbstractSimController):
 
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
-        # TODO: please add a function that can teleport a robot to any position
-        pass
+        sim_control = self._create_teleport_robot_command(
+            robot_id, is_team_yellow, x, y, theta
+        )
+        sim_command = self._create_simulator_command(sim_control)
+        self.net.send_command(sim_command)
 
     def set_robot_presence(
-        self, robot_id: int, team_colour_is_blue: bool, should_robot_be_present: bool
+        self, robot_id: int, is_team_yellow: bool, is_present: bool
     ) -> None:
         """
         Sets a robot's presence on the field by teleporting it to a specific location or removing it from the field.
@@ -92,15 +95,16 @@ class GRSimController(AbstractSimController):
         Args:
             robot_id (int): The unique ID of the robot.
             team_colour_is_blue (bool): Whether the robot belongs to the blue team. If False, it's assumed to be yellow.
-            should_robot_be_present (bool): If True, the robot will be placed on the field; if False, it will be removed.
+            is_present (bool): If True, the robot will be placed on the field; if False, it will be despawned.
 
         The method calculates a teleport location based on the team and presence status, then sends a command to the simulator.
         """
         x, y = self._get_teleport_location(
-            robot_id, team_colour_is_blue, should_robot_be_present
+            robot_id, is_team_yellow, is_present
         )
+        print(x, y)
         sim_control = self._create_teleport_robot_command(
-            robot_id, team_colour_is_blue, x, y, should_robot_be_present
+            robot_id, is_team_yellow, x, y, is_present
         )
         sim_command = self._create_simulator_command(sim_control)
         self.net.send_command(sim_command)
@@ -108,26 +112,27 @@ class GRSimController(AbstractSimController):
     def _create_teleport_robot_command(
         self,
         robot_id: int,
-        team_colour_is_blue: bool,
+        is_team_yellow: bool,
         x: float,
         y: float,
-        present: bool,
+        theta: float,
+        is_present: bool = True,
     ) -> object:
         robot = RobotId(
-            id=robot_id, team=Team.BLUE if team_colour_is_blue else Team.YELLOW
+            id=robot_id, team=Team.YELLOW if is_team_yellow else Team.BLUE
         )
-        tele_robot = TeleportRobot(id=robot, x=x / 1000, y=y / 1000, present=present)
+        tele_robot = TeleportRobot(id=robot, x=x, y=y, orientation=theta, present=is_present)
         sim_control = SimulatorControl()
         sim_control.teleport_robot.add().CopyFrom(tele_robot)
         return sim_control
 
     def _get_teleport_location(
-        self, robot_id: int, team_is_yellow: bool, add: bool
+        self, robot_id: int, is_team_yellow: bool, add: bool
     ) -> Tuple[float, float]:
-        y_coord = FIELD_Y_COORD if add else REMOVAL_Y_COORD
+        y_coord = REMOVAL_Y_COORD if add else ADD_Y_COORD
         x_coord = (
             -TELEPORT_X_COORDS[robot_id]
-            if team_is_yellow
+            if is_team_yellow
             else TELEPORT_X_COORDS[robot_id]
         )
         return x_coord, y_coord

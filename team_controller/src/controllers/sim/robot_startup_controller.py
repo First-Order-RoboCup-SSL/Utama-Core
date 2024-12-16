@@ -34,8 +34,8 @@ class StartUpController:
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
         # potentially have a set tunig parameters for each robot
-        self.pid_oren = PID(0.0167, 8, -8, 5, 0, 0.03, num_robots=6)
-        self.pid_trans = PID(0.0167, 1.5, -1.5, 5, 0, 0.02, num_robots=6)
+        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0.03, num_robots=6)
+        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0.02, num_robots=6)
 
         self.debug = debug
 
@@ -57,7 +57,6 @@ class StartUpController:
             if self.debug:
                 print(out_packet)
             self.sim_robot_controller.send_robot_commands()
-            self.sim_robot_controller.robot_has_ball(robot_id=3)
 
     def _calculate_robot_velocities(
         self,
@@ -116,10 +115,10 @@ class StartUpController:
 
         if target_x != None and target_y != None:
             left_vel = self.pid_trans.calculate(
-                target_y, current_y, robot_id, normalize_range=3000
+                target_y, current_y, robot_id, normalize_range=3
             )
             forward_vel = self.pid_trans.calculate(
-                target_x, current_x, robot_id, normalize_range=4500
+                target_x, current_x, robot_id, normalize_range=4.5
             )
 
             forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren)
