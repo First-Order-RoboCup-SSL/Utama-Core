@@ -227,11 +227,11 @@ class ShootingController:
                 if robot_data is not None:
                     if (
                         self.first_action
-                        or abs(
+                        or (abs(
                             np.round(target_oren, 1)
                             - np.round(robot_data.orientation, 1)
                         )
-                        >= 0.3
+                        >= 0.3 and self.robot_controller.robot_has_ball(self.shooter_id))
                     ):
                         print("first action")
                         target_coords = (None, None, None)
