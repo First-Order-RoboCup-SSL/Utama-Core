@@ -6,7 +6,7 @@ import math
 
 from entities.game.game_object import Ball, Colour, Robot
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
-from team_controller.src.controllers.sim.robot_startup_controller import (
+from team_controller.src.tests.grsim_robot_startup_controller import (
     StartUpController,
 )
 from team_controller.src.data import VisionDataReceiver, RefereeMessageReceiver
@@ -32,7 +32,6 @@ def main():
     data_thread.daemon = True  # Allows the thread to close when the main program exits
     data_thread.start()
 
-
     TIME = 0.5
     FRAMES_IN_TIME = round(60 * TIME)
 
@@ -50,19 +49,77 @@ def main():
         predictions = []
         while True:
             (message_type, message) = message_queue.get()  # Infinite timeout for now
-            
+
             if message_type == MessageType.VISION:
                 frames += 1
                 game.add_new_state(message)
 
-                actual = game._records[-1] # JUST FOR TESTING - don't do this irl
+                actual = game._records[-1]  # JUST FOR TESTING - don't do this irl
 
-                if len(predictions) >= FRAMES_IN_TIME  and predictions[-FRAMES_IN_TIME] != None:
-                    print("Ball prediction inaccuracy delta (cm): ", '{:.20f}'.format(100 * math.sqrt((actual.ball[0].x - predictions[-FRAMES_IN_TIME].ball[0].x)**2 + (actual.ball[0].y - predictions[-FRAMES_IN_TIME].ball[0].y)**2)))
+                if (
+                    len(predictions) >= FRAMES_IN_TIME
+                    and predictions[-FRAMES_IN_TIME] != None
+                ):
+                    print(
+                        "Ball prediction inaccuracy delta (cm): ",
+                        "{:.20f}".format(
+                            100
+                            * math.sqrt(
+                                (
+                                    actual.ball[0].x
+                                    - predictions[-FRAMES_IN_TIME].ball[0].x
+                                )
+                                ** 2
+                                + (
+                                    actual.ball[0].y
+                                    - predictions[-FRAMES_IN_TIME].ball[0].y
+                                )
+                                ** 2
+                            )
+                        ),
+                    )
                     for i in range(6):
-                        print(f"Blue robot {i} prediction inaccuracy delta (cm): ", '{:.20f}'.format(100 * math.sqrt((actual.blue_robots[i].x - predictions[-FRAMES_IN_TIME].blue_robots[i].x)**2 + (actual.blue_robots[i].y - predictions[-FRAMES_IN_TIME].blue_robots[i].y)**2)))
+                        print(
+                            f"Blue robot {i} prediction inaccuracy delta (cm): ",
+                            "{:.20f}".format(
+                                100
+                                * math.sqrt(
+                                    (
+                                        actual.blue_robots[i].x
+                                        - predictions[-FRAMES_IN_TIME].blue_robots[i].x
+                                    )
+                                    ** 2
+                                    + (
+                                        actual.blue_robots[i].y
+                                        - predictions[-FRAMES_IN_TIME].blue_robots[i].y
+                                    )
+                                    ** 2
+                                )
+                            ),
+                        )
                     for i in range(6):
-                        print(f"Yellow robot {i} prediction inaccuracy delta (cm): ", '{:.20f}'.format(100 * math.sqrt((actual.yellow_robots[i].x - predictions[-FRAMES_IN_TIME].yellow_robots[i].x)**2 + (actual.yellow_robots[i].y - predictions[-FRAMES_IN_TIME].yellow_robots[i].y)**2)))
+                        print(
+                            f"Yellow robot {i} prediction inaccuracy delta (cm): ",
+                            "{:.20f}".format(
+                                100
+                                * math.sqrt(
+                                    (
+                                        actual.yellow_robots[i].x
+                                        - predictions[-FRAMES_IN_TIME]
+                                        .yellow_robots[i]
+                                        .x
+                                    )
+                                    ** 2
+                                    + (
+                                        actual.yellow_robots[i].y
+                                        - predictions[-FRAMES_IN_TIME]
+                                        .yellow_robots[i]
+                                        .y
+                                    )
+                                    ** 2
+                                )
+                            ),
+                        )
 
                 predictions.append(game.predict_frame_after(TIME))
 

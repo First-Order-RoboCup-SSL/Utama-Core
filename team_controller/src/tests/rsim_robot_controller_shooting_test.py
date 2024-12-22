@@ -1,9 +1,3 @@
-from team_controller.src.controllers import RSimRobotController
-from entities.data.command import RobotCommand
-from entities.game import Game
-
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-
 import os
 import sys
 import time
@@ -14,6 +8,12 @@ from typing import Tuple, List, Union, Dict, Optional
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
 print(project_root)
 sys.path.insert(0, project_root)
+
+from team_controller.src.controllers import RSimRobotController
+from entities.data.command import RobotCommand
+from entities.game import Game
+
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 from entities.game import Field
 from entities.data.command import RobotCommand
@@ -132,6 +132,7 @@ def find_best_shot(
 
     largest_gap: Tuple[float, float] = max(open_spaces, key=lambda x: x[1] - x[0])
     best_shot: float = (largest_gap[0] + largest_gap[1]) / 2
+
     return best_shot
 
 

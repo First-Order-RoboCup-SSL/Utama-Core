@@ -22,3 +22,8 @@ PID_PARAMS = {
 ADD_Y_COORD = -3.15
 REMOVAL_Y_COORD = -3.8
 TELEPORT_X_COORDS = [0.4, 0.8, 1.2, 1.6, 2, 2.4]
+
+# real controller
+BAUD_RATE = 115200
+PORT = "COM3"
+TIMEOUT = 0.1
