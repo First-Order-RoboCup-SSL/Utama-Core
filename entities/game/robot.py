@@ -1,53 +1,88 @@
 from typing import Tuple, Optional, List, Union
-from dataclasses import dataclass, field
+from dataclasses import field
 import numpy as np
 
-from entities.game.role import Role
+from entities.game.role import Role, RoleType
 from team_controller.src.controllers import GRSimController
 from team_controller.src.controllers import RSimController
 
-ROLES = ["attack", "defend", "keeper", "ball_placement"]
 
-@dataclass
 class Robot:
-    robot_id: int
-    is_team_yellow: bool
-    role: Role = field(init=False)
-    has_ball: bool = False
-    pos: Optional[Tuple[float, float]] = None
-    theta: Optional[float] = None
-    agro_rating: int = 0
-    records: List[str] = field(default_factory=list)
-    using_grsim: bool = True
-    sim_controller = GRSimController if using_grsim else RSimController
+    def _init_(self, robot_id, is_team_yellow):
+        self._robot_id: int = robot_id
+        self._is_team_yellow: bool = is_team_yellow
+        self._role: Role = Role(self.robot_id)
+        self._has_ball: bool = False
+        self._pos: Optional[Tuple[float, float]] = None
+        self._heading: Optional[float] = None
+        self._aggro_rating: int = 0
+        self._records: List[str] = field(default_factory=list)
+        self._controller: Union[GRSimController, RSimController] = (
+            None  # TODO: add real controller
+        )
 
-    def __post_init__(self):
-        self.role = Role(self.robot_id)
-
-    def change_role(self, role: Union[int, str]) -> None:
-        self.role.change_role(role)
+    def change_role(self, role: Union[RoleType, str]) -> None:
+        self._role.change_role(role)
 
     def set_position(self, x: float, y: float) -> None:
         if x < 0 or y < 0:
             raise ValueError("Position coordinates must be non-negative")
-        self.pos = (x, y)
-        self.sim_controller.teleport_robot(
-        is_team_yellow=self.is_team_yellow, robot_id=self.robot_id, x=x, y=y
+        self._pos = (x, y)
+        # TODO: add real controller (if real, dont teleport)
+        self._controller.teleport_robot(
+            is_team_yellow=self.is_team_yellow, robot_id=self.robot_id, x=x, y=y
         )
 
     def set_theta(self, theta: float) -> None:
         if not (-np.pi < theta <= np.pi):
             raise ValueError("Heading must be in range (-pi, pi]")
-        self.heading = theta
+        self._heading = theta
+        # TODO: add real controller (if real, dont teleport)
         self.sim_controller.teleport_robot(
-        is_team_yellow=self.is_team_yellow, robot_id=self.robot_id,theta=self.theta
+            is_team_yellow=self.is_team_yellow, robot_id=self.robot_id, theta=self.theta
         )
 
     def update_has_ball(self, has_ball: bool) -> None:
-        self.has_ball = has_ball
-        
-    def update_agro_rating(self, agro_rating: float):
-        if agro_rating >= 0 :
-            self.agro_rating = agro_rating
+        self._has_ball = has_ball
+
+    def update_agro_rating(self, aggro_rating: float):
+        if aggro_rating >= 0:
+            self._aggro_rating = aggro_rating
         else:
             raise ValueError("agro raiting value must be non-negative")
+
+    @property
+    def robot_id(self):
+        return self._robot_id
+
+    @property
+    def is_team_yellow(self):
+        return self._is_team_yellow
+
+    @property
+    def role(self):
+        return self._role
+
+    @property
+    def has_ball(self):
+        return self._has_ball
+
+    @property
+    def pos(self):
+        return self._pos
+
+    @property
+    def heading(self):
+        return self._heading
+
+    @property
+    def aggro_rating(self):
+        return self._aggro_rating
+
+    @property
+    def records(self):
+        return self._records
+
+    @property
+    def controller(self):
+        return self._controller
