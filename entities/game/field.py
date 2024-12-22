@@ -4,11 +4,12 @@ from shapely.geometry import Point
 
 
 class Field:
-    def __init__(self):
+    def __init__(self, my_team_is_yellow=True):
+        self._my_team_is_yellow = my_team_is_yellow
         self.HALF_LENGTH = 4.5  # x value
-        self.HALF_WIDTH = 3 # y value
-        self.HALF_GOAL_WIDTH = .5
-        self.HALF_DEFENSE_AREA_LENGTH = .5
+        self.HALF_WIDTH = 3  # y value
+        self.HALF_GOAL_WIDTH = 0.5
+        self.HALF_DEFENSE_AREA_LENGTH = 0.5
         self.HALF_DEFENSE_AREA_WIDTH = 1
         self.YELLOW_GOAL_LINE = LineString(
             [
@@ -22,7 +23,7 @@ class Field:
                 (-self.HALF_LENGTH, -self.HALF_GOAL_WIDTH),
             ]
         )
-        self.CENTER_CIRCLE = Point(0, 0).buffer(.5)  # center circle with radius 500
+        self.CENTER_CIRCLE = Point(0, 0).buffer(0.5)  # center circle with radius 500
         self.YELLOW_DEFENSE_AREA = Polygon(
             [
                 (self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
@@ -51,6 +52,34 @@ class Field:
                 (-self.HALF_LENGTH, -self.HALF_DEFENSE_AREA_WIDTH),
             ]
         )
+
+    @property
+    def my_goal_line(self) -> LineString:
+        if self._my_team_is_yellow:
+            return self.yellow_goal_line
+        else:
+            return self.blue_goal_line
+
+    @property
+    def enemy_goal_line(self) -> LineString:
+        if self._my_team_is_yellow:
+            return self.blue_goal_line
+        else:
+            return self.yellow_goal_line
+
+    @property
+    def my_defense_area(self) -> LineString:
+        if self._my_team_is_yellow:
+            return self.yellow_defense_area
+        else:
+            return self.blue_defense_area
+
+    @property
+    def enemy_defense_area(self) -> LineString:
+        if self._my_team_is_yellow:
+            return self.blue_defense_area
+        else:
+            return self.yellow_defense_area
 
     @property
     def half_length(self) -> float:

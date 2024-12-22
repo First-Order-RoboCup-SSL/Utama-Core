@@ -132,7 +132,7 @@ def find_best_shot(
 
     largest_gap: Tuple[float, float] = max(open_spaces, key=lambda x: x[1] - x[0])
     best_shot: float = (largest_gap[0] + largest_gap[1]) / 2
-        
+
     return best_shot
 
 
@@ -199,7 +199,6 @@ class ShootingController:
                 balls[0], enemy_robots, self.goal_x, self.goal_y1, self.goal_y2
             )
             best_shot = find_best_shot(shadows, self.goal_y1, self.goal_y2)
-
             # Changed to atan2 to get the correct angle
             shot_orientation = np.atan2(
                 (best_shot - balls[0].y), (self.goal_x - balls[0].x)
@@ -215,13 +214,13 @@ class ShootingController:
                     balls[0].y - robot_data.y, balls[0].x - robot_data.x
                 )
                 if robot_data is not None:
-                    if (
-                        self.first_action
-                        or (abs(
+                    if self.first_action or (
+                        abs(
                             np.round(target_oren, 1)
                             - np.round(robot_data.orientation, 1)
                         )
-                        >= 0.3 and self.robot_controller.robot_has_ball(self.shooter_id))
+                        >= 0.3
+                        and self.robot_controller.robot_has_ball(self.shooter_id)
                     ):
                         print("first action")
                         target_coords = (None, None, None)
