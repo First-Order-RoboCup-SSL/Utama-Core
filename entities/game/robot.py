@@ -18,7 +18,8 @@ class Robot:
         self._aggro_rating: int = 0
         self._records: List[str] = field(default_factory=list)
         self._controller: Union[GRSimController, RSimController] = (
-            None  # TODO: add real controller
+            None  # TODO: is this needed? we should be doing robot manipulation from team_controller
+            # consider removing this and writing a function for updating robot state (ie updating based on what is observed from the game)
         )
 
     def change_role(self, role: Union[RoleType, str]) -> None:
@@ -28,7 +29,6 @@ class Robot:
         if x < 0 or y < 0:
             raise ValueError("Position coordinates must be non-negative")
         self._pos = (x, y)
-        # TODO: add real controller (if real, dont teleport)
         self._controller.teleport_robot(
             is_team_yellow=self.is_team_yellow, robot_id=self.robot_id, x=x, y=y
         )
@@ -37,7 +37,6 @@ class Robot:
         if not (-np.pi < theta <= np.pi):
             raise ValueError("Heading must be in range (-pi, pi]")
         self._heading = theta
-        # TODO: add real controller (if real, dont teleport)
         self.sim_controller.teleport_robot(
             is_team_yellow=self.is_team_yellow, robot_id=self.robot_id, theta=self.theta
         )
