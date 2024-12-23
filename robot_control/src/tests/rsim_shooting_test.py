@@ -8,7 +8,7 @@ from team_controller.src.config.settings import TIMESTEP
 
 
 if __name__ == "__main__":
-    game = Game()
+    game = Game(my_team_is_yellow=True)
 
     # making environment
     env = SSLStandardEnv(n_robots_blue=3)

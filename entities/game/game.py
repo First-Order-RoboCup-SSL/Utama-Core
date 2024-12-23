@@ -17,14 +17,46 @@ class Game:
     def __init__(self, my_team_is_yellow=True):
         self._field = Field(my_team_is_yellow=my_team_is_yellow)
         self._records = []
+        self._predicted_next_frame = None
         self._my_team_is_yellow = my_team_is_yellow
         self._yellow_score = 0
         self._blue_score = 0
+
+    @property
+    def field(self) -> Field:
+        return self._field
+
+    @property
+    def current_state(self) -> FrameData:
+        return self._records[-1] if self._records else None
+
+    @property
+    def records(self) -> List[FrameData]:
+        if not self._records:
+            return None
+        return self._records
+
+    @property
+    def yellow_score(self) -> int:
+        return self._yellow_score
+
+    @property
+    def blue_score(self) -> int:
+        return self._blue_score
+
+    @property
+    def my_team_is_yellow(self) -> bool:
+        return self._my_team_is_yellow
+
+    @property
+    def predicted_next_frame(self) -> FrameData:
+        return self._predicted_next_frame
 
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
         if isinstance(frame_data, FrameData):
             self._records.append(frame_data)
+            self._predicted_next_frame = self.predict_frame_after(TIMESTEP)
         else:
             raise ValueError("Invalid frame data.")
 
@@ -65,23 +97,28 @@ class Game:
             return None
         return self._records[-1]
 
-    # frameData rearranged as friendly_robots, enemy_robots, ball
-    # based on provided _my_team_is_yellow field
     def get_my_latest_frame(self) -> tuple[RobotData, RobotData, BallData]:
+        """
+        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
+        """
         if not self._records:
             return None
         latest_frame = self.get_latest_frame()
-        _, yellow_robots, blue_robots, balls = latest_frame
-        if self._my_team_is_yellow:
-            return yellow_robots, blue_robots, balls
-        else:
-            return blue_robots, yellow_robots, balls
+        return self._reorganise_frame_data(latest_frame)
 
     def predict_next_frame(self) -> FrameData:
         """
         Predicts the next frame based on the latest frame.
         """
-        return self.predict_frame_after(TIMESTEP)
+        return self._predicted_next_frame
+
+    def predict_my_next_frame(self) -> tuple[RobotData, RobotData, BallData]:
+        """
+        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
+        """
+        if self._predicted_next_frame is None:
+            return None
+        return self._reorganise_frame_data(self._predicted_next_frame)
 
     def predict_frame_after(self, t: float):
         """
@@ -103,6 +140,20 @@ class Game:
                 list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
                 [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
             )
+
+    def _reorganise_frame_data(
+        self, frame_data: FrameData
+    ) -> tuple[RobotData, RobotData, BallData]:
+        """
+        reorganises frame data to be (friendly_robots, enemy_robots, balls)
+        """
+        _, yellow_robots, blue_robots, balls = frame_data
+        if self._my_team_is_yellow:
+            return yellow_robots, blue_robots, balls
+        else:
+            return blue_robots, yellow_robots, balls
+
+    ### General Object Position Prediction ###
 
     def get_object_velocity(self, object: GameObject) -> Optional[tuple]:
         return self._get_object_velocity_at_frame(len(self._records) - 1, object)
@@ -195,29 +246,3 @@ class Game:
             futureAverageVelocity = tuple(averageVelocity)
 
         return (totalX / iter, totalY / iter)
-
-    @property
-    def field(self) -> Field:
-        return self._field
-
-    @property
-    def current_state(self) -> FrameData:
-        return self._records[-1] if self._records else None
-
-    @property
-    def records(self) -> List[FrameData]:
-        if not self._records:
-            return None
-        return self._records
-
-    @property
-    def yellow_score(self) -> int:
-        return self._yellow_score
-
-    @property
-    def blue_score(self) -> int:
-        return self._blue_score
-
-    @property
-    def my_team_is_yellow(self) -> bool:
-        return self._my_team_is_yellow
