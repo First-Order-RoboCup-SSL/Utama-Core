@@ -75,9 +75,17 @@ class Game:
             return None
         if is_yellow:
             # TODO: potential namespace conflict when robot (robot.py) entity is reintroduced. Think about integrating the two
-            return [self.get_object_velocity(Robot(Colour.YELLOW, i)) for i in range(6)]
+            return [
+                self.get_object_velocity(Robot(Colour.YELLOW, i))
+                for i in range(
+                    len(self.get_robots_pos(True))
+                )  # TODO: This is a bit of a hack, we should be able to get the number of robots from the field
+            ]
         else:
-            return [self.get_object_velocity(Robot(Colour.BLUE, i)) for i in range(6)]
+            return [
+                self.get_object_velocity(Robot(Colour.BLUE, i))
+                for i in range(len(self.get_robots_pos(False)))
+            ]
 
     ### Ball Data retrieval ###
     def get_ball_pos(self) -> BallData:
@@ -125,10 +133,12 @@ class Game:
         Predicts frame in t seconds from the latest frame.
         """
         yellow_pos = [
-            self.predict_object_pos_after(t, Robot(Colour.YELLOW, i)) for i in range(6)
+            self.predict_object_pos_after(t, Robot(Colour.YELLOW, i))
+            for i in range(len(self.get_robots_pos(True)))
         ]
         blue_pos = [
-            self.predict_object_pos_after(t, Robot(Colour.BLUE, i)) for i in range(6)
+            self.predict_object_pos_after(t, Robot(Colour.BLUE, i))
+            for i in range(len(self.get_robots_pos(False)))
         ]
         ball_pos = self.predict_object_pos_after(t, Ball)
         if ball_pos is None or None in yellow_pos or None in blue_pos:
@@ -154,6 +164,43 @@ class Game:
             return blue_robots, yellow_robots, balls
 
     ### General Object Position Prediction ###
+
+    def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
+        # If t is after the object has stopped we return the position at which object stopped.
+
+        acc = self.get_object_acceleration(object)
+
+        if acc is None:
+            return None
+
+        ax, ay = acc
+        ux, uy = self.get_object_velocity(object)
+
+        if object is Ball:
+            ball = self.get_ball_pos()
+            start_x, start_y = ball[0].x, ball[0].y
+        else:
+            posn = self._get_object_position_at_frame(len(self._records) - 1, object)
+            start_x, start_y = posn.x, posn.y
+
+        if ax == 0:  # Due to friction, if acc = 0 then stopped.
+            sx = 0  # TODO: Not sure what to do about robots with respect to friction - we never know if they are slowing down to stop or if they are slowing down to change direction
+        else:
+            tx_stop = -ux / ax
+            tx = min(t, tx_stop)
+            sx = ux * tx + 0.5 * ax * tx * tx
+
+        if ay == 0:
+            sy = 0
+        else:
+            ty_stop = -uy / ay
+            ty = min(t, ty_stop)
+            sy = uy * ty + 0.5 * ay * ty * ty
+
+        return (
+            start_x + sx,
+            start_y + sy,
+        )  # TODO: Doesn't take into account spin / angular vel
 
     def get_object_velocity(self, object: GameObject) -> Optional[tuple]:
         return self._get_object_velocity_at_frame(len(self._records) - 1, object)
