@@ -11,9 +11,21 @@ import gymnasium as gym
 import numpy as np
 import pygame
 
-from rsoccer_simulator.src.Entities import Field, Frame, Robot
-from rsoccer_simulator.src.Render import COLORS, Ball, SSLRenderField, SSLRobot
+from rsoccer_simulator.src.Entities import Field, Frame, Robot, Ball
+from rsoccer_simulator.src.Render import (
+    COLORS,
+    RenderBall,
+    SSLRenderField,
+    RenderSSLRobot,
+)
+from rsoccer_simulator.src.Render.overlay import (
+    RenderOverlay,
+    OverlayObject,
+    OverlayType,
+)
 from rsoccer_simulator.src.Simulators.rsim import RSimSSL
+
+from global_utils.math_utils import rad_to_deg
 
 
 class SSLBaseEnv(gym.Env):
@@ -62,6 +74,7 @@ class SSLBaseEnv(gym.Env):
         self.last_frame: Frame = None
         self.steps = 0
         self.sent_commands = None
+        self.overlay: list[OverlayObject] = []
 
         # Render
         self.field_renderer = SSLRenderField()
@@ -103,46 +116,6 @@ class SSLBaseEnv(gym.Env):
         if self.render_mode == "human":
             self.render()
         return obs, {}
-
-    def _render(self):
-        def pos_transform(pos_x, pos_y):
-            return (
-                int(pos_x * self.field_renderer.scale + self.field_renderer.center_x),
-                int(pos_y * self.field_renderer.scale + self.field_renderer.center_y),
-            )
-
-        ball = Ball(
-            *pos_transform(self.frame.ball.x, self.frame.ball.y),
-            self.field_renderer.scale,
-        )
-        self.field_renderer.draw(self.window_surface)
-
-        for i in range(self.n_robots_blue):
-            robot = self.frame.robots_blue[i]
-            x, y = pos_transform(robot.x, robot.y)
-            rbt = SSLRobot(
-                x,
-                y,
-                robot.theta,
-                self.field_renderer.scale,
-                robot.id,
-                COLORS["BLUE"],
-            )
-            rbt.draw(self.window_surface)
-
-        for i in range(self.n_robots_yellow):
-            robot = self.frame.robots_yellow[i]
-            x, y = pos_transform(robot.x, robot.y)
-            rbt = SSLRobot(
-                x,
-                y,
-                robot.theta,
-                self.field_renderer.scale,
-                robot.id,
-                COLORS["YELLOW"],
-            )
-            rbt.draw(self.window_surface)
-        ball.draw(self.window_surface)
 
     def render(self) -> None:
         """
@@ -192,6 +165,143 @@ class SSLBaseEnv(gym.Env):
             pygame.display.quit()
             pygame.quit()
         self.rsim.stop()
+
+    ### CUSTOM FUNCTIONS WE ADDED ###
+
+    def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0):
+        """
+        teleport ball to new position in meters
+
+        Note: this does not create a new frame, but mutates the current frame
+        """
+        print(self.frame.ball)
+        ball = Ball(x=x, y=y, z=self.frame.ball.z, v_x=vx, v_y=vy)
+        self.frame.ball = ball
+        self.rsim.reset(self.frame)
+
+    def teleport_robot(
+        self,
+        is_team_yellow: bool,
+        robot_id: bool,
+        x: float,
+        y: float,
+        theta: float = None,
+    ):
+        """
+        teleport robot to new position in meters, radians
+
+        Note: this does not create a new frame, but mutates the current frame
+        """
+        if theta is None:
+            if is_team_yellow:
+                theta = self.frame.robots_yellow[robot_id].theta
+            else:
+                theta = self.frame.robots_blue[robot_id].theta
+        else:
+            theta = rad_to_deg(theta)
+
+        robot = Robot(yellow=is_team_yellow, id=robot_id, x=x, y=y, theta=theta)
+        if is_team_yellow:
+            self.frame.robots_yellow[robot_id] = robot
+        else:
+            self.frame.robots_blue[robot_id] = robot
+
+        self.rsim.reset(self.frame)
+
+    def draw_point(self, x: float, y: float, color: str = "RED", width: float = 0.05):
+        """
+        draw a point on the field for debugging purposes. Rendered on next step() call.
+        """
+        point_data = OverlayObject(
+            type=OverlayType.POINT,
+            color=color,
+            points=[self._pos_transform(x, y)],
+            width=width,
+        )
+        self.overlay.append(point_data)
+
+    def draw_line(
+        self, points: list[tuple[float, float]], color: str = "RED", width: float = 0.05
+    ):
+        """
+        draw a line on the field for debugging purposes. Rendered on next step() call.
+            Note:   Only draws lines between the first and last point in the list.
+                    If you want to draw multiple lines, call the draw_polygon method instead.
+        """
+        transformed_points = []
+        for point in points:
+            transformed_points.append(self._pos_transform(*point))
+        line_data = OverlayObject(
+            type=OverlayType.LINE, color=color, points=transformed_points, width=width
+        )
+        self.overlay.append(line_data)
+
+    def draw_polygon(
+        self, points: list[tuple[float, float]], color: str = "RED", width: float = 0.05
+    ):
+        """
+        draw a polygon on the field for debugging purposes. Rendered on next step() call.
+        """
+        transformed_points = []
+        for point in points:
+            transformed_points.append(self._pos_transform(*point))
+        poly_data = OverlayObject(
+            type=OverlayType.POLYGON,
+            color=color,
+            points=transformed_points,
+            width=width,
+        )
+        self.overlay.append(poly_data)
+
+    ### END OF CUSTOM FUNCTIONS ###
+
+    def _render(self):
+        ball = RenderBall(
+            *self._pos_transform(self.frame.ball.x, self.frame.ball.y),
+            self.field_renderer.scale,
+        )
+
+        self.field_renderer.draw(self.window_surface)
+
+        # added this for drawing overlays
+        if self.overlay:
+            overlay = RenderOverlay(self.overlay, self.field_renderer.scale)
+            overlay.draw(self.window_surface)
+
+        for i in range(self.n_robots_blue):
+            robot = self.frame.robots_blue[i]
+            x, y = self._pos_transform(robot.x, robot.y)
+            rbt = RenderSSLRobot(
+                x,
+                y,
+                robot.theta,
+                self.field_renderer.scale,
+                robot.id,
+                COLORS["BLUE"],
+            )
+            rbt.draw(self.window_surface)
+
+        for i in range(self.n_robots_yellow):
+            robot = self.frame.robots_yellow[i]
+            x, y = self._pos_transform(robot.x, robot.y)
+            rbt = RenderSSLRobot(
+                x,
+                y,
+                robot.theta,
+                self.field_renderer.scale,
+                robot.id,
+                COLORS["YELLOW"],
+            )
+            rbt.draw(self.window_surface)
+        ball.draw(self.window_surface)
+
+        self.overlay = []  # clear overlay after render
+
+    def _pos_transform(self, pos_x, pos_y):
+        return (
+            int(pos_x * self.field_renderer.scale + self.field_renderer.center_x),
+            int(pos_y * self.field_renderer.scale + self.field_renderer.center_y),
+        )
 
     def _get_commands(self, action):
         """returns a list of commands of type List[Robot] from type action_space action"""

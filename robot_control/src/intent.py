@@ -1,6 +1,7 @@
 import numpy as np
 
 from robot_control.src.utils.shooting_utils import find_best_shot
+from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from entities.game import Game, Field
 from entities.data.command import RobotCommand
 from entities.data.vision import RobotData, BallData
@@ -10,6 +11,7 @@ from motion_planning.src.pid import PID
 
 # intent on scoring goal
 def score_goal(
+    env: SSLBaseEnv,
     game_obj: Game,
     shooter_has_ball: bool,
     shooter_id: int,
@@ -73,5 +75,6 @@ def score_goal(
                     robot_command = go_to_ball(
                         pid_oren, pid_trans, robot_data, shooter_id, ball_data
                     )
+                    env.draw_point(ball_data.x, ball_data.y, "RED", 10)
 
     return robot_command

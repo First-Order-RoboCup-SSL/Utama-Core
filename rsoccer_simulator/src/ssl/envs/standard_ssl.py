@@ -128,45 +128,6 @@ class SSLStandardEnv(SSLBaseEnv):
 
         print(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
-    def teleport_ball(self, x: float, y: float):
-        """
-        teleport ball to new position in meters
-
-        Note: this does not create a new frame, but mutates the current frame
-        """
-        ball = Ball(x=x, y=y, z=self.frame.ball.z)
-        self.frame.ball = ball
-        self.rsim.reset(self.frame)
-
-    def teleport_robot(
-        self,
-        is_team_yellow: bool,
-        robot_id: bool,
-        x: float,
-        y: float,
-        theta: float = None,
-    ):
-        """
-        teleport robot to new position in meters, radians
-
-        Note: this does not create a new frame, but mutates the current frame
-        """
-        if theta is None:
-            if is_team_yellow:
-                theta = self.frame.robots_yellow[robot_id].theta
-            else:
-                theta = self.frame.robots_blue[robot_id].theta
-        else:
-            theta = rad_to_deg(theta)
-
-        robot = Robot(yellow=is_team_yellow, id=robot_id, x=x, y=y, theta=theta)
-        if is_team_yellow:
-            self.frame.robots_yellow[robot_id] = robot
-        else:
-            self.frame.robots_blue[robot_id] = robot
-
-        self.rsim.reset(self.frame)
-
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
         return super().reset(seed=seed, options=options)

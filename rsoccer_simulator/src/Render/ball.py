@@ -2,7 +2,7 @@ import pygame
 from rsoccer_simulator.src.Render.utils import COLORS
 
 
-class Ball:
+class RenderBall:
     radius = 0.0215
 
     def __init__(self, x, y, scale) -> None:

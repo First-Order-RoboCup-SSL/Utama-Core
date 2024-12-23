@@ -3,7 +3,7 @@ import pygame
 from rsoccer_simulator.src.Render.utils import COLORS, TAG_ID_COLORS
 
 
-class Robot:
+class RenderRobot:
     size = 1
 
     def __init__(self, x, y, direction, scale, team_color=COLORS["BLUE"]):
@@ -18,7 +18,7 @@ class Robot:
         raise NotImplementedError("Implement this method in a child class")
 
 
-class Sim2DRobot(Robot):
+class RenderSim2DRobot(RenderRobot):
     size = 10
     vision_size = 2
 
@@ -77,7 +77,7 @@ class Sim2DRobot(Robot):
         )
 
 
-class VSSRobot(Robot):
+class RenderVSSRobot(RenderRobot):
     size = 0.072
 
     def __init__(self, x, y, direction, scale, id, team_color):
@@ -146,7 +146,7 @@ class VSSRobot(Robot):
         # self.draw_direction(screen)
 
 
-class SSLRobot(Robot):
+class RenderSSLRobot(RenderRobot):
     size = 0.09
 
     def __init__(self, x, y, direction, scale, id, team_color):
@@ -212,9 +212,9 @@ if __name__ == "__main__":
     clock = pygame.time.Clock()
     screen = pygame.display.set_mode((750, 650))
     robots = []
-    robots.append(Sim2DRobot(750 // 2, 650 // 2, 0, 0, 100, 10, COLORS["BLUE"]))
-    robots.append(VSSRobot(150, 300, 0, 500, 0, COLORS["BLUE"]))
-    robots.append(SSLRobot(600, 300, 0, 500, 0, COLORS["BLUE"]))
+    robots.append(RenderSim2DRobot(750 // 2, 650 // 2, 0, 0, 100, 10, COLORS["BLUE"]))
+    robots.append(RenderVSSRobot(150, 300, 0, 500, 0, COLORS["BLUE"]))
+    robots.append(RenderSSLRobot(600, 300, 0, 500, 0, COLORS["BLUE"]))
     while True:
         clock.tick(60)
         screen.fill(COLORS["GREEN"])
