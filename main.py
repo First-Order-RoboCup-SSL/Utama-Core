@@ -6,7 +6,7 @@ import math
 
 from entities.game.game_object import Ball, Colour, Robot
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
-from team_controller.src.tests.grsim_robot_startup_controller import (
+from team_controller.src.tests.grsim_robot_controller_startup_test import (
     StartUpController,
 )
 from team_controller.src.data import VisionDataReceiver, RefereeMessageReceiver

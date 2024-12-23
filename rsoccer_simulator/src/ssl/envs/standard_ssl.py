@@ -7,6 +7,7 @@ import numpy as np
 from rsoccer_simulator.src.Entities import Frame, Robot, Ball
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from rsoccer_simulator.src.Utils import KDTree
+from team_controller.src.config.settings import TIMESTEP
 from team_controller.src.config.starting_formation import (
     BLUE_START_ONE,
     YELLOW_START_ONE,
@@ -64,7 +65,7 @@ class SSLStandardEnv(SSLBaseEnv):
         render_mode: str = "human",
         n_robots_blue: int = 6,
         n_robots_yellow: int = 6,
-        time_step: float = 0.0167,
+        time_step: float = TIMESTEP,
         blue_starting_formation: list[tuple] = None,
         yellow_starting_formation: list[tuple] = None,
     ):

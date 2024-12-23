@@ -1,9 +1,12 @@
 from typing import List, Optional
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData
-from entities.data.command import RobotInfo
 
 from entities.game.game_object import Ball, Colour, GameObject, Robot
+
+from team_controller.src.config.settings import TIMESTEP
+
+# TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
 
 
 class Game:
@@ -32,11 +35,29 @@ class Game:
         record = self._records[-1]
         return record.yellow_robots if is_yellow else record.blue_robots
 
+    def get_robots_velocity(self, is_yellow: bool) -> List[tuple]:
+        """
+        Returns (vx, vy) of all robots on a team at the latest frame. None if no data available.
+        """
+        if len(self._records) <= 1:
+            return None
+        if is_yellow:
+            # TODO: potential namespace conflict when robot (robot.py) entity is reintroduced. Think about integrating the two
+            return [self.get_object_velocity(Robot(Colour.YELLOW, i)) for i in range(6)]
+        else:
+            return [self.get_object_velocity(Robot(Colour.BLUE, i)) for i in range(6)]
+
     ### Ball Data retrieval ###
     def get_ball_pos(self) -> BallData:
         if not self._records:
             return None
         return self._records[-1].ball
+
+    def get_ball_velocity(self) -> Optional[tuple]:
+        """
+        Returns (vx, vy) of the ball at the latest frame. None if no data available.
+        """
+        return self.get_object_velocity(Ball)
 
     ### Frame Data retrieval ###
     def get_latest_frame(self) -> FrameData:
@@ -50,15 +71,40 @@ class Game:
         if not self._records:
             return None
         latest_frame = self.get_latest_frame()
-        yellow_robots = latest_frame.yellow_robots
-        blue_robots = latest_frame.blue_robots
-        balls = latest_frame.ball
+        _, yellow_robots, blue_robots, balls = latest_frame
         if self._my_team_is_yellow:
             return yellow_robots, blue_robots, balls
         else:
             return blue_robots, yellow_robots, balls
 
-    def get_object_velocity(self, object: GameObject):
+    def predict_next_frame(self) -> FrameData:
+        """
+        Predicts the next frame based on the latest frame.
+        """
+        return self.predict_frame_after(TIMESTEP)
+
+    def predict_frame_after(self, t: float):
+        """
+        Predicts frame in t seconds from the latest frame.
+        """
+        yellow_pos = [
+            self.predict_object_pos_after(t, Robot(Colour.YELLOW, i)) for i in range(6)
+        ]
+        blue_pos = [
+            self.predict_object_pos_after(t, Robot(Colour.BLUE, i)) for i in range(6)
+        ]
+        ball_pos = self.predict_object_pos_after(t, Ball)
+        if ball_pos is None or None in yellow_pos or None in blue_pos:
+            return None
+        else:
+            return FrameData(
+                self._records[-1].ts + t,
+                list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),
+                list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
+                [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
+            )
+
+    def get_object_velocity(self, object: GameObject) -> Optional[tuple]:
         return self._get_object_velocity_at_frame(len(self._records) - 1, object)
 
     def _get_object_position_at_frame(self, frame: int, object: GameObject):
@@ -149,61 +195,6 @@ class Game:
             futureAverageVelocity = tuple(averageVelocity)
 
         return (totalX / iter, totalY / iter)
-
-    def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
-        # If t is after the object has stopped we return the position at which object stopped.
-
-        acc = self.get_object_acceleration(object)
-
-        if acc is None:
-            return None
-
-        ax, ay = acc
-        ux, uy = self.get_object_velocity(object)
-
-        if object is Ball:
-            ball = self.get_ball_pos()
-            start_x, start_y = ball[0].x, ball[0].y
-        else:
-            posn = self._get_object_position_at_frame(len(self._records) - 1, object)
-            start_x, start_y = posn.x, posn.y
-
-        if ax == 0:  # Due to friction, if acc = 0 then stopped.
-            sx = 0  # TODO: Not sure what to do about robots with respect to friction - we never know if they are slowing down to stop or if they are slowing down to change direction
-        else:
-            tx_stop = -ux / ax
-            tx = min(t, tx_stop)
-            sx = ux * tx + 0.5 * ax * tx * tx
-
-        if ay == 0:
-            sy = 0
-        else:
-            ty_stop = -uy / ay
-            ty = min(t, ty_stop)
-            sy = uy * ty + 0.5 * ay * ty * ty
-
-        return (
-            start_x + sx,
-            start_y + sy,
-        )  # TODO: Doesn't take into account spin / angular vel
-
-    def predict_frame_after(self, t: float):
-        yellow_pos = [
-            self.predict_object_pos_after(t, Robot(Colour.YELLOW, i)) for i in range(6)
-        ]
-        blue_pos = [
-            self.predict_object_pos_after(t, Robot(Colour.BLUE, i)) for i in range(6)
-        ]
-        ball_pos = self.predict_object_pos_after(t, Ball)
-        if ball_pos is None or None in yellow_pos or None in blue_pos:
-            return None
-        else:
-            return FrameData(
-                self._records[-1].ts + t,
-                list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),
-                list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
-                [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
-            )
 
     @property
     def field(self) -> Field:

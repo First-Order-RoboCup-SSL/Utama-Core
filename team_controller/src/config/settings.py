@@ -1,3 +1,6 @@
+# interval between frames
+TIMESTEP = 0.0167
+
 # Network
 LOCAL_HOST = "localhost"
 MULTICAST_GROUP = "224.5.23.2"
@@ -14,8 +17,8 @@ NUM_ROBOTS = 6
 
 # PID parameters
 PID_PARAMS = {
-    "oren": {"Kp": 4.5, "Kd": 0, "Ki": 0.3, "dt": 0.0167, "max": 8, "min": -8},
-    "trans": {"Kp": 4.5, "Kd": 0, "Ki": 0.2, "dt": 0.0167, "max": 1.5, "min": -1.5},
+    "oren": {"Kp": 4.5, "Kd": 0, "Ki": 0.3, "dt": TIMESTEP, "max": 8, "min": -8},
+    "trans": {"Kp": 4.5, "Kd": 0, "Ki": 0.2, "dt": TIMESTEP, "max": 1.5, "min": -1.5},
 }
 
 # Simulation controller
