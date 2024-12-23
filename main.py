@@ -121,7 +121,7 @@ def main():
                             ),
                         )
 
-                predictions.append(game.predict_next_frame(TIME))
+                predictions.append(game.predict_frame_after(TIME))
 
             elif message_type == MessageType.REF:
                 pass

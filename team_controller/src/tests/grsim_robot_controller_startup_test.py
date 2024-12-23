@@ -12,9 +12,6 @@ sys.path.insert(0, project_root)
 
 from team_controller.src.data.message_enum import MessageType
 from team_controller.src.data import VisionDataReceiver
-from team_controller.src.tests.grsim_robot_startup_controller import (
-    StartUpController,
-)
 
 import time
 import numpy as np
