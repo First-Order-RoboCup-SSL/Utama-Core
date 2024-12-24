@@ -49,14 +49,6 @@ class SSLStandardEnv(SSLBaseEnv):
         2       id 0 Blue Angular Speed (max set by self.max_w)
         3       id 0 Blue Kick x Speed (max set by self.kick_speed_x)
         4       id 0 Blue Dribbler (true if positive)
-
-    Reward:
-        +5 if goal (blue)
-    Starting State:
-        Robots on thier respective sides, ball and defenders randomly positioned on
-        positive field side.
-    Episode Termination:
-        Goal, 25 seconds (1000 steps), or rule infraction
     """
 
     def __init__(

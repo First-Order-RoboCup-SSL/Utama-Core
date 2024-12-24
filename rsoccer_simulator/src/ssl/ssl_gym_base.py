@@ -160,8 +160,6 @@ class SSLBaseEnv(gym.Env):
 
     def close(self):
         if self.window_surface is not None:
-            import pygame
-
             pygame.display.quit()
             pygame.quit()
         self.rsim.stop()
@@ -210,7 +208,16 @@ class SSLBaseEnv(gym.Env):
 
     def draw_point(self, x: float, y: float, color: str = "RED", width: float = 0.05):
         """
-        draw a point on the field for debugging purposes. Rendered on next step() call.
+        Draws a point as an overlay.
+
+        Parameters:
+        -----------
+        points : list[tuple[float, float]]
+            A list of tuples, where each tuple represents a point (x, y) in 2D space.
+        color : str, optional
+            The color of the line. Default is "RED".
+        width : float, optional
+            The radius of the point. Default is 0.05.
         """
         point_data = OverlayObject(
             type=OverlayType.POINT,
@@ -221,13 +228,21 @@ class SSLBaseEnv(gym.Env):
         self.overlay.append(point_data)
 
     def draw_line(
-        self, points: list[tuple[float, float]], color: str = "RED", width: float = 0.05
+        self, points: list[tuple[float, float]], color: str = "RED", width: float = 1
     ):
         """
-        draw a line on the field for debugging purposes. Rendered on next step() call.
-            Note:   Only draws lines between the first and last point in the list.
-                    If you want to draw multiple lines, call the draw_polygon method instead.
+        Draws a line as an overlay using the first and last point in a list of points.
+
+        Parameters:
+        -----------
+        points : list[tuple[float, float]]
+            A list of tuples, where each tuple represents a point (x, y) in 2D space.
+        color : str, optional
+            The color of the line. Default is "RED".
+        width : float, optional
+            The width of the line. Default is 1. Cannot be less than 1.
         """
+        width = width if width >= 1 else 1
         transformed_points = []
         for point in points:
             transformed_points.append(self._pos_transform(*point))
@@ -237,11 +252,21 @@ class SSLBaseEnv(gym.Env):
         self.overlay.append(line_data)
 
     def draw_polygon(
-        self, points: list[tuple[float, float]], color: str = "RED", width: float = 0.05
+        self, points: list[tuple[float, float]], color: str = "RED", width: float = 1
     ):
         """
-        draw a polygon on the field for debugging purposes. Rendered on next step() call.
+        Draws a polygon as an overlay using a list of points.
+
+        Parameters:
+        -----------
+        points : list[tuple[float, float]]
+            A list of tuples, where each tuple represents a point (x, y) in 2D space.
+        color : str, optional
+            The color of the line. Default is "RED".
+        width : float, optional
+            The width of the line. Default is 1. Cannot be less than 1.
         """
+        width = width if width >= 1 else 1
         transformed_points = []
         for point in points:
             transformed_points.append(self._pos_transform(*point))

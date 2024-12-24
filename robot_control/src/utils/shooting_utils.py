@@ -120,4 +120,5 @@ def find_best_shot(
 
     largest_gap: Tuple[float, float] = max(open_spaces, key=lambda x: x[1] - x[0])
     best_shot: float = (largest_gap[0] + largest_gap[1]) / 2
+
     return best_shot

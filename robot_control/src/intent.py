@@ -33,6 +33,8 @@ def score_goal(
     if friendly_robots and enemy_robots and balls:
         best_shot = find_best_shot(balls[0], enemy_robots, goal_x, goal_y1, goal_y2)
 
+        env.draw_point(-4.5, best_shot, "GREEN")  # draw best shot point
+
         shot_orientation = np.atan2((best_shot - balls[0].y), (goal_x - balls[0].x))
 
         robot_data: RobotData = (
@@ -75,6 +77,5 @@ def score_goal(
                     robot_command = go_to_ball(
                         pid_oren, pid_trans, robot_data, shooter_id, ball_data
                     )
-                    env.draw_point(ball_data.x, ball_data.y, "RED", 10)
 
     return robot_command
