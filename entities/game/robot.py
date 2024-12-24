@@ -1,87 +1,94 @@
-from typing import Tuple, Optional, List, Union
-from dataclasses import field
+from typing import Tuple, Union, Optional, List
 import numpy as np
 
-from entities.game.role import Role, RoleType
-from team_controller.src.controllers import GRSimController
-from team_controller.src.controllers import RSimController
+from entities.data.vision import RobotData
+from entities.game.role import Attack, Defend, Action, Role
+from entities.game.game_object import Colour
 
+ROLES: List[Role] = [Attack(), Defend()]
 
 class Robot:
-    def _init_(self, robot_id, is_team_yellow):
-        self._robot_id: int = robot_id
-        self._is_team_yellow: bool = is_team_yellow
-        self._role: Role = Role(self.robot_id)
+    def __init__(self, robot_id: int, team_colour: Colour, role_id: int, robot_data: Optional[RobotData] = None):
+        self._id = robot_id
+        self._team_colour = team_colour
+        self._robot_data = robot_data
         self._has_ball: bool = False
-        self._pos: Optional[Tuple[float, float]] = None
-        self._heading: Optional[float] = None
-        self._aggro_rating: int = 0
-        self._records: List[str] = field(default_factory=list)
-        self._controller: Union[GRSimController, RSimController] = (
-            None  # TODO: is this needed? we should be doing robot manipulation from team_controller
-            # consider removing this and writing a function for updating robot state (ie updating based on what is observed from the game)
-        )
-
-    def change_role(self, role: Union[RoleType, str]) -> None:
-        self._role.change_role(role)
-
-    def set_position(self, x: float, y: float) -> None:
-        if x < 0 or y < 0:
-            raise ValueError("Position coordinates must be non-negative")
-        self._pos = (x, y)
-        self._controller.teleport_robot(
-            is_team_yellow=self.is_team_yellow, robot_id=self.robot_id, x=x, y=y
-        )
-
-    def set_theta(self, theta: float) -> None:
-        if not (-np.pi < theta <= np.pi):
-            raise ValueError("Heading must be in range (-pi, pi]")
-        self._heading = theta
-        self.sim_controller.teleport_robot(
-            is_team_yellow=self.is_team_yellow, robot_id=self.robot_id, theta=self.theta
-        )
-
-    def update_has_ball(self, has_ball: bool) -> None:
-        self._has_ball = has_ball
-
-    def update_agro_rating(self, aggro_rating: float):
-        if aggro_rating >= 0:
-            self._aggro_rating = aggro_rating
-        else:
-            raise ValueError("agro raiting value must be non-negative")
+        self._aggro_rating: float = 0
+        self._suggested_action: Action = None
+        self._role: Role = None
+        
+        self.role = role_id      
+    
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
-    def robot_id(self):
-        return self._robot_id
+    def team_colour(self) -> str:
+        return self._team_colour
 
     @property
-    def is_team_yellow(self):
-        return self._is_team_yellow
-
-    @property
-    def role(self):
-        return self._role
-
-    @property
-    def has_ball(self):
+    def has_ball(self) -> bool:
         return self._has_ball
 
     @property
-    def pos(self):
-        return self._pos
+    def robot_data(self) -> Tuple[float, float, float]:
+        return self._robot_data
 
     @property
-    def heading(self):
-        return self._heading
+    def x(self) -> float:
+        return self._robot_data[0]
 
     @property
-    def aggro_rating(self):
+    def y(self) -> float:
+        return self._robot_data[1]
+
+    @property
+    def orentation(self) -> float:
+        return self._robot_data[2]
+    
+    @property
+    def sprt_rbt_ids(self) -> List[int]:
+        return self._sprt_rbt_ids
+    
+    @sprt_rbt_ids.setter
+    def sprt_rbt_ids(self, sprt_rbt_ids: List[int]) -> None:
+        self._sprt_rbt_ids = list(set(sprt_rbt_ids))  # Ensure unique IDs
+
+    @property
+    def role(self) -> Role:
+        return self._role
+        
+    @role.setter
+    def role(self, input: Union[int, str]):
+        # TODO: docstring
+        if isinstance(input, int):
+            if 0 <= input < len(ROLES):
+                self._role = ROLES[input]
+            else:
+                raise ValueError(f"Invalid role index: {input}")
+        elif isinstance(input, str):
+            for _role in ROLES:
+                if _role.name == input:
+                    self._role = _role
+        else:
+            raise ValueError(f"Invalid role: {input}")    
+    
+    @property
+    def aggro_rating(self) -> float:
         return self._aggro_rating
-
-    @property
-    def records(self):
-        return self._records
-
-    @property
-    def controller(self):
-        return self._controller
+    
+    @aggro_rating.setter
+    def aggro_rating(self, input: float):
+        if input >= 0 :
+            self._aggro_rating = input
+        else:
+            raise ValueError("agro raiting value must be non-negative")
+        
+if __name__ == "__main__":
+    robot = Robot(0, Colour.YELLOW, 0)
+    robot.aggro_rating = 5
+    print(f"Role before init: {robot.role.name}")
+    robot.role = "defender" # or 1 changes the role of the robot
+    print(f"Role after change: {robot.role.name}")
+    print(robot.aggro_rating)

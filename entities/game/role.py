@@ -1,89 +1,72 @@
-from typing import Optional, List, Union
+from typing import List
 from dataclasses import dataclass, field
-from enum import Enum
-
-
-class RoleType(Enum):
-    ATTACK = "attack"
-    DEFEND = "defend"
-    KEEPER = "keeper"
-    BALL_PLACEMENT = "ball_placement"
-
-    @classmethod
-    def default(cls):
-        return cls.ATTACK
-
 
 @dataclass
 class Action:
-    action: str
-    rating: int = 0
-
-    def update_rating(self, rating: float):
-        if rating >= 0:
-            self.rating = rating
-        else:
-            raise ValueError("raiting value mist be non-negative")
-
+    id: int 
+    name: str
+    rating: int = field(init=False, default=0)
+        
     def reset(self):
         self.rating = 0
 
-
-@dataclass
 class Role:
-    robot_id: int
-    # temporary until we have setup formation
-    role: RoleType = RoleType.default()
-    suggested_action: Optional[Action] = None
-    possible_actions: List[Action] = field(default_factory=list)
-    sprt_rbt_ids: List[int] = field(default_factory=list)
-
-    def __post_init__(self):
-        self.change_role(self.role)
-
-    def change_role(self, role: Union[RoleType, str]) -> None:
-        if isinstance(role, RoleType):
-            self.role = role
-        elif isinstance(role, str) and role in RoleType._value2member_map_:
-            self.role = RoleType(role)
-        else:
-            raise ValueError(f"Invalid role: {role}")
-
-        self.possible_actions = self._get_actions_for_role()
-
-    def _get_actions_for_role(self) -> List[Action]:
-        # TODO: This list is currently not accurate
-        role_actions = {
-            "attack": [
-                Action(action="pass"),
-                Action(action="shoot_to_goal"),
-                Action(action="go_to_ball"),
-                Action(action="cross_ball"),
-                Action(action="receive_then_score"),
-            ],
-            "defend": [
-                Action(action="pass"),
-                Action(action="man_mark"),
-                Action(action="intercept_ball"),
-                Action(action="tackle ball"),
-                Action(action="clear ball"),
-                Action(action="block"),
-                Action(action="go_to_ball"),
-                Action(action="receive_ball"),
-            ],
-        }
-        return role_actions.get(self.role, [])
-
-    def set_sprt_rbt_ids(self, sprt_rbt_ids: List[int]) -> None:
-        self.sprt_rbt_ids = list(set(sprt_rbt_ids))  # Ensure unique IDs
-
+    def __init__(self, id, name):
+        self.id: int = id
+        self.name: str = name
+        self.possible_actions: List[Action] = None
+        
     def update_rating(self, action_id: int, raiting: float):
         if isinstance(action_id, int):
             if 0 <= action_id < len(self.possible_actions):
-                self.possible_actions[action_id].change_rating(raiting)
+                self.possible_actions[action_id].rating = raiting
             else:
                 raise ValueError(f"Invalid rating index: {action_id}")
-
+            
     def reset_all_ratings(self):
         for action in self.possible_actions:
             action.reset()
+            
+    def get_suggested_action(self):
+        max_raiting_action = {"action_id": None, "max_raiting": 0}
+        for action in self.possible_actions:
+            if action.rating > max_raiting_action["max_raiting"]:
+                # TODO: change action.name or action.id both works depending on what is better
+                max_raiting_action["action_id"] = action.name
+        return max_raiting_action["action_id"]
+
+@dataclass
+class Attack(Role):    
+    def __post_init__(self):
+        super().__init__(id=0, name="attacker")
+        self.possible_actions = [
+                Action(0, name="pass"), 
+                Action(1, name="shoot_to_goal"), 
+                Action(2, name="go_to_ball"), 
+                Action(3, name="cross_ball"), 
+                Action(4, name="receive_then_score")
+            ],
+    
+@dataclass
+class Defend(Role):
+    def __post_init__(self):
+        super().__init__(id=1, name="defender")
+        self.possible_actions = [
+            Action(0, name="pass"), 
+            Action(1, name="man_mark"), 
+            Action(2, name="intercept_ball"), 
+            Action(3, name="tackle ball"), 
+            Action(4, name="clear ball"), 
+            Action(5, name="block"), 
+            Action(6, name="go_to_ball"), 
+            Action(7, name="receive_ball")
+            ]  
+                
+if __name__ == "__main__":
+    ROLES: List[Role] = [Defend(), Attack()]
+    role = ROLES[0]
+    role.possible_actions[2].rating = 5
+    print(role.name)
+    print(role.get_suggested_action())
+    
+            
