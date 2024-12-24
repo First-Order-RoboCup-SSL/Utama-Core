@@ -29,7 +29,6 @@ if __name__ == "__main__":
             # TODO: We shoud move robot_has_ball within game obj as well
             # This will do for now.
             cmd = score_goal(
-                env,
                 game,
                 sim_robot_controller.robot_has_ball(shooter_id),
                 shooter_id=shooter_id,

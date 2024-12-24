@@ -107,7 +107,7 @@ def draw_point(
     color : str, optional
         The color of the line. Default is "RED". See 
     width : float, optional
-        The radius of the point. Default is 0.05.
+        The radius of the point. Default is 1. Cannot be less than 1.
 
 #### Draw Line
 
