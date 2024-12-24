@@ -38,5 +38,6 @@ if __name__ == "__main__":
             )
             sim_robot_controller.add_robot_commands(cmd, shooter_id)
             sim_robot_controller.send_robot_commands()
+
     except KeyboardInterrupt:
         print("Exiting...")
