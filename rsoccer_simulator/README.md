@@ -19,7 +19,7 @@ class SSLStandardEnv(
     yellow_starting_formation: list[tuple] = None
 )
 ```
-#### Description:
+##### Description:
     Environment stripped to be a lightweight simulator for testing and development.
 
     args:
@@ -54,6 +54,8 @@ class SSLStandardEnv(
 
 Note that the teleport commands are sent together with the rest of the robot commands ONLY at the end of the frame.
 
+#### Teleport Ball
+
 ```python
 def teleport_ball(
     x: float
@@ -62,8 +64,10 @@ def teleport_ball(
     vy: float = 0
 )
 ```
-#### Description:
+##### Description:
     teleports ball to new position in meters, meters per second.
+
+#### Teleport Robot
 
 ```python
 def teleport_robot(
@@ -74,7 +78,7 @@ def teleport_robot(
     theta: float = None,
 )
 ```
-#### Description:
+##### Description:
     teleport robot to new position in meters, radians.
 
 ### Overlay Drawing
@@ -82,6 +86,8 @@ def teleport_robot(
 Functions used to draw points/lines/polygons of interest. Used for visualisation and debugging. Note that these are also sent together with robot commands ONLY at the end of the frame.
 
 For the list of available colours, see `rsoccer_simulator/src/Render/utils.py`.
+
+#### Draw Point
 
 ```python
 def draw_point(
@@ -91,7 +97,7 @@ def draw_point(
     width: float = 0.05
 )
 ```
-#### Description:
+##### Description:
     Draws a point as an overlay.
 
     Parameters:
@@ -103,6 +109,8 @@ def draw_point(
     width : float, optional
         The radius of the point. Default is 0.05.
 
+#### Draw Line
+
 ```python
 def draw_line(
     points: list[tuple[float, float]],
@@ -110,7 +118,7 @@ def draw_line(
     width: float = 1
 )
 ```
-#### Description:
+##### Description:
     Draws a line as an overlay using the first and last point in a list of points.
 
     Parameters:
@@ -122,6 +130,8 @@ def draw_line(
     width : float, optional
         The width of the line. Default is 1. Cannot be less than 1.
 
+#### Draw Polygon
+
 ```python
 def draw_polygon(
     points: list[tuple[float, float]], 
@@ -129,7 +139,7 @@ def draw_polygon(
     width: float = 1
 )
 ```
-#### Description:
+##### Description:
     Draws a polygon as an overlay using a list of points.
 
     Parameters:
