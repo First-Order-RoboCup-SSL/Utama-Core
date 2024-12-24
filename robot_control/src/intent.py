@@ -11,7 +11,6 @@ from motion_planning.src.pid import PID
 
 # intent on scoring goal
 def score_goal(
-    env: SSLBaseEnv,
     game_obj: Game,
     shooter_has_ball: bool,
     shooter_id: int,
@@ -32,8 +31,6 @@ def score_goal(
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
     if friendly_robots and enemy_robots and balls:
         best_shot = find_best_shot(balls[0], enemy_robots, goal_x, goal_y1, goal_y2)
-
-        env.draw_point(-4.5, best_shot, "GREEN")  # draw best shot point
 
         shot_orientation = np.atan2((best_shot - balls[0].y), (goal_x - balls[0].x))
 
