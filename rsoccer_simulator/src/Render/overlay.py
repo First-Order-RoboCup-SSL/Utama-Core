@@ -20,27 +20,27 @@ class RenderOverlay:
 
     def draw(self, screen):
         for overlay_obj in self.overlay_data:
-            line_width = overlay_obj.width.upper()
+            color = overlay_obj.color.upper()
             if overlay_obj.type == OverlayType.POINT:
                 pygame.draw.circle(
                     screen,
-                    COLORS[overlay_obj.color],
+                    COLORS[color],
                     overlay_obj.points[0],
-                    line_width,
+                    overlay_obj.width,
                     width=0,  # 0 means fill the circle
                 )
             elif overlay_obj.type == OverlayType.LINE:
                 pygame.draw.line(
                     screen,
-                    COLORS[overlay_obj.color],
+                    COLORS[color],
                     overlay_obj.points[0],
                     overlay_obj.points[-1],
-                    width=line_width,
+                    width=overlay_obj.width,
                 )
             else:
                 pygame.draw.polygon(
                     screen,
-                    COLORS[overlay_obj.color],
+                    COLORS[color],
                     overlay_obj.points,
-                    width=line_width,
+                    width=overlay_obj.width,
                 )

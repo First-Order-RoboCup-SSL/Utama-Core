@@ -217,8 +217,9 @@ class SSLBaseEnv(gym.Env):
         color : str, optional
             The color of the line. Default is "RED".
         width : float, optional
-            The radius of the point. Default is 0.05.
+            The radius of the point. Default is 1. Cannot be less than 1.
         """
+        width = width if width >= 1 else 1
         point_data = OverlayObject(
             type=OverlayType.POINT,
             color=color,
