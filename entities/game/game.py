@@ -8,7 +8,13 @@ from entities.data.command import RobotInfo
 from entities.game.game_object import Ball, Colour, GameObject, Robot
 from entities.game.robot import Friendly, Enemy
 
-from team_controller.src.config.settings import TIMESTEP
+TIMESTEP = 0.0167
+
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
 
@@ -19,7 +25,7 @@ class Game:
 
     def __init__(self, my_team_is_yellow=True):
         self._field = Field(my_team_is_yellow)
-        self._records: List[RobotData] = []
+        self._records: List[FrameData] = []
         self._predicted_next_frame = None
         self._my_team_is_yellow = my_team_is_yellow
         self._friendly_robots: List[Friendly] = [Friendly(id) for id in range(6)]
@@ -121,7 +127,9 @@ class Game:
         else:
             return [
                 self.get_object_velocity(Robot(i, Colour.BLUE))
-                for i in range(len(self.get_robots_pos(False)))
+                for i in range(
+                    len(self.get_robots_pos(False))
+                )
             ]
 
     ### Ball Data retrieval ###
@@ -139,19 +147,27 @@ class Game:
     ### Frame Data retrieval ###
     def get_latest_frame(self) -> tuple[RobotData, RobotData, BallData]:
         """
-        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
+        FrameData rearranged as Tuple(friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
         """
         if not self._records:
             return None
         latest_frame = self._records[-1]
         return self._reorganise_frame_data(latest_frame)
     
+    def get_predicted_next_frame(self) -> tuple[RobotData, RobotData, BallData]:
+        """
+        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
+        """
+        if self._predicted_next_frame is None:
+            return None
+        return self._reorganise_frame_data(self._predicted_next_frame)    
+    
     def predict_frame_after(self, t: float) -> FrameData:
         """
         Predicts frame in t seconds from the latest frame.
         """
         yellow_pos = [
-            self.predict_object_pos_after(t, Robot(Colour.YELLOW, i))
+            self.predict_object_pos_after(t,Robot(Colour.YELLOW, i))
             for i in range(len(self.get_robots_pos(True)))
         ]
         blue_pos = [
@@ -162,15 +178,13 @@ class Game:
         if ball_pos is None or None in yellow_pos or None in blue_pos:
             return None
         else:
-            return self._reorganise_frame_data(
-                FrameData(
-                    self._records[-1].ts + t,
-                    list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),
-                    list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
-                    [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
-                )
+            return FrameData(
+                self._records[-1].ts + t,
+                list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),
+                list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
+                [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
             )
-
+    
     def _reorganise_frame_data(
         self, frame_data: FrameData
     ) -> tuple[RobotData, RobotData, BallData]:
@@ -247,7 +261,7 @@ class Game:
         """
         if frame >= len(self._records) or frame == 0:
             # Cannot provide velocity at frame that does not exist
-            print(frame)
+            logger.info(f"Frame: {frame} does not exist.")
             return None
 
         # Otherwise get the previous and current frames
@@ -263,7 +277,7 @@ class Game:
         # Latest frame should always be ahead of last one
         if time_received < previous_time_received:
             # TODO log a warning
-            print("Timestamps out of order for vision data ")
+            logger.warning(" Timestamps out of order for vision data.")
             return None
 
         dt_secs = time_received - previous_time_received
