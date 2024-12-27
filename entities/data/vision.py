@@ -1,8 +1,24 @@
-from collections import namedtuple
+from typing import Tuple, Union, Optional, List, NamedTuple
 
 # position data: meters
 # orientation: radians
-BallData = namedtuple("BallData", ["x", "y", "z"])
-RobotData = namedtuple("RobotData", ["x", "y", "orientation"])
-FrameData = namedtuple("FrameData", ["ts", "yellow_robots", "blue_robots", "ball"])
-TeamRobotCoords = namedtuple("TeamRobotCoords", ["team_color", "robots"])
+
+class BallData(NamedTuple):
+    x: float
+    y: float
+    z: float
+
+class RobotData(NamedTuple):
+    x: float
+    y: float
+    orientation: float
+
+class FrameData(NamedTuple):
+    ts: float
+    yellow_robots: List[RobotData]
+    blue_robots: List[RobotData]
+    ball: BallData
+
+class TeamRobotCoords(NamedTuple):
+    team_color: str
+    robots: List[RobotData]
