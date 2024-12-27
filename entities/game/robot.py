@@ -8,24 +8,18 @@ from entities.game.game_object import Colour
 ROLES: List[Role] = [Attack(), Defend()]
 
 class Robot:
-    def __init__(self, robot_id: int, team_colour: Colour, role_id: int, robot_data: Optional[RobotData] = None):
+    def __init__(self, robot_id: int, robot_data: Optional[RobotData] = None):
         self._id = robot_id
-        self._team_colour = team_colour
         self._robot_data = robot_data
-        self._has_ball: bool = False
-        self._aggro_rating: float = 0
-        self._suggested_action: Action = None
-        self._role: Role = None
-        
-        self.role = role_id      
+        self._inactive = False    
     
     @property
     def id(self) -> int:
         return self._id
 
     @property
-    def team_colour(self) -> str:
-        return self._team_colour
+    def colour(self) -> str:
+        return self._colour
 
     @property
     def has_ball(self) -> bool:
@@ -46,13 +40,27 @@ class Robot:
     @property
     def orentation(self) -> float:
         return self._robot_data[2]
+        
+    @property
+    def inactive(self) -> bool:
+        return self._inactive
+
+class Friendly(Robot):
+    def __init__(self, robot_id: int, role_id: Optional[int] = None, robot_data: Optional[RobotData] = None):
+        super().__init__(robot_id, robot_data)
+        self._has_ball: bool = False
+        self._aggro_rating: float = 0
+        self._sprt_rbt_ids: List[int] = None
+        
+        if role_id != None:
+            self.role = role_id  
     
     @property
     def sprt_rbt_ids(self) -> List[int]:
         return self._sprt_rbt_ids
     
     @sprt_rbt_ids.setter
-    def sprt_rbt_ids(self, sprt_rbt_ids: List[int]) -> None:
+    def sprt_rbt_ids(self, sprt_rbt_ids: List[int]):
         self._sprt_rbt_ids = list(set(sprt_rbt_ids))  # Ensure unique IDs
 
     @property
@@ -84,7 +92,13 @@ class Robot:
             self._aggro_rating = input
         else:
             raise ValueError("agro raiting value must be non-negative")
-        
+    
+class Enemy(Robot):
+    def __init__(self, robot_id: int, robot_data: Optional[RobotData] = None):
+        super().__init__(robot_id, robot_data)
+        # TODO: add properties like danger raiting etc
+    
+
 if __name__ == "__main__":
     robot = Robot(0, Colour.YELLOW, 0)
     robot.aggro_rating = 5

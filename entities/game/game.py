@@ -1,13 +1,16 @@
 from typing import List, Optional
+
+from numpy import empty
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData
+from entities.data.command import RobotInfo
 
 from entities.game.game_object import Ball, Colour, GameObject, Robot
+from entities.game.robot import Friendly, Enemy
 
 from team_controller.src.config.settings import TIMESTEP
 
 # TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
-
 
 class Game:
     """
@@ -16,9 +19,11 @@ class Game:
 
     def __init__(self, my_team_is_yellow=True):
         self._field = Field(my_team_is_yellow=my_team_is_yellow)
-        self._records = []
+        self._records: List[RobotData] = []
         self._predicted_next_frame = None
         self._my_team_is_yellow = my_team_is_yellow
+        self._friendly_robots: List[Friendly] = [Friendly(id) for id in range(6)]
+        self._enemy_robots: List[Enemy] = [Enemy(id) for id in range(6)]
         self._yellow_score = 0
         self._blue_score = 0
 
@@ -51,6 +56,24 @@ class Game:
     @property
     def predicted_next_frame(self) -> FrameData:
         return self._predicted_next_frame
+    
+    @property
+    def friendly_robots(self) -> List[Friendly]:
+        return self._friendly_robots
+    
+    @friendly_robots.setter
+    def friendly_robots(self, value: List[RobotData]):
+        for robot_id, robot_data in enumerate(value):
+            self._friendly_robots[robot_id].robot_data = robot_data    
+        
+    @property
+    def enemy_robots(self) -> List[Enemy]:
+        return self._enemy_robots
+    
+    @enemy_robots.setter
+    def enemy_robots(self, value: List[RobotData]):
+        for robot_id, robot_data in enumerate(value):
+            self._enemy_robots[robot_id].robot_data = robot_data
 
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
@@ -76,14 +99,14 @@ class Game:
         if is_yellow:
             # TODO: potential namespace conflict when robot (robot.py) entity is reintroduced. Think about integrating the two
             return [
-                self.get_object_velocity(Robot(Colour.YELLOW, i))
+                self.get_object_velocity(Robot(i, Colour.YELLOW))
                 for i in range(
                     len(self.get_robots_pos(True))
                 )  # TODO: This is a bit of a hack, we should be able to get the number of robots from the field
             ]
         else:
             return [
-                self.get_object_velocity(Robot(Colour.BLUE, i))
+                self.get_object_velocity(Robot(i, Colour.BLUE))
                 for i in range(len(self.get_robots_pos(False)))
             ]
 
@@ -100,35 +123,16 @@ class Game:
         return self.get_object_velocity(Ball)
 
     ### Frame Data retrieval ###
-    def get_latest_frame(self) -> FrameData:
-        if not self._records:
-            return None
-        return self._records[-1]
-
-    def get_my_latest_frame(self) -> tuple[RobotData, RobotData, BallData]:
+    def get_latest_frame(self) -> tuple[RobotData, RobotData, BallData]:
         """
         FrameData rearranged as (friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
         """
         if not self._records:
             return None
-        latest_frame = self.get_latest_frame()
+        latest_frame = self._records[-1]
         return self._reorganise_frame_data(latest_frame)
-
-    def predict_next_frame(self) -> FrameData:
-        """
-        Predicts the next frame based on the latest frame.
-        """
-        return self._predicted_next_frame
-
-    def predict_my_next_frame(self) -> tuple[RobotData, RobotData, BallData]:
-        """
-        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
-        """
-        if self._predicted_next_frame is None:
-            return None
-        return self._reorganise_frame_data(self._predicted_next_frame)
-
-    def predict_frame_after(self, t: float):
+    
+    def predict_frame_after(self, t: float) -> FrameData:
         """
         Predicts frame in t seconds from the latest frame.
         """
@@ -144,11 +148,13 @@ class Game:
         if ball_pos is None or None in yellow_pos or None in blue_pos:
             return None
         else:
-            return FrameData(
-                self._records[-1].ts + t,
-                list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),
-                list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
-                [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
+            return self._reorganise_frame_data(
+                FrameData(
+                    self._records[-1].ts + t,
+                    list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),
+                    list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
+                    [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
+                )
             )
 
     def _reorganise_frame_data(
