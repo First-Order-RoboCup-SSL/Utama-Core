@@ -18,7 +18,7 @@ class Game:
     """
 
     def __init__(self, my_team_is_yellow=True):
-        self._field = Field(my_team_is_yellow=my_team_is_yellow)
+        self._field = Field(my_team_is_yellow)
         self._records: List[RobotData] = []
         self._predicted_next_frame = None
         self._my_team_is_yellow = my_team_is_yellow
@@ -80,8 +80,22 @@ class Game:
         if isinstance(frame_data, FrameData):
             self._records.append(frame_data)
             self._predicted_next_frame = self.predict_frame_after(TIMESTEP)
+            self._update_robots(frame_data)
         else:
             raise ValueError("Invalid frame data.")
+    
+    def add_robot_info(self, robots_info: List[RobotInfo]) -> None:
+        for robot_id, robot_info in enumerate(robots_info):
+            self._friendly_robots[robot_id].has_ball = robot_info.has_ball
+            # Extensible with more info (remeber to add the property in robot.py)
+            
+    def _update_robots(self, frame_data: FrameData) -> None:
+        if self.my_team_is_yellow:
+            self.friendly_robots = frame_data.yellow_robots
+            self.enemy_robots = frame_data.blue_robots
+        else:
+            self.friendly_robots = frame_data.blue_robots
+            self.enemy_robots = frame_data.yellow_robots
 
     ### Robot data retrieval ###
     def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
