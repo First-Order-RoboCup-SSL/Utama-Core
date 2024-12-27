@@ -206,7 +206,7 @@ class SSLBaseEnv(gym.Env):
 
         self.rsim.reset(self.frame)
 
-    def draw_point(self, x: float, y: float, color: str = "RED", width: float = 0.05):
+    def draw_point(self, x: float, y: float, color: str = "RED", width: float = 1):
         """
         Draws a point as an overlay.
 
