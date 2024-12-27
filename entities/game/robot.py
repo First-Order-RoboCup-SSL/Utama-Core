@@ -10,24 +10,20 @@ class Robot:
     def __init__(self, robot_id: int, robot_data: Optional[RobotData] = None):
         self._id = robot_id
         self._robot_data = robot_data
-        self._inactive = False    
+        self._inactive = False 
     
     @property
     def id(self) -> int:
         return self._id
 
     @property
-    def colour(self) -> str:
-        return self._colour
-
-    @property
-    def has_ball(self) -> bool:
-        return self._has_ball
-
-    @property
-    def robot_data(self) -> Tuple[float, float, float]:
+    def robot_data(self) -> RobotData:
         return self._robot_data
 
+    @robot_data.setter
+    def robot_data(self, robot_data: RobotData):
+        self._robot_data = robot_data
+    
     @property
     def x(self) -> float:
         return self._robot_data[0]
@@ -43,6 +39,10 @@ class Robot:
     @property
     def inactive(self) -> bool:
         return self._inactive
+    
+    @inactive.setter
+    def inactive(self, value: bool):
+        self._inactive = value
 
 class Friendly(Robot):
     def __init__(self, robot_id: int, role_id: Optional[int] = None, robot_data: Optional[RobotData] = None):
@@ -53,8 +53,15 @@ class Friendly(Robot):
         self._role = None
         
         if role_id != None and self._role == None:
-            self.role = role_id  
-        
+            self.role = role_id    
+    
+    @property
+    def has_ball(self) -> bool:
+        return self._has_ball
+    
+    @has_ball.setter
+    def has_ball(self, value: bool):
+        self._has_ball = value
     
     @property
     def sprt_rbt_ids(self) -> List[int]:
@@ -101,12 +108,24 @@ class Enemy(Robot):
     
 
 if __name__ == "__main__":
+    robot_data = RobotData(0.5, 0.5, 0.5)
     robot = Friendly(0)
-    robot.aggro_rating = 5
+    
     if robot.role is None:
         print("Role before init: None")
     else:
         print(f"Role before init: {robot.role.name}")
+        
     robot.role = "defender" # or 1 changes the role of the robot
     print(f"Role after change: {robot.role.name}")
+    
+    robot.aggro_rating = 5
     print(robot.aggro_rating)
+    
+    print(f"robot data before: {robot.robot_data}")
+    robot.robot_data = robot_data
+    print(f"robot data after: {robot.robot_data}")
+    
+    print(f"robot data before: {robot.has_ball}")
+    robot.has_ball = True
+    print(f"robot data after: {robot.has_ball}")
