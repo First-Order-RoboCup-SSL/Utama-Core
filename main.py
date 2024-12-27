@@ -3,8 +3,9 @@ import queue
 from entities.game import Game
 import time
 import math
+from typing import List
 
-from entities.game.game_object import Ball, Colour, Robot
+from entities.data.vision import FrameData
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.tests.grsim_robot_controller_startup_test import (
     StartUpController,
@@ -46,16 +47,14 @@ def main():
         print("LOCATED BALL")
         print(f"Predicting robot position with {TIME} seconds of motion")
 
-        predictions = []
+        predictions: List[FrameData] = []
         while True:
             (message_type, message) = message_queue.get()  # Infinite timeout for now
 
             if message_type == MessageType.VISION:
                 frames += 1
                 game.add_new_state(message)
-
-                actual = game._records[-1]  # JUST FOR TESTING - don't do this irl
-
+                actual = game.records[-1]  # JUST FOR TESTING - don't do this irl
                 if (
                     len(predictions) >= FRAMES_IN_TIME
                     and predictions[-FRAMES_IN_TIME] != None
