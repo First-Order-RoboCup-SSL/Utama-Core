@@ -2,8 +2,7 @@ from typing import Tuple, Union, Optional, List
 import numpy as np
 
 from entities.data.vision import RobotData
-from entities.game.role import Attack, Defend, Action, Role
-from entities.game.game_object import Colour
+from entities.game.role import Attack, Defend, Role
 
 ROLES: List[Role] = [Attack(), Defend()]
 
@@ -51,9 +50,11 @@ class Friendly(Robot):
         self._has_ball: bool = False
         self._aggro_rating: float = 0
         self._sprt_rbt_ids: List[int] = None
+        self._role = None
         
-        if role_id != None:
+        if role_id != None and self._role == None:
             self.role = role_id  
+        
     
     @property
     def sprt_rbt_ids(self) -> List[int]:
@@ -100,9 +101,12 @@ class Enemy(Robot):
     
 
 if __name__ == "__main__":
-    robot = Robot(0, Colour.YELLOW, 0)
+    robot = Friendly(0)
     robot.aggro_rating = 5
-    print(f"Role before init: {robot.role.name}")
+    if robot.role is None:
+        print("Role before init: None")
+    else:
+        print(f"Role before init: {robot.role.name}")
     robot.role = "defender" # or 1 changes the role of the robot
     print(f"Role after change: {robot.role.name}")
     print(robot.aggro_rating)
