@@ -4,7 +4,11 @@ import numpy as np
 from entities.data.vision import RobotData
 from entities.game.role import Attack, Defend, Role
 
-ROLES: List[Role] = [Attack(), Defend()]
+from enum import Enum
+
+class RoleType(Enum):
+    ATTACK = 1
+    DEFEND = 2
 
 import logging
 
@@ -98,19 +102,12 @@ class Friendly(Robot):
         return self._role
         
     @role.setter
-    def role(self, input: Union[int, str]):
+    def role(self, input: RoleType):
         # TODO: docstring
-        if isinstance(input, int):
-            if 0 <= input < len(ROLES):
-                self._role = ROLES[input]
-            else:
-                raise ValueError(f"Invalid role index: {input}")
-        elif isinstance(input, str):
-            for _role in ROLES:
-                if _role.name == input:
-                    self._role = _role
-        else:
-            raise ValueError(f"Invalid role: {input}")    
+        if RoleType.ATTACK:
+            self._role = Attack()
+        elif RoleType.DEFEND:
+            self._role = Defend()
     
     @property
     def aggro_rating(self) -> float:
