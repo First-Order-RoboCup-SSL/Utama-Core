@@ -167,13 +167,13 @@ class Game:
 
     def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
         # If t is after the object has stopped we return the position at which object stopped.
-
         acc = self.get_object_acceleration(object)
 
         if acc is None:
             return None
 
         ax, ay = acc
+        # TODO: handle when the ux and uy is none
         ux, uy = self.get_object_velocity(object)
 
         if object is Ball:
@@ -203,7 +203,12 @@ class Game:
         )  # TODO: Doesn't take into account spin / angular vel
 
     def get_object_velocity(self, object: GameObject) -> Optional[tuple]:
-        return self._get_object_velocity_at_frame(len(self._records) - 1, object)
+        # TODO: need to handle the None condition
+        out = self._get_object_velocity_at_frame(len(self._records) - 1, object)
+        if out:
+            return out
+        else:
+            return None, None
 
     def _get_object_position_at_frame(self, frame: int, object: GameObject):
         if object == Ball:
@@ -259,7 +264,6 @@ class Game:
         WINDOW = 5
         N_WINDOWS = 6
         iter = 0
-
         if len(self._records) < WINDOW * N_WINDOWS + 1:
             return None
 
@@ -270,6 +274,7 @@ class Game:
             windowMiddle = (windowStart + windowEnd) // 2
 
             for j in range(windowStart, windowEnd):
+                # TODO: Handle when curr_vell is not when (time_received < previous_time_received)
                 curr_vel = self._get_object_velocity_at_frame(
                     len(self._records) - j, object
                 )

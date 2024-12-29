@@ -17,7 +17,7 @@ class FrameData(NamedTuple):
     ts: float
     yellow_robots: List[RobotData]
     blue_robots: List[RobotData]
-    ball: BallData
+    ball: List[BallData]
 
 class TeamRobotCoords(NamedTuple):
     team_color: str
