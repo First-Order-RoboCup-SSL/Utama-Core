@@ -6,10 +6,13 @@ import math
 from typing import List
 
 from entities.data.vision import FrameData
+from entities.data.command import RobotInfo
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.tests.grsim_robot_controller_startup_test import (
     StartUpController,
 )
+from entities.game.robot import RoleType
+
 from team_controller.src.data import VisionDataReceiver, RefereeMessageReceiver
 from team_controller.src.data.message_enum import MessageType
 
@@ -84,12 +87,14 @@ def main():
                             "{:.5f}".format(
                                 100
                                 * math.sqrt(
-                                    (
+                                    (   
+                                        # proposed implementation
                                         game.enemy_robots[i].x
                                         - predictions[-FRAMES_IN_TIME].blue_robots[i].x
                                     )
                                     ** 2
                                     + (
+                                        # reordered frame implementation
                                         actual_reordered_frame[1][i].y
                                         - predictions[-FRAMES_IN_TIME].blue_robots[i].y
                                     )
@@ -104,6 +109,7 @@ def main():
                                 100
                                 * math.sqrt(
                                     (
+                                        # original implementation
                                         game.friendly_robots[i].x
                                         - predictions[-FRAMES_IN_TIME]
                                         .yellow_robots[i]
@@ -111,6 +117,7 @@ def main():
                                     )
                                     ** 2
                                     + (
+                                        # proposed implementation
                                         actual_frame.yellow_robots[i].y
                                         - predictions[-FRAMES_IN_TIME]
                                         .yellow_robots[i]
@@ -122,15 +129,83 @@ def main():
                         )
 
                 predictions.append(game.predict_frame_after(TIME))
-
+                
             elif message_type == MessageType.REF:
                 pass
+            
+            decision_maker.make_decision()
+            
+    except KeyboardInterrupt:
+        print("Stopping main program.")
+
+def main1():
+    game = Game(my_team_is_yellow=True)
+    time.sleep(0.2)
+
+    message_queue = queue.SimpleQueue()
+    receiver = VisionDataReceiver(message_queue, debug=False)
+    decision_maker = StartUpController(game, debug=False)
+
+    # Start the data receiving in a separate thread
+    data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
+    data_thread.daemon = True  # Allows the thread to close when the main program exits
+    data_thread.start()
+
+    # TODO: Not implemented
+    # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
+    # referee_thread.daemon = True
+    # referee_thread.start()
+
+    madeup_recieved_message = [RobotInfo(True), RobotInfo(False), RobotInfo(False), RobotInfo(False), RobotInfo(False), RobotInfo(False)]
+    message_type = MessageType.ROBOT_INFO
+    
+    message_queue.put((message_type, madeup_recieved_message))
+    
+    
+    iter = 0
+    try:
+        while True:
+            (message_type, message) = message_queue.get()  # Infinite timeout for now
+            
+
+            if message_type == MessageType.VISION:
+                game.add_new_state(message)
+                
+                # for demo purposes (displays when vision is received)
+                print(f"Before robot is_active( {game.friendly_robots[0].inactive} ) coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}")
+                game.friendly_robots[0].inactive = True
+                print(f"After robot is_active( {game.friendly_robots[0].inactive} ) Coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}\n")
+                
+                iter += 1
+
+                
+            if message_type == MessageType.REF:
+                pass
+            
+            if message_type == MessageType.ROBOT_INFO: 
+                game.add_robot_info(message)
+                
+                # for demo purposes (displays when info is received)
+                for i in range(6):
+                    print(f"Robot {i} has ball: {game.friendly_robots[i].has_ball}")
+                
+                iter += 1
+                    
 
             decision_maker.make_decision()
+            
+            if iter == 2:
+                # for demo purposes (displays once)
+                print(f"\nBefore role change: {game.friendly_robots[0].role}")
+                game.friendly_robots[0].role = RoleType.ATTACK
+                print(f"After role change: {game.friendly_robots[0].role}\n")
+                
+                # for demo purposes
+                break 
+            
 
     except KeyboardInterrupt:
         print("Stopping main program.")
 
-
 if __name__ == "__main__":
-    main()
+    main1()
