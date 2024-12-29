@@ -6,6 +6,12 @@ from entities.game.role import Attack, Defend, Role
 
 ROLES: List[Role] = [Attack(), Defend()]
 
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 class Robot:
     def __init__(self, robot_id: int, robot_data: Optional[RobotData] = None):
         self._id = robot_id
@@ -18,7 +24,11 @@ class Robot:
 
     @property
     def robot_data(self) -> RobotData:
-        return self._robot_data
+        if self.inactive:
+            return self._robot_data
+        else:
+            logger.warning(" Should not be getting coords of this robot (inactive)")
+            return None
 
     @robot_data.setter
     def robot_data(self, robot_data: RobotData):
@@ -26,15 +36,27 @@ class Robot:
     
     @property
     def x(self) -> float:
-        return self._robot_data[0]
+        if not self.inactive:
+            return self._robot_data[0]
+        else:
+            logger.warning(" Should not be getting x-coords of this robot (inactive)")
+            return None
 
     @property
     def y(self) -> float:
-        return self._robot_data[1]
+        if not self.inactive:
+            return self._robot_data[1]
+        else:
+            logger.warning(" Should not be getting y-coords of this robot (inactive)")
+            return None
 
     @property
     def orentation(self) -> float:
-        return self._robot_data[2]
+        if not self.inactive:
+            return self._robot_data[2]
+        else:
+            logger.warning(" Should not be getting orentation data of this robot (inactive)")
+            return None
         
     @property
     def inactive(self) -> bool:
