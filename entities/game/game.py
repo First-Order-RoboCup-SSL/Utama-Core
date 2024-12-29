@@ -217,19 +217,21 @@ class Game:
             posn = self._get_object_position_at_frame(len(self._records) - 1, object)
             start_x, start_y = posn.x, posn.y
 
-        if ax == 0:  # Due to friction, if acc = 0 then stopped.
-            sx = 0  # TODO: Not sure what to do about robots with respect to friction - we never know if they are slowing down to stop or if they are slowing down to change direction
-        else:
-            tx_stop = -ux / ax
-            tx = min(t, tx_stop)
-            sx = ux * tx + 0.5 * ax * tx * tx
-
-        if ay == 0:
-            sy = 0
-        else:
-            ty_stop = -uy / ay
-            ty = min(t, ty_stop)
-            sy = uy * ty + 0.5 * ay * ty * ty
+        if ax and ux:
+            if ax == 0:  # Due to friction, if acc = 0 then stopped.
+                sx = 0  # TODO: Not sure what to do about robots with respect to friction - we never know if they are slowing down to stop or if they are slowing down to change direction
+            else:
+                tx_stop = -ux / ax
+                tx = min(t, tx_stop)
+                sx = ux * tx + 0.5 * ax * tx * tx
+            
+        if ay and uy:
+            if ay == 0:
+                sy = 0
+            else:
+                ty_stop = -uy / ay
+                ty = min(t, ty_stop)
+                sy = uy * ty + 0.5 * ay * ty * ty
 
         return (
             start_x + sx,
@@ -307,8 +309,9 @@ class Game:
                 curr_vel = self._get_object_velocity_at_frame(
                     len(self._records) - j, object
                 )
-                averageVelocity[0] += curr_vel[0]
-                averageVelocity[1] += curr_vel[1]
+                if curr_vel:
+                    averageVelocity[0] += curr_vel[0]
+                    averageVelocity[1] += curr_vel[1]
 
             averageVelocity[0] /= WINDOW
             averageVelocity[1] /= WINDOW
