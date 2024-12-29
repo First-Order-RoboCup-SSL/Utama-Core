@@ -133,7 +133,7 @@ class Game:
             ]
 
     ### Ball Data retrieval ###
-    def get_ball_pos(self) -> BallData:
+    def get_ball_pos(self) -> List[BallData]:
         if not self._records:
             return None
         return self._records[-1].ball
@@ -167,7 +167,7 @@ class Game:
         Predicts frame in t seconds from the latest frame.
         """
         yellow_pos = [
-            self.predict_object_pos_after(t,Robot(Colour.YELLOW, i))
+            self.predict_object_pos_after(t, Robot(Colour.YELLOW, i))
             for i in range(len(self.get_robots_pos(True)))
         ]
         blue_pos = [
@@ -201,13 +201,15 @@ class Game:
 
     def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
         # If t is after the object has stopped we return the position at which object stopped.
+        sx = 0
+        sy = 0
+         
+        acceleration = self.get_object_acceleration(object)
 
-        acc = self.get_object_acceleration(object)
-
-        if acc is None:
+        if acceleration is None:
             return None
 
-        ax, ay = acc
+        ax, ay = acceleration
         ux, uy = self.get_object_velocity(object)
 
         if object is Ball:
@@ -218,27 +220,30 @@ class Game:
             start_x, start_y = posn.x, posn.y
 
         if ax and ux:
-            if ax == 0:  # Due to friction, if acc = 0 then stopped.
-                sx = 0  # TODO: Not sure what to do about robots with respect to friction - we never know if they are slowing down to stop or if they are slowing down to change direction
-            else:
-                tx_stop = -ux / ax
-                tx = min(t, tx_stop)
-                sx = ux * tx + 0.5 * ax * tx * tx
+            sx = self._calculate_displacement(ux, ax, t)
             
         if ay and uy:
-            if ay == 0:
-                sy = 0
-            else:
-                ty_stop = -uy / ay
-                ty = min(t, ty_stop)
-                sy = uy * ty + 0.5 * ay * ty * ty
-
+            sy = self._calculate_displacement(uy, ay, t)
+ 
         return (
             start_x + sx,
             start_y + sy,
         )  # TODO: Doesn't take into account spin / angular vel
 
+    def _calculate_displacement(self, u, a, t):
+        if a == 0:  # Handle zero acceleration case
+            return u * t
+        else:
+            stop_time = -u / a
+            effective_time = min(t, stop_time)
+            displacement = (u * effective_time) + (0.5 * a * effective_time ** 2)
+            logger.debug(f"Displacement: {displacement} for time: {effective_time}, stop time: {stop_time}")
+            return displacement
+    
     def get_object_velocity(self, object: GameObject) -> Optional[tuple]:
+        velocities = self._get_object_velocity_at_frame(len(self._records) - 1, object)
+        if velocities is None:
+            return None, None
         return self._get_object_velocity_at_frame(len(self._records) - 1, object)
 
     def _get_object_position_at_frame(self, frame: int, object: GameObject):
@@ -278,7 +283,6 @@ class Game:
 
         # Latest frame should always be ahead of last one
         if time_received < previous_time_received:
-            # TODO log a warning
             logger.warning(" Timestamps out of order for vision data.")
             return None
 
@@ -293,16 +297,17 @@ class Game:
         totalX = 0
         totalY = 0
         WINDOW = 5
-        N_WINDOWS = 6
+        N_WINDOWS = 3
         iter = 0
-
+        n = 0
+        
         if len(self._records) < WINDOW * N_WINDOWS + 1:
             return None
 
         for i in range(N_WINDOWS):
             averageVelocity = [0, 0]
-            windowStart = 1 + i * WINDOW
-            windowEnd = windowStart + WINDOW  # Excluded
+            windowStart = 1 + (i * WINDOW)
+            windowEnd = windowStart + WINDOW  # Excluded 
             windowMiddle = (windowStart + windowEnd) // 2
 
             for j in range(windowStart, windowEnd):
@@ -312,19 +317,21 @@ class Game:
                 if curr_vel:
                     averageVelocity[0] += curr_vel[0]
                     averageVelocity[1] += curr_vel[1]
+                else:
+                    n += 1     
 
-            averageVelocity[0] /= WINDOW
-            averageVelocity[1] /= WINDOW
+            averageVelocity[0] /= WINDOW - n
+            averageVelocity[1] /= WINDOW - n
 
             if i != 0:
                 dt = (
                     self._records[-windowMiddle + WINDOW].ts
                     - self._records[-windowMiddle].ts
                 )
-                accX = (futureAverageVelocity[0] - averageVelocity[0]) / dt  # TODO vec
-                accY = (futureAverageVelocity[1] - averageVelocity[1]) / dt
-                totalX += accX
-                totalY += accY
+                accelX = (futureAverageVelocity[0] - averageVelocity[0]) / dt  # TODO vec
+                accelY = (futureAverageVelocity[1] - averageVelocity[1]) / dt
+                totalX += accelX
+                totalY += accelY
                 iter += 1
 
             futureAverageVelocity = tuple(averageVelocity)

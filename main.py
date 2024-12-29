@@ -33,7 +33,7 @@ def main():
     data_thread.daemon = True  # Allows the thread to close when the main program exits
     data_thread.start()
 
-    TIME = 0.5
+    TIME = 1/60 * 10 # frames in seconds
     FRAMES_IN_TIME = round(60 * TIME)
 
     # TODO: Not implemented
@@ -45,7 +45,7 @@ def main():
 
     try:
         print("LOCATED BALL")
-        print(f"Predicting robot position with {TIME} seconds of motion")
+        print(f"Predicting robot position with {FRAMES_IN_TIME} frames of motion")
 
         predictions: List[FrameData] = []
         while True:
@@ -58,10 +58,10 @@ def main():
                 if (
                     len(predictions) >= FRAMES_IN_TIME
                     and predictions[-FRAMES_IN_TIME] != None
-                ):
+                ):  
                     print(
                         "Ball prediction inaccuracy delta (cm): ",
-                        "{:.20f}".format(
+                        "{:.5f}".format(
                             100
                             * math.sqrt(
                                 (
@@ -80,7 +80,7 @@ def main():
                     for i in range(6):
                         print(
                             f"Blue robot {i} prediction inaccuracy delta (cm): ",
-                            "{:.20f}".format(
+                            "{:.5f}".format(
                                 100
                                 * math.sqrt(
                                     (
@@ -99,7 +99,7 @@ def main():
                     for i in range(6):
                         print(
                             f"Yellow robot {i} prediction inaccuracy delta (cm): ",
-                            "{:.20f}".format(
+                            "{:.5f}".format(
                                 100
                                 * math.sqrt(
                                     (
