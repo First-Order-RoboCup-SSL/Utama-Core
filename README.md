@@ -5,6 +5,10 @@
 1. cd to root folder `/Utama` and type `pip install -e .` to install all dependencies.
 2. Note that this also installs all modules with `__init__.py` (so you need to run it again when you add an `__init__.py`)
 
+If you are still struggling with local import errors (ie importing our local modules), you can add `export PYTHONPATH=/path/to/folder/Utama` to your `~/.bashrc`. To do this, run `sudo nano ~/.bashrc` and then add the export line at the bottom of the document. Finally, close and save.
+
+###### Warning: the above workaround is quite hackish and may result in source conflicts if you are working on other projects in the same Linux machine. Be advised.
+
 ## Guidelines
 
 #### Folder Hierarchy
