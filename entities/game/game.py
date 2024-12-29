@@ -5,8 +5,9 @@ from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData
 from entities.data.command import RobotInfo
 
-from entities.game.game_object import Ball, Colour, GameObject, Robot
+from entities.game.game_object import Colour, GameObject, Robot
 from entities.game.robot import Friendly, Enemy
+from entities.game.ball import Ball
 
 TIMESTEP = 0.0167
 
@@ -30,6 +31,7 @@ class Game:
         self._my_team_is_yellow = my_team_is_yellow
         self._friendly_robots: List[Friendly] = [Friendly(id) for id in range(6)]
         self._enemy_robots: List[Enemy] = [Enemy(id) for id in range(6)]
+        self._ball: Ball = Ball()
         self._yellow_score = 0
         self._blue_score = 0
 
@@ -80,13 +82,21 @@ class Game:
     def enemy_robots(self, value: List[RobotData]):
         for robot_id, robot_data in enumerate(value):
             self._enemy_robots[robot_id].robot_data = robot_data
+    
+    @property
+    def ball(self) -> Ball:
+        return self._ball
+    
+    @ball.setter
+    def ball(self, value: BallData):
+        self._ball.ball_data = value
 
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
         if isinstance(frame_data, FrameData):
             self._records.append(frame_data)
             self._predicted_next_frame = self.predict_frame_after(TIMESTEP)
-            self._update_robots(frame_data)
+            self._update_data(frame_data)
         else:
             raise ValueError("Invalid frame data.")
     
@@ -95,13 +105,14 @@ class Game:
             self._friendly_robots[robot_id].has_ball = robot_info.has_ball
             # Extensible with more info (remeber to add the property in robot.py)
             
-    def _update_robots(self, frame_data: FrameData) -> None:
+    def _update_data(self, frame_data: FrameData) -> None:
         if self.my_team_is_yellow:
             self.friendly_robots = frame_data.yellow_robots
             self.enemy_robots = frame_data.blue_robots
         else:
             self.friendly_robots = frame_data.blue_robots
             self.enemy_robots = frame_data.yellow_robots
+        self._ball = frame_data.ball[0]  # TODO: Don't always take first ball pos
 
     ### Robot data retrieval ###
     def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
@@ -145,7 +156,7 @@ class Game:
         return self.get_object_velocity(Ball)
 
     ### Frame Data retrieval ###
-    def get_latest_frame(self) -> tuple[RobotData, RobotData, BallData]:
+    def get_latest_frame(self) -> tuple[List[RobotData], List[RobotData], List[BallData]]:
         """
         FrameData rearranged as Tuple(friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
         """
@@ -337,3 +348,13 @@ class Game:
             futureAverageVelocity = tuple(averageVelocity)
 
         return (totalX / iter, totalY / iter)
+
+if __name__ == "__main__":
+    game = Game()
+    print(game.ball.x)
+    print(game.ball.y)
+    print(game.ball.z)
+    game.ball = BallData(1, 2, 3)
+    print(game.ball.x)
+    print(game.ball.y)
+    print(game.ball.z)

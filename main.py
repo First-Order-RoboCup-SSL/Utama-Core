@@ -20,7 +20,7 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 
 def main():
-    game = Game()
+    game = Game(my_team_is_yellow=True)
     GRSimController().teleport_ball(0, 0, 2, 2.5)
     time.sleep(0.2)
 
@@ -54,7 +54,8 @@ def main():
             if message_type == MessageType.VISION:
                 frames += 1
                 game.add_new_state(message)
-                actual = game.records[-1]  # JUST FOR TESTING - don't do this irl
+                actual_frame = game._records[-1] # FOR Comparison
+                actual_reordered_frame = game.get_latest_frame() # FOR Comparison
                 if (
                     len(predictions) >= FRAMES_IN_TIME
                     and predictions[-FRAMES_IN_TIME] != None
@@ -65,12 +66,12 @@ def main():
                             100
                             * math.sqrt(
                                 (
-                                    actual.ball[0].x
+                                    game.ball.x
                                     - predictions[-FRAMES_IN_TIME].ball[0].x
                                 )
                                 ** 2
                                 + (
-                                    actual.ball[0].y
+                                    game.ball.y
                                     - predictions[-FRAMES_IN_TIME].ball[0].y
                                 )
                                 ** 2
@@ -84,12 +85,12 @@ def main():
                                 100
                                 * math.sqrt(
                                     (
-                                        actual.blue_robots[i].x
+                                        game.enemy_robots[i].x
                                         - predictions[-FRAMES_IN_TIME].blue_robots[i].x
                                     )
                                     ** 2
                                     + (
-                                        actual.blue_robots[i].y
+                                        actual_reordered_frame[1][i].y
                                         - predictions[-FRAMES_IN_TIME].blue_robots[i].y
                                     )
                                     ** 2
@@ -103,14 +104,14 @@ def main():
                                 100
                                 * math.sqrt(
                                     (
-                                        actual.yellow_robots[i].x
+                                        game.friendly_robots[i].x
                                         - predictions[-FRAMES_IN_TIME]
                                         .yellow_robots[i]
                                         .x
                                     )
                                     ** 2
                                     + (
-                                        actual.yellow_robots[i].y
+                                        actual_frame.yellow_robots[i].y
                                         - predictions[-FRAMES_IN_TIME]
                                         .yellow_robots[i]
                                         .y
