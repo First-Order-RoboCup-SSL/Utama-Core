@@ -1,6 +1,13 @@
 import threading
 import queue
-
+import sys
+import os
+print(sys.path)
+# Add the project root directory to sys.path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+print(project_root)
+sys.path.insert(0, project_root)
+from robot_control.src.skills import turn_on_spot
 from team_controller.src.controllers import GRSimRobotController
 from team_controller.src.data import VisionDataReceiver
 from team_controller.src.data.message_enum import MessageType
@@ -42,6 +49,7 @@ if __name__ == "__main__":
                 pid_oren=pid_oren,
                 pid_trans=pid_trans,
             )
+            # cmd = turn_on_spot(pid_oren, pid_trans, )
             sim_robot_controller.add_robot_commands(cmd, shooter_id)
             sim_robot_controller.send_robot_commands()
 

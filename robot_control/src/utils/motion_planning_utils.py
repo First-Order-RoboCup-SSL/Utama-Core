@@ -1,3 +1,4 @@
+from turtle import left
 from typing import Tuple, Union
 from entities.data.command import RobotCommand
 from entities.data.vision import RobotData
@@ -33,12 +34,14 @@ def calculate_robot_velocities(
         angular_vel = 0
 
     if target_x is not None and target_y is not None:
-        left_vel = pid_trans.calculate(target_y, current_y, robot_id, normalize_range=3)
-        forward_vel = pid_trans.calculate(
-            target_x, current_x, robot_id, normalize_range=4.5
-        )
-
+        forward_vel, left_vel = pid_trans.calculate((target_x, target_y), (current_x, current_y), robot_id, normalize_range=3)
+        # left_vel = pid_trans.calculate(target_y, current_y, robot_id, normalize_range=3)
+        # forward_vel = pid_trans.calculate(
+        #     target_x, current_x, robot_id, normalize_range=4.5
+        # )
+        print("GLOBAL: ", forward_vel, left_vel)
         forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren)
+        print("LOCAL: ", forward_vel, left_vel)
     else:
         forward_vel = 0
         left_vel = 0

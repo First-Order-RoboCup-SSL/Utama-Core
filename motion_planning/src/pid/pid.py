@@ -99,3 +99,15 @@ class PID:
         # Save error for next calculation
         self.pre_errors[robot_id] = error
         return output
+
+from typing import Tuple
+class TwoDPID:
+    def __init__(
+        self, dt: float, max_output: float, min_output: float,
+        Kp: float, Kd: float, Ki: float, num_robots: int
+    ):
+        self.dimX = PID(dt, max_output, min_output, Kp, Kd, Ki, num_robots)
+        self.dimY = PID(dt, max_output, min_output, Kp, Kd, Ki, num_robots)
+
+    def calculate(self, target: Tuple[float, float], current: Tuple[float, float], robot_id, normalize_range):
+        return self.dimX.calculate(target[0], current[0],robot_id, False, None), self.dimY.calculate(target[1], current[1], robot_id, False, None)

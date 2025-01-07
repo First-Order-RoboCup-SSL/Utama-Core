@@ -70,9 +70,22 @@ def score_goal(
                         )
 
                 else:
-                    print("approaching ball")
+                    print("approaching ball", robot_data.orientation)
                     robot_command = go_to_ball(
                         pid_oren, pid_trans, robot_data, shooter_id, ball_data
                     )
 
     return robot_command
+
+from typing import List
+from math import dist
+
+def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
+    ans = []
+    for ball in balls:
+        for er in enemy_robots:
+            if dist((er.x, er.y), (ball.x, ball.y)) < 0.1:
+                # Ball is close to this robot 
+                ans.append(er)
+                break
+    return ans
