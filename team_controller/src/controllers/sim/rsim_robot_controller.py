@@ -111,11 +111,12 @@ class RSimRobotController(AbstractRobotController):
             robot_id (int): The ID of the robot.
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick_spd', 'kick_angle', 'dribbler_spd'.
         """
+        # invert angular_vel and left_vel because axis is inverted in RSim
         action = np.array(
             [
                 command.local_forward_vel,
                 -command.local_left_vel,
-                command.angular_vel,
+                -command.angular_vel,
                 command.kick_spd,
                 command.dribbler_spd,
             ],

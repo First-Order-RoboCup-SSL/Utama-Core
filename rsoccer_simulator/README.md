@@ -52,7 +52,9 @@ class SSLStandardEnv(
 
 ### Ball and Robot movement (interfaces with RSimController)
 
-Note that the teleport commands are sent together with the rest of the robot commands ONLY at the end of the frame.
+#### IMPORTANT NOTE:
+- rsim has an inverted y-axis and inverted orientation system. This explains the inversion of input and outputs from the system.
+- teleport commands are sent together with the rest of the robot commands ONLY at the end of the frame.
 
 #### Teleport Ball
 
