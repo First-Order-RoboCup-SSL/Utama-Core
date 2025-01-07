@@ -1,4 +1,5 @@
 from typing import List, Optional
+from entities.game import game_object
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData
 
@@ -253,6 +254,7 @@ class Game:
 
         dt_secs = time_received - previous_time_received
 
+        print(object)
         vx = (current_pos.x - previous_pos.x) / dt_secs
         vy = (current_pos.y - previous_pos.y) / dt_secs
 
