@@ -9,6 +9,13 @@ If you are still struggling with local import errors (ie importing our local mod
 
 ###### Warning: the above workaround is quite hackish and may result in source conflicts if you are working on other projects in the same Linux machine. Be advised.
 
+### Field Guide
+![field_guide](assets/images/field_guide.jpg)
+1. All coordinates and velocities will be in meters or meters per second.
+2. All angular properties will be in radians or radians per second, normalised between [pi, -pi]. A heading of radian 0 indicates a robot facing towards the positive x-axis (ie left to right).
+3. Unless otherwise stated, the coordinate system is aligned such that blue robots are on the left and yellow are on the right.
+
+
 ## Guidelines
 
 #### Folder Hierarchy
