@@ -119,7 +119,7 @@ class RSimRobotController(AbstractRobotController):
             [
                 command.local_forward_vel,
                 -command.local_left_vel,
-                command.angular_vel,
+                -command.angular_vel,
                 command.kick_spd,
                 command.dribbler_spd,
             ],
@@ -133,6 +133,7 @@ class RSimRobotController(AbstractRobotController):
 
         Done this way, because there's no separate vision receivere for RSim.
         """
+        print("FRAME", new_frame)
         self._game_obj.add_new_state(new_frame)
 
     # create an empty command array

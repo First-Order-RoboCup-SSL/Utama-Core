@@ -29,6 +29,7 @@ def calculate_robot_velocities(
     # print(f"Robot {robot_id} target position: ({target_x:.3f}, {target_y:.3f}, {target_oren:.3f})")
 
     if target_oren is not None:
+        print("HEHEHE", target_oren, current_oren)
         angular_vel = pid_oren.calculate(target_oren, current_oren, robot_id, oren=True)
     else:
         angular_vel = 0
@@ -45,7 +46,7 @@ def calculate_robot_velocities(
     else:
         forward_vel = 0
         left_vel = 0
-    # print(f"Output: {forward_vel}, {left_vel}, {angular_vel}")
+    print(f"Output: {forward_vel}, {left_vel}, {angular_vel}")
     return RobotCommand(
         local_forward_vel=forward_vel,
         local_left_vel=left_vel,

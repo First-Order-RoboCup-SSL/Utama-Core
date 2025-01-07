@@ -1,6 +1,5 @@
 import numpy as np
 
-from entities.game.game import ColouredGame
 from robot_control.src.utils.shooting_utils import find_best_shot
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from entities.game import Game, Field
@@ -12,14 +11,15 @@ from motion_planning.src.pid import PID
 
 # intent on scoring goal
 def score_goal(
-    game_obj: ColouredGame,
+    game_obj: Game,
     shooter_has_ball: bool,
     shooter_id: int,
     pid_oren: PID,
     pid_trans: PID,
+    is_yellow: bool
 ) -> RobotCommand:
-    target_goal_line = game_obj.field.enemy_goal_line
-    latest_frame = game_obj.get_my_latest_frame()
+    target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
+    latest_frame = game_obj.get_my_latest_frame(is_yellow)
     if latest_frame:
         friendly_robots, enemy_robots, balls = latest_frame
 

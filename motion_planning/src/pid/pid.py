@@ -60,10 +60,13 @@ class PID:
         
         # Calculate error
         error = target - current
-
+        
         # Adjust error if orientation (oren) is considered
         if oren:
             error = np.atan2(np.sin(error), np.cos(error))
+            print(np.sin(error))
+            print(np.cos(error))
+            print(error)
         
         # Calculate PID output
         Pout = self.Kp * error if self.Kp != 0 else 0.0

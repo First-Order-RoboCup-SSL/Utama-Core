@@ -16,6 +16,7 @@ class Game:
     """
 
     def __init__(self):
+        self._field = Field()
         self._records = []
         self._predicted_next_frame = None
         self._yellow_score = 0
@@ -248,7 +249,6 @@ class Game:
 
         dt_secs = time_received - previous_time_received
 
-        print(object)
         vx = (current_pos.x - previous_pos.x) / dt_secs
         vy = (current_pos.y - previous_pos.y) / dt_secs
 
@@ -294,12 +294,3 @@ class Game:
             futureAverageVelocity = tuple(averageVelocity)
 
         return (totalX / iter, totalY / iter)
-
-class ColouredGame:
-    def __init__(self, game: Game, is_yellow: bool):
-        self._game = game
-        self._is_yellow = is_yellow
-    
-    def get_my_latest_frame(self):
-        return self._game.get_my_latest_frame(self._is_yellow)
-    

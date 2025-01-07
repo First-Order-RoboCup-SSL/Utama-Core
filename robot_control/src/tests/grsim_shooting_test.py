@@ -19,9 +19,11 @@ from team_controller.src.config.settings import TIMESTEP
 
 
 if __name__ == "__main__":
+    IS_YELLOW = True
+
     shooter_id = 3
 
-    game = Game(my_team_is_yellow=True)
+    game = Game()
 
     message_queue = queue.SimpleQueue()
     vision_receiver = VisionDataReceiver(message_queue, debug=False)
@@ -48,6 +50,7 @@ if __name__ == "__main__":
                 shooter_id=shooter_id,
                 pid_oren=pid_oren,
                 pid_trans=pid_trans,
+                is_yellow=IS_YELLOW
             )
             # cmd = turn_on_spot(pid_oren, pid_trans, )
             sim_robot_controller.add_robot_commands(cmd, shooter_id)
