@@ -15,11 +15,9 @@ class Game:
     Class containing states of the entire game and field information.
     """
 
-    def __init__(self, my_team_is_yellow=True):
-        self._field = Field(my_team_is_yellow=my_team_is_yellow)
+    def __init__(self):
         self._records = []
         self._predicted_next_frame = None
-        self._my_team_is_yellow = my_team_is_yellow
         self._yellow_score = 0
         self._blue_score = 0
 
@@ -44,10 +42,6 @@ class Game:
     @property
     def blue_score(self) -> int:
         return self._blue_score
-
-    @property
-    def my_team_is_yellow(self) -> bool:
-        return self._my_team_is_yellow
 
     @property
     def predicted_next_frame(self) -> FrameData:
@@ -106,14 +100,14 @@ class Game:
             return None
         return self._records[-1]
 
-    def get_my_latest_frame(self) -> tuple[RobotData, RobotData, BallData]:
+    def get_my_latest_frame(self, my_team_is_yellow: bool) -> tuple[RobotData, RobotData, BallData]:
         """
-        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
+        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on my_team_is_yellow
         """
         if not self._records:
             return None
         latest_frame = self.get_latest_frame()
-        return self._reorganise_frame_data(latest_frame)
+        return self._reorganise_frame_data(latest_frame, my_team_is_yellow)
 
     def predict_next_frame(self) -> FrameData:
         """
@@ -121,9 +115,9 @@ class Game:
         """
         return self._predicted_next_frame
 
-    def predict_my_next_frame(self) -> tuple[RobotData, RobotData, BallData]:
+    def predict_my_next_frame(self,my_team_is_yellow: bool) -> tuple[RobotData, RobotData, BallData]:
         """
-        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
+        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on my_team_is_yellow
         """
         if self._predicted_next_frame is None:
             return None
@@ -153,13 +147,13 @@ class Game:
             )
 
     def _reorganise_frame_data(
-        self, frame_data: FrameData
+        self, frame_data: FrameData, my_team_is_yellow: bool
     ) -> tuple[RobotData, RobotData, BallData]:
         """
         reorganises frame data to be (friendly_robots, enemy_robots, balls)
         """
         _, yellow_robots, blue_robots, balls = frame_data
-        if self._my_team_is_yellow:
+        if my_team_is_yellow:
             return yellow_robots, blue_robots, balls
         else:
             return blue_robots, yellow_robots, balls
@@ -300,3 +294,12 @@ class Game:
             futureAverageVelocity = tuple(averageVelocity)
 
         return (totalX / iter, totalY / iter)
+
+class ColouredGame:
+    def __init__(self, game: Game, is_yellow: bool):
+        self._game = game
+        self._is_yellow = is_yellow
+    
+    def get_my_latest_frame(self):
+        return self._game.get_my_latest_frame(self._is_yellow)
+    

@@ -1,5 +1,6 @@
 import numpy as np
 
+from entities.game.game import ColouredGame
 from robot_control.src.utils.shooting_utils import find_best_shot
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from entities.game import Game, Field
@@ -11,7 +12,7 @@ from motion_planning.src.pid import PID
 
 # intent on scoring goal
 def score_goal(
-    game_obj: Game,
+    game_obj: ColouredGame,
     shooter_has_ball: bool,
     shooter_id: int,
     pid_oren: PID,
