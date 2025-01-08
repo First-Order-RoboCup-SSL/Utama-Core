@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 
 class PID:
     """
@@ -100,7 +100,10 @@ class PID:
         self.pre_errors[robot_id] = error
         return output
 
-from typing import Tuple
+    def reset(self, robot_id: int):
+        self.pre_errors[robot_id] = 0.0
+        self.integrals[robot_id] = 0.0
+
 class TwoDPID:
     def __init__(
         self, dt: float, max_output: float, min_output: float,
@@ -110,4 +113,8 @@ class TwoDPID:
         self.dimY = PID(dt, max_output, min_output, Kp, Kd, Ki, num_robots)
 
     def calculate(self, target: Tuple[float, float], current: Tuple[float, float], robot_id):
-        return self.dimX.calculate(target[0], current[0],robot_id, False, None), self.dimY.calculate(target[1], current[1], robot_id, False, None)
+        return self.dimX.calculate(target[0], current[0], robot_id, False, None), self.dimY.calculate(target[1], current[1], robot_id, False, None)
+
+    def reset(self, robot_id: int):
+        self.dimX.reset(robot_id)
+        self.dimY.reset(robot_id)

@@ -1,5 +1,7 @@
 import sys
 import os
+import numpy as np
+import math
 
 print(sys.path)
 # Add the project root directory to sys.path
@@ -16,55 +18,60 @@ from robot_control.src.intent import score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
+from robot_control.src.tests.utils import one_robot_placement
+import pytest
 
+N_ROBOTS = 6
 
-if __name__ == "__main__":
-    IS_YELLOW = False
+@pytest.mark.parametrize("target_robot", [i for i in range(N_ROBOTS)])
+@pytest.mark.parametrize("is_yellow", [False, True])
+def test_one_robot_placement(target_robot: int, is_yellow: bool):
+    TEST_TRAVEL_TIME_THRESH = 0.03
+    TEST_RESULT_OREN_THRESH = 0.10
+    TEST_EXPECTED_ITERS = 4
 
+    ITERS = 1100
+    TARGET_OREN = math.pi / 2
     game = Game()
 
-    env = SSLStandardEnv(n_robots_blue=3)
+    N_ROBOTS_BLUE = N_ROBOTS
+    N_ROBOTS_YELLOW = N_ROBOTS
+
+    env = SSLStandardEnv(n_robots_blue=N_ROBOTS_BLUE)
     env.reset()
-    defender_ids = [1]
-    shooter_id = 3
+
     env.teleport_ball(1, 1)
-    pid_oren = PID(TIMESTEP, 8, -8, 3, 3, 0.1, num_robots=6)
-    pid_2d = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=6)
-
-
-    sim_robot_controller_yellow = RSimRobotController(
-        is_team_yellow=IS_YELLOW, env=env, game_obj=game, debug=True
+    pid_oren = PID(TIMESTEP, 8, -8, Kp=4, Kd=3, Ki=0.1, num_robots=N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
+    pid_2d = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
+    
+    sim_robot_controller = RSimRobotController(
+        is_team_yellow=is_yellow, env=env, game_obj=game, debug=False
     )
+    one_step = one_robot_placement(sim_robot_controller, is_yellow, pid_oren, pid_2d, False, target_robot, game)
+
+    change_iters = []
+    change_orens = []
+
     try:
-        done = False
-        LEADER = 0
-        ty = 1.5
-        tx = 0
+        for iter in range(ITERS):
+            switch, _, _, co = one_step()
+            if switch:
+                change_iters.append(iter)
+                change_orens.append(co)
+        
+        assert len(change_iters) == TEST_EXPECTED_ITERS
+        travel_time_0 = change_iters[1] - change_iters[0]
 
-        defender_y_targets = {defender_id:ty for defender_id in defender_ids}
-        last_sent = 0
-        while True:
-            import numpy as np
-            import math
-            env.draw_line([(0,0), (2,2)], color="RED", width=10)
-
-            latest_frame = game.get_my_latest_frame(IS_YELLOW)
-            if latest_frame:
-                friendly_robots, enemy_robots, balls = latest_frame
-            
-                cx, cy, co = friendly_robots[defender_ids[0]]
-                target_oren = math.pi+np.arctan2(
-                    ty - cy, tx - cx
-                )
-                if math.dist((tx, ty), (cx, cy))  < 0.002:
-                    ty *= -1
-                from entities.data.command import RobotCommand
-                import math
-                oren =  math.pi / 2 if ty > 0 else - math.pi / 2
-
-                cmd = go_to_point(pid_oren, pid_2d, friendly_robots[defender_ids[0]], defender_ids[0], (tx, ty), oren)
-                sim_robot_controller_yellow.add_robot_commands(cmd, defender_ids[0])
-                sim_robot_controller_yellow.send_robot_commands()
+        for i in range(len(change_iters) - 1):
+            travel_time_i = change_iters[i + 1] - change_iters[i]
+            rel_diff = (abs((travel_time_i - travel_time_0)) / travel_time_0)
+            assert rel_diff < TEST_TRAVEL_TIME_THRESH        
+        
+        for oren in change_orens:
+            assert abs(abs(oren) - TARGET_OREN) / TARGET_OREN < TEST_RESULT_OREN_THRESH
 
     except KeyboardInterrupt:
         print("Exiting...")
+
+if __name__ == "__main__":
+    test_one_robot_placement(1, False)
