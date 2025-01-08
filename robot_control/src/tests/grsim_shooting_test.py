@@ -1,12 +1,5 @@
 import threading
 import queue
-import sys
-import os
-print(sys.path)
-# Add the project root directory to sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
-print(project_root)
-sys.path.insert(0, project_root)
 from motion_planning.src.pid.pid import TwoDPID
 from robot_control.src.skills import turn_on_spot
 from team_controller.src.controllers import GRSimRobotController

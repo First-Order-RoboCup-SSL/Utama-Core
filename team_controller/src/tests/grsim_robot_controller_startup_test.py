@@ -1,15 +1,7 @@
-import os
-import sys
 import threading
 import queue
 from entities.game import Game
 import time
-
-# Add the project root directory to sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
-print(project_root)
-sys.path.insert(0, project_root)
-
 from team_controller.src.data.message_enum import MessageType
 from team_controller.src.data import VisionDataReceiver
 
