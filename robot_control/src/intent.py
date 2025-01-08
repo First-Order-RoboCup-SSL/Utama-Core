@@ -9,7 +9,9 @@ from robot_control.src.skills import kick_ball, go_to_ball, turn_on_spot
 from motion_planning.src.pid import PID
 from typing import List
 from math import dist
+import logging
 
+logger = logging.getLogger(__name__)
 
 # intent on scoring goal
 def score_goal(
@@ -51,7 +53,7 @@ def score_goal(
         if ball_data is not None and robot_data is not None:
             if robot_data is not None:
                 if shooter_has_ball:
-                    print("robot has ball")
+                    logging.info("robot has ball")
                     current_oren = robot_data.orientation
 
                     # if robot has ball and is facing the goal, kick the ball
@@ -62,7 +64,7 @@ def score_goal(
                         abs(current_oren - shot_orientation)
                         <= 0.005
                     ):
-                        print("kicking ball")
+                        logger.info("kicking ball")
                         robot_command = kick_ball()
                     # else, robot has ball, but needs to turn to the right direction
                     # TODO: Consider also advancing closer to the goal
@@ -77,7 +79,7 @@ def score_goal(
                         )
 
                 else:
-                    print("approaching ball", robot_data.orientation)
+                    logger.info("approaching ball %lf", robot_data.orientation)
                     robot_command = go_to_ball(
                         pid_oren, pid_trans, robot_data, shooter_id, ball_data
                     )
