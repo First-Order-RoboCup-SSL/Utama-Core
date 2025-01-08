@@ -7,6 +7,7 @@ print(sys.path)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
 print(project_root)
 sys.path.insert(0, project_root)
+from motion_planning.src.pid.pid import TwoDPID
 from robot_control.src.skills import turn_on_spot
 from team_controller.src.controllers import GRSimRobotController
 from team_controller.src.data import VisionDataReceiver
@@ -34,7 +35,8 @@ if __name__ == "__main__":
     vision_thread.start()
 
     pid_oren = PID(TIMESTEP, 8, -8, 4.5, 0, 0.045, num_robots=6)
-    pid_trans = PID(TIMESTEP, 1.5, -1.5, 4.5, 0, 0.035, num_robots=6)
+    # pid_trans = PID(TIMESTEP, 1.5, -1.5, 4.5, 0, 0.035, num_robots=6)
+    pid_trans = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=6)
 
     try:
         while True:

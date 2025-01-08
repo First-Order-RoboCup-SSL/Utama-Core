@@ -18,6 +18,7 @@ def kick_ball() -> RobotCommand:
     )
 
 
+from motion_planning.src.pid.pid import TwoDPID
 from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
 
 
@@ -25,7 +26,7 @@ from robot_control.src.utils.motion_planning_utils import calculate_robot_veloci
 # Ideally, we should have one PID for each robot and not have one giant PID for all robots
 def go_to_ball(
     pid_oren: PID,
-    pid_trans: PID,
+    pid_trans: TwoDPID,
     this_robot_data: RobotData,
     robot_id: int,
     ball_data: BallData,
