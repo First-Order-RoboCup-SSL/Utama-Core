@@ -52,26 +52,25 @@ def test_one_robot_placement(target_robot: int, is_yellow: bool):
     change_iters = []
     change_orens = []
 
-    try:
-        for iter in range(ITERS):
-            switch, _, _, co = one_step()
-            if switch:
-                change_iters.append(iter)
-                change_orens.append(co)
-        
-        assert len(change_iters) == TEST_EXPECTED_ITERS
-        travel_time_0 = change_iters[1] - change_iters[0]
+    for iter in range(ITERS):
+        switch, _, _, co = one_step()
+        if switch:
+            change_iters.append(iter)
+            change_orens.append(co)
+    
+    assert len(change_iters) == TEST_EXPECTED_ITERS
+    travel_time_0 = change_iters[1] - change_iters[0]
 
-        for i in range(len(change_iters) - 1):
-            travel_time_i = change_iters[i + 1] - change_iters[i]
-            rel_diff = (abs((travel_time_i - travel_time_0)) / travel_time_0)
-            assert rel_diff < TEST_TRAVEL_TIME_THRESH        
-        
-        for oren in change_orens:
-            assert abs(abs(oren) - TARGET_OREN) / TARGET_OREN < TEST_RESULT_OREN_THRESH
-
-    except KeyboardInterrupt:
-        print("Exiting...")
+    for i in range(len(change_iters) - 1):
+        travel_time_i = change_iters[i + 1] - change_iters[i]
+        rel_diff = (abs((travel_time_i - travel_time_0)) / travel_time_0)
+        assert rel_diff < TEST_TRAVEL_TIME_THRESH        
+    
+    for oren in change_orens:
+        assert abs(abs(oren) - TARGET_OREN) / TARGET_OREN < TEST_RESULT_OREN_THRESH
 
 if __name__ == "__main__":
-    test_one_robot_placement(1, False)
+    try:
+        test_one_robot_placement(1, False)
+    except KeyboardInterrupt:
+        print("Exiting...")
