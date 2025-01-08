@@ -81,3 +81,113 @@ def turn_on_spot(
         target_oren=target_oren,
         dribbling=dribbling,
     )
+
+from math import dist, sqrt, cos, sin, pi, acos, degrees, asin
+RADIUS = sqrt(2)+0.1
+
+def calculate_defense_area(t: float, is_left: bool):
+    """ Semi circle around goal with radius sqrt(2) metres, t is parametric 
+    x = r cos t, y = r sin t, pi/2 <= t <= 3pi/2 
+    """
+    assert pi/2 <= t <= 3*pi/2, t
+    rp = RADIUS*cos(t), RADIUS*sin(t)
+    return make_relative_to_goal_centre(rp, is_left)
+
+
+def make_relative_to_goal_centre(p: Tuple[float, float], is_left_goal: bool) -> Tuple[float, float]:
+    if is_left_goal:
+        goal_centre_x = -4.5
+        return goal_centre_x-p[0], p[1]
+    else:
+        goal_centre_x = 4.5
+        return goal_centre_x+p[0], p[1]
+
+
+EPS = 1e-5
+def get_goal_centre(is_left: bool) -> Tuple[float, float]:
+    return -4.5 if is_left else 4.5, 0
+
+def relative_to(p: Tuple[float, float], o: Tuple[float, float]) -> Tuple[float, float]:
+    return p[0]-o[0], p[1]-o[1]
+
+def cross(v1, v2) -> float:
+    return v1[0]*v2[1]-v1[1]*v2[0]
+
+def ccw(v1, v2) -> int :
+    # 1 if v1 is ccw of v2, -1 of v1 is cw of v2, 0 if colinear
+    mag = cross(v1, v2)
+    if abs(mag) < EPS:
+        return 0
+    if mag > 0:
+        return 1
+    else:
+        return -1
+
+def dot(v1, v2) -> float:
+    return v1[0]*v2[0]+v1[1]*v2[1]
+
+def mag(v) -> float:
+    return sqrt(v[0]*v[0]+v[1]*v[1])
+
+def ang_between(v1, v2):
+    print("DOT", dot(v1, v2))
+    res = dot(v1,v2) / (mag(v1)*mag(v2))
+    if res > 0:
+        res -= EPS
+    else:
+        res += EPS
+    assert -1 <=  res <= 1, f"{v1} {v2} {res}"
+
+    return acos(res)
+
+
+
+def step_curve(t: float, direction:int):
+    STEP_SIZE = 0.0872665
+    if direction == 0:
+        return t
+    return direction*STEP_SIZE + t
+
+def align_defenders(defender_position: float, attacker_position: Tuple[float, float], is_left: bool) -> Tuple[float, float]:
+    # defender_position is in terms of t, the parametric 
+    NO_MOVE_THRES = 1
+    # Calculates the next point on the defense area that the robots should go to
+    dx, dy = calculate_defense_area(defender_position, is_left)
+    print("DEFENDER", dx, dy)
+    goal_centre = get_goal_centre(is_left)
+
+    # Calculate the cross product relative to the centre of the goal 
+
+    goal_to_defender = relative_to((dx, dy), goal_centre)
+    goal_to_attacker = relative_to(attacker_position, goal_centre)
+    print(goal_to_defender, goal_to_attacker)
+    side = ccw(goal_to_defender, goal_to_attacker)*-1
+    angle = ang_between(goal_to_defender, goal_to_attacker)
+
+    if degrees(angle) > NO_MOVE_THRES:
+        # Move to the correct side 
+        next_t = step_curve(defender_position, side)
+        print("RAW NEXT", calculate_defense_area(next_t, is_left), side, angle)
+        return calculate_defense_area(next_t, is_left)
+    else:
+        return calculate_defense_area(defender_position, is_left)
+
+
+
+def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
+    gp = get_goal_centre(is_left)
+    rel_goal = relative_to(p, gp)
+    ang = ang_between(rel_goal, (0,1))
+    print(degrees(ang))
+    if ang > pi:
+        ang = 2*pi-ang
+    ang += pi / 2
+    print(calculate_defense_area(ang, is_left))
+    return ang
+
+
+if __name__=="__main__":
+    # print("NEXT POS: ", align_defenders(pi, (2.5, 2), False))
+    print(to_defense_parametric((3, 2), False))
+
+    
