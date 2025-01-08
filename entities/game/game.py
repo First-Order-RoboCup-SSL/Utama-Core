@@ -68,6 +68,10 @@ class Game:
         record = self._records[-1]
         return record.yellow_robots if is_yellow else record.blue_robots
 
+    def get_robot_pos(self, is_yellow: bool, robot_id: int) -> RobotData:
+        all = self.get_robots_pos(is_yellow)
+        return None if not all else all[robot_id]
+
     def get_robots_velocity(self, is_yellow: bool) -> List[tuple]:
         """
         Returns (vx, vy) of all robots on a team at the latest frame. None if no data available.
