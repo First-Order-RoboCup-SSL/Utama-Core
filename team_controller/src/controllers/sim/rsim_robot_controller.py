@@ -208,9 +208,10 @@ class RSimRobotController(AbstractRobotController):
         return self._n_enemy_robots
 
 class PVPManager:
-    def __init__(self, env: SSLBaseEnv, n_robots: int, game: Game):
+    def __init__(self, env: SSLBaseEnv, n_robots_blue: int, n_robots_yellow: int, game: Game):
         self._env = env
-        self.n_robots = n_robots
+        self.n_robots_blue = n_robots_blue
+        self.n_robots_yellow = n_robots_yellow
         self._pending = {
             "team_blue": None,
             "team_yellow": None
@@ -240,7 +241,7 @@ class PVPManager:
     def _fill_and_send(self):
         for colour in ("team_blue", "team_yellow"):
             if not self._pending[colour]:
-                self._pending[colour] = tuple(self._empty_command(self.n_robots))
+                self._pending[colour] = tuple(self._empty_command(self.n_robots_yellow if colour == "team_yellow" else self.n_robots_blue))
         
         observation, reward, terminated, truncated, reward_shaping = self._env.step(self._pending)
 
