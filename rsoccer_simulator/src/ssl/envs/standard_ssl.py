@@ -78,8 +78,8 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Action space for one robot:
         robot_action_space = gym.spaces.Box(
-            low=np.array([-1.0, -1.0, -1.0, -1.0, -1.0]),
-            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0]),
+            low=np.array([-1.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float32),
+            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float32),
             dtype=np.float32,
         )
 
