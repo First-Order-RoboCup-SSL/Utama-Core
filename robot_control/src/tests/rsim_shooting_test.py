@@ -53,7 +53,7 @@ def test_shooting(shooter_id: int, is_yellow: bool):
 
             sim_robot_controller.add_robot_commands(cmd, shooter_id)
             sim_robot_controller.send_robot_commands()
-
+    raise RuntimeError()
     assert goal_scored
 
 if __name__ == "__main__":
