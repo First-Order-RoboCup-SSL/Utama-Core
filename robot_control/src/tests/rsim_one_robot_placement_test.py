@@ -41,7 +41,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool):
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game, debug=False
     )
-    one_step = one_robot_placement(sim_robot_controller, is_yellow, pid_oren, pid_2d, False, robot_to_place, game)
+    one_step = one_robot_placement(sim_robot_controller, is_yellow, pid_oren, pid_2d, False, robot_to_place, game, TARGET_OREN)
 
     change_iters = []
     change_orens = []
@@ -61,7 +61,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool):
         assert rel_diff < TEST_TRAVEL_TIME_THRESH        
     
     for oren in change_orens:
-        assert abs(abs(oren) - TARGET_OREN) / TARGET_OREN < TEST_RESULT_OREN_THRESH
+        assert abs(abs(oren) - abs(TARGET_OREN)) / TARGET_OREN < TEST_RESULT_OREN_THRESH
 
 if __name__ == "__main__":
     try:

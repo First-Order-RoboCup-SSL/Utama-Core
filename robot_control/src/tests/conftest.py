@@ -19,6 +19,10 @@ parameter_values = {
     "robot_to_place": {
         "quick": [1],
         "full": range(6)
+    },
+    "target_robot": {
+        "quick": [1],
+        "full": [1]
     }
 }
 

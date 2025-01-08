@@ -24,7 +24,7 @@ def setup_pvp(env: SSLStandardEnv, game: Game, n_robots_blue: int, n_robots_yell
 
     return sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager
 
-def one_robot_placement(controller: RSimRobotController, is_yellow: bool, pid_oren: PID, pid_2d: TwoDPID, invert: bool, team_robot_id: int, game: Game):
+def one_robot_placement(controller: RSimRobotController, is_yellow: bool, pid_oren: PID, pid_2d: TwoDPID, invert: bool, team_robot_id: int, game: Game, target_oren: float):
     """Implements the one robot placmement test where the robot first goes to (0, 1.5) and points upwards, then
        goes to (0, -1.5) and points downwards and repeats. This is done by returning a closure which can be called
        to advance the simulation by one step, making the robot do the next step. """
@@ -48,7 +48,7 @@ def one_robot_placement(controller: RSimRobotController, is_yellow: bool, pid_or
                 pid_2d.reset(team_robot_id)
                 pid_oren.reset(team_robot_id)
 
-            oren =  math.pi / 2 if ty > 0 else - math.pi / 2
+            oren =  target_oren if ty > 0 else - target_oren
             cmd = go_to_point(pid_oren, pid_2d, friendly_robots[team_robot_id], team_robot_id, (tx, ty), oren)
             controller.add_robot_commands(cmd, team_robot_id)
             controller.send_robot_commands()
