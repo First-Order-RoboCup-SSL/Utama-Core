@@ -64,10 +64,7 @@ class PID:
         # Adjust error if orientation (oren) is considered
         if oren:
             error = np.atan2(np.sin(error), np.cos(error))
-            print(np.sin(error))
-            print(np.cos(error))
-            print(error)
-        
+
         # Calculate PID output
         Pout = self.Kp * error if self.Kp != 0 else 0.0
 
@@ -112,5 +109,5 @@ class TwoDPID:
         self.dimX = PID(dt, max_output, min_output, Kp, Kd, Ki, num_robots)
         self.dimY = PID(dt, max_output, min_output, Kp, Kd, Ki, num_robots)
 
-    def calculate(self, target: Tuple[float, float], current: Tuple[float, float], robot_id, normalize_range):
+    def calculate(self, target: Tuple[float, float], current: Tuple[float, float], robot_id):
         return self.dimX.calculate(target[0], current[0],robot_id, False, None), self.dimY.calculate(target[1], current[1], robot_id, False, None)

@@ -137,7 +137,6 @@ class RSimRobotController(AbstractRobotController):
 
         Done this way, because there's no separate vision receiver for RSim.
         """
-        print("FRAME", new_frame)
         self._game_obj.add_new_state(new_frame)
 
     def empty_command(self) -> list[NDArray]:
@@ -267,7 +266,6 @@ class PVPManager:
 
     # TODO: Inheritance?
     def _write_to_game_obj(self, new_frame: FrameData) -> None:
-        print("FRAME STAMP", new_frame.ts)
         self._game.add_new_state(new_frame)
     
     def reset_env(self):
