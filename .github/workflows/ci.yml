@@ -32,4 +32,4 @@ jobs:
       # Run tests
       - name: Run tests
         run: |
-          pytest robot_control/src/tests/rsim_shooting_test.py
+          pytest robot_control/src/tests
