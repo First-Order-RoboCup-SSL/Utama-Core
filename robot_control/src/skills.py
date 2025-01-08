@@ -43,6 +43,10 @@ def go_to_ball(
         target_oren=target_oren,
     )
 
+def face_ball(current: Tuple[float, float], ball:Tuple[float, float]) -> float:
+    return  np.arctan2(
+        ball[1] - current[1], ball[0] - current[0]
+    )
 
 def go_to_point(
     pid_oren: PID,
@@ -84,6 +88,15 @@ def turn_on_spot(
 
 from math import dist, sqrt, cos, sin, pi, acos, degrees, asin
 RADIUS = sqrt(2)+0.1
+
+
+def predict_goal_y_location(shooter_position: Tuple[float, float], orientation:float, shoots_left: bool) -> float:
+    dx, dy = cos(orientation), sin(orientation)
+    gx,_ = get_goal_centre(shoots_left)
+    if dx == 0:
+        return float("inf")
+    t = (gx-shooter_position[0]) / dx
+    return shooter_position[1] + t*dy
 
 def calculate_defense_area(t: float, is_left: bool):
     """ Semi circle around goal with radius sqrt(2) metres, t is parametric 
@@ -148,18 +161,23 @@ def step_curve(t: float, direction:int):
         return t
     return direction*STEP_SIZE + t
 
-def align_defenders(defender_position: float, attacker_position: Tuple[float, float], is_left: bool) -> Tuple[float, float]:
+def clamp_to_goal_height(y: float) -> float:
+    return max(min(y, 0.5), -0.5)
+
+def align_defenders(defender_position: float, attacker_position: Tuple[float, float], attacker_orientation: float, is_left: bool, env) -> Tuple[float, float]:
     # defender_position is in terms of t, the parametric 
     NO_MOVE_THRES = 1
     # Calculates the next point on the defense area that the robots should go to
     dx, dy = calculate_defense_area(defender_position, is_left)
     print("DEFENDER", dx, dy)
     goal_centre = get_goal_centre(is_left)
+    predicted_goal_position = goal_centre[0], clamp_to_goal_height(predict_goal_y_location(attacker_position, attacker_orientation, is_left))
+    
+    env.draw_line([predicted_goal_position, attacker_position], width=1, color="green")
+    # Calculate the cross product relative to the predicted position of the goal 
 
-    # Calculate the cross product relative to the centre of the goal 
-
-    goal_to_defender = relative_to((dx, dy), goal_centre)
-    goal_to_attacker = relative_to(attacker_position, goal_centre)
+    goal_to_defender = relative_to((dx, dy), predicted_goal_position)
+    goal_to_attacker = relative_to(attacker_position, predicted_goal_position)
     print(goal_to_defender, goal_to_attacker)
     side = ccw(goal_to_defender, goal_to_attacker)*-1
     angle = ang_between(goal_to_defender, goal_to_attacker)

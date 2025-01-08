@@ -2,7 +2,7 @@ import sys
 import os
 import numpy as np
 from motion_planning.src.pid.pid import TwoDPID
-from robot_control.src.skills import get_goal_centre, go_to_ball, go_to_point, align_defenders, to_defense_parametric
+from robot_control.src.skills import get_goal_centre, go_to_ball, go_to_point, align_defenders, to_defense_parametric, face_ball
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
@@ -70,8 +70,10 @@ if __name__ == "__main__":
             print(friendly[defender_id])
             real_def_pos = friendly[defender_id].x, friendly[defender_id].y
             current_def_parametric = to_defense_parametric(real_def_pos, True)
-            target = align_defenders(current_def_parametric, (balls[0].x, balls[0].y), True)
-            cmd = go_to_point(pid_oren_b, pid_2d_b, friendly[defender_id], defender_id, target, None)
+            #(balls[0].x, balls[0].y)
+            enemy_position = enemy[shooter_id].x, enemy[shooter_id].y
+            target = align_defenders(current_def_parametric, enemy_position, enemy[shooter_id].orientation, True, env)
+            cmd = go_to_point(pid_oren_b, pid_2d_b, friendly[defender_id], defender_id, target, face_ball(real_def_pos, (balls[0].x, balls[0].y)))
 
 
             sim_robot_controller_blue.add_robot_commands(cmd, defender_id)
