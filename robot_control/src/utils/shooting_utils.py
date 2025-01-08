@@ -67,11 +67,14 @@ def ray_casting(
     goal_x: float,
     goal_y1: float,
     goal_y2: float,
+    shoot_in_left_goal: bool
 ) -> List[Tuple[float, float]]:
     shadows: List[Tuple[float, float]] = []
+    
+    goal_mult = -1 if shoot_in_left_goal else 1 # flips the goalward direction if we are shooting left
     for enemy in enemy_robots:
         if enemy is not None:
-            if enemy.x > ball.x:
+            if goal_mult * enemy.x > goal_mult * ball.x:
                 dist: float = ball_to_robot_dist(ball.x, ball.y, enemy.x, enemy.y)
                 angle_to_robot_: float = angle_to_robot(
                     ball.x, ball.y, enemy.x, enemy.y
@@ -98,11 +101,11 @@ def find_best_shot(
     goal_x: float,
     goal_y1: float,
     goal_y2: float,
+    shoot_in_left_goal: bool
 ) -> float:
     shadows = ray_casting(
-        ball, enemy_robots=enemy_robots, goal_x=goal_x, goal_y1=goal_y1, goal_y2=goal_y2
+        ball, enemy_robots=enemy_robots, goal_x=goal_x, goal_y1=goal_y1, goal_y2=goal_y2, shoot_in_left_goal=shoot_in_left_goal
     )
-
     if not shadows:
         return (goal_y2 + goal_y1) / 2
 

@@ -16,8 +16,10 @@ def score_goal(
     shooter_id: int,
     pid_oren: PID,
     pid_trans: PID,
-    is_yellow: bool
+    is_yellow: bool,
+    shoot_in_left_goal: bool 
 ) -> RobotCommand:
+
     target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
     latest_frame = game_obj.get_my_latest_frame(is_yellow)
     if latest_frame:
@@ -31,7 +33,7 @@ def score_goal(
     # calculate best shot from the position of the ball
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
     if friendly_robots and enemy_robots and balls:
-        best_shot = find_best_shot(balls[0], enemy_robots, goal_x, goal_y1, goal_y2)
+        best_shot = find_best_shot(balls[0], enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal)
 
         shot_orientation = np.atan2((best_shot - balls[0].y), (goal_x - balls[0].x))
 

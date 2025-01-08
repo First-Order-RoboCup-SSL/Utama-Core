@@ -47,6 +47,11 @@ class Game:
     @property
     def predicted_next_frame(self) -> FrameData:
         return self._predicted_next_frame
+    
+    def is_ball_in_goal(self, left_goal: bool):
+        ball_pos = self.get_ball_pos()[0]
+        return (ball_pos.x < -4.5 and (ball_pos.y < 0.5 and ball_pos.y > -0.5) and left_goal
+           or ball_pos.x > 4.5 and (ball_pos.y < 0.5 and ball_pos.y > -0.5) and not left_goal)
 
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
