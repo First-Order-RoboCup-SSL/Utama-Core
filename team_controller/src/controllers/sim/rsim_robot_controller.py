@@ -208,6 +208,15 @@ class RSimRobotController(AbstractRobotController):
         return self._n_enemy_robots
 
 class PVPManager:
+    
+    """
+    Manages a player vs player game inside the rsim environment. The two teams run in lockstep in 
+    this setup, and so, in order to get results consistent with running just one player, 
+    it's important to either alternate the player colours that send commands from the main loop
+    (using an empty command if one team has nothing to do), or call flush() after every command that
+    should be processed on its own (without a corresponding command from the other team).
+    """
+
     def __init__(self, env: SSLBaseEnv, n_robots_blue: int, n_robots_yellow: int, game: Game):
         self._env = env
         self.n_robots_blue = n_robots_blue
