@@ -26,6 +26,8 @@ def score_goal(
         friendly_robots, enemy_robots, balls = latest_frame
 
     # TODO: Not sure if this is sufficient for both blue and yellow scoring
+    # It won't be because note that in real life the blue team is not necessarily
+    # on the left of the pitch 
     goal_x = target_goal_line.coords[0][0]
     goal_y1 = target_goal_line.coords[1][1]
     goal_y2 = target_goal_line.coords[0][1]
@@ -55,8 +57,8 @@ def score_goal(
                     # Because 0.02 as a threshold is meaningless (different at different distances)
                     # TODO: consider also adding a distance from goal threshold
                     if (
-                        abs(np.round(current_oren, 2) - np.round(shot_orientation, 2))
-                        <= 0.02
+                        abs(current_oren - shot_orientation)
+                        <= 0.005
                     ):
                         print("kicking ball")
                         robot_command = kick_ball()

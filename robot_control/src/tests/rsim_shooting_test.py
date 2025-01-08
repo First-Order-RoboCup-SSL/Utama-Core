@@ -23,7 +23,7 @@ def test_shooting(shooter_id: int, is_yellow: bool):
 
     env.reset()
     env.teleport_ball(1, 1)
-    pid_oren = PID(TIMESTEP, 8, -8, 4.5, 0, 0.045, num_robots=6)
+    pid_oren = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=6)
     pid_trans = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=6)
 
     sim_robot_controller = RSimRobotController(
@@ -48,6 +48,7 @@ def test_shooting(shooter_id: int, is_yellow: bool):
             )
 
             if game.is_ball_in_goal(shoot_in_left_goal):
+                print("Goal Scored at Position: ", game.get_ball_pos())
                 goal_scored = True
 
             sim_robot_controller.add_robot_commands(cmd, shooter_id)
