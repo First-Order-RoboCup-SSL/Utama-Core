@@ -72,6 +72,7 @@ if __name__ == "__main__":
                 target_oren = math.pi+np.arctan2(
     ty - cy, tx - cx
     )
+                print("DIST", math.dist((tx, ty), (cx, cy)))
                 if math.dist((tx, ty), (cx, cy))  < 0.002:
                     ty *= -1
                 from entities.data.command import RobotCommand

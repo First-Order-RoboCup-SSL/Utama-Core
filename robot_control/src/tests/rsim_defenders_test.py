@@ -1,5 +1,6 @@
 import sys
 import os
+import math
 
 print(sys.path)
 # Add the project root directory to sys.path
@@ -17,10 +18,49 @@ from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
 
+def setup_pvp(env: SSLStandardEnv, game: Game):
+    pvp_manager = PVPManager(env, 6, game)
+    sim_robot_controller_yellow = RSimRobotController(
+        is_team_yellow=True, env=env, game_obj=game, debug=True, pvp_manager=pvp_manager
+    )
+    sim_robot_controller_blue = RSimRobotController(
+        is_team_yellow=False, env=env, game_obj=game, debug=False, pvp_manager=pvp_manager
+    )
+    pvp_manager.set_yellow_controller(sim_robot_controller_yellow)
+    pvp_manager.set_blue_controller(sim_robot_controller_blue)
+    pvp_manager.reset_env()
+
+    return sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager
+
+
+def one_robot_placement(controller: RSimRobotController, is_yellow: bool, pid_oren: PID, pid_2d: TwoDPID, invert: bool):
+    ty = -1.5 if invert else 1.5
+    tx = 0
+
+    def one_step():
+        nonlocal tx, ty
+
+        latest_frame = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
+        if latest_frame:
+            friendly_robots, enemy_robots, balls = latest_frame    
+            cx, cy, co = friendly_robots[defender_ids[0]]
+            print("CURRENT POS: ", cx, cy, co)
+            target_oren = math.pi + np.arctan2(
+                ty - cy, tx - cx
+            )
+            error = math.dist((tx, ty), (cx, cy))
+            print("DIST", error)
+            if error  < 0.002:
+                ty *= -1
+
+            oren =  math.pi / 2 if ty > 0 else - math.pi / 2
+            cmd = go_to_point(pid_oren, pid_2d, friendly_robots[defender_ids[0]], defender_ids[0], (tx, ty), oren)
+            controller.add_robot_commands(cmd, defender_ids[0])
+            controller.send_robot_commands()
+
+    return one_step
 
 if __name__ == "__main__":
-    IS_YELLOW = False
-
     game = Game()
 
     # making environment
@@ -30,59 +70,34 @@ if __name__ == "__main__":
     shooter_id = 3
     # env.teleport_robot(False, 0, x=1, y=1)
     env.teleport_ball(1, 1)
-    pid_oren = PID(TIMESTEP, 8, -8, 3, 3, 0.1, num_robots=6)
+    pid_oren_y = PID(TIMESTEP, 8, -8, 3, 3, 0.1, num_robots=6)
     # pid_trans = PID(TIMESTEP, 1.5, -1.5, 4.5, 0, 0.0, num_robots=6)
-    pid_2d = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=6)
+    pid_2d_y = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=6)
+
+    pid_oren_b = PID(TIMESTEP, 8, -8, 3, 3, 0.1, num_robots=6)
+    # pid_trans = PID(TIMESTEP, 1.5, -1.5, 4.5, 0, 0.0, num_robots=6)
+    pid_2d_b = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=6)
 
 
-    # pvp_manager = PVPManager(env, 6)
-    sim_robot_controller_yellow = RSimRobotController(
-        is_team_yellow=IS_YELLOW, env=env, game_obj=game, debug=True
-    )
-    # sim_robot_controller_blue = RSimRobotController(
-    #     is_team_yellow=False, env=env, game_obj=game, debug=False
-    # )
-    # pvp_manager.set_yellow_player(sim_robot_controller_yellow)
-    # pvp_manager.set_blue_controller(sim_robot_controller_blue)
+    sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(env, game)
+    one_step_yellow = one_robot_placement(sim_robot_controller_yellow, True, pid_oren_y, pid_2d_y, False)
+    one_step_blue = one_robot_placement(sim_robot_controller_blue, False, pid_oren_b, pid_2d_b, True)
 
-
-    # sim_robot_controller_blue = RSimRobotController(
-    #     is_team_yellow=False, env=env, game_obj=game, debug=False, is_pvp=True
-    # )
-    import time
     try:
         done = False
         LEADER = 0
-        ty = 1.5
-        tx = 0
 
-        defender_y_targets = {defender_id:ty for defender_id in defender_ids}
+
         last_sent = 0
         while True:
             import numpy as np
             import math
             env.draw_line([(0,0), (2,2)], color="RED", width=10)
 
-            latest_frame = game.get_my_latest_frame(IS_YELLOW)
-            if latest_frame:
-                friendly_robots, enemy_robots, balls = latest_frame
-            
-                cx, cy, co = friendly_robots[defender_ids[0]]
-                print("CURRENT POS: ", cx, cy, co)
-                target_oren = math.pi+np.arctan2(
-    ty - cy, tx - cx
-    )
-                if math.dist((tx, ty), (cx, cy))  < 0.002:
-                    ty *= -1
-                from entities.data.command import RobotCommand
-                import math
-                oren =  math.pi / 2 if ty > 0 else - math.pi / 2
-                print("OREN", oren)
-                cmd = go_to_point(pid_oren, pid_2d, friendly_robots[defender_ids[0]], defender_ids[0], (tx, ty), oren)
-                # raw = RobotCommand(local_forward_vel=-0.5, local_left_vel=0, angular_vel=1, kick_angle=0, kick_spd=0, dribbler_spd=0)
-                sim_robot_controller_yellow.add_robot_commands(cmd, defender_ids[0])
-                sim_robot_controller_yellow.send_robot_commands()
-                    
+            one_step_yellow()            
+            one_step_blue()            
+
+
 
                 # defenders_y = [friendly_robots[defender_id].y for defender_id in defender_ids]
                 # defenders_x = [friendly_robots[defender_id].x for defender_id in defender_ids]

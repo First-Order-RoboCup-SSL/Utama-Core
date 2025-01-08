@@ -39,7 +39,11 @@ class RSimRobotController(AbstractRobotController):
         self._robots_info: list[RobotInfo] = [None] * self.n_friendly_robots
         self._is_pvp = pvp_manager is not None
         self.pvp_manager = pvp_manager
+        
+        if not self._is_pvp:
+            self.reset_env()
 
+    def reset_env(self):
         # if environment was not reset beforehand, reset now
         if self._env.frame is None:
             initial_obs, _ = self._env.reset()
@@ -131,11 +135,14 @@ class RSimRobotController(AbstractRobotController):
         """
         Supersedes the VisionReceiver and queue procedure to write to game obj directly.
 
-        Done this way, because there's no separate vision receivere for RSim.
+        Done this way, because there's no separate vision receiver for RSim.
         """
         print("FRAME", new_frame)
         self._game_obj.add_new_state(new_frame)
 
+    def empty_command(self) -> list[NDArray]:
+        return self._empty_command(self.n_friendly_robots)
+    
     # create an empty command array
     def _empty_command(self, n_robots: int) -> list[NDArray]:
         return [np.zeros((6,), dtype=float) for _ in range(n_robots)]
@@ -201,18 +208,19 @@ class RSimRobotController(AbstractRobotController):
         return self._n_enemy_robots
 
 class PVPManager:
-    def __init__(self, env: SSLBaseEnv, n_robots: int):
+    def __init__(self, env: SSLBaseEnv, n_robots: int, game: Game):
         self._env = env
         self.n_robots = n_robots
         self._pending = {
             "team_blue": None,
             "team_yellow": None
         }
+        self._game = game 
     
     def set_blue_controller(self, blue_player: RSimRobotController):
         self.blue_player = blue_player
     
-    def set_yellow_player(self, yellow_player: RSimRobotController):
+    def set_yellow_controller(self, yellow_player: RSimRobotController):
         self.yellow_player = yellow_player
 
     def send_command(self, is_yellow: Boolean, out_packet):
@@ -232,9 +240,9 @@ class PVPManager:
     def _fill_and_send(self):
         for colour in ("team_blue", "team_yellow"):
             if not self._pending[colour]:
-                self._pending[colour] = tuple(self._empty_command(self.n_enemy_robots))
+                self._pending[colour] = tuple(self._empty_command(self.n_robots))
         
-        observation, reward, terminated, truncated, reward_shaping = self._env.step(self._pending[colour])
+        observation, reward, terminated, truncated, reward_shaping = self._env.step(self._pending)
 
         new_frame, yellow_robots_info, blue_robots_info = observation
         self.blue_player.update_robots_info(blue_robots_info)
@@ -246,3 +254,20 @@ class PVPManager:
             "team_blue": None,
             "team_yellow": None
         }
+
+    # TODO: Inheritance?
+    def _write_to_game_obj(self, new_frame: FrameData) -> None:
+        print("FRAME STAMP", new_frame.ts)
+        self._game.add_new_state(new_frame)
+    
+    def reset_env(self):
+        # if environment was not reset beforehand, reset now
+        if self._env.frame is None:
+            initial_obs, _ = self._env.reset()
+            initial_frame = initial_obs[0]
+        else:
+            initial_frame, _, _ = self._env._frame_to_observations()
+        self._write_to_game_obj(initial_frame)
+
+    def flush(self):
+        self._fill_and_send()
