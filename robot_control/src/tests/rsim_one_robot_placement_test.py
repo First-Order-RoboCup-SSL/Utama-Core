@@ -16,9 +16,10 @@ import pytest
 
 N_ROBOTS = 6
 
-@pytest.mark.parametrize("target_robot", [i for i in range(N_ROBOTS)])
-@pytest.mark.parametrize("is_yellow", [False, True])
-def test_one_robot_placement(target_robot: int, is_yellow: bool):
+def test_one_robot_placement(robot_to_place: int, is_yellow: bool):
+    """When the tests are run with pytest, these parameters are filled in
+       based on whether we are in full or quick test mode (see conftest.py)"""
+        
     TEST_TRAVEL_TIME_THRESH = 0.03
     TEST_RESULT_OREN_THRESH = 0.10
     TEST_EXPECTED_ITERS = 4
@@ -40,7 +41,7 @@ def test_one_robot_placement(target_robot: int, is_yellow: bool):
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game, debug=False
     )
-    one_step = one_robot_placement(sim_robot_controller, is_yellow, pid_oren, pid_2d, False, target_robot, game)
+    one_step = one_robot_placement(sim_robot_controller, is_yellow, pid_oren, pid_2d, False, robot_to_place, game)
 
     change_iters = []
     change_orens = []

@@ -10,9 +10,10 @@ import pytest
 ITERS = 500
 N_ROBOTS = 6
 
-@pytest.mark.parametrize("shooter_id", [i for i in range(N_ROBOTS)])
-@pytest.mark.parametrize("is_yellow", [False, True])
 def test_shooting(shooter_id: int, is_yellow: bool):
+    """When the tests are run with pytest, these parameters are filled in
+       based on whether we are in full or quick test mode (see conftest.py)"""
+
     game = Game()
 
     # Shooting team gets full complement of robots, defending team only half
