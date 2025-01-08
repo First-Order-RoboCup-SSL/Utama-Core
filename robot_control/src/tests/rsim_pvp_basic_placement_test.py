@@ -11,7 +11,9 @@ from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
 
-if __name__ == "__main__":
+def test_pvp_placement(): # TODO : finish asserts
+    ITERS = 1000
+
     game = Game()
 
     N_ROBOTS_YELLOW = 6
@@ -32,11 +34,13 @@ if __name__ == "__main__":
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(env,  game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW)
     one_step_yellow = one_robot_placement(sim_robot_controller_yellow, True, pid_oren_y, pid_2d_y, False, TARGET_ROBOT, game)
     one_step_blue = one_robot_placement(sim_robot_controller_blue, False, pid_oren_b, pid_2d_b, True, TARGET_ROBOT, game)
+    
+    for iter in range(ITERS):
+        one_step_yellow()            
+        one_step_blue()
 
+if __name__ == "__main__":
     try:
-        while True:
-            one_step_yellow()            
-            one_step_blue()
-
+        test_pvp_placement()
     except KeyboardInterrupt:
         print("Exiting...")
