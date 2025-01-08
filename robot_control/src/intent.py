@@ -7,6 +7,8 @@ from entities.data.command import RobotCommand
 from entities.data.vision import RobotData, BallData
 from robot_control.src.skills import kick_ball, go_to_ball, turn_on_spot
 from motion_planning.src.pid import PID
+from typing import List
+from math import dist
 
 
 # intent on scoring goal
@@ -81,9 +83,6 @@ def score_goal(
                     )
 
     return robot_command
-
-from typing import List
-from math import dist
 
 def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
     ans = []
