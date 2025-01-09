@@ -101,12 +101,17 @@ def predict_goal_y_location(shooter_position: Tuple[float, float], orientation:f
     t = (gx-shooter_position[0]) / dx
     return shooter_position[1] + t*dy
 
+import numpy as np
 def calculate_defense_area(t: float, is_left: bool):
     """ Semi circle around goal with radius sqrt(2) metres, t is parametric 
     x = r cos t, y = r sin t, pi/2 <= t <= 3pi/2 
+    
+    x = a * np.sign(np.cos(t)) * np.abs(np.cos(t))**(2 / n)
+    y = b * np.sign(np.sin(t)) * np.abs(np.sin(t))**(2 / n)
     """
     assert pi/2 <= t <= 3*pi/2, t
-    rp = RADIUS*cos(t), RADIUS*sin(t)
+    a,r = 1.1, 2.2
+    rp = a * ((1-r)*(abs(cos(t))*cos(t))+r*cos(t)), a * ((1-r)*(abs(sin(t))*sin(t))+r*sin(t))
     return make_relative_to_goal_centre(rp, is_left)
 
 
@@ -158,7 +163,7 @@ def ang_between(v1, v2):
 
 
 def step_curve(t: float, direction:int):
-    STEP_SIZE = 0.0872665*2
+    STEP_SIZE = 0.0872665
     if direction == 0:
         return t
     return direction*STEP_SIZE + t
@@ -166,6 +171,9 @@ def step_curve(t: float, direction:int):
 def clamp_to_goal_height(y: float) -> float:
     return max(min(y, 0.5), -0.5)
 
+def clamp_to_parametric(t:float) -> float:
+    # parametric is between pi /2 and 3pi / 2
+    return min(3*pi / 2, max(t,pi/2))
 
 def velocity_to_orientation(p: Tuple[float, float]) -> float:
     # Takes a velocity and converts to orientation in radians identical to robot orientation
@@ -192,12 +200,18 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
     env.draw_line([predicted_goal_position, attacker_position], width=1, color="green")
     # Calculate the cross product relative to the predicted position of the goal 
 
+    poly = []
+    for t in range(round(1000 * pi/2), round(1000*3*pi / 2)+1):
+        poly.append(calculate_defense_area(clamp_to_parametric(t/1000), is_left))
+    env.draw_polygon(poly, width=3)
+
     goal_to_defender = relative_to((dx, dy), predicted_goal_position)
     goal_to_attacker = relative_to(attacker_position, predicted_goal_position)
 
     side = ccw(goal_to_defender, goal_to_attacker)
     angle = ang_between(goal_to_defender, goal_to_attacker)
-
+    
+    print(side, degrees(angle), "HELLO ")
 
     if is_left:
         side *= -1
@@ -205,7 +219,7 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
     if degrees(angle) > NO_MOVE_THRES:
         # Move to the correct side 
         next_t = step_curve(defender_position, side)
-        logger.debug("RAW NEXT", calculate_defense_area(next_t, is_left), side, angle)
+        logger.debug("RAW NEXT", calculate_defense_area(clamp_to_parametric(next_t), is_left), side, angle)
         return calculate_defense_area(next_t, is_left)
     else:
         return calculate_defense_area(defender_position, is_left)
