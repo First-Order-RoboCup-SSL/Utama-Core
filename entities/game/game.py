@@ -172,7 +172,6 @@ class Game:
             return blue_robots, yellow_robots, balls
 
     ### General Object Position Prediction ###
-
     def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
         # If t is after the object has stopped we return the position at which object stopped.
         acc = self.get_object_acceleration(object)
@@ -209,6 +208,24 @@ class Game:
             start_x + sx,
             start_y + sy,
         )  # TODO: Doesn't take into account spin / angular vel
+
+    def predict_ball_pos_at_x(self, x: float) -> Optional[tuple]:
+        vel = self.get_ball_velocity()
+        
+        if not vel or not vel[0] or not vel[0]:
+            return None
+ 
+        ux, uy = vel
+        pos = self.get_ball_pos()[0]
+        bx = pos.x
+        by = pos.y
+        
+        if (uy == 0):
+            return (bx, by)
+        
+        t = (x - bx) / ux
+        y = by + uy * t
+        return (x, y)
 
     def get_object_velocity(self, object: GameObject) -> Optional[tuple]:
         # TODO: need to handle the None condition
