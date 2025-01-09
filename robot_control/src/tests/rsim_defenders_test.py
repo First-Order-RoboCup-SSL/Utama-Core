@@ -1,7 +1,7 @@
 import sys
 import os
 import numpy as np
-from motion_planning.src.pid.pid import TwoDPID
+from motion_planning.src.pid.pid import TwoDPID, get_pids
 from robot_control.src.skills import get_goal_centre, go_to_ball, go_to_point, align_defenders, to_defense_parametric, face_ball, velocity_to_orientation
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
@@ -75,11 +75,9 @@ def test_single_defender(defender_id: int, shooter_id: int, is_yellow: bool, hea
     env.reset()
 
     env.teleport_ball(2.25, -1)
-    pid_oren_y = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=N_ROBOTS_YELLOW)
-    pid_2d_y = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=N_ROBOTS_YELLOW)
 
-    pid_oren_b = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=N_ROBOTS_BLUE)
-    pid_2d_b = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=N_ROBOTS_BLUE)
+    pid_oren_y, pid_2d_y = get_pids(N_ROBOTS_YELLOW)
+    pid_oren_b, pid_2d_b = get_pids(N_ROBOTS_BLUE)
 
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(env,  game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW)
 

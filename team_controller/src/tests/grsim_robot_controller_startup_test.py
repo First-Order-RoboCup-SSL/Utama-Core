@@ -20,7 +20,9 @@ from team_controller.src.config.starting_formation import YELLOW_START_ONE
 from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
     RobotControl,
 )
+import logging
 
+logger = logging.logger(__name__)
 # TODO: This needs to be moved out of team_controller soon
 
 
@@ -57,8 +59,7 @@ class StartUpController:
                 )
                 self.sim_robot_controller.add_robot_commands(command, robot_id)
 
-            if self.debug:
-                print(out_packet)
+            logger.debug(out_packet)
             self.sim_robot_controller.send_robot_commands()
 
     def _calculate_robot_velocities(

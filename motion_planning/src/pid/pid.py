@@ -1,6 +1,13 @@
 import numpy as np
 from typing import Optional, Union, Tuple
 
+from team_controller.src.config.settings import TIMESTEP
+
+def get_pids(n_robots: int):
+    pid_oren = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=n_robots)
+    return pid_oren, pid_trans
+
 class PID:
     """
     A Proportional-Integral-Derivative (PID) controller for managing error corrections over time.

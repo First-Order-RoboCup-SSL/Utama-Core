@@ -5,6 +5,9 @@ from entities.data.command import RobotCommand
 from entities.data.vision import BallData, RobotData
 
 from motion_planning.src.pid import PID
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def kick_ball() -> RobotCommand:
@@ -148,7 +151,6 @@ def mag(v) -> float:
     return sqrt(v[0]*v[0]+v[1]*v[1])
 
 def ang_between(v1, v2):
-    print("DOT", dot(v1, v2))
     res = dot(v1,v2) / (mag(v1)*mag(v2))
     if res > 0:
         res -= EPS
@@ -185,7 +187,7 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
     NO_MOVE_THRES = 1
     # Calculates the next point on the defense area that the robots should go to
     dx, dy = calculate_defense_area(defender_position, is_left)
-    print("DEFENDER", dx, dy)
+    logger.debug("DEFENDER", dx, dy)
     goal_centre = get_goal_centre(is_left)
 
     if attacker_orientation is None:
@@ -205,7 +207,6 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
 
     goal_to_defender = relative_to((dx, dy), predicted_goal_position)
     goal_to_attacker = relative_to(attacker_position, predicted_goal_position)
-    print(goal_to_defender, goal_to_attacker)
 
     side = ccw(goal_to_defender, goal_to_attacker)
     angle = ang_between(goal_to_defender, goal_to_attacker)
@@ -217,8 +218,8 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
 
     if degrees(angle) > NO_MOVE_THRES:
         # Move to the correct side 
-        next_t = clamp_to_parametric(step_curve(defender_position, side))
-        print("RAW NEXT", calculate_defense_area(next_t, is_left), side, angle, next_t, defender_position)
+        next_t = step_curve(defender_position, side)
+        logger.debug("RAW NEXT", calculate_defense_area(clamp_to_parametric(next_t), is_left), side, angle)
         return calculate_defense_area(next_t, is_left)
     else:
         return calculate_defense_area(defender_position, is_left)
@@ -229,16 +230,12 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
     gp = get_goal_centre(is_left)
     rel_goal = relative_to(p, gp)
     ang = ang_between(rel_goal, (0,1))
-    print(degrees(ang))
     if ang > pi:
         ang = 2*pi-ang
     ang += pi / 2
-    print(calculate_defense_area(ang, is_left))
     return ang
 
 
 if __name__=="__main__":
-    # print("NEXT POS: ", align_defenders(pi, (2.5, 2), False))
-    print(to_defense_parametric((3, 2), False))
+    logger.debug(to_defense_parametric((3, 2), False))
 
-    

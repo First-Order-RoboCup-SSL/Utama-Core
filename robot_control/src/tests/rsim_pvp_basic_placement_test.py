@@ -1,4 +1,4 @@
-from motion_planning.src.pid.pid import TwoDPID
+from motion_planning.src.pid.pid import TwoDPID, get_pids
 from robot_control.src.skills import go_to_ball, go_to_point
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 from team_controller.src.controllers import RSimRobotController
@@ -12,7 +12,7 @@ import math
 
 TEST_EXPECTED_ITERS = 2
 TEST_EXPECTED_REL_DIFF = 0.02
-TEST_EXPECTED_REL_POS_DIFF = 0.1
+TEST_EXPECTED_ABS_POS_DIFF = 0.3
 TARGET_OREN = math.pi / 2
 TEST_RESULT_OREN_THRESH = 0.10
 
@@ -28,11 +28,9 @@ def test_pvp_placement(target_robot: int, headless: bool):
     env.reset()
 
     env.teleport_ball(1, 1)
-    pid_oren_y = PID(TIMESTEP, 8, -8, 3, 3, 0.1, num_robots=N_ROBOTS_YELLOW)
-    pid_2d_y = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=N_ROBOTS_YELLOW)
 
-    pid_oren_b = PID(TIMESTEP, 8, -8, 3, 3, 0.1, num_robots=N_ROBOTS_BLUE)
-    pid_2d_b = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=N_ROBOTS_BLUE)
+    pid_oren_y, pid_2d_y = get_pids(N_ROBOTS_YELLOW)
+    pid_oren_b, pid_2d_b = get_pids(N_ROBOTS_BLUE)
 
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(env,  game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW)
     one_step_yellow = one_robot_placement(sim_robot_controller_yellow, True, pid_oren_y, pid_2d_y, False, target_robot, game, TARGET_OREN)
@@ -57,7 +55,8 @@ def test_pvp_placement(target_robot: int, headless: bool):
     yellow_robot_pos = game.get_robot_pos(is_yellow=True, robot_id=target_robot)
     blue_robot_pos = game.get_robot_pos(is_yellow=False, robot_id=target_robot)
     
-    assert(abs((yellow_robot_pos.x - blue_robot_pos.x) / yellow_robot_pos.x) < TEST_EXPECTED_REL_POS_DIFF)
+    assert(abs((yellow_robot_pos.x - blue_robot_pos.x)) < TEST_EXPECTED_ABS_POS_DIFF)
+    assert(abs((yellow_robot_pos.y - blue_robot_pos.y)) < TEST_EXPECTED_ABS_POS_DIFF)
     
     for side in change_orens:
         for oren in side:

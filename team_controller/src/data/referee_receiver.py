@@ -9,7 +9,9 @@ from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP_REFEREE, REFEREE_PORT
 
 from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Referee
+import logging
 
+logger = logging.logger(__name__)
 
 class RefereeMessageReceiver:
     """
@@ -341,8 +343,7 @@ class RefereeMessageReceiver:
                     referee_packet.Clear()  # Clear previous data to avoid memory bloat
                     referee_packet.ParseFromString(data)
                     self._update_data(referee_packet)
-            if self.debug:
-                self._print_referee_info(t_received, referee_packet)
+            self._print_referee_info(t_received, referee_packet)
             time.sleep(0.0083)
 
     def _print_referee_info(self, t_received: float, referee_packet: Referee) -> None:
@@ -354,14 +355,14 @@ class RefereeMessageReceiver:
             referee_packet (Referee): The referee packet containing game state information.
         """
         t_now = time.time()
-        print(f"Time Now          : {t_now:.3f}s")
-        print(f"Referee Command   : {self.string_from_command(self.command)}")
-        print(f"Stage             : {self.string_from_stage(self.stage)}")
-        print(f"Stage Time Left   : {self.stage_time_left} ms")
-        print(f"Command Counter   : {self.command_counter}")
-        print(f"Command Timestamp : {self.command_timestamp} us")
-        print("--- YELLOW TEAM ---------------------------")
-        print(f"{self.yellow_info}")
-        print("--- BLUE TEAM -----------------------------")
-        print(f"{self.blue_info}")
-        print("-------------------------------------------")
+        logger.debug(f"Time Now          : {t_now:.3f}s")
+        logger.debug(f"Referee Command   : {self.string_from_command(self.command)}")
+        logger.debug(f"Stage             : {self.string_from_stage(self.stage)}")
+        logger.debug(f"Stage Time Left   : {self.stage_time_left} ms")
+        logger.debug(f"Command Counter   : {self.command_counter}")
+        logger.debug(f"Command Timestamp : {self.command_timestamp} us")
+        logger.debug("--- YELLOW TEAM ---------------------------")
+        logger.debug(f"{self.yellow_info}")
+        logger.debug("--- BLUE TEAM -----------------------------")
+        logger.debug(f"{self.blue_info}")
+        logger.debug("-------------------------------------------")

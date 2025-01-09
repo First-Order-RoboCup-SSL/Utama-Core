@@ -5,7 +5,9 @@ from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
 from team_controller.src.config.settings import BAUD_RATE, PORT, TIMEOUT
+import logging
 
+logger = logging.logger(__name__)
 
 class RealRobotController(AbstractRobotController):
     def _init_(self, is_team_yellow: bool, game_obj: Game, debug: bool = False):
@@ -14,10 +16,9 @@ class RealRobotController(AbstractRobotController):
         self._debug = debug
         self._serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
 
-        if self.debug:
-            print(
-                f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}"
-            )
+        logger.debug(
+            f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}"
+        )
 
     def send_robot_commands(self) -> None:
         """

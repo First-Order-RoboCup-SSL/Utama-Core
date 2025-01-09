@@ -8,7 +8,9 @@ from team_controller.src.data.base_receiver import BaseReceiver
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT, NUM_ROBOTS
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
+import logging
 
+logger = logging.logger(__name__)
 
 class VisionDataReceiver(BaseReceiver):
     """
@@ -119,17 +121,17 @@ class VisionDataReceiver(BaseReceiver):
 
     def _print_frame_info(self, t_received: float, detection: object) -> None:
         t_now = time.time()
-        print(f"Time Now: {t_now:.3f}s")
-        print(
+        logger.debug(f"Time Now: {t_now:.3f}s")
+        logger.debug(
             f"Camera ID={detection.camera_id} FRAME={detection.frame_number} "
             f"T_CAPTURE={detection.t_capture:.4f}s"
             f" T_SENT={detection.t_sent:.4f}s"
         )
-        print(
+        logger.debug(
             f"SSL-Vision Processing Latency: "
             f"{(detection.t_sent - detection.t_capture) * 1000.0:.3f}ms"
         )
-        print(
+        logger.debug(
             f"Total Latency: "
             f"{((t_now - t_received) + (detection.t_sent - detection.t_capture)) * 1000.0:.3f}ms"
         )
@@ -151,8 +153,8 @@ class VisionDataReceiver(BaseReceiver):
                 self._update_data(vision_packet.detection)
                 # print(vision_packet.detection.frame_number)
                 # print(vision_packet.frame_number)
-            if self.debug:
-                self._print_frame_info(t_received, vision_packet.detection)
+            
+            self._print_frame_info(t_received, vision_packet.detection)
             # time.sleep(0.0083) # TODO : Block on data?
 
     # MOVE INTO GAME  
