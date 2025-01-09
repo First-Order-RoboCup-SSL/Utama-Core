@@ -223,7 +223,5 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
 
 
 if __name__=="__main__":
-    # print("NEXT POS: ", align_defenders(pi, (2.5, 2), False))
-    print(to_defense_parametric((3, 2), False))
+    logger.debug(to_defense_parametric((3, 2), False))
 
-    
