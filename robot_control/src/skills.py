@@ -7,6 +7,10 @@ from entities.data.vision import BallData, RobotData
 from motion_planning.src.pid import PID
 import logging
 
+from math import atan, atan2, dist, sqrt, cos, sin, pi, acos, degrees, asin
+from motion_planning.src.pid.pid import TwoDPID
+from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,11 +23,6 @@ def kick_ball() -> RobotCommand:
         kick_angle=0,
         dribbler_spd=0,
     )
-
-
-from motion_planning.src.pid.pid import TwoDPID
-from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
-
 
 # TODO: this pid system is v clumsy, and will eventually be streamlined with robot object
 # Ideally, we should have one PID for each robot and not have one giant PID for all robots
@@ -70,7 +69,6 @@ def go_to_point(
         dribbling=dribbling,
     )
 
-
 def turn_on_spot(
     pid_oren: PID,
     pid_trans: PID,
@@ -89,10 +87,6 @@ def turn_on_spot(
         dribbling=dribbling,
     )
 
-from math import atan, atan2, dist, sqrt, cos, sin, pi, acos, degrees, asin
-RADIUS = sqrt(2)+0.1
-
-
 def predict_goal_y_location(shooter_position: Tuple[float, float], orientation:float, shoots_left: bool) -> float:
     dx, dy = cos(orientation), sin(orientation)
     gx,_ = get_goal_centre(shoots_left)
@@ -101,7 +95,6 @@ def predict_goal_y_location(shooter_position: Tuple[float, float], orientation:f
     t = (gx-shooter_position[0]) / dx
     return shooter_position[1] + t*dy
 
-import numpy as np
 def calculate_defense_area(t: float, is_left: bool):
     """ Semi circle around goal with radius sqrt(2) metres, t is parametric 
     x = r cos t, y = r sin t, pi/2 <= t <= 3pi/2 
@@ -198,6 +191,8 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
 
     
     env.draw_line([predicted_goal_position, attacker_position], width=1, color="green")
+    env.draw_line([predicted_goal_position, (dx, dy)], width=1, color="yellow")
+
     # Calculate the cross product relative to the predicted position of the goal 
 
     poly = []

@@ -15,7 +15,7 @@ from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 
 
 def defend(pid_oren:PID, pid_2d: TwoDPID, game: Game, controller: RSimRobotController, is_yellow: bool, defender_id: int, env):
-    # Assume that is_yellow <-> not is_left here
+    # Assume that is_yellow <-> not is_left here # TODO : FIX
     friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
     shooters_data = find_likely_enemy_shooter(enemy, balls)
     orientation = None
