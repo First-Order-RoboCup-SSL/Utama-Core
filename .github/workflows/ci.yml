@@ -33,7 +33,7 @@ jobs:
       - name: Run tests
         run: |
           if [[ $GITHUB_EVENT_NAME == "push" ]]; then
-            pytest robot_control/src/tests --level full
+            pytest robot_control/src/tests --level full --headless
           elif [[ $GITHUB_EVENT_NAME == "pull_request" ]]; then
-            pytest robot_control/src/tests --level quick
+            pytest robot_control/src/tests --level quick --headless
           fi

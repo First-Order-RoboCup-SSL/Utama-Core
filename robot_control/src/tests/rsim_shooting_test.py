@@ -10,7 +10,7 @@ import pytest
 ITERS = 500
 N_ROBOTS = 6
 
-def test_shooting(shooter_id: int, is_yellow: bool):
+def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
     """When the tests are run with pytest, these parameters are filled in
        based on whether we are in full or quick test mode (see conftest.py)"""
 
@@ -18,9 +18,9 @@ def test_shooting(shooter_id: int, is_yellow: bool):
 
     # Shooting team gets full complement of robots, defending team only half
     if is_yellow:
-        env = SSLStandardEnv(n_robots_blue=N_ROBOTS // 2, n_robots_yellow=N_ROBOTS)
+        env = SSLStandardEnv(n_robots_blue=N_ROBOTS // 2, n_robots_yellow=N_ROBOTS, render_mode="ansi" if headless else "human")
     else:
-        env = SSLStandardEnv(n_robots_yellow=N_ROBOTS // 2, n_robots_blue=N_ROBOTS)
+        env = SSLStandardEnv(n_robots_yellow=N_ROBOTS // 2, n_robots_blue=N_ROBOTS, render_mode="ansi" if headless else "human")
 
     env.reset()
     env.teleport_ball(1, 1)
@@ -59,6 +59,6 @@ def test_shooting(shooter_id: int, is_yellow: bool):
 
 if __name__ == "__main__":
     try:
-       test_shooting(0, True)
+       test_shooting(0, True, False)
     except KeyboardInterrupt:
         print("Exiting...")

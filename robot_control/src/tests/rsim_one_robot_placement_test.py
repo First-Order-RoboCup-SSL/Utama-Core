@@ -16,7 +16,7 @@ import pytest
 
 N_ROBOTS = 6
 
-def test_one_robot_placement(robot_to_place: int, is_yellow: bool):
+def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: bool):
     """When the tests are run with pytest, these parameters are filled in
        based on whether we are in full or quick test mode (see conftest.py)"""
         
@@ -31,7 +31,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool):
     N_ROBOTS_BLUE = N_ROBOTS
     N_ROBOTS_YELLOW = N_ROBOTS
 
-    env = SSLStandardEnv(n_robots_blue=N_ROBOTS_BLUE)
+    env = SSLStandardEnv(n_robots_blue=N_ROBOTS_BLUE, render_mode="ansi" if headless else "human")
     env.reset()
 
     env.teleport_ball(1, 1)
@@ -65,6 +65,6 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool):
 
 if __name__ == "__main__":
     try:
-        test_one_robot_placement(1, False)
+        test_one_robot_placement(1, False, False)
     except KeyboardInterrupt:
         print("Exiting...")

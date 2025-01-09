@@ -65,13 +65,13 @@ def attack(pid_oren: PID, pid_2d:TwoDPID, game:Game, controller: RSimRobotContro
     return False
 
     
-def test_single_defender(defender_id: int, shooter_id: int, is_yellow: bool):
+def test_single_defender(defender_id: int, shooter_id: int, is_yellow: bool, headless: bool):
     game = Game()
 
     N_ROBOTS_YELLOW = 6
     N_ROBOTS_BLUE = 6
 
-    env = SSLStandardEnv(n_robots_blue=N_ROBOTS_BLUE)
+    env = SSLStandardEnv(n_robots_blue=N_ROBOTS_BLUE, render_mode="ansi" if headless else "human")
     env.reset()
 
     env.teleport_ball(2.25, -1)
@@ -94,7 +94,6 @@ def test_single_defender(defender_id: int, shooter_id: int, is_yellow: bool):
             any_scored = True
             break
         defend(pid_oren_b, pid_2d_b, game, sim_robot_controller_blue, is_yellow, defender_id, env)
-        
     assert not any_scored
 
 
@@ -102,6 +101,6 @@ def test_single_defender(defender_id: int, shooter_id: int, is_yellow: bool):
 
 if __name__ == "__main__":
     try:
-        test_single_defender(1, 5, False)
+        test_single_defender(1, 5, False, False)
     except KeyboardInterrupt:
         print("Exiting...")

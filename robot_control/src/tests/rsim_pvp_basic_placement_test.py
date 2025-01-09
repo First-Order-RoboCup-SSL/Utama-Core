@@ -16,7 +16,7 @@ TEST_EXPECTED_REL_POS_DIFF = 0.1
 TARGET_OREN = math.pi / 2
 TEST_RESULT_OREN_THRESH = 0.10
 
-def test_pvp_placement(target_robot: int):
+def test_pvp_placement(target_robot: int, headless: bool):
     ITERS = 1000
 
     game = Game()
@@ -24,7 +24,7 @@ def test_pvp_placement(target_robot: int):
     N_ROBOTS_YELLOW = 6
     N_ROBOTS_BLUE = 3
 
-    env = SSLStandardEnv(n_robots_blue=N_ROBOTS_BLUE)
+    env = SSLStandardEnv(n_robots_blue=N_ROBOTS_BLUE, render_mode="ansi" if headless else "human")
     env.reset()
 
     env.teleport_ball(1, 1)
@@ -65,6 +65,6 @@ def test_pvp_placement(target_robot: int):
 
 if __name__ == "__main__":
     try:
-        test_pvp_placement(1)
+        test_pvp_placement(1, False)
     except KeyboardInterrupt:
         print("Exiting...")

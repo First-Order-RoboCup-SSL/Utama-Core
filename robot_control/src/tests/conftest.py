@@ -1,3 +1,5 @@
+import pytest
+
 def pytest_addoption(parser):
     parser.addoption(
         "--level",
@@ -5,6 +7,12 @@ def pytest_addoption(parser):
         default="full",
         choices=["quick", "full"],
         help="Set the testing level: 'quick' or 'full'."
+    )
+    parser.addoption(
+        "--headless",
+        action="store_true",
+        default=False,
+        help="Don't display any graphics (runs faster)"
     )
 
 parameter_values = {
@@ -34,3 +42,7 @@ def pytest_generate_tests(metafunc):
     for (param, cases) in parameter_values.items():
         if param in metafunc.fixturenames:
             metafunc.parametrize(param, cases[metafunc.config.getoption("level")])
+
+@pytest.fixture
+def headless(pytestconfig):
+    return pytestconfig.getoption("--headless")
