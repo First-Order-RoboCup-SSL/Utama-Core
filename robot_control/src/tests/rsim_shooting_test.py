@@ -1,4 +1,4 @@
-from motion_planning.src.pid.pid import TwoDPID
+from motion_planning.src.pid.pid import TwoDPID, get_pids
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
@@ -24,8 +24,8 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
 
     env.reset()
     env.teleport_ball(1, 1)
-    pid_oren = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=N_ROBOTS)
-    pid_trans = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=N_ROBOTS)
+
+    pid_oren, pid_trans = get_pids(N_ROBOTS)
 
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game, debug=False
