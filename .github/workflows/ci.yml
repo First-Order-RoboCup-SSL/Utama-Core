@@ -33,7 +33,16 @@ jobs:
       - name: Run tests
         run: |
           if [[ $GITHUB_EVENT_NAME == "push" ]]; then
-            pytest robot_control/src/tests --level full --headless
+            pytest robot_control/src/tests --level full --headless --junit-xml=test-results.xml
           elif [[ $GITHUB_EVENT_NAME == "pull_request" ]]; then
-            pytest robot_control/src/tests --level quick --headless
+            pytest robot_control/src/tests --level quick --headless --junit-xml=test-results.xml
           fi
+      
+      - name: Surface failing tests
+        uses: pmeier/pytest-results-action@main
+        with:
+          path: test-results.xml
+          summary: true
+          display-options: fEX
+          fail-on-empty: true
+          title: RSoccer CI Test Results
