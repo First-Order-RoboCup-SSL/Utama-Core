@@ -21,7 +21,7 @@ from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import
     RobotFeedback,
 )
 import logging
-logger = logging.logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class GRSimRobotController(AbstractRobotController):
