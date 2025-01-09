@@ -8,6 +8,9 @@ from entities.game.game_object import Ball, Colour, GameObject, Robot
 from team_controller.src.config.settings import TIMESTEP
 
 # TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Game:
@@ -236,8 +239,8 @@ class Game:
 
         """
         if frame >= len(self._records) or frame == 0:
-            # Cannot provide velocity at frame that does not exist
-            print(frame)
+            logger.warning("Cannot provide velocity at a frame that does not exist")
+            logger.info("See frame: %s", str(frame))
             return None
 
         # Otherwise get the previous and current frames
@@ -252,8 +255,7 @@ class Game:
 
         # Latest frame should always be ahead of last one
         if time_received < previous_time_received:
-            # TODO log a warning
-            print("Timestamps out of order for vision data ")
+            logger.warning("Timestamps out of order for vision data %f should be after %f", time_received, previous_time_received)
             return None
 
         dt_secs = time_received - previous_time_received

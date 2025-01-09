@@ -4,6 +4,9 @@ import numpy as np
 from entities.data.vision import RobotData
 from entities.game.role import Attack, Defend, Action, Role
 from entities.game.game_object import Colour
+import logging
+
+logger = logging.getLogger(__name__)
 
 ROLES: List[Role] = [Attack(), Defend()]
 
@@ -88,7 +91,7 @@ class Robot:
 if __name__ == "__main__":
     robot = Robot(0, Colour.YELLOW, 0)
     robot.aggro_rating = 5
-    print(f"Role before init: {robot.role.name}")
+    logger.debug(f"Role before init: {robot.role.name}")
     robot.role = "defender" # or 1 changes the role of the robot
-    print(f"Role after change: {robot.role.name}")
-    print(robot.aggro_rating)
+    logger.debug(f"Role after change: {robot.role.name}")
+    logger.debug(f"Robot agro rating {robot.aggro_rating}")
