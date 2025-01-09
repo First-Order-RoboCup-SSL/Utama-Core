@@ -24,8 +24,8 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
 
     env.reset()
     env.teleport_ball(1, 1)
-    pid_oren = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=6)
-    pid_trans = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=6)
+    pid_oren = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=N_ROBOTS)
+    pid_trans = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=N_ROBOTS)
 
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game, debug=False
@@ -59,6 +59,6 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
 
 if __name__ == "__main__":
     try:
-       test_shooting(0, True, False)
+       test_shooting(5, True, False)
     except KeyboardInterrupt:
         print("Exiting...")
