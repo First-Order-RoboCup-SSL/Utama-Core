@@ -7,7 +7,7 @@ from team_controller.src.controllers.common.robot_controller_abstract import (
 from team_controller.src.config.settings import BAUD_RATE, PORT, TIMEOUT
 import logging
 
-logger = logging.logger(__name__)
+logger = logging.getLogger(__name__)
 
 class RealRobotController(AbstractRobotController):
     def _init_(self, is_team_yellow: bool, game_obj: Game, debug: bool = False):

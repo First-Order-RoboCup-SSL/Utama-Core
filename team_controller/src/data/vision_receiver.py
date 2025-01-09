@@ -10,7 +10,7 @@ from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT, NU
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
 import logging
 
-logger = logging.logger(__name__)
+logger = logging.getLogger(__name__)
 
 class VisionDataReceiver(BaseReceiver):
     """

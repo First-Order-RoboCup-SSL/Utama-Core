@@ -11,7 +11,7 @@ from team_controller.src.config.settings import MULTICAST_GROUP_REFEREE, REFEREE
 from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Referee
 import logging
 
-logger = logging.logger(__name__)
+logger = logging.getLogger(__name__)
 
 class RefereeMessageReceiver:
     """
