@@ -27,8 +27,8 @@ def main():
     time.sleep(0.2)
 
     message_queue = queue.SimpleQueue()
-    receiver = VisionDataReceiver(message_queue, debug=False)
-    decision_maker = StartUpController(game, debug=False)
+    receiver = VisionDataReceiver(message_queue)
+    decision_maker = StartUpController(game)
 
     # Start the data receiving in a separate thread
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))

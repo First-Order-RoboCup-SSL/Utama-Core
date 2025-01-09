@@ -142,7 +142,6 @@ class ShootingController:
         robot_controller: GRSimRobotController,
         address=LOCAL_HOST,
         port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT),
-        debug=False,
     ):
         self.game_obj = game_obj
         self.robot_controller = robot_controller
@@ -171,7 +170,6 @@ class ShootingController:
 
         self.lock = threading.Lock()
 
-        self.debug = debug
         self.shooter_id = shooter_id
 
     # Added this function
@@ -367,8 +365,8 @@ if __name__ == "__main__":
     game = Game()
 
     message_queue = queue.SimpleQueue()
-    vision_receiver = VisionDataReceiver(message_queue, debug=False)
-    sim_robot_controller = GRSimRobotController(is_team_yellow=True, debug=False)
+    vision_receiver = VisionDataReceiver(message_queue)
+    sim_robot_controller = GRSimRobotController(is_team_yellow=True)
     decision_maker = ShootingController(
         shooter_id,
         goal_x,
@@ -376,7 +374,6 @@ if __name__ == "__main__":
         goal_y2,
         game,
         sim_robot_controller,
-        debug=True,
     )
 
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)

@@ -29,7 +29,6 @@ class VisionDataReceiver(BaseReceiver):
         port=VISION_PORT,
         n_yellow_robots: int = 6,
         n_blue_robots: int = 6,
-        debug=False,
         n_cameras=4
     ):
         super().__init__(messsage_queue) # Setup the message queue
@@ -40,7 +39,6 @@ class VisionDataReceiver(BaseReceiver):
         self.robots_yellow_pos: List[RobotData] = [None] * n_yellow_robots
         self.robots_blue_pos: List[RobotData] = [None] * n_blue_robots
         self.camera_frames = [None for i in range(n_cameras)] # TODO: Use GEOMETRY
-        self.debug = debug
         self.frames_recvd = 0
         self.n_cameras = n_cameras
 

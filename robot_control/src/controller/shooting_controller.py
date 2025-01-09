@@ -34,7 +34,6 @@ class ShootingController:
         vision_receiver: VisionDataReceiver,
         address=LOCAL_HOST,
         port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT),
-        debug=False,
     ):
         self.vision_receiver = vision_receiver
         self.goal_x = goal_x
@@ -50,7 +49,6 @@ class ShootingController:
 
         self.lock = threading.Lock()
 
-        self.debug = debug
         self.shooter_id = shooter_id
 
     def kick_ball(self):

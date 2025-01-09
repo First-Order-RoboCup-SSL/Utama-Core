@@ -20,8 +20,8 @@ if __name__ == "__main__":
     game = Game()
 
     message_queue = queue.SimpleQueue()
-    vision_receiver = VisionDataReceiver(message_queue, debug=False)
-    sim_robot_controller = GRSimRobotController(is_team_yellow=True, debug=False)
+    vision_receiver = VisionDataReceiver(message_queue)
+    sim_robot_controller = GRSimRobotController(is_team_yellow=True)
 
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
     vision_thread.daemon = True

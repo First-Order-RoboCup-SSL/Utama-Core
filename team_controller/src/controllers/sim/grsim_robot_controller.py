@@ -30,7 +30,6 @@ class GRSimRobotController(AbstractRobotController):
         is_team_yellow: bool,
         address=LOCAL_HOST,
         port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT),
-        debug=False,
     ):
         self.is_team_yellow = is_team_yellow
 
@@ -43,7 +42,6 @@ class GRSimRobotController(AbstractRobotController):
 
         self.robots_info: List[RobotInfo] = [None] * 6
 
-        self.debug = debug
 
     def send_robot_commands(self) -> None:
         """

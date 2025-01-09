@@ -34,7 +34,7 @@ class StartUpController:
     ):
         self.game = game
         self.sim_robot_controller = GRSimRobotController(
-            is_team_yellow=True, debug=debug
+            is_team_yellow=True
         )
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
@@ -150,8 +150,8 @@ def main():
     game = Game()
 
     message_queue = queue.SimpleQueue()
-    receiver = VisionDataReceiver(message_queue, debug=False)
-    decision_maker = StartUpController(game, debug=False)
+    receiver = VisionDataReceiver(message_queue)
+    decision_maker = StartUpController(game)
 
     # Start the data receiving in a separate thread
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))

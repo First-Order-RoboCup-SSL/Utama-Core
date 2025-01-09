@@ -24,7 +24,7 @@ class RefereeMessageReceiver:
         port (int): The port for receiving referee data. Defaults to REFEREE_PORT.
         debug (bool): Whether to print debug information. Defaults to False.
     """
-    def __init__(self, ip=MULTICAST_GROUP_REFEREE, port=REFEREE_PORT, debug=False): # TODO: add message queue
+    def __init__(self, ip=MULTICAST_GROUP_REFEREE, port=REFEREE_PORT): # TODO: add message queue
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
         self.prev_command_counter = -1
         self.command_history = []
@@ -33,7 +33,6 @@ class RefereeMessageReceiver:
         self.time_received = None
         self.lock = threading.Lock()
         self.update_event = threading.Event()
-        self.debug = debug
 
         # Initialize state variables
         self.stage = None

@@ -15,7 +15,7 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 def main():
     # Initialize the VisionDataReceiver
-    receiver = VisionDataReceiver(debug=False)
+    receiver = VisionDataReceiver()
 
     # Start the data receiving in a separate thread
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
