@@ -10,10 +10,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 class RealRobotController(AbstractRobotController):
-    def _init_(self, is_team_yellow: bool, game_obj: Game, debug: bool = False):
+    def _init_(self, is_team_yellow: bool, game_obj: Game):
         self._is_team_yellow = is_team_yellow
         self._game_obj = game_obj
-        self._debug = debug
         self._serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
 
         logger.debug(
