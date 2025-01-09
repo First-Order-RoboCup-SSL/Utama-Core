@@ -101,6 +101,6 @@ def test_single_defender(defender_id: int, shooter_id: int, is_yellow: bool, hea
 
 if __name__ == "__main__":
     try:
-        test_single_defender(2, 0, False, False)
+        test_single_defender(2, 2, True, False)
     except KeyboardInterrupt:
         print("Exiting...")
