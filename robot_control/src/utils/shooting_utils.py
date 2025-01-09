@@ -121,7 +121,7 @@ def find_best_shot(
     if shadows[-1][1] < goal_y2:
         open_spaces.append((shadows[-1][1], goal_y2))
 
-    largest_gap: Tuple[float, float] = max(open_spaces, key=lambda x: x[1] - x[0])
+    largest_gap: Tuple[float, float] = max(open_spaces+[(0,0)], key=lambda x: x[1] - x[0])
     best_shot: float = (largest_gap[0] + largest_gap[1]) / 2
 
     return best_shot
