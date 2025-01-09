@@ -68,31 +68,40 @@ def attack(pid_oren: PID, pid_2d:TwoDPID, game:Game, controller: RSimRobotContro
 def test_single_defender(defender_id: int, shooter_id: int, defender_is_yellow: bool, headless: bool):
     game = Game()
 
-    N_ROBOTS_YELLOW = 5
-    N_ROBOTS_BLUE = 6
+    if defender_is_yellow:
+        N_ROBOTS_YELLOW = 3 
+        N_ROBOTS_BLUE = 6
+    else:
+        N_ROBOTS_BLUE = 3
+        N_ROBOTS_YELLOW = 6
 
     env = SSLStandardEnv(n_robots_blue=N_ROBOTS_BLUE, n_robots_yellow=N_ROBOTS_YELLOW, render_mode="ansi" if headless else "human")
     env.reset()
 
     env.teleport_ball(2.25, -1)
 
+    # Move the other defender out of the way
+    not_defender_id = 2 if defender_id == 1 else 1
+    env.teleport_robot(defender_is_yellow, not_defender_id, 0, 0, 0)
+
     pid_oren_y, pid_2d_y = get_pids(N_ROBOTS_YELLOW)
     pid_oren_b, pid_2d_b = get_pids(N_ROBOTS_BLUE)
-
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(env,  game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW)
 
     if defender_is_yellow:
         sim_robot_controller_attacker, sim_robot_controller_defender = sim_robot_controller_blue, sim_robot_controller_yellow
+        pid_oren_a, pid_2d_a, pid_oren_d, pid_2d_d = pid_oren_b, pid_2d_b, pid_oren_y, pid_2d_y 
     else:
         sim_robot_controller_attacker, sim_robot_controller_defender = sim_robot_controller_yellow, sim_robot_controller_blue
+        pid_oren_a, pid_2d_a, pid_oren_d, pid_2d_d = pid_oren_y, pid_2d_y, pid_oren_b, pid_2d_b 
 
     any_scored = False
     for _ in range(900):
-        scored = attack(pid_oren_y, pid_2d_y, game, sim_robot_controller_attacker, shooter_id, defender_is_yellow)
+        scored = attack(pid_oren_a, pid_2d_a, game, sim_robot_controller_attacker, shooter_id, defender_is_yellow)
         if scored:
             any_scored = True
             break
-        defend(pid_oren_b, pid_2d_b, game, sim_robot_controller_defender, defender_is_yellow, defender_id, env)
+        defend(pid_oren_d, pid_2d_d, game, sim_robot_controller_defender, defender_is_yellow, defender_id, env)
     assert not any_scored
 
 
