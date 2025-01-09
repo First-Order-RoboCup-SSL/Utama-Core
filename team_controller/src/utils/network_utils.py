@@ -4,12 +4,9 @@ import logging
 from typing import Optional, Tuple
 
 from team_controller.src.config.settings import MULTICAST_GROUP, LOCAL_HOST
+import logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
+logger = logging.getLogger(__name__)
 
 def setup_socket(
     sock: socket.socket, address: Tuple[str, int], bind_socket: bool = False
@@ -43,13 +40,13 @@ def setup_socket(
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
         # sock.settimeout(0.005)  # Set timeout to 1 frame period (60 FPS)
-        logging.info(
+        logger.info(
             "Socket setup completed with address %s and bind_socket=%s",
             address,
             bind_socket,
         )
     except socket.error as e:
-        logging.error("Socket setup failed for address %s with error: %s", address, e)
+        logger.error("Socket setup failed for address %s with error: %s", address, e)
         raise  # Re-raise the exception to handle it further up if needed
     return sock
 
@@ -71,13 +68,13 @@ def receive_data(sock: socket.socket) -> Optional[bytes]:
         data, _ = sock.recvfrom(8192)
         return data
     except socket.timeout:
-        logging.warning("Socket timed out while receiving data")
+        logger.warning("Socket timed out while receiving data")
         return None
     except socket.error as e:
-        logging.error("Socket error occurred while receiving data: %s", e)
+        logger.error("Socket error occurred while receiving data: %s", e)
         return None
     except Exception as e:
-        logging.exception("Unexpected error receiving data")
+        logger.exception("Unexpected error receiving data")
         return None
 
 
@@ -105,10 +102,10 @@ def send_command(address: Tuple[str, int], command: object, is_sim_robot_cmd: bo
             if is_sim_robot_cmd:
                 data = receive_data(send_sock)
                 return data
-            logging.info("Command sent to %s", address)
+            logger.info("Command sent to %s", address)
     except AttributeError:
-        logging.error("Command object has no SerializeToString method")
+        logger.error("Command object has no SerializeToString method")
     except socket.error as e:
-        logging.error("Socket error when sending command to %s: %s", address, e)
+        logger.error("Socket error when sending command to %s: %s", address, e)
     except Exception as e:
-        logging.exception("Unexpected error sending command")
+        logger.exception("Unexpected error sending command")
