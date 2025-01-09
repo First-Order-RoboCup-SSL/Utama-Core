@@ -96,16 +96,20 @@ def test_single_defender(defender_id: int, shooter_id: int, defender_is_yellow: 
         pid_oren_a, pid_2d_a, pid_oren_d, pid_2d_d = pid_oren_y, pid_2d_y, pid_oren_b, pid_2d_b 
 
     any_scored = False
+    attacker_gets_ball = False
     for _ in range(900):
         scored = attack(pid_oren_a, pid_2d_a, game, sim_robot_controller_attacker, shooter_id, defender_is_yellow)
         if scored:
             any_scored = True
             break
         defend(pid_oren_d, pid_2d_d, game, sim_robot_controller_defender, defender_is_yellow, defender_id, env)
+        
+        if sim_robot_controller_defender.robot_has_ball(defender_id): # Sim ends when the defender gets the ball
+            break
+        attacker_gets_ball = attacker_gets_ball or sim_robot_controller_attacker.robot_has_ball(shooter_id)
+    
     assert not any_scored
-
-
-
+    assert attacker_gets_ball
 
 if __name__ == "__main__":
     try:
