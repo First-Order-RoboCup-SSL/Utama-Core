@@ -363,7 +363,7 @@ if __name__ == "__main__":
     env.teleport_ball(0, 0)
     # Note we don't need a vision receiver for rsim
     sim_robot_controller = RSimRobotController(
-        is_team_yellow=True, env=env, game_obj=game, debug=False
+        is_team_yellow=True, env=env, game_obj=game
     )
     decision_maker = ShootingController(
         shooter_id,

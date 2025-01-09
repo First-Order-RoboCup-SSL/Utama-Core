@@ -13,10 +13,10 @@ def setup_pvp(env: SSLStandardEnv, game: Game, n_robots_blue: int, n_robots_yell
     """Factory method to setup PVP in an RSoccer environment"""
     pvp_manager = PVPManager(env, n_robots_blue, n_robots_yellow, game)
     sim_robot_controller_yellow = RSimRobotController(
-        is_team_yellow=True, env=env, game_obj=game, debug=True, pvp_manager=pvp_manager
+        is_team_yellow=True, env=env, game_obj=game, pvp_manager=pvp_manager
     )
     sim_robot_controller_blue = RSimRobotController(
-        is_team_yellow=False, env=env, game_obj=game, debug=False, pvp_manager=pvp_manager
+        is_team_yellow=False, env=env, game_obj=game, pvp_manager=pvp_manager
     )
     pvp_manager.set_yellow_controller(sim_robot_controller_yellow)
     pvp_manager.set_blue_controller(sim_robot_controller_blue)

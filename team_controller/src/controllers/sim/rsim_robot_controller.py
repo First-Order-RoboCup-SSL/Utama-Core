@@ -31,11 +31,9 @@ class RSimRobotController(AbstractRobotController):
         env: SSLBaseEnv,
         game_obj: Game,
         pvp_manager = None,#: Optional[PVPManager] = None, Can't forward declare
-        debug: bool = False,
     ):
         self._is_team_yellow = is_team_yellow
         self._game_obj = game_obj
-        self._debug = debug
         self._env = env
         self._n_friendly_robots, self._n_enemy_robots = self._get_n_robots()
         self._out_packet = self._empty_command(self.n_friendly_robots)

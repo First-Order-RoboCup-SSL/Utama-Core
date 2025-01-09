@@ -28,7 +28,7 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
     pid_oren, pid_trans = get_pids(N_ROBOTS)
 
     sim_robot_controller = RSimRobotController(
-        is_team_yellow=is_yellow, env=env, game_obj=game, debug=False
+        is_team_yellow=is_yellow, env=env, game_obj=game
     )
 
     shoot_in_left_goal = is_yellow  # Need to get this from ref info in real life; in unit testing this is fine
