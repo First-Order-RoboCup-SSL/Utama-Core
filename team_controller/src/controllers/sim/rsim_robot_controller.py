@@ -84,7 +84,7 @@ class RSimRobotController(AbstractRobotController):
             else:
                 self._robots_info = blue_robots_info
 
-            logger.debug(new_frame, terminated, truncated, reward_shaping)
+            logger.debug(f"{new_frame} {terminated} {truncated} {reward_shaping}")
 
             self._write_to_game_obj(new_frame)
             # flush out_packet

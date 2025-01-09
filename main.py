@@ -62,7 +62,7 @@ def main():
                     and predictions[-FRAMES_IN_TIME] != None
                 ):
                     logger.debug(
-                        "Ball prediction inaccuracy delta (cm): ",
+                        "Ball prediction inaccuracy delta (cm): " +
                         "{:.20f}".format(
                             100
                             * math.sqrt(
@@ -77,11 +77,11 @@ def main():
                                 )
                                 ** 2
                             )
-                        ),
+                        )
                     )
                     for i in range(6):
                         logger.debug(
-                            f"Blue robot {i} prediction inaccuracy delta (cm): ",
+                            f"Blue robot {i} prediction inaccuracy delta (cm): " +
                             "{:.20f}".format(
                                 100
                                 * math.sqrt(
@@ -96,11 +96,11 @@ def main():
                                     )
                                     ** 2
                                 )
-                            ),
+                            )
                         )
                     for i in range(6):
                         logger.debug(
-                            f"Yellow robot {i} prediction inaccuracy delta (cm): ",
+                            f"Yellow robot {i} prediction inaccuracy delta (cm): " +
                             "{:.20f}".format(
                                 100
                                 * math.sqrt(
@@ -119,7 +119,7 @@ def main():
                                     )
                                     ** 2
                                 )
-                            ),
+                            )
                         )
 
                 predictions.append(game.predict_frame_after(TIME))

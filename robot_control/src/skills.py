@@ -187,7 +187,7 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
     NO_MOVE_THRES = 1
     # Calculates the next point on the defense area that the robots should go to
     dx, dy = calculate_defense_area(defender_position, is_left)
-    logger.debug("DEFENDER", dx, dy)
+    logger.debug(f"DEFENDER {dx} {dy}")
     goal_centre = get_goal_centre(is_left)
 
     if attacker_orientation is None:
@@ -219,7 +219,7 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
     if degrees(angle) > NO_MOVE_THRES:
         # Move to the correct side 
         next_t = step_curve(defender_position, side)
-        logger.debug("RAW NEXT", calculate_defense_area(clamp_to_parametric(next_t), is_left), side, angle)
+        logger.debug(f"RAW NEXT {calculate_defense_area(clamp_to_parametric(next_t), is_left)} {side} {angle}")
         return calculate_defense_area(next_t, is_left)
     else:
         return calculate_defense_area(defender_position, is_left)
@@ -237,5 +237,5 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
 
 
 if __name__=="__main__":
-    logger.debug(to_defense_parametric((3, 2), False))
+    logger.debug(f"{to_defense_parametric((3, 2), False)}")
 

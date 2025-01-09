@@ -140,7 +140,6 @@ class ShootingController:
         goal_y2,
         game_obj: Game,
         robot_controller: RSimRobotController,
-        debug=False,
     ):
         self.game_obj = game_obj
         self.robot_controller = robot_controller
@@ -165,7 +164,6 @@ class ShootingController:
         self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0.045, num_robots=6)
         self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0.035, num_robots=6)
 
-        self.debug = debug
         self.shooter_id = shooter_id
 
     # Added this function
@@ -374,7 +372,6 @@ if __name__ == "__main__":
         goal_y2,
         game,
         sim_robot_controller,
-        debug=True,
     )
 
     try:

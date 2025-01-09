@@ -54,7 +54,7 @@ class ShootingController:
     def kick_ball(self):
         logger.debug("kicked the ball")
         out_packet = self._add_kick_command(self.shooter_id, 4)
-        logger.debug(out_packet)
+        logger.debug(str(out_packet))
         self.net.send_command(out_packet)
 
     def approach_ball(self):
@@ -96,7 +96,7 @@ class ShootingController:
                     ) < 30000:
                         self.kick_ball()
 
-                logger.debug(out_packet)
+                logger.debug(str(out_packet))
                 self.net.send_command(out_packet)
 
             time_to_sleep = max(0, 0.0167 - (time.time() - start_time))
