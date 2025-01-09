@@ -172,7 +172,6 @@ class SSLBaseEnv(gym.Env):
 
         Note: this does not create a new frame, but mutates the current frame
         """
-        print(self.frame.ball)
         ball = Ball(x=x, y=-y, z=self.frame.ball.z, v_x=vx, v_y=-vy)
         self.frame.ball = ball
         self.rsim.reset(self.frame)

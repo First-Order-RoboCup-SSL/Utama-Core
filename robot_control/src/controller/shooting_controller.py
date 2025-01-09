@@ -197,4 +197,3 @@ class ShootingController:
         local_vel.forward = command["xvel"]
         local_vel.left = command["yvel"]
         local_vel.angular = command["wvel"]
-        # print(f"Robot {command['id']} command: ({command['xvel']:.3f}, {command['yvel']:.3f}, {command['wvel']:.3f})")

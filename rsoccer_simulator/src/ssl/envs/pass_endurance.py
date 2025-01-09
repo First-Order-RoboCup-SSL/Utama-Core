@@ -6,7 +6,9 @@ import gymnasium as gym
 import numpy as np
 from rsoccer_simulator.src.Entities import Ball, Frame, Robot
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
+import logging
 
+logger = logging.getLogger(__name__)
 
 class SSLPassEnduranceEnv(SSLBaseEnv):
     """The SSL robot needs to make a goal with contested possession
@@ -72,7 +74,7 @@ class SSLPassEnduranceEnv(SSLBaseEnv):
         self.max_w = 10
         self.max_kick_x = 5.0
 
-        print("Environment initialized")
+        logger.info("Environment initialized")
 
     def _frame_to_observations(self):
         observation = list()

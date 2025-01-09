@@ -26,9 +26,6 @@ def calculate_robot_velocities(
 
     target_x, target_y = target_coords[:2]
 
-    # print(f"\nRobot {robot_id} current position: ({current_x:.3f}, {current_y:.3f}, {current_oren:.3f})")
-    # print(f"Robot {robot_id} target position: ({target_x:.3f}, {target_y:.3f}, {target_oren:.3f})")
-
     if target_oren is not None:
         angular_vel = pid_oren.calculate(target_oren, current_oren, robot_id, oren=True)
     else:

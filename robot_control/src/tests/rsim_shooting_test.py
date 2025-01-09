@@ -1,11 +1,14 @@
-from motion_planning.src.pid.pid import TwoDPID, get_pids
+from motion_planning.src.pid.pid import get_pids
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from robot_control.src.intent import score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.config.settings import TIMESTEP
-import pytest
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 ITERS = 500
 N_ROBOTS = 6
@@ -49,7 +52,7 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
             )
 
             if game.is_ball_in_goal(shoot_in_left_goal):
-                print("Goal Scored at Position: ", game.get_ball_pos())
+                logger.info("Goal Scored at Position: ", game.get_ball_pos())
                 goal_scored = True
 
             sim_robot_controller.add_robot_commands(cmd, shooter_id)

@@ -50,7 +50,6 @@ parameter_values = {
 def pytest_generate_tests(metafunc):
     for (param_set, cases) in parameter_values.items():
         for param in param_set:
-            print(param)
             if param in metafunc.fixturenames:
                 metafunc.parametrize(param, cases[metafunc.config.getoption("level")])
 

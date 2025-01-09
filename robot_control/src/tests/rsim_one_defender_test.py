@@ -12,7 +12,9 @@ from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
+import logging
 
+logger = logging.getLogger(__name__)
 
 
 def defend(pid_oren:PID, pid_2d: TwoDPID, game: Game, controller: RSimRobotController, is_yellow: bool, defender_id: int, env):
@@ -61,7 +63,7 @@ def attack(pid_oren: PID, pid_2d:TwoDPID, game:Game, controller: RSimRobotContro
     controller.send_robot_commands()
 
     if game.is_ball_in_goal(not defender_is_yellow):
-        print("Goal Scored at Position: ", game.get_ball_pos())
+        logger.info("Goal Scored at Position: ", game.get_ball_pos())
         return True
     return False
 
