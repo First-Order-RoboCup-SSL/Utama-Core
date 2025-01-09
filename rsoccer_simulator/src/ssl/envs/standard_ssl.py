@@ -1,4 +1,3 @@
-import math
 import random
 from typing import Dict, Tuple
 
@@ -16,7 +15,9 @@ from global_utils.math_utils import deg_to_rad, rad_to_deg
 
 from entities.data.vision import BallData, RobotData, FrameData
 from entities.data.command import RobotInfo
+import logging
 
+logger = logging.getLogger(__name__)
 
 class SSLStandardEnv(SSLBaseEnv):
     """
@@ -118,7 +119,7 @@ class SSLStandardEnv(SSLBaseEnv):
             else yellow_starting_formation
         )
 
-        print(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
+        logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None

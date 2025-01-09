@@ -17,6 +17,9 @@ from team_controller.src.config.settings import (
 from entities.game import Game
 from team_controller.src.data.message_enum import MessageType
 from team_controller.src.utils import network_manager
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Constants
 ROBOT_RADIUS = 0.18
@@ -175,18 +178,17 @@ class ShootingController:
     # Added this function
     def kick_ball(self, current_oren: float = None, target_oren: float = None):
         if np.round(target_oren, 1) and np.round(current_oren, 1):
-            # print(f"{np.round(target_oren, 2) - np.round(current_oren, 2)}")
             if abs(np.round(target_oren, 2) - np.round(current_oren, 2)) <= 0.02:
                 self.robot_command = self.robot_command._replace(
                     kick_spd=3, kick_angle=0, dribbler_spd=0
                 )
-                print("Kicking ball\n")
+                logger.info("Kicking ball\n")
                 return True
             else:
                 self.robot_command = self.robot_command._replace(
                     kick_spd=0, kick_angle=0, dribbler_spd=1
                 )
-                print("Dribbling ball\n")
+                logger.info("Dribbling ball\n")
                 return False
 
     # makes all the descisions for the robot

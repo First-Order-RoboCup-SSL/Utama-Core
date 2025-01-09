@@ -45,8 +45,6 @@ class VisionDataReceiver(BaseReceiver):
     def _update_data(self, detection: object) -> None: # SSL_DetectionPacket
         # Update both ball and robot data incrementally.
 
-        # print("CAMERA_ID:", detection.camera_id)
-
         self._update_ball_pos(detection)
         self._update_robots_pos(detection)
 
@@ -149,8 +147,6 @@ class VisionDataReceiver(BaseReceiver):
                 vision_packet.Clear()  # Clear previous data to avoid memory bloat
                 vision_packet.ParseFromString(data)
                 self._update_data(vision_packet.detection)
-                # print(vision_packet.detection.frame_number)
-                # print(vision_packet.frame_number)
             
             self._print_frame_info(t_received, vision_packet.detection)
             # time.sleep(0.0083) # TODO : Block on data?

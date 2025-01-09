@@ -22,7 +22,6 @@ class RefereeMessageReceiver:
     Args:
         ip (str): The IP address for receiving multicast referee data. Defaults to MULTICAST_GROUP_REFEREE.
         port (int): The port for receiving referee data. Defaults to REFEREE_PORT.
-        debug (bool): Whether to print debug information. Defaults to False.
     """
     def __init__(self, ip=MULTICAST_GROUP_REFEREE, port=REFEREE_PORT): # TODO: add message queue
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
@@ -185,7 +184,6 @@ class RefereeMessageReceiver:
                 self.command_history.append(self.referee.command)
                 if len(self.command_history) > history_length:
                     self.command_history.pop(0)  # Maintain a fixed-length history
-                print(self.command_history)
                 return True
         return False
 

@@ -104,9 +104,6 @@ class StartUpController:
         elif not face_ball and len(target_coords) == 3:
             target_oren = target_coords[2]
 
-        # print(f"\nRobot {robot_id} current position: ({current_x:.3f}, {current_y:.3f}, {current_oren:.3f})")
-        # print(f"Robot {robot_id} target position: ({target_x:.3f}, {target_y:.3f}, {target_oren:.3f})")
-
         if target_oren != None:
             angular_vel = self.pid_oren.calculate(
                 target_oren, current_oren, robot_id, oren=True
@@ -127,7 +124,6 @@ class StartUpController:
             forward_vel = 0
             left_vel = 0
 
-        # print(f"Output: {forward_vel}, {left_vel}, {angular_vel}")
         return RobotCommand(
             local_forward_vel=forward_vel,
             local_left_vel=left_vel,

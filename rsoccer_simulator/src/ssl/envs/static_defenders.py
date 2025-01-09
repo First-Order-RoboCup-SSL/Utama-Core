@@ -1,4 +1,3 @@
-import math
 import random
 from typing import Dict
 
@@ -7,6 +6,9 @@ import numpy as np
 from rsoccer_simulator.src.Entities import Frame, Robot, Ball
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from rsoccer_simulator.src.Utils import KDTree
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SSLHWStaticDefendersEnv(SSLBaseEnv):
@@ -77,7 +79,7 @@ class SSLHWStaticDefendersEnv(SSLBaseEnv):
         self.max_w = 10
         self.kick_speed_x = 5.0
 
-        print("Environment initialized")
+        logger.info("Environment initialized")
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
@@ -273,11 +275,11 @@ class SSLHWStaticDefendersEnv(SSLBaseEnv):
         ball_dist_rw = last_ball_dist - ball_dist
 
         if ball_dist_rw > 1:
-            print("ball_dist -> ", ball_dist_rw)
-            print(self.frame.ball)
-            print(self.frame.robots_blue)
-            print(self.frame.robots_yellow)
-            print("===============================")
+            logger.debug(f"ball_dist -> {ball_dist_rw}")
+            logger.debug(f"{self.frame.ball}")
+            logger.debug(f"{self.frame.robots_blue}")
+            logger.debug(f"{self.frame.robots_yellow}")
+            logger.debug("===============================")
 
         return np.clip(ball_dist_rw, -1, 1)
 
@@ -300,11 +302,11 @@ class SSLHWStaticDefendersEnv(SSLBaseEnv):
         ball_dist_rw = last_ball_dist - ball_dist
 
         if ball_dist_rw > 1:
-            print("ball_dist -> ", ball_dist_rw)
-            print(self.frame.ball)
-            print(self.frame.robots_blue)
-            print(self.frame.robots_yellow)
-            print("===============================")
+            logger.debug(f"ball_dist -> {ball_dist_rw}")
+            logger.debug(f"{self.frame.ball}")
+            logger.debug(f"{self.frame.robots_blue}")
+            logger.debug(f"{self.frame.robots_yellow}")
+            logger.debug("===============================")
 
         return np.clip(ball_dist_rw, -1, 1)
 
