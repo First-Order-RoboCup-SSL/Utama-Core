@@ -96,11 +96,15 @@ def predict_goal_y_location(shooter_position: Tuple[float, float], orientation:f
     return shooter_position[1] + t*dy
 
 def calculate_defense_area(t: float, is_left: bool):
-    """ Semi circle around goal with radius sqrt(2) metres, t is parametric  TODO
-    x = r cos t, y = r sin t, pi/2 <= t <= 3pi/2 
-    
-    x = a * np.sign(np.cos(t)) * np.abs(np.cos(t))**(2 / n)
-    y = b * np.sign(np.sin(t)) * np.abs(np.sin(t))**(2 / n)
+    """
+    Defenders' path around the goal in the form of a rounded rectangle 
+    around the penalty box. Ensures defenders don't go inside the box and stay
+    right on the edge. This edge of the penalty box is theirs - attackers are 
+    not allowed this close to the box.
+
+    x = a * ((1 - r) * |cos(t)| * cos(t) + r * cos(t))
+    y = a * ((1 - r) * |sin(t)| * sin(t) + r * sin(t))
+
     """
     assert pi/2 <= t <= 3*pi/2, t
     a,r = 1.1, 2.1
@@ -177,11 +181,13 @@ def velocity_to_orientation(p: Tuple[float, float]) -> float:
 
 def align_defenders(defender_position: float, attacker_position: Tuple[float, float], attacker_orientation: Optional[float], is_left: bool, env) -> Tuple[float, float]:
     """
-        Calculates the next point on the defense area that the robots should go to
-        defender_position is in terms of t on the parametric curve
+    Calculates the next point on the defense area that the robots should go to
+    defender_position is in terms of t on the parametric curve.
     """
 
     NO_MOVE_THRES = 1
+
+    # Start by getting the current position of the defenders
     dx, dy = calculate_defense_area(defender_position, is_left)
     
     logger.debug(f"DEFENDER {dx} {dy}")
@@ -224,6 +230,15 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
 
 
 def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
+    """
+    Given a point p on the defenders' parametric curve (as defined by calculate_defense_area), returns the parameter value t
+    which would give rise to this point.
+    """
+
+    # Ternary search the paramater, minimising the Euclidean distance between 
+    # the point corresponding to the predicted t and the actual point. We 
+    # could potentially use length along the curve (I think you can get this
+    # from polar coordinates? But for a semicircle ish curve this works fine)
     lo = pi/2
     hi = 3 * pi / 2
     EPS = 1e-6
@@ -244,15 +259,6 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
 
     t = lo
     return t
-
-    # gp = get_goal_centre(is_left)
-    # rel_goal = relative_to(p, gp)
-    # ang = ang_between(rel_goal, (0,1))
-    # if ang > pi:
-    #     ang = 2*pi-ang
-    # ang += pi / 2
-    # return ang
-
 
 if __name__=="__main__":
     logger.debug(f"{to_defense_parametric((3, 2), False)}")
