@@ -16,6 +16,9 @@ from entities.data.vision import BallData, RobotData
 from global_utils.math_utils import rotate_vector
 from motion_planning.src.pid.pid import PID
 from team_controller.src.controllers import RSimRobotController
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Constants
 ROBOT_RADIUS = 0.18
@@ -169,18 +172,17 @@ class ShootingController:
     # Added this function
     def kick_ball(self, current_oren: float = None, target_oren: float = None):
         if np.round(target_oren, 1) and np.round(current_oren, 1):
-            # print(f"{np.round(target_oren, 2) - np.round(current_oren, 2)}")
             if abs(np.round(target_oren, 2) - np.round(current_oren, 2)) <= 0.02:
                 self.robot_command = self.robot_command._replace(
                     kick_spd=3, kick_angle=0, dribbler_spd=0
                 )
-                print("Kicking ball\n")
+                logger.info("Kicking ball\n")
                 return True
             else:
                 self.robot_command = self.robot_command._replace(
                     kick_spd=0, kick_angle=0, dribbler_spd=1
                 )
-                print("Dribbling ball\n")
+                logger.info("Dribbling ball\n")
                 return False
 
     # makes all the descisions for the robot
@@ -215,7 +217,7 @@ class ShootingController:
                         >= 0.3
                         and self.robot_controller.robot_has_ball(self.shooter_id)
                     ):
-                        print("first action")
+                        logger.info("first action")
                         target_coords = (None, None, None)
                         face_ball = True
                         self.robot_command = self._calculate_robot_velocities(
@@ -227,7 +229,7 @@ class ShootingController:
                         )
                         self.first_action = False
                     elif self.robot_controller.robot_has_ball(self.shooter_id):
-                        print("robot has ball")
+                        logger.info("robot has ball")
                         current_oren = robots[self.shooter_id].orientation
                         face_ball = False
                         target_coords = (None, None, shot_orientation)
@@ -243,7 +245,7 @@ class ShootingController:
                             current_oren, shot_orientation
                         )
                     else:
-                        print("approaching ball")
+                        logger.info("approaching ball")
                         face_ball = True
                         target_coords = (balls[0].x, balls[0].y, None)
                         self.robot_command = self._calculate_robot_velocities(

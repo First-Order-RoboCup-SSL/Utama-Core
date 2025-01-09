@@ -224,7 +224,7 @@ class ShootingController:
                         )
                         >= 0.3 and self.robot_controller.robot_has_ball(self.shooter_id))
                     ):
-                        print("first action")
+                        logger.info("first action")
                         target_coords = (None, None, None)
                         face_ball = True
                         self.robot_command = self._calculate_robot_velocities(
@@ -236,7 +236,7 @@ class ShootingController:
                         )
                         self.first_action = False
                     elif self.robot_controller.robot_has_ball(self.shooter_id):
-                        print("robot has ball")
+                        logger.info("robot has ball")
                         current_oren = robots[self.shooter_id].orientation
                         face_ball = False
                         target_coords = (None, None, shot_orientation)
@@ -252,7 +252,7 @@ class ShootingController:
                             current_oren, shot_orientation
                         )
                     else:
-                        print("approaching ball")
+                        logger.info("approaching ball")
                         face_ball = True
                         target_coords = (balls[0].x, balls[0].y, None)
                         self.robot_command = self._calculate_robot_velocities(
@@ -263,11 +263,9 @@ class ShootingController:
                             face_ball=face_ball,
                         )
 
-                # print(self.robot_command, "\n")
                 self.robot_controller.add_robot_commands(
                     self.robot_command, robot_id=self.shooter_id
                 )
-                # print(self.robot_controller.out_packet)
                 self.robot_controller.send_robot_commands()
 
 
@@ -323,9 +321,6 @@ class ShootingController:
         elif not face_ball and len(target_coords) == 3:
             target_oren = target_coords[2]
 
-        # print(f"\nRobot {robot_id} current position: ({current_x:.3f}, {current_y:.3f}, {current_oren:.3f})")
-        # print(f"Robot {robot_id} target position: ({target_x:.3f}, {target_y:.3f}, {target_oren:.3f})")
-
         if target_oren != None:
             angular_vel = self.pid_oren.calculate(
                 target_oren, current_oren, robot_id, oren=True
@@ -345,7 +340,6 @@ class ShootingController:
         else:
             forward_vel = 0
             left_vel = 0
-        # print(f"Output: {forward_vel}, {left_vel}, {angular_vel}")
         return RobotCommand(
             local_forward_vel=forward_vel,
             local_left_vel=left_vel,

@@ -15,6 +15,9 @@ TypeError: a bytes-like object is required, not 'NoneType' """
 from team_controller.src.controllers import GRSimController
 from team_controller.src.data import RefereeMessageReceiver
 from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Referee
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Example usage:
 if __name__ == "__main__":
@@ -37,7 +40,6 @@ if __name__ == "__main__":
             start_time = time.time()
             if receiver.check_new_message():
                 command, des_pos = receiver.get_latest_command()
-                # print(command, des_pos, "\n")
                 message = receiver.get_latest_message()
                 # Yellow card stuff
                 yellow_team_yellow_card_times = list(message.yellow.yellow_card_times)
@@ -46,14 +48,10 @@ if __name__ == "__main__":
                 blue_team_robots_removed = []
                 id = 0
 
-                print(
-                    "Yellow team yellow card times:",
-                    yellow_team_yellow_card_times,
-                    "\n",
-                )
-                print("Blue team yellow card times:", blue_team_yellow_card_times, "\n")
+                logger.info(f"Yellow team yellow card times: {yellow_team_yellow_card_times}")
+                logger.info(f"Blue team yellow card times: {blue_team_yellow_card_times}")
                 if len(yellow_team_yellow_card_times) == 0:
-                    print("!!!!!!!!!")
+                    pass # print("!!!!!!!!!")
 
                 if len(yellow_team_yellow_card_times) != 0 and len(
                     yellow_team_yellow_card_times
@@ -62,7 +60,7 @@ if __name__ == "__main__":
                     for yellow_team_yellow_card_time in yellow_team_yellow_card_times[
                         len(yellow_team_robots_removed) - 1 :
                     ]:
-                        print("Yellow card detected! (yellow)")
+                        logger.info("Yellow card detected! (yellow)")
                         # TODO: Implement method to chose which robot to remove
                         sim_control.set_robot_presence(
                             id, team_colour_is_blue=False, should_robot_be_present=False
@@ -84,7 +82,7 @@ if __name__ == "__main__":
                     for blue_team_yellow_card_time in blue_team_yellow_card_times[
                         len(blue_team_robots_removed) - 1 :
                     ]:
-                        print("Yellow card detected! (blue)")
+                        logger.info("Yellow card detected! (blue)")
                         sim_control.set_robot_presence(
                             id, team_colour_is_blue=True, should_robot_be_present=False
                         )
@@ -105,9 +103,9 @@ if __name__ == "__main__":
                     if receiver.check_command_sequence(
                         desired_sequenceA or desired_sequenceB
                     ):
-                        print("Desired sequence detected!")
+                        logger.info("Desired sequence detected!")
                         if des_pos != (0.0, 0.0):
-                            print("Teleporting ball to", des_pos)
+                            logger.info("Teleporting ball to", des_pos)
                             sim_control.teleport_ball(
                                 des_pos[0] / 1000, des_pos[1] / 1000
                             )

@@ -25,7 +25,6 @@ if __name__ == "__main__":
                 message = receiver.get_latest_message()
                 time_stamp = receiver.get_packet_timestamp()
                 next_command = receiver.get_next_command()
-                # print(next_command)
                 # if next_command != None:
                 #     time.sleep(2)
                 # print(f"Command: {command}, Designated position: {des_pos}\n")
