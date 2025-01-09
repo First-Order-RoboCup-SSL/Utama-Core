@@ -96,21 +96,22 @@ def predict_goal_y_location(shooter_position: Tuple[float, float], orientation:f
     return shooter_position[1] + t*dy
 
 def calculate_defense_area(t: float, is_left: bool):
-    """ Semi circle around goal with radius sqrt(2) metres, t is parametric 
+    """ Semi circle around goal with radius sqrt(2) metres, t is parametric  TODO
     x = r cos t, y = r sin t, pi/2 <= t <= 3pi/2 
     
     x = a * np.sign(np.cos(t)) * np.abs(np.cos(t))**(2 / n)
     y = b * np.sign(np.sin(t)) * np.abs(np.sin(t))**(2 / n)
     """
     assert pi/2 <= t <= 3*pi/2, t
-    a,r = 1.1, 2.2
+    a,r = 1.1, 2.1
     rp = a * ((1-r)*(abs(cos(t))*cos(t))+r*cos(t)), a * ((1-r)*(abs(sin(t))*sin(t))+r*sin(t))
+    print("RP y", rp[1])
     return make_relative_to_goal_centre(rp, is_left)
 
 
 def make_relative_to_goal_centre(p: Tuple[float, float], is_left_goal: bool) -> Tuple[float, float]:
     if is_left_goal:
-        goal_centre_x = -4.5
+        goal_centre_x = -4.5 # TODO: Use pitch dimensions from field insteaed
         return goal_centre_x-p[0], p[1]
     else:
         goal_centre_x = 4.5
@@ -176,10 +177,14 @@ def velocity_to_orientation(p: Tuple[float, float]) -> float:
     return res
 
 def align_defenders(defender_position: float, attacker_position: Tuple[float, float], attacker_orientation: Optional[float], is_left: bool, env) -> Tuple[float, float]:
-    # defender_position is in terms of t, the parametric 
+    """
+        Calculates the next point on the defense area that the robots should go to
+        defender_position is in terms of t on the parametric curve
+    """
+
     NO_MOVE_THRES = 1
-    # Calculates the next point on the defense area that the robots should go to
     dx, dy = calculate_defense_area(defender_position, is_left)
+    
     logger.debug(f"DEFENDER {dx} {dy}")
     goal_centre = get_goal_centre(is_left)
 
@@ -222,13 +227,34 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
 
 
 def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
-    gp = get_goal_centre(is_left)
-    rel_goal = relative_to(p, gp)
-    ang = ang_between(rel_goal, (0,1))
-    if ang > pi:
-        ang = 2*pi-ang
-    ang += pi / 2
-    return ang
+    lo = pi/2
+    hi = 3 * pi / 2
+    EPS = 1e-6
+
+    while (hi - lo) > EPS:
+        mi1 = lo + (hi - lo) / 3
+        mi2 = lo + 2 * (hi - lo) / 3
+        
+        pred1 = calculate_defense_area(mi1, is_left)
+        pred2 = calculate_defense_area(mi2, is_left)
+        
+        dist1 = dist(p, pred1)
+        dist2 = dist(p, pred2)
+        if dist1 < dist2:
+            hi = mi2
+        else:
+            lo = mi1
+
+    t = lo
+    return t
+
+    # gp = get_goal_centre(is_left)
+    # rel_goal = relative_to(p, gp)
+    # ang = ang_between(rel_goal, (0,1))
+    # if ang > pi:
+    #     ang = 2*pi-ang
+    # ang += pi / 2
+    # return ang
 
 
 if __name__=="__main__":
