@@ -105,7 +105,6 @@ def calculate_defense_area(t: float, is_left: bool):
     assert pi/2 <= t <= 3*pi/2, t
     a,r = 1.1, 2.1
     rp = a * ((1-r)*(abs(cos(t))*cos(t))+r*cos(t)), a * ((1-r)*(abs(sin(t))*sin(t))+r*sin(t))
-    print("RP y", rp[1])
     return make_relative_to_goal_centre(rp, is_left)
 
 
@@ -211,8 +210,6 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
     side = ccw(goal_to_defender, goal_to_attacker)
     angle = ang_between(goal_to_defender, goal_to_attacker)
     
-    print(side, degrees(angle), "HELLO ")
-
     if is_left:
         side *= -1
 
