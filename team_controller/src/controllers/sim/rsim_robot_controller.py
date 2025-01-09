@@ -11,6 +11,9 @@ import numpy as np
 from numpy.typing import NDArray
 from entities.data.command import RobotCommand, RobotInfo
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
+import logging
+
+logger = logging.getLogger(__name__)
 
 class RSimRobotController(AbstractRobotController):
     """
@@ -160,8 +163,7 @@ class RSimRobotController(AbstractRobotController):
             return False
 
         if self._robots_info[robot_id].has_ball:
-            if self.debug:
-                print(f"Robot: {robot_id} has the Ball")
+            logger.debug(f"Robot: {robot_id} has the Ball")
             return True
         else:
             return False

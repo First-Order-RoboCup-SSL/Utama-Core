@@ -53,7 +53,7 @@ def score_goal(
         if ball_data is not None and robot_data is not None:
             if robot_data is not None:
                 if shooter_has_ball:
-                    logging.info("robot has ball")
+                    logging.debug("robot has ball")
                     current_oren = robot_data.orientation
 
                     # if robot has ball and is facing the goal, kick the ball
@@ -79,7 +79,7 @@ def score_goal(
                         )
 
                 else:
-                    logger.info("approaching ball %lf", robot_data.orientation)
+                    logger.debug("approaching ball %lf", robot_data.orientation)
                     robot_command = go_to_ball(
                         pid_oren, pid_trans, robot_data, shooter_id, ball_data
                     )
