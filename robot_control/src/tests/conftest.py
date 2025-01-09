@@ -23,6 +23,10 @@ parameter_values = {
     "target_robot": {
         "quick": [1],
         "full": [1]
+    },
+    "defender_id": {
+        "quick": [1],
+        "full": [1,2]
     }
 }
 

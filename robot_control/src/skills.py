@@ -179,8 +179,13 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
     goal_to_defender = relative_to((dx, dy), predicted_goal_position)
     goal_to_attacker = relative_to(attacker_position, predicted_goal_position)
     print(goal_to_defender, goal_to_attacker)
-    side = ccw(goal_to_defender, goal_to_attacker)*-1
+    
+    side = ccw(goal_to_defender, goal_to_attacker)
     angle = ang_between(goal_to_defender, goal_to_attacker)
+
+
+    if is_left:
+        side *= -1
 
     if degrees(angle) > NO_MOVE_THRES:
         # Move to the correct side 

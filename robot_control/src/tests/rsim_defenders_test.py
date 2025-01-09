@@ -10,34 +10,56 @@ from robot_control.src.intent import score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
-from robot_control.src.tests.utils import one_robot_placement
+from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 
-def setup_pvp(env: SSLStandardEnv, game: Game, n_robots_blue: int, n_robots_yellow: int):
-    pvp_manager = PVPManager(env, n_robots_blue, n_robots_yellow, game)
-    sim_robot_controller_yellow = RSimRobotController(
-        is_team_yellow=True, env=env, game_obj=game, debug=True, pvp_manager=pvp_manager
+
+
+def defend(pid_oren:PID, pid_2d: TwoDPID, game: Game, controller: RSimRobotController, is_yellow: bool, defender_id: int, shooter_id:int, env):
+    # Assume that is_yellow <-> not is_left here
+    friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
+    real_def_pos = friendly[defender_id].x, friendly[defender_id].y
+    current_def_parametric = to_defense_parametric(real_def_pos, is_left=not is_yellow)
+    enemy_position = enemy[shooter_id].x, enemy[shooter_id].y
+    target = align_defenders(current_def_parametric, enemy_position, enemy[shooter_id].orientation, not is_yellow, env)
+    cmd = go_to_point(pid_oren, pid_2d, friendly[defender_id], defender_id, target, face_ball(real_def_pos, (balls[0].x, balls[0].y)))
+
+
+    controller.add_robot_commands(cmd, defender_id)
+
+    controller.send_robot_commands()
+
+    gp = get_goal_centre(is_left=not is_yellow)
+    env.draw_line([gp, (enemy[shooter_id].x, enemy[shooter_id].y)], width=5)
+
+def attack(pid_oren: PID, pid_2d:TwoDPID, game:Game, controller: RSimRobotController, shooter_id:int, is_yellow:bool) -> bool:
+    cmd = score_goal(
+        game,
+        controller.robot_has_ball(shooter_id),
+        shooter_id=shooter_id,
+        pid_oren=pid_oren,
+        pid_trans=pid_2d,
+        is_yellow=not is_yellow,
+        shoot_in_left_goal=not is_yellow
     )
-    sim_robot_controller_blue = RSimRobotController(
-        is_team_yellow=False, env=env, game_obj=game, debug=False, pvp_manager=pvp_manager
-    )
-    pvp_manager.set_yellow_controller(sim_robot_controller_yellow)
-    pvp_manager.set_blue_controller(sim_robot_controller_blue)
-    pvp_manager.reset_env()
+    controller.add_robot_commands(cmd, shooter_id)
+    controller.send_robot_commands()
 
-    return sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager
+    if game.is_ball_in_goal(not is_yellow):
+        print("Goal Scored at Position: ", game.get_ball_pos())
+        return True
+    return False
 
-if __name__ == "__main__":
+    
+def test_single_defender(defender_id: int, shooter_id: int, is_yellow: bool):
     game = Game()
 
     N_ROBOTS_YELLOW = 6
     N_ROBOTS_BLUE = 6
 
-    TARGET_ROBOT = 1
-
     env = SSLStandardEnv(n_robots_blue=N_ROBOTS_BLUE)
     env.reset()
 
-    env.teleport_ball(1, 1)
+    env.teleport_ball(2.25, -1)
     pid_oren_y = PID(TIMESTEP, 8, -8, 3, 3, 0.1, num_robots=N_ROBOTS_YELLOW)
     pid_2d_y = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=N_ROBOTS_YELLOW)
 
@@ -45,42 +67,26 @@ if __name__ == "__main__":
     pid_2d_b = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=N_ROBOTS_BLUE)
 
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(env,  game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW)
-    # one_step_yellow = one_robot_placement(sim_robot_controller_yellow, True, pid_oren_y, pid_2d_y, False, TARGET_ROBOT, game)
-    # one_step_blue = one_robot_placement(sim_robot_controller_blue, False, pid_oren_b, pid_2d_b, True, TARGET_ROBOT, game)
-    import math
+
+    if is_yellow:
+        sim_robot_controller_yellow, sim_robot_controller_blue = sim_robot_controller_blue, sim_robot_controller_yellow
+
+    any_scored = False
+    for _ in range(600):
+
+        scored = attack(pid_oren_y, pid_2d_y, game, sim_robot_controller_yellow, shooter_id, is_yellow)
+        if scored:
+            any_scored = True
+            break
+        defend(pid_oren_b, pid_2d_b, game, sim_robot_controller_blue, is_yellow, defender_id, shooter_id, env)
+        
+    assert not any_scored
+
+
+
+
+if __name__ == "__main__":
     try:
-        shooter_id = 5
-        defender_id = 1
-        target = None
-        while True:
-
-            cmd = score_goal(
-                game,
-                sim_robot_controller_yellow.robot_has_ball(shooter_id),
-                shooter_id=shooter_id,
-                pid_oren=pid_oren_y,
-                pid_trans=pid_2d_y,
-                is_yellow=True,
-                shoot_in_left_goal=True
-            )
-            sim_robot_controller_yellow.add_robot_commands(cmd, shooter_id)
-            sim_robot_controller_yellow.send_robot_commands()
-            
-            friendly, enemy, balls = game.get_my_latest_frame(False)
-            print(friendly[defender_id])
-            real_def_pos = friendly[defender_id].x, friendly[defender_id].y
-            current_def_parametric = to_defense_parametric(real_def_pos, True)
-            #(balls[0].x, balls[0].y)
-            enemy_position = enemy[shooter_id].x, enemy[shooter_id].y
-            target = align_defenders(current_def_parametric, enemy_position, enemy[shooter_id].orientation, True, env)
-            cmd = go_to_point(pid_oren_b, pid_2d_b, friendly[defender_id], defender_id, target, face_ball(real_def_pos, (balls[0].x, balls[0].y)))
-
-
-            sim_robot_controller_blue.add_robot_commands(cmd, defender_id)
-
-            sim_robot_controller_blue.send_robot_commands()
-            gp = get_goal_centre(True)
-            env.draw_line([gp, (enemy[shooter_id].x, enemy[shooter_id].y)], width=5)
-
+        test_single_defender(1, 5, True)
     except KeyboardInterrupt:
         print("Exiting...")
