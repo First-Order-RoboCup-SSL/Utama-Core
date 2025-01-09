@@ -90,8 +90,7 @@ def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
     ans = []
     for ball in balls:
         for er in enemy_robots:
-            if dist((er.x, er.y), (ball.x, ball.y)) < 0.1:
+            if dist((er.x, er.y), (ball.x, ball.y)) < 0.2:
                 # Ball is close to this robot 
                 ans.append(er)
-                break
-    return ans
+    return list(set(ans))

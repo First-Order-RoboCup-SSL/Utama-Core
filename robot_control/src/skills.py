@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Tuple
+from typing import Optional, Tuple
 
 from entities.data.command import RobotCommand
 from entities.data.vision import BallData, RobotData
@@ -86,7 +86,7 @@ def turn_on_spot(
         dribbling=dribbling,
     )
 
-from math import dist, sqrt, cos, sin, pi, acos, degrees, asin
+from math import atan, atan2, dist, sqrt, cos, sin, pi, acos, degrees, asin
 RADIUS = sqrt(2)+0.1
 
 
@@ -156,7 +156,7 @@ def ang_between(v1, v2):
 
 
 def step_curve(t: float, direction:int):
-    STEP_SIZE = 0.0872665
+    STEP_SIZE = 0.0872665*2
     if direction == 0:
         return t
     return direction*STEP_SIZE + t
@@ -164,14 +164,28 @@ def step_curve(t: float, direction:int):
 def clamp_to_goal_height(y: float) -> float:
     return max(min(y, 0.5), -0.5)
 
-def align_defenders(defender_position: float, attacker_position: Tuple[float, float], attacker_orientation: float, is_left: bool, env) -> Tuple[float, float]:
+
+def velocity_to_orientation(p: Tuple[float, float]) -> float:
+    # Takes a velocity and converts to orientation in radians identical to robot orientation
+    res = atan2(p[1], p[0])
+    if res < 0:
+        res += 2*pi
+    return res
+
+def align_defenders(defender_position: float, attacker_position: Tuple[float, float], attacker_orientation: Optional[float], is_left: bool, env) -> Tuple[float, float]:
     # defender_position is in terms of t, the parametric 
     NO_MOVE_THRES = 1
     # Calculates the next point on the defense area that the robots should go to
     dx, dy = calculate_defense_area(defender_position, is_left)
     print("DEFENDER", dx, dy)
     goal_centre = get_goal_centre(is_left)
-    predicted_goal_position = goal_centre[0], clamp_to_goal_height(predict_goal_y_location(attacker_position, attacker_orientation, is_left))
+
+    if attacker_orientation is None:
+        # In case there is no ball velocity or attackers, use centre of goal 
+        predicted_goal_position = goal_centre
+    else:
+        predicted_goal_position = goal_centre[0], clamp_to_goal_height(predict_goal_y_location(attacker_position, attacker_orientation, is_left))
+
     
     env.draw_line([predicted_goal_position, attacker_position], width=1, color="green")
     # Calculate the cross product relative to the predicted position of the goal 
@@ -179,7 +193,7 @@ def align_defenders(defender_position: float, attacker_position: Tuple[float, fl
     goal_to_defender = relative_to((dx, dy), predicted_goal_position)
     goal_to_attacker = relative_to(attacker_position, predicted_goal_position)
     print(goal_to_defender, goal_to_attacker)
-    
+
     side = ccw(goal_to_defender, goal_to_attacker)
     angle = ang_between(goal_to_defender, goal_to_attacker)
 
