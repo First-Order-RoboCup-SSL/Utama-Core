@@ -75,10 +75,10 @@ def test_single_defender(defender_id: int, shooter_id: int, is_yellow: bool, hea
     env.reset()
 
     env.teleport_ball(2.25, -1)
-    pid_oren_y = PID(TIMESTEP, 8, -8, 3, 3, 0.1, num_robots=N_ROBOTS_YELLOW)
+    pid_oren_y = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=N_ROBOTS_YELLOW)
     pid_2d_y = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=N_ROBOTS_YELLOW)
 
-    pid_oren_b = PID(TIMESTEP, 8, -8, 3, 3, 0.1, num_robots=N_ROBOTS_BLUE)
+    pid_oren_b = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=N_ROBOTS_BLUE)
     pid_2d_b = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=N_ROBOTS_BLUE)
 
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(env,  game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW)
@@ -101,6 +101,6 @@ def test_single_defender(defender_id: int, shooter_id: int, is_yellow: bool, hea
 
 if __name__ == "__main__":
     try:
-        test_single_defender(1, 5, False, False)
+        test_single_defender(2, 0, False, False)
     except KeyboardInterrupt:
         print("Exiting...")
