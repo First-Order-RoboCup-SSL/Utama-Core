@@ -20,6 +20,8 @@ from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import
     RobotControlResponse,
     RobotFeedback,
 )
+import logging
+logger = logging.getLogger(__name__)
 
 
 class GRSimRobotController(AbstractRobotController):
@@ -28,7 +30,6 @@ class GRSimRobotController(AbstractRobotController):
         is_team_yellow: bool,
         address=LOCAL_HOST,
         port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT),
-        debug=False,
     ):
         self.is_team_yellow = is_team_yellow
 
@@ -41,14 +42,12 @@ class GRSimRobotController(AbstractRobotController):
 
         self.robots_info: List[RobotInfo] = [None] * 6
 
-        self.debug = debug
 
     def send_robot_commands(self) -> None:
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
-        if self.debug:
-            print(f"Sending Robot Commands")
+        logger.debug(f"Sending Robot Commands")
 
         data = self.net.send_command(self.out_packet, is_sim_robot_cmd=True)
 
@@ -121,8 +120,7 @@ class GRSimRobotController(AbstractRobotController):
             return False
 
         if self.robots_info[robot_id].has_ball:
-            if self.debug:
-                print(f"Robot: {robot_id}: HAS the Ball")
+            logger.debug(f"Robot: {robot_id}: HAS the Ball")
             return True
         else:
             return False

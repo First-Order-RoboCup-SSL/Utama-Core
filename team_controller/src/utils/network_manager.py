@@ -54,4 +54,4 @@ class NetworkManager:
         try:
             self.sock.close()
         except Exception as e:
-            print(f"Error closing socket: {e}")
+            logger.error(f"Error closing socket: {e}")

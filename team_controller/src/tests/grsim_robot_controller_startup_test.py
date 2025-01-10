@@ -1,15 +1,7 @@
-import os
-import sys
 import threading
 import queue
 from entities.game import Game
 import time
-
-# Add the project root directory to sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
-print(project_root)
-sys.path.insert(0, project_root)
-
 from team_controller.src.data.message_enum import MessageType
 from team_controller.src.data import VisionDataReceiver
 
@@ -28,7 +20,9 @@ from team_controller.src.config.starting_formation import YELLOW_START_ONE
 from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
     RobotControl,
 )
+import logging
 
+logger = logging.getLogger(__name__)
 # TODO: This needs to be moved out of team_controller soon
 
 
@@ -36,19 +30,16 @@ class StartUpController:
     def __init__(
         self,
         game: Game,
-        debug=False,
     ):
         self.game = game
         self.sim_robot_controller = GRSimRobotController(
-            is_team_yellow=True, debug=debug
+            is_team_yellow=True
         )
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
         # potentially have a set tunig parameters for each robot
         self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0.03, num_robots=6)
         self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0.02, num_robots=6)
-
-        self.debug = debug
 
     def make_decision(self):
         robots = self.game.get_robots_pos(is_yellow=True)
@@ -65,8 +56,7 @@ class StartUpController:
                 )
                 self.sim_robot_controller.add_robot_commands(command, robot_id)
 
-            if self.debug:
-                print(out_packet)
+            logger.debug(out_packet)
             self.sim_robot_controller.send_robot_commands()
 
     def _calculate_robot_velocities(
@@ -114,9 +104,6 @@ class StartUpController:
         elif not face_ball and len(target_coords) == 3:
             target_oren = target_coords[2]
 
-        # print(f"\nRobot {robot_id} current position: ({current_x:.3f}, {current_y:.3f}, {current_oren:.3f})")
-        # print(f"Robot {robot_id} target position: ({target_x:.3f}, {target_y:.3f}, {target_oren:.3f})")
-
         if target_oren != None:
             angular_vel = self.pid_oren.calculate(
                 target_oren, current_oren, robot_id, oren=True
@@ -137,7 +124,6 @@ class StartUpController:
             forward_vel = 0
             left_vel = 0
 
-        # print(f"Output: {forward_vel}, {left_vel}, {angular_vel}")
         return RobotCommand(
             local_forward_vel=forward_vel,
             local_left_vel=left_vel,
@@ -157,8 +143,8 @@ def main():
     game = Game()
 
     message_queue = queue.SimpleQueue()
-    receiver = VisionDataReceiver(message_queue, debug=False)
-    decision_maker = StartUpController(game, debug=False)
+    receiver = VisionDataReceiver(message_queue)
+    decision_maker = StartUpController(game)
 
     # Start the data receiving in a separate thread
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))

@@ -1,0 +1,49 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Set up Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      # Run tests
+      - name: Run tests
+        run: |
+          if [[ $GITHUB_EVENT_NAME == "push" ]]; then
+            pytest robot_control/src/tests --level full --headless --junit-xml=test-results.xml
+          elif [[ $GITHUB_EVENT_NAME == "pull_request" ]]; then
+            pytest robot_control/src/tests --level quick --headless --junit-xml=test-results.xml
+          fi
+      
+      - name: Surface failing tests
+        if: always()
+        uses: pmeier/pytest-results-action@main
+        with:
+          path: test-results.xml
+          summary: true
+          display-options: fEX
+          fail-on-empty: true
+          title: RSoccer CI Test Results

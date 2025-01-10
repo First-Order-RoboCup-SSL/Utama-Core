@@ -1,4 +1,3 @@
-import math
 import random
 from typing import Dict, Tuple
 
@@ -16,7 +15,9 @@ from global_utils.math_utils import deg_to_rad, rad_to_deg
 
 from entities.data.vision import BallData, RobotData, FrameData
 from entities.data.command import RobotInfo
+import logging
 
+logger = logging.getLogger(__name__)
 
 class SSLStandardEnv(SSLBaseEnv):
     """
@@ -78,8 +79,8 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Action space for one robot:
         robot_action_space = gym.spaces.Box(
-            low=np.array([-1.0, -1.0, -1.0, -1.0, -1.0]),
-            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0]),
+            low=np.array([-1.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float32),
+            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -118,7 +119,7 @@ class SSLStandardEnv(SSLBaseEnv):
             else yellow_starting_formation
         )
 
-        print(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
+        logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
@@ -243,7 +244,7 @@ class SSLStandardEnv(SSLBaseEnv):
         ball = self.frame.ball
 
         def robot_in_gk_area(rbt):
-            return rbt.x > half_len - pen_len and abs(rbt.y) < half_pen_wid
+            return abs(rbt.x)> half_len - pen_len and abs(rbt.y) < half_pen_wid
 
         # Check if any robot on the blue team exited field or violated rules (for info)
         for (_, robot_b), (_, robot_y) in zip(

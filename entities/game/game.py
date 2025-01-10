@@ -1,4 +1,5 @@
 from typing import List, Optional
+from entities.game import game_object
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData
 
@@ -7,6 +8,9 @@ from entities.game.game_object import Ball, Colour, GameObject, Robot
 from team_controller.src.config.settings import TIMESTEP
 
 # TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Game:
@@ -14,11 +18,10 @@ class Game:
     Class containing states of the entire game and field information.
     """
 
-    def __init__(self, my_team_is_yellow=True):
-        self._field = Field(my_team_is_yellow=my_team_is_yellow)
+    def __init__(self):
+        self._field = Field()
         self._records = []
         self._predicted_next_frame = None
-        self._my_team_is_yellow = my_team_is_yellow
         self._yellow_score = 0
         self._blue_score = 0
 
@@ -45,12 +48,13 @@ class Game:
         return self._blue_score
 
     @property
-    def my_team_is_yellow(self) -> bool:
-        return self._my_team_is_yellow
-
-    @property
     def predicted_next_frame(self) -> FrameData:
         return self._predicted_next_frame
+    
+    def is_ball_in_goal(self, left_goal: bool):
+        ball_pos = self.get_ball_pos()[0]
+        return (ball_pos.x < -self.field.HALF_LENGTH and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH) and left_goal
+           or ball_pos.x > self.field.HALF_LENGTH and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH) and not left_goal)
 
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
@@ -66,6 +70,10 @@ class Game:
             return None
         record = self._records[-1]
         return record.yellow_robots if is_yellow else record.blue_robots
+
+    def get_robot_pos(self, is_yellow: bool, robot_id: int) -> RobotData:
+        all = self.get_robots_pos(is_yellow)
+        return None if not all else all[robot_id]
 
     def get_robots_velocity(self, is_yellow: bool) -> List[tuple]:
         """
@@ -105,14 +113,14 @@ class Game:
             return None
         return self._records[-1]
 
-    def get_my_latest_frame(self) -> tuple[RobotData, RobotData, BallData]:
+    def get_my_latest_frame(self, my_team_is_yellow: bool) -> tuple[RobotData, RobotData, BallData]:
         """
-        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
+        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on my_team_is_yellow
         """
         if not self._records:
             return None
         latest_frame = self.get_latest_frame()
-        return self._reorganise_frame_data(latest_frame)
+        return self._reorganise_frame_data(latest_frame, my_team_is_yellow)
 
     def predict_next_frame(self) -> FrameData:
         """
@@ -120,9 +128,9 @@ class Game:
         """
         return self._predicted_next_frame
 
-    def predict_my_next_frame(self) -> tuple[RobotData, RobotData, BallData]:
+    def predict_my_next_frame(self,my_team_is_yellow: bool) -> tuple[RobotData, RobotData, BallData]:
         """
-        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
+        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on my_team_is_yellow
         """
         if self._predicted_next_frame is None:
             return None
@@ -152,19 +160,18 @@ class Game:
             )
 
     def _reorganise_frame_data(
-        self, frame_data: FrameData
+        self, frame_data: FrameData, my_team_is_yellow: bool
     ) -> tuple[RobotData, RobotData, BallData]:
         """
         reorganises frame data to be (friendly_robots, enemy_robots, balls)
         """
         _, yellow_robots, blue_robots, balls = frame_data
-        if self._my_team_is_yellow:
+        if my_team_is_yellow:
             return yellow_robots, blue_robots, balls
         else:
             return blue_robots, yellow_robots, balls
 
     ### General Object Position Prediction ###
-
     def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
         # If t is after the object has stopped we return the position at which object stopped.
         acc = self.get_object_acceleration(object)
@@ -202,6 +209,24 @@ class Game:
             start_y + sy,
         )  # TODO: Doesn't take into account spin / angular vel
 
+    def predict_ball_pos_at_x(self, x: float) -> Optional[tuple]:
+        vel = self.get_ball_velocity()
+        
+        if not vel or not vel[0] or not vel[0]:
+            return None
+ 
+        ux, uy = vel
+        pos = self.get_ball_pos()[0]
+        bx = pos.x
+        by = pos.y
+        
+        if (uy == 0):
+            return (bx, by)
+        
+        t = (x - bx) / ux
+        y = by + uy * t
+        return (x, y)
+
     def get_object_velocity(self, object: GameObject) -> Optional[tuple]:
         # TODO: need to handle the None condition
         out = self._get_object_velocity_at_frame(len(self._records) - 1, object)
@@ -231,8 +256,8 @@ class Game:
 
         """
         if frame >= len(self._records) or frame == 0:
-            # Cannot provide velocity at frame that does not exist
-            print(frame)
+            logger.warning("Cannot provide velocity at a frame that does not exist")
+            logger.info("See frame: %s", str(frame))
             return None
 
         # Otherwise get the previous and current frames
@@ -247,8 +272,7 @@ class Game:
 
         # Latest frame should always be ahead of last one
         if time_received < previous_time_received:
-            # TODO log a warning
-            print("Timestamps out of order for vision data ")
+            logger.warning("Timestamps out of order for vision data %f should be after %f", time_received, previous_time_received)
             return None
 
         dt_secs = time_received - previous_time_received

@@ -20,6 +20,9 @@ from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import 
     RobotControl,
 )
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class ShootingController:
     def __init__(
@@ -31,7 +34,6 @@ class ShootingController:
         vision_receiver: VisionDataReceiver,
         address=LOCAL_HOST,
         port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT),
-        debug=False,
     ):
         self.vision_receiver = vision_receiver
         self.goal_x = goal_x
@@ -47,14 +49,12 @@ class ShootingController:
 
         self.lock = threading.Lock()
 
-        self.debug = debug
         self.shooter_id = shooter_id
 
     def kick_ball(self):
-        print("kicked the ball")
+        logger.debug("kicked the ball")
         out_packet = self._add_kick_command(self.shooter_id, 4)
-        if self.debug:
-            print(out_packet)
+        logger.debug(str(out_packet))
         self.net.send_command(out_packet)
 
     def approach_ball(self):
@@ -96,9 +96,7 @@ class ShootingController:
                     ) < 30000:
                         self.kick_ball()
 
-                if self.debug:
-                    pass
-                    # print(out_packet)
+                logger.debug(str(out_packet))
                 self.net.send_command(out_packet)
 
             time_to_sleep = max(0, 0.0167 - (time.time() - start_time))
@@ -170,8 +168,8 @@ class ShootingController:
         elif not face_ball and len(target_coords) == 3:
             target_oren = target_coords[2]
 
-        # print(f"\nRobot {robot_id} current position: ({current_x:.3f}, {current_y:.3f}, {current_oren:.3f})")
-        # print(f"Robot {robot_id} target position: ({target_x:.3f}, {target_y:.3f}, {target_oren:.3f})")
+        logger.debug(f"\nRobot {robot_id} current position: ({current_x:.3f}, {current_y:.3f}, {current_oren:.3f})")
+        logger.debug(f"Robot {robot_id} target position: ({target_x:.3f}, {target_y:.3f}, {target_oren:.3f})")
 
         if target_oren != None:
             out["wvel"] = self.pid_oren.calculate(
@@ -199,4 +197,3 @@ class ShootingController:
         local_vel.forward = command["xvel"]
         local_vel.left = command["yvel"]
         local_vel.angular = command["wvel"]
-        # print(f"Robot {command['id']} command: ({command['xvel']:.3f}, {command['yvel']:.3f}, {command['wvel']:.3f})")
