@@ -244,7 +244,7 @@ class SSLStandardEnv(SSLBaseEnv):
         ball = self.frame.ball
 
         def robot_in_gk_area(rbt):
-            return rbt.x > half_len - pen_len and abs(rbt.y) < half_pen_wid
+            return abs(rbt.x)> half_len - pen_len and abs(rbt.y) < half_pen_wid
 
         # Check if any robot on the blue team exited field or violated rules (for info)
         for (_, robot_b), (_, robot_y) in zip(
