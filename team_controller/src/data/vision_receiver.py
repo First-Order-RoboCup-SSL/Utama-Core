@@ -20,6 +20,7 @@ class VisionDataReceiver(BaseReceiver):
         ip (str): The IP address for receiving multicast vision data. Defaults to MULTICAST_GROUP.
         port (int): The port for receiving vision data. Defaults to VISION_PORT.
     """
+
     def __init__(
         self,
         messsage_queue: queue.SimpleQueue,
@@ -28,24 +29,26 @@ class VisionDataReceiver(BaseReceiver):
         n_yellow_robots: int = 6,
         n_blue_robots: int = 6,
         debug=False,
-        n_cameras=4
+        n_cameras=4,
     ):
-        super().__init__(messsage_queue) # Setup the message queue
+        super().__init__(messsage_queue)  # Setup the message queue
 
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
         self.time_received = None
         self.ball_pos: List[BallData] = None
         self.robots_yellow_pos: List[RobotData] = [None] * n_yellow_robots
         self.robots_blue_pos: List[RobotData] = [None] * n_blue_robots
-        self.camera_frames = [None for i in range(n_cameras)] # TODO: Use GEOMETRY
+        self.camera_frames = [None for i in range(n_cameras)]  # TODO: Use GEOMETRY
         self.debug = debug
         self.frames_recvd = 0
         self.n_cameras = n_cameras
 
-    def _update_data(self, detection: object) -> None: # SSL_DetectionPacket
+    def _update_data(self, detection: object) -> None:  # SSL_DetectionPacket
         # Update both ball and robot data incrementally.
 
         # print("CAMERA_ID:", detection.camera_id)
+
+        # TODO: flush robots_yellow_pos, flush robots_blue_pos with None before updating?
 
         self._update_ball_pos(detection)
         self._update_robots_pos(detection)
@@ -58,30 +61,81 @@ class VisionDataReceiver(BaseReceiver):
             self.robots_blue_pos,
             self.ball_pos,
         )
-        
+
         self.camera_frames[detection.camera_id] = new_frame
-        
-        if self.frames_recvd % self.n_cameras == 0 and not None in self.camera_frames: # TODO : Do something more advanced than an average because cameras might not be round robin 
+
+        if (
+            self.frames_recvd % self.n_cameras == 0 and not None in self.camera_frames
+        ):  # TODO : Do something more advanced than an average because cameras might not be round robin
             # Put the latest game state into the thread-safe queue which will wake up
             # main if it was empty.
             # TODO: we should modify how Game is updated. Instead of appending to the records list, we should really keep any data we don't have updates for.
-            self._message_queue.put_nowait((MessageType.VISION, self._avg_frames(self.camera_frames)))
+            self._message_queue.put_nowait(
+                (MessageType.VISION, self._avg_frames(self.camera_frames))
+            )
 
     def _avg_frames(self, frames) -> FrameData:
-        frames = [*filter(lambda x : x.ball is not None, frames)]
+        frames = [*filter(lambda x: x.ball is not None, frames)]
         sum_frame = frames[0]
         for frame in frames[1:]:
             sum_frame = FrameData(
                 sum_frame.ts + frame.ts,
-                [*map(lambda r1, r2 : RobotData(r1.x + r2.x, r1.y + r2.y, r1.orientation + r2.orientation), sum_frame.yellow_robots, frame.yellow_robots)],
-                [*map(lambda r1, r2 : RobotData(r1.x + r2.x, r1.y + r2.y, r1.orientation + r2.orientation), sum_frame.blue_robots, frame.blue_robots)],
-                [*map(lambda b1, b2 : BallData(b1.x + b2.x, b1.y + b2.y, b1.z + b2.z), sum_frame.ball, frame.ball)]
+                [
+                    *map(
+                        lambda r1, r2: RobotData(
+                            r1.x + r2.x, r1.y + r2.y, r1.orientation + r2.orientation
+                        ),
+                        sum_frame.yellow_robots,
+                        frame.yellow_robots,
+                    )
+                ],
+                [
+                    *map(
+                        lambda r1, r2: RobotData(
+                            r1.x + r2.x, r1.y + r2.y, r1.orientation + r2.orientation
+                        ),
+                        sum_frame.blue_robots,
+                        frame.blue_robots,
+                    )
+                ],
+                [
+                    *map(
+                        lambda b1, b2: BallData(b1.x + b2.x, b1.y + b2.y, b1.z + b2.z),
+                        sum_frame.ball,
+                        frame.ball,
+                    )
+                ],
             )
         sum_frame = FrameData(
             sum_frame.ts / self.n_cameras,
-            [*map(lambda r : RobotData(r.x / self.n_cameras, r.y / self.n_cameras, r.orientation / self.n_cameras), sum_frame.yellow_robots)],
-            [*map(lambda r : RobotData(r.x / self.n_cameras, r.y / self.n_cameras, r.orientation / self.n_cameras), sum_frame.blue_robots)],
-            [*map(lambda b : BallData(b.x / self.n_cameras, b.y / self.n_cameras, b.z / self.n_cameras), sum_frame.ball)]
+            [
+                *map(
+                    lambda r: RobotData(
+                        r.x / self.n_cameras,
+                        r.y / self.n_cameras,
+                        r.orientation / self.n_cameras,
+                    ),
+                    sum_frame.yellow_robots,
+                )
+            ],
+            [
+                *map(
+                    lambda r: RobotData(
+                        r.x / self.n_cameras,
+                        r.y / self.n_cameras,
+                        r.orientation / self.n_cameras,
+                    ),
+                    sum_frame.blue_robots,
+                )
+            ],
+            [
+                *map(
+                    lambda b: BallData(
+                        b.x / self.n_cameras, b.y / self.n_cameras, b.z / self.n_cameras
+                    ),
+                    sum_frame.ball,
+                )
+            ],
         )
         return sum_frame
 
@@ -93,7 +147,11 @@ class VisionDataReceiver(BaseReceiver):
         ball_pos = []
         for _, ball in enumerate(detection.balls):
             ball_pos.append(
-                BallData(ball.x / 1000, ball.y / 1000, (ball.z / 1000) if ball.HasField("z") else 0.0)
+                BallData(
+                    ball.x / 1000,
+                    ball.y / 1000,
+                    (ball.z / 1000) if ball.HasField("z") else 0.0,
+                )
             )
         self.ball_pos = ball_pos
 
@@ -107,6 +165,7 @@ class VisionDataReceiver(BaseReceiver):
         robots_data: object,
         robots: List[RobotData],
     ) -> None:
+
         # Generic method to update robots for both teams.
         for robot in robots_data:
             if 0 <= robot.robot_id < len(robots):
@@ -143,7 +202,7 @@ class VisionDataReceiver(BaseReceiver):
         vision_packet = SSL_WrapperPacket()
         while True:
             data = self.net.receive_data()
-            t_received = time.time() # TODO: DUBIOUS because of thread scheduling?
+            t_received = time.time()  # TODO: DUBIOUS because of thread scheduling?
             self.time_received = t_received
             if data is not None:
                 vision_packet.Clear()  # Clear previous data to avoid memory bloat
@@ -155,9 +214,9 @@ class VisionDataReceiver(BaseReceiver):
                 self._print_frame_info(t_received, vision_packet.detection)
             # time.sleep(0.0083) # TODO : Block on data?
 
-    # MOVE INTO GAME  
-  
-    # # Implemented already  
+    # MOVE INTO GAME
+
+    # # Implemented already
     # def get_robot_by_id(self, is_yellow: bool, robot_id: int) -> RobotData:
     #         """
     #         Retrieves the position data for a specific robot by ID.
@@ -172,13 +231,13 @@ class VisionDataReceiver(BaseReceiver):
     #             if 0 <= robot_id < len(robots) and robots[robot_id] is not None:
     #                 return robots[robot_id]
     #             else:
-    #                 return None  # TODO: Or raise an exception.    
-    
-    #            
+    #                 return None  # TODO: Or raise an exception.
+
+    #
     # def get_closest_robot_at_point(self, is_yellow: bool, x: float, y: float) -> RobotData:
     #     """
     #     Finds the robot closest to a given point.
-        
+
     #     Args:
     #         is_yellow (bool): If True, searches within the yellow team; otherwise, within the blue team.
     #         x (float): The x-coordinate of the point.
@@ -197,6 +256,5 @@ class VisionDataReceiver(BaseReceiver):
     #                 if distance < min_distance:
     #                     min_distance = distance
     #                     closest_robot = robot
-    #     # TODO: Haven't been tested 
-    #     return closest_robot   
-    
+    #     # TODO: Haven't been tested
+    #     return closest_robot
