@@ -80,7 +80,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 sim_robot_controller_defender.add_robot_commands(cmd, 0)
                 sim_robot_controller_defender.send_robot_commands()
 
-    assert goal_scored
+    assert not goal_scored
 
 if __name__ == "__main__":
     try:
