@@ -53,8 +53,8 @@ class Game:
     
     def is_ball_in_goal(self, left_goal: bool):
         ball_pos = self.get_ball_pos()[0]
-        return (ball_pos.x < -4.5 and (ball_pos.y < 0.5 and ball_pos.y > -0.5) and left_goal
-           or ball_pos.x > 4.5 and (ball_pos.y < 0.5 and ball_pos.y > -0.5) and not left_goal)
+        return (ball_pos.x < -self.field.HALF_LENGTH and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH) and left_goal
+           or ball_pos.x > self.field.HALF_LENGTH and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH) and not left_goal)
 
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:

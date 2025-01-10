@@ -4,7 +4,7 @@ from shapely.geometry import Point
 
 
 class Field:
-    def __init__(self, ):
+    def __init__(self, ): # TODO: Make these static
         self.HALF_LENGTH = 4.5  # x value
         self.HALF_WIDTH = 3  # y value
         self.HALF_GOAL_WIDTH = 0.5
