@@ -105,6 +105,7 @@ def calculate_defense_area(t: float, is_left: bool):
     x = a * ((1 - r) * |cos(t)| * cos(t) + r * cos(t))
     y = a * ((1 - r) * |sin(t)| * sin(t) + r * sin(t))
 
+    https://www.desmos.com/calculator/nmaf7rpmnw
     """
     assert pi/2 <= t <= 3*pi/2, t
     a,r = 1.1, 2.1
