@@ -20,7 +20,7 @@ game_controller = RSimController(env=env)
 for i in range(10000):
     if i > 100:
         # follows GRSimRootController setup. Add robot commands them send them like below
-        robot_controller.add_robot_commands(RobotCommand(0, -1, 0, 0, 0, 1), 3)
+        robot_controller.add_robot_commands(RobotCommand(0, -0.01, 0, 0, 0, 1), 3)
         robot_controller.add_robot_commands(RobotCommand(0, 0, 1, 0, 0, 0), 4)
     if i == 150:
         # RSimController gives you the abulity to teleport the ball directly

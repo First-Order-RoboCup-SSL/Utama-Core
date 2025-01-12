@@ -3,10 +3,12 @@ from typing import Optional, Union, Tuple
 
 from team_controller.src.config.settings import TIMESTEP
 
+
 def get_pids(n_robots: int):
     pid_oren = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=n_robots)
     pid_trans = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=n_robots)
     return pid_oren, pid_trans
+
 
 class PID:
     """
@@ -20,31 +22,42 @@ class PID:
         Kd (float): Derivative gain.
         Ki (float): Integral gain.
         num_robots (int): Number of robots being controlled; each has separate error tracking.
-    
+
     Raises:
         ValueError: If `dt` is not greater than zero.
     """
+
     def __init__(
-        self, dt: float, max_output: float, min_output: float,
-        Kp: float, Kd: float, Ki: float, num_robots: int
+        self,
+        dt: float,
+        max_output: float,
+        min_output: float,
+        Kp: float,
+        Kd: float,
+        Ki: float,
+        num_robots: int,
     ):
         if dt <= 0:
             raise ValueError("dt should be greater than zero")
         self.dt = dt
-        
+
         self.max_output = max_output
         self.min_output = min_output
-        
+
         self.Kp = Kp
         self.Kd = Kd
         self.Ki = Ki
-        
+
         self.pre_errors = {i: 0.0 for i in range(num_robots)}
         self.integrals = {i: 0.0 for i in range(num_robots)}
 
     def calculate(
-        self, target: float, current: float, robot_id: int,
-        oren: bool = False, normalize_range: Optional[float] = None
+        self,
+        target: float,
+        current: float,
+        robot_id: int,
+        oren: bool = False,
+        normalize_range: Optional[float] = None,
     ) -> float:
         """
         Compute the PID output to move a robot towards a target position.
@@ -60,14 +73,14 @@ class PID:
             float: The PID control output value, limited between `min_output` and `max_output`.
 
         This function calculates the PID output by computing proportional, integral, and derivative terms,
-        with optional normalization in order to try and keep all the output values within a range. When 
-        `oren` is True, the error calculation is modified to handle angular differences. Clamping is 
+        with optional normalization in order to try and keep all the output values within a range. When
+        `oren` is True, the error calculation is modified to handle angular differences. Clamping is
         applied to prevent integral wind-up and to limit the total output.
         """
-        
+
         # Calculate error
         error = target - current
-        
+
         # Adjust error if orientation (oren) is considered
         if oren:
             error = np.atan2(np.sin(error), np.cos(error))
@@ -80,7 +93,7 @@ class PID:
             self.integrals[robot_id] += error * self.dt
             self.integrals[robot_id] = max(
                 min(self.integrals[robot_id], self.max_output / self.Ki),
-                self.min_output / self.Ki
+                self.min_output / self.Ki,
             )
             Iout = self.Ki * self.integrals[robot_id]
         else:
@@ -95,11 +108,11 @@ class PID:
 
         # Total output with clamping
         output = Pout + Iout + Dout
-        
+
         # Apply optional normalization
         if normalize_range is not None and normalize_range != 0:
             output /= normalize_range
-        
+
         # apply clamping
         output = max(self.min_output, min(self.max_output, output))
 
@@ -111,16 +124,27 @@ class PID:
         self.pre_errors[robot_id] = 0.0
         self.integrals[robot_id] = 0.0
 
+
 class TwoDPID:
     def __init__(
-        self, dt: float, max_output: float, min_output: float,
-        Kp: float, Kd: float, Ki: float, num_robots: int
+        self,
+        dt: float,
+        max_output: float,
+        min_output: float,
+        Kp: float,
+        Kd: float,
+        Ki: float,
+        num_robots: int,
     ):
         self.dimX = PID(dt, max_output, min_output, Kp, Kd, Ki, num_robots)
         self.dimY = PID(dt, max_output, min_output, Kp, Kd, Ki, num_robots)
 
-    def calculate(self, target: Tuple[float, float], current: Tuple[float, float], robot_id):
-        return self.dimX.calculate(target[0], current[0], robot_id, False, None), self.dimY.calculate(target[1], current[1], robot_id, False, None)
+    def calculate(
+        self, target: Tuple[float, float], current: Tuple[float, float], robot_id
+    ):
+        return self.dimX.calculate(
+            target[0], current[0], robot_id, False, None
+        ), self.dimY.calculate(target[1], current[1], robot_id, False, None)
 
     def reset(self, robot_id: int):
         self.dimX.reset(robot_id)

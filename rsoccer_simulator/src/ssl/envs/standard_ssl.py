@@ -19,6 +19,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class SSLStandardEnv(SSLBaseEnv):
     """
     Description:
@@ -107,7 +108,7 @@ class SSLStandardEnv(SSLBaseEnv):
         ) * 1000  # max wheel speed (rad/s) * 4 wheels * steps
 
         # default kick speed
-        self.kick_speed_x = 5.0  # kick speed
+        self.kick_speed_x = 5  # kick speed
 
         # set starting formation style for
         self.blue_formation = (
@@ -244,7 +245,7 @@ class SSLStandardEnv(SSLBaseEnv):
         ball = self.frame.ball
 
         def robot_in_gk_area(rbt):
-            return abs(rbt.x)> half_len - pen_len and abs(rbt.y) < half_pen_wid
+            return abs(rbt.x) > half_len - pen_len and abs(rbt.y) < half_pen_wid
 
         # Check if any robot on the blue team exited field or violated rules (for info)
         for (_, robot_b), (_, robot_y) in zip(
