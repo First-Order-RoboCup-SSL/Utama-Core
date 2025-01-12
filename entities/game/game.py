@@ -25,7 +25,7 @@ class Game:
 
     def __init__(self, my_team_is_yellow=True):
         self._my_team_is_yellow = my_team_is_yellow
-        self._field = Field(my_team_is_yellow)
+        self._field = Field()
         
         self._records: List[FrameData] = []
         self._predicted_next_frame: PredictedFrame = None
