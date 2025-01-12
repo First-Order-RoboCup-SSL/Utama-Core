@@ -240,7 +240,8 @@ class Game:
         ux, uy = self.get_object_velocity(object)
 
         if object is Ball:
-            start_x, start_y = self.ball.x, self.ball.y
+            ball = self.get_ball_pos()
+            start_x, start_y = ball[0].x, ball[0].y
         else:
             posn = self._get_object_position_at_frame(len(self._records) - 1, object)
             start_x, start_y = posn.x, posn.y
