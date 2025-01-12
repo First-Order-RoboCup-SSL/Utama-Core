@@ -1,12 +1,16 @@
+from numpy import pi
+
 # interval between frames
 TIMESTEP = 0.0167
 
-# maximum robot settings
+# maximum (real and sim) robot settings
 MAX_VEL = 1.5
 MAX_ANGULAR_VEL = 8
 
 # sim kick speed
 KICK_SPD = 5
+DRIBBLE_SPD = 3
+CHIP_ANGLE = pi / 4
 
 # Network
 LOCAL_HOST = "localhost"

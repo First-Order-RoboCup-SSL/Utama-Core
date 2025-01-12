@@ -8,13 +8,11 @@ RobotCommand = namedtuple(
         "local_forward_vel",
         "local_left_vel",
         "angular_vel",
-        "kick_spd",
-        "kick_angle",
-        "dribbler_spd",
+        "kick",
+        "chip",
+        "dribble",
     ],
 )
-
-# TODO: chaange kick_spd and kick_angle to booleans for kick_fw and kick_up
 
 RobotInfo = namedtuple(
     "RobotInfo",

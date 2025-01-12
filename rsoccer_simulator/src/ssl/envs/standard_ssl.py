@@ -6,7 +6,10 @@ import numpy as np
 from rsoccer_simulator.src.Entities import Frame, Robot, Ball
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from rsoccer_simulator.src.Utils import KDTree
-from team_controller.src.config.settings import TIMESTEP
+from team_controller.src.config.settings import (
+    TIMESTEP,
+    KICK_SPD,
+)
 from team_controller.src.config.starting_formation import (
     BLUE_START_ONE,
     YELLOW_START_ONE,
@@ -107,9 +110,6 @@ class SSLStandardEnv(SSLBaseEnv):
             160 * 4
         ) * 1000  # max wheel speed (rad/s) * 4 wheels * steps
 
-        # default kick speed
-        self.kick_speed_x = 5  # kick speed
-
         # set starting formation style for
         self.blue_formation = (
             BLUE_START_ONE if not blue_starting_formation else blue_starting_formation
@@ -187,7 +187,7 @@ class SSLStandardEnv(SSLBaseEnv):
                 v_x=v_x,
                 v_y=v_y,
                 v_theta=v_theta,
-                kick_v_x=self.kick_speed_x if actions["team_blue"][i][3] > 0 else 0.0,
+                kick_v_x=KICK_SPD if actions["team_blue"][i][3] > 0 else 0.0,
                 dribbler=True if actions["team_blue"][i][4] > 0 else False,
             )
             commands.append(cmd)
@@ -202,7 +202,7 @@ class SSLStandardEnv(SSLBaseEnv):
                 v_x=v_x,
                 v_y=v_y,
                 v_theta=v_theta,
-                kick_v_x=self.kick_speed_x if actions["team_yellow"][i][3] > 0 else 0.0,
+                kick_v_x=KICK_SPD if actions["team_yellow"][i][3] > 0 else 0.0,
                 dribbler=True if actions["team_yellow"][i][4] > 0 else False,
             )
             commands.append(cmd)

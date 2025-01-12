@@ -71,7 +71,7 @@ class RealRobotController(AbstractRobotController):
 
         Args:
             robot_id (int): The ID of the robot.
-            command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick_spd', 'kick_angle', 'dribbler_spd'.
+            command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
         q_command = self._quantise_command(command)
         command_buffer = self._generate_command_buffer(q_command)
@@ -143,17 +143,17 @@ class RealRobotController(AbstractRobotController):
         q_local_left_vel = self._quantise(
             command.local_left_vel, MAX_VEL, *self._quant_dict["local_left_vel"]
         )
-        q_kicker_bottom = 1 if command.kick_spd > 0 else 0
-        q_kicker_top = 1 if command.kick_angle > 0 else 0
-        q_dribbler_spd = 1 if command.dribbler_spd > 0 else 0
+        q_kick = 1 if command.kick > 0 else 0
+        q_chip = 1 if command.chip > 0 else 0
+        q_dribble = 1 if command.dribble > 0 else 0
 
         return RobotCommand(
             local_forward_vel=q_local_forward_vel,
             local_left_vel=q_local_left_vel,
             angular_vel=q_angular_vel,
-            kick_spd=q_kicker_bottom,
-            kick_angle=q_kicker_top,
-            dribbler_spd=q_dribbler_spd,
+            kick=q_kick,
+            chip=q_chip,
+            dribble=q_dribble,
         )
 
     def _quantise(
@@ -204,20 +204,18 @@ class RealRobotController(AbstractRobotController):
         local_left_vel_buffer = (
             f'{q_command.local_left_vel:0{out_bit_sizes["local_left_vel"][0]}b}'
         )
-        kicker_bottom_buffer = (
-            f'{q_command.kick_spd:0{out_bit_sizes["kicker_bottom"][0]}b}'
-        )
-        kicker_top_buffer = f'{q_command.kick_angle:0{out_bit_sizes["kicker_top"][0]}b}'
-        dribbler_buffer = f'{q_command.dribbler_spd:0{out_bit_sizes["dribbler"][0]}b}'
+        kick_buffer = f'{q_command.kick:0{out_bit_sizes["kicker_bottom"][0]}b}'
+        chip_buffer = f'{q_command.chip:0{out_bit_sizes["kicker_top"][0]}b}'
+        dribble_buffer = f'{q_command.dribble:0{out_bit_sizes["dribbler"][0]}b}'
 
         command_buffer = "".join(
             [
                 angular_vel_buffer,
                 local_forward_vel_buffer,
                 local_left_vel_buffer,
-                kicker_bottom_buffer,
-                kicker_top_buffer,
-                dribbler_buffer,
+                kick_buffer,
+                chip_buffer,
+                dribble_buffer,
             ]
         )
 

@@ -32,7 +32,9 @@ def calculate_robot_velocities(
         angular_vel = 0
 
     if target_x is not None and target_y is not None:
-        forward_vel, left_vel = pid_trans.calculate((target_x, target_y), (current_x, current_y), robot_id)
+        forward_vel, left_vel = pid_trans.calculate(
+            (target_x, target_y), (current_x, current_y), robot_id
+        )
         forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren)
     else:
         forward_vel = 0
@@ -41,7 +43,7 @@ def calculate_robot_velocities(
         local_forward_vel=forward_vel,
         local_left_vel=left_vel,
         angular_vel=angular_vel,
-        kick_spd=0,
-        kick_angle=0,
-        dribbler_spd=3 if dribbling else 0,
+        kick=0,
+        chip=0,
+        dribble=1 if dribbling else 0,
     )
