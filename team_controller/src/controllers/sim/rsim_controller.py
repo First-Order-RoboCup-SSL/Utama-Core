@@ -21,7 +21,7 @@ class RSimController(AbstractSimController):
     def __init__(self, env: SSLBaseEnv):
         self._env = env
 
-    def teleport_ball(self, x: float, y: float) -> None:
+    def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0) -> None:
         """
         Teleports the ball to a specific location on the field.
 
@@ -31,7 +31,7 @@ class RSimController(AbstractSimController):
 
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
-        self._env.teleport_ball(x, y)
+        self._env.teleport_ball(x, y, vx, vy)
 
     def teleport_robot(
         self,

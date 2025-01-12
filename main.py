@@ -15,6 +15,9 @@ from team_controller.src.tests.grsim_robot_controller_startup_test import (
 
 from team_controller.src.data import VisionDataReceiver, RefereeMessageReceiver
 from team_controller.src.data.message_enum import MessageType
+import logging
+
+logger = logging.getLogger(__name__)
 
 import warnings
 
@@ -32,8 +35,8 @@ def main():
     time.sleep(0.2)
 
     message_queue = queue.SimpleQueue()
-    receiver = VisionDataReceiver(message_queue, debug=False)
-    decision_maker = StartUpController(game, debug=False)
+    receiver = VisionDataReceiver(message_queue)
+    decision_maker = StartUpController(game)
 
     # Start the data receiving in a separate thread
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
@@ -51,8 +54,8 @@ def main():
     frames = 0
 
     try:
-        print("LOCATED BALL")
-        print(f"Predicting robot position with {FRAMES_IN_TIME} frames of motion")
+        logger.debug("LOCATED BALL")
+        logger.debug(f"Predicting robot position with {FRAMES_IN_TIME} frames of motion")
         
         predictions: List[PredictedFrame] = []
         while True:
@@ -66,8 +69,8 @@ def main():
                     len(predictions) >= FRAMES_IN_TIME
                     and predictions[-FRAMES_IN_TIME] != None
                 ):  
-                    print(
-                        "Ball prediction inaccuracy delta (cm): ",
+                    logger.debug(
+                        "Ball prediction inaccuracy delta (cm): " +
                         "{:.5f}".format(
                             100
                             * math.sqrt(
@@ -82,11 +85,11 @@ def main():
                                 )
                                 ** 2
                             )
-                        ),
+                        )
                     )
                     for i in range(6):
-                        print(
-                            f"Enemy(Blue) robot {i} prediction inaccuracy delta (cm): ",
+                        logger.debug(
+                            f"Enemy(Blue) robot {i} prediction inaccuracy delta (cm): " +
                             "{:.5f}".format(
                                 100
                                 * math.sqrt(
@@ -103,11 +106,11 @@ def main():
                                     )
                                     ** 2
                                 )
-                            ),
+                            )
                         )
                     for i in range(6):
-                        print(
-                            f"Friendly(Yellow) robot {i} prediction inaccuracy delta (cm): ",
+                        logger.debug(
+                            f"Friendly(Yellow) robot {i} prediction inaccuracy delta (cm): " +
                             "{:.5f}".format(
                                 100
                                 * math.sqrt(
@@ -124,7 +127,7 @@ def main():
                                     )
                                     ** 2
                                 )
-                            ),
+                            )
                         )
 
                 
@@ -134,7 +137,7 @@ def main():
                 pass
             
             decision_maker.make_decision()
-            
+       
     except KeyboardInterrupt:
         print("Stopping main program.")
 

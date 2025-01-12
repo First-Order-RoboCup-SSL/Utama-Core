@@ -1,4 +1,3 @@
-import math
 import random
 from typing import Dict, Tuple
 
@@ -16,7 +15,9 @@ from global_utils.math_utils import deg_to_rad, rad_to_deg
 
 from entities.data.vision import BallData, RobotData, FrameData
 from entities.data.command import RobotInfo
+import logging
 
+logger = logging.getLogger(__name__)
 
 class SSLStandardEnv(SSLBaseEnv):
     """
@@ -78,8 +79,8 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Action space for one robot:
         robot_action_space = gym.spaces.Box(
-            low=np.array([-1.0, -1.0, -1.0, -1.0, -1.0]),
-            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0]),
+            low=np.array([-1.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float32),
+            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -118,7 +119,7 @@ class SSLStandardEnv(SSLBaseEnv):
             else yellow_starting_formation
         )
 
-        print(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
+        logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
@@ -139,7 +140,7 @@ class SSLStandardEnv(SSLBaseEnv):
         blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
         """
         # Ball observation shared by all robots
-        ball_obs = BallData(self.frame.ball.x, self.frame.ball.y, self.frame.ball.z)
+        ball_obs = BallData(self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z)
 
         # Robots observation (Blue + Yellow)
         blue_obs = []
@@ -168,7 +169,7 @@ class SSLStandardEnv(SSLBaseEnv):
         )
 
     def _get_robot_observation(self, robot):
-        robot_pos = RobotData(robot.x, robot.y, float(deg_to_rad(robot.theta)))
+        robot_pos = RobotData(robot.x, -robot.y, -float(deg_to_rad(robot.theta)))
         robot_info = RobotInfo(robot.infrared)
         return robot_pos, robot_info
 
@@ -243,7 +244,7 @@ class SSLStandardEnv(SSLBaseEnv):
         ball = self.frame.ball
 
         def robot_in_gk_area(rbt):
-            return rbt.x > half_len - pen_len and abs(rbt.y) < half_pen_wid
+            return abs(rbt.x)> half_len - pen_len and abs(rbt.y) < half_pen_wid
 
         # Check if any robot on the blue team exited field or violated rules (for info)
         for (_, robot_b), (_, robot_y) in zip(
@@ -315,12 +316,14 @@ class SSLStandardEnv(SSLBaseEnv):
 
         for i in range(self.n_robots_blue):
             x, y, heading = self.blue_formation[i]
-            pos_frame.robots_blue[i] = Robot(id=i, x=x, y=y, theta=rad_to_deg(heading))
+            pos_frame.robots_blue[i] = Robot(
+                id=i, x=x, y=-y, theta=-rad_to_deg(heading)
+            )
 
         for i in range(self.n_robots_yellow):
             x, y, heading = self.yellow_formation[i]
             pos_frame.robots_yellow[i] = Robot(
-                id=i, x=x, y=y, theta=rad_to_deg(heading)
+                id=i, x=x, y=-y, theta=-rad_to_deg(heading)
             )
 
         pos_frame.ball = Ball(x=0, y=0)

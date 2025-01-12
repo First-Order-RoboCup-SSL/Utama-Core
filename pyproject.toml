@@ -21,8 +21,10 @@ dependencies = [
     "rc-robosim == 1.2",
     "pygame == 2.6.1",
     "pyserial == 3.5",
+    "pytest == 8.3.4"
 ]
 requires-python = ">=3.9,<3.11"
 
 [tool.setuptools]
 py-modules = []
+packages = ["decision_maker", "entities", "global_utils", "motion_planning", "robot_control", "rsoccer_simulator", "team_controller"]

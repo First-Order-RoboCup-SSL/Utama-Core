@@ -1,4 +1,6 @@
+from curses.ascii import RS
 from typing import Dict, Union, Optional, Tuple
+from xmlrpc.client import Boolean
 from entities.game import Game
 from entities.data.command import RobotCommand, RobotInfo
 from entities.data.vision import FrameData
@@ -9,14 +11,16 @@ import numpy as np
 from numpy.typing import NDArray
 from entities.data.command import RobotCommand, RobotInfo
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
+import logging
 
+logger = logging.getLogger(__name__)
 
 class RSimRobotController(AbstractRobotController):
     """
     Robot Controller (and Vision Receiver) for RSim.
 
-    is_pvp:
-    if pvp, two controllers are playing against each other. Else, play against static
+    pvp_manager:
+    if not None, two controllers are playing against each other. Else, play against static
 
     There is no need for a separate Vision Receiver for RSim.
     """
@@ -26,18 +30,21 @@ class RSimRobotController(AbstractRobotController):
         is_team_yellow: bool,
         env: SSLBaseEnv,
         game_obj: Game,
-        is_pvp: bool = False,
-        debug: bool = False,
+        pvp_manager = None,#: Optional[PVPManager] = None, Can't forward declare
     ):
         self._is_team_yellow = is_team_yellow
         self._game_obj = game_obj
-        self._debug = debug
         self._env = env
         self._n_friendly_robots, self._n_enemy_robots = self._get_n_robots()
-        self._is_pvp = is_pvp
         self._out_packet = self._empty_command(self.n_friendly_robots)
         self._robots_info: list[RobotInfo] = [None] * self.n_friendly_robots
+        self._is_pvp = pvp_manager is not None
+        self.pvp_manager = pvp_manager
+        
+        if not self._is_pvp:
+            self.reset_env()
 
+    def reset_env(self):
         # if environment was not reset beforehand, reset now
         if self._env.frame is None:
             initial_obs, _ = self._env.reset()
@@ -51,8 +58,7 @@ class RSimRobotController(AbstractRobotController):
         Sends the robot commands to the appropriate team (yellow or blue).
         """
         if self.is_pvp:
-            raise NotImplementedError()
-            # TODO: implement Controller v Controller system
+            self.pvp_manager.send_command(self.is_team_yellow, self._out_packet)
         else:
             if self.is_team_yellow:
                 action = {
@@ -65,24 +71,22 @@ class RSimRobotController(AbstractRobotController):
                     "team_yellow": tuple(self._empty_command(self.n_enemy_robots)),
                 }
 
-        # print(action)
-        observation, reward, terminated, truncated, reward_shaping = self._env.step(
-            action
-        )
+            observation, reward, terminated, truncated, reward_shaping = self._env.step(
+                action
+            )
 
-        # note that we should not technically be able to view the opponent's robots_info!!
-        new_frame, yellow_robots_info, blue_robots_info = observation
-        if self.is_team_yellow:
-            self._robots_info = yellow_robots_info
-        else:
-            self._robots_info = blue_robots_info
+            # note that we should not technically be able to view the opponent's robots_info!!
+            new_frame, yellow_robots_info, blue_robots_info = observation
+            if self.is_team_yellow:
+                self._robots_info = yellow_robots_info
+            else:
+                self._robots_info = blue_robots_info
 
-        if self._debug:
-            print(new_frame, terminated, truncated, reward_shaping)
+            logger.debug(f"{new_frame} {terminated} {truncated} {reward_shaping}")
 
-        self._write_to_game_obj(new_frame)
-        # flush out_packet
-        self._out_packet = self._empty_command(self.n_friendly_robots)
+            self._write_to_game_obj(new_frame)
+            # flush out_packet
+            self._out_packet = self._empty_command(self.n_friendly_robots)
 
     def add_robot_commands(
         self,
@@ -103,6 +107,9 @@ class RSimRobotController(AbstractRobotController):
         """
         super().add_robot_commands(robot_commands, robot_id)
 
+    def update_robots_info(self, robots_info):
+        self._robots_info = robots_info
+
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
         """
         Adds a robot command to the out_packet.
@@ -111,11 +118,12 @@ class RSimRobotController(AbstractRobotController):
             robot_id (int): The ID of the robot.
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick_spd', 'kick_angle', 'dribbler_spd'.
         """
+        # invert angular_vel and left_vel because axis is inverted in RSim
         action = np.array(
             [
                 command.local_forward_vel,
                 -command.local_left_vel,
-                command.angular_vel,
+                -command.angular_vel,
                 command.kick_spd,
                 command.dribbler_spd,
             ],
@@ -127,10 +135,13 @@ class RSimRobotController(AbstractRobotController):
         """
         Supersedes the VisionReceiver and queue procedure to write to game obj directly.
 
-        Done this way, because there's no separate vision receivere for RSim.
+        Done this way, because there's no separate vision receiver for RSim.
         """
         self._game_obj.add_new_state(new_frame)
 
+    def empty_command(self) -> list[NDArray]:
+        return self._empty_command(self.n_friendly_robots)
+    
     # create an empty command array
     def _empty_command(self, n_robots: int) -> list[NDArray]:
         return [np.zeros((6,), dtype=float) for _ in range(n_robots)]
@@ -149,8 +160,7 @@ class RSimRobotController(AbstractRobotController):
             return False
 
         if self._robots_info[robot_id].has_ball:
-            if self.debug:
-                print(f"Robot: {robot_id} has the Ball")
+            logger.debug(f"Robot: {robot_id} has the Ball")
             return True
         else:
             return False
@@ -194,3 +204,77 @@ class RSimRobotController(AbstractRobotController):
     @property
     def n_enemy_robots(self):
         return self._n_enemy_robots
+
+class PVPManager:
+    
+    """
+    Manages a player vs player game inside the rsim environment. The two teams run in lockstep in 
+    this setup, and so, in order to get results consistent with running just one player, 
+    it's important to either alternate the player colours that send commands from the main loop
+    (using an empty command if one team has nothing to do), or call flush() after every command that
+    should be processed on its own (without a corresponding command from the other team).
+    """
+
+    def __init__(self, env: SSLBaseEnv, n_robots_blue: int, n_robots_yellow: int, game: Game):
+        self._env = env
+        self.n_robots_blue = n_robots_blue
+        self.n_robots_yellow = n_robots_yellow
+        self._pending = {
+            "team_blue": None,
+            "team_yellow": None
+        }
+        self._game = game 
+    
+    def set_blue_controller(self, blue_player: RSimRobotController):
+        self.blue_player = blue_player
+    
+    def set_yellow_controller(self, yellow_player: RSimRobotController):
+        self.yellow_player = yellow_player
+
+    def send_command(self, is_yellow: Boolean, out_packet):
+        colour = "team_yellow" if is_yellow else "team_blue"
+        other_colour = "team_blue" if is_yellow else "team_yellow"
+
+        if self._pending[colour]:
+            self._fill_and_send()
+
+        self._pending[colour] = tuple(out_packet)
+        if self._pending[other_colour]:
+            self._fill_and_send()
+
+    def _empty_command(self, n_robots: int) -> list[NDArray]:
+        return [np.zeros((6,), dtype=float) for _ in range(n_robots)]
+    
+    def _fill_and_send(self):
+        for colour in ("team_blue", "team_yellow"):
+            if not self._pending[colour]:
+                self._pending[colour] = tuple(self._empty_command(self.n_robots_yellow if colour == "team_yellow" else self.n_robots_blue))
+        
+        observation, reward, terminated, truncated, reward_shaping = self._env.step(self._pending)
+
+        new_frame, yellow_robots_info, blue_robots_info = observation
+        self.blue_player.update_robots_info(blue_robots_info)
+        self.yellow_player.update_robots_info(yellow_robots_info)
+
+        self._write_to_game_obj(new_frame)
+
+        self._pending = {
+            "team_blue": None,
+            "team_yellow": None
+        }
+
+    # TODO: Inheritance?
+    def _write_to_game_obj(self, new_frame: FrameData) -> None:
+        self._game.add_new_state(new_frame)
+    
+    def reset_env(self):
+        # if environment was not reset beforehand, reset now
+        if self._env.frame is None:
+            initial_obs, _ = self._env.reset()
+            initial_frame = initial_obs[0]
+        else:
+            initial_frame, _, _ = self._env._frame_to_observations()
+        self._write_to_game_obj(initial_frame)
+
+    def flush(self):
+        self._fill_and_send()

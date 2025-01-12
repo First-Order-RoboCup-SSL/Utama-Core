@@ -6,7 +6,9 @@ import gymnasium as gym
 import numpy as np
 from rsoccer_simulator.src.Entities import Frame, Robot, Ball
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
+import logging
 
+logger = logging.getLogger(__name__)
 
 class SSLHWDribblingEnv(SSLBaseEnv):
     """The SSL robot needs navigate a course while keeping the ball
@@ -73,7 +75,7 @@ class SSLHWDribblingEnv(SSLBaseEnv):
         self.max_v = 2.5
         self.max_w = 10
 
-        print("Environment initialized")
+        logger.debug("Environment initialized")
 
     def reset(self, *, seed=None, options=None):
         self.checkpoints_count = 0

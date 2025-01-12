@@ -172,8 +172,7 @@ class SSLBaseEnv(gym.Env):
 
         Note: this does not create a new frame, but mutates the current frame
         """
-        print(self.frame.ball)
-        ball = Ball(x=x, y=y, z=self.frame.ball.z, v_x=vx, v_y=vy)
+        ball = Ball(x=x, y=-y, z=self.frame.ball.z, v_x=vx, v_y=-vy)
         self.frame.ball = ball
         self.rsim.reset(self.frame)
 
@@ -198,7 +197,7 @@ class SSLBaseEnv(gym.Env):
         else:
             theta = rad_to_deg(theta)
 
-        robot = Robot(yellow=is_team_yellow, id=robot_id, x=x, y=y, theta=theta)
+        robot = Robot(yellow=is_team_yellow, id=robot_id, x=x, y=-y, theta=theta)
         if is_team_yellow:
             self.frame.robots_yellow[robot_id] = robot
         else:
@@ -206,7 +205,7 @@ class SSLBaseEnv(gym.Env):
 
         self.rsim.reset(self.frame)
 
-    def draw_point(self, x: float, y: float, color: str = "RED", width: float = 0.05):
+    def draw_point(self, x: float, y: float, color: str = "RED", width: float = 1):
         """
         Draws a point as an overlay.
 
@@ -223,7 +222,7 @@ class SSLBaseEnv(gym.Env):
         point_data = OverlayObject(
             type=OverlayType.POINT,
             color=color,
-            points=[self._pos_transform(x, y)],
+            points=[self._pos_transform(x, -y)],
             width=width,
         )
         self.overlay.append(point_data)
@@ -246,7 +245,7 @@ class SSLBaseEnv(gym.Env):
         width = width if width >= 1 else 1
         transformed_points = []
         for point in points:
-            transformed_points.append(self._pos_transform(*point))
+            transformed_points.append(self._pos_transform(point[0], -point[1]))
         line_data = OverlayObject(
             type=OverlayType.LINE, color=color, points=transformed_points, width=width
         )
@@ -270,7 +269,7 @@ class SSLBaseEnv(gym.Env):
         width = width if width >= 1 else 1
         transformed_points = []
         for point in points:
-            transformed_points.append(self._pos_transform(*point))
+            transformed_points.append(self._pos_transform(point[0], -point[1]))
         poly_data = OverlayObject(
             type=OverlayType.POLYGON,
             color=color,

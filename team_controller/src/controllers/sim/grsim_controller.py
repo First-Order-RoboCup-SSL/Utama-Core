@@ -102,7 +102,6 @@ class GRSimController(AbstractSimController):
         x, y = self._get_teleport_location(
             robot_id, is_team_yellow, is_present
         )
-        print(x, y)
         sim_control = self._create_teleport_robot_command(
             robot_id, is_team_yellow, x, y, is_present
         )

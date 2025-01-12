@@ -1,6 +1,5 @@
 from typing import List, Optional, NamedTuple
 
-from numpy import empty
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData, PredictedFrame
 from entities.data.command import RobotInfo
@@ -10,7 +9,7 @@ from entities.game.game_object import Robot as RobotEntity
 from entities.game.robot import Robot
 from entities.game.ball import Ball
 
-TIMESTEP = 0.0167
+from team_controller.src.config.settings import TIMESTEP
 # TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
 
 import logging, warnings
@@ -68,32 +67,11 @@ class Game:
     def predicted_next_frame(self) -> PredictedFrame:
         return self._predicted_next_frame
     
-    @property
-    def friendly_robots(self) -> List[Robot]:
-        return self._friendly_robots
-    
-    @friendly_robots.setter
-    def friendly_robots(self, value: List[RobotData]):
-        for robot_id, robot_data in enumerate(value):
-            self._friendly_robots[robot_id].robot_data = robot_data    
-        
-    @property
-    def enemy_robots(self) -> List[Robot]:
-        return self._enemy_robots
-    
-    @enemy_robots.setter
-    def enemy_robots(self, value: List[RobotData]):
-        for robot_id, robot_data in enumerate(value):
-            self._enemy_robots[robot_id].robot_data = robot_data
-    
-    @property
-    def ball(self) -> Ball:
-        return self._ball
-    
-    @ball.setter
-    def ball(self, value: BallData):
-        self._ball.ball_data = value
-    
+    def is_ball_in_goal(self, left_goal: bool):
+        ball_pos = self.get_ball_pos()[0]
+        return (ball_pos.x < -self.field.HALF_LENGTH and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH) and left_goal
+           or ball_pos.x > self.field.HALF_LENGTH and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH) and not left_goal)
+
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
         if isinstance(frame_data, FrameData):
@@ -124,6 +102,10 @@ class Game:
         record = self._records[-1]
         warnings.warn("Use game.friendly_robots/enemy_robots instead", DeprecationWarning, stacklevel=2)
         return record.yellow_robots if is_yellow else record.blue_robots
+
+    def get_robot_pos(self, is_yellow: bool, robot_id: int) -> RobotData:
+        all = self.get_robots_pos(is_yellow)
+        return None if not all else all[robot_id]
 
     def get_robots_velocity(self, is_yellow: bool) -> List[tuple]:
         """
@@ -160,19 +142,29 @@ class Game:
         return self.get_object_velocity(Ball)
 
     ### Frame Data retrieval ###
-    def get_latest_frame(self) -> tuple[List[RobotData], List[RobotData], List[BallData]]:
+    def get_latest_frame(self) -> FrameData:
+        if not self._records:
+            return None
+        return self._records[-1]
+
+    def get_my_latest_frame(self, my_team_is_yellow: bool) -> tuple[RobotData, RobotData, BallData]:
         """
         FrameData rearranged as Tuple(friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
         """
         if not self._records:
             return None
-        latest_frame = self._records[-1]
-        warnings.warn("Use game.friendly_robots/enemy_robots/ball instead", DeprecationWarning, stacklevel=2)
-        return self._reorganise_frame_data(latest_frame)
-    
-    def get_predicted_next_frame(self) -> tuple[RobotData, RobotData, BallData]:
+        latest_frame = self.get_latest_frame()
+        return self._reorganise_frame_data(latest_frame, my_team_is_yellow)
+
+    def predict_next_frame(self) -> FrameData:
         """
-        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
+        Predicts the next frame based on the latest frame.
+        """
+        return self._predicted_next_frame
+
+    def predict_my_next_frame(self,my_team_is_yellow: bool) -> tuple[RobotData, RobotData, BallData]:
+        """
+        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on my_team_is_yellow
         """
         if self._predicted_next_frame is None:
             return None
@@ -222,19 +214,18 @@ class Game:
         return None
     
     def _reorganise_frame_data(
-        self, frame_data: FrameData
+        self, frame_data: FrameData, my_team_is_yellow: bool
     ) -> tuple[RobotData, RobotData, BallData]:
         """
         *Deprecated* reorganises frame data to be (friendly_robots, enemy_robots, balls)
         """
         _, yellow_robots, blue_robots, balls = frame_data
-        if self._my_team_is_yellow:
+        if my_team_is_yellow:
             return yellow_robots, blue_robots, balls
         else:
             return blue_robots, yellow_robots, balls
 
     ### General Object Position Prediction ###
-
     def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
         # If t is after the object has stopped we return the position at which object stopped.
         sx = 0
@@ -275,6 +266,24 @@ class Game:
             logger.debug(f"Displacement: {displacement} for time: {effective_time}, stop time: {stop_time}")
             return displacement
     
+    def predict_ball_pos_at_x(self, x: float) -> Optional[tuple]:
+        vel = self.get_ball_velocity()
+        
+        if not vel or not vel[0] or not vel[0]:
+            return None
+ 
+        ux, uy = vel
+        pos = self.get_ball_pos()[0]
+        bx = pos.x
+        by = pos.y
+        
+        if (uy == 0):
+            return (bx, by)
+        
+        t = (x - bx) / ux
+        y = by + uy * t
+        return (x, y)
+
     def get_object_velocity(self, object: GameObject) -> Optional[tuple]:
         velocities = self._get_object_velocity_at_frame(len(self._records) - 1, object)
         if velocities is None:
@@ -302,8 +311,8 @@ class Game:
 
         """
         if frame >= len(self._records) or frame == 0:
-            # Cannot provide velocity at frame that does not exist
-            logger.info(f"Frame: {frame} does not exist.")
+            logger.warning("Cannot provide velocity at a frame that does not exist")
+            logger.info("See frame: %s", str(frame))
             return None
 
         # Otherwise get the previous and current frames
@@ -318,7 +327,7 @@ class Game:
 
         # Latest frame should always be ahead of last one
         if time_received < previous_time_received:
-            logger.warning(" Timestamps out of order for vision data.")
+            logger.warning("Timestamps out of order for vision data %f should be after %f", time_received, previous_time_received)
             return None
 
         dt_secs = time_received - previous_time_received
@@ -346,6 +355,7 @@ class Game:
             windowMiddle = (windowStart + windowEnd) // 2
 
             for j in range(windowStart, windowEnd):
+                # TODO: Handle when curr_vell is not when (time_received < previous_time_received)
                 curr_vel = self._get_object_velocity_at_frame(
                     len(self._records) - j, object
                 )

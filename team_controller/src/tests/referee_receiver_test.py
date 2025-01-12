@@ -11,12 +11,6 @@ import time
     message_copy.ParseFromString(data)
 TypeError: a bytes-like object is required, not 'NoneType' """
 
-
-# Add the project root directory to sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
-print(project_root)
-sys.path.insert(0, project_root)
-
 from team_controller.src.data.referee_receiver import RefereeMessageReceiver
 
 # Example usage:
@@ -31,7 +25,6 @@ if __name__ == "__main__":
                 message = receiver.get_latest_message()
                 time_stamp = receiver.get_packet_timestamp()
                 next_command = receiver.get_next_command()
-                # print(next_command)
                 # if next_command != None:
                 #     time.sleep(2)
                 # print(f"Command: {command}, Designated position: {des_pos}\n")

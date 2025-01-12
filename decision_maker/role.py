@@ -1,5 +1,8 @@
 from typing import List
 from dataclasses import dataclass, field
+import logging
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Action:
@@ -66,7 +69,5 @@ if __name__ == "__main__":
     ROLES: List[Role] = [Defend(), Attack()]
     role = ROLES[0]
     role.possible_actions[2].rating = 5
-    print(role.name)
-    print(role.get_suggested_action())
-    
-            
+    logger.debug(f"Role name: {role.name}")
+    logger.debug(f"Role suggested action: {role.get_suggested_action()}")

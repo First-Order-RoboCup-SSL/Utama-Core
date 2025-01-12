@@ -1,16 +1,7 @@
-import sys
-import os
-import time
 import threading
 import numpy as np
 from typing import Tuple, List, Union, Dict, Optional
 import queue
-
-# Add the project root directory to sys.path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
-print(project_root)
-sys.path.insert(0, project_root)
-
 from entities.game import Field
 from entities.data.command import RobotCommand
 from entities.data.vision import BallData, RobotData
@@ -26,6 +17,9 @@ from team_controller.src.config.settings import (
 from entities.game import Game
 from team_controller.src.data.message_enum import MessageType
 from team_controller.src.utils import network_manager
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Constants
 ROBOT_RADIUS = 0.18
@@ -151,7 +145,6 @@ class ShootingController:
         robot_controller: GRSimRobotController,
         address=LOCAL_HOST,
         port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT),
-        debug=False,
     ):
         self.game_obj = game_obj
         self.robot_controller = robot_controller
@@ -180,24 +173,22 @@ class ShootingController:
 
         self.lock = threading.Lock()
 
-        self.debug = debug
         self.shooter_id = shooter_id
 
     # Added this function
     def kick_ball(self, current_oren: float = None, target_oren: float = None):
         if np.round(target_oren, 1) and np.round(current_oren, 1):
-            # print(f"{np.round(target_oren, 2) - np.round(current_oren, 2)}")
             if abs(np.round(target_oren, 2) - np.round(current_oren, 2)) <= 0.02:
                 self.robot_command = self.robot_command._replace(
                     kick_spd=3, kick_angle=0, dribbler_spd=0
                 )
-                print("Kicking ball\n")
+                logger.info("Kicking ball\n")
                 return True
             else:
                 self.robot_command = self.robot_command._replace(
                     kick_spd=0, kick_angle=0, dribbler_spd=1
                 )
-                print("Dribbling ball\n")
+                logger.info("Dribbling ball\n")
                 return False
 
     # makes all the descisions for the robot
@@ -233,7 +224,7 @@ class ShootingController:
                         )
                         >= 0.3 and self.robot_controller.robot_has_ball(self.shooter_id))
                     ):
-                        print("first action")
+                        logger.info("first action")
                         target_coords = (None, None, None)
                         face_ball = True
                         self.robot_command = self._calculate_robot_velocities(
@@ -245,7 +236,7 @@ class ShootingController:
                         )
                         self.first_action = False
                     elif self.robot_controller.robot_has_ball(self.shooter_id):
-                        print("robot has ball")
+                        logger.info("robot has ball")
                         current_oren = robots[self.shooter_id].orientation
                         face_ball = False
                         target_coords = (None, None, shot_orientation)
@@ -261,7 +252,7 @@ class ShootingController:
                             current_oren, shot_orientation
                         )
                     else:
-                        print("approaching ball")
+                        logger.info("approaching ball")
                         face_ball = True
                         target_coords = (balls[0].x, balls[0].y, None)
                         self.robot_command = self._calculate_robot_velocities(
@@ -272,11 +263,9 @@ class ShootingController:
                             face_ball=face_ball,
                         )
 
-                # print(self.robot_command, "\n")
                 self.robot_controller.add_robot_commands(
                     self.robot_command, robot_id=self.shooter_id
                 )
-                # print(self.robot_controller.out_packet)
                 self.robot_controller.send_robot_commands()
 
 
@@ -332,9 +321,6 @@ class ShootingController:
         elif not face_ball and len(target_coords) == 3:
             target_oren = target_coords[2]
 
-        # print(f"\nRobot {robot_id} current position: ({current_x:.3f}, {current_y:.3f}, {current_oren:.3f})")
-        # print(f"Robot {robot_id} target position: ({target_x:.3f}, {target_y:.3f}, {target_oren:.3f})")
-
         if target_oren != None:
             angular_vel = self.pid_oren.calculate(
                 target_oren, current_oren, robot_id, oren=True
@@ -354,7 +340,6 @@ class ShootingController:
         else:
             forward_vel = 0
             left_vel = 0
-        # print(f"Output: {forward_vel}, {left_vel}, {angular_vel}")
         return RobotCommand(
             local_forward_vel=forward_vel,
             local_left_vel=left_vel,
@@ -376,8 +361,8 @@ if __name__ == "__main__":
     game = Game()
 
     message_queue = queue.SimpleQueue()
-    vision_receiver = VisionDataReceiver(message_queue, debug=False)
-    sim_robot_controller = GRSimRobotController(is_team_yellow=True, debug=False)
+    vision_receiver = VisionDataReceiver(message_queue)
+    sim_robot_controller = GRSimRobotController(is_team_yellow=True)
     decision_maker = ShootingController(
         shooter_id,
         goal_x,
@@ -385,7 +370,6 @@ if __name__ == "__main__":
         goal_y2,
         game,
         sim_robot_controller,
-        debug=True,
     )
 
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
