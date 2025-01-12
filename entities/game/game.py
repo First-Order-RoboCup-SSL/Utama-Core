@@ -1,23 +1,23 @@
-from typing import List, Optional
+from typing import List, Optional, NamedTuple
 
 from numpy import empty
 from entities.game.field import Field
-from entities.data.vision import FrameData, RobotData, BallData
+from entities.data.vision import FrameData, RobotData, BallData, PredictedFrame
 from entities.data.command import RobotInfo
 
 from entities.game.game_object import Colour, GameObject, Robot
-from entities.game.robot import Friendly, Enemy
+from entities.game.game_object import Robot as RobotEntity
+from entities.game.robot import Robot
 from entities.game.ball import Ball
 
 TIMESTEP = 0.0167
+# TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
 
-import logging
+import logging, warnings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
 
 class Game:
     """
@@ -25,13 +25,16 @@ class Game:
     """
 
     def __init__(self, my_team_is_yellow=True):
-        self._field = Field(my_team_is_yellow)
-        self._records: List[FrameData] = []
-        self._predicted_next_frame = None
         self._my_team_is_yellow = my_team_is_yellow
-        self._friendly_robots: List[Friendly] = [Friendly(id) for id in range(6)]
-        self._enemy_robots: List[Enemy] = [Enemy(id) for id in range(6)]
+        self._field = Field(my_team_is_yellow)
+        
+        self._records: List[FrameData] = []
+        self._predicted_next_frame: PredictedFrame = None
+        
+        self._friendly_robots: List[Robot] = [Robot(id, is_friendly=True) for id in range(6)]
+        self._enemy_robots: List[Robot] = [Robot(id, is_friendly=False) for id in range(6)]
         self._ball: Ball = Ball()
+        
         self._yellow_score = 0
         self._blue_score = 0
 
@@ -62,11 +65,11 @@ class Game:
         return self._my_team_is_yellow
 
     @property
-    def predicted_next_frame(self) -> FrameData:
+    def predicted_next_frame(self) -> PredictedFrame:
         return self._predicted_next_frame
     
     @property
-    def friendly_robots(self) -> List[Friendly]:
+    def friendly_robots(self) -> List[Robot]:
         return self._friendly_robots
     
     @friendly_robots.setter
@@ -75,7 +78,7 @@ class Game:
             self._friendly_robots[robot_id].robot_data = robot_data    
         
     @property
-    def enemy_robots(self) -> List[Enemy]:
+    def enemy_robots(self) -> List[Robot]:
         return self._enemy_robots
     
     @enemy_robots.setter
@@ -90,12 +93,12 @@ class Game:
     @ball.setter
     def ball(self, value: BallData):
         self._ball.ball_data = value
-
+    
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
         if isinstance(frame_data, FrameData):
             self._records.append(frame_data)
-            self._predicted_next_frame = self.predict_frame_after(TIMESTEP)
+            self._predicted_next_frame = self._reorganise_frame(self.predict_frame_after(TIMESTEP))
             self._update_data(frame_data)
         else:
             raise ValueError("Invalid frame data.")
@@ -119,6 +122,7 @@ class Game:
         if not self._records:
             return None
         record = self._records[-1]
+        warnings.warn("Use game.friendly_robots/enemy_robots instead", DeprecationWarning, stacklevel=2)
         return record.yellow_robots if is_yellow else record.blue_robots
 
     def get_robots_velocity(self, is_yellow: bool) -> List[tuple]:
@@ -130,14 +134,13 @@ class Game:
         if is_yellow:
             # TODO: potential namespace conflict when robot (robot.py) entity is reintroduced. Think about integrating the two
             return [
-                self.get_object_velocity(Robot(i, Colour.YELLOW))
-                for i in range(
-                    len(self.get_robots_pos(True))
+                self.get_object_velocity(RobotEntity(i, Colour.YELLOW))
+                for i in range(len(self.get_robots_pos(True))
                 )  # TODO: This is a bit of a hack, we should be able to get the number of robots from the field
             ]
         else:
             return [
-                self.get_object_velocity(Robot(i, Colour.BLUE))
+                self.get_object_velocity(RobotEntity(i, Colour.BLUE))
                 for i in range(
                     len(self.get_robots_pos(False))
                 )
@@ -147,6 +150,7 @@ class Game:
     def get_ball_pos(self) -> List[BallData]:
         if not self._records:
             return None
+        warnings.warn("Use game.ball instead", DeprecationWarning, stacklevel=2)
         return self._records[-1].ball
 
     def get_ball_velocity(self) -> Optional[tuple]:
@@ -163,6 +167,7 @@ class Game:
         if not self._records:
             return None
         latest_frame = self._records[-1]
+        warnings.warn("Use game.friendly_robots/enemy_robots/ball instead", DeprecationWarning, stacklevel=2)
         return self._reorganise_frame_data(latest_frame)
     
     def get_predicted_next_frame(self) -> tuple[RobotData, RobotData, BallData]:
@@ -171,6 +176,7 @@ class Game:
         """
         if self._predicted_next_frame is None:
             return None
+        warnings.warn("Use game.predicted_next_frame instead", DeprecationWarning, stacklevel=2)
         return self._reorganise_frame_data(self._predicted_next_frame)    
     
     def predict_frame_after(self, t: float) -> FrameData:
@@ -178,11 +184,11 @@ class Game:
         Predicts frame in t seconds from the latest frame.
         """
         yellow_pos = [
-            self.predict_object_pos_after(t, Robot(Colour.YELLOW, i))
+            self.predict_object_pos_after(t, RobotEntity(Colour.YELLOW, i))
             for i in range(len(self.get_robots_pos(True)))
         ]
         blue_pos = [
-            self.predict_object_pos_after(t, Robot(Colour.BLUE, i))
+            self.predict_object_pos_after(t, RobotEntity(Colour.BLUE, i))
             for i in range(len(self.get_robots_pos(False)))
         ]
         ball_pos = self.predict_object_pos_after(t, Ball)
@@ -195,12 +201,31 @@ class Game:
                 list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
                 [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
             )
+            
+    def _reorganise_frame(self, frame: FrameData) -> PredictedFrame:
+        if frame:
+            ts, yellow_pos, blue_pos, ball_pos = frame
+            if self.my_team_is_yellow:
+                return PredictedFrame(
+                    ts,
+                    yellow_pos,
+                    blue_pos,
+                    ball_pos,
+                )
+            else:
+                return PredictedFrame(
+                    ts,
+                    blue_pos,
+                    yellow_pos,
+                    ball_pos,
+                )
+        return None
     
     def _reorganise_frame_data(
         self, frame_data: FrameData
     ) -> tuple[RobotData, RobotData, BallData]:
         """
-        reorganises frame data to be (friendly_robots, enemy_robots, balls)
+        *Deprecated* reorganises frame data to be (friendly_robots, enemy_robots, balls)
         """
         _, yellow_robots, blue_robots, balls = frame_data
         if self._my_team_is_yellow:
@@ -224,8 +249,7 @@ class Game:
         ux, uy = self.get_object_velocity(object)
 
         if object is Ball:
-            ball = self.get_ball_pos()
-            start_x, start_y = ball[0].x, ball[0].y
+            start_x, start_y = self.ball.x, self.ball.y
         else:
             posn = self._get_object_position_at_frame(len(self._records) - 1, object)
             start_x, start_y = posn.x, posn.y
@@ -260,7 +284,7 @@ class Game:
     def _get_object_position_at_frame(self, frame: int, object: GameObject):
         if object == Ball:
             return self._records[frame].ball[0]  # TODO don't always take first ball pos
-        elif isinstance(object, Robot):
+        elif isinstance(object, RobotEntity):
             if object.colour == Colour.YELLOW:
                 return self._records[frame].yellow_robots[object.id]
             else:

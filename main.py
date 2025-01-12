@@ -3,19 +3,23 @@ import queue
 from entities.game import Game
 import time
 import math
-from typing import List
+from typing import List, Type
 
-from entities.data.vision import FrameData
+
 from entities.data.command import RobotInfo
+from entities.data.vision import PredictedFrame
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.tests.grsim_robot_controller_startup_test import (
     StartUpController,
 )
-from entities.game.robot import RoleType
 
 from team_controller.src.data import VisionDataReceiver, RefereeMessageReceiver
 from team_controller.src.data.message_enum import MessageType
 
+import warnings
+
+# Enable all warnings, including DeprecationWarning
+warnings.simplefilter("default", DeprecationWarning)
 
 def data_update_listener(receiver: VisionDataReceiver):
     # Start receiving game data; this will run in a separate thread.
@@ -49,16 +53,15 @@ def main():
     try:
         print("LOCATED BALL")
         print(f"Predicting robot position with {FRAMES_IN_TIME} frames of motion")
-
-        predictions: List[FrameData] = []
+        
+        predictions: List[PredictedFrame] = []
         while True:
             (message_type, message) = message_queue.get()  # Infinite timeout for now
 
             if message_type == MessageType.VISION:
                 frames += 1
                 game.add_new_state(message)
-                actual_frame = game._records[-1] # FOR Comparison
-                actual_reordered_frame = game.get_latest_frame() # FOR Comparison
+                
                 if (
                     len(predictions) >= FRAMES_IN_TIME
                     and predictions[-FRAMES_IN_TIME] != None
@@ -83,20 +86,20 @@ def main():
                     )
                     for i in range(6):
                         print(
-                            f"Blue robot {i} prediction inaccuracy delta (cm): ",
+                            f"Enemy(Blue) robot {i} prediction inaccuracy delta (cm): ",
                             "{:.5f}".format(
                                 100
                                 * math.sqrt(
                                     (   
                                         # proposed implementation
                                         game.enemy_robots[i].x
-                                        - predictions[-FRAMES_IN_TIME].blue_robots[i].x
+                                        - predictions[-FRAMES_IN_TIME].enemy_robots[i].x
                                     )
                                     ** 2
                                     + (
                                         # reordered frame implementation
-                                        actual_reordered_frame[1][i].y
-                                        - predictions[-FRAMES_IN_TIME].blue_robots[i].y
+                                        game.enemy_robots[i].y
+                                        - predictions[-FRAMES_IN_TIME].enemy_robots[i].y
                                     )
                                     ** 2
                                 )
@@ -104,31 +107,28 @@ def main():
                         )
                     for i in range(6):
                         print(
-                            f"Yellow robot {i} prediction inaccuracy delta (cm): ",
+                            f"Friendly(Yellow) robot {i} prediction inaccuracy delta (cm): ",
                             "{:.5f}".format(
                                 100
                                 * math.sqrt(
                                     (
                                         # original implementation
                                         game.friendly_robots[i].x
-                                        - predictions[-FRAMES_IN_TIME]
-                                        .yellow_robots[i]
-                                        .x
+                                        - predictions[-FRAMES_IN_TIME].friendly_robots[i].x
                                     )
                                     ** 2
                                     + (
                                         # proposed implementation
-                                        actual_frame.yellow_robots[i].y
-                                        - predictions[-FRAMES_IN_TIME]
-                                        .yellow_robots[i]
-                                        .y
+                                        game.friendly_robots[i].y
+                                        - predictions[-FRAMES_IN_TIME].friendly_robots[i].y
                                     )
                                     ** 2
                                 )
                             ),
                         )
 
-                predictions.append(game.predict_frame_after(TIME))
+                
+                predictions.append(game.predicted_next_frame)
                 
             elif message_type == MessageType.REF:
                 pass
@@ -158,9 +158,7 @@ def main1():
 
     madeup_recieved_message = [RobotInfo(True), RobotInfo(False), RobotInfo(False), RobotInfo(False), RobotInfo(False), RobotInfo(False)]
     message_type = MessageType.ROBOT_INFO
-    
     message_queue.put((message_type, madeup_recieved_message))
-    
     
     iter = 0
     try:
@@ -173,12 +171,13 @@ def main1():
                 
                 # for demo purposes (displays when vision is received)
                 print(f"Before robot is_active( {game.friendly_robots[0].inactive} ) coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}")
+                # TODO: create a check with referee to see if robot is inactive
                 game.friendly_robots[0].inactive = True
+                
                 print(f"After robot is_active( {game.friendly_robots[0].inactive} ) Coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}\n")
                 
                 iter += 1
-
-                
+   
             if message_type == MessageType.REF:
                 pass
             
@@ -190,22 +189,9 @@ def main1():
                     print(f"Robot {i} has ball: {game.friendly_robots[i].has_ball}")
                 
                 iter += 1
-                    
-
-            decision_maker.make_decision()
-            
-            if iter == 2:
-                # for demo purposes (displays once)
-                print(f"\nBefore role change: {game.friendly_robots[0].role}")
-                game.friendly_robots[0].role = RoleType.ATTACK
-                print(f"After role change: {game.friendly_robots[0].role}\n")
-                
-                # for demo purposes
-                break 
-            
 
     except KeyboardInterrupt:
         print("Stopping main program.")
 
 if __name__ == "__main__":
-    main1()
+    main()
