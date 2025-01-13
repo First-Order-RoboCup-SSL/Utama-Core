@@ -1,4 +1,5 @@
 from collections import namedtuple
+from typing import NamedTuple
 
 # velocities: meters per second
 # angular_vel: radians per second
@@ -14,9 +15,7 @@ RobotCommand = namedtuple(
     ],
 )
 
-RobotInfo = namedtuple(
-    "RobotInfo",
-    ["has_ball"],
-)
-
+class RobotInfo(NamedTuple):
+    has_ball: bool
 # TODO: add kicker charged to robot info
+
