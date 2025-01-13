@@ -344,7 +344,7 @@ class Game:
         WINDOW = 5
         N_WINDOWS = 3
         iter = 0
-        n = 0
+        missing_velocities = 0
         
         if len(self._records) < WINDOW * N_WINDOWS + 1:
             return None
@@ -365,10 +365,10 @@ class Game:
                     averageVelocity[0] += curr_vel[0]
                     averageVelocity[1] += curr_vel[1]
                 else:
-                    n += 1     
+                    missing_velocities += 1     
 
-            averageVelocity[0] /= WINDOW - n
-            averageVelocity[1] /= WINDOW - n
+            averageVelocity[0] /= WINDOW - missing_velocities
+            averageVelocity[1] /= WINDOW - missing_velocities
 
             if i != 0:
                 dt = (
