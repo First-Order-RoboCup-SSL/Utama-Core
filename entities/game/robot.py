@@ -5,7 +5,6 @@ from entities.data.vision import RobotData
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -87,6 +86,8 @@ class Robot:
             raise AttributeError("Enemy robots cannot have the 'has_ball' property.")
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO) 
+    
     robot_data_1 = RobotData(0.5, 0.5, 0.5)
     robot_data_2 = RobotData(0.2, 0.2, 0.2)
     

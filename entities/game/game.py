@@ -15,7 +15,6 @@ from team_controller.src.config.settings import TIMESTEP
 import logging, warnings
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class Game:
@@ -386,6 +385,8 @@ class Game:
         return (totalX / iter, totalY / iter)
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    
     game = Game()
     print(game.ball.x)
     print(game.ball.y)
