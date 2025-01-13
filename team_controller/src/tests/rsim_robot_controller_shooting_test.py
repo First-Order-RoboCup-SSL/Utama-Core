@@ -153,9 +153,9 @@ class ShootingController:
             local_forward_vel=0,
             local_left_vel=0,
             angular_vel=0,
-            kick_spd=0,
-            kick_angle=0,
-            dribbler_spd=0,
+            kick=0,
+            chip=0,
+            dribble=0,
         )
 
         self.goal_x = goal_x
@@ -174,13 +174,13 @@ class ShootingController:
         if np.round(target_oren, 1) and np.round(current_oren, 1):
             if abs(np.round(target_oren, 2) - np.round(current_oren, 2)) <= 0.02:
                 self.robot_command = self.robot_command._replace(
-                    kick_spd=3, kick_angle=0, dribbler_spd=0
+                    kick=1, chip=0, dribble=0
                 )
                 logger.info("Kicking ball\n")
                 return True
             else:
                 self.robot_command = self.robot_command._replace(
-                    kick_spd=0, kick_angle=0, dribbler_spd=1
+                    kick=0, chip=0, dribble=1
                 )
                 logger.info("Dribbling ball\n")
                 return False
@@ -342,9 +342,9 @@ class ShootingController:
             local_forward_vel=forward_vel,
             local_left_vel=left_vel,
             angular_vel=angular_vel,
-            kick_spd=0,
-            kick_angle=0,
-            dribbler_spd=0,
+            kick=0,
+            chip=0,
+            dribble=0,
         )
 
 

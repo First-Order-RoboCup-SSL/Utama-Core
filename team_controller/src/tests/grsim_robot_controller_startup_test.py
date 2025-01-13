@@ -32,9 +32,7 @@ class StartUpController:
         game: Game,
     ):
         self.game = game
-        self.sim_robot_controller = GRSimRobotController(
-            is_team_yellow=True
-        )
+        self.sim_robot_controller = GRSimRobotController(is_team_yellow=True)
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
         # potentially have a set tunig parameters for each robot
@@ -128,9 +126,9 @@ class StartUpController:
             local_forward_vel=forward_vel,
             local_left_vel=left_vel,
             angular_vel=angular_vel,
-            kick_spd=0,
-            kick_angle=0,
-            dribbler_spd=0,
+            kick=0,
+            chip=0,
+            dribble=0,
         )
 
 

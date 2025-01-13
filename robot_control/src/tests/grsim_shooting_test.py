@@ -45,7 +45,8 @@ if __name__ == "__main__":
                 shooter_id=shooter_id,
                 pid_oren=pid_oren,
                 pid_trans=pid_trans,
-                is_yellow=IS_YELLOW
+                is_yellow=IS_YELLOW,
+                shoot_in_left_goal=IS_YELLOW,
             )
             # cmd = turn_on_spot(pid_oren, pid_trans, )
             sim_robot_controller.add_robot_commands(cmd, shooter_id)

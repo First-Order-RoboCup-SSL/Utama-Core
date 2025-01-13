@@ -150,14 +150,14 @@ class ShootingController:
         self.robot_controller = robot_controller
 
         self.first_action = False
-        
+
         self.robot_command = RobotCommand(
             local_forward_vel=0,
             local_left_vel=0,
             angular_vel=0,
-            kick_spd=0,
-            kick_angle=0,
-            dribbler_spd=0,
+            kick=0,
+            chip=0,
+            dribble=0,
         )
 
         self.goal_x = goal_x
@@ -180,13 +180,13 @@ class ShootingController:
         if np.round(target_oren, 1) and np.round(current_oren, 1):
             if abs(np.round(target_oren, 2) - np.round(current_oren, 2)) <= 0.02:
                 self.robot_command = self.robot_command._replace(
-                    kick_spd=3, kick_angle=0, dribbler_spd=0
+                    kick=1, chip=0, dribble=0
                 )
                 logger.info("Kicking ball\n")
                 return True
             else:
                 self.robot_command = self.robot_command._replace(
-                    kick_spd=0, kick_angle=0, dribbler_spd=1
+                    kick=0, chip=0, dribble=1
                 )
                 logger.info("Dribbling ball\n")
                 return False
@@ -200,12 +200,12 @@ class ShootingController:
                 balls[0], enemy_robots, self.goal_x, self.goal_y1, self.goal_y2
             )
             best_shot = find_best_shot(shadows, self.goal_y1, self.goal_y2)
-            
+
             # Changed to atan2 to get the correct angle
             shot_orientation = np.atan2(
                 (best_shot - balls[0].y), (self.goal_x - balls[0].x)
             )
-           
+
             robot_data = (
                 robots[self.shooter_id] if self.shooter_id < len(robots) else None
             )
@@ -216,13 +216,13 @@ class ShootingController:
                     balls[0].y - robot_data.y, balls[0].x - robot_data.x
                 )
                 if robot_data is not None:
-                    if (
-                        self.first_action
-                        or (abs(
+                    if self.first_action or (
+                        abs(
                             np.round(target_oren, 1)
                             - np.round(robot_data.orientation, 1)
                         )
-                        >= 0.3 and self.robot_controller.robot_has_ball(self.shooter_id))
+                        >= 0.3
+                        and self.robot_controller.robot_has_ball(self.shooter_id)
                     ):
                         logger.info("first action")
                         target_coords = (None, None, None)
@@ -240,7 +240,7 @@ class ShootingController:
                         current_oren = robots[self.shooter_id].orientation
                         face_ball = False
                         target_coords = (None, None, shot_orientation)
-                        
+
                         self.robot_command = self._calculate_robot_velocities(
                             self.shooter_id,
                             target_coords,
@@ -267,7 +267,6 @@ class ShootingController:
                     self.robot_command, robot_id=self.shooter_id
                 )
                 self.robot_controller.send_robot_commands()
-
 
     def _get_positions(self) -> tuple:
         # Fetch the latest positions of robots and balls with thread locking.
@@ -344,9 +343,9 @@ class ShootingController:
             local_forward_vel=forward_vel,
             local_left_vel=left_vel,
             angular_vel=angular_vel,
-            kick_spd=0,
-            kick_angle=0,
-            dribbler_spd=0,
+            kick=0,
+            chip=0,
+            dribble=0,
         )
 
 
