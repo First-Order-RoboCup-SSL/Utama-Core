@@ -16,12 +16,7 @@ RobotCommand = namedtuple(
 
 RobotInfo = namedtuple(
     "RobotInfo",
-    [
-        "has_ball",
-        "stop_current_command",
-        # Flag to control the action of the robot. Defaults to False. If true, the robot will stop.
-        # TODO initialize it first (but I don't know where to do it)
-    ],
+    ["has_ball"],
 )
 
 # TODO: add kicker charged to robot info

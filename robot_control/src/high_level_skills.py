@@ -2,6 +2,7 @@ import numpy as np
 from typing import Tuple
 from time import sleep
 
+from entities.game import Game
 from entities.data.command import RobotCommand, RobotInfo
 from entities.data.vision import BallData, RobotData
 
@@ -9,19 +10,12 @@ from motion_planning.src.pid import PID
 from global_utils.math_utils import distance
 
 from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
-from robot_control.src import skills
+from robot_control.src.skills import go_to_ball
 
-def dribble_to_target(
-    pid_oren: PID,
-    pid_trans: PID,
-    this_robot_data: RobotData,
-    robot_id: int,
-    target_coords: Tuple[float, float],
-    dribble_speed: float = 3.0,
-    tolerance: float = 0.1,
-    ):
+
+class DribbleToTarget:
     """
-    Function to dribble the ball to a target location using repeated cycles of releasing, 
+    Dribble the ball to a target location using repeated cycles of releasing,
     repositioning, and reabsorbing the ball.
 
     Parameters:
@@ -35,94 +29,103 @@ def dribble_to_target(
     Returns:
         None
     """
-    current_x, current_y, current_oren = this_robot_data
-    target_x, target_y = target_coords
 
-    while distance((current_x, current_y), (target_x, target_y)) > tolerance:
-        # Step 1: Set dribbler speed negative to take the ball
-        if (RobotInfo.stop_current_command): return
-        yield RobotCommand(
-            local_forward_vel=0,
-            local_left_vel=0,
-            angular_vel=0,
-            kick_spd=0,
-            kick_angle=0,
-            dribbler_spd=-dribble_speed,
-        )
+    def __init__(
+        self,
+        pid_oren: PID,
+        pid_trans: PID,
+        game: Game,
+        robot_id: int,
+        target_coords: Tuple[float, float],
+        dribble_speed: float = 3.0,
+        tolerance: float = 0.1,
+    ):
+        self.pid_oren = pid_oren
+        self.pid_trans = pid_trans
+        self.game = game
+        self.robot_id = robot_id
+        self.target_coords = target_coords
+        self.dribble_speed = dribble_speed
+        self.tolerance = tolerance
 
-        if (RobotInfo.stop_current_command): return
-        sleep(0.1) # Wait for the ball to be absorbed
+        self.max_dribble_d = 0.8
+        self.last_point_with_ball = None
+        self.dribbled_distance = 0  # TODO: this needs to be stored as a global robot state in the future (because it is accessed by all functions involving movement)
+        self.paused = False
 
-        # Step 2: Stop dribbler
-        if (RobotInfo.stop_current_command): return
-        yield RobotCommand(
-            local_forward_vel=0,
-            local_left_vel=0,
-            angular_vel=0,
-            kick_spd=0,
-            kick_angle=0,
-            dribbler_spd=0,
-        )
+    def enact(self, has_ball: bool):
+        this_robot_data = self.game.get_robot_pos(True, self.robot_id)
+        current_x, current_y, current_oren = this_robot_data
+        target_x, target_y = self.target_coords
+        self._update_dribble_distance(
+            (current_x, current_y), has_ball
+        )  # update distance traveled with ball
 
-        # Step 3: Turn to target point
-        if (RobotInfo.stop_current_command): return
-        target_oren = np.arctan2(target_y - current_y, target_x - current_x)
-        yield calculate_robot_velocities(
-            pid_oren=pid_oren,
-            pid_trans=pid_trans,
-            this_robot_data=this_robot_data,
-            robot_id=robot_id,
-            target_coords=(None, None),
-            target_oren=target_oren,
-        )
+        if distance((current_x, current_y), self.target_coords) <= self.tolerance:
+            return RobotCommand(
+                local_forward_vel=0,
+                local_left_vel=0,
+                angular_vel=0,
+                kick=0,
+                chip=0,
+                dribble=0,
+            )
 
-        # Step 4: Move forward 0.8 meters, if the rule allows
-        if (RobotInfo.stop_current_command): return
-        forward_distance = 0.8
-        move_target_x = current_x + forward_distance * np.cos(current_oren)
-        move_target_y = current_y + forward_distance * np.sin(current_oren)
-        yield calculate_robot_velocities(
-            pid_oren=pid_oren,
-            pid_trans=pid_trans,
-            this_robot_data=this_robot_data,
-            robot_id=robot_id,
-            target_coords=(move_target_x, move_target_y),
-            target_oren=current_oren,
-        )
+        else:
+            if not has_ball:
+                self.paused = False  # reset pause flag
+                return go_to_ball(
+                    self.pid_oren,
+                    self.pid_trans,
+                    this_robot_data,
+                    self.robot_id,
+                    self.game.get_ball_pos()[0],
+                )
+            elif self.dribbled_distance < 0.8:
+                target_oren = np.arctan2(target_y - current_y, target_x - current_x)
+                return calculate_robot_velocities(
+                    self.pid_oren,
+                    self.pid_trans,
+                    this_robot_data,
+                    self.robot_id,
+                    self.target_coords,
+                    target_oren,
+                    dribbling=True,
+                )
+            else:
+                # if just crossed the threshold, push the ball forward
+                if not self.paused:
+                    self.paused = True
+                    return RobotCommand(
+                        local_forward_vel=1,
+                        local_left_vel=0,
+                        angular_vel=0,
+                        kick=0,
+                        chip=0,
+                        dribble=0,
+                    )
+                else:
+                    # if the ball is still with the robot, pause
+                    return RobotCommand(
+                        local_forward_vel=0.1,
+                        local_left_vel=0,
+                        angular_vel=0,
+                        kick=0,
+                        chip=0,
+                        dribble=0,
+                    )
 
-        # Step 5: Release the ball slightly
-        if (RobotInfo.stop_current_command): return
-        yield RobotCommand(
-            local_forward_vel=0,
-            local_left_vel=0,
-            angular_vel=0,
-            kick_spd=0.5,
-            kick_angle=0,
-            dribbler_spd=0,
-        )
-
-        # Step 6: Move towards the ball to reabsorb it
-        if (RobotInfo.stop_current_command): return
-        ball_coords = (move_target_x, move_target_y)  # Approximate ball position
-        yield calculate_robot_velocities(
-            pid_oren=pid_oren,
-            pid_trans=pid_trans,
-            this_robot_data=this_robot_data,
-            robot_id=robot_id,
-            target_coords=ball_coords,
-            target_oren=current_oren,
-            dribbling=True,
-        )
-
-        # Step 7: Update current position (simulate robot movement)
-        current_x, current_y = move_target_x, move_target_y
-
-    # Final stop command when target is reached
-    yield RobotCommand(
-        local_forward_vel=0,
-        local_left_vel=0,
-        angular_vel=0,
-        kick_spd=0,
-        kick_angle=0,
-        dribbler_spd=0,
-    )
+    def _update_dribble_distance(
+        self, current_point: tuple[float, float], has_ball: bool
+    ):
+        """
+        Update the distance dribbled by the robot with the ball.
+        """
+        if not has_ball:
+            self.last_point_with_ball = None
+            self.dribbled_distance = 0
+        else:
+            if self.last_point_with_ball is not None:
+                last_d = distance(self.last_point_with_ball, current_point)
+                self.dribbled_distance += last_d
+            self.last_point_with_ball = current_point

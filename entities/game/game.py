@@ -50,11 +50,23 @@ class Game:
     @property
     def predicted_next_frame(self) -> FrameData:
         return self._predicted_next_frame
-    
+
     def is_ball_in_goal(self, left_goal: bool):
         ball_pos = self.get_ball_pos()[0]
-        return (ball_pos.x < -self.field.HALF_LENGTH and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH) and left_goal
-           or ball_pos.x > self.field.HALF_LENGTH and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH) and not left_goal)
+        return (
+            ball_pos.x < -self.field.HALF_LENGTH
+            and (
+                ball_pos.y < self.field.HALF_GOAL_WIDTH
+                and ball_pos.y > -self.field.HALF_GOAL_WIDTH
+            )
+            and left_goal
+            or ball_pos.x > self.field.HALF_LENGTH
+            and (
+                ball_pos.y < self.field.HALF_GOAL_WIDTH
+                and ball_pos.y > -self.field.HALF_GOAL_WIDTH
+            )
+            and not left_goal
+        )
 
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
@@ -113,7 +125,9 @@ class Game:
             return None
         return self._records[-1]
 
-    def get_my_latest_frame(self, my_team_is_yellow: bool) -> tuple[RobotData, RobotData, BallData]:
+    def get_my_latest_frame(
+        self, my_team_is_yellow: bool
+    ) -> tuple[RobotData, RobotData, BallData]:
         """
         FrameData rearranged as (friendly_robots, enemy_robots, balls) based on my_team_is_yellow
         """
@@ -128,7 +142,9 @@ class Game:
         """
         return self._predicted_next_frame
 
-    def predict_my_next_frame(self,my_team_is_yellow: bool) -> tuple[RobotData, RobotData, BallData]:
+    def predict_my_next_frame(
+        self, my_team_is_yellow: bool
+    ) -> tuple[RobotData, RobotData, BallData]:
         """
         FrameData rearranged as (friendly_robots, enemy_robots, balls) based on my_team_is_yellow
         """
@@ -211,18 +227,18 @@ class Game:
 
     def predict_ball_pos_at_x(self, x: float) -> Optional[tuple]:
         vel = self.get_ball_velocity()
-        
+
         if not vel or not vel[0] or not vel[0]:
             return None
- 
+
         ux, uy = vel
         pos = self.get_ball_pos()[0]
         bx = pos.x
         by = pos.y
-        
-        if (uy == 0):
+
+        if uy == 0:
             return (bx, by)
-        
+
         t = (x - bx) / ux
         y = by + uy * t
         return (x, y)
@@ -272,7 +288,11 @@ class Game:
 
         # Latest frame should always be ahead of last one
         if time_received < previous_time_received:
-            logger.warning("Timestamps out of order for vision data %f should be after %f", time_received, previous_time_received)
+            logger.warning(
+                "Timestamps out of order for vision data %f should be after %f",
+                time_received,
+                previous_time_received,
+            )
             return None
 
         dt_secs = time_received - previous_time_received
