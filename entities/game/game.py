@@ -350,6 +350,7 @@ class Game:
             return None
 
         for i in range(N_WINDOWS):
+            n = 0
             averageVelocity = [0, 0]
             windowStart = 1 + (i * WINDOW)
             windowEnd = windowStart + WINDOW  # Excluded 
