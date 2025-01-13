@@ -27,25 +27,10 @@ cleanup() {
 # Trap SIGINT (Ctrl+C) and call the cleanup function
 trap cleanup SIGINT
 
-# Open the website based on the operating system
-echo "Opening website..."
-
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Linux
-    xdg-open "http://localhost:8081/#/match" &
-
-elif [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
-    open "http://localhost:8081/#/match" &
-
-elif [[ "$OSTYPE" == "cygwin" || "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-    # Windows
-    start "" "http://localhost:8081/#/match" &
-
-else
-    echo "Unsupported operating system. Cannot open the website."
-    exit 1
-fi
+# Output reminder to open the website manually
+echo "Reminder: Please open the following website in your browser:"
+echo "http://localhost:8081/#/match"
+echo "Once the website is opened, the script will continue..."
 
 # Start grSim in the background, suppressing output
 echo "Starting grSim..."
