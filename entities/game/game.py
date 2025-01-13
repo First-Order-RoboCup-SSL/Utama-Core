@@ -167,7 +167,7 @@ class Game:
         return self.get_object_velocity(Ball)
 
     ### Frame Data retrieval ###
-    def get_latest_frame(self) -> FrameData:
+    def get_latest_frame(self) -> Optional[FrameData]:
         if not self._records:
             return None
         return self._records[-1]
@@ -179,6 +179,7 @@ class Game:
         if not self._records:
             return None
         latest_frame = self.get_latest_frame()
+        warnings.warn("Use game.friendly/enemy.x/y/orentation instead", DeprecationWarning, stacklevel=2)
         return self._reorganise_frame_data(latest_frame, my_team_is_yellow)
 
     def predict_next_frame(self) -> FrameData:
@@ -262,8 +263,13 @@ class Game:
             return None
 
         ax, ay = acceleration
-        ux, uy = self.get_object_velocity(object)
+        vels = self.get_object_velocity(object)
 
+        if vels is None:
+            ux, uy = None, None
+        else:
+            ux, uy = vels
+        
         if object is Ball:
             ball = self.get_ball_pos()
             start_x, start_y = ball[0].x, ball[0].y
@@ -313,7 +319,7 @@ class Game:
     def get_object_velocity(self, object: GameObject) -> Optional[tuple]:
         velocities = self._get_object_velocity_at_frame(len(self._records) - 1, object)
         if velocities is None:
-            return None, None
+            return None
         return self._get_object_velocity_at_frame(len(self._records) - 1, object)
 
     def _get_object_position_at_frame(self, frame: int, object: GameObject):
