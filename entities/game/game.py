@@ -194,7 +194,7 @@ class Game:
                 [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
             )
             
-    def _reorganise_frame(self, frame: FrameData) -> PredictedFrame:
+    def _reorganise_frame(self, frame: FrameData) -> Optional[PredictedFrame]:
         if frame:
             ts, yellow_pos, blue_pos, ball_pos = frame
             if self.my_team_is_yellow:
