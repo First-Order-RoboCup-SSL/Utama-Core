@@ -142,12 +142,20 @@ def main():
         print("Stopping main program.")
 
 def main1():
+    """
+    This is a test function to demonstrate the use of the Game class and the Robot class.
+    
+    In terms of RobotInfo and the way it is currently implemented is not confirmed and may change. 
+    (have the robot info update game directly in the main thread as robot commands are sent on the main thread) 
+    
+    We will need to implement a way to update the robot info with grsim and rsim in the controllers 
+    """
+    ### Standard setup for the game ###
     game = Game(my_team_is_yellow=True)
     time.sleep(0.2)
 
     message_queue = queue.SimpleQueue()
     receiver = VisionDataReceiver(message_queue, debug=False)
-    decision_maker = StartUpController(game, debug=False)
 
     # Start the data receiving in a separate thread
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
@@ -159,27 +167,25 @@ def main1():
     # referee_thread.daemon = True
     # referee_thread.start()
 
+    #### Demo ####
+    
+    ### Creates the made up robot info message ###
     madeup_recieved_message = [RobotInfo(True), RobotInfo(False), RobotInfo(False), RobotInfo(False), RobotInfo(False), RobotInfo(False)]
     message_type = MessageType.ROBOT_INFO
     message_queue.put((message_type, madeup_recieved_message))
-    
-    iter = 0
+
     try:
         while True:
-            (message_type, message) = message_queue.get()  # Infinite timeout for now
-            
+            (message_type, message) = message_queue.get() 
 
             if message_type == MessageType.VISION:
                 game.add_new_state(message)
                 
-                # for demo purposes (displays when vision is received)
+                ### for demo purposes (displays when vision is received) ###
                 print(f"Before robot is_active( {game.friendly_robots[0].inactive} ) coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}")
                 # TODO: create a check with referee to see if robot is inactive
                 game.friendly_robots[0].inactive = True
-                
                 print(f"After robot is_active( {game.friendly_robots[0].inactive} ) Coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}\n")
-                
-                iter += 1
    
             if message_type == MessageType.REF:
                 pass
@@ -187,14 +193,20 @@ def main1():
             if message_type == MessageType.ROBOT_INFO: 
                 game.add_robot_info(message)
                 
-                # for demo purposes (displays when info is received)
+                ### for demo purposes (displays when robot info is received) ####
                 for i in range(6):
-                    print(f"Robot {i} has ball: {game.friendly_robots[i].has_ball}")
-                
-                iter += 1
+                    print(f"Robot {i} has ball: {game.friendly_robots[i].has_ball}")   
+             
+             
+            ### Getting coordinate data ###
+            print(f"Friendly(Yellow) Robot 1 coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}, {game.friendly_robots[0].orientation}")
+            print(f"Ball coords: {game.ball.x}, {game.ball.y}, {game.ball.z}\n")
+            
+            # to just demonstrate the print statements   
+            break    
 
     except KeyboardInterrupt:
         print("Stopping main program.")
 
 if __name__ == "__main__":
-    main()
+    main1()
