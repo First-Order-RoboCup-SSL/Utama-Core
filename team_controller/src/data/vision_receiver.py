@@ -30,7 +30,6 @@ class VisionDataReceiver(BaseReceiver):
         port=VISION_PORT,
         n_yellow_robots: int = 6,
         n_blue_robots: int = 6,
-        debug=False,
         n_cameras=4,
     ):
         super().__init__(messsage_queue)  # Setup the message queue
