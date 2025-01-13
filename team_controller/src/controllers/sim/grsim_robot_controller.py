@@ -6,6 +6,9 @@ from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
 from team_controller.src.config.settings import (
+    KICK_SPD,
+    DRIBBLE_SPD,
+    CHIP_ANGLE,
     PID_PARAMS,
     LOCAL_HOST,
     YELLOW_TEAM_SIM_PORT,
@@ -21,6 +24,7 @@ from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import
     RobotFeedback,
 )
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,7 +45,6 @@ class GRSimRobotController(AbstractRobotController):
             self.net = network_manager.NetworkManager(address=(address, port[1]))
 
         self.robots_info: List[RobotInfo] = [None] * 6
-
 
     def send_robot_commands(self) -> None:
         """
@@ -93,13 +96,13 @@ class GRSimRobotController(AbstractRobotController):
 
         Args:
             robot_id (int): The ID of the robot.
-            command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick_spd', 'kick_angle', 'dribbler_spd'.
+            command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
         robot = self.out_packet.robot_commands.add()
         robot.id = robot_id
-        robot.kick_speed = command.kick_spd
-        robot.kick_angle = command.kick_angle
-        robot.dribbler_speed = command.dribbler_spd
+        robot.kick_speed = KICK_SPD if (command.kick or command.chip) > 0 else 0
+        robot.kick_angle = CHIP_ANGLE if command.chip > 0 else 0
+        robot.dribbler_speed = DRIBBLE_SPD if command.dribble > 0 else 0
 
         local_vel = robot.move_command.local_velocity
         local_vel.forward = command.local_forward_vel

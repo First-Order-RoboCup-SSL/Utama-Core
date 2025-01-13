@@ -8,11 +8,12 @@ RobotCommand = namedtuple(
         "local_forward_vel",
         "local_left_vel",
         "angular_vel",
-        "kick_spd",
-        "kick_angle",
-        "dribbler_spd",
+        "kick",
+        "chip",
+        "dribble",
     ],
 )
+
 RobotInfo = namedtuple(
     "RobotInfo",
     [
@@ -22,3 +23,5 @@ RobotInfo = namedtuple(
         # TODO initialize it first (but I don't know where to do it)
     ],
 )
+
+# TODO: add kicker charged to robot info
