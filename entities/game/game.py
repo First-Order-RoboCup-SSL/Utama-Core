@@ -73,7 +73,7 @@ class Game:
     @friendly_robots.setter
     def friendly_robots(self, value: List[RobotData]):
         for robot_id, robot_data in enumerate(value):
-            # temporary fix for robot data being None
+            # TODO: temporary fix for robot data being None
             if robot_data is not None:
                 self._friendly_robots[robot_id].robot_data = robot_data    
         
@@ -84,7 +84,7 @@ class Game:
     @enemy_robots.setter
     def enemy_robots(self, value: List[RobotData]):
         for robot_id, robot_data in enumerate(value):
-            # temporary fix for robot data being None
+            # TODO: temporary fix for robot data being None
             if robot_data is not None:
                 self._enemy_robots[robot_id].robot_data = robot_data
             
