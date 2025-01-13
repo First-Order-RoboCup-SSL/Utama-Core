@@ -73,7 +73,9 @@ class Game:
     @friendly_robots.setter
     def friendly_robots(self, value: List[RobotData]):
         for robot_id, robot_data in enumerate(value):
-            self._friendly_robots[robot_id].robot_data = robot_data    
+            # temporary fix for robot data being None
+            if robot_data is not None:
+                self._friendly_robots[robot_id].robot_data = robot_data    
         
     @property
     def enemy_robots(self) -> List[Robot]:
@@ -82,13 +84,16 @@ class Game:
     @enemy_robots.setter
     def enemy_robots(self, value: List[RobotData]):
         for robot_id, robot_data in enumerate(value):
-            self._enemy_robots[robot_id].robot_data = robot_data
+            # temporary fix for robot data being None
+            if robot_data is not None:
+                self._enemy_robots[robot_id].robot_data = robot_data
             
     @property
     def ball(self) -> Ball:
         return self._ball
     
     @ball.setter
+    # TODO: can always make a "setter" which copies the object and returns a new object with the changed value
     def ball(self, value: BallData):
         self._ball.ball_data = value
     
