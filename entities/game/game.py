@@ -83,6 +83,14 @@ class Game:
     def enemy_robots(self, value: List[RobotData]):
         for robot_id, robot_data in enumerate(value):
             self._enemy_robots[robot_id].robot_data = robot_data
+            
+    @property
+    def ball(self) -> Ball:
+        return self._ball
+    
+    @ball.setter
+    def ball(self, value: BallData):
+        self._ball.ball_data = value
     
     def is_ball_in_goal(self, left_goal: bool):
         ball_pos = self.get_ball_pos()[0]
@@ -367,7 +375,7 @@ class Game:
             return None
 
         for i in range(N_WINDOWS):
-            n = 0
+            missing_velocities = 0
             averageVelocity = [0, 0]
             windowStart = 1 + (i * WINDOW)
             windowEnd = windowStart + WINDOW  # Excluded 
