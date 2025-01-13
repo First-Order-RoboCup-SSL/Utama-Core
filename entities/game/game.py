@@ -66,6 +66,24 @@ class Game:
     def predicted_next_frame(self) -> PredictedFrame:
         return self._predicted_next_frame
     
+    @property
+    def friendly_robots(self) -> List[Robot]:
+        return self._friendly_robots
+    
+    @friendly_robots.setter
+    def friendly_robots(self, value: List[RobotData]):
+        for robot_id, robot_data in enumerate(value):
+            self._friendly_robots[robot_id].robot_data = robot_data    
+        
+    @property
+    def enemy_robots(self) -> List[Robot]:
+        return self._enemy_robots
+    
+    @enemy_robots.setter
+    def enemy_robots(self, value: List[RobotData]):
+        for robot_id, robot_data in enumerate(value):
+            self._enemy_robots[robot_id].robot_data = robot_data
+    
     def is_ball_in_goal(self, left_goal: bool):
         ball_pos = self.get_ball_pos()[0]
         return (ball_pos.x < -self.field.HALF_LENGTH and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH) and left_goal
