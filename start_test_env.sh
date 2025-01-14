@@ -46,7 +46,7 @@ fi
 # Change to the ssl-game-controller directory and run the game controller, suppressing output
 echo "Starting game controller..."
 cd ssl-game-controller/
-./ssl-game-controller_v3.12.7_linux_amd64 > /dev/null 2>&1 &
+./ssl-game-controller > /dev/null 2>&1 &
 GAME_CONTROLLER_PID=$!
 cd ..
 
