@@ -269,8 +269,17 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                     game.get_ball_pos()[0],
                 ),
             )
-            sim_robot_controller_defender.add_robot_commands(cmd, keeper_id)
-            sim_robot_controller_defender.send_robot_commands()
+            if not find_likely_enemy_shooter(enemy, balls):
+                cmd = go_to_point(
+                    pid_oren_d,
+                    pid_2d_d,
+                    friendly[0],
+                    0,
+                    keeper_target,
+                    face_ball((friendly[0].x, friendly[0].y), game.get_ball_pos()[0]),
+                )
+                sim_robot_controller_defender.add_robot_commands(cmd, keeper_id)
+                sim_robot_controller_defender.send_robot_commands()
 
             # Our team: Main defender focuses on intercepting the main attacker
             main_defender_id = 1
