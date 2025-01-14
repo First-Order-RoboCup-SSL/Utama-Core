@@ -32,7 +32,8 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 def main():
     game = Game(my_team_is_yellow=True)
-    GRSimController().teleport_ball(0, 0, 2, 2.5)
+    # GRSimController().teleport_ball(0, 0, 2, 2.5)
+    GRSimController().teleport_ball(0, 0, 0, 0)
     time.sleep(0.2)
 
     message_queue = queue.SimpleQueue()
