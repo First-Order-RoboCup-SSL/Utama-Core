@@ -3,7 +3,6 @@ from entities.game import game_object
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData, PredictedFrame
 from entities.data.referee import RefereeData
-<<<<<<< HEAD
 from entities.data.command import RobotInfo
 
 from entities.game.game_object import Colour, GameObject, Robot
@@ -13,13 +12,8 @@ from entities.game.ball import Ball
 
 from entities.game.team_info import TeamInfo
 from entities.referee.referee_command import RefereeCommand
-=======
-from entities.game.game_object import Ball, Colour, GameObject, Robot
-from entities.game.team_info import TeamInfo
-from entities.referee.referee_command import RefereeCommand
 from entities.referee.stage import Stage
 
->>>>>>> 31d8bcc (Change RefereeCommand and Stage to enum class)
 from team_controller.src.config.settings import TIMESTEP
 
 # TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
@@ -670,7 +664,7 @@ class Game:
     def _get_object_position_at_frame(self, frame: int, object: GameObject):
         if object == Ball:
             return self._records[frame].ball[0]  # TODO don't always take first ball pos
-        elif isinstance(object, Robot):
+        elif isinstance(object, RobotEntity):
             if object.colour == Colour.YELLOW:
                 return self._records[frame].yellow_robots[object.id]
             else:
@@ -789,23 +783,6 @@ class Game:
             sy = uy * ty + 0.5 * ay * ty * ty
 
         return (
-<<<<<<< HEAD
-            self.referee_data_handler.last_command == RefereeCommand.BALL_PLACEMENT_BLUE
-        )
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
-    game = Game()
-    print(game.ball.x)
-    print(game.ball.y)
-    print(game.ball.z)
-    game.ball = BallData(1, 2, 3)
-    print(game.ball.x)
-    print(game.ball.y)
-    print(game.ball.z)
-=======
             start_x + sx,
             start_y + sy,
         )  # TODO: Doesn't take into account spin / angular vel
@@ -827,4 +804,16 @@ if __name__ == "__main__":
                 list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
                 [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
             )
->>>>>>> 31d8bcc (Change RefereeCommand and Stage to enum class)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
+    game = Game()
+    print(game.ball.x)
+    print(game.ball.y)
+    print(game.ball.z)
+    game.ball = BallData(1, 2, 3)
+    print(game.ball.x)
+    print(game.ball.y)
+    print(game.ball.z)

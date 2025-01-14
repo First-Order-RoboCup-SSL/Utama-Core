@@ -160,7 +160,7 @@ def main1():
     time.sleep(0.2)
 
     message_queue = queue.SimpleQueue()
-    receiver = VisionDataReceiver(message_queue, debug=False)
+    receiver = VisionDataReceiver(message_queue)
 
     # Start the data receiving in a separate thread
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
@@ -227,4 +227,4 @@ def main1():
 
 
 if __name__ == "__main__":
-    main1()
+    main()
