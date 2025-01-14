@@ -8,6 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def setup_socket(
     sock: socket.socket, address: Tuple[str, int], bind_socket: bool = False
 ) -> socket.socket:
@@ -40,7 +41,6 @@ def setup_socket(
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
         # sock.settimeout(0.005)  # Set timeout to 1 frame period (60 FPS)
-        logger.info(
         logging.info(
             "Socket setup completed with address %s and bind_socket=%s",
             address,
@@ -79,7 +79,9 @@ def receive_data(sock: socket.socket) -> Optional[bytes]:
         return None
 
 
-def send_command(address: Tuple[str, int], command: object, is_sim_robot_cmd: bool = False) -> Optional[bytes]:
+def send_command(
+    address: Tuple[str, int], command: object, is_sim_robot_cmd: bool = False
+) -> Optional[bytes]:
     """
     Sends a command to the specified address over a UDP socket.
 
@@ -89,8 +91,8 @@ def send_command(address: Tuple[str, int], command: object, is_sim_robot_cmd: bo
         is_sim_robot_cmd (bool): If True, the function will attempt to receive a response from the server.
 
     Returns:
-        Optional[bytes]: The data received, or None if no data is received or if an error occurs.   
-     
+        Optional[bytes]: The data received, or None if no data is received or if an error occurs.
+
     This function creates a temporary UDP socket, serializes the command, and sends it to the specified address.
     If the command being sent is a RobotControl packet there will be a response packet which will be received.
     Errors during serialization or socket operations are logged, with specific handling if the `SerializeToString`

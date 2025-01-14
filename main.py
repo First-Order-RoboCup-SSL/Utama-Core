@@ -38,8 +38,8 @@ def main():
     message_queue = queue.SimpleQueue()
 
     referee_receiver = RefereeMessageReceiver(message_queue, debug=False)
-    vision_receiver = VisionDataReceiver(message_queue, debug=False)
-    decision_maker = StartUpController(game, debug=False)
+    vision_receiver = VisionDataReceiver(message_queue)
+    decision_maker = StartUpController(game)
 
     # Start the data receiving in separate threads
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
@@ -71,6 +71,7 @@ def main():
                 frames += 1
                 game.add_new_state(message)
 
+                actual = game.records[-1]  # JUST FOR TESTING - don't do this irl
                 if (
                     len(predictions) >= FRAMES_IN_TIME
                     and predictions[-FRAMES_IN_TIME] != None
