@@ -56,14 +56,3 @@ If you are still struggling with local import errors (ie importing our local mod
 ## Milestones
 
 - 2024 November 20 - First goal in grSim (featuring Ray casting)
-
-## Draft
-
-Skills -> Behavior -> Strategy
-
-Strategy
-
-- Attack:
-  - Dynamic passing
-- Defense:
-  - Man marking
