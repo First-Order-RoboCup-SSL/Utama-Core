@@ -5,8 +5,8 @@ from team_controller.src.config.settings import TIMESTEP
 
 
 def get_pids(n_robots: int):
-    pid_oren = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=n_robots)
-    pid_trans = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=n_robots)
+    pid_oren = PID(TIMESTEP, 4, -4, 4.5, 0.1, 0.045, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, 2.5, -2.5, 4.5, 0.1, 0.0, num_robots=n_robots)
     return pid_oren, pid_trans
 
 
@@ -143,8 +143,8 @@ class TwoDPID:
         self, target: Tuple[float, float], current: Tuple[float, float], robot_id
     ):
         return self.dimX.calculate(
-            target[0], current[0], robot_id, False, None
-        ), self.dimY.calculate(target[1], current[1], robot_id, False, None)
+            target[0], current[0], robot_id, False, normalize_range=4.5
+        ), self.dimY.calculate(target[1], current[1], robot_id, False, normalize_range=3)
 
     def reset(self, robot_id: int):
         self.dimX.reset(robot_id)
