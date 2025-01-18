@@ -61,7 +61,6 @@ class VisionDataReceiver(BaseReceiver):
         )
 
         self.camera_frames[detection.camera_id] = new_frame
-
         if (
             self.frames_recvd % self.n_cameras == 0 and not None in self.camera_frames
         ):  # TODO : Do something more advanced than an average because cameras might not be round robin
@@ -72,30 +71,52 @@ class VisionDataReceiver(BaseReceiver):
                 (MessageType.VISION, self._avg_frames(self.camera_frames))
             )
 
+    def _combine_optional_robot_data_frames(self, r1: Optional[RobotData], r2: Optional[RobotData]) -> Optional[RobotData]:
+        if r1 is None and r2 is None:
+            return None
+        elif r2 is None:
+            return r1
+        elif r1 is None:
+            return r2
+        return RobotData(r1.x+r2.x, r1.y+r2.y, r1.orientation+r2.orientation)
+    
+    def _combine_robot_data(self, sum_frame: List[RobotData], next_frame:List[RobotData]) -> RobotData:
+        """
+          Combines two lists of robot frames elementwise, adds new info if possible
+          eg RobotData(1,2,3) + None => RobotData(1,2,3)
+          None + RobotData(1,2,3) =? RobotData(1,2,3)
+          RD(1,2,3) + RobotData(4,5,6) => RD(5,7,9)
+          """
+        return [self._combine_optional_robot_data_frames(r1,r2) for r1,r2 in zip(sum_frame, next_frame)]
+    
+    def _normalise_frame_data_by_number_of_cameras(self, sum_frame: FrameData) -> FrameData:
+        yellow_bots = []
+        blue_bots = []
+        balls = []
+        for r in sum_frame.yellow_robots:
+            if r is not None:
+                r = RobotData(r.x / self.n_cameras, r.y / self.n_cameras, r.orientation / self.n_cameras)
+            yellow_bots.append(r)
+        
+        for r in sum_frame.blue_robots:
+            if r is not None:
+                r = RobotData(r.x / self.n_cameras, r.y / self.n_cameras, r.orientation / self.n_cameras)
+            blue_bots.append(r)
+        
+        for b in sum_frame.ball:
+            if b is not None:
+                b = BallData(b.x / self.n_cameras, b.y / self.n_cameras, b.z / self.n_cameras)
+            balls.append(b)
+        return FrameData(sum_frame.ts / self.n_cameras, yellow_bots, blue_bots, balls)
+
     def _avg_frames(self, frames) -> FrameData:
         frames = [*filter(lambda x: x.ball is not None, frames)]
         sum_frame = frames[0]
         for frame in frames[1:]:
             sum_frame = FrameData(
                 sum_frame.ts + frame.ts,
-                [
-                    *map(
-                        lambda r1, r2: RobotData(
-                            r1.x + r2.x, r1.y + r2.y, r1.orientation + r2.orientation
-                        ),
-                        sum_frame.yellow_robots,
-                        frame.yellow_robots,
-                    )
-                ],
-                [
-                    *map(
-                        lambda r1, r2: RobotData(
-                            r1.x + r2.x, r1.y + r2.y, r1.orientation + r2.orientation
-                        ),
-                        sum_frame.blue_robots,
-                        frame.blue_robots,
-                    )
-                ],
+                self._combine_robot_data(sum_frame.yellow_robots, frame.yellow_robots),
+                self._combine_robot_data(sum_frame.blue_robots, frame.blue_robots),
                 [
                     *map(
                         lambda b1, b2: BallData(b1.x + b2.x, b1.y + b2.y, b1.z + b2.z),
@@ -104,38 +125,8 @@ class VisionDataReceiver(BaseReceiver):
                     )
                 ],
             )
-        sum_frame = FrameData(
-            sum_frame.ts / self.n_cameras,
-            [
-                *map(
-                    lambda r: RobotData(
-                        r.x / self.n_cameras,
-                        r.y / self.n_cameras,
-                        r.orientation / self.n_cameras,
-                    ),
-                    sum_frame.yellow_robots,
-                )
-            ],
-            [
-                *map(
-                    lambda r: RobotData(
-                        r.x / self.n_cameras,
-                        r.y / self.n_cameras,
-                        r.orientation / self.n_cameras,
-                    ),
-                    sum_frame.blue_robots,
-                )
-            ],
-            [
-                *map(
-                    lambda b: BallData(
-                        b.x / self.n_cameras, b.y / self.n_cameras, b.z / self.n_cameras
-                    ),
-                    sum_frame.ball,
-                )
-            ],
-        )
-        return sum_frame
+
+        return self._normalise_frame_data_by_number_of_cameras(sum_frame)
 
     def _update_ball_pos(self, detection: object) -> None:
 

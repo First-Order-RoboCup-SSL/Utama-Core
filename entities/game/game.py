@@ -22,15 +22,15 @@ class Game:
     Class containing states of the entire game and field information.
     """
 
-    def __init__(self, my_team_is_yellow=True):
+    def __init__(self, my_team_is_yellow=True, num_friendly_robots: int = 6, num_enemy_robots: int = 6):
         self._my_team_is_yellow = my_team_is_yellow
         self._field = Field()
         
         self._records: List[FrameData] = []
         self._predicted_next_frame: PredictedFrame = None
         
-        self._friendly_robots: List[Robot] = [Robot(id, is_friendly=True) for id in range(6)]
-        self._enemy_robots: List[Robot] = [Robot(id, is_friendly=False) for id in range(6)]
+        self._friendly_robots: List[Robot] = [Robot(id, is_friendly=True) for id in range(num_friendly_robots)]
+        self._enemy_robots: List[Robot] = [Robot(id, is_friendly=False) for id in range(num_enemy_robots)]
         self._ball: Ball = Ball()
         
         self._yellow_score = 0
@@ -105,9 +105,29 @@ class Game:
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
         if isinstance(frame_data, FrameData):
-            self._records.append(frame_data)
+            # Need to trim number of robots in frame to number we expect (num_friendly, num_enemy)
+            yellow_robot_data = [i for i in frame_data.yellow_robots if i is not None]
+            blue_robot_data = [i for i in frame_data.blue_robots if i is not None]
+
+            
+            if self.my_team_is_yellow:
+                if len(yellow_robot_data) != len(self._friendly_robots):
+                    logger.warning(f"Expected data for {len(self.friendly_robots)} friendly robots but found {len(yellow_robot_data)} in frame")
+
+                if len(blue_robot_data) != len(self._enemy_robots):
+                    logger.warning(f"Expected data for {len(self._enemy_robots)} enemy (blue) robots but found {len(blue_robot_data)} in frame")
+            else:
+                if len(yellow_robot_data) != len(self._enemy_robots):
+                    logger.warning(f"Expected data for {len(self._enemy_robots)} enemy (yellow) robots but found {len(yellow_robot_data)} in frame")
+
+                if len(blue_robot_data) != len(self._friendly_robots):
+                    logger.warning(f"Expected data for {len(self._friendly_robots)} friendly (blue) robots but found {len(blue_robot_data)} in frame")
+            
+
+            stripped_frame_data = FrameData(frame_data.ts, yellow_robot_data, blue_robot_data, frame_data.ball)
+            self._records.append(stripped_frame_data)
             self._predicted_next_frame = self._reorganise_frame(self.predict_frame_after(TIMESTEP))
-            self._update_data(frame_data)
+            self._update_data(stripped_frame_data)
         else:
             raise ValueError("Invalid frame data.")
     
@@ -358,6 +378,9 @@ class Game:
 
         previous_pos = self._get_object_position_at_frame(frame - 1, object)
         current_pos = self._get_object_position_at_frame(frame, object)
+
+        assert previous_pos is not None
+        assert current_pos is not None
 
         previous_time_received = previous_frame.ts
         time_received = current_frame.ts

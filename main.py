@@ -30,7 +30,7 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 
 def main():
-    game = Game(my_team_is_yellow=True)
+    game = Game(my_team_is_yellow=True, num_friendly_robots=6, num_enemy_robots=6)
     GRSimController().teleport_ball(0, 0, 2, 2.5)
     time.sleep(0.2)
 
@@ -50,8 +50,10 @@ def main():
     # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
     # referee_thread.daemon = True
     # referee_thread.start()
-
     frames = 0
+
+    # To debug
+    logging.basicConfig(level=logging.DEBUG)
 
     try:
         logger.debug("LOCATED BALL")
@@ -205,4 +207,4 @@ def main1():
         print("Stopping main program.")
 
 if __name__ == "__main__":
-    main1()
+    main()
