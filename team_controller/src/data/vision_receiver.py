@@ -2,7 +2,7 @@ import threading
 import queue
 import time
 from team_controller.src.data.message_enum import MessageType
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from entities.data.vision import BallData, RobotData, FrameData, TeamRobotCoords
 from team_controller.src.data.base_receiver import BaseReceiver
 from team_controller.src.utils import network_manager
@@ -11,6 +11,7 @@ from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_Wrappe
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 class VisionDataReceiver(BaseReceiver):
     """
@@ -39,7 +40,7 @@ class VisionDataReceiver(BaseReceiver):
         self.ball_pos: List[BallData] = None
         self.robots_yellow_pos: List[RobotData] = [None] * n_yellow_robots
         self.robots_blue_pos: List[RobotData] = [None] * n_blue_robots
-        self.camera_frames = [None for i in range(n_cameras)] # TODO: Use GEOMETRY
+        self.camera_frames = [None for i in range(n_cameras)]  # TODO: Use GEOMETRY
         self.frames_recvd = 0
         self.n_cameras = n_cameras
 
@@ -61,7 +62,6 @@ class VisionDataReceiver(BaseReceiver):
         )
 
         self.camera_frames[detection.camera_id] = new_frame
-
         if (
             self.frames_recvd % self.n_cameras == 0 and not None in self.camera_frames
         ):  # TODO : Do something more advanced than an average because cameras might not be round robin
@@ -72,70 +72,53 @@ class VisionDataReceiver(BaseReceiver):
                 (MessageType.VISION, self._avg_frames(self.camera_frames))
             )
 
-    def _avg_frames(self, frames) -> FrameData:
+    def _avg_robots(self, rs: List[RobotData]) -> Optional[RobotData]:
+        if not rs:
+            return None
+
+        tx, ty, to = 0, 0, 0
+        for r in rs:
+            tx += r.x
+            ty += r.y
+            to += r.orientation
+
+        return RobotData(tx / len(rs), ty / len(rs), to / len(rs))
+
+    def _avg_balls(self, bs: List[BallData]) -> Optional[BallData]:
+        if not bs:
+            return None
+
+        tx, ty, tz = 0, 0, 0
+        for r in bs:
+            tx += r.x
+            ty += r.y
+            tz += r.z
+
+        return BallData(tx / len(bs), ty / len(bs), tz / len(bs))
+
+    def _avg_frames(self, frames: List[FrameData]) -> FrameData:
         frames = [*filter(lambda x: x.ball is not None, frames)]
-        sum_frame = frames[0]
-        for frame in frames[1:]:
-            sum_frame = FrameData(
-                sum_frame.ts + frame.ts,
-                [
-                    *map(
-                        lambda r1, r2: RobotData(
-                            r1.x + r2.x, r1.y + r2.y, r1.orientation + r2.orientation
-                        ),
-                        sum_frame.yellow_robots,
-                        frame.yellow_robots,
-                    )
-                ],
-                [
-                    *map(
-                        lambda r1, r2: RobotData(
-                            r1.x + r2.x, r1.y + r2.y, r1.orientation + r2.orientation
-                        ),
-                        sum_frame.blue_robots,
-                        frame.blue_robots,
-                    )
-                ],
-                [
-                    *map(
-                        lambda b1, b2: BallData(b1.x + b2.x, b1.y + b2.y, b1.z + b2.z),
-                        sum_frame.ball,
-                        frame.ball,
-                    )
-                ],
-            )
-        sum_frame = FrameData(
-            sum_frame.ts / self.n_cameras,
-            [
-                *map(
-                    lambda r: RobotData(
-                        r.x / self.n_cameras,
-                        r.y / self.n_cameras,
-                        r.orientation / self.n_cameras,
-                    ),
-                    sum_frame.yellow_robots,
-                )
-            ],
-            [
-                *map(
-                    lambda r: RobotData(
-                        r.x / self.n_cameras,
-                        r.y / self.n_cameras,
-                        r.orientation / self.n_cameras,
-                    ),
-                    sum_frame.blue_robots,
-                )
-            ],
-            [
-                *map(
-                    lambda b: BallData(
-                        b.x / self.n_cameras, b.y / self.n_cameras, b.z / self.n_cameras
-                    ),
-                    sum_frame.ball,
-                )
-            ],
-        )
-        return sum_frame
+        ts = 0
+        yellow_captured = [[] for _ in range(11)]
+        blue_captured = [[] for _ in range(11)]
+        ball_captured = [[] for _ in range(11)]
+
+        for frame in frames:
+            for ind, yr in enumerate(frame.yellow_robots):
+                if yr is not None:
+                    yellow_captured[ind].append(yr)
+            for ind, br in enumerate(frame.blue_robots):
+                if br is not None:
+                    blue_captured[ind].append(br)
+            for ind, b in enumerate(frame.ball):
+                if b is not None:
+                    ball_captured[ind].append(b)
+            ts += frame.ts
+
+        avg_yellows = list(map(self._avg_robots, yellow_captured))
+        avg_blues = list(map(self._avg_robots, blue_captured))
+        avg_balls = list(map(self._avg_balls, ball_captured))
+        return FrameData(ts, avg_yellows, avg_blues, avg_balls)
 
     def _update_ball_pos(self, detection: object) -> None:
 
@@ -206,6 +189,6 @@ class VisionDataReceiver(BaseReceiver):
                 vision_packet.Clear()  # Clear previous data to avoid memory bloat
                 vision_packet.ParseFromString(data)
                 self._update_data(vision_packet.detection)
-            
+
             self._print_frame_info(t_received, vision_packet.detection)
             # time.sleep(0.0083) # TODO : Block on data?
