@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     pid_oren = PID(TIMESTEP, 5, -5, 4.5, 0, 0.045, num_robots=6)
     # pid_trans = PID(TIMESTEP, 1.5, -1.5, 4.5, 0, 0.035, num_robots=6)
-    pid_trans = TwoDPID(TIMESTEP, 2.5, -2.5, 4.5, 0.01, 0.0, num_robots=6)
+    pid_trans = TwoDPID(TIMESTEP, 2.5, 6.5, 0.01, 0.0, num_robots=6)
 
     try:
         while True:

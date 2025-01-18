@@ -5,8 +5,8 @@ from team_controller.src.config.settings import TIMESTEP
 
 
 def get_pids(n_robots: int):
-    pid_oren = PID(TIMESTEP, 5, -5, 4.5, 0.1, 0.045, num_robots=n_robots)
-    pid_trans = TwoDPID(TIMESTEP, 2.5, -2.5, 4.5, 0.01, 0.0, num_robots=n_robots)
+    pid_oren = PID(TIMESTEP, 5, -5, 4.5, 0, 0.045, num_robots=6)
+    pid_trans = TwoDPID(TIMESTEP, 2.5, 6.5, 0.01, 0.0, num_robots=n_robots)
     return pid_oren, pid_trans
 
 
@@ -114,7 +114,8 @@ class PID:
             output /= normalize_range
 
         # apply clamping
-        output = max(self.min_output, min(self.max_output, output))
+        if self.max_output and self.min_output:
+            output = max(self.min_output, min(self.max_output, output))
 
         # Save error for next calculation
         self.pre_errors[robot_id] = error
@@ -129,22 +130,34 @@ class TwoDPID:
     def __init__(
         self,
         dt: float,
-        max_output: float,
-        min_output: float,
+        max_velocity: float,
         Kp: float,
         Kd: float,
         Ki: float,
         num_robots: int,
-    ):
-        self.dimX = PID(dt, max_output, min_output, Kp, Kd, Ki, num_robots)
-        self.dimY = PID(dt, max_output, min_output, Kp, Kd, Ki, num_robots)
+    ):  
+        self.max_velocity = max_velocity
+        
+        self.dimX = PID(dt, None, None, Kp, Kd, Ki, num_robots)
+        self.dimY = PID(dt, None, None, Kp, Kd, Ki, num_robots)
 
     def calculate(
         self, target: Tuple[float, float], current: Tuple[float, float], robot_id
     ):
-        return self.dimX.calculate(
-            target[0], current[0], robot_id, False, normalize_range=4.5
-        ), self.dimY.calculate(target[1], current[1], robot_id, False, normalize_range=3)
+        x_vel = self.dimX.calculate(target[0], current[0], robot_id, False, normalize_range=4.5)
+        y_vel = self.dimY.calculate(target[1], current[1], robot_id, False, normalize_range=3)
+        return self.scale_velocity(x_vel, y_vel, self.max_velocity)
+    
+    def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float):
+        current_vel = np.hypot(x_vel, y_vel)
+        
+        if current_vel > max_vel:
+            scaling_factor = max_vel / current_vel
+            
+            x_vel *= scaling_factor
+            y_vel *= scaling_factor
+        
+        return x_vel, y_vel
 
     def reset(self, robot_id: int):
         self.dimX.reset(robot_id)
