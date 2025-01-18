@@ -5,8 +5,8 @@ from team_controller.src.config.settings import TIMESTEP
 
 
 def get_pids(n_robots: int):
-    pid_oren = PID(TIMESTEP, 5, -5, 4.5, 0, 0.045, num_robots=6)
-    pid_trans = TwoDPID(TIMESTEP, 2.5, 6.5, 0.01, 0.0, num_robots=n_robots)
+    pid_oren = PID(TIMESTEP, 8, -8, 10.5, 0.01, 0.045, num_robots=6)
+    pid_trans = TwoDPID(TIMESTEP, 2.5, 7.5, 0.01, 0.0, num_robots=n_robots)
     return pid_oren, pid_trans
 
 
