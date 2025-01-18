@@ -1,4 +1,3 @@
-from turtle import left
 from typing import Tuple, Union
 from entities.data.command import RobotCommand
 from entities.data.vision import RobotData
