@@ -110,7 +110,7 @@ def block_pass_between_attackers(
     return cmd
 
 
-def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
+def test_man_marking(shooter_id: int, defender_is_yellow: bool, headless: bool):
     game = Game()
 
     if defender_is_yellow:
@@ -165,7 +165,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
             pid_2d_b,
         )
 
-    shoot_in_left_goal = not defender_is_yellow
+    shoot_in_left_goal = random.random() > 0.5
     goal_scored = False
 
     for iter in range(ITERS):
@@ -228,7 +228,6 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                     face_ball((enemy[1].x, enemy[1].y), game.get_ball_pos()[0]),
                 )
             sim_robot_controller_attacker.add_robot_commands(cmd, 1)
-            # sim_robot_controller_attacker.send_robot_commands()
 
             # Opponent team: Support attacker positions to receive a pass
             if not sim_robot_controller_attacker.robot_has_ball(
@@ -279,7 +278,6 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                     face_ball((friendly[0].x, friendly[0].y), game.get_ball_pos()[0]),
                 )
                 sim_robot_controller_defender.add_robot_commands(cmd, keeper_id)
-                # sim_robot_controller_defender.send_robot_commands()
 
             # Our team: Main defender focuses on intercepting the main attacker
             main_defender_id = 1
@@ -293,7 +291,6 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 pid_2d_d,
             )
             sim_robot_controller_defender.add_robot_commands(cmd, main_defender_id)
-            # sim_robot_controller_defender.send_robot_commands()
 
             # Our team: Support defender marks the support attacker
             support_defender_id = 2
@@ -343,6 +340,6 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
 
 if __name__ == "__main__":
     try:
-        test_shooting(5, True, False)
+        test_man_marking(5, True, False)
     except KeyboardInterrupt:
         print("Exiting...")
