@@ -89,4 +89,4 @@ def test_grsim_shooting(shooter_id: int, is_yellow: bool, headless: bool):
 
 if __name__ == "__main__":
     # Run the test and output the result
-    test_result = grsim_shooting(5, False, False)
+    test_result = test_grsim_shooting(5, False, False)
