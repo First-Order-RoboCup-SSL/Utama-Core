@@ -76,7 +76,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 target = (game.predict_ball_pos_at_x(-4.5))
 
             if target and not find_likely_enemy_shooter(enemy, balls):
-                cmd = go_to_point(pid_oren_d, pid_2d_d, friendly[0], 0, target, face_ball((friendly[0].x, friendly[0].y), (game.ball.x, game.ball.y)))
+                cmd = go_to_point(pid_oren_d, pid_2d_d, friendly[0], 0, target, face_ball((friendly[0].x, friendly[0].y), (game.ball.x, game.ball.y)), dribbling=True)
                 sim_robot_controller_defender.add_robot_commands(cmd, 0)
                 sim_robot_controller_defender.send_robot_commands()
             else:

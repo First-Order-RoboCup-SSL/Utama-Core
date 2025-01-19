@@ -66,6 +66,7 @@ def defend(
         defender_id,
         target,
         face_ball(real_def_pos, (balls[0].x, balls[0].y)),
+        dribbling=True,
     )
 
     controller.add_robot_commands(cmd, defender_id)
