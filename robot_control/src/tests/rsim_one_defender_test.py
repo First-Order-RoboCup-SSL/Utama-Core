@@ -2,7 +2,7 @@ import sys
 import os
 import numpy as np
 import pytest
-from motion_planning.src.pid.pid import TwoDPID, get_pids
+from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from robot_control.src.skills import (
     get_goal_centre,
     go_to_ball,
@@ -131,8 +131,8 @@ def test_single_defender(
     not_defender_id = 2 if defender_id == 1 else 1
     env.teleport_robot(defender_is_yellow, not_defender_id, 0, 0, 0)
 
-    pid_oren_y, pid_2d_y = get_pids(N_ROBOTS_YELLOW)
-    pid_oren_b, pid_2d_b = get_pids(N_ROBOTS_BLUE)
+    pid_oren_y, pid_2d_y = get_rsim_pids(N_ROBOTS_YELLOW)
+    pid_oren_b, pid_2d_b = get_rsim_pids(N_ROBOTS_BLUE)
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
         env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW
     )
@@ -199,6 +199,6 @@ def test_single_defender(
 
 if __name__ == "__main__":
     try:
-        test_single_defender(1, 2, True, False)
+        test_single_defender(1, 3, True, False)
     except KeyboardInterrupt:
         print("Exiting...")

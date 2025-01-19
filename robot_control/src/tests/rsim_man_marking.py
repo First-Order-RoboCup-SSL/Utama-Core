@@ -1,4 +1,4 @@
-from motion_planning.src.pid.pid import get_pids
+from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.skills import face_ball, go_to_point
 from robot_control.src.tests.utils import setup_pvp
 from team_controller.src.controllers import RSimRobotController
@@ -135,8 +135,8 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
 
     env.teleport_ball(random.random(), random.random())
 
-    pid_oren_y, pid_2d_y = get_pids(N_ROBOTS_YELLOW)
-    pid_oren_b, pid_2d_b = get_pids(N_ROBOTS_BLUE)
+    pid_oren_y, pid_2d_y = get_rsim_pids(N_ROBOTS_YELLOW)
+    pid_oren_b, pid_2d_b = get_rsim_pids(N_ROBOTS_BLUE)
 
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
         env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW

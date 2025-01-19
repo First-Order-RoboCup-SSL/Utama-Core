@@ -1,4 +1,4 @@
-from motion_planning.src.pid.pid import TwoDPID, get_pids
+from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from robot_control.src.skills import go_to_ball, go_to_point
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 from team_controller.src.controllers import RSimRobotController
@@ -29,8 +29,8 @@ def test_pvp_placement(target_robot: int, headless: bool):
 
     env.teleport_ball(1, 1)
 
-    pid_oren_y, pid_2d_y = get_pids(N_ROBOTS_YELLOW)
-    pid_oren_b, pid_2d_b = get_pids(N_ROBOTS_BLUE)
+    pid_oren_y, pid_2d_y = get_rsim_pids(N_ROBOTS_YELLOW)
+    pid_oren_b, pid_2d_b = get_rsim_pids(N_ROBOTS_BLUE)
 
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(env,  game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW)
     one_step_yellow = one_robot_placement(sim_robot_controller_yellow, True, pid_oren_y, pid_2d_y, False, target_robot, game, TARGET_OREN)

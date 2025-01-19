@@ -2,7 +2,7 @@ import sys
 import os
 import numpy as np
 import math
-from motion_planning.src.pid.pid import TwoDPID, get_pids
+from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from robot_control.src.skills import go_to_ball, go_to_point
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
@@ -35,7 +35,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
     env.reset()
 
     env.teleport_ball(1, 1)
-    pid_oren, pid_2d = get_pids(N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
+    pid_oren, pid_2d = get_rsim_pids(N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
     
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game
