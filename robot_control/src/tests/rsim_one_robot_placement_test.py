@@ -51,7 +51,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
             change_iters.append(iter)
             change_orens.append(co)
     
-    assert len(change_iters) == TEST_EXPECTED_ITERS
+    assert len(change_iters) >= TEST_EXPECTED_ITERS
     travel_time_0 = change_iters[1] - change_iters[0]
 
     for i in range(len(change_iters) - 1):

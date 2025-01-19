@@ -5,8 +5,11 @@ from team_controller.src.config.settings import TIMESTEP
 
 
 def get_pids(n_robots: int):
-    pid_oren = PID(TIMESTEP, 8, -8, 10.5, 0.01, 0.045, num_robots=6)
-    pid_trans = TwoDPID(TIMESTEP, 2.5, 7.5, 0.01, 0.0, num_robots=n_robots)
+    # no clamping for oreintation otherwise the robot becomes unstable
+    pid_oren = PID(TIMESTEP, None, None, 19, 0.12, 0, num_robots=6)
+    # speeds faster than 2.3 m/s cause the robot to lose control (due to the physics engine, 
+    # rsim becomes wierd there is some sot of limiter on the robots)
+    pid_trans = TwoDPID(TIMESTEP, 2.5, 8.5, 0.025, 0, num_robots=n_robots)
     return pid_oren, pid_trans
 
 
@@ -50,6 +53,8 @@ class PID:
 
         self.pre_errors = {i: 0.0 for i in range(num_robots)}
         self.integrals = {i: 0.0 for i in range(num_robots)}
+        
+        self.first_pass = True
 
     def calculate(
         self,
@@ -91,24 +96,21 @@ class PID:
         # Integral term with clamping
         if self.Ki != 0:
             self.integrals[robot_id] += error * self.dt
-            self.integrals[robot_id] = max(
-                min(self.integrals[robot_id], self.max_output / self.Ki),
-                self.min_output / self.Ki,
-            )
             Iout = self.Ki * self.integrals[robot_id]
         else:
             Iout = 0.0
 
         # Derivative term
-        if self.Kd != 0:
+        if self.Kd != 0 and not self.first_pass:
             derivative = (error - self.pre_errors[robot_id]) / self.dt
             Dout = self.Kd * derivative
         else:
             Dout = 0.0
+            self.first_pass = False
 
         # Total output with clamping
         output = Pout + Iout + Dout
-
+        
         # Apply optional normalization
         if normalize_range is not None and normalize_range != 0:
             output /= normalize_range
@@ -116,7 +118,6 @@ class PID:
         # apply clamping
         if self.max_output and self.min_output:
             output = max(self.min_output, min(self.max_output, output))
-
         # Save error for next calculation
         self.pre_errors[robot_id] = error
         return output
@@ -124,6 +125,7 @@ class PID:
     def reset(self, robot_id: int):
         self.pre_errors[robot_id] = 0.0
         self.integrals[robot_id] = 0.0
+        self.first_pass = True
 
 
 class TwoDPID:
@@ -143,7 +145,7 @@ class TwoDPID:
 
     def calculate(
         self, target: Tuple[float, float], current: Tuple[float, float], robot_id
-    ):
+    ):  
         x_vel = self.dimX.calculate(target[0], current[0], robot_id, False, normalize_range=4.5)
         y_vel = self.dimY.calculate(target[1], current[1], robot_id, False, normalize_range=3)
         return self.scale_velocity(x_vel, y_vel, self.max_velocity)

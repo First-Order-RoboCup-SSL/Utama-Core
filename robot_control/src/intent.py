@@ -62,7 +62,7 @@ def score_goal(
                     # TODO: consider also adding a distance from goal threshold
                     if (
                         abs(current_oren - shot_orientation)
-                        <= 0.005
+                        <= 0.02
                     ):
                         logger.info("kicking ball")
                         robot_command = kick_ball()
