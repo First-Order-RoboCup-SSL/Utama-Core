@@ -113,7 +113,7 @@ def test_pathfinding( headless: bool
         #     if i != mover_id:
 
         #         cmd_dict[i] = go_to_point(pid_oren, pid_2d, friendly_robots[i], i,ba_targets[i], None)
-        sim_robot_controller.add_robot_commands(cmd_dict)
+        # sim_robot_controller.add_robot_commands(cmd_dict)
         sim_robot_controller.send_robot_commands()
 
 
