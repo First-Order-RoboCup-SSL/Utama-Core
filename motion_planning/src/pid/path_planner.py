@@ -11,6 +11,18 @@ import random
 from shapely import Point, LineString
 
 from robot_control.src.find_best_shot import ROBOT_RADIUS 
+
+"""
+TODO - RRT is too slow and not adaptive enough,
+use RTT waypoints as part of the Dynamic window Approach heuristic
+This should give enough adaptivity 
+to avoid obstacles whilst being a globally decent path
+
+Edge cases:
+    target inside obstacle
+    target too close to obstacle (within safety radius)
+
+"""
 class DynamicWindowPlanner:
     SIMULATED_TIMESTEP = 0.2 # seconds
     MAX_ACCELERATION = 2 # Measured in ms^2
