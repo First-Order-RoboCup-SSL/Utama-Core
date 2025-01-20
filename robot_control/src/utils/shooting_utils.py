@@ -3,7 +3,7 @@ import numpy as np
 from shapely.geometry import LineString
 
 # Constants
-ROBOT_RADIUS = 0.18
+ROBOT_RADIUS = 0.09
 
 
 def ball_to_robot_dist(
