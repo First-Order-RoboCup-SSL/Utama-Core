@@ -10,8 +10,8 @@ def get_grsim_pids(n_robots: int):
     return pid_oren, pid_trans
 
 def get_rsim_pids(n_robots: int):
-    pid_oren = PID(TIMESTEP, 8, -8, 10, 0.1, 0.045, num_robots=n_robots)
-    pid_trans = TwoDPID(TIMESTEP, 4, -4, 2, 0.2, 0.01, num_robots=n_robots, normalize=False)
+    pid_oren = PID(TIMESTEP, 12, -12, 10, 0.1, 0.045, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, 3, -3, 2, 0.1, 0.0, num_robots=n_robots, normalize=False)
     return pid_oren, pid_trans
 
 class PID:
