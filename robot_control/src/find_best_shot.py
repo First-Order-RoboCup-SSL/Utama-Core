@@ -2,7 +2,7 @@ from typing import List, Tuple
 import numpy as np
 
 # Constants
-ROBOT_RADIUS = 0.18
+ROBOT_RADIUS = 0.09
 
 
 def ball_to_robot_dist(
