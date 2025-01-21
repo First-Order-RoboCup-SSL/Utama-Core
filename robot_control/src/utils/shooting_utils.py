@@ -67,11 +67,13 @@ def ray_casting(
     goal_x: float,
     goal_y1: float,
     goal_y2: float,
-    shoot_in_left_goal: bool
+    shoot_in_left_goal: bool,
 ) -> List[Tuple[float, float]]:
     shadows: List[Tuple[float, float]] = []
-    
-    goal_mult = -1 if shoot_in_left_goal else 1 # flips the goalward direction if we are shooting left
+
+    goal_mult = (
+        -1 if shoot_in_left_goal else 1
+    )  # flips the goalward direction if we are shooting left
     for enemy in enemy_robots:
         if enemy is not None:
             if goal_mult * enemy.x > goal_mult * ball.x:
@@ -101,10 +103,15 @@ def find_best_shot(
     goal_x: float,
     goal_y1: float,
     goal_y2: float,
-    shoot_in_left_goal: bool
+    shoot_in_left_goal: bool,
 ) -> float:
     shadows = ray_casting(
-        ball, enemy_robots=enemy_robots, goal_x=goal_x, goal_y1=goal_y1, goal_y2=goal_y2, shoot_in_left_goal=shoot_in_left_goal
+        ball,
+        enemy_robots=enemy_robots,
+        goal_x=goal_x,
+        goal_y1=goal_y1,
+        goal_y2=goal_y2,
+        shoot_in_left_goal=shoot_in_left_goal,
     )
     if not shadows:
         return (goal_y2 + goal_y1) / 2
@@ -121,7 +128,9 @@ def find_best_shot(
     if shadows[-1][1] < goal_y2:
         open_spaces.append((shadows[-1][1], goal_y2))
 
-    largest_gap: Tuple[float, float] = max(open_spaces+[(0,0)], key=lambda x: x[1] - x[0])
+    largest_gap: Tuple[float, float] = max(
+        open_spaces + [(0, 0)], key=lambda x: x[1] - x[0]
+    )
     best_shot: float = (largest_gap[0] + largest_gap[1]) / 2
 
     return best_shot
