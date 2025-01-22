@@ -32,10 +32,17 @@ for _ in range(100000):
         + (f[robot_id].y - target_coords[1]) ** 2
     ) < 0.1:
         target_coords = (random.random() * 4 - 2, random.random() * 4 - 2)
-        dribble_task.update_coord(target_coords)
+
+        dribble_task = DribbleToTarget(
+            pid_oren,
+            pid_trans,
+            game,
+            robot_id,
+            target_coords=target_coords,
+        )
 
     command = dribble_task.enact(robot_controller.robot_has_ball(robot_id))
-    # print(dribble_task.dribbled_distance)
+    print(dribble_task.dribbled_distance)
     env.draw_point(target_coords[0], target_coords[1])
     robot_controller.add_robot_commands(command, robot_id)
     robot_controller.send_robot_commands()

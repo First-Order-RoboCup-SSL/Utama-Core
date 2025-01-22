@@ -1,3 +1,4 @@
+import random
 import threading
 import queue
 from team_controller.src.controllers.sim.grsim_robot_controller import (
@@ -28,6 +29,7 @@ vision_thread.start()
 
 pid_oren, pid_trans = get_pids(6)
 
+target_coords = (random.random() * 4 - 2, random.random() * 4 - 2)
 dribble_task = DribbleToTarget(
     pid_oren,
     pid_trans,
@@ -35,6 +37,7 @@ dribble_task = DribbleToTarget(
     robot_id,
     target_coords=target_coords,
 )
+my_team_is_yellow = True
 
 try:
     while True:
@@ -44,8 +47,19 @@ try:
         elif message_type == MessageType.REF:
             pass
 
+        f, e, b = game.get_my_latest_frame(my_team_is_yellow=my_team_is_yellow)
+
+        if (
+            (f[robot_id].x - target_coords[0]) ** 2
+            + (f[robot_id].y - target_coords[1]) ** 2
+        ) < 0.1:
+            print("SUCCESS")
+            target_coords = (random.random() * 4 - 2, random.random() * 4 - 2)
+            dribble_task.update_coord(target_coords)
+
         cmd = dribble_task.enact(robot_controller.robot_has_ball(robot_id))
-        # cmd = turn_on_spot(pid_oren, pid_trans, )
+        if dribble_task.dribbled_distance > 1.2:
+            print("FOULLL")
         robot_controller.add_robot_commands(cmd, robot_id)
         robot_controller.send_robot_commands()
 

@@ -10,7 +10,7 @@ from motion_planning.src.pid import PID
 from global_utils.math_utils import distance
 
 from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
-from robot_control.src.skills import go_to_ball
+from robot_control.src.skills import go_to_ball, go_to_point
 
 
 class DribbleToTarget:
@@ -70,7 +70,6 @@ class DribbleToTarget:
                 chip=0,
                 dribble=0,
             )
-
         else:
             if not has_ball:
                 self.paused = False  # reset pause flag
@@ -97,7 +96,7 @@ class DribbleToTarget:
                 if not self.paused:
                     self.paused = True
                     return RobotCommand(
-                        local_forward_vel=1,
+                        local_forward_vel=0,
                         local_left_vel=0,
                         angular_vel=0,
                         kick=0,
@@ -107,13 +106,25 @@ class DribbleToTarget:
                 else:
                     # if the ball is still with the robot, pause
                     return RobotCommand(
-                        local_forward_vel=0.1,
+                        local_forward_vel=0,
                         local_left_vel=0,
                         angular_vel=0,
                         kick=0,
                         chip=0,
                         dribble=0,
                     )
+                    # return go_to_point(
+                    #     self.pid_oren,
+                    #     self.pid_trans,
+                    #     this_robot_data,
+                    #     self.robot_id,
+                    #     self.target_coords,
+                    #     this_robot_data.orientation,
+                    #     dribbling=True,
+                    # )
+
+    def update_coord(self, next_coords: Tuple[int]):
+        self.target_coords = next_coords
 
     def _update_dribble_distance(
         self, current_point: tuple[float, float], has_ball: bool
