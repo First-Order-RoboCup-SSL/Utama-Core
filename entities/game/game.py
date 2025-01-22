@@ -128,6 +128,8 @@ class Game:
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
         if isinstance(frame_data, FrameData):
+            ### TODO: when stripping all the Nones from the frame if only robot id: 1 is detected in the frame dosen't have placeholders with ###
+
             # Need to trim number of robots in frame to number we expect (num_friendly, num_enemy)
             yellow_robot_data = [i for i in frame_data.yellow_robots if i is not None]
             blue_robot_data = [i for i in frame_data.blue_robots if i is not None]
