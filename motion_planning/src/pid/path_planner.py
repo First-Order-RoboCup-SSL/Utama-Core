@@ -6,7 +6,7 @@ from entities.game.robot import Robot
 from math import sin, cos, pi
 import time
 from itertools import product 
-from math import dist
+from math import dist, exp
 import random
 from shapely import Point, LineString
 
@@ -22,13 +22,27 @@ Edge cases:
     target inside obstacle
     target too close to obstacle (within safety radius)
 
+Drift
+Cleanup so that it takes a robot for the path every time
+Magic numbers
+
+Motion controller stateful with waypoints - take robot index or separate one for each robot
+Inner stateless one does the path planning
+ -> Take local planning if possible
+ -> Otherwise make a new global tree and go towards next waypoint until you get there and then use local planning
+Fix clearance
+Make Field stuff static and fix the dimensions (2.15)
+Test with motion
+Slow motion and never gets there.
 """
+
+N_DIRECTIONS = 16
 class DynamicWindowPlanner:
     SIMULATED_TIMESTEP = 0.2 # seconds
     MAX_ACCELERATION = 2 # Measured in ms^2
-    DIRECTIONS = [i*2*pi/16 for i in range(16)]
+    DIRECTIONS = [i * 2 * pi / N_DIRECTIONS for i in range(N_DIRECTIONS)]
     OBSTACLE_RADIUS = 0.1 # in metres
-    SAFE_OBSTACLES_RADIUS = 0.4
+    SAFE_OBSTACLES_RADIUS =  0.25
     ROBOT_RADIUS = 0.1
 
 
@@ -172,87 +186,155 @@ class DynamicWindowPlanner:
         Returns:
             Tuple[float, float]: The next waypoint coordinates (x, y) or the target if already reached.
         """
+        # robot: Robot = self._game.friendly_robots[friendly_robot_id]
 
-        robot: Robot = self._game.friendly_robots[friendly_robot_id]
+        # start_x, start_y = robot.x, robot.y
 
-        start_x, start_y = robot.x, robot.y
-        if dist((start_x, start_y), target) <= self.SAFE_OBSTACLES_RADIUS:
-            
-            return target
-        if target == self.target:
-            if self.waypoints is None:
-                print("NO PATH FOUND!!!!")
-                return start_x, start_y
-            elif not self.waypoints:
-                return target
-            
-            if dist((start_x, start_y), self.waypoints[0]) <= 0.4:
-                return self.waypoints.pop(0)
-            else:
-                return self.waypoints[0]
-        else:
-            self.target = target
+        # if dist((start_x, start_y), target) < 0.4:
+        #     return target
+        
+        return self.local_planning(friendly_robot_id, target)
 
-            rrt_path = self.rrt_path_to(friendly_robot_id, target)
-            if rrt_path is None:
-                print("NO PATH FOUND!!!!")
-                return start_x, start_y
-            self.waypoints = list(map(self.point_to_tuple, rrt_path))
+        # robot: Robot = self._game.friendly_robots[friendly_robot_id]
+
+        # start_x, start_y = robot.x, robot.y
+        # if dist((start_x, start_y), target) <= self.SAFE_OBSTACLES_RADIUS:
             
-            if dist((start_x, start_y), self.waypoints[0]) <= 0.4:
-                return self.waypoints.pop(0)
-            else:
-                return self.waypoints[0]
+        #     return target
+        # if target == self.target:
+        #     if self.waypoints is None:
+        #         print("NO PATH FOUND!!!!")
+        #         return start_x, start_y
+        #     elif not self.waypoints:
+        #         return target
+            
+        #     if dist((start_x, start_y), self.waypoints[0]) <= 0.4:
+        #         return self.waypoints.pop(0)
+        #     else:
+        #         return self.waypoints[0]
+        # else:
+        #     self.target = target
+
+        #     rrt_path = self.rrt_path_to(friendly_robot_id, target)
+        #     if rrt_path is None:
+        #         print("NO PATH FOUND!!!!")
+        #         return start_x, start_y
+        #     self.waypoints = list(map(self.point_to_tuple, rrt_path))
+            
+        #     if dist((start_x, start_y), self.waypoints[0]) <= 0.4:
+        #         return self.waypoints.pop(0)
+        #     else:
+        #         return self.waypoints[0]
 
 
     
     def local_planning(self, friendly_robot_id: int, target: Tuple[float, float]):
         velocity = self._game.get_object_velocity(GameRobot(self._friendly_colour, friendly_robot_id))
-        # DEPRECATED
+
         if velocity is None:
             # If no data, assume it is still :) 
             velocity = 0,0
-        
-        # Calculate the allowed velocities in this frame, 
+        print(velocity, "HERE")
+        # Calculate the allowed velocities in this frame
         delta_vel = DynamicWindowPlanner.SIMULATED_TIMESTEP * DynamicWindowPlanner.MAX_ACCELERATION
         best_score = float("-inf")
-        best_move = start_x, start_y
-        # print("REACHED", start_x, start_y, velocity, delta_vel)
+        robot: Robot = self._game.friendly_robots[friendly_robot_id]
 
-        for ang, vel_scale in product(DynamicWindowPlanner.DIRECTIONS, [1] ): #i/10 for i in range(1,11)
-            ss = time.time()
+        start_x, start_y = robot.x, robot.y
+        best_move = start_x, start_y
+        print()
+        print("---------------------------------")
+        print()
+        for ang, vel_scale in product(DynamicWindowPlanner.DIRECTIONS, [1]): #i/10 for i in range(1,11)
             segment = self._get_motion_segment((start_x, start_y), velocity, delta_vel*vel_scale, ang)
             # Evaluate this segment, avoiding obstalces 
             score = self._evaluate_segment(friendly_robot_id, segment, Point(target[0], target[1]))
-            # print("TARGET", segment, score)
-
+                                           # self._adjust_segment_for_robot_radius(segment), Point(target[0], target[1]))
+            print(segment, score)
+            print()
             if score > best_score:
                 best_score = score
                 best_move = segment.coords[1]
+        
+
         return best_move
 
     def _get_obstacles(self, robot_id):
         return self._game.friendly_robots[:robot_id] + self._game.friendly_robots[robot_id+1:] + self._game.enemy_robots
 
+    def make_inf_long(self, segment: LineString):
+        norm = segment.length
+        endX, endY = segment.coords[1]
+        startX, startY = segment.coords[0]
+        new = Point(startX + (endX - startX) / norm * 18, startY + (endY - startY) / norm * 18)
+
+        return LineString([segment.coords[0], new]) 
+
     def _evaluate_segment(self, robot_id: int, segment: LineString, target: Point) -> float:
-        # Direct distance to target first, then we add the obstacles 
-        # print(segment, target)
-        score = target.distance(Point(segment.coords[0])) - target.distance(Point(segment.coords[1]))
-        # print("BASE SCORE", score)
-        # Need to calculate whether we will pass through any obstacles, check the closest point 
+        """Evaluate line segment; bigger score is better"""
+        target_factor = target.distance(Point(segment.coords[0])) - target.distance(Point(segment.coords[1]))
 
+        min_time = float("inf")
         for r in self._get_obstacles(robot_id):
-            # See how close we pass to this robot
-            rpos = Point(r.x, r.y)
-            closest_distance = rpos.distance(segment)
-            # print(closest_distance)
+            our_velocity_vector = self._game.get_object_velocity(GameRobot(self._friendly_colour, robot_id))
+            if our_velocity_vector is None:
+                # print("IS NOEN")
+                our_velocity_vector = (0, 0)
+            
+            their_velocity_vector = self._game.get_object_velocity(GameRobot(self._friendly_colour if r.is_friendly else Colour.invert(self._friendly_colour), r.id))
+            if their_velocity_vector is None:
+                # print("IS NOOOONE")
+                their_velocity_vector = (0,0 )
 
-            if closest_distance < self.OBSTACLE_RADIUS:
-                score = float("-inf")
-            elif closest_distance < self.SAFE_OBSTACLES_RADIUS:
-                score -= closest_distance - (self.SAFE_OBSTACLES_RADIUS - self.OBSTACLE_RADIUS)
- 
+            rel_velocity = Point((our_velocity_vector[0] - their_velocity_vector[0]), (our_velocity_vector[1] - their_velocity_vector[1]))
+            norm_speed = rel_velocity.distance(Point(0, 0))
+
+
+            if norm_speed != 0:
+                obstacle_path = LineString([Point(r.x, r.y), Point(r.x + rel_velocity.x / norm_speed * 18, r.y + rel_velocity.y / norm_speed * 18)])
+                intersection = self.make_inf_long(segment).intersection(obstacle_path)
+                # intersection = segment.intersection(obstacle_path)
+                if not intersection.is_empty:
+                    distance = intersection.distance(Point(r.x, r.y))
+                    time = distance / norm_speed
+                    min_time = min(min_time, time)
+                print("OBSTACLE", obstacle_path, "SEGMENT", segment, self.make_inf_long(segment))
+
+        obstacle_factor = 20 * exp(-0.5*(min_time))
+        score = target_factor - obstacle_factor
+        print("FACT", target_factor, obstacle_factor, min_time, score, segment)
         return score
+
+        # # Distance travelled towards target by this segment
+
+        # # Need to calculate whether we will pass through any obstacles, check the closest point 
+        #     # See how close we pass to this robot's predicted path
+        #     predicted = None
+        #     if r.is_friendly:
+        #         predicted = self._game.predict_object_pos_after(self.SIMULATED_TIMESTEP, GameRobot(self._friendly_colour, r.id))
+        #         velocity = self._game.get_object_velocity(GameRobot(self._friendly_colour, r.id))
+
+        #         print("VEL: ", velocity)
+        #     # else:
+        #     #     predicted = self._game.predict_object_pos_after(self.SIMULATED_TIMESTEP, GameRobot(Colour.BLUE, r.id))
+
+        #     if predicted is None:
+        #         rpos = Point(r.x, r.y)
+        #         closest_distance = rpos.distance(segment)
+        #     else:
+        #         rpos = Point(r.x, r.y)
+        #         rpred_pos = Point([predicted[0], predicted[1]])
+        #         closest_distance = rpred_pos.distance(segment)
+        #         print("PRED", predicted, rpred_pos, segment)
+        #     # print("distance")
+        #     # print(rpos)
+        #     # print(closest_distance)
+
+        #     if closest_distance < self.OBSTACLE_RADIUS:
+        #         score = float("-inf")
+        #     obst_score += exp(-2*(closest_distance-0.07))
+        # print("OBSTACLE SCORE: ", obst_score)
+        # return score
                 
     def _get_motion_segment(self, rpos: Tuple[float, float], rvel: Tuple[float, float], delta_vel: float, ang: float) -> LineString:
         adj_vel_y = rvel[1]*DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel*sin(ang)

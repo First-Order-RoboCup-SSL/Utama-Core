@@ -5,6 +5,13 @@ class Colour(Enum):
     YELLOW = 1
     BLUE = 2
 
+    @staticmethod
+    def invert(colour):
+        if colour == Colour.YELLOW:
+            return Colour.BLUE
+        else:
+            return Colour.YELLOW
+
 class GameObject(ABC):
     pass
 
