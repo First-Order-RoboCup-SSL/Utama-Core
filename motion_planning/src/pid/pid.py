@@ -4,14 +4,18 @@ from typing import Optional, Union, Tuple
 from team_controller.src.config.settings import TIMESTEP
 
 
-def get_pids(n_robots: int):
+def get_grsim_pids(n_robots: int):
+    pid_oren = PID(TIMESTEP, 8, -8, 10.5, 0.01, 0.045, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, 2.5, 7.5, 0.01, 0.0, num_robots=n_robots)
+    return pid_oren, pid_trans
+
+def get_rsim_pids(n_robots: int):
     # no clamping for oreintation otherwise the robot becomes unstable
     pid_oren = PID(TIMESTEP, None, None, 19, 0.12, 0, num_robots=6)
     # speeds faster than 2.3 m/s cause the robot to lose control (due to the physics engine, 
     # rsim becomes wierd there is some sot of limiter on the robots)
     pid_trans = TwoDPID(TIMESTEP, 2.5, 8.5, 0.025, 0, num_robots=n_robots)
     return pid_oren, pid_trans
-
 
 class PID:
     """

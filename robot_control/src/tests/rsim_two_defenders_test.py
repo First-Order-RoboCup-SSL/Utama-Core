@@ -23,6 +23,7 @@ from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 import logging
 
 logger = logging.getLogger(__name__)
+from typing import List
 
 
 def defend(
@@ -31,11 +32,29 @@ def defend(
     game: Game,
     controller: RSimRobotController,
     is_yellow: bool,
-    defender_id: int,
+    defender_ids: List[int],
     env,
 ):
     # Assume that is_yellow <-> not is_left here # TODO : FIX
+    """
+    Strategy for two defenders,
+
+    if only one attacker:
+        predict shot location, and extrapolate target parametric position tcenter
+        need the two robots to span tcenter
+
+        Let w = defender gap, assume w is small
+        Suppose t1,t2 are desired defender positions
+
+        approx arc length t1 -> tcenter as straight line length ROBOT_RADIUS / 2
+        approx arc length tcenter -> t2 as straight line length ROBOT_RADIUS / 2
+
+        find unit gradient vector at tcenter, (tx, ty) +- w/2 * deriv at(tx, ty) is t1,t2
+
+    """
+
     friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
+    defender1_id, def2 = defender_ids
     shooters_data = find_likely_enemy_shooter(enemy, balls)
     orientation = None
     tracking_ball = False
@@ -54,7 +73,7 @@ def defend(
         target_tracking_coord = sd.x, sd.y
         orientation = sd.orientation
 
-    real_def_pos = friendly[defender_id].x, friendly[defender_id].y
+    real_def_pos = friendly[defender1_id].x, friendly[defender1_id].y
     current_def_parametric = to_defense_parametric(real_def_pos, is_left=not is_yellow)
     target = align_defenders(
         current_def_parametric, target_tracking_coord, orientation, not is_yellow, env
@@ -62,14 +81,13 @@ def defend(
     cmd = go_to_point(
         pid_oren,
         pid_2d,
-        friendly[defender_id],
-        defender_id,
+        friendly[defender1_id],
+        defender1_id,
         target,
         face_ball(real_def_pos, (balls[0].x, balls[0].y)),
-        dribbling=True,
     )
 
-    controller.add_robot_commands(cmd, defender_id)
+    controller.add_robot_commands(cmd, defender1_id)
 
     controller.send_robot_commands()
 
@@ -107,7 +125,7 @@ def attack(
     return False
 
 
-def test_single_defender(
+def test_two_defenders(
     defender_id: int, shooter_id: int, defender_is_yellow: bool, headless: bool
 ):
     game = Game()
@@ -129,8 +147,8 @@ def test_single_defender(
     env.teleport_ball(2.25, -1)
 
     # Move the other defender out of the way
-    not_defender_id = 2 if defender_id == 1 else 1
-    env.teleport_robot(defender_is_yellow, not_defender_id, 0, 0, 0)
+    # not_defender_id = 2 if defender_id == 1 else 1
+    # env.teleport_robot(defender_is_yellow, not_defender_id, 0, 0, 0)
 
     pid_oren_y, pid_2d_y = get_rsim_pids(N_ROBOTS_YELLOW)
     pid_oren_b, pid_2d_b = get_rsim_pids(N_ROBOTS_BLUE)
@@ -162,7 +180,7 @@ def test_single_defender(
         )
 
     any_scored = False
-    defender_gets_ball = False
+    attacker_gets_ball = False
     for _ in range(900):
         scored = attack(
             pid_oren_a,
@@ -181,7 +199,7 @@ def test_single_defender(
             game,
             sim_robot_controller_defender,
             defender_is_yellow,
-            defender_id,
+            [defender_id, -1],
             env,
         )
 
@@ -189,17 +207,17 @@ def test_single_defender(
             defender_id
         ):  # Sim ends when the defender gets the ball
             break
-        defender_gets_ball = (
-            defender_gets_ball
+        attacker_gets_ball = (
+            attacker_gets_ball
             or sim_robot_controller_attacker.robot_has_ball(shooter_id)
         )
 
     assert not any_scored
-    assert defender_gets_ball
+    assert attacker_gets_ball
 
 
 if __name__ == "__main__":
     try:
-        test_single_defender(1, 3, True, False)
+        test_two_defenders(1, 2, True, False)
     except KeyboardInterrupt:
         print("Exiting...")

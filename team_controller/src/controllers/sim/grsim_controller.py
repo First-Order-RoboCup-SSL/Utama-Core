@@ -1,5 +1,9 @@
 from typing import Tuple
 
+from team_controller.src.config.starting_formation import (
+    BLUE_START_ONE,
+    YELLOW_START_ONE,
+)
 from team_controller.src.utils import network_manager
 from team_controller.src.config.settings import (
     LOCAL_HOST,
@@ -54,11 +58,20 @@ class GRSimController(AbstractSimController):
         sim_command = self._create_simulator_command(sim_control)
         self.net.send_command(sim_command)
 
-    def _create_teleport_ball_command(self, x: float, y: float, vx: float, vy: float) -> object:
+    def _create_teleport_ball_command(
+        self, x: float, y: float, vx: float, vy: float
+    ) -> object:
         tele_ball = TeleportBall(x=x, y=y, vx=vx, vy=vy)
         sim_control = SimulatorControl()
         sim_control.teleport_ball.CopyFrom(tele_ball)
         return sim_control
+
+    def reset(self):
+        for idx, x in enumerate(YELLOW_START_ONE):
+            self.teleport_robot(True, idx, x[0], x[1], x[2])
+        for idx, x in enumerate(BLUE_START_ONE):
+            self.teleport_robot(False, idx, x[0], x[1], x[2])
+        self.teleport_ball(0, 0, 0, 0)
 
     def teleport_robot(
         self,
@@ -99,9 +112,7 @@ class GRSimController(AbstractSimController):
 
         The method calculates a teleport location based on the team and presence status, then sends a command to the simulator.
         """
-        x, y = self._get_teleport_location(
-            robot_id, is_team_yellow, is_present
-        )
+        x, y = self._get_teleport_location(robot_id, is_team_yellow, is_present)
         sim_control = self._create_teleport_robot_command(
             robot_id, is_team_yellow, x, y, is_present
         )
@@ -117,10 +128,10 @@ class GRSimController(AbstractSimController):
         theta: float,
         is_present: bool = True,
     ) -> object:
-        robot = RobotId(
-            id=robot_id, team=Team.YELLOW if is_team_yellow else Team.BLUE
+        robot = RobotId(id=robot_id, team=Team.YELLOW if is_team_yellow else Team.BLUE)
+        tele_robot = TeleportRobot(
+            id=robot, x=x, y=y, orientation=theta, present=is_present
         )
-        tele_robot = TeleportRobot(id=robot, x=x, y=y, orientation=theta, present=is_present)
         sim_control = SimulatorControl()
         sim_control.teleport_robot.add().CopyFrom(tele_robot)
         return sim_control
