@@ -4,11 +4,15 @@ from typing import Optional, Union, Tuple
 from team_controller.src.config.settings import TIMESTEP
 
 
-def get_pids(n_robots: int):
-    pid_oren = PID(TIMESTEP, 8, -8, 6, 0.1, 0.045, num_robots=n_robots)
-    pid_trans = TwoDPID(TIMESTEP, 1.5, -1.5, 3, 0.1, 0.0, num_robots=n_robots)
+def get_grsim_pids(n_robots: int):
+    pid_oren = PID(TIMESTEP, 8, -8, 10.5, 0.01, 0.045, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, 2.5, 7.5, 0.01, 0.0, num_robots=n_robots)
     return pid_oren, pid_trans
 
+def get_rsim_pids(n_robots: int):
+    pid_oren = PID(TIMESTEP, 8, -8, 10, 0.1, 0.045, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, 4, -4, 2, 0.2, 0.01, num_robots=n_robots, normalize=False)
+    return pid_oren, pid_trans
 
 class PID:
     """
@@ -135,16 +139,18 @@ class TwoDPID:
         Kd: float,
         Ki: float,
         num_robots: int,
+        normalize: bool = True
     ):
         self.dimX = PID(dt, max_output, min_output, Kp, Kd, Ki, num_robots)
         self.dimY = PID(dt, max_output, min_output, Kp, Kd, Ki, num_robots)
+        self.normalize = normalize
 
     def calculate(
         self, target: Tuple[float, float], current: Tuple[float, float], robot_id
     ):
         return self.dimX.calculate(
-            target[0], current[0], robot_id, False, None
-        ), self.dimY.calculate(target[1], current[1], robot_id, False, None)
+            target[0], current[0], robot_id, False, normalize_range=None if not self.normalize else 4.5
+        ), self.dimY.calculate(target[1], current[1], robot_id, False, normalize_range=None if not self.normalize else 3)
 
     def reset(self, robot_id: int):
         self.dimX.reset(robot_id)

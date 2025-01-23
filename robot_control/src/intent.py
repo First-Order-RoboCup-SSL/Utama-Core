@@ -13,6 +13,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 # intent on scoring goal
 def score_goal(
     game_obj: Game,
@@ -21,17 +22,18 @@ def score_goal(
     pid_oren: PID,
     pid_trans: PID,
     is_yellow: bool,
-    shoot_in_left_goal: bool 
+    shoot_in_left_goal: bool,
 ) -> RobotCommand:
 
     target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
     latest_frame = game_obj.get_my_latest_frame(is_yellow)
-    if latest_frame:
-        friendly_robots, enemy_robots, balls = latest_frame
+    if not latest_frame:
+        return
+    friendly_robots, enemy_robots, balls = latest_frame
 
     # TODO: Not sure if this is sufficient for both blue and yellow scoring
     # It won't be because note that in real life the blue team is not necessarily
-    # on the left of the pitch 
+    # on the left of the pitch
     goal_x = target_goal_line.coords[0][0]
     goal_y1 = target_goal_line.coords[1][1]
     goal_y2 = target_goal_line.coords[0][1]
@@ -39,7 +41,9 @@ def score_goal(
     # calculate best shot from the position of the ball
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
     if friendly_robots and enemy_robots and balls:
-        best_shot = find_best_shot(balls[0], enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal)
+        best_shot = find_best_shot(
+            balls[0], enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
+        )
 
         shot_orientation = np.atan2((best_shot - balls[0].y), (goal_x - balls[0].x))
 
@@ -60,10 +64,7 @@ def score_goal(
                     # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
                     # Because 0.02 as a threshold is meaningless (different at different distances)
                     # TODO: consider also adding a distance from goal threshold
-                    if (
-                        abs(current_oren - shot_orientation)
-                        <= 0.005
-                    ):
+                    if abs(current_oren - shot_orientation) <= 0.01:
                         logger.info("kicking ball")
                         robot_command = kick_ball()
                     # else, robot has ball, but needs to turn to the right direction
@@ -86,11 +87,12 @@ def score_goal(
 
     return robot_command
 
+
 def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
     ans = []
     for ball in balls:
         for er in enemy_robots:
             if dist((er.x, er.y), (ball.x, ball.y)) < 0.2:
-                # Ball is close to this robot 
+                # Ball is close to this robot
                 ans.append(er)
     return list(set(ans))

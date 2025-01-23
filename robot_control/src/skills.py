@@ -178,7 +178,7 @@ def ang_between(v1, v2):
 
 
 def step_curve(t: float, direction: int):
-    STEP_SIZE = 0.0872665
+    STEP_SIZE = 0.0872665*2
     if direction == 0:
         return t
     return direction * STEP_SIZE + t

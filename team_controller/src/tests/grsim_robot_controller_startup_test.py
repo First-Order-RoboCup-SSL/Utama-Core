@@ -36,8 +36,8 @@ class StartUpController:
 
         # TODO: Tune PID parameters further when going from sim to real(it works for Grsim)
         # potentially have a set tunig parameters for each robot
-        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0.03, num_robots=6)
-        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0.02, num_robots=6)
+        self.pid_oren = PID(0.0167, 8, -8, 4.5, 0, 0, num_robots=6)
+        self.pid_trans = PID(0.0167, 1.5, -1.5, 4.5, 0, 0, num_robots=6)
 
     def make_decision(self):
         robots = self.game.get_robots_pos(is_yellow=True)
