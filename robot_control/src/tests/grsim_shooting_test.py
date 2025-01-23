@@ -37,8 +37,9 @@ def test_grsim_shooting(shooter_id: int, is_yellow: bool, headless: bool):
     vision_thread.start()
 
     # Initialize PID controllers
-    pid_oren = PID(TIMESTEP, 5, -5, 4.5, 0, 0.045, num_robots=6)
-    pid_trans = TwoDPID(TIMESTEP, 2.5, -2.5, 4.5, 0.01, 0.0, num_robots=6)
+    pid_oren = PID(TIMESTEP, 8, -8, 10, 0.01, 0.045, num_robots=6)
+    # pid_trans = PID(TIMESTEP, 1.5, -1.5, 4.5, 0, 0.035, num_robots=6)
+    pid_trans = TwoDPID(TIMESTEP, 2.5, 7.5, 0.01, 0.0, num_robots=6)
 
     time.sleep(0.1)
 

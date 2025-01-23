@@ -109,7 +109,8 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                     0,
                     target,
                     face_ball(
-                        (friendly[0].x, friendly[0].y), (game.ball.x, game.ball.y)
+                        (friendly[0].x, friendly[0].y), 
+                        (game.ball.x, game.ball.y)
                     ),
                     dribbling=True,
                 )
@@ -128,6 +129,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 )
                 sim_robot_controller_defender.add_robot_commands(cmd, 0)
                 sim_robot_controller_defender.send_robot_commands()
+                
 
     assert not goal_scored
 
