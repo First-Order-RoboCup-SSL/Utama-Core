@@ -39,6 +39,7 @@ class DribbleToTarget:
         target_coords: Tuple[float, float],
         dribble_speed: float = 3.0,
         tolerance: float = 0.1,
+        augment: bool = False,
     ):
         self.pid_oren = pid_oren
         self.pid_trans = pid_trans
@@ -52,6 +53,7 @@ class DribbleToTarget:
         self.last_point_with_ball = None
         self.dribbled_distance = 0  # TODO: this needs to be stored as a global robot state in the future (because it is accessed by all functions involving movement)
         self.paused = False
+        self.augment = augment
 
     def enact(self, has_ball: bool):
         this_robot_data = self.game.get_robot_pos(True, self.robot_id)
@@ -72,15 +74,21 @@ class DribbleToTarget:
             )
         else:
             if not has_ball:
-                self.paused = False  # reset pause flag
+                ball_data = self.game.get_ball_pos()[0]
+                if self.augment:
+                    delta_x = self.game.get_ball_pos()[0].x - current_x
+                    delta_y = self.game.get_ball_pos()[0].y - current_y
+                    ball_data = BallData(
+                        delta_x * 3 + current_x, delta_y * 3 + current_y, 0
+                    )
                 return go_to_ball(
                     self.pid_oren,
                     self.pid_trans,
                     this_robot_data,
                     self.robot_id,
-                    self.game.get_ball_pos()[0],
+                    ball_data,
                 )
-            elif self.dribbled_distance < 0.8:
+            elif self.dribbled_distance < 0.75:
                 target_oren = np.arctan2(target_y - current_y, target_x - current_x)
                 return calculate_robot_velocities(
                     self.pid_oren,
@@ -93,35 +101,14 @@ class DribbleToTarget:
                 )
             else:
                 # if just crossed the threshold, push the ball forward
-                if not self.paused:
-                    self.paused = True
-                    return RobotCommand(
-                        local_forward_vel=0,
-                        local_left_vel=0,
-                        angular_vel=0,
-                        kick=0,
-                        chip=0,
-                        dribble=0,
-                    )
-                else:
-                    # if the ball is still with the robot, pause
-                    return RobotCommand(
-                        local_forward_vel=0,
-                        local_left_vel=0,
-                        angular_vel=0,
-                        kick=0,
-                        chip=0,
-                        dribble=0,
-                    )
-                    # return go_to_point(
-                    #     self.pid_oren,
-                    #     self.pid_trans,
-                    #     this_robot_data,
-                    #     self.robot_id,
-                    #     self.target_coords,
-                    #     this_robot_data.orientation,
-                    #     dribbling=True,
-                    # )
+                return RobotCommand(
+                    local_forward_vel=0,
+                    local_left_vel=0,
+                    angular_vel=0,
+                    kick=0,
+                    chip=0,
+                    dribble=0,
+                )
 
     def update_coord(self, next_coords: Tuple[int]):
         self.target_coords = next_coords

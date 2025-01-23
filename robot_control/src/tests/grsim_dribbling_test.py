@@ -1,6 +1,7 @@
 import random
 import threading
 import queue
+from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.grsim_robot_controller import (
     GRSimRobotController,
 )
@@ -15,9 +16,10 @@ from entities.game import Game
 IS_YELLOW = True
 
 robot_id = 3
-target_coords = (-2, 1)
+target_coord = (-2, 1)
 
 game = Game()
+env = GRSimController()
 
 message_queue = queue.SimpleQueue()
 vision_receiver = VisionDataReceiver(message_queue)
@@ -29,13 +31,10 @@ vision_thread.start()
 
 pid_oren, pid_trans = get_pids(6)
 
-target_coords = (random.random() * 4 - 2, random.random() * 4 - 2)
+target_coords = [(4, 2.5), (4, -2.5), (-4, -2.5), (-4, 2.5)]
+idx = 0
 dribble_task = DribbleToTarget(
-    pid_oren,
-    pid_trans,
-    game,
-    robot_id,
-    target_coords=target_coords,
+    pid_oren, pid_trans, game, robot_id, target_coords=target_coords[0], augment=True
 )
 my_team_is_yellow = True
 
@@ -50,16 +49,16 @@ try:
         f, e, b = game.get_my_latest_frame(my_team_is_yellow=my_team_is_yellow)
 
         if (
-            (f[robot_id].x - target_coords[0]) ** 2
-            + (f[robot_id].y - target_coords[1]) ** 2
+            (f[robot_id].x - target_coords[idx][0]) ** 2
+            + (f[robot_id].y - target_coords[idx][1]) ** 2
         ) < 0.1:
+            idx = (idx + 1) % 4
+            dribble_task.update_coord(target_coords[idx])
             print("SUCCESS")
-            target_coords = (random.random() * 4 - 2, random.random() * 4 - 2)
-            dribble_task.update_coord(target_coords)
 
         cmd = dribble_task.enact(robot_controller.robot_has_ball(robot_id))
-        if dribble_task.dribbled_distance > 1.2:
-            print("FOULLL")
+        if dribble_task.dribbled_distance > 1.0:
+            print("FOULLL: ", dribble_task.dribbled_distance)
         robot_controller.add_robot_commands(cmd, robot_id)
         robot_controller.send_robot_commands()
 
