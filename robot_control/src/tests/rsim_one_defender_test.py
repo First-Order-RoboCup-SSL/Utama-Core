@@ -101,7 +101,7 @@ def attack(
     controller.add_robot_commands(cmd, shooter_id)
     controller.send_robot_commands()
 
-    if game.is_ball_in_goal(not defender_is_yellow):
+    if game.is_ball_in_goal(defender_is_yellow):
         logger.info("Goal Scored at Position: ", game.get_ball_pos())
         return True
     return False
