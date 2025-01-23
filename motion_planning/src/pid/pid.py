@@ -1,21 +1,31 @@
 import numpy as np
 from typing import Optional, Union, Tuple
 
-from team_controller.src.config.settings import TIMESTEP
+from team_controller.src.config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL
 
 
 def get_grsim_pids(n_robots: int):
-    pid_oren = PID(TIMESTEP, 8, -8, 10.5, 0.01, 0.045, num_robots=n_robots)
-    pid_trans = TwoDPID(TIMESTEP, 2.5, 7.5, 0.01, 0.0, num_robots=n_robots)
+    pid_oren = PID(
+        TIMESTEP,
+        MAX_ANGULAR_VEL,
+        -MAX_ANGULAR_VEL,
+        10.5,
+        0.01,
+        0.045,
+        num_robots=n_robots,
+    )
+    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 7.5, 0.01, 0.0, num_robots=n_robots)
     return pid_oren, pid_trans
+
 
 def get_rsim_pids(n_robots: int):
     # no clamping for oreintation otherwise the robot becomes unstable
     pid_oren = PID(TIMESTEP, None, None, 19, 0.12, 0, num_robots=6)
-    # speeds faster than 2.3 m/s cause the robot to lose control (due to the physics engine, 
+    # speeds faster than 2.3 m/s cause the robot to lose control (due to the physics engine,
     # rsim becomes wierd there is some sot of limiter on the robots)
-    pid_trans = TwoDPID(TIMESTEP, 2.5, 8.5, 0.025, 0, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0, num_robots=n_robots)
     return pid_oren, pid_trans
+
 
 class PID:
     """
@@ -57,7 +67,7 @@ class PID:
 
         self.pre_errors = {i: 0.0 for i in range(num_robots)}
         self.integrals = {i: 0.0 for i in range(num_robots)}
-        
+
         self.first_pass = True
 
     def calculate(
@@ -114,7 +124,7 @@ class PID:
 
         # Total output with clamping
         output = Pout + Iout + Dout
-        
+
         # Apply optional normalization
         if normalize_range is not None and normalize_range != 0:
             output /= normalize_range
@@ -141,28 +151,32 @@ class TwoDPID:
         Kd: float,
         Ki: float,
         num_robots: int,
-    ):  
+    ):
         self.max_velocity = max_velocity
-        
+
         self.dimX = PID(dt, None, None, Kp, Kd, Ki, num_robots)
         self.dimY = PID(dt, None, None, Kp, Kd, Ki, num_robots)
 
     def calculate(
         self, target: Tuple[float, float], current: Tuple[float, float], robot_id
-    ):  
-        x_vel = self.dimX.calculate(target[0], current[0], robot_id, False, normalize_range=4.5)
-        y_vel = self.dimY.calculate(target[1], current[1], robot_id, False, normalize_range=3)
+    ):
+        x_vel = self.dimX.calculate(
+            target[0], current[0], robot_id, False, normalize_range=4.5
+        )
+        y_vel = self.dimY.calculate(
+            target[1], current[1], robot_id, False, normalize_range=3
+        )
         return self.scale_velocity(x_vel, y_vel, self.max_velocity)
-    
+
     def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float):
         current_vel = np.hypot(x_vel, y_vel)
-        
+
         if current_vel > max_vel:
             scaling_factor = max_vel / current_vel
-            
+
             x_vel *= scaling_factor
             y_vel *= scaling_factor
-        
+
         return x_vel, y_vel
 
     def reset(self, robot_id: int):
