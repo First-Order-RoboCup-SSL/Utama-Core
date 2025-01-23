@@ -77,6 +77,7 @@ def score_goal(
                             shooter_id,
                             shot_orientation,
                             dribbling=shooter_has_ball,
+                            pivot_on_ball=True,
                         )
 
                 else:

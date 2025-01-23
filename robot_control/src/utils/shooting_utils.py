@@ -1,9 +1,6 @@
 from typing import List, Tuple
 import numpy as np
-from shapely.geometry import LineString
-
-# Constants
-ROBOT_RADIUS = 0.09
+from team_controller.src.config.settings import ROBOT_RADIUS
 
 
 def ball_to_robot_dist(

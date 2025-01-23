@@ -7,6 +7,8 @@ TIMESTEP = 0.0167
 MAX_VEL = 2.5
 MAX_ANGULAR_VEL = 8
 
+ROBOT_RADIUS = 0.09  # TODO: probably not the best place to put this
+
 # sim kick speed
 KICK_SPD = 5
 DRIBBLE_SPD = 3

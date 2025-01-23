@@ -7,9 +7,12 @@ from entities.data.vision import BallData, RobotData
 from motion_planning.src.pid import PID
 import logging
 
-from math import atan, atan2, dist, sqrt, cos, sin, pi, acos, degrees, asin
+from math import atan2, dist, sqrt, cos, sin, pi, acos, degrees
+from global_utils.math_utils import normalise_heading
 from motion_planning.src.pid.pid import TwoDPID
 from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
+
+from team_controller.src.config.settings import ROBOT_RADIUS
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +28,6 @@ def kick_ball() -> RobotCommand:
     )
 
 
-# TODO: this pid system is v clumsy, and will eventually be streamlined with robot object
-# Ideally, we should have one PID for each robot and not have one giant PID for all robots
 def go_to_ball(
     pid_oren: PID,
     pid_trans: TwoDPID,
@@ -78,8 +79,14 @@ def turn_on_spot(
     robot_id: int,
     target_oren: float,
     dribbling: bool = False,
+    pivot_on_ball: bool = False,
 ) -> RobotCommand:
-    return calculate_robot_velocities(
+    """
+    Turns the robot on the spot to face the target orientation.
+
+    pivot_on_ball: If True, the robot will pivot on the ball, otherwise it will pivot on its own centre.
+    """
+    turn = calculate_robot_velocities(
         pid_oren=pid_oren,
         pid_trans=pid_trans,
         this_robot_data=this_robot_data,
@@ -88,6 +95,13 @@ def turn_on_spot(
         target_oren=target_oren,
         dribbling=dribbling,
     )
+
+    if pivot_on_ball:
+        angular_vel = turn.angular_vel
+        local_left_vel = -angular_vel * (ROBOT_RADIUS * 1.8)
+        turn = turn._replace(local_left_vel=local_left_vel)
+
+    return turn
 
 
 def predict_goal_y_location(
@@ -178,7 +192,7 @@ def ang_between(v1, v2):
 
 
 def step_curve(t: float, direction: int):
-    STEP_SIZE = 0.0872665*2
+    STEP_SIZE = 0.0872665 * 2
     if direction == 0:
         return t
     return direction * STEP_SIZE + t
