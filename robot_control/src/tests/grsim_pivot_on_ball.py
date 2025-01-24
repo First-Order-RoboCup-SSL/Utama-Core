@@ -75,5 +75,7 @@ def test_grsim_pivot_on_ball(shooter_id: int, is_yellow: bool, headless: bool):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
+    
     # Run the test and output the result
     test_result = test_grsim_pivot_on_ball(5, False, False)
