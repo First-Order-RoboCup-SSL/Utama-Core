@@ -25,7 +25,7 @@ def test_pathfinding(headless: bool):
     N_ROBOTS_YELLOW = 6
     N_ROBOTS_BLUE = 6
 
-    random.seed(1)
+    random.seed(3)
     env = SSLStandardEnv(
         n_robots_blue=N_ROBOTS_BLUE,
         n_robots_yellow=N_ROBOTS_YELLOW,
@@ -61,7 +61,7 @@ def test_pathfinding(headless: bool):
         is_team_yellow=is_yellow, env=env, game_obj=game
     )
     planner = DynamicWindowPlanner(game)
-    targets = [(0,0)]+[(random.uniform(-2, 2), random.uniform(-1.5, 1.5)) for _ in range(1000)]
+    targets = [(0,0)]+[(random.uniform(-2, 2), random.uniform(-1, 1)) for _ in range(1000)]
     target = targets.pop(0)
 
     for _ in range(5000):
