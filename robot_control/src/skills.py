@@ -17,6 +17,17 @@ from team_controller.src.config.settings import ROBOT_RADIUS
 logger = logging.getLogger(__name__)
 
 
+def empty_command(dribbler_on: bool = False) -> RobotCommand:
+    return RobotCommand(
+        local_forward_vel=0,
+        local_left_vel=0,
+        angular_vel=0,
+        kick=0,
+        chip=0,
+        dribble=dribbler_on,
+    )
+
+
 def kick_ball() -> RobotCommand:
     return RobotCommand(
         local_forward_vel=0,

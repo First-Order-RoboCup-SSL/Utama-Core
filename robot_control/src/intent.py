@@ -1,17 +1,158 @@
 import numpy as np
 
+from global_utils.math_utils import squared_distance, normalise_heading
 from robot_control.src.utils.shooting_utils import find_best_shot
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from entities.game import Game, Field
 from entities.data.command import RobotCommand
 from entities.data.vision import RobotData, BallData
-from robot_control.src.skills import kick_ball, go_to_ball, turn_on_spot
+from robot_control.src.skills import (
+    kick_ball,
+    go_to_ball,
+    turn_on_spot,
+    empty_command,
+    go_to_point,
+)
 from motion_planning.src.pid import PID
-from typing import List
+from typing import List, Tuple
 from math import dist
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+from robot_control.src.utils.passing_utils import calculate_adjusted_receiver_pos
+
+
+class PassBall:
+    def __init__(
+        self,
+        pid_oren: PID,
+        pid_trans: PID,
+        game: Game,
+        passer_id: int,
+        receiver_id: int,
+        target_coords: Tuple[float, float],
+    ):
+        self.pid_oren = pid_oren
+        self.pid_trans = pid_trans
+        self.game = game
+        self.passer_id = passer_id
+        self.receiver_id = receiver_id
+        self.target_coords = target_coords
+        self.my_team_is_yellow = game.my_team_is_yellow
+
+        self.angle_tolerance = 0.01
+        self.sq_dist_tolerance = 0.01
+        self.ball_in_flight = False
+        self.ball_launch_pos = None
+
+    def enact(self, passer_has_ball: bool) -> Tuple[RobotCommand, RobotCommand]:
+        """
+        return the command for passer and receiver in that order.
+        """
+        passer_ready = False
+        receiver_ready = False
+
+        passer_data = self.game.get_robot_pos(self.my_team_is_yellow, self.passer_id)
+        receiver_data = self.game.get_robot_pos(
+            self.my_team_is_yellow, self.receiver_id
+        )
+        ball_data = self.game.ball
+
+        ### passer commands ###
+
+        passer_oren = passer_data.orientation
+        shot_orientation = np.arctan2(
+            self.target_coords[1] - ball_data.y,
+            self.target_coords[0] - ball_data.x,
+        )
+
+        if not passer_has_ball and not self.ball_in_flight:
+            passer_cmd = go_to_ball(
+                self.pid_oren,
+                self.pid_trans,
+                passer_data,
+                self.passer_id,
+                ball_data,
+            )
+
+        else:
+            if (
+                abs(passer_oren - shot_orientation) <= self.angle_tolerance
+                or self.ball_in_flight
+            ):
+                passer_ready = True
+                passer_cmd = empty_command(
+                    dribbler_on=True
+                )  # default action is to wait. Unless both are ready then intiate pass
+            else:
+                passer_cmd = turn_on_spot(
+                    self.pid_oren,
+                    self.pid_trans,
+                    passer_data,
+                    self.passer_id,
+                    shot_orientation,
+                    dribbling=True,
+                    pivot_on_ball=True,
+                )
+
+        ### receiver commands ###
+        receiver_oren = receiver_data.orientation
+
+        # if ball has already been kicked and heading towards receiver
+        if self.ball_in_flight:
+
+            # TODO: fix fine adjustment of receiver position
+
+            # adjusted_pos = calculate_adjusted_receiver_pos(
+            #     self.ball_launch_pos, receiver_data, ball_data
+            # )  # we are assuming the adjusted position should be extremely close
+            # catch_orientation = np.arctan2(
+            #     ball_data.y - adjusted_pos[1], ball_data.x - adjusted_pos[0]
+            # )
+            catch_orientation = np.arctan2(
+                ball_data.y - receiver_data.y, ball_data.x - receiver_data.x
+            )
+            receiver_cmd = go_to_point(
+                self.pid_oren,
+                self.pid_trans,
+                receiver_data,
+                self.receiver_id,
+                self.target_coords,
+                catch_orientation,
+            )
+
+        else:
+            catch_orientation = normalise_heading(shot_orientation + np.pi)
+            if (
+                squared_distance((receiver_data.x, receiver_data.y), self.target_coords)
+                < self.sq_dist_tolerance
+                and abs(
+                    receiver_oren - catch_orientation,
+                )
+                < self.angle_tolerance
+            ):
+
+                receiver_cmd = empty_command(dribbler_on=True)
+                receiver_ready = True
+
+            else:
+                receiver_cmd = go_to_point(
+                    self.pid_oren,
+                    self.pid_trans,
+                    receiver_data,
+                    self.receiver_id,
+                    self.target_coords,
+                    catch_orientation,
+                )
+
+        if passer_ready and receiver_ready:
+            passer_cmd = kick_ball()
+            self.ball_launch_pos = (ball_data.x, ball_data.y)
+            self.ball_in_flight = True
+
+        return passer_cmd, receiver_cmd
 
 
 # intent on scoring goal
