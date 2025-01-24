@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 MAX_TIME = 20  # in seconds
 N_ROBOTS = 6
+TARGET_COORDS = (-2, 3)
 
 
 def test_passing(passer_id: int, receiver_id: int, is_yellow: bool, headless: bool):
@@ -54,12 +55,16 @@ def test_passing(passer_id: int, receiver_id: int, is_yellow: bool, headless: bo
         game,
         passer_id,
         receiver_id,
-        (-2, -2),
+        target_coords=TARGET_COORDS,
     )
 
     try:
         while True:
-
+            env.draw_point(
+                TARGET_COORDS[0],
+                TARGET_COORDS[1],
+                width=2,
+            )
             # Check if the time limit has been exceeded
             elapsed_time = time.time() - start_time
             if elapsed_time > MAX_TIME:

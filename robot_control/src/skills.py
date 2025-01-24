@@ -46,6 +46,7 @@ def go_to_ball(
     robot_id: int,
     ball_data: BallData,
 ) -> RobotCommand:
+    # TODO: add a optional target_oren flag
     target_oren = np.arctan2(
         ball_data.y - this_robot_data.y, ball_data.x - this_robot_data.x
     )
