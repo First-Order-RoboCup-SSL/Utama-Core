@@ -20,7 +20,7 @@ def get_grsim_pids(n_robots: int):
 
 def get_rsim_pids(n_robots: int):
     # no clamping for oreintation otherwise the robot becomes unstable
-    pid_oren = PID(TIMESTEP, 8, -8, 20, 0.12, 0, num_robots=6)
+    pid_oren = PID(TIMESTEP, 8, -8, 18.5, 0.12, 0, num_robots=6)
     # speeds faster than 2.3 m/s cause the robot to lose control (due to the physics engine,
     # rsim becomes wierd there is some sot of limiter on the robots)
     pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0, num_robots=n_robots)
