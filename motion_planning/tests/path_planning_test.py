@@ -68,8 +68,9 @@ def test_pathfinding(headless: bool, moving: bool):
     target = targets.pop(0)
     ba_targets = [(random.uniform(-4.5, 4.5), random.uniform(-2.25, 2.25)) for _ in range(6)]
 
-    make_wall(env, True, 0.5, 0, [mover_id], True, 2.2)
-
+    make_wall(env, True, 0.5, -1, [mover_id], False, 2.2)
+    # make_wall(env, True, 0.5, 0, [mover_id], False, 2.2)
+    
     for i in range(5000):
         env.draw_point(target[0], target[1], width=10, color="GREEN")
 

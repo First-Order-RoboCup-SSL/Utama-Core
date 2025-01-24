@@ -3,7 +3,7 @@ from typing import Tuple, Union, Optional, List
 from entities.game import Game
 from entities.game.game_object import Colour, GameObject, Robot as GameRobot
 from entities.game.robot import Robot
-from math import sin, cos, pi
+from math import sin, cos, pi, sqrt
 import time
 from itertools import product 
 from math import dist, exp
@@ -20,8 +20,7 @@ to avoid obstacles whilst being a globally decent path
 
 Edge cases:
     target inside obstacle
-    target too close to obstacle (within safety radius)
-
+    target too close to obstacle (within// Install Vtune
 Drift
 Cleanup so that it takes a robot for the path every time
 Magic numbers
@@ -42,7 +41,7 @@ class DynamicWindowPlanner:
     MAX_ACCELERATION = 2 # Measured in ms^2
     DIRECTIONS = [i * 2 * pi / N_DIRECTIONS for i in range(N_DIRECTIONS)]
     OBSTACLE_RADIUS = 0.1 # in metres
-    SAFE_OBSTACLES_RADIUS =  0.25
+    SAFE_OBSTACLES_RADIUS = 0.25
     ROBOT_RADIUS = 0.1
 
 
@@ -234,7 +233,7 @@ class DynamicWindowPlanner:
         if velocity is None:
             # If no data, assume it is still :) 
             velocity = 0,0
-        print(velocity, "HERE")
+        # print(velocity, "HERE")
         # Calculate the allowed velocities in this frame
         delta_vel = DynamicWindowPlanner.SIMULATED_TIMESTEP * DynamicWindowPlanner.MAX_ACCELERATION
         best_score = float("-inf")
@@ -242,21 +241,26 @@ class DynamicWindowPlanner:
 
         start_x, start_y = robot.x, robot.y
         best_move = start_x, start_y
-        print()
-        print("---------------------------------")
-        print()
-        for ang, vel_scale in product(DynamicWindowPlanner.DIRECTIONS, [1]): #i/10 for i in range(1,11)
-            segment = self._get_motion_segment((start_x, start_y), velocity, delta_vel*vel_scale, ang)
-            # Evaluate this segment, avoiding obstalces 
-            score = self._evaluate_segment(friendly_robot_id, segment, Point(target[0], target[1]))
-                                           # self._adjust_segment_for_robot_radius(segment), Point(target[0], target[1]))
-            print(segment, score)
-            print()
-            if score > best_score:
-                best_score = score
-                best_move = segment.coords[1]
-        
+        # print()
+        # print("---------------------------------")
+        # print()
+        sf = 1
 
+        while best_score < 0 and sf > 0.001:
+            for ang, vel_scale in product(DynamicWindowPlanner.DIRECTIONS, [sf]): #i/10 for i in range(1,11)
+                segment = self._get_motion_segment((start_x, start_y), velocity, delta_vel*vel_scale, ang)
+                # Evaluate this segment, avoiding obstalces 
+                score = self._evaluate_segment(friendly_robot_id, segment, Point(target[0], target[1]))
+                                            # self._adjust_segment_for_robot_radius(segment), Point(target[0], target[1]))
+                print(segment, score)
+                # print()
+                if score > best_score:
+                    best_score = score
+                    best_move = segment.coords[1]
+            
+            sf /= 2
+            print(best_score, sf)
+        print("MOVING", best_move)
         return best_move
 
     def _get_obstacles(self, robot_id):
@@ -267,42 +271,56 @@ class DynamicWindowPlanner:
         endX, endY = segment.coords[1]
         startX, startY = segment.coords[0]
         new = Point(startX + (endX - startX) / norm * 18, startY + (endY - startY) / norm * 18)
-
         return LineString([segment.coords[0], new]) 
+
+    def obstacle_penalty_function(self, x):
+        # return (0.035 / (x - 0.18)) + 0.03/x
+        return exp(-8 * (x - 0.18))    
+
+    def target_closeness_function(self, x):
+        return 4 * exp(-8 * x)
 
     def _evaluate_segment(self, robot_id: int, segment: LineString, target: Point) -> float:
         """Evaluate line segment; bigger score is better"""
         target_factor = target.distance(Point(segment.coords[0])) - target.distance(Point(segment.coords[1]))
+        our_velocity_vector = (segment.coords[1][0] - segment.coords[0][0]) / self.SIMULATED_TIMESTEP, (segment.coords[1][1] - segment.coords[0][1]) / self.SIMULATED_TIMESTEP
+        if our_velocity_vector is None:
+            our_velocity_vector = (0, 0)
+        
+        our_position = self._game.get_robot_pos(self._friendly_colour == Colour.YELLOW, robot_id)
 
-        min_time = float("inf")
-        for r in self._get_obstacles(robot_id):
-            our_velocity_vector = self._game.get_object_velocity(GameRobot(self._friendly_colour, robot_id))
-            if our_velocity_vector is None:
-                # print("IS NOEN")
-                our_velocity_vector = (0, 0)
-            
+        obstacle_factor = 0
+
+        for r in self._get_obstacles(robot_id):            
             their_velocity_vector = self._game.get_object_velocity(GameRobot(self._friendly_colour if r.is_friendly else Colour.invert(self._friendly_colour), r.id))
+            # print(our_velocity_vector, their_velocity_vector)
+
             if their_velocity_vector is None:
-                # print("IS NOOOONE")
-                their_velocity_vector = (0,0 )
+                their_velocity_vector = (0, 0)
 
-            rel_velocity = Point((our_velocity_vector[0] - their_velocity_vector[0]), (our_velocity_vector[1] - their_velocity_vector[1]))
-            norm_speed = rel_velocity.distance(Point(0, 0))
+            their_position = (r.x, r.y)
+            # print("O/T pos", our_position, their_position)
 
+            diff_v_x = our_velocity_vector[0] - their_velocity_vector[0]
+            diff_p_x = our_position[0] - their_position[0]
+            diff_v_y = our_velocity_vector[1] - their_velocity_vector[1]
+            diff_p_y = our_position[1] - their_position[1]
+            # print("POSN", their_position)
+            # print(f"DIFF {diff_p_x} {diff_v_x} {diff_p_y} {diff_v_y}")
 
-            if norm_speed != 0:
-                obstacle_path = LineString([Point(r.x, r.y), Point(r.x + rel_velocity.x / norm_speed * 18, r.y + rel_velocity.y / norm_speed * 18)])
-                intersection = self.make_inf_long(segment).intersection(obstacle_path)
-                # intersection = segment.intersection(obstacle_path)
-                if not intersection.is_empty:
-                    distance = intersection.distance(Point(r.x, r.y))
-                    time = distance / norm_speed
-                    min_time = min(min_time, time)
-                print("OBSTACLE", obstacle_path, "SEGMENT", segment, self.make_inf_long(segment))
+            if (denom := (diff_v_x * diff_v_x + diff_v_y * diff_v_y)) != 0:
+                t = (-diff_v_x * diff_p_x - diff_v_y * diff_p_y) / denom
+                # print("NUM", (-diff_v_x * diff_p_x - diff_v_y * diff_p_y))
+                # print("DENOM", denom)
+                # print("TIME", t)
+                if t > 0:
+                    d_sq = (diff_p_x + t * diff_v_x) ** 2 + (diff_p_y + t * diff_v_y) ** 2
+                    # print("D_SQ", d_sq)
+                    # print("OBS FACt", self.exp_decay(t) * self.exp_decay(d_sq))
+                    obstacle_factor = max(obstacle_factor,  self.obstacle_penalty_function(d_sq)) # self.exp_decay(d_sq)) # self.exp_decay(t) * self.exp_decay(d_sq))
 
-        obstacle_factor = 20 * exp(-0.5*(min_time))
-        score = target_factor - obstacle_factor
-        print("FACT", target_factor, obstacle_factor, min_time, score, segment)
+        score = 5 * target_factor - obstacle_factor + self.target_closeness_function(target.distance(segment)) # Point(segment.coords[1])# - 2 * target.distance(Point(segment.coords[1])) + 
+        print("FACT", target_factor, obstacle_factor, score, segment)
         return score
 
         # # Distance travelled towards target by this segment
