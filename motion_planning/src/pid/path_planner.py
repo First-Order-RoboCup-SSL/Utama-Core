@@ -33,28 +33,59 @@ Test with motion
 Slow motion and never gets there.
 """
 
-N_DIRECTIONS = 16
-class DynamicWindowPlanner:
-    SIMULATED_TIMESTEP = 0.2 # seconds
-    MAX_ACCELERATION = 2 # Measured in ms^2
-    DIRECTIONS = [i * 2 * pi / N_DIRECTIONS for i in range(N_DIRECTIONS)]
-    OBSTACLE_RADIUS = 0.1 # in metres
-    SAFE_OBSTACLES_RADIUS = 0.25
-    ROBOT_RADIUS = 0.1
 
+def point_to_tuple(point: Point) -> tuple:
+    """
+    Convert a Shapely 2D Point into a tuple of (x, y).
+    
+    Args:
+        point (Point): A Shapely Point object.
+    
+    Returns:
+        tuple: A tuple (x, y) representing the coordinates of the point.
+    """
+    return (point.x, point.y)
 
-    def point_to_tuple(self, point: Point) -> tuple:
-        """
-        Convert a Shapely 2D Point into a tuple of (x, y).
+def smooth_path(points: List[Tuple[float, float]], smoothing_factor: float = 0.1) -> List[Tuple[float, float]]:
+    """
+    Smooth a path using a simple moving average.
+    
+    Args:
+        points (List[Tuple[float, float]]): A list of 2D points representing the path.
+        smoothing_factor (float): A parameter to control the amount of smoothing.
         
-        Args:
-            point (Point): A Shapely Point object.
-        
-        Returns:
-            tuple: A tuple (x, y) representing the coordinates of the point.
-        """
-        return (point.x, point.y)
+    Returns:
+        List[Tuple[float, float]]: A list of 2D points representing the smoothed path.
+    """
+    if len(points) < 3:
+        return points
 
+    smoothed_points = []
+    window_size = max(2, int(smoothing_factor * len(points)))
+
+    for i in range(len(points)):
+        start = max(0, i - window_size)
+        end = min(len(points), i + window_size)
+        window = points[start:end]
+        avg_x = sum(p[0] for p in window) / len(window)
+        avg_y = sum(p[1] for p in window) / len(window)
+        smoothed_points.append((avg_x, avg_y))
+    
+    # Reduce points that are less than 1 unit away from each other
+    reduced_points = [smoothed_points[0]]
+    for point in smoothed_points[1:]:
+        if dist(reduced_points[-1], point) >= 1:
+            reduced_points.append(point)
+
+    # Further reduce points by checking line of sight
+    final_points = [reduced_points[0]]
+    for i in range(1, len(reduced_points)):
+        if i == len(reduced_points) - 1 or not LineString([final_points[-1], reduced_points[i + 1]]).is_simple:
+            final_points.append(reduced_points[i])
+
+    return final_points
+
+class RRTPlanner:
     def __init__(self, game: Game):
         self._game = game
         self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue
@@ -71,9 +102,8 @@ class DynamicWindowPlanner:
         return closest
     
     def _adjust_segment_for_robot_radius(self, seg: LineString) -> LineString:
-        current_robot_seg_interect = seg.interpolate(self.ROBOT_RADIUS)
+        current_robot_seg_interect = seg.interpolate(ROBOT_RADIUS)
         return LineString([current_robot_seg_interect, seg.interpolate(1, normalized=True)])
-             
 
     def rrt_path_to(self, friendly_robot_id: int, target: Tuple[float, float], max_iterations: int = 10000) -> Optional[List[Point]]:
         """
@@ -151,24 +181,24 @@ class DynamicWindowPlanner:
                 current_point = parent_map[current_point]
 
             path = path[::-1]
-            compressed_path = [path[0], path[1]]
-
-            while len(path) > 2:
-                collision = False
-                segment = LineString([compressed_path[-1], path[1]])
-                closest_distance = self._closest_obstacle(friendly_robot_id, segment)
-
-                if collision or closest_distance < self.SAFE_OBSTACLES_RADIUS or segment.length > 4:
-                    compressed_path.append(path[0])
-
-                path.pop(0)
-
-            compressed_path.extend(path)
-            return compressed_path
+            return smooth_path(path)
 
         else:
             # No good enough path found
             return None
+
+
+
+N_DIRECTIONS = 16
+class DynamicWindowPlanner:
+    SIMULATED_TIMESTEP = 0.2 # seconds
+    MAX_ACCELERATION = 2 # Measured in ms^2
+    DIRECTIONS = [i * 2 * pi / N_DIRECTIONS for i in range(N_DIRECTIONS)]
+    ROBOT_RADIUS = 0.1
+
+    def __init__(self, game: Game):
+        self._game = game
+        self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue    
 
     def path_to(self, friendly_robot_id: int, target: Tuple[float, float]) -> Tuple[float, float]:
         """
@@ -191,8 +221,6 @@ class DynamicWindowPlanner:
             return target
         
         return self.local_planning(friendly_robot_id, target)
-
-
     
     def local_planning(self, friendly_robot_id: int, target: Tuple[float, float]):
         velocity = self._game.get_object_velocity(GameRobot(self._friendly_colour, friendly_robot_id))
@@ -282,7 +310,6 @@ class DynamicWindowPlanner:
         score = 5 * target_factor - obstacle_factor + self.target_closeness_function(target.distance(segment))
         return score
 
-                
     def _get_motion_segment(self, rpos: Tuple[float, float], rvel: Tuple[float, float], delta_vel: float, ang: float) -> LineString:
         adj_vel_y = rvel[1]*DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel*sin(ang)
         adj_vel_x = rvel[0]*DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel*cos(ang)
