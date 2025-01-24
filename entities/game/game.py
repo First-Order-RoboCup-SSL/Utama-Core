@@ -128,12 +128,6 @@ class Game:
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
         if isinstance(frame_data, FrameData):
-            ### TODO: when stripping all the Nones from the frame if only robot id: 1 is detected in the frame dosen't have placeholders with ###
-
-            # Need to trim number of robots in frame to number we expect (num_friendly, num_enemy)
-            # yellow_robot_data = [i for i in frame_data.yellow_robots if i is not None]
-            # blue_robot_data = [i for i in frame_data.blue_robots if i is not None]
-
             # if self.my_team_is_yellow:
             #     if len(yellow_robot_data) != len(self._friendly_robots):
             #         logger.warning(f"Expected data for {len(self.friendly_robots)} friendly robots but found {len(yellow_robot_data)} in frame")
@@ -147,14 +141,15 @@ class Game:
             #     if len(blue_robot_data) != len(self._friendly_robots):
             #         logger.warning(f"Expected data for {len(self._friendly_robots)} friendly (blue) robots but found {len(blue_robot_data)} in frame")
 
-            # stripped_frame_data = FrameData(
-            #     frame_data.ts, yellow_robot_data, blue_robot_data, frame_data.ball
-            # )
-            self._records.append(frame_data)
+            # Trims number of robots in frame to number we expect (num_friendly, num_enemy) currently done to 6
+            stripped_frame_data = FrameData(
+                frame_data.ts, frame_data.yellow_robots[:-5], frame_data.blue_robots[:-5], frame_data.ball[:-10]
+            )
+            self._records.append(stripped_frame_data)
             self._predicted_next_frame = self._reorganise_frame(
                 self.predict_frame_after(TIMESTEP)
             )
-            self._update_data(frame_data)
+            self._update_data(stripped_frame_data)
         else:
             raise ValueError("Invalid frame data.")
 
@@ -421,7 +416,7 @@ class Game:
         previous_pos = self._get_object_position_at_frame(frame - 1, object)
         current_pos = self._get_object_position_at_frame(frame, object)
         
-        if current_pos is None and previous_pos is None:
+        if current_pos is None or previous_pos is None:
             logger.warning("No position data to calculate velocity for frame %d", frame)
             return None
 
@@ -471,7 +466,7 @@ class Game:
                     averageVelocity[0] += curr_vel[0]
                     averageVelocity[1] += curr_vel[1]
                 elif missing_velocities == WINDOW - 1:
-                    logging.warning(f"No velocity data to calculate acceleration for frame{len(self._records) - j}")
+                    logging.warning(f"No velocity data to calculate acceleration for frame {len(self._records) - j}")
                     return None
                 else:
                     missing_velocities += 1
