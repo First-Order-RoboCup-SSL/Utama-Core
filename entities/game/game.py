@@ -420,9 +420,10 @@ class Game:
 
         previous_pos = self._get_object_position_at_frame(frame - 1, object)
         current_pos = self._get_object_position_at_frame(frame, object)
-
-        assert previous_pos is not None
-        assert current_pos is not None
+        
+        if current_pos is None and previous_pos is None:
+            logger.warning("No position data to calculate velocity for frame %d", frame)
+            return None
 
         previous_time_received = previous_frame.ts
         time_received = current_frame.ts
@@ -437,7 +438,7 @@ class Game:
             return None
 
         dt_secs = time_received - previous_time_received
-
+        
         vx = (current_pos.x - previous_pos.x) / dt_secs
         vy = (current_pos.y - previous_pos.y) / dt_secs
 
@@ -469,6 +470,9 @@ class Game:
                 if curr_vel:
                     averageVelocity[0] += curr_vel[0]
                     averageVelocity[1] += curr_vel[1]
+                elif missing_velocities == WINDOW - 1:
+                    logging.warning(f"No velocity data to calculate acceleration for frame{len(self._records) - j}")
+                    return None
                 else:
                     missing_velocities += 1
 
