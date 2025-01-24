@@ -143,7 +143,7 @@ class Game:
 
             # Trims number of robots in frame to number we expect (num_friendly, num_enemy) currently done to 6
             stripped_frame_data = FrameData(
-                frame_data.ts, frame_data.yellow_robots[:-5], frame_data.blue_robots[:-5], frame_data.ball[:-10]
+                frame_data.ts, frame_data.yellow_robots, frame_data.blue_robots, frame_data.ball
             )
             self._records.append(stripped_frame_data)
             self._predicted_next_frame = self._reorganise_frame(

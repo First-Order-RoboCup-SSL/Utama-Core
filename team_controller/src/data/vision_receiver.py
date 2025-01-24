@@ -118,7 +118,7 @@ class VisionDataReceiver(BaseReceiver):
         avg_yellows = list(map(self._avg_robots, yellow_captured))
         avg_blues = list(map(self._avg_robots, blue_captured))
         avg_balls = list(map(self._avg_balls, ball_captured))
-        return FrameData(ts, avg_yellows, avg_blues, avg_balls)
+        return FrameData(ts, avg_yellows[:-5], avg_blues[:-5], avg_balls[:-10])
 
     def _update_ball_pos(self, detection: object) -> None:
 
