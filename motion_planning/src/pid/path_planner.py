@@ -1,3 +1,4 @@
+from pickle import STOP
 from typing import Tuple, Union, Optional, List
 
 from entities.game import Game
@@ -9,6 +10,8 @@ import random
 from shapely import Point, LineString
 
 from robot_control.src.find_best_shot import ROBOT_RADIUS 
+
+ROBOT_DIAMETER = 0.2
 
 """
 TODO - RRT is too slow and not adaptive enough,
@@ -86,6 +89,8 @@ def smooth_path(points: List[Tuple[float, float]], smoothing_factor: float = 0.1
     return final_points
 
 class RRTPlanner:
+    SAFE_OBSTACLES_RADIUS = 0.5
+    STOPPING_DISTANCE = 0.2
     def __init__(self, game: Game):
         self._game = game
         self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue
@@ -105,7 +110,7 @@ class RRTPlanner:
         current_robot_seg_interect = seg.interpolate(ROBOT_RADIUS)
         return LineString([current_robot_seg_interect, seg.interpolate(1, normalized=True)])
 
-    def rrt_path_to(self, friendly_robot_id: int, target: Tuple[float, float], max_iterations: int = 10000) -> Optional[List[Point]]:
+    def path_to(self, friendly_robot_id: int, target: Tuple[float, float], max_iterations: int = 10000) -> Optional[List[Point]]:
         """
         Generate a path to the target using the Rapidly-exploring Random Tree (RRT) algorithm.
         
@@ -124,7 +129,6 @@ class RRTPlanner:
         robot = self._game.friendly_robots[friendly_robot_id]
         start = Point(robot.x, robot.y)
         goal = Point(target[0], target[1])
-        ROBOT_DIAMETER = 0.2
 
         # Check if path is even possible, if target is inside, just do start
         if self._closest_obstacle(friendly_robot_id, goal) < ROBOT_DIAMETER / 2:
@@ -163,7 +167,7 @@ class RRTPlanner:
                 continue
 
             # Check if the new point is close enough to the goal to stop
-            if adjusted_new_segment.distance(goal) < 0.3:
+            if adjusted_new_segment.distance(goal) < self.STOPPING_DISTANCE:
                 parent_map[random_point] = closest_point
                 path_found = True
                 break
