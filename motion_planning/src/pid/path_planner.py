@@ -127,7 +127,7 @@ class DynamicWindowPlanner:
             # Find the closest point in the tree
             closest_point = min(parent_map.keys(), key=lambda p: p.distance(random_point))
             new_segment = LineString([closest_point, random_point])
-            random_point = new_segment.interpolate(0.15)
+            random_point = new_segment.interpolate(0.1)
             new_segment = LineString([closest_point, random_point])
             adjusted_new_segment = self._adjust_segment_for_robot_radius(new_segment)
 
@@ -185,45 +185,14 @@ class DynamicWindowPlanner:
         Returns:
             Tuple[float, float]: The next waypoint coordinates (x, y) or the target if already reached.
         """
-        # robot: Robot = self._game.friendly_robots[friendly_robot_id]
+        robot: Robot = self._game.friendly_robots[friendly_robot_id]
 
-        # start_x, start_y = robot.x, robot.y
+        start_x, start_y = robot.x, robot.y
 
-        # if dist((start_x, start_y), target) < 0.4:
-        #     return target
+        if dist((start_x, start_y), target) < 1.5*ROBOT_RADIUS:
+            return target
         
         return self.local_planning(friendly_robot_id, target)
-
-        # robot: Robot = self._game.friendly_robots[friendly_robot_id]
-
-        # start_x, start_y = robot.x, robot.y
-        # if dist((start_x, start_y), target) <= self.SAFE_OBSTACLES_RADIUS:
-            
-        #     return target
-        # if target == self.target:
-        #     if self.waypoints is None:
-        #         print("NO PATH FOUND!!!!")
-        #         return start_x, start_y
-        #     elif not self.waypoints:
-        #         return target
-            
-        #     if dist((start_x, start_y), self.waypoints[0]) <= 0.4:
-        #         return self.waypoints.pop(0)
-        #     else:
-        #         return self.waypoints[0]
-        # else:
-        #     self.target = target
-
-        #     rrt_path = self.rrt_path_to(friendly_robot_id, target)
-        #     if rrt_path is None:
-        #         print("NO PATH FOUND!!!!")
-        #         return start_x, start_y
-        #     self.waypoints = list(map(self.point_to_tuple, rrt_path))
-            
-        #     if dist((start_x, start_y), self.waypoints[0]) <= 0.4:
-        #         return self.waypoints.pop(0)
-        #     else:
-        #         return self.waypoints[0]
 
 
     
@@ -252,15 +221,15 @@ class DynamicWindowPlanner:
                 # Evaluate this segment, avoiding obstalces 
                 score = self._evaluate_segment(friendly_robot_id, segment, Point(target[0], target[1]))
                                             # self._adjust_segment_for_robot_radius(segment), Point(target[0], target[1]))
-                print(segment, score)
+                # print(segment, score)
                 # print()
                 if score > best_score:
                     best_score = score
                     best_move = segment.coords[1]
             
             sf /= 2
-            print(best_score, sf)
-        print("MOVING", best_move)
+            # print(best_score, sf)
+        # print("MOVING", best_move)
         return best_move
 
     def _get_obstacles(self, robot_id):
@@ -275,7 +244,7 @@ class DynamicWindowPlanner:
 
     def obstacle_penalty_function(self, x):
         # return (0.035 / (x - 0.18)) + 0.03/x
-        return exp(-8 * (x - 0.18))    
+        return exp(-8 * (x - 0.22))    
 
     def target_closeness_function(self, x):
         return 4 * exp(-8 * x)
@@ -320,7 +289,7 @@ class DynamicWindowPlanner:
                     obstacle_factor = max(obstacle_factor,  self.obstacle_penalty_function(d_sq)) # self.exp_decay(d_sq)) # self.exp_decay(t) * self.exp_decay(d_sq))
 
         score = 5 * target_factor - obstacle_factor + self.target_closeness_function(target.distance(segment)) # Point(segment.coords[1])# - 2 * target.distance(Point(segment.coords[1])) + 
-        print("FACT", target_factor, obstacle_factor, score, segment)
+        # print("FACT", target_factor, obstacle_factor, score, segment)
         return score
 
         # # Distance travelled towards target by this segment
