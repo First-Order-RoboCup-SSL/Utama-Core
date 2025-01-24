@@ -87,44 +87,26 @@ def test_pathfinding(headless: bool, moving: bool):
             target = targets.pop(0)
 
 
-            # randomly_spawn_robots(env, True, [mover_id])
-            # randomly_spawn_robots(env, False, [])
+            randomly_spawn_robots(env, True, [mover_id])
+            randomly_spawn_robots(env, False, [])
 
-            env.draw_point(target[0], target[1], width=10, color="PINK")
             pid_oren.reset(mover_id)
             pid_2d.reset(mover_id)
 
-        for x in planner.par.keys():
-            if planner.par[x] is not None:
-                env.draw_line([planner.point_to_tuple(x), planner.point_to_tuple(planner.par[x])], color="BLUE", width=3)
-                
-        for i in range(len(planner.waypoints)-1):
-            a,b = planner.waypoints[i], planner.waypoints[i+1]
-            env.draw_line([a,b], width=3, color="PINK")
-        if len(planner.waypoints) == 1:
-            env.draw_line([(r.x, r.y), planner.waypoints[0]], color="PINK", width=3)
         cmd = go_to_point(pid_oren, pid_2d, friendly_robots[mover_id], mover_id, next_stop, face_ball((r.x, r.y), next_stop))
         sim_robot_controller.add_robot_commands(cmd, mover_id)
-        # time.sleep(2)
 
-        # if moving:
-        #     if i % 50 == 0:
-        #         ba_targets = [(random.uniform(-4.5, 4.5), random.uniform(-2.25, 2.25)) for _ in range(6)]
-        #     cmd_dict = {}
-        #     for i in range(6):
-        #         if i != mover_id:
-
-        #             cmd_dict[i] = go_to_point(pid_oren, pid_2d, friendly_robots[i], i,ba_targets[i], None)
-        #     sim_robot_controller.add_robot_commands(cmd_dict)
-        
-
-        # # moving up:
         if moving:
+            if i % 50 == 0:
+                ba_targets = [(random.uniform(-4.5, 4.5), random.uniform(-2.25, 2.25)) for _ in range(6)]
             cmd_dict = {}
-            for (robot_id, posn) in calculate_wall_posns(0.5, 1, [mover_id], True, 2.2):  
-                cmd_dict[robot_id] = go_to_point(pid_oren, pid_2d, friendly_robots[robot_id], robot_id, posn, None)
-            
-            sim_robot_controller.add_robot_commands(cmd_dict)        
+            for i in range(6):
+                if i != mover_id:
+
+                    cmd_dict[i] = go_to_point(pid_oren, pid_2d, friendly_robots[i], i,ba_targets[i], None)
+            sim_robot_controller.add_robot_commands(cmd_dict)
+        
+       
         sim_robot_controller.send_robot_commands()
 
 def calculate_wall_posns(x, y, safe_robots: List[int], horizontal: bool, spread_factor: int):
@@ -143,6 +125,6 @@ def randomly_spawn_robots(env: SSLStandardEnv, is_team_yellow: bool, safe_robots
 
 if __name__ == "__main__":
     try:
-        test_pathfinding(False, False)
+        test_pathfinding(False, True)
     except KeyboardInterrupt:
         print("Exiting...")
