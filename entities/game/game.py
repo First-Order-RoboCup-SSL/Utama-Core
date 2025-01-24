@@ -106,7 +106,9 @@ class Game:
     @ball.setter
     # TODO: can always make a "setter" which copies the object and returns a new object with the changed value
     def ball(self, value: BallData):
-        self._ball.ball_data = value
+        # Temporary fix for when the ball is None
+        if value is not None:
+            self._ball.ball_data = value
 
     def is_ball_in_goal(self, our_side: bool):
         ball_pos = self.get_ball_pos()[0]
