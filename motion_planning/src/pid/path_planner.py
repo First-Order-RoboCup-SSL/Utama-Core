@@ -4,6 +4,7 @@ from typing import Tuple, Union, Optional, List
 from entities.game import Game
 from entities.game.game_object import Colour, Robot as GameRobot
 from entities.game.robot import Robot
+from entities.game.field import Field
 from math import sin, cos, pi
 from math import dist, exp
 import random
@@ -89,8 +90,15 @@ def smooth_path(points: List[Tuple[float, float]], smoothing_factor: float = 0.1
     return final_points
 
 class RRTPlanner:
-    SAFE_OBSTACLES_RADIUS = 0.5
+    # Clearance radius in metres we want for obstacles
+    SAFE_OBSTACLES_RADIUS = 0.4
+    # When the tree is this far in metres from the goal we declare it a success
     STOPPING_DISTANCE = 0.2
+    # 0 <= EXPLORE_BIAS <= 1, the higher the more likely to explore, otherwise we try going directly to the goal
+    EXPLORE_BIAS = 0.3
+    # How much the tree grows each step in metres
+    STEP_SIZE = 0.1
+    
     def __init__(self, game: Game):
         self._game = game
         self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue
@@ -145,29 +153,29 @@ class RRTPlanner:
         if self._closest_obstacle(friendly_robot_id, adjusted_direct_path) > self.SAFE_OBSTACLES_RADIUS:
             return [goal]
 
-        explore_bias = 0.3
+        
         # Initialize the tree with the start point
         parent_map = {start: None}
         path_found = False
 
         for _ in range(max_iterations):
-            if random.random() < explore_bias:
-                random_point = Point(random.uniform(-4.4, 4.4), random.uniform(-2.15, 2.15))
+            if random.random() < RRTPlanner.EXPLORE_BIAS:
+                random_point = Point(random.uniform(-Field.HALF_LENGTH + ROBOT_RADIUS, Field.HALF_LENGTH - ROBOT_RADIUS), random.uniform(-Field.HALF_LENGTH + ROBOT_RADIUS, Field.HALF_LENGTH - ROBOT_RADIUS))
             else:
                 random_point = goal
 
             # Find the closest point in the tree
             closest_point = min(parent_map.keys(), key=lambda p: p.distance(random_point))
             new_segment = LineString([closest_point, random_point])
-            random_point = new_segment.interpolate(0.1)
+            random_point = new_segment.interpolate(RRTPlanner.STEP_SIZE)
             new_segment = LineString([closest_point, random_point])
             adjusted_new_segment = self._adjust_segment_for_robot_radius(new_segment)
 
-            if self._closest_obstacle(friendly_robot_id, adjusted_new_segment) < self.SAFE_OBSTACLES_RADIUS:
+            if self._closest_obstacle(friendly_robot_id, adjusted_new_segment) < RRTPlanner.SAFE_OBSTACLES_RADIUS:
                 continue
 
             # Check if the new point is close enough to the goal to stop
-            if adjusted_new_segment.distance(goal) < self.STOPPING_DISTANCE:
+            if adjusted_new_segment.distance(goal) < RRTPlanner.STOPPING_DISTANCE:
                 parent_map[random_point] = closest_point
                 path_found = True
                 break

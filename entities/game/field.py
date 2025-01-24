@@ -4,12 +4,14 @@ from shapely.geometry import Point
 
 
 class Field:
-    def __init__(self): # TODO: Make these static
-        self.HALF_LENGTH = 4.5  # x value
-        self.HALF_WIDTH = 3  # y value
-        self.HALF_GOAL_WIDTH = 0.5
-        self.HALF_DEFENSE_AREA_LENGTH = 0.5
-        self.HALF_DEFENSE_AREA_WIDTH = 1
+    HALF_LENGTH = 4.5  # x value
+    HALF_WIDTH = 3  # y value
+    HALF_GOAL_WIDTH = 0.5
+    HALF_DEFENSE_AREA_LENGTH = 0.5
+    HALF_DEFENSE_AREA_WIDTH = 1
+
+    def __init__(self):
+
         self.YELLOW_GOAL_LINE = LineString(
             [
                 (self.HALF_LENGTH, self.HALF_GOAL_WIDTH),
