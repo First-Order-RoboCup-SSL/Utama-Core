@@ -141,15 +141,11 @@ class Game:
             #     if len(blue_robot_data) != len(self._friendly_robots):
             #         logger.warning(f"Expected data for {len(self._friendly_robots)} friendly (blue) robots but found {len(blue_robot_data)} in frame")
 
-            # Trims number of robots in frame to number we expect (num_friendly, num_enemy) currently done to 6
-            stripped_frame_data = FrameData(
-                frame_data.ts, frame_data.yellow_robots, frame_data.blue_robots, frame_data.ball
-            )
-            self._records.append(stripped_frame_data)
+            self._records.append(frame_data)
             self._predicted_next_frame = self._reorganise_frame(
                 self.predict_frame_after(TIMESTEP)
             )
-            self._update_data(stripped_frame_data)
+            self._update_data(frame_data)
         else:
             raise ValueError("Invalid frame data.")
 
