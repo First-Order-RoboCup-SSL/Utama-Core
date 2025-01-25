@@ -76,18 +76,18 @@ def smooth_path(points: List[Tuple[float, float]], smoothing_factor: float = 0.1
         smoothed_points.append((avg_x, avg_y))
     
     # Reduce points that are less than 1 unit away from each other
-    reduced_points = [smoothed_points[0]]
-    for point in smoothed_points[1:]:
-        if dist(reduced_points[-1], point) >= 1:
-            reduced_points.append(point)
+    # reduced_points = [smoothed_points[0]]
+    # for point in smoothed_points[1:]:
+    #     if dist(reduced_points[-1], point) >= 1:
+    #         reduced_points.append(point)
 
-    # Further reduce points by checking line of sight
-    final_points = [reduced_points[0]]
-    for i in range(1, len(reduced_points)):
-        if i == len(reduced_points) - 1 or not LineString([final_points[-1], reduced_points[i + 1]]).is_simple:
-            final_points.append(reduced_points[i])
+    # # Further reduce points by checking line of sight
+    # final_points = [reduced_points[0]]
+    # for i in range(1, len(reduced_points)):
+    #     if i == len(reduced_points) - 1 or not LineString([final_points[-1], reduced_points[i + 1]]).is_simple:
+    #         final_points.append(reduced_points[i])
 
-    return final_points
+    return smoothed_points
 
 class RRTPlanner:
     # Clearance radius in metres we want for obstacles
@@ -97,7 +97,7 @@ class RRTPlanner:
     # 0 <= EXPLORE_BIAS <= 1, the higher the more likely to explore, otherwise we try going directly to the goal
     EXPLORE_BIAS = 0.3
     # How much the tree grows each step in metres
-    STEP_SIZE = 0.1
+    STEP_SIZE = 0.25
     
     def __init__(self, game: Game):
         self._game = game
@@ -105,6 +105,9 @@ class RRTPlanner:
         self.target = None
         self.waypoints = []
         self.par = dict()
+
+    def _get_obstacles(self, robot_id):
+        return self._game.friendly_robots[:robot_id] + self._game.friendly_robots[robot_id+1:] + self._game.enemy_robots
 
     def _closest_obstacle(self, robot_id: int, pos: Union[Point,LineString]) -> float:
         closest = float("inf")
@@ -141,17 +144,17 @@ class RRTPlanner:
         # Check if path is even possible, if target is inside, just do start
         if self._closest_obstacle(friendly_robot_id, goal) < ROBOT_DIAMETER / 2:
             print(f"Path to target {target} is impossible due to an obstacle being too close.")
-            return [start]
+            return [point_to_tuple(start)]
 
         # Already there - no work to do
         if start.distance(goal) < ROBOT_DIAMETER / 2:
-            return [goal]
+            return [point_to_tuple(goal)]
 
         # See if we can straight line it
         direct_path = LineString([start, goal])
         adjusted_direct_path = self._adjust_segment_for_robot_radius(direct_path)
         if self._closest_obstacle(friendly_robot_id, adjusted_direct_path) > self.SAFE_OBSTACLES_RADIUS:
-            return [goal]
+            return [point_to_tuple(goal)]
 
         
         # Initialize the tree with the start point
@@ -159,6 +162,8 @@ class RRTPlanner:
         path_found = False
 
         for _ in range(max_iterations):
+            if _ % 100 == 0:
+                print(_)
             if random.random() < RRTPlanner.EXPLORE_BIAS:
                 random_point = Point(random.uniform(-Field.HALF_LENGTH + ROBOT_RADIUS, Field.HALF_LENGTH - ROBOT_RADIUS), random.uniform(-Field.HALF_LENGTH + ROBOT_RADIUS, Field.HALF_LENGTH - ROBOT_RADIUS))
             else:
@@ -171,7 +176,7 @@ class RRTPlanner:
             new_segment = LineString([closest_point, random_point])
             adjusted_new_segment = self._adjust_segment_for_robot_radius(new_segment)
 
-            if self._closest_obstacle(friendly_robot_id, adjusted_new_segment) < RRTPlanner.SAFE_OBSTACLES_RADIUS:
+            if self._closest_obstacle(friendly_robot_id, adjusted_new_segment) < self.SAFE_OBSTACLES_RADIUS:
                 continue
 
             # Check if the new point is close enough to the goal to stop
@@ -193,10 +198,12 @@ class RRTPlanner:
                 current_point = parent_map[current_point]
 
             path = path[::-1]
-            return smooth_path(path)
+            # return list(map(point_to_tuple, path)) + [point_to_tuple(goal)]
+            return smooth_path(list(map(point_to_tuple, path))) + [point_to_tuple(goal)]
 
         else:
             # No good enough path found
+            self.par = parent_map
             return None
 
 

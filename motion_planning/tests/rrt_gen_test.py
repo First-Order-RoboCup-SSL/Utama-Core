@@ -3,8 +3,9 @@ import os
 from typing import List
 import numpy as np
 import pytest
+from shapely import Point
 from entities.game.game_object import Colour, GameObject, Robot as GameRobot
-
+from motion_planning.src.pid.path_planner import point_to_tuple
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from robot_control.src.skills import (
     get_goal_centre,
@@ -24,7 +25,7 @@ from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
-from motion_planning.src.pid.path_planner import DynamicWindowPlanner
+from motion_planning.src.pid.path_planner import DynamicWindowPlanner, RRTPlanner
 from robot_control.src.find_best_shot import ROBOT_RADIUS 
 import random
 import logging
@@ -41,7 +42,7 @@ def test_pathfinding(headless: bool, moving: bool):
     N_ROBOTS_YELLOW = 6
     N_ROBOTS_BLUE = 6
 
-
+    random.seed(0)
     env = SSLStandardEnv(
         n_robots_blue=N_ROBOTS_BLUE,
         n_robots_yellow=N_ROBOTS_YELLOW,
@@ -52,7 +53,6 @@ def test_pathfinding(headless: bool, moving: bool):
     mover_id = 1
 
     env.teleport_ball(2.25, -1)
-    env.teleport_robot(True, 3, 0, -5, -1)
 
     env.teleport_robot(True, mover_id, 3.5, 0)
 
@@ -63,31 +63,43 @@ def test_pathfinding(headless: bool, moving: bool):
         is_team_yellow=is_yellow, env=env, game_obj=game
     )
 
-    planner = DynamicWindowPlanner(game)
+    planner = RRTPlanner(game)
     targets = [(0,0)]+[(random.uniform(-4.5, 4.5), random.uniform(-2.25, 2.25)) for _ in range(1000)]
     target = targets.pop(0)
-    ba_targets = [(random.uniform(-4.5, 4.5), random.uniform(-2.25, 2.25)) for _ in range(6)]
 
     make_wall(env, True, 0.5, -1, [mover_id], False, 2.2)
-    # make_wall(env, True, 0.5, 0, [mover_id], False, 2.2)
+    waypoints = None
     for i in range(5000):
-        env.draw_point(target[0], target[1], width=10, color="GREEN")
-
-        velocity = game.get_object_velocity(GameRobot(True, mover_id))
-
-        next_stop = planner.path_to(mover_id, target)
-
         latest_frame = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
         if latest_frame:
             friendly_robots, _, _ = latest_frame  
         r = friendly_robots[mover_id]
-        if dist((r.x, r.y), target) < 0.05 and mag(velocity) < 0.2:
-            print("REACHED")
-            target = targets.pop(0)
+
+        env.draw_point(target[0], target[1], width=10, color="GREEN")
+
+        velocity = game.get_object_velocity(GameRobot(True, mover_id))
+
+        if waypoints is None:
+            waypoints = planner.path_to(mover_id, target)
 
 
-            # randomly_spawn_robots(env, True, [mover_id])
-            # randomly_spawn_robots(env, False, [])
+        if waypoints is None :
+            next_stop = r.x, r.y
+            print("NO PATH FOUND")
+        else:
+
+            next_stop = waypoints[0]
+            assert type(next_stop) != Point, waypoints
+
+
+
+        if dist((r.x, r.y), next_stop) < 0.4 and (velocity is None or mag(velocity) < 0.5):
+            if waypoints:
+                next_stop = waypoints.pop(0)
+                assert type(next_stop) != Point
+            if waypoints is not None and  len(waypoints) == 0:
+                target = targets.pop(0)
+                waypoints = None
 
             env.draw_point(target[0], target[1], width=10, color="PINK")
             pid_oren.reset(mover_id)
@@ -95,24 +107,20 @@ def test_pathfinding(headless: bool, moving: bool):
 
         for x in planner.par.keys():
             if planner.par[x] is not None:
-                env.draw_line([planner.point_to_tuple(x), planner.point_to_tuple(planner.par[x])], color="BLUE", width=3)
-                
-        for i in range(len(planner.waypoints)-1):
-            a,b = planner.waypoints[i], planner.waypoints[i+1]
-            env.draw_line([a,b], width=3, color="PINK")
-        if len(planner.waypoints) == 1:
-            env.draw_line([(r.x, r.y), planner.waypoints[0]], color="PINK", width=3)
+                env.draw_line([point_to_tuple(x), point_to_tuple(planner.par[x])], color="BLUE", width=3)
+
+        if waypoints is not None:
+            for i in range(len(waypoints)-1):
+                a,b =  waypoints[i], waypoints[i+1]
+                env.draw_line([a,b], width=3, color="PINK")
+            
+            if len(waypoints) == 1:
+                env.draw_line([(r.x, r.y), waypoints[0]], color="PINK", width=3)
+            
         cmd = go_to_point(pid_oren, pid_2d, friendly_robots[mover_id], mover_id, next_stop, face_ball((r.x, r.y), next_stop))
         sim_robot_controller.add_robot_commands(cmd, mover_id)
         # time.sleep(2)
-
-        # # moving up:
-        if moving:
-            cmd_dict = {}
-            for (robot_id, posn) in calculate_wall_posns(0.5, 1, [mover_id], True, 2.2):  
-                cmd_dict[robot_id] = go_to_point(pid_oren, pid_2d, friendly_robots[robot_id], robot_id, posn, None)
-            
-            sim_robot_controller.add_robot_commands(cmd_dict)        
+      
         sim_robot_controller.send_robot_commands()
 
 def calculate_wall_posns(x, y, safe_robots: List[int], horizontal: bool, spread_factor: int):
