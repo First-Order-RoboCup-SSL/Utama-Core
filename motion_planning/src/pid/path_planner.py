@@ -1,16 +1,11 @@
-from pickle import STOP
 from typing import Tuple, Union, Optional, List
-
 from entities.game import Game
 from entities.game.game_object import Colour, Robot as GameRobot
 from entities.game.robot import Robot
-from entities.game.field import Field
-from math import sin, cos, pi
-from math import dist, exp
+from math import sin, cos, pi, dist, exp
 import random
-from shapely import Point, LineString
-
-from robot_control.src.find_best_shot import ROBOT_RADIUS 
+from shapely.geometry import Point, LineString
+from robot_control.src.find_best_shot import ROBOT_RADIUS
 
 ROBOT_DIAMETER = 0.2
 
@@ -90,15 +85,13 @@ def smooth_path(points: List[Tuple[float, float]], smoothing_factor: float = 0.1
     return smoothed_points
 
 class RRTPlanner:
-    # Clearance radius in metres we want for obstacles
-    SAFE_OBSTACLES_RADIUS = 0.4
-    # When the tree is this far in metres from the goal we declare it a success
+    SAFE_OBSTACLES_RADIUS = 0.28
     STOPPING_DISTANCE = 0.2
-    # 0 <= EXPLORE_BIAS <= 1, the higher the more likely to explore, otherwise we try going directly to the goal
-    EXPLORE_BIAS = 0.3
-    # How much the tree grows each step in metres
+    EXPLORE_BIAS = 0.1
     STEP_SIZE = 0.25
-    
+    GOOD_ENOUGH_REL = 1.2
+    GOOD_ENOUGH_ABS = 1
+
     def __init__(self, game: Game):
         self._game = game
         self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue
@@ -109,103 +102,110 @@ class RRTPlanner:
     def _get_obstacles(self, robot_id):
         return self._game.friendly_robots[:robot_id] + self._game.friendly_robots[robot_id+1:] + self._game.enemy_robots
 
-    def _closest_obstacle(self, robot_id: int, pos: Union[Point,LineString]) -> float:
+    def _closest_obstacle(self, robot_id: int, pos: Union[Point, LineString]) -> float:
         closest = float("inf")
         for r in self._get_obstacles(robot_id):
             rpos = Point(r.x, r.y)
             closest = min(closest, rpos.distance(pos))
-
         return closest
-    
+
     def _adjust_segment_for_robot_radius(self, seg: LineString) -> LineString:
         current_robot_seg_interect = seg.interpolate(ROBOT_RADIUS)
         return LineString([current_robot_seg_interect, seg.interpolate(1, normalized=True)])
 
-    def path_to(self, friendly_robot_id: int, target: Tuple[float, float], max_iterations: int = 10000) -> Optional[List[Point]]:
+
+    def _propagate(self, parent_map, cost_map, parent):
+        for p in parent_map.keys():
+            if parent_map[p] == parent:
+                cost_map[p] = cost_map[parent] + p.distance(parent)
+                self._propagate(parent_map, cost_map, p)
+
+    def path_to(self, friendly_robot_id: int, target: Tuple[float, float], max_iterations: int = 1000) -> Optional[List[Tuple[float, float]]]:
         """
         Generate a path to the target using the Rapidly-exploring Random Tree (RRT) algorithm.
         
         Args:
             friendly_robot_id (int): The ID of the friendly robot.
             target (Tuple[float, float]): The target coordinates (x, y).
+            max_iterations (int): Maximum number of iterations for the RRT algorithm.
         
         Returns:
-            list: A list of waypoints (x, y) from the start to the target.
-        
-        The RRT algorithm works by randomly sampling points in the space and connecting them to the nearest existing point in the tree, 
-        ensuring that the path does not collide with any obstacles. If a path is found that reaches close enough to the target, 
-        the function returns the waypoints of the path.
+            Optional[List[Tuple[float, float]]]: A list of waypoints (x, y) from the start to the target.
         """
-        # Initial robot position
         robot = self._game.friendly_robots[friendly_robot_id]
         start = Point(robot.x, robot.y)
         goal = Point(target[0], target[1])
 
-        # Check if path is even possible, if target is inside, just do start
         if self._closest_obstacle(friendly_robot_id, goal) < ROBOT_DIAMETER / 2:
-            print(f"Path to target {target} is impossible due to an obstacle being too close.")
-            return [point_to_tuple(start)]
+            return [(start.x, start.y)]
 
-        # Already there - no work to do
         if start.distance(goal) < ROBOT_DIAMETER / 2:
-            return [point_to_tuple(goal)]
+            return [(goal.x, goal.y)]
 
-        # See if we can straight line it
         direct_path = LineString([start, goal])
         adjusted_direct_path = self._adjust_segment_for_robot_radius(direct_path)
-        if self._closest_obstacle(friendly_robot_id, adjusted_direct_path) > self.SAFE_OBSTACLES_RADIUS:
-            return [point_to_tuple(goal)]
+        if self._closest_obstacle(friendly_robot_id, adjusted_direct_path) > 3*self.SAFE_OBSTACLES_RADIUS:
+            return [(goal.x, goal.y)]
 
-        
-        # Initialize the tree with the start point
         parent_map = {start: None}
+        cost_map = {start: 0}
         path_found = False
 
         for _ in range(max_iterations):
-            if _ % 100 == 0:
-                print(_)
-            if random.random() < RRTPlanner.EXPLORE_BIAS:
-                random_point = Point(random.uniform(-Field.HALF_LENGTH + ROBOT_RADIUS, Field.HALF_LENGTH - ROBOT_RADIUS), random.uniform(-Field.HALF_LENGTH + ROBOT_RADIUS, Field.HALF_LENGTH - ROBOT_RADIUS))
+            if random.random() < self.EXPLORE_BIAS:
+                rand_point = Point(random.uniform(-4.4, 4.4), random.uniform(-3, 3))
             else:
-                random_point = goal
+                rand_point = Point(target[0], target[1])
+            
 
-            # Find the closest point in the tree
-            closest_point = min(parent_map.keys(), key=lambda p: p.distance(random_point))
-            new_segment = LineString([closest_point, random_point])
-            random_point = new_segment.interpolate(RRTPlanner.STEP_SIZE)
-            new_segment = LineString([closest_point, random_point])
-            adjusted_new_segment = self._adjust_segment_for_robot_radius(new_segment)
+            closest_point = min(parent_map.keys(), key=lambda p: p.distance(rand_point))
+            new_segment = LineString([closest_point, rand_point])
+            rand_point = new_segment.interpolate(self.STEP_SIZE)
+            new_segment = LineString([closest_point, rand_point])
 
-            if self._closest_obstacle(friendly_robot_id, adjusted_new_segment) < self.SAFE_OBSTACLES_RADIUS:
-                continue
+            if self._closest_obstacle(friendly_robot_id, new_segment) > self.SAFE_OBSTACLES_RADIUS and rand_point not in parent_map:
+                # Choose the best parent node 
+                best_parent = closest_point
+                min_cost = cost_map[closest_point] + closest_point.distance(rand_point)
+                for p in parent_map.keys():
+                    if p.distance(rand_point) < 2*self.STEP_SIZE and cost_map[p] + p.distance(rand_point) < min_cost and self._closest_obstacle(friendly_robot_id, LineString([p, rand_point])) > self.SAFE_OBSTACLES_RADIUS:
+                        best_parent = p
+                        min_cost = cost_map[p] + p.distance(rand_point)
+                
+                cost_map[rand_point] = min_cost
+                parent_map[rand_point] = best_parent
 
-            # Check if the new point is close enough to the goal to stop
-            if adjusted_new_segment.distance(goal) < RRTPlanner.STOPPING_DISTANCE:
-                parent_map[random_point] = closest_point
-                path_found = True
-                break
-
-            parent_map[random_point] = closest_point
-
+                # Now need to rewire the tree based on this 
+                
+                for p in parent_map.keys():
+                    if p.distance(rand_point) < 2:
+                        # Might be able to find a better path through rand_point
+                        if cost_map[rand_point] + rand_point.distance(p) < cost_map[p] and self._closest_obstacle(friendly_robot_id, LineString([p, rand_point])) > self.SAFE_OBSTACLES_RADIUS:
+                            cost_map[p] = cost_map[rand_point] + rand_point.distance(p)
+                            parent_map[p] = rand_point
+                            self._propagate(parent_map, cost_map, p)
+                
+                if rand_point.distance(goal) < self.STOPPING_DISTANCE and cost_map[rand_point] + rand_point.distance(goal) < cost_map.get(goal, float("inf")):
+                    parent_map[goal] = rand_point
+                    cost_map[goal] = cost_map[rand_point] + rand_point.distance(goal)
+                    path_found = True
+                    if cost_map[goal] <= self.GOOD_ENOUGH_ABS*goal.distance(start) or cost_map[goal] - goal.distance(start) < self.GOOD_ENOUGH_ABS:
+                        break
         if path_found:
             self.par = parent_map
-            nearest_goal = min(parent_map.keys(), key=lambda p: p.distance(goal))
-            path = [nearest_goal]
-            current_point = nearest_goal
-
-            while current_point != start:
-                path.append(parent_map[current_point])
+            path = []
+            current_point = goal
+            visited = set()
+            while current_point is not None:
+                if current_point in visited:
+                    break
+                visited.add(current_point)
+                path.append(current_point)
                 current_point = parent_map[current_point]
+            path.reverse()
+            return [(p.x, p.y) for p in path]
 
-            path = path[::-1]
-            # return list(map(point_to_tuple, path)) + [point_to_tuple(goal)]
-            return smooth_path(list(map(point_to_tuple, path))) + [point_to_tuple(goal)]
-
-        else:
-            # No good enough path found
-            self.par = parent_map
-            return None
-
+        return None
 
 
 N_DIRECTIONS = 16

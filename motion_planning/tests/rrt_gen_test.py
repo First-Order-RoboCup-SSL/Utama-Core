@@ -83,27 +83,22 @@ def test_pathfinding(headless: bool, moving: bool):
             waypoints = planner.path_to(mover_id, target)
 
 
-        if waypoints is None :
-            next_stop = r.x, r.y
-            print("NO PATH FOUND")
-        else:
-
-            next_stop = waypoints[0]
-            assert type(next_stop) != Point, waypoints
-
-
-
-        if dist((r.x, r.y), next_stop) < 0.4 and (velocity is None or mag(velocity) < 0.5):
-            if waypoints:
-                next_stop = waypoints.pop(0)
-                assert type(next_stop) != Point
-            if waypoints is not None and  len(waypoints) == 0:
-                target = targets.pop(0)
-                waypoints = None
-
+        if waypoints:
+            if dist((r.x, r.y), waypoints[0]) < 0.4 and (velocity is None or mag(velocity) < 0.5):
+                waypoints.pop(0)
+        
+        if dist((r.x, r.y), target) < 0.05 and (velocity is None or mag(velocity) < 0.2):
+            print("REACHED")
+            target = targets.pop(0)
+            start = time.time()
+            waypoints = planner.path_to(mover_id, target)
+            print("TOOK: ", time.time()-start)
+            # print(waypoints)
+            # time.sleep(5)
             env.draw_point(target[0], target[1], width=10, color="PINK")
             pid_oren.reset(mover_id)
             pid_2d.reset(mover_id)
+
 
         for x in planner.par.keys():
             if planner.par[x] is not None:
@@ -116,10 +111,13 @@ def test_pathfinding(headless: bool, moving: bool):
             
             if len(waypoints) == 1:
                 env.draw_line([(r.x, r.y), waypoints[0]], color="PINK", width=3)
-            
+        if waypoints:
+            next_stop = waypoints[0]
+        else:
+            next_stop = target
+
         cmd = go_to_point(pid_oren, pid_2d, friendly_robots[mover_id], mover_id, next_stop, face_ball((r.x, r.y), next_stop))
         sim_robot_controller.add_robot_commands(cmd, mover_id)
-        # time.sleep(2)
       
         sim_robot_controller.send_robot_commands()
 
