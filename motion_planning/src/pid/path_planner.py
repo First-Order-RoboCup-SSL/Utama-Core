@@ -1,5 +1,6 @@
 from typing import Tuple, Union, Optional, List
 from entities.game import Game
+from entities.game.field import Field
 from entities.game.game_object import Colour, Robot as GameRobot
 from entities.game.robot import Robot
 from math import sin, cos, pi, dist, exp
@@ -45,50 +46,13 @@ def point_to_tuple(point: Point) -> tuple:
     """
     return (point.x, point.y)
 
-def smooth_path(points: List[Tuple[float, float]], smoothing_factor: float = 0.1) -> List[Tuple[float, float]]:
-    """
-    Smooth a path using a simple moving average.
-    
-    Args:
-        points (List[Tuple[float, float]]): A list of 2D points representing the path.
-        smoothing_factor (float): A parameter to control the amount of smoothing.
-        
-    Returns:
-        List[Tuple[float, float]]: A list of 2D points representing the smoothed path.
-    """
-    if len(points) < 3:
-        return points
-
-    smoothed_points = []
-    window_size = max(2, int(smoothing_factor * len(points)))
-
-    for i in range(len(points)):
-        start = max(0, i - window_size)
-        end = min(len(points), i + window_size)
-        window = points[start:end]
-        avg_x = sum(p[0] for p in window) / len(window)
-        avg_y = sum(p[1] for p in window) / len(window)
-        smoothed_points.append((avg_x, avg_y))
-    
-    # Reduce points that are less than 1 unit away from each other
-    # reduced_points = [smoothed_points[0]]
-    # for point in smoothed_points[1:]:
-    #     if dist(reduced_points[-1], point) >= 1:
-    #         reduced_points.append(point)
-
-    # # Further reduce points by checking line of sight
-    # final_points = [reduced_points[0]]
-    # for i in range(1, len(reduced_points)):
-    #     if i == len(reduced_points) - 1 or not LineString([final_points[-1], reduced_points[i + 1]]).is_simple:
-    #         final_points.append(reduced_points[i])
-
-    return smoothed_points
 
 class RRTPlanner:
-    SAFE_OBSTACLES_RADIUS = 0.28
-    STOPPING_DISTANCE = 0.2
-    EXPLORE_BIAS = 0.1
+    SAFE_OBSTACLES_RADIUS = 0.28 # 2*ROBOT_RADIUS + 0.08 for wiggle room
+    STOPPING_DISTANCE = 0.2 # When are we close enough to the goal to stop
+    EXPLORE_BIAS = 0.1 # How often the tree does a random exploration
     STEP_SIZE = 0.25
+    # acceptable relative and absolute error from the target (euclidian distance)
     GOOD_ENOUGH_REL = 1.2
     GOOD_ENOUGH_ABS = 1
 
@@ -115,6 +79,8 @@ class RRTPlanner:
 
 
     def _propagate(self, parent_map, cost_map, parent):
+        # Technically should push costs down to the children when we find a better path to the parent
+        # In practice this is just really slow and doesn't make a huge difference in our use case 
         for p in parent_map.keys():
             if parent_map[p] == parent:
                 cost_map[p] = cost_map[parent] + p.distance(parent)
@@ -122,7 +88,7 @@ class RRTPlanner:
 
     def path_to(self, friendly_robot_id: int, target: Tuple[float, float], max_iterations: int = 1000) -> Optional[List[Tuple[float, float]]]:
         """
-        Generate a path to the target using the Rapidly-exploring Random Tree (RRT) algorithm.
+        Generate a path to the target using the Rapidly-exploring Random Tree Star (RRT*) algorithm.
         
         Args:
             friendly_robot_id (int): The ID of the friendly robot.
@@ -144,6 +110,8 @@ class RRTPlanner:
 
         direct_path = LineString([start, goal])
         adjusted_direct_path = self._adjust_segment_for_robot_radius(direct_path)
+
+        # Need more than the safe obstacle radius as at high speeds this does not work
         if self._closest_obstacle(friendly_robot_id, adjusted_direct_path) > 3*self.SAFE_OBSTACLES_RADIUS:
             return [(goal.x, goal.y)]
 
@@ -153,7 +121,7 @@ class RRTPlanner:
 
         for _ in range(max_iterations):
             if random.random() < self.EXPLORE_BIAS:
-                rand_point = Point(random.uniform(-4.4, 4.4), random.uniform(-3, 3))
+                rand_point = Point(random.uniform(-Field.HALF_LENGTH, Field.HALF_LENGTH), random.uniform(-Field.HALF_WIDTH, Field.HALF_WIDTH))
             else:
                 rand_point = Point(target[0], target[1])
             
@@ -198,7 +166,8 @@ class RRTPlanner:
             visited = set()
             while current_point is not None:
                 if current_point in visited:
-                    break
+                    # There was a cycle in the tree - this is very bad
+                    return None
                 visited.add(current_point)
                 path.append(current_point)
                 current_point = parent_map[current_point]
