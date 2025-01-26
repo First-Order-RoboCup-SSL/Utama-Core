@@ -1,11 +1,11 @@
 import random
 from motion_planning.src.pid.pid import get_rsim_pids
-from robot_control.src.skills import face_ball, go_to_point
+from robot_control.src.skills import face_ball, go_to_point, goalkeep
 from robot_control.src.tests.utils import setup_pvp
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from robot_control.src.intent import find_likely_enemy_shooter, score_goal
+from robot_control.src.intent import score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.config.settings import TIMESTEP
 import logging
@@ -96,40 +96,10 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
             sim_robot_controller_attacker.add_robot_commands(cmd, shooter_id)
             sim_robot_controller_attacker.send_robot_commands()
 
-            if defender_is_yellow:
-                target = game.predict_ball_pos_at_x(4.5 - 0.4)
-            else:
-                target = game.predict_ball_pos_at_x(-4.5 + 0.4)
 
-            if target and not find_likely_enemy_shooter(enemy, balls):
-                cmd = go_to_point(
-                    pid_oren_d,
-                    pid_2d_d,
-                    friendly[0],
-                    0,
-                    target,
-                    face_ball(
-                        (friendly[0].x, friendly[0].y), 
-                        (game.ball.x, game.ball.y)
-                    ),
-                    dribbling=True,
-                )
-                sim_robot_controller_defender.add_robot_commands(cmd, 0)
-                sim_robot_controller_defender.send_robot_commands()
-            else:
-                cmd = go_to_point(
-                    pid_oren_d,
-                    pid_2d_d,
-                    friendly[0],
-                    0,
-                    [None, None],
-                    face_ball(
-                        (friendly[0].x, friendly[0].y), (game.ball.x, game.ball.y)
-                    ),
-                )
-                sim_robot_controller_defender.add_robot_commands(cmd, 0)
-                sim_robot_controller_defender.send_robot_commands()
-                
+            cmd = goalkeep(not defender_is_yellow, game, 0, pid_oren_d, pid_2d_d, defender_is_yellow)
+            sim_robot_controller_defender.add_robot_commands(cmd, 0)
+            sim_robot_controller_defender.send_robot_commands()
 
     assert not goal_scored
 
