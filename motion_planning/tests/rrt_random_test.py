@@ -26,7 +26,7 @@ from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 from motion_planning.src.pid.path_planner import DynamicWindowPlanner, RRTPlanner
-from robot_control.src.find_best_shot import ROBOT_RADIUS 
+from robot_control.src.find_best_shot import ROBOT_RADIUS
 import random
 import logging
 import time
@@ -34,7 +34,6 @@ from math import dist
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
 
 
 def test_pathfinding(headless: bool, moving: bool):
@@ -58,13 +57,15 @@ def test_pathfinding(headless: bool, moving: bool):
 
     is_yellow = True
     pid_oren, pid_2d = get_rsim_pids(N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
-    
+
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game
     )
 
     planner = RRTPlanner(game)
-    targets = [(-4.5,3)]+[(random.uniform(-4.5, 4.5), random.uniform(-3, 3)) for _ in range(1000)]
+    targets = [(-4.5, 3)] + [
+        (random.uniform(-4.5, 4.5), random.uniform(-3, 3)) for _ in range(1000)
+    ]
     target = targets.pop(0)
 
     randomly_spawn_robots(env, True, [])
@@ -73,7 +74,7 @@ def test_pathfinding(headless: bool, moving: bool):
     for i in range(5000):
         latest_frame = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
         if latest_frame:
-            friendly_robots, _, _ = latest_frame  
+            friendly_robots, _, _ = latest_frame
         r = friendly_robots[mover_id]
 
         env.draw_point(target[0], target[1], width=10, color="GREEN")
@@ -83,17 +84,20 @@ def test_pathfinding(headless: bool, moving: bool):
         if waypoints is None:
             waypoints = planner.path_to(mover_id, target)
 
-
         if waypoints:
-            if dist((r.x, r.y), waypoints[0]) < 0.4 and (velocity is None or mag(velocity) < 0.5):
+            if dist((r.x, r.y), waypoints[0]) < 0.4 and (
+                velocity is None or mag(velocity) < 0.5
+            ):
                 waypoints.pop(0)
-        
-        if dist((r.x, r.y), target) < 0.05 and (velocity is None or mag(velocity) < 0.2):
+
+        if dist((r.x, r.y), target) < 0.05 and (
+            velocity is None or mag(velocity) < 0.2
+        ):
             print("REACHED")
             target = targets.pop(0)
             start = time.time()
             waypoints = planner.path_to(mover_id, target)
-            print("TOOK: ", time.time()-start)
+            print("TOOK: ", time.time() - start)
             randomly_spawn_robots(env, True, [mover_id])
 
             # print(waypoints)
@@ -102,16 +106,19 @@ def test_pathfinding(headless: bool, moving: bool):
             pid_oren.reset(mover_id)
             pid_2d.reset(mover_id)
 
-
         for x in planner.par.keys():
             if planner.par[x] is not None:
-                env.draw_line([point_to_tuple(x), point_to_tuple(planner.par[x])], color="BLUE", width=3)
+                env.draw_line(
+                    [point_to_tuple(x), point_to_tuple(planner.par[x])],
+                    color="BLUE",
+                    width=3,
+                )
 
         if waypoints is not None:
-            for i in range(len(waypoints)-1):
-                a,b =  waypoints[i], waypoints[i+1]
-                env.draw_line([a,b], width=3, color="PINK")
-            
+            for i in range(len(waypoints) - 1):
+                a, b = waypoints[i], waypoints[i + 1]
+                env.draw_line([a, b], width=3, color="PINK")
+
             if len(waypoints) == 1:
                 env.draw_line([(r.x, r.y), waypoints[0]], color="PINK", width=3)
         if waypoints:
@@ -119,17 +126,31 @@ def test_pathfinding(headless: bool, moving: bool):
         else:
             next_stop = target
 
-        cmd = go_to_point(pid_oren, pid_2d, friendly_robots[mover_id], mover_id, next_stop, face_ball((r.x, r.y), next_stop))
+        cmd = go_to_point(
+            pid_oren,
+            pid_2d,
+            friendly_robots[mover_id],
+            mover_id,
+            next_stop,
+            face_ball((r.x, r.y), next_stop),
+        )
         sim_robot_controller.add_robot_commands(cmd, mover_id)
-      
+
         sim_robot_controller.send_robot_commands()
 
 
-
-def randomly_spawn_robots(env: SSLStandardEnv, is_team_yellow: bool, safe_robots: List[int]):
+def randomly_spawn_robots(
+    env: SSLStandardEnv, is_team_yellow: bool, safe_robots: List[int]
+):
     for i in range(6):
         if i not in safe_robots:
-            env.teleport_robot(is_team_yellow, i, random.uniform(-4.5, 4.5), random.uniform(-2.25, 2.25))
+            env.teleport_robot(
+                is_team_yellow,
+                i,
+                random.uniform(-4.5, 4.5),
+                random.uniform(-2.25, 2.25),
+            )
+
 
 if __name__ == "__main__":
     try:

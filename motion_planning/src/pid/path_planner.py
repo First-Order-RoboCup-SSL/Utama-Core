@@ -9,6 +9,7 @@ from shapely.geometry import Point, LineString
 from robot_control.src.find_best_shot import ROBOT_RADIUS
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,10 +42,10 @@ Slow motion and never gets there.
 def point_to_tuple(point: Point) -> tuple:
     """
     Convert a Shapely 2D Point into a tuple of (x, y).
-    
+
     Args:
         point (Point): A Shapely Point object.
-    
+
     Returns:
         tuple: A tuple (x, y) representing the coordinates of the point.
     """
@@ -52,9 +53,9 @@ def point_to_tuple(point: Point) -> tuple:
 
 
 class RRTPlanner:
-    SAFE_OBSTACLES_RADIUS = 0.28 # 2*ROBOT_RADIUS + 0.08 for wiggle room
-    STOPPING_DISTANCE = 0.2 # When are we close enough to the goal to stop
-    EXPLORE_BIAS = 0.1 # How often the tree does a random exploration
+    SAFE_OBSTACLES_RADIUS = 0.28  # 2*ROBOT_RADIUS + 0.08 for wiggle room
+    STOPPING_DISTANCE = 0.2  # When are we close enough to the goal to stop
+    EXPLORE_BIAS = 0.1  # How often the tree does a random exploration
     STEP_SIZE = 0.3
     # acceptable relative and absolute error from the target (euclidian distance)
     GOOD_ENOUGH_REL = 1.2
@@ -65,23 +66,32 @@ class RRTPlanner:
         self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue
         self.waypoints = []
         self.par = dict()
-    
-    def _reduce_waypoints(self, waypoints: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+
+    def _reduce_waypoints(
+        self, waypoints: List[Tuple[float, float]]
+    ) -> List[Tuple[float, float]]:
         # Takes a list of waypoints and removes the middle waypoint in a set of three if they are nearly collinear
         # It does this by checking the distance of the middle waypoint from the line formed by the other two
         # This is to reduce the number of waypoints and make the path smoother
         if len(waypoints) < 3:
             return waypoints
         new_waypoints = [waypoints[0]]
-        for i in range(1, len(waypoints)-1):
-            skipped_segment = LineString([new_waypoints[-1], waypoints[i+1]])
-            if skipped_segment.distance(Point(waypoints[i])) > 0.03 or skipped_segment.length > 2:
+        for i in range(1, len(waypoints) - 1):
+            skipped_segment = LineString([new_waypoints[-1], waypoints[i + 1]])
+            if (
+                skipped_segment.distance(Point(waypoints[i])) > 0.03
+                or skipped_segment.length > 2
+            ):
                 new_waypoints.append(waypoints[i])
         new_waypoints.append(waypoints[-1])
         return new_waypoints
 
     def _get_obstacles(self, robot_id):
-        return self._game.friendly_robots[:robot_id] + self._game.friendly_robots[robot_id+1:] + self._game.enemy_robots
+        return (
+            self._game.friendly_robots[:robot_id]
+            + self._game.friendly_robots[robot_id + 1 :]
+            + self._game.enemy_robots
+        )
 
     def _closest_obstacle(self, robot_id: int, pos: Union[Point, LineString]) -> float:
         closest = float("inf")
@@ -92,43 +102,51 @@ class RRTPlanner:
 
     def _adjust_segment_for_robot_radius(self, seg: LineString) -> LineString:
         current_robot_seg_interect = seg.interpolate(ROBOT_RADIUS)
-        return LineString([current_robot_seg_interect, seg.interpolate(1, normalized=True)])
-
+        return LineString(
+            [current_robot_seg_interect, seg.interpolate(1, normalized=True)]
+        )
 
     def _propagate(self, parent_map, cost_map, parent):
         # Technically should push costs down to the children when we find a better path to the parent
-        # In practice this is just really slow and doesn't make a huge difference in our use case 
+        # In practice this is just really slow and doesn't make a huge difference in our use case
         for p in parent_map.keys():
             if parent_map[p] == parent:
                 cost_map[p] = cost_map[parent] + p.distance(parent)
                 self._propagate(parent_map, cost_map, p)
-    
+
     def _get_nearby(self, point: Point) -> List[Point]:
         return [p for p in self._get_adj_cells(point)]
-    
+
     def _get_adj_cells(self, point: Point) -> Generator[Point, None, None]:
-        gx,gy = self._compress_point(point)
-        for dx,dy in [[1,0], [-1,0], [0,1], [0,-1]]:
-            if 0 <= gx+dx < 9 and 0 <= gy+dy < 6:
-                for p in self.grid[gy+dy][gx+dx]:
+        gx, gy = self._compress_point(point)
+        for dx, dy in [[1, 0], [-1, 0], [0, 1], [0, -1]]:
+            if 0 <= gx + dx < 9 and 0 <= gy + dy < 6:
+                for p in self.grid[gy + dy][gx + dx]:
                     yield p
-    
+
     def _compress_point(self, point: Point) -> Tuple[int, int]:
-        return int((point.x + Field.HALF_LENGTH) // 1), int((point.y + Field.HALF_WIDTH) // 1)
-    
+        return int((point.x + Field.HALF_LENGTH) // 1), int(
+            (point.y + Field.HALF_WIDTH) // 1
+        )
+
     def _add_compressed_point(self, point: Point):
         cp = self._compress_point(point)
         self.grid[cp[1]][cp[0]].append(point)
 
-    def path_to(self, friendly_robot_id: int, target: Tuple[float, float], max_iterations: int = 3000) -> Optional[List[Tuple[float, float]]]:
+    def path_to(
+        self,
+        friendly_robot_id: int,
+        target: Tuple[float, float],
+        max_iterations: int = 3000,
+    ) -> Optional[List[Tuple[float, float]]]:
         """
         Generate a path to the target using the Rapidly-exploring Random Tree Star (RRT*) algorithm.
-        
+
         Args:
             friendly_robot_id (int): The ID of the friendly robot.
             target (Tuple[float, float]): The target coordinates (x, y).
             max_iterations (int): Maximum number of iterations for the RRT algorithm.
-        
+
         Returns:
             Optional[List[Tuple[float, float]]]: A list of waypoints (x, y) from the start to the target.
         """
@@ -137,23 +155,30 @@ class RRTPlanner:
         goal = Point(target[0], target[1])
 
         if self._closest_obstacle(friendly_robot_id, goal) < ROBOT_DIAMETER / 2:
-            logger.debug("RRT Planner: Goal is inside obstacle radius of goal - no path there, return start")
+            logger.debug(
+                "RRT Planner: Goal is inside obstacle radius of goal - no path there, return start"
+            )
 
             return [(start.x, start.y)]
 
         if start.distance(goal) < ROBOT_DIAMETER / 2:
-            logger.debug("RRT Planner: Goal is inside robot radius of goal - already there, return goal")
+            logger.debug(
+                "RRT Planner: Goal is inside robot radius of goal - already there, return goal"
+            )
             return [(goal.x, goal.y)]
 
         direct_path = LineString([start, goal])
         adjusted_direct_path = self._adjust_segment_for_robot_radius(direct_path)
 
         # Need more than the safe obstacle radius as at high speeds this does not work
-        if self._closest_obstacle(friendly_robot_id, adjusted_direct_path) > 3*self.SAFE_OBSTACLES_RADIUS:
+        if (
+            self._closest_obstacle(friendly_robot_id, adjusted_direct_path)
+            > 3 * self.SAFE_OBSTACLES_RADIUS
+        ):
             logger.debug("RRT Planner: Goal direct line of sight - Go straight there")
 
             return [(goal.x, goal.y)]
-        
+
         self.grid = [[[] for _ in range(9)] for _ in range(6)]
 
         self.par = {start: None}
@@ -162,50 +187,80 @@ class RRTPlanner:
         path_found = False
 
         for its in range(max_iterations):
-            if its%250 == 0:
-                logger.debug(f'RRT info: ITERS: {its} nodes: {len(self.par.keys())}, BEST: {cost_map.get(goal, float("inf"))} EUCLID: {goal.distance(start)}')
+            if its % 250 == 0:
+                logger.debug(
+                    f'RRT info: ITERS: {its} nodes: {len(self.par.keys())}, BEST: {cost_map.get(goal, float("inf"))} EUCLID: {goal.distance(start)}'
+                )
             if random.random() < self.EXPLORE_BIAS:
-                rand_point = Point(random.uniform(-Field.HALF_LENGTH, Field.HALF_LENGTH), random.uniform(-Field.HALF_WIDTH, Field.HALF_WIDTH))
+                rand_point = Point(
+                    random.uniform(-Field.HALF_LENGTH, Field.HALF_LENGTH),
+                    random.uniform(-Field.HALF_WIDTH, Field.HALF_WIDTH),
+                )
             else:
                 rand_point = Point(target[0], target[1])
-            
 
             closest_point = min(self.par.keys(), key=lambda p: p.distance(rand_point))
             new_segment = LineString([closest_point, rand_point])
             rand_point = new_segment.interpolate(self.STEP_SIZE)
             new_segment = LineString([closest_point, rand_point])
 
-            if self._closest_obstacle(friendly_robot_id, new_segment) > self.SAFE_OBSTACLES_RADIUS and rand_point not in self.par:
-                # Choose the best parent node 
+            if (
+                self._closest_obstacle(friendly_robot_id, new_segment)
+                > self.SAFE_OBSTACLES_RADIUS
+                and rand_point not in self.par
+            ):
+                # Choose the best parent node
                 best_parent = closest_point
                 min_cost = cost_map[closest_point] + closest_point.distance(rand_point)
                 for p in self._get_nearby(rand_point):
-                    if cost_map[p] + p.distance(rand_point) < min_cost and self._closest_obstacle(friendly_robot_id, LineString([p, rand_point])) > self.SAFE_OBSTACLES_RADIUS:
+                    if (
+                        cost_map[p] + p.distance(rand_point) < min_cost
+                        and self._closest_obstacle(
+                            friendly_robot_id, LineString([p, rand_point])
+                        )
+                        > self.SAFE_OBSTACLES_RADIUS
+                    ):
                         best_parent = p
                         min_cost = cost_map[p] + p.distance(rand_point)
-                
+
                 cost_map[rand_point] = min_cost
                 self.par[rand_point] = best_parent
 
-                # Now need to rewire the tree based on this 
-                
+                # Now need to rewire the tree based on this
+
                 for p in self._get_nearby(rand_point):
                     # Might be able to find a better path through rand_point
-                    if cost_map[rand_point] + rand_point.distance(p) < cost_map[p] and self._closest_obstacle(friendly_robot_id, LineString([p, rand_point])) > self.SAFE_OBSTACLES_RADIUS:
+                    if (
+                        cost_map[rand_point] + rand_point.distance(p) < cost_map[p]
+                        and self._closest_obstacle(
+                            friendly_robot_id, LineString([p, rand_point])
+                        )
+                        > self.SAFE_OBSTACLES_RADIUS
+                    ):
                         cost_map[p] = cost_map[rand_point] + rand_point.distance(p)
                         self.par[p] = rand_point
                         self._propagate(self.par, cost_map, p)
-                
-                if rand_point.distance(goal) < self.STOPPING_DISTANCE and cost_map[rand_point] + rand_point.distance(goal) < cost_map.get(goal, float("inf")):
+
+                if rand_point.distance(goal) < self.STOPPING_DISTANCE and cost_map[
+                    rand_point
+                ] + rand_point.distance(goal) < cost_map.get(goal, float("inf")):
                     self.par[goal] = rand_point
                     cost_map[goal] = cost_map[rand_point] + rand_point.distance(goal)
                     path_found = True
-                    if cost_map[goal] <= self.GOOD_ENOUGH_ABS*goal.distance(start) or cost_map[goal] - goal.distance(start) < self.GOOD_ENOUGH_ABS:
+                    if (
+                        cost_map[goal] <= self.GOOD_ENOUGH_ABS * goal.distance(start)
+                        or cost_map[goal] - goal.distance(start) < self.GOOD_ENOUGH_ABS
+                    ):
                         break
                 self._add_compressed_point(rand_point)
-            
-            if cost_map.get(goal, float("inf")) <= self.GOOD_ENOUGH_ABS*goal.distance(start) or cost_map.get(goal, float("inf")) - goal.distance(start) < self.GOOD_ENOUGH_ABS:
-                break   
+
+            if (
+                cost_map.get(goal, float("inf"))
+                <= self.GOOD_ENOUGH_ABS * goal.distance(start)
+                or cost_map.get(goal, float("inf")) - goal.distance(start)
+                < self.GOOD_ENOUGH_ABS
+            ):
+                break
 
             if its >= 1000 and path_found:
                 break
@@ -229,26 +284,30 @@ class RRTPlanner:
 
 
 N_DIRECTIONS = 16
+
+
 class DynamicWindowPlanner:
-    SIMULATED_TIMESTEP = 0.2 # seconds
-    MAX_ACCELERATION = 2 # Measured in ms^2
+    SIMULATED_TIMESTEP = 0.2  # seconds
+    MAX_ACCELERATION = 2  # Measured in ms^2
     DIRECTIONS = [i * 2 * pi / N_DIRECTIONS for i in range(N_DIRECTIONS)]
     ROBOT_RADIUS = 0.1
 
     def __init__(self, game: Game):
         self._game = game
-        self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue    
+        self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue
 
-    def path_to(self, friendly_robot_id: int, target: Tuple[float, float]) -> Tuple[float, float]:
+    def path_to(
+        self, friendly_robot_id: int, target: Tuple[float, float]
+    ) -> Tuple[float, float]:
         """
         Plan a path to the target for the specified friendly robot.
-        
+
         Args:
             friendly_robot_id (int): The ID of the friendly robot.
             target (Tuple[float, float]): The target coordinates (x, y).
             pid_oren: PID controller for orientation.
             pid_trans: PID controller for translation.
-        
+
         Returns:
             Tuple[float, float]: The next waypoint coordinates (x, y) or the target if already reached.
         """
@@ -256,20 +315,25 @@ class DynamicWindowPlanner:
 
         start_x, start_y = robot.x, robot.y
 
-        if dist((start_x, start_y), target) < 1.5*ROBOT_RADIUS:
+        if dist((start_x, start_y), target) < 1.5 * ROBOT_RADIUS:
             return target
-        
+
         return self.local_planning(friendly_robot_id, target)
-    
+
     def local_planning(self, friendly_robot_id: int, target: Tuple[float, float]):
-        velocity = self._game.get_object_velocity(GameRobot(self._friendly_colour, friendly_robot_id))
+        velocity = self._game.get_object_velocity(
+            GameRobot(self._friendly_colour, friendly_robot_id)
+        )
 
         if velocity is None:
-            # If no data, assume it is still :) 
-            velocity = 0,0
+            # If no data, assume it is still :)
+            velocity = 0, 0
 
         # Calculate the allowed velocities in this frame
-        delta_vel = DynamicWindowPlanner.SIMULATED_TIMESTEP * DynamicWindowPlanner.MAX_ACCELERATION
+        delta_vel = (
+            DynamicWindowPlanner.SIMULATED_TIMESTEP
+            * DynamicWindowPlanner.MAX_ACCELERATION
+        )
         best_score = float("-inf")
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
 
@@ -281,52 +345,81 @@ class DynamicWindowPlanner:
         # its speed and path length to avoid obstacles
         sf = 1
         while best_score < 0 and sf > 0.05:
-            for ang in DynamicWindowPlanner.DIRECTIONS: 
-                segment = self._get_motion_segment((start_x, start_y), velocity, delta_vel*sf, ang)
+            for ang in DynamicWindowPlanner.DIRECTIONS:
+                segment = self._get_motion_segment(
+                    (start_x, start_y), velocity, delta_vel * sf, ang
+                )
                 # Evaluate this segment, avoiding obstacles
-                score = self._evaluate_segment(friendly_robot_id, segment, Point(target[0], target[1]))
+                score = self._evaluate_segment(
+                    friendly_robot_id, segment, Point(target[0], target[1])
+                )
 
                 if score > best_score:
                     best_score = score
                     best_move = segment.coords[1]
-            
+
             sf /= 2
 
         return best_move
 
     def _get_obstacles(self, robot_id):
-        return self._game.friendly_robots[:robot_id] + self._game.friendly_robots[robot_id+1:] + self._game.enemy_robots
+        return (
+            self._game.friendly_robots[:robot_id]
+            + self._game.friendly_robots[robot_id + 1 :]
+            + self._game.enemy_robots
+        )
 
     def make_inf_long(self, segment: LineString):
         norm = segment.length
         endX, endY = segment.coords[1]
         startX, startY = segment.coords[0]
-        new = Point(startX + (endX - startX) / norm * 18, startY + (endY - startY) / norm * 18)
-        return LineString([segment.coords[0], new]) 
+        new = Point(
+            startX + (endX - startX) / norm * 18, startY + (endY - startY) / norm * 18
+        )
+        return LineString([segment.coords[0], new])
 
     def obstacle_penalty_function(self, x):
-        return exp(-8 * (x - 0.22))    
+        return exp(-8 * (x - 0.22))
 
     def target_closeness_function(self, x):
         return 4 * exp(-8 * x)
 
-    def _evaluate_segment(self, robot_id: int, segment: LineString, target: Point) -> float:
+    def _evaluate_segment(
+        self, robot_id: int, segment: LineString, target: Point
+    ) -> float:
         """Evaluate line segment; bigger score is better"""
         # Distance travelled towards the target should be rewarded
-        target_factor = target.distance(Point(segment.coords[0])) - target.distance(Point(segment.coords[1]))
-        our_velocity_vector = (segment.coords[1][0] - segment.coords[0][0]) / self.SIMULATED_TIMESTEP, (segment.coords[1][1] - segment.coords[0][1]) / self.SIMULATED_TIMESTEP
+        target_factor = target.distance(Point(segment.coords[0])) - target.distance(
+            Point(segment.coords[1])
+        )
+        our_velocity_vector = (
+            segment.coords[1][0] - segment.coords[0][0]
+        ) / self.SIMULATED_TIMESTEP, (
+            segment.coords[1][1] - segment.coords[0][1]
+        ) / self.SIMULATED_TIMESTEP
         if our_velocity_vector is None:
             our_velocity_vector = (0, 0)
-        
-        our_position = self._game.get_robot_pos(self._friendly_colour == Colour.YELLOW, robot_id)
+
+        our_position = self._game.get_robot_pos(
+            self._friendly_colour == Colour.YELLOW, robot_id
+        )
 
         # If we are too close to an obstacle, we should be penalised
         obstacle_factor = 0
 
         # Factor in obstacle velocity, do some maths to find their closest approach to us
-        # and the time at which that happens. 
-        for r in self._get_obstacles(robot_id):            
-            their_velocity_vector = self._game.get_object_velocity(GameRobot(self._friendly_colour if r.is_friendly else Colour.invert(self._friendly_colour), r.id))
+        # and the time at which that happens.
+        for r in self._get_obstacles(robot_id):
+            their_velocity_vector = self._game.get_object_velocity(
+                GameRobot(
+                    (
+                        self._friendly_colour
+                        if r.is_friendly
+                        else Colour.invert(self._friendly_colour)
+                    ),
+                    r.id,
+                )
+            )
 
             if their_velocity_vector is None:
                 their_velocity_vector = (0, 0)
@@ -341,19 +434,37 @@ class DynamicWindowPlanner:
             if (denom := (diff_v_x * diff_v_x + diff_v_y * diff_v_y)) != 0:
                 t = (-diff_v_x * diff_p_x - diff_v_y * diff_p_y) / denom
                 if t > 0:
-                    d_sq = (diff_p_x + t * diff_v_x) ** 2 + (diff_p_y + t * diff_v_y) ** 2
+                    d_sq = (diff_p_x + t * diff_v_x) ** 2 + (
+                        diff_p_y + t * diff_v_y
+                    ) ** 2
 
-                    obstacle_factor = max(obstacle_factor,  self.obstacle_penalty_function(d_sq)*self.obstacle_penalty_function(t))
+                    obstacle_factor = max(
+                        obstacle_factor,
+                        self.obstacle_penalty_function(d_sq)
+                        * self.obstacle_penalty_function(t),
+                    )
 
         # Adjust weights for the final score - this is done by tuning
-        score = 5 * target_factor - obstacle_factor + self.target_closeness_function(target.distance(segment))
+        score = (
+            5 * target_factor
+            - obstacle_factor
+            + self.target_closeness_function(target.distance(segment))
+        )
         return score
 
-    def _get_motion_segment(self, rpos: Tuple[float, float], rvel: Tuple[float, float], delta_vel: float, ang: float) -> LineString:
-        adj_vel_y = rvel[1]*DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel*sin(ang)
-        adj_vel_x = rvel[0]*DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel*cos(ang)
+    def _get_motion_segment(
+        self,
+        rpos: Tuple[float, float],
+        rvel: Tuple[float, float],
+        delta_vel: float,
+        ang: float,
+    ) -> LineString:
+        adj_vel_y = rvel[1] * DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel * sin(
+            ang
+        )
+        adj_vel_x = rvel[0] * DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel * cos(
+            ang
+        )
         end_y = adj_vel_y + rpos[1]
         end_x = adj_vel_x + rpos[0]
         return LineString([(rpos[0], rpos[1]), (end_x, end_y)])
-
-
