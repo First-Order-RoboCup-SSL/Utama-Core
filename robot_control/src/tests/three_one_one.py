@@ -42,6 +42,9 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
     N_ROBOTS_YELLOW = N_ROBOTS_ATTACK if attacker_is_yellow else N_ROBOTS_DEFEND  
     N_ROBOTS_BLUE = N_ROBOTS_DEFEND if attacker_is_yellow else N_ROBOTS_ATTACK  
     
+    START_POS = 1
+    SHOOT_THRESH = 2.5
+    SPACING = 2.5
 
     env = SSLStandardEnv(
         n_robots_blue=N_ROBOTS_BLUE, n_robots_yellow=N_ROBOTS_YELLOW, render_mode="ansi" if headless else "human"
@@ -50,12 +53,12 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
 
     if attacker_is_yellow:
         for i in range(3):  
-            env.teleport_robot(attacker_is_yellow, i, 3, 2.5 - 2.5 * i)
-        env.teleport_ball(2.5, 0)
+            env.teleport_robot(attacker_is_yellow, i, START_POS, SPACING - SPACING * i)
+        env.teleport_ball(START_POS - 0.5, 0)
     else:
         for i in range(3):  
-            env.teleport_robot(attacker_is_yellow, i, -3, 2.5 - 2.5 * i)
-        env.teleport_ball(-2.5, 0)
+            env.teleport_robot(attacker_is_yellow, i, -START_POS, SPACING - SPACING * i)
+        env.teleport_ball(-START_POS + 0.5, 0)
 
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
         env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW
@@ -72,21 +75,25 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
     pid_oren_attacker, pid_2d_attacker = get_rsim_pids(N_ROBOTS_ATTACK)
     pid_oren_defender, pid_2d_defender = get_rsim_pids(N_ROBOTS_DEFEND)
 
-
-    
     possessor = 1
     dp = 1
 
     charge_tasks = None
     pass_task = None
+    shooting = False
 
     for iter in range(10000):
         sim_robot_controller_defender.add_robot_commands(defend(pid_oren_defender, pid_2d_defender, game, not attacker_is_yellow, 1, env), 1)
-        sim_robot_controller_defender.add_robot_commands(goalkeep(attacker_is_yellow, game, 0, pid_oren_defender, pid_2d_defender, not attacker_is_yellow), 0)
+        sim_robot_controller_defender.add_robot_commands(goalkeep(attacker_is_yellow, game, 0, pid_oren_defender, pid_2d_defender, not attacker_is_yellow, sim_robot_controller_defender.robot_has_ball(0)), 0)
         sim_robot_controller_defender.send_robot_commands()
 
         if iter > 10: # give them chance to spawn in the correct place
-            if pass_task: # Passing...
+            if shooting:
+                cmd = score_goal(game, True, possessor, pid_oren_attacker, pid_2d_attacker, attacker_is_yellow, attacker_is_yellow)
+                for npc_attacker in set(range(N_ROBOTS_ATTACK)).difference([possessor]):
+                    sim_robot_controller_attacker.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), npc_attacker)
+                sim_robot_controller_attacker.add_robot_commands(cmd, possessor)
+            elif pass_task: # Passing...
                 if sim_robot_controller_attacker.robot_has_ball(next_possessor): # Finished passing... # TODO put this check in a done() method inside passing task
                     pass_task = None
                     possessor = next_possessor
@@ -112,20 +119,23 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
                         all_done = False
                 
                 if all_done: # Finished charging...
-                    charge_tasks = None
-                    next_possessor = possessor + dp
-                    pass_task = PassBall(
-                        pid_oren_attacker,
-                        pid_2d_attacker,
-                        game,
-                        possessor,
-                        next_possessor,
-                        target_coords=game.get_robot_pos(attacker_is_yellow, next_possessor),
-                    )
+                    if abs(game.get_robot_pos(attacker_is_yellow, possessor).x) > SHOOT_THRESH:
+                        shooting = True
+                    else:
+                        charge_tasks = None
+                        next_possessor = possessor + dp
+                        pass_task = PassBall(
+                            pid_oren_attacker,
+                            pid_2d_attacker,
+                            game,
+                            possessor,
+                            next_possessor,
+                            target_coords=game.get_robot_pos(attacker_is_yellow, next_possessor),
+                        )
 
-                    npc_attacker = list(set(range(N_ROBOTS_ATTACK)).difference(set([possessor, next_possessor])))[0]
-                    sim_robot_controller_attacker.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), npc_attacker)
-            
+                        npc_attacker = list(set(range(N_ROBOTS_ATTACK)).difference(set([possessor, next_possessor])))[0]
+                        sim_robot_controller_attacker.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), npc_attacker)
+                
             sim_robot_controller_attacker.send_robot_commands()
 
 

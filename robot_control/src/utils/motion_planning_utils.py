@@ -26,7 +26,7 @@ def calculate_robot_velocities(
 
     target_x, target_y = target_coords[:2]
 
-    if target_oren:
+    if target_oren is not None:
         angular_vel = pid_oren.calculate(target_oren, current_oren, robot_id, oren=True, normalize_range=np.pi)
     else:
         angular_vel = 0

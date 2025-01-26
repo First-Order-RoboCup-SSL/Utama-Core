@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from typing import List, Optional, Tuple
 
@@ -317,13 +318,21 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
     t = lo
     return t
 
-def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_trans: TwoDPID, is_yellow: bool):
-    if is_left_goal:
-        target = game.predict_ball_pos_at_x(-4.5 + 0.4)
-    else:
-        target = game.predict_ball_pos_at_x(4.5 - 0.4)
-
+def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_trans: TwoDPID, is_yellow: bool, goalie_has_ball: bool):
     robot_data = game.get_robot_pos(is_yellow, robot_id)
+    if goalie_has_ball:
+        target_oren = (0 if is_left_goal else math.pi)
+        print("TARGET OREN", target_oren)
+        return go_to_point(pid_oren, pid_trans, robot_data, robot_id, ((-4 if is_left_goal else 4), 0), target_oren, True)
+
+    if is_left_goal:
+        target = game.predict_ball_pos_at_x(-4.5)
+    else:
+        target = game.predict_ball_pos_at_x(4.5)
+
+    if not target or abs(target[1]) > 0.5:
+        target = (-4.5 if is_left_goal else 4.5, 0)
+
 
     if target and not find_likely_enemy_shooter(game.get_robots_pos(not is_yellow), [game.ball]):
         cmd = go_to_point(
