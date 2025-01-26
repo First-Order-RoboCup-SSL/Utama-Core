@@ -108,7 +108,7 @@ class Game:
     def ball(self, value: BallData):
         self._ball.ball_data = value
 
-    def is_ball_in_goal(self, our_side: bool):
+    def is_ball_in_goal(self, left_goal: bool):
         ball_pos = self.get_ball_pos()[0]
         return (
             ball_pos.x < -self.field.HALF_LENGTH
@@ -116,13 +116,13 @@ class Game:
                 ball_pos.y < self.field.HALF_GOAL_WIDTH
                 and ball_pos.y > -self.field.HALF_GOAL_WIDTH
             )
-            and not our_side
+            and not left_goal
             or ball_pos.x > self.field.HALF_LENGTH
             and (
                 ball_pos.y < self.field.HALF_GOAL_WIDTH
                 and ball_pos.y > -self.field.HALF_GOAL_WIDTH
             )
-            and our_side
+            and left_goal
         )
 
     ### Game state management ###

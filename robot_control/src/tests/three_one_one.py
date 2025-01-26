@@ -81,13 +81,19 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
     charge_tasks = None
     pass_task = None
     shooting = False
+    goal_scored = False
 
-    for iter in range(10000):
+    for iter in range(2000):
+        if iter % 100 == 0:
+            print(iter)
+        
         sim_robot_controller_defender.add_robot_commands(defend(pid_oren_defender, pid_2d_defender, game, not attacker_is_yellow, 1, env), 1)
         sim_robot_controller_defender.add_robot_commands(goalkeep(attacker_is_yellow, game, 0, pid_oren_defender, pid_2d_defender, not attacker_is_yellow, sim_robot_controller_defender.robot_has_ball(0)), 0)
         sim_robot_controller_defender.send_robot_commands()
 
+
         if iter > 10: # give them chance to spawn in the correct place
+            goal_scored = goal_scored or game.is_ball_in_goal(attacker_is_yellow)
             if shooting:
                 cmd = score_goal(game, True, possessor, pid_oren_attacker, pid_2d_attacker, attacker_is_yellow, attacker_is_yellow)
                 for npc_attacker in set(range(N_ROBOTS_ATTACK)).difference([possessor]):
@@ -137,6 +143,8 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
                         sim_robot_controller_attacker.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), npc_attacker)
                 
             sim_robot_controller_attacker.send_robot_commands()
+    
+    assert goal_scored
 
 
 

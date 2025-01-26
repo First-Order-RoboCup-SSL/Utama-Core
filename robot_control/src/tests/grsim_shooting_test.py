@@ -77,7 +77,7 @@ def test_grsim_shooting(shooter_id: int, is_yellow: bool, headless: bool):
             sim_robot_controller.send_robot_commands()
 
             # Check if a goal has been scored
-            if game.is_ball_in_goal(our_side=not is_yellow):
+            if game.is_ball_in_goal(left_goal=not is_yellow):
                 logger.info(f"Test Passed: Goal scored in {elapsed_time:.2f} seconds.")
                 break
 
