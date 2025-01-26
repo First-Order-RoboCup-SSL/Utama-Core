@@ -118,7 +118,7 @@ def test_single_defender(
         if scored:
             any_scored = True
             break
-        defend(
+        cmd = defend(
             pid_oren_d,
             pid_2d_d,
             game,
@@ -127,6 +127,9 @@ def test_single_defender(
             defender_id,
             env,
         )
+        sim_robot_controller_defender.add_robot_commands(cmd, defender_id)
+        sim_robot_controller_defender.send_robot_commands()
+
 
         if sim_robot_controller_defender.robot_has_ball(
             defender_id

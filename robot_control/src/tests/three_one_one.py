@@ -1,43 +1,67 @@
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import go_to_ball, go_to_point
+from robot_control.src.skills import go_to_ball, go_to_point, goalkeep
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from robot_control.src.intent import defend, score_goal
+from robot_control.src.intent import PassBall, defend, score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
+from entities.data.command import RobotCommand
 import math
 
-TEST_EXPECTED_ITERS = 2
-TEST_EXPECTED_REL_DIFF = 0.02
-TEST_EXPECTED_ABS_POS_DIFF = 0.3
-TARGET_OREN = math.pi / 2
-TEST_RESULT_OREN_THRESH = 0.10
+CHARGE_ACHIEVED_THRESH = 0.1
+CHARGE_FORWARD_DELTA = 0.7
 
+class ChargeTask:
+    def  __init__(self, pid_oren: PID, pid_trans: TwoDPID, robot_id: int, is_yellow: bool, forward_oren: float, game: Game):
+        robot_data = game.get_robot_pos(is_yellow, robot_id)
+        self.target_coords = (robot_data.x + CHARGE_FORWARD_DELTA * math.cos(forward_oren), robot_data.y)
+        self.pid_oren = pid_oren
+        self.pid_trans = pid_trans
+        self.robot_id = robot_id
+        self.is_yellow = is_yellow
+        self.forward_oren = forward_oren
+        self.game = game
 
-def test_three_one_one(is_yellow: bool, headless: bool):
+    def enact(self):
+        robot_data = self.game.get_robot_pos(self.is_yellow, self.robot_id)
+        return go_to_point(self.pid_oren, self.pid_trans, robot_data, self.robot_id, self.target_coords, self.forward_oren, True)
+
+    def done(self):
+        new_pos = self.game.get_robot_pos(self.is_yellow, self.robot_id)
+        return math.hypot(new_pos.x - self.target_coords[0], new_pos.y - self.target_coords[1]) < CHARGE_ACHIEVED_THRESH
+
+def test_three_one_one(attacker_is_yellow: bool, headless: bool):
     game = Game()
 
     N_ROBOTS_ATTACK = 3
     N_ROBOTS_DEFEND = 2
 
-    N_ROBOTS_YELLOW = N_ROBOTS_ATTACK if is_yellow else N_ROBOTS_DEFEND  
-    N_ROBOTS_BLUE = N_ROBOTS_DEFEND if is_yellow else N_ROBOTS_ATTACK  
+    N_ROBOTS_YELLOW = N_ROBOTS_ATTACK if attacker_is_yellow else N_ROBOTS_DEFEND  
+    N_ROBOTS_BLUE = N_ROBOTS_DEFEND if attacker_is_yellow else N_ROBOTS_ATTACK  
     
 
     env = SSLStandardEnv(
         n_robots_blue=N_ROBOTS_BLUE, n_robots_yellow=N_ROBOTS_YELLOW, render_mode="ansi" if headless else "human"
     )
     env.reset()
-    env.teleport_ball(1, 1)
+
+    if attacker_is_yellow:
+        for i in range(3):  
+            env.teleport_robot(attacker_is_yellow, i, 3, 2.5 - 2.5 * i)
+        env.teleport_ball(2.5, 0)
+    else:
+        for i in range(3):  
+            env.teleport_robot(attacker_is_yellow, i, -3, 2.5 - 2.5 * i)
+        env.teleport_ball(-2.5, 0)
 
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
         env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW
     )
 
-    if is_yellow:
+    if attacker_is_yellow:
         sim_robot_controller_attacker = sim_robot_controller_yellow
         sim_robot_controller_defender = sim_robot_controller_blue
     else:
@@ -49,60 +73,81 @@ def test_three_one_one(is_yellow: bool, headless: bool):
     pid_oren_defender, pid_2d_defender = get_rsim_pids(N_ROBOTS_DEFEND)
 
 
-
-    for i in range(3):
-        env.teleport_robot(is_yellow, i, 0, 3 - 3 * i)
     
-    while True:
-        defend(pid_oren_defender, pid_2d_defender, game, sim_robot_controller_defender, not is_yellow, 1, env)
+    possessor = 1
+    dp = 1
 
-    # one_step_yellow = one_robot_placement(
-    #     sim_robot_controller_yellow,
-    #     True,
-    #     pid_oren_y,
-    #     pid_2d_y,
-    #     False,
-    #     target_robot,
-    #     game,
-    #     TARGET_OREN,
-    # )
-    # one_step_blue = one_robot_placement(
-    #     sim_robot_controller_blue,
-    #     False,
-    #     pid_oren_b,
-    #     pid_2d_b,
-    #     True,
-    #     target_robot,
-    #     game,
-    #     TARGET_OREN,
-    # )
+    charge_tasks = None
+    pass_task = None
 
-    # change_iters = ([], [])
-    # change_orens = ([], [])
+    for iter in range(10000):
+        sim_robot_controller_defender.add_robot_commands(defend(pid_oren_defender, pid_2d_defender, game, not attacker_is_yellow, 1, env), 1)
+        sim_robot_controller_defender.add_robot_commands(goalkeep(attacker_is_yellow, game, 0, pid_oren_defender, pid_2d_defender, not attacker_is_yellow), 0)
+        sim_robot_controller_defender.send_robot_commands()
 
-    # for iter in range(ITERS):
-    #     for i, one_step_colour in enumerate((one_step_blue, one_step_yellow)):
-    #         switch, _, _, co = one_step_colour()
-    #         if switch:
-    #             change_iters[i].append(iter)
-    #             change_orens[i].append(co)
+        if iter > 10: # give them chance to spawn in the correct place
+            if pass_task: # Passing...
+                if sim_robot_controller_attacker.robot_has_ball(next_possessor): # Finished passing... # TODO put this check in a done() method inside passing task
+                    pass_task = None
+                    possessor = next_possessor
+                    if possessor in (0, 2):
+                        dp = -dp
+                else: # Still passing...
+                    passer_cmd, receiver_cmd = pass_task.enact(
+                        passer_has_ball=sim_robot_controller_attacker.robot_has_ball(possessor)
+                    )
+                    sim_robot_controller_attacker.add_robot_commands(passer_cmd, possessor)
+                    sim_robot_controller_attacker.add_robot_commands(receiver_cmd, next_possessor)
+            else: # Charging... 
+                if not charge_tasks: # First time charging...
+                    charge_tasks = [
+                        ChargeTask(pid_oren_attacker, pid_2d_attacker, i, attacker_is_yellow, math.pi if attacker_is_yellow else 0, game)
+                        for i in range(N_ROBOTS_ATTACK)
+                    ]
 
-    # assert len(change_iters[0]) == len(change_iters[1])
-    # assert len(change_iters[0]) > TEST_EXPECTED_ITERS
+                all_done = True
+                for i, task in enumerate(charge_tasks):
+                    if not task.done():
+                        sim_robot_controller_attacker.add_robot_commands(task.enact(), i)
+                        all_done = False
+                
+                if all_done: # Finished charging...
+                    charge_tasks = None
+                    next_possessor = possessor + dp
+                    pass_task = PassBall(
+                        pid_oren_attacker,
+                        pid_2d_attacker,
+                        game,
+                        possessor,
+                        next_possessor,
+                        target_coords=game.get_robot_pos(attacker_is_yellow, next_possessor),
+                    )
 
-    # for left, right in zip(*change_iters):
-    #     assert (abs(left - right) / left) < TEST_EXPECTED_REL_DIFF
+                    npc_attacker = list(set(range(N_ROBOTS_ATTACK)).difference(set([possessor, next_possessor])))[0]
+                    sim_robot_controller_attacker.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), npc_attacker)
+            
+            sim_robot_controller_attacker.send_robot_commands()
 
-    # # yellow_robot_pos = game.get_robot_pos(is_yellow=True, robot_id=target_robot)
-    # # blue_robot_pos = game.get_robot_pos(is_yellow=False, robot_id=target_robot)
 
-    # # TODO: I am not really sure what is this test for, I will remove it first
-    # # assert abs((yellow_robot_pos.x - blue_robot_pos.x)) < TEST_EXPECTED_ABS_POS_DIFF
-    # # assert abs((yellow_robot_pos.y - blue_robot_pos.y)) < TEST_EXPECTED_ABS_POS_DIFF
 
-    # for side in change_orens:
-    #     for oren in side:
-    #         assert abs(abs(oren) - TARGET_OREN) / TARGET_OREN < TEST_RESULT_OREN_THRESH
+
+        # pass_ball_task = 
+        # possessor = next_possessor
+
+
+        #     if not passed:
+
+
+        #             logger.info("Passed.")
+        #             passed = True
+        #             time.sleep(1)
+        #             break
+
+        #         sim_robot_controller.add_robot_commands(passer_cmd, passer_id)
+        #         sim_robot_controller.add_robot_commands(receiver_cmd, receiver_id)
+        #         sim_robot_controller.send_robot_commands()
+
+        # assert passed
 
 
 if __name__ == "__main__":
