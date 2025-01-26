@@ -16,14 +16,11 @@ logger = logging.getLogger(__name__)
 ROBOT_DIAMETER = 0.2
 
 """
-TODO - RRT is too slow and not adaptive enough,
-use RTT waypoints as part of the Dynamic window Approach heuristic
-This should give enough adaptivity 
-to avoid obstacles whilst being a globally decent path
-
+TODO -
 Edge cases:
     target inside obstacle
-    target too close to obstacle (within// Install Vtune
+    target starts within / too close to obstacle 
+
 Drift
 Cleanup so that it takes a robot for the path every time
 Magic numbers
@@ -53,6 +50,9 @@ def point_to_tuple(point: Point) -> tuple:
 
 
 class RRTPlanner:
+    # TODO - make these parameters configurable at runtime
+    # TODO - Add support for avoiding goal areas - should be easy to use the Field object for this
+
     SAFE_OBSTACLES_RADIUS = 0.28  # 2*ROBOT_RADIUS + 0.08 for wiggle room
     STOPPING_DISTANCE = 0.2  # When are we close enough to the goal to stop
     EXPLORE_BIAS = 0.1  # How often the tree does a random exploration
