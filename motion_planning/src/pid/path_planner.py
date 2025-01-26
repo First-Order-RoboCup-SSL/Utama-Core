@@ -8,6 +8,10 @@ import random
 from shapely.geometry import Point, LineString
 from robot_control.src.find_best_shot import ROBOT_RADIUS
 
+import logging
+logger = logging.getLogger(__name__)
+
+
 ROBOT_DIAMETER = 0.2
 
 """
@@ -51,7 +55,7 @@ class RRTPlanner:
     SAFE_OBSTACLES_RADIUS = 0.28 # 2*ROBOT_RADIUS + 0.08 for wiggle room
     STOPPING_DISTANCE = 0.2 # When are we close enough to the goal to stop
     EXPLORE_BIAS = 0.1 # How often the tree does a random exploration
-    STEP_SIZE = 0.25
+    STEP_SIZE = 0.3
     # acceptable relative and absolute error from the target (euclidian distance)
     GOOD_ENOUGH_REL = 1.2
     GOOD_ENOUGH_ABS = 1
@@ -61,7 +65,20 @@ class RRTPlanner:
         self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue
         self.waypoints = []
         self.par = dict()
-        
+    
+    def _reduce_waypoints(self, waypoints: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+        # Takes a list of waypoints and removes the middle waypoint in a set of three if they are nearly collinear
+        # It does this by checking the distance of the middle waypoint from the line formed by the other two
+        # This is to reduce the number of waypoints and make the path smoother
+        if len(waypoints) < 3:
+            return waypoints
+        new_waypoints = [waypoints[0]]
+        for i in range(1, len(waypoints)-1):
+            skipped_segment = LineString([new_waypoints[-1], waypoints[i+1]])
+            if skipped_segment.distance(Point(waypoints[i])) > 0.03 or skipped_segment.length > 2:
+                new_waypoints.append(waypoints[i])
+        new_waypoints.append(waypoints[-1])
+        return new_waypoints
 
     def _get_obstacles(self, robot_id):
         return self._game.friendly_robots[:robot_id] + self._game.friendly_robots[robot_id+1:] + self._game.enemy_robots
@@ -120,9 +137,12 @@ class RRTPlanner:
         goal = Point(target[0], target[1])
 
         if self._closest_obstacle(friendly_robot_id, goal) < ROBOT_DIAMETER / 2:
+            logger.debug("RRT Planner: Goal is inside obstacle radius of goal - no path there, return start")
+
             return [(start.x, start.y)]
 
         if start.distance(goal) < ROBOT_DIAMETER / 2:
+            logger.debug("RRT Planner: Goal is inside robot radius of goal - already there, return goal")
             return [(goal.x, goal.y)]
 
         direct_path = LineString([start, goal])
@@ -130,6 +150,8 @@ class RRTPlanner:
 
         # Need more than the safe obstacle radius as at high speeds this does not work
         if self._closest_obstacle(friendly_robot_id, adjusted_direct_path) > 3*self.SAFE_OBSTACLES_RADIUS:
+            logger.debug("RRT Planner: Goal direct line of sight - Go straight there")
+
             return [(goal.x, goal.y)]
         
         self.grid = [[[] for _ in range(9)] for _ in range(6)]
@@ -140,6 +162,8 @@ class RRTPlanner:
         path_found = False
 
         for its in range(max_iterations):
+            if its%250 == 0:
+                logger.debug(f'RRT info: ITERS: {its} nodes: {len(self.par.keys())}, BEST: {cost_map.get(goal, float("inf"))} EUCLID: {goal.distance(start)}')
             if random.random() < self.EXPLORE_BIAS:
                 rand_point = Point(random.uniform(-Field.HALF_LENGTH, Field.HALF_LENGTH), random.uniform(-Field.HALF_WIDTH, Field.HALF_WIDTH))
             else:
@@ -179,9 +203,12 @@ class RRTPlanner:
                     if cost_map[goal] <= self.GOOD_ENOUGH_ABS*goal.distance(start) or cost_map[goal] - goal.distance(start) < self.GOOD_ENOUGH_ABS:
                         break
                 self._add_compressed_point(rand_point)
-                
-                if its >= 1000 and path_found:
-                    break
+            
+            if cost_map.get(goal, float("inf")) <= self.GOOD_ENOUGH_ABS*goal.distance(start) or cost_map.get(goal, float("inf")) - goal.distance(start) < self.GOOD_ENOUGH_ABS:
+                break   
+
+            if its >= 1000 and path_found:
+                break
 
         if path_found:
             path = []
@@ -190,12 +217,13 @@ class RRTPlanner:
             while current_point is not None:
                 if current_point in visited:
                     # There was a cycle in the tree - this is very bad
+                    logger.warning("RRT Planner: Cycle in the tree - this is very bad")
                     return None
                 visited.add(current_point)
                 path.append(current_point)
                 current_point = self.par[current_point]
             path.reverse()
-            return [(p.x, p.y) for p in path]
+            return self._reduce_waypoints([(p.x, p.y) for p in path])
 
         return None
 
