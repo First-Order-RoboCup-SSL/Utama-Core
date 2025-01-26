@@ -67,7 +67,8 @@ SERIAL_BIT_SIZES = {
         "kicker_bottom": 1,
         "kicker_top": 1,
         "dribbler": 1,
-        "spare": 13,
+        "robot_id": 5,
+        "spare": 8,
     },
     "in": {"has_ball": 1},  # TODO: add "kicker_charged": 1,
 }

@@ -74,7 +74,7 @@ class RealRobotController(AbstractRobotController):
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
         c_command = self._convert_float_command(command)
-        command_buffer = self._generate_command_buffer(c_command)
+        command_buffer = self._generate_command_buffer(robot_id, c_command)
         start_idx = robot_id * self._rbt_cmd_size
         self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = command_buffer
 
@@ -112,10 +112,12 @@ class RealRobotController(AbstractRobotController):
             self._robots_info[i] = info
             data_in = data_in << 1  # shift to the next robot's data
 
-    def _generate_command_buffer(self, c_command: RobotCommand) -> bytes:
+    def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
         """
         Generates the command buffer to be sent to the robot.
         """
+        assert robot_id < 6, "Invalid robot_id. Must be between 0 and 5."
+
         out_bit_sizes = SERIAL_BIT_SIZES["out"]
         local_forward_vel_buffer = (
             f'{c_command.local_forward_vel:0{out_bit_sizes["local_forward_vel"]}b}'
@@ -127,6 +129,7 @@ class RealRobotController(AbstractRobotController):
         kick_buffer = f'{c_command.kick:0{out_bit_sizes["kicker_bottom"]}b}'
         chip_buffer = f'{c_command.chip:0{out_bit_sizes["kicker_top"]}b}'
         dribble_buffer = f'{c_command.dribble:0{out_bit_sizes["dribbler"]}b}'
+        robot_id_buffer = f'{robot_id:0{out_bit_sizes["robot_id"]}b}'
         spare_buffer = f'{0:0{out_bit_sizes["spare"]}b}'
 
         command_buffer = "".join(
@@ -137,6 +140,7 @@ class RealRobotController(AbstractRobotController):
                 kick_buffer,
                 chip_buffer,
                 dribble_buffer,
+                robot_id_buffer,
                 spare_buffer,
             ]
         )
