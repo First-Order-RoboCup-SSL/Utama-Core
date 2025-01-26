@@ -1,4 +1,4 @@
-from typing import Tuple, Union, Optional, List
+from typing import Tuple, Union, Optional, List, Generator
 from entities.game import Game
 from entities.game.field import Field
 from entities.game.game_object import Colour, Robot as GameRobot
@@ -59,9 +59,9 @@ class RRTPlanner:
     def __init__(self, game: Game):
         self._game = game
         self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue
-        self.target = None
         self.waypoints = []
         self.par = dict()
+        
 
     def _get_obstacles(self, robot_id):
         return self._game.friendly_robots[:robot_id] + self._game.friendly_robots[robot_id+1:] + self._game.enemy_robots
@@ -85,8 +85,25 @@ class RRTPlanner:
             if parent_map[p] == parent:
                 cost_map[p] = cost_map[parent] + p.distance(parent)
                 self._propagate(parent_map, cost_map, p)
+    
+    def _get_nearby(self, point: Point) -> List[Point]:
+        return [p for p in self._get_adj_cells(point)]
+    
+    def _get_adj_cells(self, point: Point) -> Generator[Point, None, None]:
+        gx,gy = self._compress_point(point)
+        for dx,dy in [[1,0], [-1,0], [0,1], [0,-1]]:
+            if 0 <= gx+dx < 9 and 0 <= gy+dy < 6:
+                for p in self.grid[gy+dy][gx+dx]:
+                    yield p
+    
+    def _compress_point(self, point: Point) -> Tuple[int, int]:
+        return int((point.x + Field.HALF_LENGTH) // 1), int((point.y + Field.HALF_WIDTH) // 1)
+    
+    def _add_compressed_point(self, point: Point):
+        cp = self._compress_point(point)
+        self.grid[cp[1]][cp[0]].append(point)
 
-    def path_to(self, friendly_robot_id: int, target: Tuple[float, float], max_iterations: int = 1000) -> Optional[List[Tuple[float, float]]]:
+    def path_to(self, friendly_robot_id: int, target: Tuple[float, float], max_iterations: int = 3000) -> Optional[List[Tuple[float, float]]]:
         """
         Generate a path to the target using the Rapidly-exploring Random Tree Star (RRT*) algorithm.
         
@@ -114,53 +131,59 @@ class RRTPlanner:
         # Need more than the safe obstacle radius as at high speeds this does not work
         if self._closest_obstacle(friendly_robot_id, adjusted_direct_path) > 3*self.SAFE_OBSTACLES_RADIUS:
             return [(goal.x, goal.y)]
+        
+        self.grid = [[[] for _ in range(9)] for _ in range(6)]
 
-        parent_map = {start: None}
+        self.par = {start: None}
         cost_map = {start: 0}
+        self._add_compressed_point(start)
         path_found = False
 
-        for _ in range(max_iterations):
+        for its in range(max_iterations):
             if random.random() < self.EXPLORE_BIAS:
                 rand_point = Point(random.uniform(-Field.HALF_LENGTH, Field.HALF_LENGTH), random.uniform(-Field.HALF_WIDTH, Field.HALF_WIDTH))
             else:
                 rand_point = Point(target[0], target[1])
             
 
-            closest_point = min(parent_map.keys(), key=lambda p: p.distance(rand_point))
+            closest_point = min(self.par.keys(), key=lambda p: p.distance(rand_point))
             new_segment = LineString([closest_point, rand_point])
             rand_point = new_segment.interpolate(self.STEP_SIZE)
             new_segment = LineString([closest_point, rand_point])
 
-            if self._closest_obstacle(friendly_robot_id, new_segment) > self.SAFE_OBSTACLES_RADIUS and rand_point not in parent_map:
+            if self._closest_obstacle(friendly_robot_id, new_segment) > self.SAFE_OBSTACLES_RADIUS and rand_point not in self.par:
                 # Choose the best parent node 
                 best_parent = closest_point
                 min_cost = cost_map[closest_point] + closest_point.distance(rand_point)
-                for p in parent_map.keys():
-                    if p.distance(rand_point) < 2*self.STEP_SIZE and cost_map[p] + p.distance(rand_point) < min_cost and self._closest_obstacle(friendly_robot_id, LineString([p, rand_point])) > self.SAFE_OBSTACLES_RADIUS:
+                for p in self._get_nearby(rand_point):
+                    if cost_map[p] + p.distance(rand_point) < min_cost and self._closest_obstacle(friendly_robot_id, LineString([p, rand_point])) > self.SAFE_OBSTACLES_RADIUS:
                         best_parent = p
                         min_cost = cost_map[p] + p.distance(rand_point)
                 
                 cost_map[rand_point] = min_cost
-                parent_map[rand_point] = best_parent
+                self.par[rand_point] = best_parent
 
                 # Now need to rewire the tree based on this 
                 
-                for p in parent_map.keys():
-                    if p.distance(rand_point) < 2:
-                        # Might be able to find a better path through rand_point
-                        if cost_map[rand_point] + rand_point.distance(p) < cost_map[p] and self._closest_obstacle(friendly_robot_id, LineString([p, rand_point])) > self.SAFE_OBSTACLES_RADIUS:
-                            cost_map[p] = cost_map[rand_point] + rand_point.distance(p)
-                            parent_map[p] = rand_point
-                            self._propagate(parent_map, cost_map, p)
+                for p in self._get_nearby(rand_point):
+                    # Might be able to find a better path through rand_point
+                    if cost_map[rand_point] + rand_point.distance(p) < cost_map[p] and self._closest_obstacle(friendly_robot_id, LineString([p, rand_point])) > self.SAFE_OBSTACLES_RADIUS:
+                        cost_map[p] = cost_map[rand_point] + rand_point.distance(p)
+                        self.par[p] = rand_point
+                        self._propagate(self.par, cost_map, p)
                 
                 if rand_point.distance(goal) < self.STOPPING_DISTANCE and cost_map[rand_point] + rand_point.distance(goal) < cost_map.get(goal, float("inf")):
-                    parent_map[goal] = rand_point
+                    self.par[goal] = rand_point
                     cost_map[goal] = cost_map[rand_point] + rand_point.distance(goal)
                     path_found = True
                     if cost_map[goal] <= self.GOOD_ENOUGH_ABS*goal.distance(start) or cost_map[goal] - goal.distance(start) < self.GOOD_ENOUGH_ABS:
                         break
+                self._add_compressed_point(rand_point)
+                
+                if its >= 1000 and path_found:
+                    break
+
         if path_found:
-            self.par = parent_map
             path = []
             current_point = goal
             visited = set()
@@ -170,7 +193,7 @@ class RRTPlanner:
                     return None
                 visited.add(current_point)
                 path.append(current_point)
-                current_point = parent_map[current_point]
+                current_point = self.par[current_point]
             path.reverse()
             return [(p.x, p.y) for p in path]
 
