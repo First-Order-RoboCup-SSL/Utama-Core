@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from shapely import Point
 from entities.game.game_object import Colour, GameObject, Robot as GameRobot
-from motion_planning.src.pid.path_planner import point_to_tuple
+from motion_planning.src.planning.path_planner import point_to_tuple
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from robot_control.src.skills import (
     get_goal_centre,
@@ -25,7 +25,7 @@ from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
-from motion_planning.src.pid.path_planner import DynamicWindowPlanner, RRTPlanner
+from motion_planning.src.planning.path_planner import DynamicWindowPlanner, RRTPlanner
 from robot_control.src.find_best_shot import ROBOT_RADIUS
 import random
 import logging

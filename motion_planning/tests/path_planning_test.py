@@ -1,8 +1,5 @@
-import sys
-import os
 from typing import List
 import numpy as np
-import pytest
 from entities.game.game_object import Colour, GameObject, Robot as GameRobot
 
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
@@ -24,11 +21,9 @@ from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
-from motion_planning.src.pid.path_planner import DynamicWindowPlanner
+from motion_planning.src.planning.path_planner import DynamicWindowPlanner
 from robot_control.src.find_best_shot import ROBOT_RADIUS 
 import random
-import logging
-import time
 from math import dist
 
 # logger = logging.getLogger(__name__)
@@ -83,9 +78,7 @@ def test_pathfinding(headless: bool, moving: bool):
             friendly_robots, _, _ = latest_frame  
         r = friendly_robots[mover_id]
         if dist((r.x, r.y), target) < 0.05 and mag(velocity) < 0.2:
-            print("REACHED")
             target = targets.pop(0)
-
 
             randomly_spawn_robots(env, True, [mover_id])
             randomly_spawn_robots(env, False, [])

@@ -358,7 +358,7 @@ class DynamicWindowPlanner:
                     best_score = score
                     best_move = segment.coords[1]
 
-            sf /= 2
+            sf /= 4
 
         return best_move
 
