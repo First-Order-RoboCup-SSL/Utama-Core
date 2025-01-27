@@ -108,7 +108,7 @@ class Game:
     def ball(self, value: BallData):
         self._ball.ball_data = value
 
-    def is_ball_in_goal(self, left_goal: bool):
+    def is_ball_in_goal(self, right_goal: bool):
         ball_pos = self.get_ball_pos()[0]
         return (
             ball_pos.x < -self.field.HALF_LENGTH
@@ -116,13 +116,13 @@ class Game:
                 ball_pos.y < self.field.HALF_GOAL_WIDTH
                 and ball_pos.y > -self.field.HALF_GOAL_WIDTH
             )
-            and not left_goal
+            and not right_goal
             or ball_pos.x > self.field.HALF_LENGTH
             and (
                 ball_pos.y < self.field.HALF_GOAL_WIDTH
                 and ball_pos.y > -self.field.HALF_GOAL_WIDTH
             )
-            and left_goal
+            and right_goal
         )
 
     ### Game state management ###
@@ -491,6 +491,11 @@ class Game:
             futureAverageVelocity = tuple(averageVelocity)
 
         return (totalX / iter, totalY / iter)
+
+    def in_box(x_coord: float, y_coord: float):
+        return ((x_coord < 1 and abs(y_coord) < 1)
+                or 
+                (x_coord > 8 and abs(y_coord) < 1))
 
 
 if __name__ == "__main__":

@@ -252,6 +252,12 @@ def defend(
     shooters_data = find_likely_enemy_shooter(enemy, balls)
     orientation = None
     tracking_ball = False
+
+
+    # if game.in_box(balls[0].x, balls[0].y):
+    #     print("AAAAAAAAAAAAAAAAAAAAAA")
+    #     # return None
+
     if not shooters_data:
         target_tracking_coord = balls[0].x, balls[0].y
         # TODO game.get_ball_velocity() can return (None, None)

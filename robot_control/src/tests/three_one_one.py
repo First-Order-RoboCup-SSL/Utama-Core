@@ -42,7 +42,7 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
     N_ROBOTS_YELLOW = N_ROBOTS_ATTACK if attacker_is_yellow else N_ROBOTS_DEFEND  
     N_ROBOTS_BLUE = N_ROBOTS_DEFEND if attacker_is_yellow else N_ROBOTS_ATTACK  
     
-    START_POS = 1
+    START_POS = 2
     SHOOT_THRESH = 2.5
     SPACING = 2.5
 
@@ -93,7 +93,10 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
 
 
         if iter > 10: # give them chance to spawn in the correct place
-            goal_scored = goal_scored or game.is_ball_in_goal(attacker_is_yellow)
+            goal_scored = goal_scored or game.is_ball_in_goal(not attacker_is_yellow)
+            if game.is_ball_in_goal(not attacker_is_yellow):
+                break
+
             if shooting:
                 cmd = score_goal(game, True, possessor, pid_oren_attacker, pid_2d_attacker, attacker_is_yellow, attacker_is_yellow)
                 for npc_attacker in set(range(N_ROBOTS_ATTACK)).difference([possessor]):
