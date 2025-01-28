@@ -4,6 +4,7 @@ from typing import Union, Optional, Dict, List
 from math import degrees
 import warnings
 import numpy as np
+import time
 
 from entities.data.command import RobotCommand, RobotInfo
 from entities.game import Game
@@ -28,18 +29,24 @@ logger = logging.getLogger(__name__)
 class RealRobotController(AbstractRobotController):
     """
     Robot Controller for Real Robots.
+
+    Args:
+        is_team_yellow (bool): True if the team is yellow, False if the team is blue.
+        game_obj (Game): The game object storing all game state data.
+        n_robots (int): The number of robots in the team. Directly affects output buffer size. Default is 6.
     """
 
-    def __init__(self, is_team_yellow: bool, game_obj: Game):
+    def __init__(self, is_team_yellow: bool, game_obj: Game, n_robots: int = 6):
         self._is_team_yellow = is_team_yellow
         self._game_obj = game_obj
-        self._serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
+        self._n_robots = n_robots  # determines buffer size
+        self._serial = self._init_serial()
         self._rbt_cmd_size = ceil(
             sum(SERIAL_BIT_SIZES["out"].values()) / 8
         )  # packet size for one robot
         self._out_packet = self._empty_command()
         self._in_packet_size = ceil(sum(SERIAL_BIT_SIZES["in"].values()) / 8)
-        self._robots_info: List[RobotInfo] = [None] * 6
+        self._robots_info: List[RobotInfo] = [None] * self._n_robots
 
         logger.debug(
             f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}"
@@ -104,7 +111,7 @@ class RealRobotController(AbstractRobotController):
         # TODO It's a bit awkward now because we haven't confirmed the return packet size and there's likely some spare space in the packet
         # assumption now is packet of 1 byte, bits[7] to bit[2] are has_ball boolean in order of id 0 to 5. bit[1] to bit[0] are reserved
         """
-        for i in range(6):
+        for i in range(self._n_robots):
             has_ball = False
             if data_in[0] & 0b10000000:
                 has_ball = True
@@ -214,7 +221,13 @@ class RealRobotController(AbstractRobotController):
         return float_val.view(np.uint16)
 
     def _empty_command(self) -> bytearray:
-        return bytearray(self._rbt_cmd_size * 6)
+        return bytearray(self._rbt_cmd_size * self._n_robots)
+
+    def _init_serial(self) -> Serial:
+        serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
+        time.sleep(5)
+        serial.reset_input_buffer()  # temporary implementation to clear debugging info in input
+        return serial
 
     @property
     def is_team_yellow(self) -> bool:
@@ -223,6 +236,10 @@ class RealRobotController(AbstractRobotController):
     @property
     def game_obj(self) -> Game:
         return self._game_obj
+
+    @property
+    def n_robots(self) -> int:
+        return self._n_robots
 
     @property
     def serial(self) -> Serial:
