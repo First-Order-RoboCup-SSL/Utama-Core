@@ -6,7 +6,7 @@ from team_controller.src.controllers.sim.grsim_robot_controller import (
     GRSimRobotController,
 )
 from team_controller.src.config.settings import TIMESTEP
-from motion_planning.src.pid.pid import get_pids
+from motion_planning.src.pid.pid import get_grsim_pids
 from team_controller.src.data import VisionDataReceiver
 from team_controller.src.data.message_enum import MessageType
 from robot_control.src.high_level_skills import DribbleToTarget
@@ -29,7 +29,7 @@ vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
 vision_thread.daemon = True
 vision_thread.start()
 
-pid_oren, pid_trans = get_pids(6)
+pid_oren, pid_trans = get_grsim_pids(6)
 
 target_coords = [(4, 2.5), (4, -2.5), (-4, -2.5), (-4, 2.5)]
 idx = 0

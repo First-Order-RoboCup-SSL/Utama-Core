@@ -79,7 +79,7 @@ class DribbleToTarget:
                     delta_x = self.game.get_ball_pos()[0].x - current_x
                     delta_y = self.game.get_ball_pos()[0].y - current_y
                     ball_data = BallData(
-                        delta_x * 3 + current_x, delta_y * 3 + current_y, 0
+                        delta_x * 6 + current_x, delta_y * 6 + current_y, 0
                     )
                 return go_to_ball(
                     self.pid_oren,
@@ -88,7 +88,7 @@ class DribbleToTarget:
                     self.robot_id,
                     ball_data,
                 )
-            elif self.dribbled_distance < 0.75:
+            elif self.dribbled_distance < 0.55:
                 target_oren = np.arctan2(target_y - current_y, target_x - current_x)
                 return calculate_robot_velocities(
                     self.pid_oren,
