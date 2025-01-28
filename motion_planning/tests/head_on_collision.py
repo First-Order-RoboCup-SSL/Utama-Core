@@ -68,7 +68,7 @@ def test_pathfinding(headless: bool):
         env.draw_point(target[0], target[1], width=10, color="GREEN")
 
         velocity = game.get_object_velocity(GameRobot(True, mover_id))
-        next_stop = planner.path_to(mover_id, target)
+        next_stop, _ = planner.path_to(mover_id, target)
         latest_frame = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
 
         if latest_frame:

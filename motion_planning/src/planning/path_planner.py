@@ -48,6 +48,9 @@ def point_to_tuple(point: Point) -> tuple:
     """
     return (point.x, point.y)
 
+def target_inside_robot_radius(rpos: Tuple[float, float], target: Tuple[float, float]) -> bool:
+    return dist(rpos, target) <= ROBOT_RADIUS
+
 
 class RRTPlanner:
     # TODO - make these parameters configurable at runtime
@@ -56,7 +59,7 @@ class RRTPlanner:
     SAFE_OBSTACLES_RADIUS = 0.28  # 2*ROBOT_RADIUS + 0.08 for wiggle room
     STOPPING_DISTANCE = 0.2  # When are we close enough to the goal to stop
     EXPLORE_BIAS = 0.1  # How often the tree does a random exploration
-    STEP_SIZE = 0.3
+    STEP_SIZE = 0.15
     # acceptable relative and absolute error from the target (euclidian distance)
     GOOD_ENOUGH_REL = 1.2
     GOOD_ENOUGH_ABS = 1
@@ -241,7 +244,7 @@ class RRTPlanner:
                         self.par[p] = rand_point
                         self._propagate(self.par, cost_map, p)
 
-                if rand_point.distance(goal) < self.STOPPING_DISTANCE and cost_map[
+                if goal.distance(LineString([best_parent, rand_point])) < self.STOPPING_DISTANCE and cost_map[
                     rand_point
                 ] + rand_point.distance(goal) < cost_map.get(goal, float("inf")):
                     self.par[goal] = rand_point
@@ -298,7 +301,7 @@ class DynamicWindowPlanner:
 
     def path_to(
         self, friendly_robot_id: int, target: Tuple[float, float]
-    ) -> Tuple[float, float]:
+    ) -> Tuple[Tuple[float, float], float]:
         """
         Plan a path to the target for the specified friendly robot.
 
@@ -316,7 +319,7 @@ class DynamicWindowPlanner:
         start_x, start_y = robot.x, robot.y
 
         if dist((start_x, start_y), target) < 1.5 * ROBOT_RADIUS:
-            return target
+            return target, float("inf")
 
         return self.local_planning(friendly_robot_id, target)
 
@@ -360,7 +363,7 @@ class DynamicWindowPlanner:
 
             sf /= 4
 
-        return best_move
+        return best_move, best_score
 
     def _get_obstacles(self, robot_id):
         return (
