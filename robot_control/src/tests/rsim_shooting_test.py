@@ -36,7 +36,7 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
         )
 
     env.reset()
-    env.teleport_ball(1, 1)
+    env.teleport_ball(1, 2)
 
     pid_oren, pid_trans = get_rsim_pids(N_ROBOTS)
 
@@ -44,7 +44,6 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
         is_team_yellow=is_yellow, env=env, game_obj=game
     )
 
-    shoot_in_left_goal = random.random() > 0.5
     goal_scored = False
 
     start_time = time.time()
@@ -66,7 +65,7 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
                     pid_oren=pid_oren,
                     pid_trans=pid_trans,
                     is_yellow=is_yellow,
-                    shoot_in_left_goal=shoot_in_left_goal,
+                    shoot_in_left_goal=is_yellow,
                 )
 
                 if game.is_ball_in_goal(our_side=not is_yellow):

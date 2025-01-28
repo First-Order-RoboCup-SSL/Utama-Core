@@ -35,7 +35,7 @@ def calculate_robot_velocities(
         forward_vel, left_vel = pid_trans.calculate(
             (target_x, target_y), (current_x, current_y), robot_id
         )
-        forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren)
+        forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren + (angular_vel*(1/60) / 2))
     else:
         forward_vel = 0
         left_vel = 0

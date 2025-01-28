@@ -42,7 +42,7 @@ class Game:
         self._enemy_robots: List[Robot] = [
             Robot(id, is_friendly=False) for id in range(num_enemy_robots)
         ]
-        self._ball: Ball = Ball()
+        self._ball: Ball = Ball(BallData(0, 0, 0))
 
         self._yellow_score = 0
         self._blue_score = 0
@@ -106,7 +106,9 @@ class Game:
     @ball.setter
     # TODO: can always make a "setter" which copies the object and returns a new object with the changed value
     def ball(self, value: BallData):
-        self._ball.ball_data = value
+        # Temporary fix for when the ball is None
+        if value is not None:
+            self._ball.ball_data = value
 
     def is_ball_in_goal(self, our_side: bool):
         ball_pos = self.get_ball_pos()[0]
@@ -128,12 +130,6 @@ class Game:
     ### Game state management ###
     def add_new_state(self, frame_data: FrameData) -> None:
         if isinstance(frame_data, FrameData):
-            ### TODO: when stripping all the Nones from the frame if only robot id: 1 is detected in the frame dosen't have placeholders with ###
-
-            # Need to trim number of robots in frame to number we expect (num_friendly, num_enemy)
-            # yellow_robot_data = [i for i in frame_data.yellow_robots if i is not None]
-            # blue_robot_data = [i for i in frame_data.blue_robots if i is not None]
-
             # if self.my_team_is_yellow:
             #     if len(yellow_robot_data) != len(self._friendly_robots):
             #         logger.warning(f"Expected data for {len(self.friendly_robots)} friendly robots but found {len(yellow_robot_data)} in frame")
@@ -147,9 +143,6 @@ class Game:
             #     if len(blue_robot_data) != len(self._friendly_robots):
             #         logger.warning(f"Expected data for {len(self._friendly_robots)} friendly (blue) robots but found {len(blue_robot_data)} in frame")
 
-            # stripped_frame_data = FrameData(
-            #     frame_data.ts, yellow_robot_data, blue_robot_data, frame_data.ball
-            # )
             self._records.append(frame_data)
             self._predicted_next_frame = self._reorganise_frame(
                 self.predict_frame_after(TIMESTEP)
@@ -420,9 +413,10 @@ class Game:
 
         previous_pos = self._get_object_position_at_frame(frame - 1, object)
         current_pos = self._get_object_position_at_frame(frame, object)
-
-        assert previous_pos is not None
-        assert current_pos is not None
+        
+        if current_pos is None or previous_pos is None:
+            logger.warning("No position data to calculate velocity for frame %d", frame)
+            return None
 
         previous_time_received = previous_frame.ts
         time_received = current_frame.ts
@@ -437,7 +431,7 @@ class Game:
             return None
 
         dt_secs = time_received - previous_time_received
-
+        
         vx = (current_pos.x - previous_pos.x) / dt_secs
         vy = (current_pos.y - previous_pos.y) / dt_secs
 
@@ -469,6 +463,9 @@ class Game:
                 if curr_vel:
                     averageVelocity[0] += curr_vel[0]
                     averageVelocity[1] += curr_vel[1]
+                elif missing_velocities == WINDOW - 1:
+                    logging.warning(f"No velocity data to calculate acceleration for frame {len(self._records) - j}")
+                    return None
                 else:
                     missing_velocities += 1
 

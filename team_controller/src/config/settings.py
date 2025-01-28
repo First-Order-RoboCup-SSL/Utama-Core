@@ -5,6 +5,7 @@ TIMESTEP = 0.0167
 
 # maximum (real and sim) robot settings
 MAX_VEL = 2.5
+# any slower and the robots become unstable
 MAX_ANGULAR_VEL = 8
 
 ROBOT_RADIUS = 0.09  # TODO: probably not the best place to put this
@@ -43,8 +44,7 @@ PID_PARAMS = {
         "Kd": 0,
         "Ki": 0.2,
         "dt": TIMESTEP,
-        "max": MAX_VEL,
-        "min": -MAX_VEL,
+        "max_vel": MAX_VEL,
     },
 }
 
