@@ -39,7 +39,7 @@ def test_grsim_shooting(shooter_id: int, is_yellow: bool, headless: bool):
     # Initialize PID controllers
     pid_oren, pid_trans = get_grsim_pids(6)
 
-    time.sleep(0.3)
+    time.sleep(0.1)
 
     start_time = time.time()  # Start the timer
 
@@ -77,7 +77,7 @@ def test_grsim_shooting(shooter_id: int, is_yellow: bool, headless: bool):
             if game.is_ball_in_goal(our_side=not is_yellow):
                 logger.info(f"Test Passed: Goal scored in {elapsed_time:.2f} seconds.")
                 break
-            
+
         assert True  # Success
 
     except KeyboardInterrupt:
@@ -89,4 +89,4 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
 
     # Run the test and output the result
-    test_result = test_grsim_shooting(5, False, False)
+    test_result = test_grsim_shooting(4, False, False)

@@ -67,11 +67,11 @@ class GRSimController(AbstractSimController):
         return sim_control
 
     def reset(self):
+        self.teleport_ball(0, 0, 0, 0)
         for idx, x in enumerate(YELLOW_START_ONE):
             self.teleport_robot(True, idx, x[0], x[1], x[2])
         for idx, x in enumerate(BLUE_START_ONE):
             self.teleport_robot(False, idx, x[0], x[1], x[2])
-        self.teleport_ball(0, 0, 0, 0)
 
     def teleport_robot(
         self,

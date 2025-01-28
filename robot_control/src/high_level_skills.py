@@ -54,6 +54,7 @@ class DribbleToTarget:
         self.dribbled_distance = 0  # TODO: this needs to be stored as a global robot state in the future (because it is accessed by all functions involving movement)
         self.paused = False
         self.augment = augment
+        self.prev_has_ball = False
 
     def enact(self, has_ball: bool):
         this_robot_data = self.game.get_robot_pos(True, self.robot_id)
@@ -100,7 +101,6 @@ class DribbleToTarget:
                     dribbling=True,
                 )
             else:
-                # if just crossed the threshold, push the ball forward
                 return RobotCommand(
                     local_forward_vel=0,
                     local_left_vel=0,
@@ -111,7 +111,23 @@ class DribbleToTarget:
                 )
 
     def update_coord(self, next_coords: Tuple[int]):
+        self.dribbled_distance = 0
         self.target_coords = next_coords
+
+    # def _update_dribble_distance(
+    #     self, current_point: tuple[float, float], has_ball: bool
+    # ):
+    #     """
+    #     Update the distance dribbled by the robot with the ball.
+    #     """
+    #     if not has_ball:
+    #         self.last_point_with_ball = None
+    #         self.dribbled_distance = 0
+    #     else:
+    #         if self.last_point_with_ball is not None:
+    #             last_d = distance(self.last_point_with_ball, current_point)
+    #             self.dribbled_distance += last_d
+    #         self.last_point_with_ball = current_point
 
     def _update_dribble_distance(
         self, current_point: tuple[float, float], has_ball: bool
@@ -122,8 +138,15 @@ class DribbleToTarget:
         if not has_ball:
             self.last_point_with_ball = None
             self.dribbled_distance = 0
+            self.prev_has_ball = False  # Track previous state
         else:
-            if self.last_point_with_ball is not None:
-                last_d = distance(self.last_point_with_ball, current_point)
-                self.dribbled_distance += last_d
-            self.last_point_with_ball = current_point
+            # Reset dribble distance if this is the first frame of regaining the ball
+            if not self.prev_has_ball:
+                self.dribbled_distance = 0
+                self.last_point_with_ball = current_point  # Start fresh
+            else:
+                if self.last_point_with_ball is not None:
+                    last_d = distance(self.last_point_with_ball, current_point)
+                    self.dribbled_distance += last_d
+                self.last_point_with_ball = current_point
+            self.prev_has_ball = True  # Update previous state
