@@ -1,3 +1,4 @@
+import logging
 import random
 import threading
 import queue
@@ -13,54 +14,61 @@ from robot_control.src.high_level_skills import DribbleToTarget
 from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from entities.game import Game
 
-IS_YELLOW = True
 
-robot_id = 3
-target_coord = (-2, 1)
+def test_grsim_dribbling(dribbler_id: int, is_yellow: bool, headless: bool):
+    game = Game()
 
-game = Game()
-env = GRSimController()
+    message_queue = queue.SimpleQueue()
+    vision_receiver = VisionDataReceiver(message_queue)
+    robot_controller = GRSimRobotController(is_team_yellow=True)
 
-message_queue = queue.SimpleQueue()
-vision_receiver = VisionDataReceiver(message_queue)
-robot_controller = GRSimRobotController(is_team_yellow=True)
+    vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
+    vision_thread.daemon = True
+    vision_thread.start()
 
-vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
-vision_thread.daemon = True
-vision_thread.start()
+    pid_oren, pid_trans = get_grsim_pids(6)
 
-pid_oren, pid_trans = get_grsim_pids(6)
+    target_coords = [(4, 2.5), (4, -2.5), (-4, -2.5), (-4, 2.5)]
+    idx = 0
+    dribble_task = DribbleToTarget(
+        pid_oren,
+        pid_trans,
+        game,
+        dribbler_id,
+        target_coords=target_coords[0],
+        augment=True,
+    )
 
-target_coords = [(4, 2.5), (4, -2.5), (-4, -2.5), (-4, 2.5)]
-idx = 0
-dribble_task = DribbleToTarget(
-    pid_oren, pid_trans, game, robot_id, target_coords=target_coords[0], augment=True
-)
-my_team_is_yellow = True
+    try:
+        while True:
+            (message_type, message) = message_queue.get()
+            if message_type == MessageType.VISION:
+                game.add_new_state(message)
+            elif message_type == MessageType.REF:
+                pass
 
-try:
-    while True:
-        (message_type, message) = message_queue.get()
-        if message_type == MessageType.VISION:
-            game.add_new_state(message)
-        elif message_type == MessageType.REF:
-            pass
+            f, e, b = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
 
-        f, e, b = game.get_my_latest_frame(my_team_is_yellow=my_team_is_yellow)
+            if (
+                (f[dribbler_id].x - target_coords[idx][0]) ** 2
+                + (f[dribbler_id].y - target_coords[idx][1]) ** 2
+            ) < 0.1:
+                idx = (idx + 1) % 4
+                dribble_task.update_coord(target_coords[idx])
+                print("SUCCESS")
 
-        if (
-            (f[robot_id].x - target_coords[idx][0]) ** 2
-            + (f[robot_id].y - target_coords[idx][1]) ** 2
-        ) < 0.1:
-            idx = (idx + 1) % 4
-            dribble_task.update_coord(target_coords[idx])
-            print("SUCCESS")
+            cmd = dribble_task.enact(robot_controller.robot_has_ball(dribbler_id))
+            if dribble_task.dribbled_distance > 1.0:
+                print("FOULLL: ", dribble_task.dribbled_distance)
+            robot_controller.add_robot_commands(cmd, dribbler_id)
+            robot_controller.send_robot_commands()
 
-        cmd = dribble_task.enact(robot_controller.robot_has_ball(robot_id))
-        if dribble_task.dribbled_distance > 1.0:
-            print("FOULLL: ", dribble_task.dribbled_distance)
-        robot_controller.add_robot_commands(cmd, robot_id)
-        robot_controller.send_robot_commands()
+    except KeyboardInterrupt:
+        print("Exiting...")
 
-except KeyboardInterrupt:
-    print("Exiting...")
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
+
+    # Run the test and output the result
+    test_result = test_grsim_dribbling(3, False, False)
