@@ -88,7 +88,8 @@ class TimedSwitchController:
     idea is that the slower planner gives more accurate global guidance
        """
     
-    DEFAULT_RUN = 20
+    DEFAULT_RUN = 30 # SLow planner is invoked once every DEFAULT_RUN frames
+    
     def __init__(self, num_robots: int, game: Game, friendly_colour, env):
         self.num_robots = num_robots
         self._slow_planner = BisectorPlanner(game, friendly_colour, env)
