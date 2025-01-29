@@ -1,11 +1,14 @@
 from typing import Tuple
 
 from numpy import full
+from entities.game import robot
 from entities.game.game import Game
 from entities.game.robot import Robot
-from motion_planning.src.planning.path_planner import RRTPlanner, DynamicWindowPlanner, target_inside_robot_radius
+from motion_planning.src.planning.path_planner import BisectorPlanner, RRTPlanner, DynamicWindowPlanner, target_inside_robot_radius
 from math import dist
 import time
+
+
 class HybridWaypointMotionController:
     """Motion controller that takes two path planners, one which produces locally good moves
        and another which produces a list of waypoints to the target the aim of the class
@@ -77,6 +80,45 @@ class HybridWaypointMotionController:
         else:
             print("You are in deep trouble lad")
             return target
+
+
+
+class TimedSwitchController:
+    """Takes two planners, one run per frame and one run per N frames,
+    idea is that the slower planner gives more accurate global guidance
+       """
+    
+    DEFAULT_RUN = 20
+    def __init__(self, num_robots: int, game: Game, friendly_colour, env):
+        self.num_robots = num_robots
+        self._slow_planner = BisectorPlanner(game, friendly_colour, env)
+        self._game = game
+        self._fast_planner = DynamicWindowPlanner(game)
+        self._real_targets = [None for _ in range(num_robots)]
+        self._intermediate_target = [None for _ in range(num_robots)]
+        self._last_slow_frame = [0 for _ in range(num_robots)]
+
+        # DEBUG ONLY
+        self._env = env
+
+    def path_to(self, target: Tuple[float, float], robot_id: int) -> Tuple[float, float]:
+
+        if target == self._real_targets[robot_id]:
+            if self._last_slow_frame[robot_id] == 0:
+                self._intermediate_target[robot_id] = self._slow_planner.path_to(robot_id, target)
+                self._last_slow_frame[robot_id] = self.DEFAULT_RUN
+            else:
+                self._last_slow_frame[robot_id] -= 1
+        else:
+            self._real_targets[robot_id] = target
+            self._intermediate_target[robot_id] = self._slow_planner.path_to(robot_id, target)
+            self._last_slow_frame[robot_id] = self.DEFAULT_RUN
+        
+        return self._fast_planner.path_to(robot_id, self._intermediate_target[robot_id])[0]
+
+
+
+
 
 
 

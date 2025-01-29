@@ -519,7 +519,6 @@ class BisectorPlanner:
 
         return LineString([(start_x, start_y), (end_x, end_y)])
 
-        return closest
 
     def _adjust_segment_for_robot_radius(self, seg: LineString) -> LineString:
         current_robot_seg_interect = seg.interpolate(ROBOT_RADIUS)
@@ -541,12 +540,16 @@ class BisectorPlanner:
         perp = self.perpendicular_bisector(line)
 
         midpoint = perp.interpolate(0.5, normalized=True)
+
+        if midpoint.distance(Point(*target)) < ROBOT_RADIUS:
+            return target
+        
         halves = [LineString([midpoint, perp.coords[1]]), LineString([midpoint, perp.coords[0]])]
         obsts = self._get_obstacles(robot_id)
 
         if self._env:
-            self._env.draw_line(halves[0].coords)
-            self._env.draw_line(halves[1].coords)
+            self._env.draw_line(halves[0].coords, width=3)
+            self._env.draw_line(halves[1].coords, width=3)
 
 
         for s in range(90):
