@@ -9,12 +9,10 @@ def get_grsim_pids(n_robots: int):
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        10.5,
-        0.01,
-        0.045,
+        18.5/2, 0.12/2, 0,
         num_robots=n_robots,
     )
-    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 7.5, 0.01, 0.0, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5/2, 0.025/2, 0, num_robots=n_robots)
     return pid_oren, pid_trans
 
 
