@@ -53,8 +53,7 @@ def main():
 
             if message_type == MessageType.VISION:
                 game.add_new_state(message)
-                # print(message)
-                # print(game.friendly_robots[1].orientation)
+                print(message)
             elif message_type == MessageType.REF:
                 pass
 
