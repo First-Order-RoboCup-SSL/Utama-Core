@@ -36,7 +36,7 @@ def inverse_kinematics(forward_vel: float, left_vel:float, angular_vel: float, )
     
     wheel_velocities = []
     for theta in wheel_angles:
-        v_i = forward_vel * np.sin(theta) - left_vel * np.cos(theta) + angular_vel * r
+        v_i = forward_vel * np.sin(theta) + left_vel * np.cos(theta) + angular_vel * r
         wheel_velocities.append(v_i)
     return wheel_velocities
 
