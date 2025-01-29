@@ -55,7 +55,7 @@ TELEPORT_X_COORDS = [0.4, 0.8, 1.2, 1.6, 2, 2.4]
 
 # real controller
 BAUD_RATE = 115200
-PORT = "/dev/ttyACM3"
+PORT = "/dev/ttyACM0"
 TIMEOUT = 0.1
 # NOTE: angular_vel, local_forward_vel, local_left_vel are 16 bit floating point.
 # they should not be changed to any arbitrary value.
