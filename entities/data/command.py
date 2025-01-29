@@ -15,6 +15,19 @@ RobotCommand = namedtuple(
     ],
 )
 
+RobotVelCommand = namedtuple(
+    "RobotVelCommand",
+    [
+        "front_right",
+        "back_right",
+        "front_left",
+        "back_left",
+        "kick",
+        "chip",
+        "dribble",
+    ],
+)
+
 class RobotInfo(NamedTuple):
     has_ball: bool
 # TODO: add kicker charged to robot info
