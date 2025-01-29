@@ -57,8 +57,10 @@ class RealRobotController(AbstractRobotController):
         Sends the robot commands to the appropriate team (yellow or blue).
         """
         self._serial.write(self.out_packet)
-        data_in = self._serial.read(self._in_packet_size)
-        self._populate_robots_info(data_in)
+        data_in = self._serial.read(self._serial.in_waiting)
+        print(data_in)
+        # data_in = self._serial.read(self._in_packet_size)
+        # self._populate_robots_info(data_in)
 
         self._out_packet = self._empty_command()  # flush the out_packet
 
@@ -225,6 +227,7 @@ class RealRobotController(AbstractRobotController):
 
     def _init_serial(self) -> Serial:
         serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
+        print("Serial port opened!")
         time.sleep(5)
         serial.reset_input_buffer()  # temporary implementation to clear debugging info in input
         return serial
