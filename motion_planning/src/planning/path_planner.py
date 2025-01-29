@@ -289,6 +289,10 @@ class RRTPlanner:
 N_DIRECTIONS = 16
 
 
+def collision_times(our_position: Tuple[float, float], our_velocity: Optional[Tuple[float, float]]):
+    pass
+
+
 class DynamicWindowPlanner:
     SIMULATED_TIMESTEP = 0.2  # seconds
     MAX_ACCELERATION = 2  # Measured in ms^2
@@ -471,3 +475,100 @@ class DynamicWindowPlanner:
         end_y = adj_vel_y + rpos[1]
         end_x = adj_vel_x + rpos[0]
         return LineString([(rpos[0], rpos[1]), (end_x, end_y)])
+
+from shapely.affinity import rotate
+from shapely.ops import split
+
+class BisectorPlanner:
+    OBSTACLE_CLEARANCE = 0.18
+
+    def _get_obstacles(self, robot_id):
+        return (
+            self._game.friendly_robots[:robot_id]
+            + self._game.friendly_robots[robot_id + 1 :]
+            + self._game.enemy_robots
+        )
+    
+    def __init__(self, game, friendly_colour, env):
+        self._game = game
+        self._friendly_colour = friendly_colour
+        self._enemy_colour = Colour.invert(friendly_colour)
+        self._env = env
+
+    def perpendicular_bisector(self, line: LineString):
+        # Ensure the input is a valid LineString
+        if len(line.coords) != 2:
+            raise ValueError("The LineString must consist of exactly two points.")
+
+        # Get the midpoint of the line
+        midpoint = line.interpolate(0.5, normalized=True)
+
+        # Rotate the line by 90 degrees around the midpoint
+        perpendicular = rotate(line, 90, origin=midpoint)
+        sx,sy = perpendicular.coords[0]
+        ex, ey = perpendicular.coords[1]
+
+        gradx = ex - sx
+        grady = ey - sy
+        
+        start_x = sx - 1000*gradx
+        start_y = sy - 1000*grady
+
+        end_x = ex + 1000*gradx
+        end_y = ey + 1000*grady
+
+        return LineString([(start_x, start_y), (end_x, end_y)])
+
+        return closest
+
+    def _adjust_segment_for_robot_radius(self, seg: LineString) -> LineString:
+        current_robot_seg_interect = seg.interpolate(ROBOT_RADIUS)
+        return LineString(
+            [current_robot_seg_interect, seg.interpolate(1, normalized=True)]
+        )
+    
+    def path_to(self, robot_id: int, target: Tuple[float, float]) -> Tuple[float, float]:
+        # Check the straight line case first
+
+        our_position = self._game.get_robot_pos(
+            self._friendly_colour == self._friendly_colour, robot_id
+        )
+
+
+        self._env.draw_line([(our_position.x, our_position.y), target], width=2, color="GREEN")
+        
+        line = LineString([(our_position.x, our_position.y), target])
+        perp = self.perpendicular_bisector(line)
+
+        midpoint = perp.interpolate(0.5, normalized=True)
+        halves = [LineString([midpoint, perp.coords[1]]), LineString([midpoint, perp.coords[0]])]
+        obsts = self._get_obstacles(robot_id)
+
+        if self._env:
+            self._env.draw_line(halves[0].coords)
+            self._env.draw_line(halves[1].coords)
+
+
+        for s in range(90):
+            offset = s*0.10
+
+            for h in halves:
+                p1 = h.interpolate(offset)
+
+                seg1 = self._adjust_segment_for_robot_radius(LineString([(our_position.x, our_position.y), p1]))
+                seg2 = LineString([p1, target])
+
+                if not self._segment_intersects(seg1, obsts) and not self._segment_intersects(seg2, obsts):
+                    self._env.draw_point(*point_to_tuple(p1), color="PINK", width=3)
+                    return point_to_tuple(p1)
+        
+        # assert 1 == 0, "NO SUITABLE POINT FOUND"
+        return point_to_tuple(midpoint)
+
+
+    def _segment_intersects(self, seg: LineString, obstacles: List[Tuple[float, float]]) -> bool:
+
+        for o in obstacles:
+            if Point((o.x, o.y)).distance(seg) < BisectorPlanner.OBSTACLE_CLEARANCE:
+                return True
+        return False
