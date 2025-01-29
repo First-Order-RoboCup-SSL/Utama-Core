@@ -42,6 +42,7 @@ def inverse_kinematics(forward_vel: float, left_vel:float, angular_vel: float, )
 
 def packet_builder():
     out_packet = RobotControl()
+    # idk why its soo slow but if its to fast something breaks
     wheel_velocities = inverse_kinematics(forward_vel=0, left_vel=10, angular_vel=0)
     command = RobotVelCommand(
             front_right=wheel_velocities[0],
