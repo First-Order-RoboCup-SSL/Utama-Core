@@ -1,0 +1,195 @@
+import numpy as np
+from robot_control.src.utils.shooting_utils import find_shot_quality
+
+ROBOT_RADIUS = 0.09
+
+
+def ball_position(t, x0, v0, a):
+    x0 = np.array(x0)
+    v0 = np.array(v0)
+    a = np.array(a)
+    return x0 + v0 * t + 0.5 * a * (t**2)
+
+
+def interception_chance(
+    passer, receiver, opponent, robot_velocity, ball_v0_magnitude, ball_a_magnitude
+):
+    A = np.array(passer)
+    B = np.array(receiver)
+    R = np.array(opponent)
+    AB = B - A
+    AB_unit = AB / np.linalg.norm(AB)
+    ball_v0 = AB_unit * ball_v0_magnitude
+    ball_a = AB_unit * ball_a_magnitude
+
+    AR = R - A
+    t = np.dot(AR, AB) / np.dot(AB, AB)
+    if t < 0 or t > 1:
+        return 0, None, None
+    closest_point = A + t * AB
+    ball_distance = np.linalg.norm(closest_point - A)
+    ball_speed = np.linalg.norm(ball_v0)
+    ball_time_roots = np.roots(
+        [0.5 * np.linalg.norm(ball_a), ball_speed, -ball_distance]
+    )
+    ball_time = (
+        np.max(ball_time_roots[ball_time_roots > 0])
+        if np.any(ball_time_roots > 0)
+        else float("inf")
+    )
+
+    opp_dist_to_pass = np.linalg.norm(closest_point - R) - ROBOT_RADIUS
+    opp_to_pass_time = opp_dist_to_pass / robot_velocity
+
+    if opp_to_pass_time <= ball_time:
+        ball_pos = ball_position(opp_to_pass_time, passer, ball_v0, ball_a)
+        opp_to_ball_dist = np.linalg.norm(ball_pos - closest_point)
+        chance = np.log(1 + opp_to_ball_dist)
+    else:
+        chance = 0
+        return 0, None, None
+
+    return chance, closest_point, ball_pos
+
+
+def find_pass_quality(
+    passer,
+    receiver,
+    enemy_positions,
+    enemy_velocities,
+    ball_v0_magnitude,
+    ball_a_magnitude,
+    goal_x,
+    goal_y1,
+    goal_y2,
+    shoot_in_left_goal,
+):
+    total_interception_chance = 0
+    for enemy_pos, enemy_velocity in zip(enemy_positions, enemy_velocities):
+        interception, _, _ = interception_chance(
+            passer,
+            receiver,
+            enemy_pos,
+            enemy_velocity,
+            ball_v0_magnitude,
+            ball_a_magnitude,
+        )
+        total_interception_chance += interception
+
+    goal_chance = find_shot_quality(
+        receiver, enemy_positions, goal_x, goal_y1, goal_y2, shoot_in_left_goal
+    )
+
+    # these will be adjusted
+    interception_chance_weight = 1
+    goal_chance_weight = 1
+
+    pass_quality = (
+        1
+        - interception_chance_weight * total_interception_chance
+        + goal_chance_weight * goal_chance
+    )  # pass quality metric
+
+    return pass_quality
+
+
+def find_best_pass(
+    passer,
+    friendly_robots,
+    enemy_positions,
+    enemy_velocities,
+    ball_v0_magnitude,
+    ball_a_magnitude,
+    goal_x,
+    goal_y1,
+    goal_y2,
+    shoot_in_left_goal,
+):
+    best_quality = -float("inf")
+    best_receiver = None
+    pass_qualities = []
+
+    for receiver in friendly_robots:
+        pass_quality = find_pass_quality(
+            passer,
+            receiver,
+            enemy_positions,
+            enemy_velocities,
+            ball_v0_magnitude,
+            ball_a_magnitude,
+            goal_x,
+            goal_y1,
+            goal_y2,
+            shoot_in_left_goal,
+        )
+        pass_qualities.append(pass_quality)
+        if pass_quality > best_quality:
+            best_quality = pass_quality
+            best_receiver = receiver
+
+    return best_receiver, pass_qualities
+
+
+def find_best_receiver_position(
+    receiver_position,
+    passer,
+    enemy_positions,
+    enemy_velocities,
+    ball_v0_magnitude,
+    ball_a_magnitude,
+    field_limits,
+    goal_x,
+    goal_y1,
+    goal_y2,
+    shoot_in_left_goal,
+    sample_radius=0.2,
+    num_samples=10,
+):
+    """
+    Finds the best nearby receiver position that maximizes pass quality.
+
+    Returns:
+        - best_position: (x, y) coordinates of the best receiver position
+        - sampled_positions: list of (x, y) all sampled points including the original receiver position
+        - pass_qualities: list of pass quality values corresponding to sampled positions
+    """
+
+    x_min, x_max = field_limits[0]
+    y_min, y_max = field_limits[1]
+
+    best_position = receiver_position
+    best_quality = -float("inf")
+
+    sampled_positions = [receiver_position]  # Include the current position
+    pass_qualities = []  # Store pass quality for each sampled point
+
+    angles = np.linspace(0, 2 * np.pi, num_samples, endpoint=False)
+
+    for angle in angles:
+        new_x = receiver_position[0] + sample_radius * np.cos(angle)
+        new_y = receiver_position[1] + sample_radius * np.sin(angle)
+
+        # Ensure the sampled position is within the field
+        if x_min <= new_x <= x_max and y_min <= new_y <= y_max:
+            sampled_positions.append((new_x, new_y))
+
+    for candidate in sampled_positions:
+
+        pass_quality = find_pass_quality(
+            passer,
+            candidate,
+            enemy_positions,
+            enemy_velocities,
+            ball_v0_magnitude,
+            ball_a_magnitude,
+            goal_x,
+            goal_y1,
+            goal_y2,
+            shoot_in_left_goal,
+        )
+        pass_qualities.append(pass_quality)
+        if pass_quality > best_quality:
+            best_quality = pass_quality
+            best_position = candidate
+
+    return best_position, sampled_positions, pass_qualities

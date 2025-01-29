@@ -3,16 +3,16 @@ import numpy as np
 from team_controller.src.config.settings import ROBOT_RADIUS
 
 
-def ball_to_robot_dist(
-    ball_x: float, ball_y: float, robot_x: float, robot_y: float
+def point_to_robot_dist(
+    point_x: float, point_y: float, robot_x: float, robot_y: float
 ) -> float:
-    return np.sqrt((ball_y - robot_y) ** 2 + (ball_x - robot_x) ** 2)
+    return np.sqrt((point_y - robot_y) ** 2 + (point_x - robot_x) ** 2)
 
 
 def angle_to_robot(
-    ball_x: float, ball_y: float, robot_x: float, robot_y: float
+    point_x: float, point_y: float, robot_x: float, robot_y: float
 ) -> float:
-    return np.arctan((robot_y - ball_y) / (robot_x - ball_x))
+    return np.arctan((robot_y - point_y) / (robot_x - point_x))
 
 
 # Calculates the intersection of 2 rays with the goal
@@ -59,7 +59,7 @@ def filter_and_merge_shadows(
 
 # Casts a ray along the 2 tangents to each enemy robot, and calls filter_and_merge_shadows
 def ray_casting(
-    ball: Tuple[float, float],
+    point: Tuple[float, float],
     enemy_robots: List[Tuple[float, float]],
     goal_x: float,
     goal_y1: float,
@@ -73,16 +73,16 @@ def ray_casting(
     )  # flips the goalward direction if we are shooting left
     for enemy in enemy_robots:
         if enemy is not None:
-            if goal_mult * enemy.x > goal_mult * ball.x:
-                dist: float = ball_to_robot_dist(ball.x, ball.y, enemy.x, enemy.y)
+            if goal_mult * enemy.x > goal_mult * point.x:
+                dist: float = point_to_robot_dist(point.x, point.y, enemy.x, enemy.y)
                 angle_to_robot_: float = angle_to_robot(
-                    ball.x, ball.y, enemy.x, enemy.y
+                    point.x, point.y, enemy.x, enemy.y
                 )
                 alpha: float = np.arcsin(ROBOT_RADIUS / dist)
                 shadows.append(
                     shadow(
-                        ball.x,
-                        ball.y,
+                        point.x,
+                        point.y,
                         angle_to_robot_ + alpha,
                         angle_to_robot_ - alpha,
                         goal_x,
@@ -95,15 +95,15 @@ def ray_casting(
 # Finds the biggest area of the goal that doesn't have a shadow (the biggest gap) and finds its midpoint for best shot
 # TODO: could add heuristics to prefer shots closer to the goalpost
 def find_best_shot(
-    ball: Tuple[float, float],
+    point: Tuple[float, float],
     enemy_robots: List[Tuple[float, float]],
     goal_x: float,
     goal_y1: float,
     goal_y2: float,
     shoot_in_left_goal: bool,
-) -> float:
+) -> Tuple[float, Tuple[float, float]]:
     shadows = ray_casting(
-        ball,
+        point,
         enemy_robots=enemy_robots,
         goal_x=goal_x,
         goal_y1=goal_y1,
@@ -130,4 +130,39 @@ def find_best_shot(
     )
     best_shot: float = (largest_gap[0] + largest_gap[1]) / 2
 
-    return best_shot
+    return best_shot, largest_gap
+
+
+def find_shot_quality(
+    point: Tuple[float, float],
+    enemy_robots,
+    goal_x: float,
+    goal_y1: float,
+    goal_y2: float,
+    shoot_in_left_goal,
+) -> float:
+    """
+    Computes the shot quality based on the open angle to the goal / total angle to the goal.
+    Uses the find_best_shot function to determine the largest open angle.
+    """
+
+    # Full angle between the two goalposts
+    full_angle = np.absolute(
+        np.arctan2(goal_y2 - point.y, goal_x - point.x)
+        - np.arctan2(goal_y1 - point.y, goal_x - point.x)
+    )
+
+    # Use find_best_shot to get the largest gap
+    _, largest_gap = find_best_shot(
+        point, enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
+    )
+
+    # Compute the open angle (gap angle)
+    open_angle = np.absolute(
+        np.arctan2(largest_gap[1] - point.y, largest_gap[0] - point.x)
+        - np.arctan2(largest_gap[1] - point.y, largest_gap[0] - point.x)
+    )
+
+    # Normalize shot quality
+    shot_quality = open_angle / full_angle if full_angle > 0 else 0
+    return shot_quality
