@@ -7,6 +7,7 @@ from math import sin, cos, pi, dist, exp
 import random
 from shapely.geometry import Point, LineString
 from robot_control.src.find_best_shot import ROBOT_RADIUS
+from shapely.affinity import rotate
 
 import logging
 
@@ -476,11 +477,9 @@ class DynamicWindowPlanner:
         end_x = adj_vel_x + rpos[0]
         return LineString([(rpos[0], rpos[1]), (end_x, end_y)])
 
-from shapely.affinity import rotate
-from shapely.ops import split
-
 class BisectorPlanner:
     OBSTACLE_CLEARANCE = 0.18
+    ClOSE_LIMIT = 0.3
 
     def _get_obstacles(self, robot_id):
         return (
@@ -533,10 +532,15 @@ class BisectorPlanner:
             self._friendly_colour == self._friendly_colour, robot_id
         )
 
-
-        self._env.draw_line([(our_position.x, our_position.y), target], width=2, color="GREEN")
+        if self._env is not None:
+            self._env.draw_line([(our_position.x, our_position.y), target], width=2, color="GREEN")
         
         line = LineString([(our_position.x, our_position.y), target])
+
+        # Stops jittering near the target
+        if line.length < BisectorPlanner.ClOSE_LIMIT:
+            return target
+        
         perp = self.perpendicular_bisector(line)
 
         midpoint = perp.interpolate(0.5, normalized=True)
@@ -547,7 +551,7 @@ class BisectorPlanner:
         halves = [LineString([midpoint, perp.coords[1]]), LineString([midpoint, perp.coords[0]])]
         obsts = self._get_obstacles(robot_id)
 
-        if self._env:
+        if self._env is not None:
             self._env.draw_line(halves[0].coords, width=3)
             self._env.draw_line(halves[1].coords, width=3)
 
@@ -565,7 +569,6 @@ class BisectorPlanner:
                     self._env.draw_point(*point_to_tuple(p1), color="PINK", width=3)
                     return point_to_tuple(p1)
         
-        # assert 1 == 0, "NO SUITABLE POINT FOUND"
         return point_to_tuple(midpoint)
 
 

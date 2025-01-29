@@ -63,7 +63,7 @@ def test_pathfinding(headless: bool, moving: bool):
     target = targets.pop(0)
 
     make_wall(env, True, 0.5, -0.5, [mover_id], False, 1.5)
-    for i in range(5000):
+    for _ in range(5000):
         latest_frame = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
         if latest_frame:
             friendly_robots, _, _ = latest_frame
