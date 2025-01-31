@@ -1,5 +1,5 @@
 from motion_planning.src.pid.pid import get_grsim_pids
-from robot_control.src.skills import go_to_point
+from robot_control.src.skills import go_to_point, go_to_ball
 from team_controller.src.controllers import RealRobotController
 from entities.game import Game
 from entities.data.command import RobotCommand
@@ -32,7 +32,10 @@ def test_with_vision(game: Game, robot_controller: RealRobotController):
             pass
         data = game.get_robot_pos(True, 1)
         if data:
-            cmd = go_to_point(pid_oren, pid_trans, data, 1, (-2.25, 0), 0, False)
+            cmd = go_to_ball(pid_oren, pid_trans, data, 1, game.ball)
+            angular_vel = cmd.angular_vel
+            cmd._replace(angular_vel=-angular_vel)
+            # cmd = go_to_point(pid_oren, pid_trans, data, 1, (-3, -0.5), 0, False)
             print(cmd)
             robot_controller.add_robot_commands(cmd, 0)
             binary_representation = [hex(byte) for byte in robot_controller.out_packet]
@@ -41,7 +44,7 @@ def test_with_vision(game: Game, robot_controller: RealRobotController):
 
 
 def test_forward(robot_controller: RealRobotController):
-    cmd = RobotCommand(0.2, 0, 3, 0, 0, 1)
+    cmd = RobotCommand(0, 0, 1, 0, 0, 0)
     x = 0
     while True:
         robot_controller.add_robot_commands(cmd, 0)
@@ -60,6 +63,7 @@ def main():
     )
     try:
         test_forward(robot_controller)
+        #test_with_vision(game, robot_controller)
 
     except KeyboardInterrupt:
         # try to stop the robot 15 times
