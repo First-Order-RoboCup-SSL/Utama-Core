@@ -19,7 +19,7 @@ def data_update_listener(receiver: VisionDataReceiver):
 def test_with_vision(game: Game, robot_controller: RealRobotController):
     pid_oren, pid_trans = get_grsim_pids(6)
     message_queue = queue.SimpleQueue()
-    receiver = VisionDataReceiver(message_queue)
+    receiver = VisionDataReceiver(message_queue, n_cameras=1)
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
     data_thread.daemon = True  # Allows the thread to close when the main program exits
     data_thread.start()
@@ -28,6 +28,7 @@ def test_with_vision(game: Game, robot_controller: RealRobotController):
         (message_type, message) = message_queue.get()  # Infinite timeout for now
         if message_type == MessageType.VISION:
             game.add_new_state(message)
+            # print(message)
         elif message_type == MessageType.REF:
             pass
         data = game.get_robot_pos(True, 1)
@@ -62,8 +63,8 @@ def main():
         is_team_yellow=True, game_obj=game, n_robots=1
     )
     try:
-        test_forward(robot_controller)
-        # test_with_vision(game, robot_controller)
+        # test_forward(robot_controller)
+        test_with_vision(game, robot_controller)
 
     except KeyboardInterrupt:
         # try to stop the robot 15 times
