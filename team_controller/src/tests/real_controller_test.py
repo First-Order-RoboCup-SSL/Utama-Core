@@ -44,7 +44,7 @@ def test_with_vision(game: Game, robot_controller: RealRobotController):
 
 
 def test_forward(robot_controller: RealRobotController):
-    cmd = RobotCommand(0, 0, 1, 0, 0, 0)
+    cmd = RobotCommand(0.1, 0, 0, 0, 0, 1)
     x = 0
     while True:
         robot_controller.add_robot_commands(cmd, 0)
@@ -63,7 +63,7 @@ def main():
     )
     try:
         test_forward(robot_controller)
-        #test_with_vision(game, robot_controller)
+        # test_with_vision(game, robot_controller)
 
     except KeyboardInterrupt:
         # try to stop the robot 15 times

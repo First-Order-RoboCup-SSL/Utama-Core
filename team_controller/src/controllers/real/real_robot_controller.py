@@ -20,6 +20,8 @@ from team_controller.src.config.settings import (
     TIMEOUT,
     ENDIAN,
     SERIAL_BIT_SIZES,
+    AUTH_STR,
+    MAX_INITIALIZATION_TIME,
 )
 import logging
 
@@ -229,9 +231,20 @@ class RealRobotController(AbstractRobotController):
 
     def _init_serial(self) -> Serial:
         serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
-        print("Serial port opened!")
-        time.sleep(5)
-        serial.reset_input_buffer()  # temporary implementation to clear debugging info in input
+        start_t = time.time()
+        is_ready = False
+        while time.time() - start_t < MAX_INITIALIZATION_TIME:
+            if serial.in_waiting > 0:
+                line = serial.readline().decode("utf-8").rstrip()
+                if line == AUTH_STR:
+                    is_ready = True
+                    break
+
+        if is_ready:
+            print("Serial port opened!")
+            serial.reset_input_buffer()  # temporary implementation to clear debugging info in input
+        else:
+            raise ConnectionError("Could not connect: Invalid authentication string!")
         return serial
 
     @property
