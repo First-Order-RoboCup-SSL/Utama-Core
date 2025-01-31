@@ -56,10 +56,10 @@ class RealRobotController(AbstractRobotController):
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
+        print(self.out_packet)
         self._serial.write(self.out_packet)
-        data_in = self._serial.read(self._serial.in_waiting)
-        print(data_in)
-        # data_in = self._serial.read(self._in_packet_size)
+        data_in = self._serial.read_all()
+        # time.sleep(0.05)
         # self._populate_robots_info(data_in)
 
         self._out_packet = self._empty_command()  # flush the out_packet
@@ -82,10 +82,10 @@ class RealRobotController(AbstractRobotController):
             robot_id (int): The ID of the robot.
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
-        c_command = self._convert_float_command(command)
+        c_command = self._convert_float_command(robot_id, command)
         command_buffer = self._generate_command_buffer(robot_id, c_command)
         start_idx = robot_id * self._rbt_cmd_size
-        self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = command_buffer
+        self._out_packet = command_buffer
 
     def robot_has_ball(self, robot_id):
         """
@@ -160,7 +160,7 @@ class RealRobotController(AbstractRobotController):
             self._rbt_cmd_size, byteorder=ENDIAN, signed=False
         )
 
-    def _convert_float_command(self, command: RobotCommand) -> RobotCommand:
+    def _convert_float_command(self, robot_id, command: RobotCommand) -> RobotCommand:
         """
         Prepares the float values in the command to be formatted to binary in the buffer.
 
@@ -173,7 +173,7 @@ class RealRobotController(AbstractRobotController):
 
         if abs(command.angular_vel) > MAX_ANGULAR_VEL:
             warnings.warn(
-                f"Angular velocity for robot {command.robot_id} is greater than the maximum angular velocity. Clipping to {MAX_ANGULAR_VEL}."
+                f"Angular velocity for robot {robot_id} is greater than the maximum angular velocity. Clipping to {MAX_ANGULAR_VEL}."
             )
             angular_vel = (
                 MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
@@ -181,13 +181,13 @@ class RealRobotController(AbstractRobotController):
 
         if abs(command.local_forward_vel) > MAX_VEL:
             warnings.warn(
-                f"Local forward velocity for robot {command.robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
+                f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
             )
             local_forward_vel = MAX_VEL if command.local_forward_vel > 0 else -MAX_VEL
 
         if abs(command.local_left_vel) > MAX_VEL:
             warnings.warn(
-                f"Local left velocity for robot {command.robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
+                f"Local left velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
             )
             local_left_vel = MAX_VEL if command.local_left_vel > 0 else -MAX_VEL
 
@@ -200,7 +200,9 @@ class RealRobotController(AbstractRobotController):
                 local_left_vel, out_bit_sizes["local_left_vel"]
             ),
             angular_vel=self._convert_float(
-                degrees(angular_vel), out_bit_sizes["angular_vel"]
+                angular_vel,
+                out_bit_sizes["angular_vel"],
+                # degrees(angular_vel), out_bit_sizes["angular_vel"]
             ),
             kick=command.kick,
             chip=command.chip,
