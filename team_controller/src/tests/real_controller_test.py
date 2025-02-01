@@ -34,14 +34,16 @@ def test_with_vision(game: Game, robot_controller: RealRobotController):
         data = game.get_robot_pos(True, 1)
         if data:
             cmd = go_to_ball(pid_oren, pid_trans, data, 1, game.ball)
+            # cmd = go_to_point(pid_oren, pid_trans, data, 1, (-2, -0.5), 0, False)
+            
             anglular_vel = cmd.angular_vel
             if abs(anglular_vel) < 1:
                 cmd._replace(angular_vel=0)
-            # cmd = go_to_point(pid_oren, pid_trans, data, 1, (-2, -0.5), 0, False)
             robot_controller.add_robot_commands(cmd, 0)
             binary_representation = [hex(byte) for byte in robot_controller.out_packet]
             # print(binary_representation)
             robot_controller.send_robot_commands()
+            time.sleep(0.0167)
 
 
 def test_forward(robot_controller: RealRobotController):
