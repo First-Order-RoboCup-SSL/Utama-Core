@@ -31,13 +31,13 @@
 			<Var name="Division B" type="trigger">
 			</Var>
 			<Var name="Field Length" type="double" minval="" maxval="">
-				9000.000000
+				12040.000000
 			</Var>
 			<Var name="Field Width" type="double" minval="" maxval="">
-				6000.000000
+				9020.000000
 			</Var>
 			<Var name="Goal Width" type="double" minval="" maxval="">
-				1000.000000
+				1200.000000
 			</Var>
 			<Var name="Goal Depth" type="double" minval="" maxval="">
 				180.000000
@@ -52,13 +52,13 @@
 				10.000000
 			</Var>
 			<Var name="Penalty Area Depth" type="double" minval="" maxval="">
-				1000.000000
+				1220.000000
 			</Var>
 			<Var name="Penalty Area Width" type="double" minval="" maxval="">
-				2000.000000
+				2410.000000
 			</Var>
 			<Var name="Goal Line to Penalty Mark" type="double" minval="" maxval="">
-				6000.000000
+				8000.000000
 			</Var>
 			<Var name="Center Circle Radius" type="double" minval="" maxval="">
 				500.000000
@@ -70,10 +70,10 @@
 				90.000000
 			</Var>
 			<Var name="Total Number of Cameras" type="int" minval="" maxval="">
-				1
+				2
 			</Var>
 			<Var name="Local Number of Cameras" type="int" minval="" maxval="">
-				1
+				2
 			</Var>
 			<Var name="Center Line" type="bool">
 				true
@@ -134,16 +134,16 @@
 						</Var>
 					</Var>
 					<Var name="P1.x" type="double" minval="" maxval="">
-						-4500.000000
+						-6020.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
-						3000.000000
+						4510.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
-						4500.000000
+						6020.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
-						3000.000000
+						4510.000000
 					</Var>
 					<Var name="Line thickness" type="double" minval="" maxval="">
 						10.000000
@@ -196,16 +196,16 @@
 						</Var>
 					</Var>
 					<Var name="P1.x" type="double" minval="" maxval="">
-						-4500.000000
+						-6020.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
-						-3000.000000
+						-4510.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
-						4500.000000
+						6020.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
-						-3000.000000
+						-4510.000000
 					</Var>
 					<Var name="Line thickness" type="double" minval="" maxval="">
 						10.000000
@@ -258,16 +258,16 @@
 						</Var>
 					</Var>
 					<Var name="P1.x" type="double" minval="" maxval="">
-						-4500.000000
+						-6020.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
-						-3000.000000
+						-4510.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
-						-4500.000000
+						-6020.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
-						3000.000000
+						4510.000000
 					</Var>
 					<Var name="Line thickness" type="double" minval="" maxval="">
 						10.000000
@@ -320,16 +320,16 @@
 						</Var>
 					</Var>
 					<Var name="P1.x" type="double" minval="" maxval="">
-						4500.000000
+						6020.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
-						-3000.000000
+						-4510.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
-						4500.000000
+						6020.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
-						3000.000000
+						4510.000000
 					</Var>
 					<Var name="Line thickness" type="double" minval="" maxval="">
 						10.000000
@@ -385,13 +385,13 @@
 						0.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
-						-3000.000000
+						-4510.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
 						0.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
-						3000.000000
+						4510.000000
 					</Var>
 					<Var name="Line thickness" type="double" minval="" maxval="">
 						10.000000
@@ -444,16 +444,16 @@
 						</Var>
 					</Var>
 					<Var name="P1.x" type="double" minval="" maxval="">
-						-3500.000000
+						-4800.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
-						-1000.000000
+						-1205.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
-						-3500.000000
+						-4800.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
-						1000.000000
+						1205.000000
 					</Var>
 					<Var name="Line thickness" type="double" minval="" maxval="">
 						10.000000
@@ -506,16 +506,16 @@
 						</Var>
 					</Var>
 					<Var name="P1.x" type="double" minval="" maxval="">
-						3500.000000
+						4800.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
-						-1000.000000
+						-1205.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
-						3500.000000
+						4800.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
-						1000.000000
+						1205.000000
 					</Var>
 					<Var name="Line thickness" type="double" minval="" maxval="">
 						10.000000
@@ -568,16 +568,16 @@
 						</Var>
 					</Var>
 					<Var name="P1.x" type="double" minval="" maxval="">
-						-4500.000000
+						-6020.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
-						-1000.000000
+						-1205.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
-						-3500.000000
+						-4800.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
-						-1000.000000
+						-1205.000000
 					</Var>
 					<Var name="Line thickness" type="double" minval="" maxval="">
 						10.000000
@@ -630,16 +630,16 @@
 						</Var>
 					</Var>
 					<Var name="P1.x" type="double" minval="" maxval="">
-						-4500.000000
+						-6020.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
-						1000.000000
+						1205.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
-						-3500.000000
+						-4800.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
-						1000.000000
+						1205.000000
 					</Var>
 					<Var name="Line thickness" type="double" minval="" maxval="">
 						10.000000
@@ -692,16 +692,16 @@
 						</Var>
 					</Var>
 					<Var name="P1.x" type="double" minval="" maxval="">
-						4500.000000
+						6020.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
-						-1000.000000
+						-1205.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
-						3500.000000
+						4800.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
-						-1000.000000
+						-1205.000000
 					</Var>
 					<Var name="Line thickness" type="double" minval="" maxval="">
 						10.000000
@@ -754,16 +754,16 @@
 						</Var>
 					</Var>
 					<Var name="P1.x" type="double" minval="" maxval="">
-						4500.000000
+						6020.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
-						1000.000000
+						1205.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
-						3500.000000
+						4800.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
-						1000.000000
+						1205.000000
 					</Var>
 					<Var name="Line thickness" type="double" minval="" maxval="">
 						10.000000
@@ -816,13 +816,13 @@
 						</Var>
 					</Var>
 					<Var name="P1.x" type="double" minval="" maxval="">
-						-4500.000000
+						-6020.000000
 					</Var>
 					<Var name="P1.y" type="double" minval="" maxval="">
 						0.000000
 					</Var>
 					<Var name="P2.x" type="double" minval="" maxval="">
-						4500.000000
+						6020.000000
 					</Var>
 					<Var name="P2.y" type="double" minval="" maxval="">
 						0.000000
@@ -1132,94 +1132,6 @@
 		</Var>
 		<Var name="Blue Team" type="list">
 			<Var name="Team" type="stringenum">
-				Default
-				<Var name="0" type="string">
-					Default
-				</Var>
-				<Var name="1" type="string">
-					MRL
-				</Var>
-				<Var name="2" type="string">
-					CMus
-				</Var>
-				<Var name="3" type="string">
-					ER-Force
-				</Var>
-				<Var name="4" type="string">
-					Immortals
-				</Var>
-				<Var name="5" type="string">
-					KIKS
-				</Var>
-				<Var name="6" type="string">
-					RoboDragons
-				</Var>
-				<Var name="7" type="string">
-					RoboTeam Twente
-				</Var>
-				<Var name="8" type="string">
-					TIGERs Mannheim
-				</Var>
-				<Var name="9" type="string">
-					TurtleRabbit
-				</Var>
-				<Var name="10" type="string">
-					UMass Minutebots
-				</Var>
-				<Var name="11" type="string">
-					ZJUNlict
-				</Var>
-				<Var name="12" type="string">
-					AIS
-				</Var>
-				<Var name="13" type="string">
-					NAMeC
-				</Var>
-				<Var name="14" type="string">
-					NEUIslanders
-				</Var>
-				<Var name="15" type="string">
-					RoboFEI
-				</Var>
-				<Var name="16" type="string">
-					RoboIME
-				</Var>
-				<Var name="17" type="string">
-					RoboJackets
-				</Var>
-				<Var name="18" type="string">
-					UBC Thunderbots
-				</Var>
-				<Var name="19" type="string">
-					ULtron
-				</Var>
-				<Var name="20" type="string">
-					OP-AmP
-				</Var>
-				<Var name="21" type="string">
-					MCT Susano Logics
-				</Var>
-				<Var name="22" type="string">
-					RobôCIn
-				</Var>
-				<Var name="23" type="string">
-					GreenTea
-				</Var>
-				<Var name="24" type="string">
-					DelftMercurians
-				</Var>
-				<Var name="25" type="string">
-					luhbots
-				</Var>
-				<Var name="26" type="string">
-					ITAndroids
-				</Var>
-				<Var name="27" type="string">
-					RobôCIn-B
-				</Var>
-				<Var name="28" type="string">
-					ibis
-				</Var>
 			</Var>
 			<Var name="Max Robots" type="int" minval="" maxval="">
 				12
@@ -1227,94 +1139,6 @@
 		</Var>
 		<Var name="Yellow Team" type="list">
 			<Var name="Team" type="stringenum">
-				Default
-				<Var name="0" type="string">
-					Default
-				</Var>
-				<Var name="1" type="string">
-					MRL
-				</Var>
-				<Var name="2" type="string">
-					CMus
-				</Var>
-				<Var name="3" type="string">
-					ER-Force
-				</Var>
-				<Var name="4" type="string">
-					Immortals
-				</Var>
-				<Var name="5" type="string">
-					KIKS
-				</Var>
-				<Var name="6" type="string">
-					RoboDragons
-				</Var>
-				<Var name="7" type="string">
-					RoboTeam Twente
-				</Var>
-				<Var name="8" type="string">
-					TIGERs Mannheim
-				</Var>
-				<Var name="9" type="string">
-					TurtleRabbit
-				</Var>
-				<Var name="10" type="string">
-					UMass Minutebots
-				</Var>
-				<Var name="11" type="string">
-					ZJUNlict
-				</Var>
-				<Var name="12" type="string">
-					AIS
-				</Var>
-				<Var name="13" type="string">
-					NAMeC
-				</Var>
-				<Var name="14" type="string">
-					NEUIslanders
-				</Var>
-				<Var name="15" type="string">
-					RoboFEI
-				</Var>
-				<Var name="16" type="string">
-					RoboIME
-				</Var>
-				<Var name="17" type="string">
-					RoboJackets
-				</Var>
-				<Var name="18" type="string">
-					UBC Thunderbots
-				</Var>
-				<Var name="19" type="string">
-					ULtron
-				</Var>
-				<Var name="20" type="string">
-					OP-AmP
-				</Var>
-				<Var name="21" type="string">
-					MCT Susano Logics
-				</Var>
-				<Var name="22" type="string">
-					RobôCIn
-				</Var>
-				<Var name="23" type="string">
-					GreenTea
-				</Var>
-				<Var name="24" type="string">
-					DelftMercurians
-				</Var>
-				<Var name="25" type="string">
-					luhbots
-				</Var>
-				<Var name="26" type="string">
-					ITAndroids
-				</Var>
-				<Var name="27" type="string">
-					RobôCIn-B
-				</Var>
-				<Var name="28" type="string">
-					ibis
-				</Var>
 			</Var>
 			<Var name="Max Robots" type="int" minval="" maxval="">
 				12
@@ -1392,7 +1216,7 @@
 				<Var name="re-read params" type="trigger">
 				</Var>
 				<Var name="Capture Module" type="stringenum">
-					Video 4 Linux
+					Read from files
 					<Var name="0" type="string">
 						None
 					</Var>
@@ -2007,10 +1831,10 @@
 						30
 					</Var>
 					<Var name="width" type="int" minval="" maxval="">
-						1280
+						640
 					</Var>
 					<Var name="height" type="int" minval="" maxval="">
-						720
+						480
 					</Var>
 					<Var name="left" type="int" minval="" maxval="">
 						0
@@ -2025,7 +1849,7 @@
 						</Var>
 					</Var>
 					<Var name="pixel format" type="stringenum">
-						MJPEG
+						YUYV
 						<Var name="0" type="string">
 							YUYV
 						</Var>
@@ -2034,18 +1858,18 @@
 						</Var>
 					</Var>
 					<Var name="ringbuffer size" type="int" minval="" maxval="">
-						0
+						3
 					</Var>
 				</Var>
 				<Var name="Camera Parameters" type="list">
 					<Var name="brightness" type="list">
 						<Var name="enabled" type="bool">
-							true
+							false
 						</Var>
 						<Var name="default" type="bool">
 							false
 						</Var>
-						<Var name="value" type="int" minval="-64" maxval="64">
+						<Var name="value" type="int" minval="" maxval="">
 							0
 						</Var>
 						<Var name="was_read" type="bool">
@@ -2054,12 +1878,12 @@
 					</Var>
 					<Var name="sharpness" type="list">
 						<Var name="enabled" type="bool">
-							true
+							false
 						</Var>
 						<Var name="defulat" type="int" minval="" maxval="">
 							0
 						</Var>
-						<Var name="value" type="int" minval="0" maxval="7">
+						<Var name="value" type="int" minval="" maxval="">
 							0
 						</Var>
 						<Var name="was_read" type="bool">
@@ -2068,7 +1892,7 @@
 					</Var>
 					<Var name="white balance" type="list">
 						<Var name="enabled" type="bool">
-							true
+							false
 						</Var>
 						<Var name="auto" type="bool">
 							false
@@ -2079,12 +1903,12 @@
 					</Var>
 					<Var name="hue" type="list">
 						<Var name="enabled" type="bool">
-							true
+							false
 						</Var>
 						<Var name="default" type="bool">
 							false
 						</Var>
-						<Var name="value" type="int" minval="-2000" maxval="2000">
+						<Var name="value" type="int" minval="" maxval="">
 							0
 						</Var>
 						<Var name="was_read" type="bool">
@@ -2093,12 +1917,12 @@
 					</Var>
 					<Var name="saturation" type="list">
 						<Var name="enabled" type="bool">
-							true
+							false
 						</Var>
 						<Var name="default" type="bool">
 							false
 						</Var>
-						<Var name="value" type="int" minval="0" maxval="255">
+						<Var name="value" type="int" minval="" maxval="">
 							0
 						</Var>
 						<Var name="was_read" type="bool">
@@ -2107,13 +1931,13 @@
 					</Var>
 					<Var name="gamma" type="list">
 						<Var name="enabled" type="bool">
-							true
+							false
 						</Var>
 						<Var name="default" type="bool">
 							false
 						</Var>
-						<Var name="value" type="int" minval="64" maxval="300">
-							100
+						<Var name="value" type="int" minval="" maxval="">
+							0
 						</Var>
 						<Var name="was_read" type="bool">
 							false
@@ -2135,12 +1959,12 @@
 					</Var>
 					<Var name="contrast" type="list">
 						<Var name="enabled" type="bool">
-							true
+							false
 						</Var>
 						<Var name="default" type="bool">
 							false
 						</Var>
-						<Var name="value" type="int" minval="0" maxval="95">
+						<Var name="value" type="int" minval="" maxval="">
 							0
 						</Var>
 						<Var name="was_read" type="bool">
@@ -2149,13 +1973,13 @@
 					</Var>
 					<Var name="temperature" type="list">
 						<Var name="enabled" type="bool">
-							true
+							false
 						</Var>
 						<Var name="default" type="bool">
 							false
 						</Var>
-						<Var name="value" type="int" minval="2800" maxval="6500">
-							2800
+						<Var name="value" type="int" minval="" maxval="">
+							0
 						</Var>
 						<Var name="was_read" type="bool">
 							false
@@ -2163,12 +1987,12 @@
 					</Var>
 					<Var name="gain" type="list">
 						<Var name="enabled" type="bool">
-							true
+							false
 						</Var>
 						<Var name="default" type="bool">
 							false
 						</Var>
-						<Var name="value" type="int" minval="0" maxval="1023">
+						<Var name="value" type="int" minval="" maxval="">
 							0
 						</Var>
 						<Var name="was_read" type="bool">
@@ -2289,22 +2113,22 @@
 				</Var>
 				<Var name="Extrinsic Parameters" type="list">
 					<Var name="rvec x" type="double" minval="" maxval="">
-						-1066.299046
+						0.000000
 					</Var>
 					<Var name="rvec y" type="double" minval="" maxval="">
-						-645.638008
+						0.000000
 					</Var>
 					<Var name="rvec z" type="double" minval="" maxval="">
-						-774.599225
+						0.000000
 					</Var>
 					<Var name="tvec x" type="double" minval="" maxval="">
-						-14494.709593
+						0.000000
 					</Var>
 					<Var name="tvec y" type="double" minval="" maxval="">
-						-7664.416205
+						0.000000
 					</Var>
 					<Var name="tvec z" type="double" minval="" maxval="">
-						-13.326016
+						0.000000
 					</Var>
 					<Var name="Fix focal length" type="bool">
 						false
@@ -2327,30 +2151,13 @@
 					<Var name="Calibration point" type="trigger">
 					</Var>
 					<Var name="Calibration points" type="list">
-						<Var name="point" type="list">
-							<Var name="image_x" type="double" minval="" maxval="">
-								12.612483
-							</Var>
-							<Var name="image_y" type="double" minval="" maxval="">
-								6.784068
-							</Var>
-							<Var name="field_x" type="double" minval="" maxval="">
-								0.000000
-							</Var>
-							<Var name="field_y" type="double" minval="" maxval="">
-								0.000000
-							</Var>
-							<Var name="field_z" type="double" minval="" maxval="">
-								0.000000
-							</Var>
-						</Var>
 					</Var>
 				</Var>
 				<Var name="use openCV camera model" type="bool">
 					false
 				</Var>
 				<Var name="focal length" type="double" minval="" maxval="">
-					422.076036
+					500.000000
 				</Var>
 				<Var name="principal point x" type="double" minval="" maxval="">
 					390.000000
@@ -2362,25 +2169,25 @@
 					0.000000
 				</Var>
 				<Var name="q0" type="double" minval="" maxval="">
-					0.960040
+					0.700000
 				</Var>
 				<Var name="q1" type="double" minval="" maxval="">
-					0.033232
+					-0.700000
 				</Var>
 				<Var name="q2" type="double" minval="" maxval="">
-					0.021074
+					0.000000
 				</Var>
 				<Var name="q3" type="double" minval="" maxval="">
-					0.277082
+					0.000000
 				</Var>
 				<Var name="tx" type="double" minval="" maxval="">
-					3515.043137
+					0.000000
 				</Var>
 				<Var name="ty" type="double" minval="" maxval="">
-					-887.335320
+					1250.000000
 				</Var>
 				<Var name="tz" type="double" minval="0.000000" maxval="6500.000000">
-					3369.000000
+					3500.000000
 				</Var>
 			</Var>
 			<Var name="Calibration Parameters" type="list">
@@ -2389,16 +2196,16 @@
 						CP 0
 					</Var>
 					<Var name="Control point 0 image x" type="double" minval="" maxval="">
-						344.000000
+						50.000000
 					</Var>
 					<Var name="Control point 0 image y" type="double" minval="" maxval="">
-						33.000000
+						50.000000
 					</Var>
 					<Var name="Control point 0 field x" type="double" minval="" maxval="">
-						-4500.000000
+						0.000000
 					</Var>
 					<Var name="Control point 0 field y" type="double" minval="" maxval="">
-						3000.000000
+						0.000000
 					</Var>
 				</Var>
 				<Var name="Control Point 1" type="list">
@@ -2406,16 +2213,16 @@
 						CP 1
 					</Var>
 					<Var name="Control point 1 image x" type="double" minval="" maxval="">
-						843.000000
+						50.000000
 					</Var>
 					<Var name="Control point 1 image y" type="double" minval="" maxval="">
-						26.000000
+						100.000000
 					</Var>
 					<Var name="Control point 1 field x" type="double" minval="" maxval="">
 						0.000000
 					</Var>
 					<Var name="Control point 1 field y" type="double" minval="" maxval="">
-						3000.000000
+						0.000000
 					</Var>
 				</Var>
 				<Var name="Control Point 2" type="list">
@@ -2423,16 +2230,16 @@
 						CP 2
 					</Var>
 					<Var name="Control point 2 image x" type="double" minval="" maxval="">
-						1181.000000
+						50.000000
 					</Var>
 					<Var name="Control point 2 image y" type="double" minval="" maxval="">
-						607.000000
+						150.000000
 					</Var>
 					<Var name="Control point 2 field x" type="double" minval="" maxval="">
 						0.000000
 					</Var>
 					<Var name="Control point 2 field y" type="double" minval="" maxval="">
-						-3000.000000
+						0.000000
 					</Var>
 				</Var>
 				<Var name="Control Point 3" type="list">
@@ -2440,16 +2247,16 @@
 						CP 3
 					</Var>
 					<Var name="Control point 3 image x" type="double" minval="" maxval="">
-						59.000000
+						50.000000
 					</Var>
 					<Var name="Control point 3 image y" type="double" minval="" maxval="">
-						659.000000
+						200.000000
 					</Var>
 					<Var name="Control point 3 field x" type="double" minval="" maxval="">
-						-4500.000000
+						0.000000
 					</Var>
 					<Var name="Control point 3 field y" type="double" minval="" maxval="">
-						-3000.000000
+						0.000000
 					</Var>
 				</Var>
 				<Var name="camera index" type="int" minval="" maxval="">
@@ -2459,7 +2266,7 @@
 					1.000000
 				</Var>
 				<Var name="line search corridor width" type="double" minval="" maxval="">
-					658.000000
+					280.000000
 				</Var>
 				<Var name="Image boundary for edge detection" type="double" minval="" maxval="">
 					10.000000
@@ -2486,16 +2293,16 @@
 					150.000000
 				</Var>
 				<Var name="Image width" type="int" minval="0" maxval="">
-					1280
+					0
 				</Var>
 				<Var name="Image height" type="int" minval="0" maxval="">
-					720
+					0
 				</Var>
 				<Var name="grid height" type="int" minval="" maxval="">
-					16
+					9
 				</Var>
 				<Var name="grid width" type="int" minval="" maxval="">
-					16
+					7
 				</Var>
 				<Var name="global camera id" type="int" minval="0" maxval="7">
 					0
@@ -2576,118 +2383,6 @@
 		</Var>
 		<Var name="Auto Color Calibration" type="list">
 			<Var name="Calibration Points" type="list">
-				<Var name="Pink sample" type="list">
-					<Var name="use" type="bool">
-						true
-					</Var>
-					<Var name="y" type="int" minval="0" maxval="255">
-						196
-					</Var>
-					<Var name="u" type="int" minval="0" maxval="255">
-						130
-					</Var>
-					<Var name="v" type="int" minval="0" maxval="255">
-						169
-					</Var>
-					<Var name="channel" type="int" minval="0" maxval="">
-						5
-					</Var>
-					<Var name="maxAngle" type="double" minval="0.010000" maxval="1.570000">
-						0.300000
-					</Var>
-					<Var name="maxDistance" type="double" minval="0.000000" maxval="10000.000000">
-						3000.000000
-					</Var>
-					<Var name="weight" type="double" minval="0.000000" maxval="10.000000">
-						1.000000
-					</Var>
-					<Var name="Remove" type="trigger">
-					</Var>
-				</Var>
-				<Var name="Orange sample" type="list">
-					<Var name="use" type="bool">
-						true
-					</Var>
-					<Var name="y" type="int" minval="0" maxval="255">
-						102
-					</Var>
-					<Var name="u" type="int" minval="0" maxval="255">
-						102
-					</Var>
-					<Var name="v" type="int" minval="0" maxval="255">
-						237
-					</Var>
-					<Var name="channel" type="int" minval="0" maxval="">
-						2
-					</Var>
-					<Var name="maxAngle" type="double" minval="0.010000" maxval="1.570000">
-						0.300000
-					</Var>
-					<Var name="maxDistance" type="double" minval="0.000000" maxval="10000.000000">
-						3000.000000
-					</Var>
-					<Var name="weight" type="double" minval="0.000000" maxval="10.000000">
-						1.000000
-					</Var>
-					<Var name="Remove" type="trigger">
-					</Var>
-				</Var>
-				<Var name="Green sample" type="list">
-					<Var name="use" type="bool">
-						true
-					</Var>
-					<Var name="y" type="int" minval="0" maxval="255">
-						194
-					</Var>
-					<Var name="u" type="int" minval="0" maxval="255">
-						117
-					</Var>
-					<Var name="v" type="int" minval="0" maxval="255">
-						92
-					</Var>
-					<Var name="channel" type="int" minval="0" maxval="">
-						7
-					</Var>
-					<Var name="maxAngle" type="double" minval="0.010000" maxval="1.570000">
-						0.300000
-					</Var>
-					<Var name="maxDistance" type="double" minval="0.000000" maxval="10000.000000">
-						3000.000000
-					</Var>
-					<Var name="weight" type="double" minval="0.000000" maxval="10.000000">
-						1.000000
-					</Var>
-					<Var name="Remove" type="trigger">
-					</Var>
-				</Var>
-				<Var name="Yellow sample" type="list">
-					<Var name="use" type="bool">
-						true
-					</Var>
-					<Var name="y" type="int" minval="0" maxval="255">
-						241
-					</Var>
-					<Var name="u" type="int" minval="0" maxval="255">
-						68
-					</Var>
-					<Var name="v" type="int" minval="0" maxval="255">
-						137
-					</Var>
-					<Var name="channel" type="int" minval="0" maxval="">
-						3
-					</Var>
-					<Var name="maxAngle" type="double" minval="0.010000" maxval="1.570000">
-						0.300000
-					</Var>
-					<Var name="maxDistance" type="double" minval="0.000000" maxval="10000.000000">
-						3000.000000
-					</Var>
-					<Var name="weight" type="double" minval="0.000000" maxval="10.000000">
-						1.000000
-					</Var>
-					<Var name="Remove" type="trigger">
-					</Var>
-				</Var>
 			</Var>
 			<Var name="Defaults" type="list">
 				<Var name="Weights" type="list">
@@ -2750,25 +2445,25 @@
 				true
 			</Var>
 			<Var name="camera calibration markers" type="bool">
-				true
+				false
 			</Var>
 			<Var name="calibration result" type="bool">
 				true
 			</Var>
 			<Var name="calibration result pillars" type="bool">
-				true
+				false
 			</Var>
 			<Var name="calibration result pillars height" type="double" minval="" maxval="">
 				150.000000
 			</Var>
 			<Var name="detected edges" type="bool">
-				true
+				false
 			</Var>
 			<Var name="complete edge detection" type="bool">
 				false
 			</Var>
 			<Var name="image mask hull" type="bool">
-				false
+				true
 			</Var>
 			<Var name="chessboard" type="bool">
 				false
@@ -2802,7 +2497,7 @@
 				<Var name="re-read params" type="trigger">
 				</Var>
 				<Var name="Capture Module" type="stringenum">
-					Read from files
+					None
 					<Var name="0" type="string">
 						None
 					</Var>
@@ -3782,10 +3477,10 @@
 						CP 0
 					</Var>
 					<Var name="Control point 0 image x" type="double" minval="" maxval="">
-						179.000000
+						50.000000
 					</Var>
 					<Var name="Control point 0 image y" type="double" minval="" maxval="">
-						342.000000
+						50.000000
 					</Var>
 					<Var name="Control point 0 field x" type="double" minval="" maxval="">
 						0.000000
@@ -3799,10 +3494,10 @@
 						CP 1
 					</Var>
 					<Var name="Control point 1 image x" type="double" minval="" maxval="">
-						2294.000000
+						50.000000
 					</Var>
 					<Var name="Control point 1 image y" type="double" minval="" maxval="">
-						413.000000
+						100.000000
 					</Var>
 					<Var name="Control point 1 field x" type="double" minval="" maxval="">
 						0.000000
@@ -3816,10 +3511,10 @@
 						CP 2
 					</Var>
 					<Var name="Control point 2 image x" type="double" minval="" maxval="">
-						2271.000000
+						50.000000
 					</Var>
 					<Var name="Control point 2 image y" type="double" minval="" maxval="">
-						1815.000000
+						150.000000
 					</Var>
 					<Var name="Control point 2 field x" type="double" minval="" maxval="">
 						0.000000
@@ -3833,10 +3528,10 @@
 						CP 3
 					</Var>
 					<Var name="Control point 3 image x" type="double" minval="" maxval="">
-						127.000000
+						50.000000
 					</Var>
 					<Var name="Control point 3 image y" type="double" minval="" maxval="">
-						1780.000000
+						200.000000
 					</Var>
 					<Var name="Control point 3 field x" type="double" minval="" maxval="">
 						0.000000
@@ -3879,10 +3574,10 @@
 					150.000000
 				</Var>
 				<Var name="Image width" type="int" minval="0" maxval="">
-					2448
+					0
 				</Var>
 				<Var name="Image height" type="int" minval="0" maxval="">
-					2048
+					0
 				</Var>
 				<Var name="grid height" type="int" minval="" maxval="">
 					9
