@@ -6,7 +6,7 @@ TIMESTEP = 0.0167
 # maximum (real and sim) robot settings
 MAX_VEL = 0.2
 # any slower and the robots become unstable
-MAX_ANGULAR_VEL = 4
+MAX_ANGULAR_VEL = 0.5
 
 ROBOT_RADIUS = 0.09  # TODO: probably not the best place to put this
 
@@ -55,7 +55,7 @@ TELEPORT_X_COORDS = [0.4, 0.8, 1.2, 1.6, 2, 2.4]
 
 # real controller
 BAUD_RATE = 115200
-PORT = "/dev/ttyACM0"
+PORT = "/dev/ttyACM1"
 AUTH_STR = "<READY>"
 MAX_INITIALIZATION_TIME = 5
 TIMEOUT = 0.1

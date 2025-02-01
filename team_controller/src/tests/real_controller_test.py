@@ -1,4 +1,4 @@
-from motion_planning.src.pid.pid import get_grsim_pids
+from motion_planning.src.pid.pid import get_grsim_pids, get_rsim_pids
 from robot_control.src.skills import go_to_point, go_to_ball
 from team_controller.src.controllers import RealRobotController
 from entities.game import Game
@@ -28,19 +28,18 @@ def test_with_vision(game: Game, robot_controller: RealRobotController):
         (message_type, message) = message_queue.get()  # Infinite timeout for now
         if message_type == MessageType.VISION:
             game.add_new_state(message)
-            # print(message)
         elif message_type == MessageType.REF:
             pass
         data = game.get_robot_pos(True, 1)
         if data:
             cmd = go_to_ball(pid_oren, pid_trans, data, 1, game.ball)
-            angular_vel = cmd.angular_vel
-            cmd._replace(angular_vel=-angular_vel)
-            # cmd = go_to_point(pid_oren, pid_trans, data, 1, (-3, -0.5), 0, False)
-            print(cmd)
+            anglular_vel = cmd.angular_vel
+            if abs(anglular_vel) < 1:
+                cmd._replace(angular_vel=0)
+            # cmd = go_to_point(pid_oren, pid_trans, data, 1, (-2, -0.5), 0, False)
             robot_controller.add_robot_commands(cmd, 0)
             binary_representation = [hex(byte) for byte in robot_controller.out_packet]
-            print(binary_representation)
+            # print(binary_representation)
             robot_controller.send_robot_commands()
 
 
