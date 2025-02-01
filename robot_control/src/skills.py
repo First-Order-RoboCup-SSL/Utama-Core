@@ -50,8 +50,14 @@ def go_to_ball(
     target_oren = np.arctan2(
         ball_data.y - this_robot_data.y, ball_data.x - this_robot_data.x
     )
-    print(f"target: {target_oren}")
-    print(f"actual vision {this_robot_data.orientation}")
+    distance = np.hypot(
+        ball_data.y - this_robot_data.y, ball_data.x - this_robot_data.x
+    )
+    dribbling = distance < 0.5
+    
+    if dribbling:
+        print("DRIBBLING")
+
     return calculate_robot_velocities(
         pid_oren=pid_oren,
         pid_trans=pid_trans,
@@ -59,6 +65,7 @@ def go_to_ball(
         robot_id=robot_id,
         target_coords=ball_data,
         target_oren=target_oren,
+        dribbling=dribbling
     )
 
 

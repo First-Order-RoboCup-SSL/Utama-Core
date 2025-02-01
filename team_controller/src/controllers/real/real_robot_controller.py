@@ -58,7 +58,6 @@ class RealRobotController(AbstractRobotController):
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
-        print(self.out_packet)
         self._serial.write(self.out_packet)
         data_in = self._serial.read_all()
         # time.sleep(0.05)

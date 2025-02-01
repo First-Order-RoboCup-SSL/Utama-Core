@@ -9,12 +9,12 @@ def get_real_pids(n_robots: int):
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        0.5,
+        1.5,
         0,
         0,
         num_robots=n_robots,
     )
-    pid_trans = TwoDPID(TIMESTEP, 0, 4.25, 0, 0, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 4.25, 0, 0, num_robots=n_robots)
     return pid_oren, pid_trans
 
 

@@ -42,7 +42,7 @@ class Game:
         self._enemy_robots: List[Robot] = [
             Robot(id, is_friendly=False) for id in range(num_enemy_robots)
         ]
-        self._ball: Ball = Ball(BallData(0, 0, 0))
+        self._ball: Ball = Ball(BallData(0, 0, 0, 0))
 
         self._yellow_score = 0
         self._blue_score = 0

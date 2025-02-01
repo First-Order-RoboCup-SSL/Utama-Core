@@ -61,6 +61,9 @@ class VisionDataReceiver(BaseReceiver):
             self.ball_pos,
         )
 
+        if all(map(lambda x: x is None, self.robots_yellow_pos)):
+            print("NOTHING FOUND")
+
         self.camera_frames[detection.camera_id] = new_frame
         if (
             self.frames_recvd % self.n_cameras == 0 and not None in self.camera_frames
@@ -94,7 +97,7 @@ class VisionDataReceiver(BaseReceiver):
             ty += r.y
             tz += r.z
 
-        return BallData(tx / len(bs), ty / len(bs), tz / len(bs))
+        return BallData(tx / len(bs), ty / len(bs), tz / len(bs), min(map(lambda x: x.confidence, bs)))
 
     def _avg_frames(self, frames: List[FrameData]) -> FrameData:
         frames = [*filter(lambda x: x.ball is not None, frames)]
@@ -134,9 +137,12 @@ class VisionDataReceiver(BaseReceiver):
                     ball.x / 1000,
                     ball.y / 1000,
                     (ball.z / 1000) if ball.HasField("z") else 0.0,
+                    ball.confidence,
                 )
             )
-        self.ball_pos = ball_pos
+        # sorted by ball confidence
+        sorted_balls = sorted(ball_pos, key=lambda ball: ball.confidence)
+        self.ball_pos = sorted_balls
 
     def _update_robots_pos(self, detection: object) -> None:
         # Update both yellow and blue robots from detection.
