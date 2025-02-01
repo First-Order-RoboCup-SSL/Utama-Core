@@ -9,12 +9,12 @@ def get_real_pids(n_robots: int):
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        2.5,
+        0.5,
         0,
         0,
         num_robots=n_robots,
     )
-    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 4.25, 0, 0, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, 0, 4.25, 0, 0, num_robots=n_robots)
     return pid_oren, pid_trans
 
 
@@ -119,8 +119,8 @@ class PID:
         # Adjust error if orientation (oren) is considered
         if oren:
             error = np.atan2(np.sin(error), np.cos(error))
-            if error > np.deg2rad(6):
-                error = 0.0
+            # if error < np.deg2rad(2):
+            #     error = 0.0
 
         # Calculate PID output
         Pout = self.Kp * error if self.Kp != 0 else 0.0

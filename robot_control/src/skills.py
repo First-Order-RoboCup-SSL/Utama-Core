@@ -50,6 +50,8 @@ def go_to_ball(
     target_oren = np.arctan2(
         ball_data.y - this_robot_data.y, ball_data.x - this_robot_data.x
     )
+    print(f"target: {target_oren}")
+    print(f"actual vision {this_robot_data.orientation}")
     return calculate_robot_velocities(
         pid_oren=pid_oren,
         pid_trans=pid_trans,

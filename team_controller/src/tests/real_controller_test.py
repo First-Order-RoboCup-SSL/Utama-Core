@@ -34,23 +34,19 @@ def test_with_vision(game: Game, robot_controller: RealRobotController):
         data = game.get_robot_pos(True, 1)
         if data:
             cmd = go_to_ball(pid_oren, pid_trans, data, 1, game.ball)
+            print(cmd)
             # cmd = go_to_point(pid_oren, pid_trans, data, 1, (-2, -0.5), 0, False)
-            
-            anglular_vel = cmd.angular_vel
-            if abs(anglular_vel) < 1:
-                cmd._replace(angular_vel=0)
+                
             robot_controller.add_robot_commands(cmd, 0)
-            binary_representation = [hex(byte) for byte in robot_controller.out_packet]
-            # print(binary_representation)
             robot_controller.send_robot_commands()
-            time.sleep(0.0167)
+            # time.sleep(0.0167)
 
 
 def test_forward(robot_controller: RealRobotController):
     cmd = RobotCommand(
-        local_forward_vel=0.1, 
+        local_forward_vel=0, 
         local_left_vel=0, 
-        angular_vel=0, 
+        angular_vel=1, 
         kick=0, 
         chip= 0, 
         dribble=1,
@@ -65,6 +61,7 @@ def test_forward(robot_controller: RealRobotController):
         robot_controller.send_robot_commands()
         print(f"Time: {time.time() - start_time}")
         start_time = time.time()
+        time.sleep(0.017)
 
 def main():
     stop_buffer = [0, 0, 0, 0, 0, 0, 0, 0]
@@ -75,7 +72,7 @@ def main():
     )
     try:
         test_forward(robot_controller)
-        test_with_vision(game, robot_controller)
+        # test_with_vision(game, robot_controller)
 
     except KeyboardInterrupt:
         # try to stop the robot 15 times
