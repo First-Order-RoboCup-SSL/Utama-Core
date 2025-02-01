@@ -4,21 +4,39 @@ from typing import Optional, Union, Tuple
 from team_controller.src.config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL
 
 
+def get_real_pids(n_robots: int):
+    pid_oren = PID(
+        TIMESTEP,
+        MAX_ANGULAR_VEL,
+        -MAX_ANGULAR_VEL,
+        4.5,
+        0,
+        0.3,
+        num_robots=n_robots,
+    )
+    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 4.5, 0, 0.2, num_robots=n_robots)
+    return pid_oren, pid_trans
+
+
 def get_grsim_pids(n_robots: int):
     pid_oren = PID(
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        5/2, 0, 0,
+        5 / 2,
+        0,
+        0,
         num_robots=n_robots,
     )
-    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5/2, 0, 0, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5 / 2, 0, 0, num_robots=n_robots)
     return pid_oren, pid_trans
 
 
 def get_rsim_pids(n_robots: int):
     # no clamping for oreintation otherwise the robot becomes unstable
-    pid_oren = PID(TIMESTEP, MAX_ANGULAR_VEL, -MAX_ANGULAR_VEL, 18.5, 0.12, 0, num_robots=6)
+    pid_oren = PID(
+        TIMESTEP, MAX_ANGULAR_VEL, -MAX_ANGULAR_VEL, 18.5, 0.12, 0, num_robots=6
+    )
     # speeds faster than 2.3 m/s cause the robot to lose control (due to the physics engine,
     # rsim becomes wierd there is some sot of limiter on the robots)
     pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0, num_robots=n_robots)

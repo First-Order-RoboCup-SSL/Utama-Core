@@ -1,4 +1,4 @@
-from motion_planning.src.pid.pid import get_grsim_pids, get_rsim_pids
+from motion_planning.src.pid.pid import get_real_pids
 from robot_control.src.skills import go_to_point, go_to_ball
 from team_controller.src.controllers import RealRobotController
 from entities.game import Game
@@ -17,7 +17,7 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 
 def test_with_vision(game: Game, robot_controller: RealRobotController):
-    pid_oren, pid_trans = get_grsim_pids(6)
+    pid_oren, pid_trans = get_real_pids(6)
     message_queue = queue.SimpleQueue()
     receiver = VisionDataReceiver(message_queue, n_cameras=1)
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
@@ -46,11 +46,14 @@ def test_with_vision(game: Game, robot_controller: RealRobotController):
 def test_forward(robot_controller: RealRobotController):
     cmd = RobotCommand(0.1, 0, 0, 0, 0, 1)
     x = 0
+    start_time = time.time()
     while True:
         robot_controller.add_robot_commands(cmd, 0)
         binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
         print(binary_representation)
         robot_controller.send_robot_commands()
+        print(f"Time: {time.time() - start_time}")
+        start_time = time.time()
         time.sleep(0.1)
 
 
@@ -62,7 +65,7 @@ def main():
         is_team_yellow=True, game_obj=game, n_robots=1
     )
     try:
-        # test_forward(robot_controller)
+        test_forward(robot_controller)
         test_with_vision(game, robot_controller)
 
     except KeyboardInterrupt:
