@@ -39,8 +39,6 @@ def test_with_vision(game: Game, robot_controller: RealRobotController):
                 
             robot_controller.add_robot_commands(cmd, 0)
             robot_controller.send_robot_commands()
-            # time.sleep(0.0167)
-
 
 def test_forward(robot_controller: RealRobotController):
     cmd = RobotCommand(
