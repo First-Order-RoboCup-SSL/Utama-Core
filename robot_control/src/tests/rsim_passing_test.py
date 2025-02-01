@@ -60,11 +60,11 @@ def test_passing(passer_id: int, receiver_id: int, is_yellow: bool, headless: bo
 
     try:
         while True:
-            env.draw_point(
-                TARGET_COORDS[0],
-                TARGET_COORDS[1],
-                width=2,
-            )
+            # env.draw_point(
+            #     TARGET_COORDS[0],
+            #     TARGET_COORDS[1],
+            #     width=2,
+            # )
             # Check if the time limit has been exceeded
             elapsed_time = time.time() - start_time
             if elapsed_time > MAX_TIME:

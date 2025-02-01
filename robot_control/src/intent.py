@@ -103,23 +103,23 @@ class PassBall:
         # if ball has already been kicked and heading towards receiver
         if self.ball_in_flight:
 
-            # TODO: fix fine adjustment of receiver position
+            # TODO: add line filtering to calculate the adjusted position
 
-            # adjusted_pos = calculate_adjusted_receiver_pos(
-            #     self.ball_launch_pos, receiver_data, ball_data
-            # )  # we are assuming the adjusted position should be extremely close
-            # catch_orientation = np.arctan2(
-            #     ball_data.y - adjusted_pos[1], ball_data.x - adjusted_pos[0]
-            # )
+            adjusted_pos = calculate_adjusted_receiver_pos(
+                self.ball_launch_pos, receiver_data, ball_data
+            )  # we are assuming the adjusted position should be extremely close
             catch_orientation = np.arctan2(
-                ball_data.y - receiver_data.y, ball_data.x - receiver_data.x
+                ball_data.y - adjusted_pos[1], ball_data.x - adjusted_pos[0]
             )
+            # catch_orientation = np.arctan2(
+            #     ball_data.y - receiver_data.y, ball_data.x - receiver_data.x
+            # )
             receiver_cmd = go_to_point(
                 self.pid_oren,
                 self.pid_trans,
                 receiver_data,
                 self.receiver_id,
-                self.target_coords,
+                adjusted_pos,
                 catch_orientation,
             )
 
