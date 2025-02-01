@@ -1,3 +1,4 @@
+from calendar import c
 from motion_planning.src.pid.pid import get_real_pids
 from robot_control.src.skills import go_to_point, go_to_ball
 from team_controller.src.controllers import RealRobotController
@@ -44,7 +45,15 @@ def test_with_vision(game: Game, robot_controller: RealRobotController):
 
 
 def test_forward(robot_controller: RealRobotController):
-    cmd = RobotCommand(0.1, 0, 0, 0, 0, 1)
+    cmd = RobotCommand(
+        local_forward_vel=0.1, 
+        local_left_vel=0, 
+        angular_vel=0, 
+        kick=0, 
+        chip= 0, 
+        dribble=1,
+        )
+    
     x = 0
     start_time = time.time()
     while True:
@@ -54,8 +63,6 @@ def test_forward(robot_controller: RealRobotController):
         robot_controller.send_robot_commands()
         print(f"Time: {time.time() - start_time}")
         start_time = time.time()
-        time.sleep(0.1)
-
 
 def main():
     stop_buffer = [0, 0, 0, 0, 0, 0, 0, 0]
