@@ -111,7 +111,7 @@ def find_best_shot(
         shoot_in_left_goal=shoot_in_left_goal,
     )
     if not shadows:
-        return (goal_y2 + goal_y1) / 2
+        return (goal_y2 + goal_y1) / 2, [goal_y1, goal_y2]
 
     open_spaces: List[Tuple[float, float]] = []
 
@@ -159,8 +159,8 @@ def find_shot_quality(
 
     # Compute the open angle (gap angle)
     open_angle = np.absolute(
-        np.arctan2(largest_gap[1] - point.y, largest_gap[0] - point.x)
-        - np.arctan2(largest_gap[1] - point.y, largest_gap[0] - point.x)
+        np.arctan2(largest_gap[1] - point.y, goal_x - point.x)
+        - np.arctan2(largest_gap[0] - point.y, goal_x - point.x)
     )
 
     # Normalize shot quality

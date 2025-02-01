@@ -197,7 +197,7 @@ class Game:
             ]
         else:
             return [
-                self.get_object_velocity(RobotEntity(i, Colour.BLUE))
+                self.get_object_velocity(RobotEntity(Colour.BLUE, i))
                 for i in range(len(self.get_robots_pos(False)))
             ]
 
@@ -413,7 +413,7 @@ class Game:
 
         previous_pos = self._get_object_position_at_frame(frame - 1, object)
         current_pos = self._get_object_position_at_frame(frame, object)
-        
+
         if current_pos is None or previous_pos is None:
             logger.warning("No position data to calculate velocity for frame %d", frame)
             return None
@@ -431,7 +431,7 @@ class Game:
             return None
 
         dt_secs = time_received - previous_time_received
-        
+
         vx = (current_pos.x - previous_pos.x) / dt_secs
         vy = (current_pos.y - previous_pos.y) / dt_secs
 
@@ -464,7 +464,9 @@ class Game:
                     averageVelocity[0] += curr_vel[0]
                     averageVelocity[1] += curr_vel[1]
                 elif missing_velocities == WINDOW - 1:
-                    logging.warning(f"No velocity data to calculate acceleration for frame {len(self._records) - j}")
+                    logging.warning(
+                        f"No velocity data to calculate acceleration for frame {len(self._records) - j}"
+                    )
                     return None
                 else:
                     missing_velocities += 1

@@ -1,7 +1,20 @@
 import numpy as np
 from robot_control.src.utils.shooting_utils import find_shot_quality
+from entities.game.robot import RobotData
 
 ROBOT_RADIUS = 0.09
+
+
+class PointOnField:
+    def __init__(self, x: float, y: float):
+        self.x = x
+        self.y = y
+
+    def x(self) -> float:
+        self.x
+
+    def y(self) -> float:
+        self.y
 
 
 def ball_position(t, x0, v0, a):
@@ -14,9 +27,12 @@ def ball_position(t, x0, v0, a):
 def interception_chance(
     passer, receiver, opponent, robot_velocity, ball_v0_magnitude, ball_a_magnitude
 ):
-    A = np.array(passer)
-    B = np.array(receiver)
-    R = np.array(opponent)
+
+    # assert type(passer) != tuple
+    # assert type(receiver) != tuple
+    A = np.array([passer.x, passer.y])
+    B = np.array([receiver.x, receiver.y])
+    R = np.array([opponent.x, opponent.y])
     AB = B - A
     AB_unit = AB / np.linalg.norm(AB)
     ball_v0 = AB_unit * ball_v0_magnitude
@@ -39,7 +55,9 @@ def interception_chance(
     )
 
     opp_dist_to_pass = np.linalg.norm(closest_point - R) - ROBOT_RADIUS
-    opp_to_pass_time = opp_dist_to_pass / robot_velocity
+    opp_to_pass_time = (
+        opp_dist_to_pass / robot_velocity if robot_velocity != 0 else float("inf")
+    )
 
     if opp_to_pass_time <= ball_time:
         ball_pos = ball_position(opp_to_pass_time, passer, ball_v0, ball_a)
@@ -75,7 +93,6 @@ def find_pass_quality(
             ball_a_magnitude,
         )
         total_interception_chance += interception
-
     goal_chance = find_shot_quality(
         receiver, enemy_positions, goal_x, goal_y1, goal_y2, shoot_in_left_goal
     )
@@ -137,12 +154,12 @@ def find_best_receiver_position(
     enemy_velocities,
     ball_v0_magnitude,
     ball_a_magnitude,
-    field_limits,
     goal_x,
     goal_y1,
     goal_y2,
     shoot_in_left_goal,
-    sample_radius=0.2,
+    field_limits=[(-4.5, 4.5), (-3.0, 3.0)],
+    sample_radius=0.7,
     num_samples=10,
 ):
     """
@@ -160,21 +177,22 @@ def find_best_receiver_position(
     best_position = receiver_position
     best_quality = -float("inf")
 
-    sampled_positions = [receiver_position]  # Include the current position
+    sampled_positions = [
+        PointOnField(receiver_position.x, receiver_position.y)
+    ]  # Include the current position
     pass_qualities = []  # Store pass quality for each sampled point
 
     angles = np.linspace(0, 2 * np.pi, num_samples, endpoint=False)
 
     for angle in angles:
-        new_x = receiver_position[0] + sample_radius * np.cos(angle)
-        new_y = receiver_position[1] + sample_radius * np.sin(angle)
+        new_x = receiver_position.x + sample_radius * np.cos(angle)
+        new_y = receiver_position.y + sample_radius * np.sin(angle)
 
         # Ensure the sampled position is within the field
         if x_min <= new_x <= x_max and y_min <= new_y <= y_max:
-            sampled_positions.append((new_x, new_y))
+            sampled_positions.append(PointOnField(new_x, new_y))
 
     for candidate in sampled_positions:
-
         pass_quality = find_pass_quality(
             passer,
             candidate,
@@ -190,6 +208,6 @@ def find_best_receiver_position(
         pass_qualities.append(pass_quality)
         if pass_quality > best_quality:
             best_quality = pass_quality
-            best_position = candidate
+            best_position = (candidate.x, candidate.y)
 
     return best_position, sampled_positions, pass_qualities

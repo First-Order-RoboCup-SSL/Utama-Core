@@ -13,18 +13,15 @@ from typing import List
 logger = logging.getLogger(__name__)
 
 MAX_TIME = 20  # in seconds
-N_ROBOTS = 6
+N_ROBOTS = 7
 DEFENDING_ROBOTS = 5
 ATTACKING_ROBOTS = 2
 TARGET_COORDS = (-2, 3)
-PASS_QUALITY_THRESHOLD = 2
-SHOT_QUALITY_THRESHOLD = 0.4
+PASS_QUALITY_THRESHOLD = 2.0
+SHOT_QUALITY_THRESHOLD = 1.0
 
 
 def test_2v5_play(friendly_robot_ids: List[int], is_yellow: bool, headless: bool):
-    """When the tests are run with pytest, these parameters are filled in
-    based on whether we are in full or quick test mode (see conftest.py)"""
-
     game = Game(my_team_is_yellow=is_yellow)
 
     if is_yellow:
@@ -50,8 +47,10 @@ def test_2v5_play(friendly_robot_ids: List[int], is_yellow: bool, headless: bool
     )
 
     scored = False
-
     start_time = time.time()
+
+    player1_id = friendly_robot_ids[0]  # Start with robot 0
+    player2_id = friendly_robot_ids[1]  # Start with robot 1
 
     play_2v5_task = Play2v5(
         pid_oren,
@@ -65,22 +64,23 @@ def test_2v5_play(friendly_robot_ids: List[int], is_yellow: bool, headless: bool
 
     try:
         while True:
-            env.draw_point(
-                TARGET_COORDS[0],
-                TARGET_COORDS[1],
-                width=2,
-            )
 
-            # Check if the time limit has been exceeded
             elapsed_time = time.time() - start_time
             if elapsed_time > MAX_TIME:
                 logger.info("Test Failed: Time limit exceeded.")
                 assert False  # Failure
 
             if not scored:
-                passer_cmd, receiver_cmd = play_2v5_task.enact(
-                    passer_has_ball=sim_robot_controller.robot_has_ball(passer_id)
-                )
+                player1_has_ball = sim_robot_controller.robot_has_ball(player1_id)
+                player2_has_ball = sim_robot_controller.robot_has_ball(player2_id)
+                ball_possesor_id = None
+
+                if player1_has_ball:
+                    ball_possesor_id = player1_id
+                elif player2_has_ball:
+                    ball_possesor_id = player2_id
+
+                commands, sampled_positions = play_2v5_task.enact(ball_possesor_id)
 
                 if game.is_ball_in_goal(our_side=not is_yellow):
                     logger.info(
@@ -89,9 +89,33 @@ def test_2v5_play(friendly_robot_ids: List[int], is_yellow: bool, headless: bool
                     scored = True
                     break
 
-                sim_robot_controller.add_robot_commands(passer_cmd, passer_id)
-                sim_robot_controller.add_robot_commands(receiver_cmd, receiver_id)
+                (
+                    sim_robot_controller.add_robot_commands(
+                        commands.get(player1_id), player1_id
+                    )
+                    if commands.get(player1_id)
+                    else None
+                )
+                (
+                    sim_robot_controller.add_robot_commands(
+                        commands.get(player2_id), player2_id
+                    )
+                    if commands.get(player2_id)
+                    else None
+                )
+
+                # for rid in friendly_robot_ids:
+                #    if rid in commands and rid != passer_id:
+                #        receiver_id = rid  # Update receiver to the one in commands
+                #        sim_robot_controller.add_robot_commands(commands[rid], rid)
+
+                # Swap passer and receiver after a pass
+                # passer_id, receiver_id = receiver_id, passer_id
+
                 sim_robot_controller.send_robot_commands()
+                if sampled_positions != None:
+                    for sample in sampled_positions:
+                        env.draw_point(sample.x, sample.y, width=2)
 
         assert scored
 
