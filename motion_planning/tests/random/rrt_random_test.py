@@ -26,7 +26,7 @@ from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 from motion_planning.src.planning.path_planner import DynamicWindowPlanner, RRTPlanner
-from robot_control.src.find_best_shot import ROBOT_RADIUS
+from team_controller.src.config.settings import ROBOT_RADIUS
 import random
 import logging
 import time

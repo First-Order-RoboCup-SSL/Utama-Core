@@ -6,7 +6,7 @@ from entities.game.robot import Robot
 from math import sin, cos, pi, dist, exp
 import random
 from shapely.geometry import Point, LineString
-from robot_control.src.find_best_shot import ROBOT_RADIUS
+from team_controller.src.config.settings import ROBOT_RADIUS
 from shapely.affinity import rotate
 
 import logging

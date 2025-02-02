@@ -25,7 +25,7 @@ from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 from motion_planning.src.planning.path_planner import DynamicWindowPlanner
-from robot_control.src.find_best_shot import ROBOT_RADIUS 
+from team_controller.src.config.settings import ROBOT_RADIUS
 import random
 import logging
 import time
@@ -59,7 +59,7 @@ def test_pathfinding(headless: bool, moving: bool):
     is_yellow = True
     pid_oren, pid_2d = get_rsim_pids(N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
 
-    slow_pid2d = TwoDPID(TIMESTEP, 1, -1, 2, 0.1, 0.0, num_robots=6, normalize=False)
+    slow_pid2d = TwoDPID(TIMESTEP, 1, 2, 0.1, 0.0, num_robots=6)
 
     
     sim_robot_controller = RSimRobotController(
@@ -78,13 +78,12 @@ def test_pathfinding(headless: bool, moving: bool):
 
         velocity = game.get_object_velocity(GameRobot(True, mover_id))
 
-        next_stop = planner.path_to(mover_id, target)
+        next_stop, _ = planner.path_to(mover_id, target)
 
         latest_frame = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
         if latest_frame:
             friendly_robots, _, _ = latest_frame  
         r = friendly_robots[mover_id]
-
         env.draw_line([(r.x, r.y), next_stop], width=2, color="PINK")
         if dist((r.x, r.y), target) < 0.05 and mag(velocity) < 0.2:
             target = targets.pop(0)

@@ -11,7 +11,7 @@ from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from motion_planning.src.planning.controller import HybridWaypointMotionController
-from robot_control.src.find_best_shot import ROBOT_RADIUS
+from team_controller.src.config.settings import ROBOT_RADIUS
 import random
 from math import dist
 
