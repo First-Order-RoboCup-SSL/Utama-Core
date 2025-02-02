@@ -275,7 +275,7 @@ class Game:
                 self._records[-1].ts + t,
                 list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),
                 list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
-                [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
+                [BallData(ball_pos[0], ball_pos[1], 0, 1)],  # TODO : Support z axis
             )
 
     def _reorganise_frame(self, frame: FrameData) -> Optional[PredictedFrame]:
@@ -413,7 +413,7 @@ class Game:
 
         previous_pos = self._get_object_position_at_frame(frame - 1, object)
         current_pos = self._get_object_position_at_frame(frame, object)
-        
+
         if current_pos is None or previous_pos is None:
             # logger.warning("No position data to calculate velocity for frame %d", frame)
             return None
@@ -431,7 +431,7 @@ class Game:
             return None
 
         dt_secs = time_received - previous_time_received
-        
+
         vx = (current_pos.x - previous_pos.x) / dt_secs
         vy = (current_pos.y - previous_pos.y) / dt_secs
 
@@ -497,7 +497,7 @@ if __name__ == "__main__":
     print(game.ball.x)
     print(game.ball.y)
     print(game.ball.z)
-    game.ball = BallData(1, 2, 3)
+    game.ball = BallData(1, 2, 3, 1)
     print(game.ball.x)
     print(game.ball.y)
     print(game.ball.z)

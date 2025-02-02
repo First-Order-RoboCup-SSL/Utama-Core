@@ -141,7 +141,9 @@ class SSLStandardEnv(SSLBaseEnv):
         blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
         """
         # Ball observation shared by all robots
-        ball_obs = BallData(self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z)
+        ball_obs = BallData(
+            self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z, 1.0
+        )
 
         # Robots observation (Blue + Yellow)
         blue_obs = []

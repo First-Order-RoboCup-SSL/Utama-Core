@@ -1,6 +1,6 @@
 import numpy as np
 
-from global_utils.math_utils import squared_distance, normalise_heading
+from global_utils.math_utils import distance, normalise_heading
 from robot_control.src.utils.shooting_utils import find_best_shot
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from entities.game import Game, Field
@@ -43,7 +43,7 @@ class PassBall:
         self.my_team_is_yellow = game.my_team_is_yellow
 
         self.angle_tolerance = 0.01
-        self.sq_dist_tolerance = 0.01
+        self.dist_tolerance = 0.05
         self.ball_in_flight = False
         self.ball_launch_pos = None
 
@@ -126,8 +126,8 @@ class PassBall:
         else:
             catch_orientation = normalise_heading(shot_orientation + np.pi)
             if (
-                squared_distance((receiver_data.x, receiver_data.y), self.target_coords)
-                < self.sq_dist_tolerance
+                distance((receiver_data.x, receiver_data.y), self.target_coords)
+                < self.dist_tolerance
                 and abs(
                     receiver_oren - catch_orientation,
                 )

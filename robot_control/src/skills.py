@@ -8,7 +8,7 @@ from motion_planning.src.pid import PID
 import logging
 
 from math import atan2, dist, sqrt, cos, sin, pi, acos, degrees
-from global_utils.math_utils import normalise_heading
+from global_utils.math_utils import normalise_heading, distance
 from motion_planning.src.pid.pid import TwoDPID
 from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
 
@@ -45,27 +45,32 @@ def go_to_ball(
     this_robot_data: RobotData,
     robot_id: int,
     ball_data: BallData,
+    dribble_when_near: bool = True,
+    dribble_threshold: float = 0.5,
 ) -> RobotCommand:
+
     # TODO: add a optional target_oren flag
     target_oren = np.arctan2(
         ball_data.y - this_robot_data.y, ball_data.x - this_robot_data.x
     )
-    distance = np.hypot(
-        ball_data.y - this_robot_data.y, ball_data.x - this_robot_data.x
-    )
-    dribbling = distance < 0.5
-    
-    if dribbling:
-        print("DRIBBLING")
+
+    target_x = ball_data.x - ROBOT_RADIUS * np.cos(target_oren)
+    target_y = ball_data.y - ROBOT_RADIUS * np.sin(target_oren)
+
+    if dribble_when_near:
+        distance = np.hypot(
+            ball_data.y - this_robot_data.y, ball_data.x - this_robot_data.x
+        )
+        dribbling = distance < dribble_threshold
 
     return calculate_robot_velocities(
         pid_oren=pid_oren,
         pid_trans=pid_trans,
         this_robot_data=this_robot_data,
         robot_id=robot_id,
-        target_coords=ball_data,
+        target_coords=(target_x, target_y),
         target_oren=target_oren,
-        dribbling=dribbling
+        dribbling=dribbling,
     )
 
 
@@ -119,7 +124,7 @@ def turn_on_spot(
 
     if pivot_on_ball:
         angular_vel = turn.angular_vel
-        local_left_vel = -angular_vel * (ROBOT_RADIUS * 1.8)
+        local_left_vel = -angular_vel * 1.8 * ROBOT_RADIUS
         turn = turn._replace(local_left_vel=local_left_vel)
 
     return turn
