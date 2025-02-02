@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 MAX_TIME = 20  # in seconds
 N_ROBOTS = 7
-DEFENDING_ROBOTS = 2
+DEFENDING_ROBOTS = 5
 ATTACKING_ROBOTS = 2
 # TARGET_COORDS = (-2, 3)
 PASS_QUALITY_THRESHOLD = 1.15
