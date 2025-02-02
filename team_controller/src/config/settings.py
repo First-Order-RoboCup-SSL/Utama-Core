@@ -4,8 +4,11 @@ from numpy import pi
 TIMESTEP = 0.0167
 
 # maximum (real and sim) robot settings
-MAX_VEL = 1.5
+MAX_VEL = 2.5
+# any slower and the robots become unstable
 MAX_ANGULAR_VEL = 8
+
+ROBOT_RADIUS = 0.09  # TODO: probably not the best place to put this
 
 # sim kick speed
 KICK_SPD = 5
@@ -41,8 +44,7 @@ PID_PARAMS = {
         "Kd": 0,
         "Ki": 0.2,
         "dt": TIMESTEP,
-        "max": MAX_VEL,
-        "min": -MAX_VEL,
+        "max_vel": MAX_VEL,
     },
 }
 
@@ -55,16 +57,18 @@ TELEPORT_X_COORDS = [0.4, 0.8, 1.2, 1.6, 2, 2.4]
 BAUD_RATE = 115200
 PORT = "COM3"
 TIMEOUT = 0.1
-# s: signed, u: unsigned
+# NOTE: angular_vel, local_forward_vel, local_left_vel are 16 bit floating point.
+# they should not be changed to any arbitrary value.
 SERIAL_BIT_SIZES = {
     "out": {
-        "angular_vel": (7, "s"),
-        "local_forward_vel": (7, "s"),
-        "local_left_vel": (7, "s"),
-        "kicker_bottom": (1, "u"),
-        "kicker_top": (1, "u"),
-        "dribbler": (1, "u"),
+        "angular_vel": 16,
+        "local_forward_vel": 16,
+        "local_left_vel": 16,
+        "kicker_bottom": 1,
+        "kicker_top": 1,
+        "dribbler": 1,
+        "spare": 13,
     },
-    "in": {"kicker_charged": (1, "u"), "has_ball": (1, "u")},
+    "in": {"has_ball": 1},  # TODO: add "kicker_charged": 1,
 }
 ENDIAN = "big"

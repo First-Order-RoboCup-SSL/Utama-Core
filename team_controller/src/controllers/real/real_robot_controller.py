@@ -1,6 +1,9 @@
 from math import ceil
 from serial import Serial
 from typing import Union, Optional, Dict, List
+from math import degrees
+import warnings
+import numpy as np
 
 from entities.data.command import RobotCommand, RobotInfo
 from entities.game import Game
@@ -31,14 +34,11 @@ class RealRobotController(AbstractRobotController):
         self._is_team_yellow = is_team_yellow
         self._game_obj = game_obj
         self._serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
-        self._rbt_cmd_size = self._get_byte_size(
-            SERIAL_BIT_SIZES["out"]
+        self._rbt_cmd_size = ceil(
+            sum(SERIAL_BIT_SIZES["out"].values()) / 8
         )  # packet size for one robot
-        self._quant_dict = (
-            self._generate_quant_dict()
-        )  # generate values commonly used to quantise output
         self._out_packet = self._empty_command()
-        self._in_packet_size = self._get_byte_size(SERIAL_BIT_SIZES["in"])
+        self._in_packet_size = ceil(sum(SERIAL_BIT_SIZES["in"].values()) / 8)
         self._robots_info: List[RobotInfo] = [None] * 6
 
         logger.debug(
@@ -73,8 +73,8 @@ class RealRobotController(AbstractRobotController):
             robot_id (int): The ID of the robot.
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
-        q_command = self._quantise_command(command)
-        command_buffer = self._generate_command_buffer(q_command)
+        c_command = self._convert_float_command(command)
+        command_buffer = self._generate_command_buffer(c_command)
         start_idx = robot_id * self._rbt_cmd_size
         self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = command_buffer
 
@@ -112,110 +112,32 @@ class RealRobotController(AbstractRobotController):
             self._robots_info[i] = info
             data_in = data_in << 1  # shift to the next robot's data
 
-    def _generate_quant_dict(self) -> Dict:
-        """
-        Generates a dictionary of the maximum and minimum quantised values for each key in the SERIAL_BIT_SIZES dictionary.
-        """
-        quant_dict = {}
-        for key, bit_size in SERIAL_BIT_SIZES["out"].items():
-            n_bits = bit_size[0]
-            signed = True if bit_size[1] == "s" else False
-            if signed:
-                half_range = 2 ** (n_bits - 1)
-                max_quantised = half_range - 1
-                min_quantised = -half_range
-            else:
-                max_quantised = 2**n_bits - 1
-                min_quantised = 0
-            quant_dict[key] = (max_quantised, min_quantised)
-        return quant_dict
-
-    def _quantise_command(self, command: RobotCommand) -> RobotCommand:
-        """
-        Quantizes the robot command to the appropriate bit size.
-        """
-        q_angular_vel = self._quantise(
-            command.angular_vel, MAX_ANGULAR_VEL, *self._quant_dict["angular_vel"]
-        )
-        q_local_forward_vel = self._quantise(
-            command.local_forward_vel, MAX_VEL, *self._quant_dict["local_forward_vel"]
-        )
-        q_local_left_vel = self._quantise(
-            command.local_left_vel, MAX_VEL, *self._quant_dict["local_left_vel"]
-        )
-        q_kick = 1 if command.kick > 0 else 0
-        q_chip = 1 if command.chip > 0 else 0
-        q_dribble = 1 if command.dribble > 0 else 0
-
-        return RobotCommand(
-            local_forward_vel=q_local_forward_vel,
-            local_left_vel=q_local_left_vel,
-            angular_vel=q_angular_vel,
-            kick=q_kick,
-            chip=q_chip,
-            dribble=q_dribble,
-        )
-
-    def _quantise(
-        self,
-        value: float,
-        max_actual: float,
-        max_quantised: int,
-        min_quantised: int,
-    ) -> int:
-        """
-        Normalize a floating-point value and map it to a quantized twos-complement integer range.
-
-        Note the asymmetry in the quantization due to the natural limit of signed values.
-
-        Args:
-            value (float): The input value to be quantized.
-            max_actual (float): The maximum possible absolute value for normalization.
-            max_quantised (int): The upper bound of the quantized range.
-            min_quantised (int): The lower bound of the quantized range.
-
-        Returns:
-            int: The quantized integer value (two's complement: instead of -4 return its complement).
-
-        Raises:
-            AssertionError: If `max_actual` is zero.
-        """
-        assert max_actual != 0
-        assert value <= max_actual and value >= -max_actual
-
-        norm_value = value / max_actual
-        if norm_value >= 0:
-            quantised = round(norm_value * max_quantised)
-        else:
-            quantised = -((2 * min_quantised) + round(norm_value * min_quantised))
-        return quantised
-
-    def _generate_command_buffer(self, q_command: RobotCommand) -> bytes:
+    def _generate_command_buffer(self, c_command: RobotCommand) -> bytes:
         """
         Generates the command buffer to be sent to the robot.
         """
         out_bit_sizes = SERIAL_BIT_SIZES["out"]
-        angular_vel_buffer = (
-            f'{q_command.angular_vel:0{out_bit_sizes["angular_vel"][0]}b}'
-        )
         local_forward_vel_buffer = (
-            f'{q_command.local_forward_vel:0{out_bit_sizes["local_forward_vel"][0]}b}'
+            f'{c_command.local_forward_vel:0{out_bit_sizes["local_forward_vel"]}b}'
         )
         local_left_vel_buffer = (
-            f'{q_command.local_left_vel:0{out_bit_sizes["local_left_vel"][0]}b}'
+            f'{c_command.local_left_vel:0{out_bit_sizes["local_left_vel"]}b}'
         )
-        kick_buffer = f'{q_command.kick:0{out_bit_sizes["kicker_bottom"][0]}b}'
-        chip_buffer = f'{q_command.chip:0{out_bit_sizes["kicker_top"][0]}b}'
-        dribble_buffer = f'{q_command.dribble:0{out_bit_sizes["dribbler"][0]}b}'
+        angular_vel_buffer = f'{c_command.angular_vel:0{out_bit_sizes["angular_vel"]}b}'
+        kick_buffer = f'{c_command.kick:0{out_bit_sizes["kicker_bottom"]}b}'
+        chip_buffer = f'{c_command.chip:0{out_bit_sizes["kicker_top"]}b}'
+        dribble_buffer = f'{c_command.dribble:0{out_bit_sizes["dribbler"]}b}'
+        spare_buffer = f'{0:0{out_bit_sizes["spare"]}b}'
 
         command_buffer = "".join(
             [
-                angular_vel_buffer,
                 local_forward_vel_buffer,
                 local_left_vel_buffer,
+                angular_vel_buffer,
                 kick_buffer,
                 chip_buffer,
                 dribble_buffer,
+                spare_buffer,
             ]
         )
 
@@ -225,11 +147,67 @@ class RealRobotController(AbstractRobotController):
             self._rbt_cmd_size, byteorder=ENDIAN, signed=False
         )
 
-    def _get_byte_size(self, bit_dict: dict) -> int:
+    def _convert_float_command(self, command: RobotCommand) -> RobotCommand:
         """
-        Returns the byte size of the dictionary. (ceil divide)
+        Prepares the float values in the command to be formatted to binary in the buffer.
+
+        Also converts angular velocity to degrees per second.
         """
-        return ceil(sum(value[0] for value in bit_dict.values()) / 8)
+
+        angular_vel = command.angular_vel
+        local_forward_vel = command.local_forward_vel
+        local_left_vel = command.local_left_vel
+
+        if abs(command.angular_vel) > MAX_ANGULAR_VEL:
+            warnings.warn(
+                f"Angular velocity for robot {command.robot_id} is greater than the maximum angular velocity. Clipping to {MAX_ANGULAR_VEL}."
+            )
+            angular_vel = (
+                MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
+            )
+
+        if abs(command.local_forward_vel) > MAX_VEL:
+            warnings.warn(
+                f"Local forward velocity for robot {command.robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
+            )
+            local_forward_vel = MAX_VEL if command.local_forward_vel > 0 else -MAX_VEL
+
+        if abs(command.local_left_vel) > MAX_VEL:
+            warnings.warn(
+                f"Local left velocity for robot {command.robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
+            )
+            local_left_vel = MAX_VEL if command.local_left_vel > 0 else -MAX_VEL
+
+        out_bit_sizes = SERIAL_BIT_SIZES["out"]
+        command = RobotCommand(
+            local_forward_vel=self._convert_float(
+                local_forward_vel, out_bit_sizes["local_forward_vel"]
+            ),
+            local_left_vel=self._convert_float(
+                local_left_vel, out_bit_sizes["local_left_vel"]
+            ),
+            angular_vel=self._convert_float(
+                degrees(angular_vel), out_bit_sizes["angular_vel"]
+            ),
+            kick=command.kick,
+            chip=command.chip,
+            dribble=command.dribble,
+        )
+        return command
+
+    def _convert_float(self, val: float, float_size: int) -> int:
+        """
+        Converts a float to an unsigned integer using the specified float size.
+        This allows us to format it to binary and send it to the robot.
+        """
+        if float_size == 16:
+            float_val = np.float16(val)
+        elif float_size == 32:
+            float_val = np.float32(val)
+        else:
+            raise ValueError(f"Invalid float size: {float_size}")
+
+        return float_val.view(np.uint16)
 
     def _empty_command(self) -> bytearray:
         return bytearray(self._rbt_cmd_size * 6)

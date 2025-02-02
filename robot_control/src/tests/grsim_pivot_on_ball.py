@@ -1,35 +1,30 @@
 import threading
 import queue
 import time
+import numpy as np
 from team_controller.src.controllers import GRSimRobotController
 from team_controller.src.data import VisionDataReceiver
 from team_controller.src.data.message_enum import MessageType
 from entities.game import Game
-from robot_control.src.intent import score_goal
 from team_controller.src.config.settings import TIMESTEP
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
+from robot_control.src.skills import turn_on_spot, go_to_ball
 from motion_planning.src.pid.pid import get_grsim_pids
-
 import logging
-import random
 
 logger = logging.getLogger(__name__)
 
-# Test parameters
-MAX_TIME = 30  # Maximum time (in seconds) to score a goal
 
-
-def test_grsim_shooting(shooter_id: int, is_yellow: bool, headless: bool):
-    """Run the shooting test and return whether the robot scored within the time limit."""
+def test_grsim_pivot_on_ball(shooter_id: int, is_yellow: bool, headless: bool):
     env = GRSimController()
     env.reset()
 
-    game = Game()
+    game = Game(False)
 
     message_queue = queue.SimpleQueue()
     vision_receiver = VisionDataReceiver(message_queue)
 
-    sim_robot_controller = GRSimRobotController(is_team_yellow=is_yellow)
+    sim_robot_controller = GRSimRobotController(is_team_yellow=False)
 
     # Start vision thread
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
@@ -41,16 +36,8 @@ def test_grsim_shooting(shooter_id: int, is_yellow: bool, headless: bool):
 
     time.sleep(0.3)
 
-    start_time = time.time()  # Start the timer
-
     try:
         while True:
-            # Check if the time limit has been exceeded
-            elapsed_time = time.time() - start_time
-            if elapsed_time > MAX_TIME:
-                logger.info("Test Failed: Time limit exceeded.")
-                assert False  # Failure
-
             # Process messages from the queue
             if not message_queue.empty():
                 (message_type, message) = message_queue.get()
@@ -60,25 +47,27 @@ def test_grsim_shooting(shooter_id: int, is_yellow: bool, headless: bool):
                 elif message_type == MessageType.REF:
                     pass
 
-            # Generate commands for the shooter robot
-            cmd = score_goal(
-                game,
-                sim_robot_controller.robot_has_ball(shooter_id),
-                shooter_id=shooter_id,
-                pid_oren=pid_oren,
-                pid_trans=pid_trans,
-                is_yellow=is_yellow,
-                shoot_in_left_goal=is_yellow,
-            )
+            if not sim_robot_controller.robot_has_ball(shooter_id):
+                cmd = go_to_ball(
+                    pid_oren=pid_oren,
+                    pid_trans=pid_trans,
+                    this_robot_data=game.get_robot_pos(False, shooter_id),
+                    robot_id=shooter_id,
+                    ball_data=game.ball,
+                )
+            else:
+                cmd = turn_on_spot(
+                    pid_oren=pid_oren,
+                    pid_trans=pid_trans,
+                    this_robot_data=game.get_robot_pos(False, shooter_id),
+                    robot_id=shooter_id,
+                    target_oren=-np.pi,
+                    dribbling=True,
+                    pivot_on_ball=True,
+                )
+
             sim_robot_controller.add_robot_commands(cmd, shooter_id)
             sim_robot_controller.send_robot_commands()
-
-            # Check if a goal has been scored
-            if game.is_ball_in_goal(our_side=not is_yellow):
-                logger.info(f"Test Passed: Goal scored in {elapsed_time:.2f} seconds.")
-                break
-            
-        assert True  # Success
 
     except KeyboardInterrupt:
         logger.info("Test Interrupted.")
@@ -87,6 +76,6 @@ def test_grsim_shooting(shooter_id: int, is_yellow: bool, headless: bool):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
-
+    
     # Run the test and output the result
-    test_result = test_grsim_shooting(5, False, False)
+    test_result = test_grsim_pivot_on_ball(5, False, False)

@@ -4,6 +4,7 @@ from entities.data.vision import RobotData
 from global_utils.math_utils import rotate_vector
 from motion_planning.src.pid import PID
 from motion_planning.src.pid.pid import TwoDPID
+import numpy as np
 
 
 def calculate_robot_velocities(
@@ -26,7 +27,7 @@ def calculate_robot_velocities(
     target_x, target_y = target_coords[:2]
 
     if target_oren:
-        angular_vel = pid_oren.calculate(target_oren, current_oren, robot_id, oren=True)
+        angular_vel = pid_oren.calculate(target_oren, current_oren, robot_id, oren=True, normalize_range=np.pi)
     else:
         angular_vel = 0
 
@@ -34,10 +35,11 @@ def calculate_robot_velocities(
         forward_vel, left_vel = pid_trans.calculate(
             (target_x, target_y), (current_x, current_y), robot_id
         )
-        forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren)
+        forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren + (angular_vel*(1/60) / 2))
     else:
         forward_vel = 0
         left_vel = 0
+
     return RobotCommand(
         local_forward_vel=forward_vel,
         local_left_vel=left_vel,
