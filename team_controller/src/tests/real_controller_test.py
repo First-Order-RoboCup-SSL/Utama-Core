@@ -12,11 +12,13 @@ from team_controller.src.data.message_enum import MessageType
 from team_controller.src.data.vision_receiver import VisionDataReceiver
 import numpy as np
 
+
 def data_update_listener(receiver: VisionDataReceiver):
     # Start receiving game data; this will run in a separate thread.
     receiver.pull_game_data()
 
-def rotate_on_ball_test_with_vision(game: Game, robot_controller: RealRobotController):
+
+def rotate_on_ball_with_vision(game: Game, robot_controller: RealRobotController):
     pid_oren, pid_trans = get_real_pids(6)
     message_queue = queue.SimpleQueue()
     receiver = VisionDataReceiver(message_queue, n_cameras=1)
@@ -28,15 +30,60 @@ def rotate_on_ball_test_with_vision(game: Game, robot_controller: RealRobotContr
     go_back = 10000
     done = False
     vision_recieved = False
+    oren_done = False
     while True:
         (message_type, message) = message_queue.get()  # Infinite timeout for now
-        
+
         if message_type == MessageType.VISION:
             game.add_new_state(message)
             vision_recieved = True
         elif message_type == MessageType.REF:
             pass
 
+        data = game.get_robot_pos(True, 1)
+        if vision_recieved:
+            if not initial_ball_pos:
+                initial_ball_pos = game.ball
+
+            my_pos = game.get_robot_pos(True, 1)
+            if my_pos is not None:
+                distance = np.hypot(
+                    my_pos.x - initial_ball_pos.x, my_pos.y - initial_ball_pos.y
+                )
+
+                SLOW_FRAMES = 45
+                print("DIST", distance)
+                if abs(distance) < 0.2 and not done:
+                    print("SWITCHING TO TURN")
+                    go_back = 2 * SLOW_FRAMES
+                    done = True
+                elif go_back <= SLOW_FRAMES:
+                    print("TURNING NOW")
+                    cmd = turn_on_spot(
+                        pid_oren, pid_trans, data, 1, np.pi / 2, True, True
+                    )
+                    print(cmd)
+                elif go_back <= 2 * SLOW_FRAMES:
+                    print("SLOWING")
+                    cmd = RobotCommand(
+                        (go_back - SLOW_FRAMES) / (SLOW_FRAMES),
+                        0,
+                        0,
+                        False,
+                        False,
+                        True,
+                    )
+                    go_back -= 1
+                else:
+                    cmd = go_to_ball(pid_oren, pid_trans, data, 1, game.ball)
+
+                if oren_done:
+                    cmd = RobotCommand(0.5, 0, 0, False, False, True)
+
+                robot_controller.add_robot_commands(cmd, 0)
+                robot_controller.send_robot_commands()
+
+        vision_recieved = False
 
 
 def get_ball_test_with_vision(game: Game, robot_controller: RealRobotController):
@@ -54,21 +101,23 @@ def get_ball_test_with_vision(game: Game, robot_controller: RealRobotController)
     oren_done = False
     while True:
         (message_type, message) = message_queue.get()  # Infinite timeout for now
-        
+
         if message_type == MessageType.VISION:
             game.add_new_state(message)
             vision_recieved = True
         elif message_type == MessageType.REF:
             pass
-        
+
         data = game.get_robot_pos(True, 1)
         if vision_recieved:
             if not initial_ball_pos:
                 initial_ball_pos = game.ball
-    
+
             my_pos = game.get_robot_pos(True, 1)
             if my_pos is not None:
-                distance = np.hypot(my_pos.x - initial_ball_pos.x, my_pos.y - initial_ball_pos.y)
+                distance = np.hypot(
+                    my_pos.x - initial_ball_pos.x, my_pos.y - initial_ball_pos.y
+                )
 
                 SLOW_FRAMES = 45
                 print("DIST", distance)
@@ -78,59 +127,79 @@ def get_ball_test_with_vision(game: Game, robot_controller: RealRobotController)
                     done = True
 
                 if go_back == 0:
-                    # cmd = RobotCommand(-0.5, 0, 0, False, False, True)
-                    cmd = turn_on_spot(pid_oren, pid_trans, data, 1, np.pi/2, True, True)
+                    cmd = RobotCommand(-0.5, 0, 0, False, False, True)
                     print(cmd)
                     print("GOING BACK NOW")
                     oren_done = True
                 elif go_back <= SLOW_FRAMES:
                     print("SLOWING BACK")
-                    # cmd = RobotCommand(-(SLOW_FRAMES - go_back)/(SLOW_FRAMES), 0, 0, False, False, True)
-                    cmd = turn_on_spot(pid_oren, pid_trans, data, 1, np.pi/2, True, True)
+                    cmd = RobotCommand(
+                        -(SLOW_FRAMES - go_back) / (SLOW_FRAMES),
+                        0,
+                        0,
+                        False,
+                        False,
+                        True,
+                    )
                     print(cmd)
-                    go_back -= 1    
+                    go_back -= 1
                 elif go_back <= 2 * SLOW_FRAMES:
                     print("SLOWING")
-                    cmd = RobotCommand((go_back - SLOW_FRAMES) / (SLOW_FRAMES), 0, 0, False, False, True)
+                    cmd = RobotCommand(
+                        (go_back - SLOW_FRAMES) / (SLOW_FRAMES),
+                        0,
+                        0,
+                        False,
+                        False,
+                        True,
+                    )
                     go_back -= 1
                 else:
                     cmd = go_to_ball(pid_oren, pid_trans, data, 1, game.ball)
-                    
-                if oren_done: 
+
+                if oren_done:
                     cmd = RobotCommand(0.5, 0, 0, False, False, True)
 
-                    
                 # cmd = go_to_point(pid_oren, pid_trans, data, 1, (-2, -0.5), 0, False)
-                                
+
                 robot_controller.add_robot_commands(cmd, 0)
                 robot_controller.send_robot_commands()
-            
-        vision_recieved = False
-            
 
-def test_rotation(robot_controller: RealRobotController, target_val: int, ramp_iters: int, ramp_only: bool=False, dribble: bool = False):
+        vision_recieved = False
+
+
+def test_command(
+    robot_controller: RealRobotController,
+    target_val: int,
+    ramp_iters: int,
+    ramp_only: bool = False,
+    dribble: bool = False,
+):
     iter = 0
     start_time = time.time()
     while True:
         if ramp_only and iter > ramp_iters:
             break
-        iter += 1 
+        iter += 1
         cmd = RobotCommand(
-            local_forward_vel=0, 
-            local_left_vel=0, 
-            angular_vel=min(1, iter / ramp_iters) * target_val, 
-            kick=0, 
-            chip= 0, 
+            local_forward_vel=0,
+            local_left_vel=0,
+            angular_vel=min(1, iter / ramp_iters) * target_val,
+            kick=0,
+            chip=0,
             dribble=dribble,
         )
-    
+
         robot_controller.add_robot_commands(cmd, 0)
         binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
-        print(f"command sent!\n",)
+        print(
+            f"command sent!\n",
+        )
         print(binary_representation)
         robot_controller.send_robot_commands()
         start_time = time.time()
         time.sleep(0.017)
+
 
 def main():
     stop_buffer_off = [0, 0, 0, 0, 0, 0, 0, 0]
@@ -145,7 +214,7 @@ def main():
     except KeyboardInterrupt:
         # try to stop the robot 15 times
         print("Stopping robot.")
-        test_rotation(robot_controller, 0, 100, True, False)
+        test_command(robot_controller, 0, 100, True, False)
 
         for i in range(15):
             robot_controller.serial.write(stop_buffer_off)
@@ -154,13 +223,6 @@ def main():
     # binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
     # print(binary_representation)
     # robot_controller.send_robot_commands()
-
-    # Start the data receiving in a separate thread
-
-    # TODO: Not implemented
-    # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
-    # referee_thread.daemon = True
-    # referee_thread.start()
 
 
 if __name__ == "__main__":
