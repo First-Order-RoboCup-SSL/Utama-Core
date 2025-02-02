@@ -1,6 +1,7 @@
 from typing import List, Tuple
 import numpy as np
 from team_controller.src.config.settings import ROBOT_RADIUS
+from robot_control.src.utils.pass_quality_utils import PointOnField
 
 
 def point_to_robot_dist(
@@ -13,6 +14,32 @@ def angle_to_robot(
     point_x: float, point_y: float, robot_x: float, robot_y: float
 ) -> float:
     return np.arctan((robot_y - point_y) / (robot_x - point_x))
+
+
+def angle_between_points(main_point, point1, point2):
+    """
+    Computes the angle (in radians) between two lines originating from main_point
+    and passing through point1 and point2.
+
+    Parameters:
+    main_point (tuple): The common point (x, y).
+    point1 (tuple): First point (x, y).
+    point2 (tuple): Second point (x, y).
+
+    Returns:
+    float: Angle in degrees between the two lines.
+    """
+    v1 = np.array([point1.x - main_point.x, point1.y - main_point.y])
+    v2 = np.array([point2.x - main_point.x, point2.y - main_point.y])
+
+    dot_product = np.dot(v1, v2)
+    norm_product = np.linalg.norm(v1) * np.linalg.norm(v2)
+
+    if norm_product == 0:
+        return 0  # Avoid division by zero if vectors are degenerate
+
+    angle_rad = np.arccos(np.clip(dot_product / norm_product, -1.0, 1.0))
+    return angle_rad
 
 
 # Calculates the intersection of 2 rays with the goal
@@ -147,9 +174,8 @@ def find_shot_quality(
     """
 
     # Full angle between the two goalposts
-    full_angle = np.absolute(
-        np.arctan2(goal_y2 - point.y, goal_x - point.x)
-        - np.arctan2(goal_y1 - point.y, goal_x - point.x)
+    full_angle = angle_between_points(
+        point, PointOnField(goal_x, goal_y1), PointOnField(goal_x, goal_y2)
     )
 
     # Use find_best_shot to get the largest gap
@@ -158,11 +184,20 @@ def find_shot_quality(
     )
 
     # Compute the open angle (gap angle)
-    open_angle = np.absolute(
-        np.arctan2(largest_gap[1] - point.y, goal_x - point.x)
-        - np.arctan2(largest_gap[0] - point.y, goal_x - point.x)
+    open_angle = angle_between_points(
+        point,
+        PointOnField(goal_x, largest_gap[0]),
+        PointOnField(goal_x, largest_gap[1]),
     )
 
+    distance_to_goal_ratio = (np.absolute(point.x - goal_x)) / np.absolute(2 * goal_x)
+
+    distance_to_goal_weight = 0.4
+
     # Normalize shot quality
-    shot_quality = open_angle / full_angle if full_angle > 0 else 0
+    shot_quality = (
+        open_angle / full_angle - distance_to_goal_weight * distance_to_goal_ratio
+        if full_angle > 0
+        else 0
+    )
     return shot_quality

@@ -1,23 +1,32 @@
 import numpy as np
+import time
 
 from global_utils.math_utils import squared_distance, normalise_heading
 from robot_control.src.utils.shooting_utils import find_best_shot, find_shot_quality
 from robot_control.src.utils.pass_quality_utils import (
     find_pass_quality,
     find_best_receiver_position,
+    PointOnField,
 )
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from entities.game import Game, Field
 from entities.data.command import RobotCommand
 from entities.data.vision import RobotData, BallData
 from robot_control.src.skills import (
+    align_defenders,
+    face_ball,
+    find_likely_enemy_shooter,
+    get_goal_centre,
     kick_ball,
     go_to_ball,
+    to_defense_parametric,
     turn_on_spot,
     empty_command,
     go_to_point,
+    velocity_to_orientation,
 )
 from motion_planning.src.pid import PID
+from motion_planning.src.pid.pid import TwoDPID
 from typing import List, Tuple, Dict, Optional
 from math import dist
 import logging
@@ -190,7 +199,8 @@ def score_goal(
     # calculate best shot from the position of the ball
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
     if friendly_robots and enemy_robots and balls:
-        best_shot = find_best_shot(
+        print(balls[0])
+        best_shot, _ = find_best_shot(
             balls[0], enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
         )
 
@@ -307,6 +317,7 @@ class Play2v5:
         pass_task = None
         trying_to_pass = False
         sampled_positions = None
+        target_pos = None
 
         target_goal_line = self.game.field.enemy_goal_line(self.my_team_is_yellow)
         latest_frame = self.game.get_my_latest_frame(self.my_team_is_yellow)
@@ -378,7 +389,41 @@ class Play2v5:
                     else empty_command(dribbler_on=True)
                 )
 
-            return commands, None  # Only interceptors act, others wait
+            for rid in self.robot_ids:
+                if rid == best_interceptor or best_interceptor == None:
+                    continue
+                # If a pass is happening, don't override the receiver's movement
+                if trying_to_pass:
+                    continue  # Let PassBall handle the receiver
+
+                potential_passer_id = (
+                    rid + 1 if rid + 1 <= len(friendly_robots) - 1 else rid - 1
+                )
+                target_pos, sampled_positions, target_pos = find_best_receiver_position(
+                    friendly_robots[rid],
+                    friendly_robots[
+                        potential_passer_id
+                    ],  # PointOnField(ball_pos[0], ball_pos[1]),
+                    enemy_robots,
+                    enemy_velocities,
+                    BALL_V0_MAGNITUDE,
+                    BALL_A_MAGNITUDE,
+                    goal_x,
+                    goal_y1,
+                    goal_y2,
+                    self.shoot_in_left_goal,
+                )
+
+                commands[rid] = go_to_point(
+                    self.pid_oren,
+                    self.pid_trans,
+                    friendly_robots[rid],
+                    rid,
+                    target_pos,
+                    friendly_robots[rid].orientation,
+                )
+
+            return commands, sampled_positions, target_pos
 
         ### CASE 2: Someone has the ball ###
         print("We have the ball", ball_possessor_id)
@@ -393,10 +438,9 @@ class Play2v5:
             goal_y2,
             self.shoot_in_left_goal,
         )
-        print(shot_quality, self.shot_quality_thresh)
         if shot_quality > self.shot_quality_thresh:
             commands[ball_possessor_id] = kick_ball()
-            return commands, None  # Just shoot, no need to pass
+            return commands, None, None  # Just shoot, no need to pass
 
         # Check for best pass
         best_receiver_id = None
@@ -420,13 +464,11 @@ class Play2v5:
             if pq > best_pass_quality:
                 best_pass_quality = pq
                 best_receiver_id = rid
-
-        print(best_pass_quality, self.pass_quality_thresh)
         if (
             best_receiver_id is not None
             and best_pass_quality > self.pass_quality_thresh
         ):
-            # print("trying to execute a pass")
+            print("trying to execute a pass")
             trying_to_pass = True
             pass_task = PassBall(
                 self.pid_oren,
@@ -454,11 +496,12 @@ class Play2v5:
             # If a pass is happening, don't override the receiver's movement
             if trying_to_pass:
                 continue  # Let PassBall handle the receiver
-            target_pos, sampled_positions, _ = find_best_receiver_position(
+            enemy_speeds = np.linalg.norm(enemy_velocities, axis=1)
+            target_pos, sampled_positions, target_pos = find_best_receiver_position(
                 friendly_robots[rid],
                 friendly_robots[ball_possessor_id],
                 enemy_robots,
-                enemy_velocities,
+                enemy_speeds,
                 BALL_V0_MAGNITUDE,
                 BALL_A_MAGNITUDE,
                 goal_x,
@@ -466,7 +509,6 @@ class Play2v5:
                 goal_y2,
                 self.shoot_in_left_goal,
             )
-            # print("Target pos:", target_pos, "current pos", friendly_robots[rid])
 
             commands[rid] = go_to_point(
                 self.pid_oren,
@@ -477,4 +519,62 @@ class Play2v5:
                 friendly_robots[rid].orientation,
             )
 
-        return commands, sampled_positions
+        return commands, sampled_positions, target_pos
+
+
+def defend(
+    pid_oren: PID,
+    pid_2d: TwoDPID,
+    game: Game,
+    is_yellow: bool,
+    defender_id: int,
+    env,
+) -> RobotCommand:
+    # Assume that is_yellow <-> not is_left here # TODO : FIX
+    friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
+    shooters_data = find_likely_enemy_shooter(enemy, balls)
+    orientation = None
+    tracking_ball = False
+
+    # if game.in_box(balls[0].x, balls[0].y):
+    #     print("AAAAAAAAAAAAAAAAAAAAAA")
+    #     # return None
+
+    if not shooters_data:
+        target_tracking_coord = balls[0].x, balls[0].y
+        # TODO game.get_ball_velocity() can return (None, None)
+        if (
+            game.get_ball_velocity() is not None
+            and None not in game.get_ball_velocity()
+        ):
+            orientation = velocity_to_orientation(game.get_ball_velocity())
+            tracking_ball = True
+    else:
+        # TODO (deploy more defenders, or find closest shooter?)
+        sd = shooters_data[0]
+        target_tracking_coord = sd.x, sd.y
+        orientation = sd.orientation
+
+    real_def_pos = friendly[defender_id].x, friendly[defender_id].y
+    current_def_parametric = to_defense_parametric(real_def_pos, is_left=not is_yellow)
+    target = align_defenders(
+        current_def_parametric, target_tracking_coord, orientation, not is_yellow, env
+    )
+    cmd = go_to_point(
+        pid_oren,
+        pid_2d,
+        friendly[defender_id],
+        defender_id,
+        target,
+        face_ball(real_def_pos, (balls[0].x, balls[0].y)),
+        dribbling=True,
+    )
+
+    gp = get_goal_centre(is_left=not is_yellow)
+    env.draw_line(
+        [gp, (target_tracking_coord[0], target_tracking_coord[1])],
+        width=5,
+        color="RED" if tracking_ball else "PINK",
+    )
+
+    return cmd

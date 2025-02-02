@@ -1,9 +1,11 @@
+import math
 import numpy as np
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from entities.data.command import RobotCommand
 from entities.data.vision import BallData, RobotData
 
+from entities.game.game import Game
 from motion_planning.src.pid import PID
 import logging
 
@@ -55,7 +57,7 @@ def go_to_ball(
         pid_trans=pid_trans,
         this_robot_data=this_robot_data,
         robot_id=robot_id,
-        target_coords=ball_data,
+        target_coords=(ball_data.x, ball_data.y),
         target_oren=target_oren,
     )
 
@@ -315,6 +317,100 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
 
     t = lo
     return t
+
+
+def goalkeep(
+    is_left_goal: bool,
+    game: Game,
+    robot_id: int,
+    pid_oren: PID,
+    pid_trans: TwoDPID,
+    is_yellow: bool,
+    goalie_has_ball: bool,
+):
+    robot_data = game.get_robot_pos(is_yellow, robot_id)
+    if goalie_has_ball:
+        target_oren = 0 if is_left_goal else math.pi
+        print("TARGET OREN", target_oren)
+        return go_to_point(
+            pid_oren,
+            pid_trans,
+            robot_data,
+            robot_id,
+            ((-4 if is_left_goal else 4), 0),
+            target_oren,
+            True,
+        )
+
+    if is_left_goal:
+        target = game.predict_ball_pos_at_x(-4.5)
+    else:
+        target = game.predict_ball_pos_at_x(4.5)
+
+    if not target or abs(target[1]) > 0.5:
+        target = (-4.5 if is_left_goal else 4.5, 0)
+
+    if target and not find_likely_enemy_shooter(
+        game.get_robots_pos(not is_yellow), [game.ball]
+    ):
+        cmd = go_to_point(
+            pid_oren,
+            pid_trans,
+            robot_data,
+            robot_id,
+            target,
+            face_ball((robot_data.x, robot_data.y), (game.ball.x, game.ball.y)),
+            dribbling=True,
+        )
+    else:  # TODO : Not sure if we actually need this case?
+        cmd = go_to_point(
+            pid_oren,
+            pid_trans,
+            robot_data,
+            0,
+            [None, None],
+            face_ball((robot_data.x, robot_data.y), (game.ball.x, game.ball.y)),
+        )
+    return cmd
+
+
+def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
+    ans = []
+    for ball in balls:
+        for er in enemy_robots:
+            if dist((er.x, er.y), (ball.x, ball.y)) < 0.2:
+                # Ball is close to this robot
+                ans.append(er)
+    return list(set(ans))
+
+
+def man_mark(is_yellow, game: Game, robot_id, target_id, pid_oren, pid_trans):
+    robot = game.get_robot_pos(is_yellow, robot_id)
+    target = game.get_robot_pos(not is_yellow, target_id)
+    ball_pos = (game.ball.x, game.ball.y)
+    # Position with a perpendicular offset to the line between target and ball
+    dx = target.x - ball_pos[0]
+    dy = target.y - ball_pos[1]
+    norm = math.sqrt(dx**2 + dy**2)
+    dx /= norm
+    dy /= norm
+
+    # Perpendicular offset
+    offset_x = -dy * 0.5
+    offset_y = dx * 0.5
+
+    target_x = target.x + offset_x
+    target_y = target.y + offset_y
+
+    cmd = go_to_point(
+        pid_oren,
+        pid_trans,
+        robot,
+        0,
+        (target_x, target_y),
+        face_ball((robot.x, robot.y), ball_pos),
+    )
+    return cmd
 
 
 if __name__ == "__main__":

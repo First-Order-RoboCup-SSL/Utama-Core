@@ -17,8 +17,9 @@ N_ROBOTS = 7
 DEFENDING_ROBOTS = 5
 ATTACKING_ROBOTS = 2
 TARGET_COORDS = (-2, 3)
-PASS_QUALITY_THRESHOLD = 2.0
-SHOT_QUALITY_THRESHOLD = 1.0
+PASS_QUALITY_THRESHOLD = 1.2
+SHOT_QUALITY_THRESHOLD = 0.7
+POSSESSION_CHANGE_DELAY = 2  # Delay time in seconds
 
 
 def test_2v5_play(friendly_robot_ids: List[int], is_yellow: bool, headless: bool):
@@ -51,6 +52,7 @@ def test_2v5_play(friendly_robot_ids: List[int], is_yellow: bool, headless: bool
 
     player1_id = friendly_robot_ids[0]  # Start with robot 0
     player2_id = friendly_robot_ids[1]  # Start with robot 1
+    prev_ball_possessor_id = None  # Track the previous possessor
 
     play_2v5_task = Play2v5(
         pid_oren,
@@ -80,7 +82,26 @@ def test_2v5_play(friendly_robot_ids: List[int], is_yellow: bool, headless: bool
                 elif player2_has_ball:
                     ball_possesor_id = player2_id
 
-                commands, sampled_positions = play_2v5_task.enact(ball_possesor_id)
+                last_possession_change_time = 0.0
+
+                # Check if possession has changed
+                if ball_possesor_id != prev_ball_possessor_id:
+                    logger.info(
+                        f"Ball possessor changed to {ball_possesor_id}. Waiting before acting..."
+                    )
+                    last_possession_change_time = time.time()
+                    prev_ball_possessor_id = (
+                        ball_possesor_id  # Update previous possessor
+                    )
+
+                # If within the delay period, send empty commands
+                if time.time() - last_possession_change_time < POSSESSION_CHANGE_DELAY:
+                    sim_robot_controller.send_robot_commands()  # Send no actions
+                    continue  # Skip this iteration
+
+                commands, sampled_positions, best_sample = play_2v5_task.enact(
+                    ball_possesor_id
+                )
 
                 if game.is_ball_in_goal(our_side=not is_yellow):
                     logger.info(
@@ -115,7 +136,10 @@ def test_2v5_play(friendly_robot_ids: List[int], is_yellow: bool, headless: bool
                 sim_robot_controller.send_robot_commands()
                 if sampled_positions != None:
                     for sample in sampled_positions:
-                        env.draw_point(sample.x, sample.y, width=2)
+                        if sample == best_sample:
+                            env.draw_point(sample.x, sample.y, "BLUE", width=2)
+                        else:
+                            env.draw_point(sample.x, sample.y, width=2)
 
         assert scored
 

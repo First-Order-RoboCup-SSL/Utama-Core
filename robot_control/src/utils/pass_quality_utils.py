@@ -1,6 +1,6 @@
 import numpy as np
-from robot_control.src.utils.shooting_utils import find_shot_quality
 from entities.game.robot import RobotData
+from global_utils.math_utils import squared_distance
 
 ROBOT_RADIUS = 0.09
 
@@ -21,7 +21,7 @@ def ball_position(t, x0, v0, a):
     x0 = np.array(x0)
     v0 = np.array(v0)
     a = np.array(a)
-    return x0 + v0 * t + 0.5 * a * (t**2)
+    return x0[0:2] + v0 * t + 0.5 * a * (t**2)
 
 
 def interception_chance(
@@ -30,6 +30,7 @@ def interception_chance(
 
     # assert type(passer) != tuple
     # assert type(receiver) != tuple
+    robot_speed = np.linalg.norm(robot_velocity)
     A = np.array([passer.x, passer.y])
     B = np.array([receiver.x, receiver.y])
     R = np.array([opponent.x, opponent.y])
@@ -56,7 +57,7 @@ def interception_chance(
 
     opp_dist_to_pass = np.linalg.norm(closest_point - R) - ROBOT_RADIUS
     opp_to_pass_time = (
-        opp_dist_to_pass / robot_velocity if robot_velocity != 0 else float("inf")
+        opp_dist_to_pass / robot_speed if robot_speed != 0 else float("inf")
     )
 
     if opp_to_pass_time <= ball_time:
@@ -82,6 +83,8 @@ def find_pass_quality(
     goal_y2,
     shoot_in_left_goal,
 ):
+    from robot_control.src.utils.shooting_utils import find_shot_quality
+
     total_interception_chance = 0
     for enemy_pos, enemy_velocity in zip(enemy_positions, enemy_velocities):
         interception, _, _ = interception_chance(
@@ -97,15 +100,28 @@ def find_pass_quality(
         receiver, enemy_positions, goal_x, goal_y1, goal_y2, shoot_in_left_goal
     )
 
+    distance_to_goal_ratio = (np.absolute(receiver.x - goal_x)) / np.absolute(
+        2 * goal_x
+    )
+
+    distance_to_passer = np.sqrt(
+        squared_distance((passer.x, passer.y), (receiver.x, receiver.y))
+    )
+
     # these will be adjusted
     interception_chance_weight = 1
-    goal_chance_weight = 1
+    goal_chance_weight = 0.5
+    distance_to_goal_weight = 0.2
 
-    pass_quality = (
-        1
-        - interception_chance_weight * total_interception_chance
-        + goal_chance_weight * goal_chance
-    )  # pass quality metric
+    if distance_to_passer >= 0.7:
+        pass_quality = (
+            1
+            - interception_chance_weight * total_interception_chance
+            + goal_chance_weight * goal_chance
+            - distance_to_goal_weight * distance_to_goal_ratio
+        )  # pass quality metric
+    else:
+        pass_quality = float("-inf")
 
     return pass_quality
 
@@ -206,8 +222,9 @@ def find_best_receiver_position(
             shoot_in_left_goal,
         )
         pass_qualities.append(pass_quality)
+        # pass_quality += 100 * squared_distance(receiver_position, passer)
         if pass_quality > best_quality:
             best_quality = pass_quality
-            best_position = (candidate.x, candidate.y)
+            best_position = candidate
 
     return best_position, sampled_positions, pass_qualities
