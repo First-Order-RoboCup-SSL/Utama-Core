@@ -14,7 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-ROBOT_DIAMETER = 0.2
+ROBOT_DIAMETER = 2*ROBOT_RADIUS
 
 """
 TODO -
@@ -57,7 +57,7 @@ class RRTPlanner:
     # TODO - make these parameters configurable at runtime
     # TODO - Add support for avoiding goal areas - should be easy to use the Field object for this
 
-    SAFE_OBSTACLES_RADIUS = 0.28  # 2*ROBOT_RADIUS + 0.08 for wiggle room
+    SAFE_OBSTACLES_RADIUS = 2*ROBOT_RADIUS + 0.08  # 2*ROBOT_RADIUS + 0.08 for wiggle room
     STOPPING_DISTANCE = 0.2  # When are we close enough to the goal to stop
     EXPLORE_BIAS = 0.1  # How often the tree does a random exploration
     STEP_SIZE = 0.15
@@ -478,8 +478,9 @@ class DynamicWindowPlanner:
         return LineString([(rpos[0], rpos[1]), (end_x, end_y)])
 
 class BisectorPlanner:
-    OBSTACLE_CLEARANCE = 0.18
+    OBSTACLE_CLEARANCE = ROBOT_DIAMETER
     ClOSE_LIMIT = 0.5
+    SAMPLE_SIZE = 0.10
 
     def _get_obstacles(self, robot_id):
         return (
@@ -556,8 +557,8 @@ class BisectorPlanner:
             self._env.draw_line(halves[1].coords, width=3)
 
 
-        for s in range(90):
-            offset = s*0.10
+        for s in range(int(max(Field.HALF_LENGTH*2, Field.HALF_WIDTH*2) / BisectorPlanner.SAMPLE_SIZE)):
+            offset = s*BisectorPlanner.SAMPLE_SIZE
 
             for h in halves:
                 p1 = h.interpolate(offset)

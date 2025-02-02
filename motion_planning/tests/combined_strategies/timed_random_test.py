@@ -61,7 +61,7 @@ def test_pathfinding(headless: bool, moving: bool):
     is_yellow = True
     pid_oren, pid_2d = get_rsim_pids(N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
 
-    slow_pid2d = TwoDPID(TIMESTEP, 1, -1, 2, 0.1, 0.0, num_robots=6, normalize=False)
+    slow_pid2d = TwoDPID(TIMESTEP, 1, 2, 0.1, 0.0, num_robots=6)
 
     
     sim_robot_controller = RSimRobotController(
