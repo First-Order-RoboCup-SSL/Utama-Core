@@ -479,7 +479,7 @@ class DynamicWindowPlanner:
 
 class BisectorPlanner:
     OBSTACLE_CLEARANCE = 0.18
-    ClOSE_LIMIT = 0.3
+    ClOSE_LIMIT = 0.5
 
     def _get_obstacles(self, robot_id):
         return (
@@ -566,7 +566,8 @@ class BisectorPlanner:
                 seg2 = LineString([p1, target])
 
                 if not self._segment_intersects(seg1, obsts) and not self._segment_intersects(seg2, obsts):
-                    self._env.draw_point(*point_to_tuple(p1), color="PINK", width=3)
+                    if self._env is not None:
+                        self._env.draw_point(*point_to_tuple(p1), color="PINK", width=3)
                     return point_to_tuple(p1)
         
         return point_to_tuple(midpoint)
