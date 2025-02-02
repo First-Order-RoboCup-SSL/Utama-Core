@@ -108,7 +108,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
     for iter in range(2000):
         if iter % 100 == 0:
             print(iter)
-        """
+
         sim_robot_controller_defender.add_robot_commands(
             defend(
                 pid_oren_defender, pid_2d_defender, game, not attacker_is_yellow, 1, env
@@ -157,7 +157,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
         )
 
         sim_robot_controller_defender.send_robot_commands()
-        """
+
         if iter > 10:  # give them chance to spawn in the correct place
             goal_scored = goal_scored or game.is_ball_in_goal(not attacker_is_yellow)
             if game.is_ball_in_goal(not attacker_is_yellow):
