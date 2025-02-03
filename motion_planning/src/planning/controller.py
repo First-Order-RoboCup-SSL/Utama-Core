@@ -1,6 +1,7 @@
-from typing import Tuple
+from typing import List, Tuple
 
 from numpy import full
+from shapely import Polygon
 from entities.game import robot
 from entities.game.game import Game
 from entities.game.robot import Robot
@@ -102,20 +103,19 @@ class TimedSwitchController:
         # DEBUG ONLY
         self._env = env
 
-    def path_to(self, target: Tuple[float, float], robot_id: int) -> Tuple[float, float]:
+    def path_to(self, target: Tuple[float, float], robot_id: int, temporary_obstacles:List[Polygon]=[]) -> Tuple[float, float]:
 
         if target == self._real_targets[robot_id]:
             if self._last_slow_frame[robot_id] == 0:
-                self._intermediate_target[robot_id] = self._slow_planner.path_to(robot_id, target)
+                self._intermediate_target[robot_id] = self._slow_planner.path_to(robot_id, target, temporary_obstacles=temporary_obstacles)
                 self._last_slow_frame[robot_id] = self.DEFAULT_RUN
             else:
                 self._last_slow_frame[robot_id] -= 1
         else:
             self._real_targets[robot_id] = target
-            self._intermediate_target[robot_id] = self._slow_planner.path_to(robot_id, target)
+            self._intermediate_target[robot_id] = self._slow_planner.path_to(robot_id, target, temporary_obstacles=temporary_obstacles)
             self._last_slow_frame[robot_id] = self.DEFAULT_RUN
-        
-        return self._fast_planner.path_to(robot_id, self._intermediate_target[robot_id])[0]
+        return self._fast_planner.path_to(robot_id, self._intermediate_target[robot_id], temporary_obstacles=temporary_obstacles)[0]
 
 
 

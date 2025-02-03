@@ -1,4 +1,6 @@
 from typing import Tuple, Union, Optional, List, Generator
+
+from shapely import Polygon
 from entities.game import Game
 from entities.game.field import Field
 from entities.game.game_object import Colour, Robot as GameRobot
@@ -14,7 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-ROBOT_DIAMETER = 2*ROBOT_RADIUS
+ROBOT_DIAMETER = 2 * ROBOT_RADIUS
 
 """
 TODO -
@@ -49,7 +51,10 @@ def point_to_tuple(point: Point) -> tuple:
     """
     return (point.x, point.y)
 
-def target_inside_robot_radius(rpos: Tuple[float, float], target: Tuple[float, float]) -> bool:
+
+def target_inside_robot_radius(
+    rpos: Tuple[float, float], target: Tuple[float, float]
+) -> bool:
     return dist(rpos, target) <= ROBOT_RADIUS
 
 
@@ -57,7 +62,9 @@ class RRTPlanner:
     # TODO - make these parameters configurable at runtime
     # TODO - Add support for avoiding goal areas - should be easy to use the Field object for this
 
-    SAFE_OBSTACLES_RADIUS = 2*ROBOT_RADIUS + 0.08  # 2*ROBOT_RADIUS + 0.08 for wiggle room
+    SAFE_OBSTACLES_RADIUS = (
+        2 * ROBOT_RADIUS + 0.08
+    )  # 2*ROBOT_RADIUS + 0.08 for wiggle room
     STOPPING_DISTANCE = 0.2  # When are we close enough to the goal to stop
     EXPLORE_BIAS = 0.1  # How often the tree does a random exploration
     STEP_SIZE = 0.15
@@ -245,9 +252,15 @@ class RRTPlanner:
                         self.par[p] = rand_point
                         self._propagate(self.par, cost_map, p)
 
-                if goal.distance(LineString([best_parent, rand_point])) < self.STOPPING_DISTANCE and cost_map[
+                if goal.distance(
+                    LineString([best_parent, rand_point])
+                ) < self.STOPPING_DISTANCE and cost_map[
                     rand_point
-                ] + rand_point.distance(goal) < cost_map.get(goal, float("inf")):
+                ] + rand_point.distance(
+                    goal
+                ) < cost_map.get(
+                    goal, float("inf")
+                ):
                     self.par[goal] = rand_point
                     cost_map[goal] = cost_map[rand_point] + rand_point.distance(goal)
                     path_found = True
@@ -290,8 +303,11 @@ class RRTPlanner:
 N_DIRECTIONS = 16
 
 
-def collision_times(our_position: Tuple[float, float], our_velocity: Optional[Tuple[float, float]]):
-    pass
+def intersects_any_segment(segment: LineString, obstacles: List[Polygon]) -> bool:
+    for o in obstacles:
+        if segment.distance(o.boundary) < ROBOT_RADIUS:
+            return True
+    return False
 
 
 class DynamicWindowPlanner:
@@ -305,7 +321,10 @@ class DynamicWindowPlanner:
         self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue
 
     def path_to(
-        self, friendly_robot_id: int, target: Tuple[float, float]
+        self,
+        friendly_robot_id: int,
+        target: Tuple[float, float],
+        temporary_obstacles: List[LineString] = [],
     ) -> Tuple[Tuple[float, float], float]:
         """
         Plan a path to the target for the specified friendly robot.
@@ -313,22 +332,24 @@ class DynamicWindowPlanner:
         Args:
             friendly_robot_id (int): The ID of the friendly robot.
             target (Tuple[float, float]): The target coordinates (x, y).
-            pid_oren: PID controller for orientation.
-            pid_trans: PID controller for translation.
 
         Returns:
             Tuple[float, float]: The next waypoint coordinates (x, y) or the target if already reached.
         """
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
-
         start_x, start_y = robot.x, robot.y
 
         if dist((start_x, start_y), target) < 1.5 * ROBOT_RADIUS:
             return target, float("inf")
 
-        return self.local_planning(friendly_robot_id, target)
+        return self.local_planning(friendly_robot_id, target, temporary_obstacles)
 
-    def local_planning(self, friendly_robot_id: int, target: Tuple[float, float]):
+    def local_planning(
+        self,
+        friendly_robot_id: int,
+        target: Tuple[float, float],
+        temporary_obstacles: List[Polygon],
+    ) -> Tuple[Tuple[float, float], float]:
         velocity = self._game.get_object_velocity(
             GameRobot(self._friendly_colour, friendly_robot_id)
         )
@@ -357,6 +378,8 @@ class DynamicWindowPlanner:
                 segment = self._get_motion_segment(
                     (start_x, start_y), velocity, delta_vel * sf, ang
                 )
+                if intersects_any_segment(segment, temporary_obstacles):
+                    continue
                 # Evaluate this segment, avoiding obstacles
                 score = self._evaluate_segment(
                     friendly_robot_id, segment, Point(target[0], target[1])
@@ -477,6 +500,7 @@ class DynamicWindowPlanner:
         end_x = adj_vel_x + rpos[0]
         return LineString([(rpos[0], rpos[1]), (end_x, end_y)])
 
+
 class BisectorPlanner:
     OBSTACLE_CLEARANCE = ROBOT_DIAMETER
     ClOSE_LIMIT = 0.5
@@ -488,7 +512,7 @@ class BisectorPlanner:
             + self._game.friendly_robots[robot_id + 1 :]
             + self._game.enemy_robots
         )
-    
+
     def __init__(self, game, friendly_colour, env):
         self._game = game
         self._friendly_colour = friendly_colour
@@ -505,76 +529,115 @@ class BisectorPlanner:
 
         # Rotate the line by 90 degrees around the midpoint
         perpendicular = rotate(line, 90, origin=midpoint)
-        sx,sy = perpendicular.coords[0]
+        sx, sy = perpendicular.coords[0]
         ex, ey = perpendicular.coords[1]
 
         gradx = ex - sx
         grady = ey - sy
-        
-        start_x = sx - 1000*gradx
-        start_y = sy - 1000*grady
 
-        end_x = ex + 1000*gradx
-        end_y = ey + 1000*grady
+        start_x = sx - 1000 * gradx
+        start_y = sy - 1000 * grady
+
+        end_x = ex + 1000 * gradx
+        end_y = ey + 1000 * grady
 
         return LineString([(start_x, start_y), (end_x, end_y)])
-
 
     def _adjust_segment_for_robot_radius(self, seg: LineString) -> LineString:
         current_robot_seg_interect = seg.interpolate(ROBOT_RADIUS)
         return LineString(
             [current_robot_seg_interect, seg.interpolate(1, normalized=True)]
         )
-    
-    def path_to(self, robot_id: int, target: Tuple[float, float]) -> Tuple[float, float]:
-        # Check the straight line case first
+
+    def path_to(
+        self,
+        robot_id: int,
+        target: Tuple[float, float],
+        temporary_obstacles: List[Polygon] = [],
+    ) -> Tuple[float, float]:
+        """
+        Calculate a path for the robot to the target position while avoiding obstacles.
+        Args:
+            robot_id (int): The ID of the robot for which the path is being calculated.
+            target (Tuple[float, float]): The target position (x, y) to which the robot should move.
+            temporary_obstacles (List[Polygon]): A list of temporary obstacles represented as Polygon objects.
+                These obstacles represent imaginary and temporary regions to avoid, such as defense areas during play.
+                During setup time and ball placement, the robot may be allowed to enter these areas.
+        Returns:
+            Tuple[float, float]: The next position (x, y) for the robot to move towards the target.
+        """
 
         our_position = self._game.get_robot_pos(
             self._friendly_colour == self._friendly_colour, robot_id
         )
 
         if self._env is not None:
-            self._env.draw_line([(our_position.x, our_position.y), target], width=2, color="GREEN")
-        
+            self._env.draw_line(
+                [(our_position.x, our_position.y), target], width=2, color="GREEN"
+            )
+
         line = LineString([(our_position.x, our_position.y), target])
 
         # Stops jittering near the target
         if line.length < BisectorPlanner.ClOSE_LIMIT:
             return target
-        
+
         perp = self.perpendicular_bisector(line)
 
         midpoint = perp.interpolate(0.5, normalized=True)
 
         if midpoint.distance(Point(*target)) < ROBOT_RADIUS:
             return target
-        
-        halves = [LineString([midpoint, perp.coords[1]]), LineString([midpoint, perp.coords[0]])]
+
+        halves = [
+            LineString([midpoint, perp.coords[1]]),
+            LineString([midpoint, perp.coords[0]]),
+        ]
         obsts = self._get_obstacles(robot_id)
 
         if self._env is not None:
             self._env.draw_line(halves[0].coords, width=3)
             self._env.draw_line(halves[1].coords, width=3)
 
-
-        for s in range(int(max(Field.HALF_LENGTH*2, Field.HALF_WIDTH*2) / BisectorPlanner.SAMPLE_SIZE)):
-            offset = s*BisectorPlanner.SAMPLE_SIZE
+        for s in range(
+            int(
+                max(Field.HALF_LENGTH * 2, Field.HALF_WIDTH * 2)
+                / BisectorPlanner.SAMPLE_SIZE
+            )
+        ):
+            offset = s * BisectorPlanner.SAMPLE_SIZE
 
             for h in halves:
                 p1 = h.interpolate(offset)
 
-                seg1 = self._adjust_segment_for_robot_radius(LineString([(our_position.x, our_position.y), p1]))
+                seg1 = self._adjust_segment_for_robot_radius(
+                    LineString([(our_position.x, our_position.y), p1])
+                )
                 seg2 = LineString([p1, target])
 
-                if not self._segment_intersects(seg1, obsts) and not self._segment_intersects(seg2, obsts):
+                if not self._segment_intersects(
+                    seg1, obsts
+                ) and not self._segment_intersects(seg2, obsts):
+
                     if self._env is not None:
-                        self._env.draw_point(*point_to_tuple(p1), color="PINK", width=3)
-                    return point_to_tuple(p1)
-        
+
+                        self._env.draw_point(*point_to_tuple(p1), color="PINK", width=1)
+                        col = "GREEN" if not intersects_any_segment(seg1, temporary_obstacles) else "RED"
+                        seg1i = seg1.intersection(temporary_obstacles[2].boundary)
+                        if not seg1i.is_empty:
+                            self._env.draw_line(seg1i.coords, color="PINK", width=1)
+                        self._env.draw_line(list(seg1.coords), width=1, color=col)
+                        self._env.draw_line(list(seg2.coords), width=3, color="PINK")
+                    if not intersects_any_segment(
+                        seg1, temporary_obstacles
+                    ) and not intersects_any_segment(seg2, temporary_obstacles):
+                        return point_to_tuple(p1)
+
         return point_to_tuple(midpoint)
 
-
-    def _segment_intersects(self, seg: LineString, obstacles: List[Tuple[float, float]]) -> bool:
+    def _segment_intersects(
+        self, seg: LineString, obstacles: List[Tuple[float, float]]
+    ) -> bool:
 
         for o in obstacles:
             if Point((o.x, o.y)).distance(seg) < BisectorPlanner.OBSTACLE_CLEARANCE:
