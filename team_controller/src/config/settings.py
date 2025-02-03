@@ -8,7 +8,7 @@ MAX_VEL = 2.5
 # any slower and the robots become unstable
 MAX_ANGULAR_VEL = 8
 
-ROBOT_RADIUS = 0.09  # TODO: probably not the best place to put this
+ROBOT_RADIUS = 0.12  # TODO: probably not the best place to put this
 
 # sim kick speed
 KICK_SPD = 5

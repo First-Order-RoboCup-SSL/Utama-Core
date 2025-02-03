@@ -44,7 +44,11 @@ def score_goal(
         best_shot = find_best_shot(
             balls[0], enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
         )
-
+        
+        if best_shot is None:
+            # print("No shot found")
+            return None
+        
         shot_orientation = np.atan2((best_shot - balls[0].y), (goal_x - balls[0].x))
 
         robot_data: RobotData = (
