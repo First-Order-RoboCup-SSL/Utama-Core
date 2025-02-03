@@ -1,22 +1,31 @@
 from typing import List, Tuple
 
-from numpy import full
 from shapely import Polygon
-from entities.game import robot
 from entities.game.game import Game
 from entities.game.robot import Robot
 from motion_planning.src.planning.path_planner import BisectorPlanner, RRTPlanner, DynamicWindowPlanner, target_inside_robot_radius
 from math import dist
 import time
+from entities.game.field import Field
+from enum import Enum
 
+class TempObstacleType(Enum):
+    NONE = []
+    FIELD = [Field.full_field()]
+    DEFENCE_ZONES = [Field.yellow_defense_area(), Field.blue_defense_area()]
+    ALL = [Field.yellow_defense_area(), Field.blue_defense_area(), Field.full_field()]
 
 class HybridWaypointMotionController:
-    """Motion controller that takes two path planners, one which produces locally good moves
+    """
+    Do not use :)
+
+    Motion controller that takes two path planners, one which produces locally good moves
        and another which produces a list of waypoints to the target the aim of the class
        is to track state such as switching waypoints. 
        """
     DEFAULT_TAKEN_WAYPOINTS = 30
     def __init__(self, num_robots: int, game: Game, env):
+        raise NotImplementedError("This class should not be used - use TimedSwitchController instead")
         self.num_robots = num_robots
         self._waypoint_producer = RRTPlanner(game)
         self._game = game
@@ -89,7 +98,7 @@ class TimedSwitchController:
     idea is that the slower planner gives more accurate global guidance
        """
     
-    DEFAULT_RUN = 30 # SLow planner is invoked once every DEFAULT_RUN frames
+    DEFAULT_RUN = 60 # SLow planner is invoked once every DEFAULT_RUN frames
     
     def __init__(self, num_robots: int, game: Game, friendly_colour, env):
         self.num_robots = num_robots
@@ -103,19 +112,33 @@ class TimedSwitchController:
         # DEBUG ONLY
         self._env = env
 
-    def path_to(self, target: Tuple[float, float], robot_id: int, temporary_obstacles:List[Polygon]=[]) -> Tuple[float, float]:
+    def path_to(self, target: Tuple[float, float], robot_id: int, temporary_obstacles_enum:TempObstacleType) -> Tuple[float, float]:
+        """
+        Computes the path to the given target for the specified robot, considering temporary obstacles such as defence zones, field or None
+
+
+        Args:
+            target (Tuple[float, float]): The target coordinates (x, y) to which the robot should navigate.
+            robot_id (int): The identifier of the robot for which the path is being computed.
+            temporary_obstacles_enum (TempObstacleType): An enumeration indicating the type of temporary obstacles to consider.
+
+        Returns:
+            Tuple[float, float]: The next coordinates (x, y) in the path to the target.
+        """
 
         if target == self._real_targets[robot_id]:
             if self._last_slow_frame[robot_id] == 0:
-                self._intermediate_target[robot_id] = self._slow_planner.path_to(robot_id, target, temporary_obstacles=temporary_obstacles)
+                # Invoke the slow planner and reset the counter
+                self._intermediate_target[robot_id] = self._slow_planner.path_to(robot_id, target, temporary_obstacles=temporary_obstacles_enum.value)
                 self._last_slow_frame[robot_id] = self.DEFAULT_RUN
             else:
+                # Count down until the next slow frame
                 self._last_slow_frame[robot_id] -= 1
         else:
             self._real_targets[robot_id] = target
-            self._intermediate_target[robot_id] = self._slow_planner.path_to(robot_id, target, temporary_obstacles=temporary_obstacles)
+            self._intermediate_target[robot_id] = self._slow_planner.path_to(robot_id, target, temporary_obstacles=temporary_obstacles_enum.value)
             self._last_slow_frame[robot_id] = self.DEFAULT_RUN
-        return self._fast_planner.path_to(robot_id, self._intermediate_target[robot_id], temporary_obstacles=temporary_obstacles)[0]
+        return self._fast_planner.path_to(robot_id, self._intermediate_target[robot_id], temporary_obstacles=temporary_obstacles_enum.value)[0]
 
 
 

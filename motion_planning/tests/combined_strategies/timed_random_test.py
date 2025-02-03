@@ -7,7 +7,7 @@ import time
 from entities.game.game_object import Colour, GameObject, Robot as GameRobot
 
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from motion_planning.src.planning.controller import HybridWaypointMotionController, TimedSwitchController
+from motion_planning.src.planning.controller import HybridWaypointMotionController, TempObstacleType, TimedSwitchController
 from robot_control.src.skills import (
     get_goal_centre,
     go_to_ball,
@@ -81,7 +81,7 @@ def test_pathfinding(headless: bool, moving: bool):
 
         velocity = game.get_object_velocity(GameRobot(True, mover_id))
         start = time.time()
-        next_stop = planner.path_to(target, mover_id)
+        next_stop = planner.path_to(target, mover_id, TempObstacleType.ALL)
         took = time.time()-start
         ma = max(ma, took)
         avg += took

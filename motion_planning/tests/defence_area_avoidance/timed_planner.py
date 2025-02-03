@@ -1,30 +1,18 @@
-import sys
-import os
 from typing import List
-import numpy as np
-import pytest
-from shapely import Point
 from entities.game.field import Field
-from entities.game.game_object import Colour, GameObject, Robot as GameRobot
-from motion_planning.src.planning.path_planner import BisectorPlanner, DynamicWindowPlanner, point_to_tuple
+from entities.game.game_object import Colour, Robot as GameRobot
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from robot_control.src.skills import (
-    get_goal_centre,
-    go_to_ball,
     go_to_point,
-    align_defenders,
     mag,
-    to_defense_parametric,
     face_ball,
-    velocity_to_orientation,
 )
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from motion_planning.src.planning.controller import HybridWaypointMotionController, TimedSwitchController
+from motion_planning.src.planning.controller import TempObstacleType, TimedSwitchController
 from team_controller.src.config.settings import ROBOT_RADIUS
 import random
-import time
 import logging
 from math import dist
 
@@ -76,11 +64,8 @@ def test_pathfinding(headless: bool, moving: bool):
 
         r = friendly_robots[mover_id]
         velocity = game.get_object_velocity(GameRobot(True, mover_id))
-        to = [Field.blue_defense_area(), Field.yellow_defense_area(), Field.full_field()]
 
-        for to_ in to:
-            env.draw_polygon(to_.exterior.coords, color="RED")
-        next_stop = hybrid.path_to(target, mover_id, temporary_obstacles=to)
+        next_stop = hybrid.path_to(target, mover_id, temporary_obstacles_enum=TempObstacleType.FIELD)
 
         env.draw_point(target[0], target[1], width=10, color="GREEN")
 

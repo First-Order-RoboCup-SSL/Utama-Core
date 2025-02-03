@@ -20,7 +20,7 @@ from robot_control.src.skills import (
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from motion_planning.src.planning.controller import HybridWaypointMotionController, TimedSwitchController
+from motion_planning.src.planning.controller import HybridWaypointMotionController, TempObstacleType, TimedSwitchController
 from team_controller.src.config.settings import ROBOT_RADIUS
 import random
 import time
@@ -70,7 +70,7 @@ def test_pathfinding(headless: bool, moving: bool):
 
         r = friendly_robots[mover_id]
         velocity = game.get_object_velocity(GameRobot(True, mover_id))
-        next_stop = hybrid.path_to(target, mover_id)
+        next_stop = hybrid.path_to(target, mover_id, TempObstacleType.DEFENCE_ZONES)
 
         env.draw_point(target[0], target[1], width=10, color="GREEN")
 

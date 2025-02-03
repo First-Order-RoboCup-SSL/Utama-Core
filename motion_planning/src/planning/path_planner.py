@@ -623,9 +623,6 @@ class BisectorPlanner:
 
                         self._env.draw_point(*point_to_tuple(p1), color="PINK", width=1)
                         col = "GREEN" if not intersects_any_segment(seg1, temporary_obstacles) else "RED"
-                        seg1i = seg1.intersection(temporary_obstacles[2].boundary)
-                        if not seg1i.is_empty:
-                            self._env.draw_line(seg1i.coords, color="PINK", width=1)
                         self._env.draw_line(list(seg1.coords), width=1, color=col)
                         self._env.draw_line(list(seg2.coords), width=3, color="PINK")
                     if not intersects_any_segment(
