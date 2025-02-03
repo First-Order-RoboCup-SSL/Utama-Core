@@ -23,7 +23,7 @@ class Robot:
 
     @property
     def robot_data(self) -> RobotData:
-        if self.inactive:
+        if not self.inactive:
             return self._robot_data
         else:
             logger.warning(" Should not be getting coords of this robot (inactive)")
