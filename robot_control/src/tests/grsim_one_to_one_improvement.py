@@ -130,9 +130,7 @@ def dribble_to_target_decision_maker(
     :param safe_distance: The minimum distance to maintain from the enemy robot.
     :return: The optimal (x, y) position for the robot to dribble to.
     """
-    robot_pos = game.friendly_robots[robot_id]  # Assuming the robot is on the yellow team
-    robot_x, robot_y = robot_pos.x, robot_pos.y
-    
+    robot = game.friendly_robots[robot_id]  # Assuming the robot is on the yellow team
     if game._my_team_is_yellow:
         goal_x, goal_y = 4.5, 0
     else:
@@ -141,8 +139,8 @@ def dribble_to_target_decision_maker(
     # If the robot has the ball, move towards the goal while avoiding the enemy
     if grsim_controller.robot_has_ball(robot_id):
         # Calculate the direction vector from the robot to the goal
-        goal_dx = goal_x - robot_x
-        goal_dy = goal_y - robot_y
+        goal_dx = goal_x - robot.x
+        goal_dy = goal_y - robot.y
         goal_dist = math.hypot(goal_dx, goal_dy)
 
         # Calculate the direction vector from the enemy to the robot
@@ -150,13 +148,14 @@ def dribble_to_target_decision_maker(
         enemy_dx = 0
         enemy_dy = 0
         for enemy_robot in game.enemy_robots:
-            enemy_dx = robot_x - enemy_robot.x
-            enemy_dy = robot_y - enemy_robot.y
-            enemy_dist = math.hypot(enemy_dx, enemy_dy)
-            if smallest_enemy_dist == 0 or enemy_dist < smallest_enemy_dist:
-                smallest_enemy_dist = enemy_dist  
-                enemy_dx = enemy_dx
-                enemy_dy = enemy_dy    
+            if enemy_robot is not None:
+                enemy_dx = robot.x - enemy_robot.x
+                enemy_dy = robot.y - enemy_robot.y
+                enemy_dist = math.hypot(enemy_dx, enemy_dy)
+                if smallest_enemy_dist == 0 or enemy_dist < smallest_enemy_dist:
+                    smallest_enemy_dist = enemy_dist  
+                    enemy_dx = enemy_dx
+                    enemy_dy = enemy_dy    
 
         # If the enemy is too close, adjust the target position to avoid interception
         if enemy_dist < safe_distance:
@@ -171,8 +170,8 @@ def dribble_to_target_decision_maker(
                 perpendicular_dy /= perpendicular_dist
 
             # Move away from the enemy while still progressing towards the goal
-            target_x = robot_x + perpendicular_dx * safe_distance + goal_dx * 0.5
-            target_y = robot_y + perpendicular_dy * safe_distance + goal_dy * 0.5
+            target_x = robot.x + perpendicular_dx * safe_distance + goal_dx * 0.5
+            target_y = robot.y + perpendicular_dy * safe_distance + goal_dy * 0.5
         else:
             # Move directly towards the goal
             target_x = goal_x
@@ -222,8 +221,6 @@ def strat_a(game: Game, stop_event: threading.Event):
             robot = game.friendly_robots[0]
             ball = game.ball
             
-            print(f"Robot: {robot.x}, {robot.y}")
-            print(f"robot_data: {robot.robot_data}")
             enemy_has_ball = False
             
             if sim_robot_controller.robot_has_ball(0):
@@ -241,6 +238,7 @@ def strat_a(game: Game, stop_event: threading.Event):
                     target_coords,
                     augment=True,
                 )
+                print(f"command: {cmd}")
             #     able_to_score = True
             #     if able_to_score: 
             #         cmd = score_goal(
@@ -354,6 +352,7 @@ def pvp_manager(headless: bool):
     print("Game over.")
 
 if __name__ == "__main__":
+    logging.disable(logging.CRITICAL)
     try:
         pvp_manager(headless=False)
     except KeyboardInterrupt:
