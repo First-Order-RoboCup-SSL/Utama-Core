@@ -29,28 +29,32 @@ class Field:
             [
                 (self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
                 (
-                    self.HALF_LENGTH - self.HALF_DEFENSE_AREA_LENGTH,
+                    self.HALF_LENGTH - 2*self.HALF_DEFENSE_AREA_LENGTH,
                     self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (
-                    self.HALF_LENGTH - self.HALF_DEFENSE_AREA_LENGTH,
+                    self.HALF_LENGTH - 2*self.HALF_DEFENSE_AREA_LENGTH,
                     -self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (self.HALF_LENGTH, -self.HALF_DEFENSE_AREA_WIDTH),
+                (self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
+
             ]
         )
         self.BLUE_DEFENSE_AREA = Polygon(
             [
                 (-self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
                 (
-                    -self.HALF_LENGTH + self.HALF_DEFENSE_AREA_LENGTH,
+                    -self.HALF_LENGTH + 2*self.HALF_DEFENSE_AREA_LENGTH,
                     self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (
-                    -self.HALF_LENGTH + self.HALF_DEFENSE_AREA_LENGTH,
+                    -self.HALF_LENGTH + 2*self.HALF_DEFENSE_AREA_LENGTH,
                     -self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (-self.HALF_LENGTH, -self.HALF_DEFENSE_AREA_WIDTH),
+                (-self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
+                
             ]
         )
 
@@ -102,10 +106,14 @@ class Field:
     def center_circle(self) -> Point:
         return self.CENTER_CIRCLE
 
-    @property
-    def yellow_defense_area(self) -> Polygon:
-        return self.YELLOW_DEFENSE_AREA
+    @staticmethod
+    def yellow_defense_area() -> Polygon:
+        return Field().YELLOW_DEFENSE_AREA
 
-    @property
-    def blue_defense_area(self) -> Polygon:
-        return self.BLUE_DEFENSE_AREA
+    @staticmethod
+    def blue_defense_area() -> Polygon:
+        return Field().BLUE_DEFENSE_AREA
+    
+    @staticmethod
+    def full_field() -> Polygon:
+        return Polygon([[-Field.HALF_LENGTH, -Field.HALF_WIDTH], [-Field.HALF_LENGTH, Field.HALF_WIDTH], [Field.HALF_LENGTH, Field.HALF_WIDTH], [Field.HALF_LENGTH, -Field.HALF_WIDTH]])
