@@ -9,9 +9,9 @@ def get_grsim_pids(n_robots: int):
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        18.5,
+        10.5,
         0.12,
-        0.045,
+        0,
         num_robots=n_robots,
     )
     pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0.0, num_robots=n_robots)
@@ -96,7 +96,7 @@ class PID:
         `oren` is True, the error calculation is modified to handle angular differences. Clamping is
         applied to prevent integral wind-up and to limit the total output.
         """
-
+        
         # Calculate error
         error = target - current
 
