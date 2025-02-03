@@ -26,10 +26,10 @@ class Robot:
         if self._robot_data is not None:
             return self._robot_data
         elif self.inactive:
-            logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
+            logger.warning(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
         else:
-            logger.critical(f" Should not be getting coords of robot_id: {self.id} (None)")
+            logger.warning(f" No RobotData; friendly: {self.is_friendly} robot_id: {self.id} (None)")
             return None
 
     @robot_data.setter
@@ -44,7 +44,7 @@ class Robot:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
         else:
-            logger.critical(f" Should not be getting coords of robot_id: {self.id} (None)")
+            logger.critical(f" No coords; friendly: {self.is_friendly} robot_id: {self.id} (None)")
             return None
 
     @property
@@ -55,7 +55,7 @@ class Robot:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
         else:
-            logger.critical(f" Should not be getting coords of robot_id: {self.id} (None)")
+            logger.critical(f" No coords; friendly: {self.is_friendly} robot_id: {self.id} (None)")
             return None
 
     @property
@@ -66,7 +66,7 @@ class Robot:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
         else:
-            logger.critical(f" Should not be getting coords of this robot_id: {self.id} (None)")
+            logger.critical(f" No coords; friendly: {self.is_friendly} robot_id: {self.id} (None)")
             return None
 
     @property
