@@ -59,6 +59,9 @@ def target_inside_robot_radius(
 
 
 class RRTPlanner:
+    """This class is a stateless planning class and should not be used on its own
+    see the controllers class which provide state tracking and waypoint switching for these classes such as TimedSwitchController
+    """
     # TODO - make these parameters configurable at runtime
     # TODO - Add support for avoiding goal areas - should be easy to use the Field object for this
 
@@ -303,7 +306,7 @@ class RRTPlanner:
 N_DIRECTIONS = 16
 
 
-def intersects_any_segment(segment: LineString, obstacles: List[Polygon]) -> bool:
+def intersects_any_polygon(segment: LineString, obstacles: List[Polygon]) -> bool:
     for o in obstacles:
         if segment.distance(o.boundary) < ROBOT_RADIUS:
             return True
@@ -311,6 +314,9 @@ def intersects_any_segment(segment: LineString, obstacles: List[Polygon]) -> boo
 
 
 class DynamicWindowPlanner:
+    """This class is a stateless planning class and should not be used on its own
+    see the controllers class which provide state tracking and waypoint switching for these classes such as TimedSwitchController
+    """
     SIMULATED_TIMESTEP = 0.2  # seconds
     MAX_ACCELERATION = 2  # Measured in ms^2
     DIRECTIONS = [i * 2 * pi / N_DIRECTIONS for i in range(N_DIRECTIONS)]
@@ -378,7 +384,7 @@ class DynamicWindowPlanner:
                 segment = self._get_motion_segment(
                     (start_x, start_y), velocity, delta_vel * sf, ang
                 )
-                if intersects_any_segment(segment, temporary_obstacles):
+                if intersects_any_polygon(segment, temporary_obstacles):
                     continue
                 # Evaluate this segment, avoiding obstacles
                 score = self._evaluate_segment(
@@ -502,6 +508,9 @@ class DynamicWindowPlanner:
 
 
 class BisectorPlanner:
+    """This class is a stateless planning class and should not be used on its own
+    see the controllers class which provide state tracking and waypoint switching for these classes such as TimedSwitchController
+    """
     OBSTACLE_CLEARANCE = ROBOT_DIAMETER
     ClOSE_LIMIT = 0.5
     SAMPLE_SIZE = 0.10
@@ -562,7 +571,8 @@ class BisectorPlanner:
             target (Tuple[float, float]): The target position (x, y) to which the robot should move.
             temporary_obstacles (List[Polygon]): A list of temporary obstacles represented as Polygon objects.
                 These obstacles represent imaginary and temporary regions to avoid, such as defense areas during play.
-                During setup time and ball placement, the robot may be allowed to enter these areas.
+                During setup time and ball placement, the robot may be allowed to enter these areas. For temporary obstacles
+                we assume that entering them is possible but not desirable. 
         Returns:
             Tuple[float, float]: The next position (x, y) for the robot to move towards the target.
         """
@@ -622,12 +632,12 @@ class BisectorPlanner:
                     if self._env is not None:
 
                         self._env.draw_point(*point_to_tuple(p1), color="PINK", width=1)
-                        col = "GREEN" if not intersects_any_segment(seg1, temporary_obstacles) else "RED"
+                        col = "GREEN" if not intersects_any_polygon(seg1, temporary_obstacles) else "RED"
                         self._env.draw_line(list(seg1.coords), width=1, color=col)
                         self._env.draw_line(list(seg2.coords), width=3, color="PINK")
-                    if not intersects_any_segment(
+                    if not intersects_any_polygon(
                         seg1, temporary_obstacles
-                    ) and not intersects_any_segment(seg2, temporary_obstacles):
+                    ) and not intersects_any_polygon(seg2, temporary_obstacles):
                         return point_to_tuple(p1)
 
         return point_to_tuple(midpoint)
