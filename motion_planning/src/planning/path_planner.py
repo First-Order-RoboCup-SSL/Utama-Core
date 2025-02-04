@@ -316,6 +316,12 @@ def intersects_any_polygon(segment: LineString, obstacles: List[Polygon]) -> boo
 class DynamicWindowPlanner:
     """This class is a stateless planning class and should not be used on its own
     see the controllers class which provide state tracking and waypoint switching for these classes such as TimedSwitchController
+
+    TODO Add code to leave the defense areas via the nearest point such that the robot is outside the polygon
+    this should not be in the planners as we need this to be more reactive, happening during any skills
+    like go_to_ball. The behaviour tree should handle this.
+
+
     """
     SIMULATED_TIMESTEP = 0.2  # seconds
     MAX_ACCELERATION = 2  # Measured in ms^2
