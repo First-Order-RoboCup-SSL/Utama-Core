@@ -25,26 +25,28 @@ def ball_position(t, x0, v0, a):
 
 
 def interception_chance(
-    passer, receiver, opponent, robot_velocity, ball_v0_magnitude, ball_a_magnitude
+    env, passer, receiver, opponent, robot_speed, ball_v0_magnitude, ball_a_magnitude
 ):
 
     # assert type(passer) != tuple
     # assert type(receiver) != tuple
-    robot_speed = np.linalg.norm(robot_velocity)
-    A = np.array([passer.x, passer.y])
-    B = np.array([receiver.x, receiver.y])
-    R = np.array([opponent.x, opponent.y])
-    AB = B - A
-    AB_unit = AB / np.linalg.norm(AB)
-    ball_v0 = AB_unit * ball_v0_magnitude
-    ball_a = AB_unit * ball_a_magnitude
+    # robot_speed = np.linalg.norm(robot_velocity)
+    passer_vector = np.array([passer.x, passer.y])
+    receiver_vector = np.array([receiver.x, receiver.y])
+    opp_vector = np.array([opponent.x, opponent.y])
+    passer_to_receiver_vec = receiver_vector - passer_vector
+    pr_unit = passer_to_receiver_vec / np.linalg.norm(passer_to_receiver_vec)
+    ball_v0 = pr_unit * ball_v0_magnitude
+    ball_a = pr_unit * ball_a_magnitude
 
-    AR = R - A
-    t = np.dot(AR, AB) / np.dot(AB, AB)
-    if t < 0 or t > 1:
+    passer_to_opp_vec = opp_vector - passer_vector
+    projection = np.dot(passer_to_opp_vec, passer_to_receiver_vec) / np.dot(
+        passer_to_receiver_vec, passer_to_receiver_vec
+    )
+    if projection < 0 or projection > 1:
         return 0, None, None
-    closest_point = A + t * AB
-    ball_distance = np.linalg.norm(closest_point - A)
+    closest_point = passer_vector + projection * passer_to_opp_vec
+    ball_distance = np.linalg.norm(closest_point - passer_vector)
     ball_speed = np.linalg.norm(ball_v0)
     ball_time_roots = np.roots(
         [0.5 * np.linalg.norm(ball_a), ball_speed, -ball_distance]
@@ -55,15 +57,33 @@ def interception_chance(
         else float("inf")
     )
 
-    opp_dist_to_pass = np.linalg.norm(closest_point - R) - ROBOT_RADIUS
-    opp_to_pass_time = (
-        opp_dist_to_pass / robot_speed if robot_speed != 0 else float("inf")
+    env.draw_point(closest_point[0], closest_point[1], "YELLOW", width=4)
+
+    opp_dist_to_pass = np.linalg.norm(closest_point - opp_vector) - ROBOT_RADIUS
+    if opp_dist_to_pass > 0:
+        opp_to_pass_time = (
+            opp_dist_to_pass / robot_speed if robot_speed != 0 else float("inf")
+        )
+    else:
+        opp_to_pass_time = 0
+
+    print(
+        "Opponent: ",
+        opponent.x,
+        opponent.y,
+        "Ball time:",
+        ball_time,
+        "Opponent time:",
+        opp_to_pass_time,
+        opp_dist_to_pass,
     )
 
     if opp_to_pass_time <= ball_time:
         ball_pos = ball_position(opp_to_pass_time, passer, ball_v0, ball_a)
+        # env.draw_point(ball_pos[0], ball_pos[1], "YELLOW", width=4)
         opp_to_ball_dist = np.linalg.norm(ball_pos - closest_point)
         chance = np.log(1 + opp_to_ball_dist)
+        print("hiya we have interception possibility ", chance)
     else:
         chance = 0
         return 0, None, None
@@ -72,10 +92,11 @@ def interception_chance(
 
 
 def find_pass_quality(
+    env,
     passer,
     receiver,
     enemy_positions,
-    enemy_velocities,
+    enemy_speeds,
     ball_v0_magnitude,
     ball_a_magnitude,
     goal_x,
@@ -86,12 +107,13 @@ def find_pass_quality(
     from robot_control.src.utils.shooting_utils import find_shot_quality
 
     total_interception_chance = 0
-    for enemy_pos, enemy_velocity in zip(enemy_positions, enemy_velocities):
+    for enemy_pos, enemy_speed in zip(enemy_positions, enemy_speeds):
         interception, _, _ = interception_chance(
+            env,
             passer,
             receiver,
             enemy_pos,
-            enemy_velocity,
+            enemy_speed,
             ball_v0_magnitude,
             ball_a_magnitude,
         )
@@ -109,10 +131,11 @@ def find_pass_quality(
     )
 
     # these will be adjusted
-    interception_chance_weight = 1
+    interception_chance_weight = 3
     goal_chance_weight = 0.5
     distance_to_goal_weight = 0.2
 
+    print(total_interception_chance)
     if distance_to_passer >= 0.7:
         pass_quality = (
             1
@@ -127,10 +150,11 @@ def find_pass_quality(
 
 
 def find_best_pass(
+    env,
     passer,
     friendly_robots,
     enemy_positions,
-    enemy_velocities,
+    enemy_speeds,
     ball_v0_magnitude,
     ball_a_magnitude,
     goal_x,
@@ -144,10 +168,11 @@ def find_best_pass(
 
     for receiver in friendly_robots:
         pass_quality = find_pass_quality(
+            env,
             passer,
             receiver,
             enemy_positions,
-            enemy_velocities,
+            enemy_speeds,
             ball_v0_magnitude,
             ball_a_magnitude,
             goal_x,
@@ -164,10 +189,11 @@ def find_best_pass(
 
 
 def find_best_receiver_position(
+    env,
     receiver_position,
     passer,
     enemy_positions,
-    enemy_velocities,
+    enemy_speeds,
     ball_v0_magnitude,
     ball_a_magnitude,
     goal_x,
@@ -210,10 +236,11 @@ def find_best_receiver_position(
 
     for candidate in sampled_positions:
         pass_quality = find_pass_quality(
+            env,
             passer,
             candidate,
             enemy_positions,
-            enemy_velocities,
+            enemy_speeds,
             ball_v0_magnitude,
             ball_a_magnitude,
             goal_x,
