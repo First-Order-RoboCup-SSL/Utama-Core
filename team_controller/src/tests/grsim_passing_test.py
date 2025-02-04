@@ -6,6 +6,7 @@ from team_controller.src.controllers import GRSimRobotController
 from team_controller.src.data import VisionDataReceiver
 from team_controller.src.data.message_enum import MessageType
 from entities.game import Game
+from robot_control.src.intent import PassBall
 from team_controller.src.config.settings import TIMESTEP
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from robot_control.src.skills import turn_on_spot, go_to_ball
@@ -14,8 +15,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+TARGET_COORDS = (-2, 3)
 
-def test_grsim_pivot_on_ball(shooter_id: int, is_yellow: bool, headless: bool):
+
+def test_grsim_passing(
+    passer_id: int, receiver_id: int, is_yellow: bool, headless: bool
+):
     env = GRSimController()
     env.reset()
 
@@ -36,6 +41,17 @@ def test_grsim_pivot_on_ball(shooter_id: int, is_yellow: bool, headless: bool):
 
     time.sleep(0.3)
 
+    passed = False
+
+    pass_ball_task = PassBall(
+        pid_oren,
+        pid_trans,
+        game,
+        passer_id,
+        receiver_id,
+        target_coords=TARGET_COORDS,
+    )
+
     try:
         while True:
             # Process messages from the queue
@@ -47,27 +63,20 @@ def test_grsim_pivot_on_ball(shooter_id: int, is_yellow: bool, headless: bool):
                 elif message_type == MessageType.REF:
                     pass
 
-            if not sim_robot_controller.robot_has_ball(shooter_id):
-                cmd = go_to_ball(
-                    pid_oren=pid_oren,
-                    pid_trans=pid_trans,
-                    this_robot_data=game.get_robot_pos(False, shooter_id),
-                    robot_id=shooter_id,
-                    ball_data=game.ball,
-                )
-            else:
-                cmd = turn_on_spot(
-                    pid_oren=pid_oren,
-                    pid_trans=pid_trans,
-                    this_robot_data=game.get_robot_pos(False, shooter_id),
-                    robot_id=shooter_id,
-                    target_oren=-np.pi,
-                    dribbling=True,
-                    pivot_on_ball=True,
+            if not passed:
+                passer_cmd, receiver_cmd = pass_ball_task.enact(
+                    passer_has_ball=sim_robot_controller.robot_has_ball(passer_id)
                 )
 
-            sim_robot_controller.add_robot_commands(cmd, shooter_id)
-            sim_robot_controller.send_robot_commands()
+                if sim_robot_controller.robot_has_ball(receiver_id):
+                    logger.info("Passed.")
+                    passed = True
+                    time.sleep(1)
+                    break
+
+                sim_robot_controller.add_robot_commands(passer_cmd, passer_id)
+                sim_robot_controller.add_robot_commands(receiver_cmd, receiver_id)
+                sim_robot_controller.send_robot_commands()
 
     except KeyboardInterrupt:
         logger.info("Test Interrupted.")
@@ -76,6 +85,6 @@ def test_grsim_pivot_on_ball(shooter_id: int, is_yellow: bool, headless: bool):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
-    
+
     # Run the test and output the result
-    test_result = test_grsim_pivot_on_ball(5, False, False)
+    test_result = test_grsim_passing(4, 5, False, False)

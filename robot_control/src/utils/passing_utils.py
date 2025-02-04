@@ -8,7 +8,9 @@ def calculate_ttr():
 
 
 def calculate_adjusted_receiver_pos(
-    ball_initial_pos: Tuple[float, float], receiver_data: RobotData, ball_data: BallData
+    ball_initial_pos: Tuple[float, float],
+    receiver_data: RobotData,
+    ball_data: BallData,
 ) -> Tuple[float, float]:
     """
     Returns the adjusted receive position of the receiver based on ball trajectory
@@ -27,16 +29,16 @@ def calculate_adjusted_receiver_pos(
         """
         vx = ball_pos[0] - ball_ini_pos[0]
         vy = ball_pos[1] - ball_ini_pos[1]
-        b = -vy
-        a = vx
+        b = -vx
+        a = vy
         c = -a * ball_pos[0] - b * ball_pos[1]
+
         return a, b, c
 
     x1 = receiver_data.x
     y1 = receiver_data.y
 
     a, b, c = get_ball_movement_line(ball_initial_pos, (ball_data.x, ball_data.y))
-    print(ball_initial_pos, (ball_data.x, ball_data.y))
 
     denominator = a**2 + b**2
     assert denominator != 0, "Denominator is zero"
