@@ -1,6 +1,8 @@
 import numpy as np
-from typing import Optional, Union, Tuple
-
+from typing import Optional, Union, Tuple, Generic, TypeVar
+from abc import ABC, abstractmethod
+import time
+import math
 from team_controller.src.config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL
 
 
@@ -23,10 +25,23 @@ def get_rsim_pids(n_robots: int):
     # speeds faster than 2.3 m/s cause the robot to lose control (due to the physics engine,
     # rsim becomes wierd there is some sot of limiter on the robots)
     pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0, num_robots=n_robots)
+    # return PIDAccelerationLimiterWrapper(pid_oren, 50), PIDAccelerationLimiterWrapper(pid_trans, 0.1)
     return pid_oren, pid_trans
 
 
-class PID:
+T = TypeVar("T")
+class AbstractPID(ABC, Generic[T]):
+    
+    @abstractmethod
+    def calculate(self, target: T, current: T) -> T:
+        """Can have other keyword args - this highlights structure of function"""
+        ...
+    
+    @abstractmethod
+    def reset(self, robot_id: int):
+        ...
+
+class PID(AbstractPID[float]):
     """
     A Proportional-Integral-Derivative (PID) controller for managing error corrections over time.
 
@@ -141,7 +156,7 @@ class PID:
         self.first_pass = True
 
 
-class TwoDPID:
+class TwoDPID(AbstractPID[Tuple[float, float]]):
     def __init__(
         self,
         dt: float,
@@ -181,3 +196,70 @@ class TwoDPID:
     def reset(self, robot_id: int):
         self.dimX.reset(robot_id)
         self.dimY.reset(robot_id)
+
+
+class PIDAccelerationLimiterWrapper:
+    def __init__(self, internal_pid: AbstractPID, max_acceleration: float):
+        self._internal_pid = internal_pid
+        self._last_result_time = None
+        self._last_result = None
+        self._max_acceleration = max_acceleration
+
+    def calculate(self, *args, **kwargs):
+        # Forward the arguments to the internal pid controller
+        result = self._internal_pid.calculate(*args, **kwargs)
+        current_time = time.time()
+        if self._last_result_time is None:
+            # Assume the worst case, which is one frame ago eg 16.6ms
+            time_since_last = 16.6 / 1000
+        else:
+            time_since_last = current_time - self._last_result_time
+        self._last_result_time = current_time
+
+        # Maximum allowed change in velocity in this time step
+        dv = time_since_last * self._max_acceleration
+
+        if isinstance(result, float) or isinstance(result, int):
+            usable_last_result = 0 if self._last_result is None else self._last_result
+            difference = result - usable_last_result
+            if difference >= 0:
+                difference = min(difference, dv)
+            else:
+                difference = max(difference, -dv)
+            reduced_result = usable_last_result + difference
+        elif isinstance(result, tuple):
+            # Need to scale down the vector with respect to each direction
+            usable_last_result = (0,0) if self._last_result is None else self._last_result
+            norm = math.dist(usable_last_result, result)
+            if norm < dv:
+                reduced_result = result
+            else:
+                if norm != 0:
+                    # Don't allow scaling above the maximum
+                    ratio = min(1, self._max_acceleration / norm)
+                    dx, dy = (result[0]-usable_last_result[0]) * ratio, (result[1]-usable_last_result[1]) * ratio
+                    reduced_result = usable_last_result[0] + dx, usable_last_result[1] + dy
+                else:
+                    reduced_result = result
+        else:
+            raise NotImplementedError(f"Can only wrap tuples of float or Tuple[float, float] not {type(result)}")
+        self._last_result = reduced_result
+        return reduced_result
+
+    def reset(self, robot_id: int):
+        self._internal_pid.reset(robot_id)
+
+
+
+
+if __name__=="__main__":
+    
+    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0.0, num_robots=6)
+    pid_trans2 = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0.0, num_robots=6)
+
+    pid_trans_limited = PIDAccelerationLimiterWrapper(pid_trans2)
+    for pid in [pid_trans, pid_trans_limited]:
+        result = pid.calculate((100,100), (0,0), 0)
+
+        print(result)
+        print(math.dist((0,0), result))
