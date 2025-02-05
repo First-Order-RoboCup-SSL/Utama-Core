@@ -1,6 +1,5 @@
 import numpy as np
 
-from global_utils.math_utils import squared_distance, normalise_heading
 from motion_planning.src.pid.pid import TwoDPID
 from global_utils.math_utils import distance, normalise_heading
 from robot_control.src.utils.shooting_utils import find_best_shot
@@ -136,6 +135,7 @@ class PassBall:
                 self.receiver_id,
                 adjusted_pos,
                 catch_orientation,
+                dribbling=True
             )
 
         else:
