@@ -2,6 +2,7 @@ import numpy as np
 
 from global_utils.math_utils import squared_distance, normalise_heading
 from motion_planning.src.pid.pid import TwoDPID
+from global_utils.math_utils import distance, normalise_heading
 from robot_control.src.utils.shooting_utils import find_best_shot
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from entities.game import Game, Field
@@ -53,14 +54,17 @@ class PassBall:
         self.my_team_is_yellow = game.my_team_is_yellow
 
         self.angle_tolerance = 0.01
-        self.sq_dist_tolerance = 0.01
+        self.dist_tolerance = 0.05
         self.ball_in_flight = False
+        self.ball_traj_points = []
         self.ball_launch_pos = None
 
     def enact(self, passer_has_ball: bool) -> Tuple[RobotCommand, RobotCommand]:
         """
         return the command for passer and receiver in that order.
         """
+
+        # TODO: need to ensure this func works when ball_data or robot_pos is None
         passer_ready = False
         receiver_ready = False
 
@@ -114,9 +118,10 @@ class PassBall:
         if self.ball_in_flight:
 
             # TODO: add line filtering to calculate the adjusted position
-
+            if ball_data is not None:
+                self.ball_traj_points.append((ball_data.x, ball_data.y))
             adjusted_pos = calculate_adjusted_receiver_pos(
-                self.ball_launch_pos, receiver_data, ball_data
+                receiver_data, self.ball_traj_points
             )  # we are assuming the adjusted position should be extremely close
             catch_orientation = np.arctan2(
                 ball_data.y - adjusted_pos[1], ball_data.x - adjusted_pos[0]
@@ -136,8 +141,8 @@ class PassBall:
         else:
             catch_orientation = normalise_heading(shot_orientation + np.pi)
             if (
-                squared_distance((receiver_data.x, receiver_data.y), self.target_coords)
-                < self.sq_dist_tolerance
+                distance((receiver_data.x, receiver_data.y), self.target_coords)
+                < self.dist_tolerance
                 and abs(
                     receiver_oren - catch_orientation,
                 )
@@ -159,7 +164,8 @@ class PassBall:
 
         if passer_ready and receiver_ready:
             passer_cmd = kick_ball()
-            self.ball_launch_pos = (ball_data.x, ball_data.y)
+            if ball_data is not None:
+                self.ball_traj_points.append((ball_data.x, ball_data.y))
             self.ball_in_flight = True
 
         return passer_cmd, receiver_cmd

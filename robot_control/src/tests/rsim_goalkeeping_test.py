@@ -79,7 +79,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 my_team_is_yellow=defender_is_yellow
             )
 
-            cmd = score_goal(
+            attack_cmd = score_goal(
                 game,
                 sim_robot_controller_attacker.robot_has_ball(shooter_id),
                 shooter_id=shooter_id,
@@ -93,7 +93,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 logger.info("Goal Scored at Position: ", game.get_ball_pos())
                 goal_scored = True
 
-            sim_robot_controller_attacker.add_robot_commands(cmd, shooter_id)
+            sim_robot_controller_attacker.add_robot_commands(attack_cmd, shooter_id)
             sim_robot_controller_attacker.send_robot_commands()
 
 
