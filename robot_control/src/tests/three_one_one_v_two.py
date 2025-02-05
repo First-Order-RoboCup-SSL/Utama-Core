@@ -1,5 +1,5 @@
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import go_to_ball, go_to_point, goalkeep
+from robot_control.src.skills import empty_command, go_to_ball, go_to_point, goalkeep
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 from robot_control.src.utils.shooting_utils import find_best_shot
 from team_controller.src.controllers import RSimRobotController
@@ -149,16 +149,21 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
                     next_possessor,
                     target_coords=game.get_robot_pos(attacker_is_yellow, next_possessor),
                 )
+            # else:
+            print("Possessor", possessor, sim_robot_controller_attacker.robot_has_ball(possessor), "Next possessor", next_possessor, sim_robot_controller_attacker.robot_has_ball(next_possessor))
+            if sim_robot_controller_attacker.robot_has_ball(next_possessor):
+                pass_task = None
+                possessor = next_possessor
+                print("RECEIVED")
+                sim_robot_controller_attacker.add_robot_commands(empty_command(dribbler_on=True), possessor)
+                sim_robot_controller_attacker.add_robot_commands(empty_command(dribbler_on=True), 0)
+                sim_robot_controller_attacker.send_robot_commands()
             else:
-                if sim_robot_controller_attacker.robot_has_ball(next_possessor):
-                    pass_task = None
-                    possessor = next_possessor
-                    print("RECEIVED")
-                else:
-                    (possessor_cmd, next_possessor_cmd) = pass_task.enact(sim_robot_controller_attacker.robot_has_ball(possessor))
-                    sim_robot_controller_attacker.add_robot_commands(possessor_cmd, possessor)
-                    sim_robot_controller_attacker.add_robot_commands(next_possessor_cmd, next_possessor)
-                    sim_robot_controller_attacker.send_robot_commands()
+                (possessor_cmd, next_possessor_cmd) = pass_task.enact(sim_robot_controller_attacker.robot_has_ball(possessor))
+                sim_robot_controller_attacker.add_robot_commands(possessor_cmd, possessor)
+                sim_robot_controller_attacker.add_robot_commands(next_possessor_cmd, next_possessor)
+                print("Possessor dribblle", possessor_cmd.dribble, "Receiver dribble", next_possessor_cmd.dribble)
+                sim_robot_controller_attacker.send_robot_commands()
         elif stage == 3:
             sim_robot_controller_attacker.add_robot_commands(score_goal(game, sim_robot_controller_attacker.robot_has_ball(possessor), possessor, pid_oren_attacker, pid_2d_attacker, attacker_is_yellow, attacker_is_yellow), possessor)
             sim_robot_controller_attacker.send_robot_commands()
