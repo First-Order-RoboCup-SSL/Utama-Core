@@ -79,7 +79,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 my_team_is_yellow=defender_is_yellow
             )
 
-            cmd = score_goal(
+            attack_cmd = score_goal(
                 game,
                 sim_robot_controller_attacker.robot_has_ball(shooter_id),
                 shooter_id=shooter_id,
@@ -93,7 +93,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 logger.info("Goal Scored at Position: ", game.get_ball_pos())
                 goal_scored = True
 
-            sim_robot_controller_attacker.add_robot_commands(cmd, shooter_id)
+            sim_robot_controller_attacker.add_robot_commands(attack_cmd, shooter_id)
             sim_robot_controller_attacker.send_robot_commands()
 
             if defender_is_yellow:
@@ -102,22 +102,22 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 target = game.predict_ball_pos_at_x(-4.5 + 0.4)
 
             if target and not find_likely_enemy_shooter(enemy, balls):
-                cmd = go_to_point(
+                print(target)
+                defend_cmd = go_to_point(
                     pid_oren_d,
                     pid_2d_d,
                     friendly[0],
                     0,
                     target,
                     face_ball(
-                        (friendly[0].x, friendly[0].y), 
-                        (game.ball.x, game.ball.y)
+                        (friendly[0].x, friendly[0].y), (game.ball.x, game.ball.y)
                     ),
                     dribbling=True,
                 )
-                sim_robot_controller_defender.add_robot_commands(cmd, 0)
+                sim_robot_controller_defender.add_robot_commands(defend_cmd, 0)
                 sim_robot_controller_defender.send_robot_commands()
             else:
-                cmd = go_to_point(
+                defend_cmd = go_to_point(
                     pid_oren_d,
                     pid_2d_d,
                     friendly[0],
@@ -127,9 +127,8 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                         (friendly[0].x, friendly[0].y), (game.ball.x, game.ball.y)
                     ),
                 )
-                sim_robot_controller_defender.add_robot_commands(cmd, 0)
+                sim_robot_controller_defender.add_robot_commands(defend_cmd, 0)
                 sim_robot_controller_defender.send_robot_commands()
-                
 
     assert not goal_scored
 

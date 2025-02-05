@@ -9,14 +9,13 @@ def get_grsim_pids(n_robots: int):
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        10.5,
-        0.01,
+        18.5,
+        0.12,
         0.045,
         num_robots=n_robots,
     )
-    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 7.5, 0.01, 0.0, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0.0, num_robots=n_robots)
     return pid_oren, pid_trans
-
 
 def get_rsim_pids(n_robots: int):
     # no clamping for oreintation otherwise the robot becomes unstable

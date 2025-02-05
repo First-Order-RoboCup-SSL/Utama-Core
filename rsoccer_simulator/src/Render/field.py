@@ -253,7 +253,7 @@ class SSLRenderField(VSSRenderField):
     length = 9
     width = 6
     margin = 0.35
-    center_circle_r = 1
+    center_circle_r = 0.5
     penalty_length = 1
     penalty_width = 2
     goal_area_length = 0

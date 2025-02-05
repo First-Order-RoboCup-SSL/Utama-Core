@@ -70,3 +70,31 @@ def distance(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
         float: The Euclidean distance between the two points.
     """
     return np.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+
+
+def distance(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
+    """
+    Calculate the Euclidean distance between two 2D points.
+
+    Parameters:
+        point1 (Tuple[float, float]): Coordinates of the first point (x1, y1).
+        point2 (Tuple[float, float]): Coordinates of the second point (x2, y2).
+
+    Returns:
+        float: The Euclidean distance between the two points.
+    """
+    return np.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+
+
+def distance(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
+    """
+    Calculate the Euclidean distance between two 2D points.
+
+    Parameters:
+        point1 (Tuple[float, float]): Coordinates of the first point (x1, y1).
+        point2 (Tuple[float, float]): Coordinates of the second point (x2, y2).
+
+    Returns:
+        float: The Euclidean distance between the two points.
+    """
+    return np.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
