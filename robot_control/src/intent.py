@@ -107,7 +107,8 @@ class PassBall:
         if self.ball_in_flight:
 
             # TODO: add line filtering to calculate the adjusted position
-            self.ball_traj_points.append((ball_data.x, ball_data.y))
+            if ball_data is not None:
+                self.ball_traj_points.append((ball_data.x, ball_data.y))
             adjusted_pos = calculate_adjusted_receiver_pos(
                 receiver_data, self.ball_traj_points
             )  # we are assuming the adjusted position should be extremely close
@@ -152,7 +153,8 @@ class PassBall:
 
         if passer_ready and receiver_ready:
             passer_cmd = kick_ball()
-            self.ball_traj_points.append((ball_data.x, ball_data.y))
+            if ball_data is not None:
+                self.ball_traj_points.append((ball_data.x, ball_data.y))
             self.ball_in_flight = True
 
         return passer_cmd, receiver_cmd
