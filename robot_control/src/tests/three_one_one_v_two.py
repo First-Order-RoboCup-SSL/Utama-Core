@@ -114,13 +114,6 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
                 stage += 1
         
         elif stage == 2:
-            if possessor == 0:
-                next_possessor = 1
-            elif possessor == N_ROBOTS_ATTACK - 1:
-                next_possessor = N_ROBOTS_ATTACK - 2
-            else:
-                next_possessor = random.choice([possessor + 1, possessor - 1])
-
             if not pass_task:
                 target_goal_line = game.field.enemy_goal_line(attacker_is_yellow)
                 latest_frame = game.get_my_latest_frame(attacker_is_yellow)
@@ -135,12 +128,19 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
                         balls[0], enemy_robots, goal_x, goal_y1, goal_y2, attacker_is_yellow
                     )
 
-                    print(size_of_shot)
+                    print("SIZE OF SHOT", size_of_shot)
 
-                    if size_of_shot > 0.4 and passes >= 5:
+                    if size_of_shot > 0.41 and passes >= 5:
                         stage += 1
 
                 passes += 1
+                if possessor == 0:
+                    next_possessor = 1
+                elif possessor == N_ROBOTS_ATTACK - 1:
+                    next_possessor = N_ROBOTS_ATTACK - 2
+                else:
+                    next_possessor = random.choice([possessor + 1, possessor - 1])
+
                 pass_task = PassBall(
                     pid_oren_attacker,
                     pid_2d_attacker,
@@ -165,6 +165,7 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
                 print("Possessor dribblle", possessor_cmd.dribble, "Receiver dribble", next_possessor_cmd.dribble)
                 sim_robot_controller_attacker.send_robot_commands()
         elif stage == 3:
+            print("SCOOOORING")
             sim_robot_controller_attacker.add_robot_commands(score_goal(game, sim_robot_controller_attacker.robot_has_ball(possessor), possessor, pid_oren_attacker, pid_2d_attacker, attacker_is_yellow, attacker_is_yellow), possessor)
             sim_robot_controller_attacker.send_robot_commands()
     
