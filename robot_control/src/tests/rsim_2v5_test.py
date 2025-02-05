@@ -21,7 +21,7 @@ from robot_control.src.utils.shooting_utils import find_shot_quality
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from robot_control.src.intent import PassBall, defend, score_goal
-from global_utils.math_utils import squared_distance
+from global_utils.math_utils import distance
 
 
 logger = logging.getLogger(__name__)
@@ -232,7 +232,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
 
                     # Calculate how close the robot is to the intercept position (lower score is better)
                     intercept_score = (
-                        squared_distance(robot, intercept_pos)
+                        distance(robot, intercept_pos)
                         if intercept_pos != None
                         else float("inf")
                     )

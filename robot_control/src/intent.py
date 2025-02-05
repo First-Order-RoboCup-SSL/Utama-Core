@@ -1,7 +1,7 @@
 import numpy as np
 import time
 
-from global_utils.math_utils import squared_distance, normalise_heading
+from global_utils.math_utils import distance, normalise_heading
 from robot_control.src.utils.shooting_utils import find_best_shot, find_shot_quality
 from robot_control.src.utils.pass_quality_utils import (
     find_pass_quality,
@@ -104,10 +104,12 @@ class PassBall:
                 or self.ball_in_flight
             ):
                 passer_ready = True
+                print("our passy boy is ready to execute the passy pass")
                 passer_cmd = empty_command(
                     dribbler_on=True
                 )  # default action is to wait. Unless both are ready then intiate pass
             else:
+                print("our passy  boy is turning")
                 passer_cmd = turn_on_spot(
                     self.pid_oren,
                     self.pid_trans,
@@ -122,9 +124,8 @@ class PassBall:
         receiver_oren = receiver_data.orientation
 
         # if ball has already been kicked and heading towards receiver
-        print(self.ball_in_flight)
         if self.ball_in_flight:
-            print("ball in fligggghhttttt")
+
             # TODO: add line filtering to calculate the adjusted position
             if ball_data is not None:
                 self.ball_traj_points.append((ball_data.x, ball_data.y))
@@ -149,7 +150,7 @@ class PassBall:
         else:
             catch_orientation = normalise_heading(shot_orientation + np.pi)
             if (
-                squared_distance((receiver_data.x, receiver_data.y), self.target_coords)
+                distance((receiver_data.x, receiver_data.y), self.target_coords)
                 < self.dist_tolerance
                 and abs(
                     receiver_oren - catch_orientation,
@@ -159,6 +160,7 @@ class PassBall:
 
                 receiver_cmd = empty_command(dribbler_on=True)
                 receiver_ready = True
+                print("our receivy boy is ready (spoiler: it aint)")
 
             else:
                 receiver_cmd = go_to_point(
@@ -169,13 +171,19 @@ class PassBall:
                     self.target_coords,
                     catch_orientation,
                 )
+                print(
+                    "hey bruv here is where the receivy boy is trying to go to",
+                    self.target_coords,
+                )
 
         if passer_ready and receiver_ready:
-            print("imma kick the ball ... to pass it")
+            print("ready for the kick...not really :(")
             passer_cmd = kick_ball()
             if ball_data is not None:
                 self.ball_traj_points.append((ball_data.x, ball_data.y))
             self.ball_in_flight = True
+
+        print(f"ball in flight: {self.ball_in_flight}")
 
         return passer_cmd, receiver_cmd
 
@@ -264,270 +272,6 @@ def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
                 # Ball is close to this robot
                 ans.append(er)
     return list(set(ans))
-
-
-class Play2v5:
-    def __init__(
-        self,
-        pid_oren: PID,
-        pid_trans: PID,
-        game: Game,
-        robot_ids: List[int],
-        shoot_in_left_goal: bool,
-        pass_quality_thresh: float,
-        shot_quality_thresh: float,
-    ):
-        self.pid_oren = pid_oren
-        self.pid_trans = pid_trans
-        self.game = game
-        self.robot_ids = robot_ids
-        self.shoot_in_left_goal = shoot_in_left_goal
-        self.pass_quality_thresh = pass_quality_thresh
-        self.shot_quality_thresh = shot_quality_thresh
-        self.my_team_is_yellow = game.my_team_is_yellow
-
-    def intercept_ball(
-        self,
-        receiver_pos: Tuple[float, float],
-        ball_pos: Tuple[float, float],
-        ball_vel: Tuple[float, float],
-        robot_speed: float,
-    ) -> Tuple[float, float]:
-        """
-        Simple function to calculate intercept position for a robot.
-        Assumes the ball is moving in a straight line, and we find the point where the receiver should go.
-        """
-        # Calculate the time it will take for the robot to reach the ball (simplified)
-        distance_to_ball = np.linalg.norm(np.array(ball_pos) - np.array(receiver_pos))
-        time_to_reach = (
-            distance_to_ball / robot_speed if robot_speed != 0 else float("inf")
-        )  # Assuming constant robot speed
-
-        # Predict the future position of the ball
-        intercept_pos = (
-            (
-                ball_pos[0] + ball_vel[0] * time_to_reach,
-                ball_pos[1] + ball_vel[1] * time_to_reach,
-            )
-            if ball_vel != None
-            else None
-        )
-
-        return intercept_pos
-
-    def enact(
-        self, ball_possessor_id: Optional[int]
-    ) -> Tuple[Dict[int, RobotCommand], List[Tuple[float, float]]]:
-        """
-        Returns a dict {robot_id: command} for each robot.
-        """
-        commands = {}
-        pass_task = None
-        trying_to_pass = False
-        sampled_positions = None
-        target_pos = None
-
-        target_goal_line = self.game.field.enemy_goal_line(self.my_team_is_yellow)
-        latest_frame = self.game.get_my_latest_frame(self.my_team_is_yellow)
-        if not latest_frame:
-            return
-        friendly_robots, enemy_robots, balls = latest_frame
-        enemy_velocities = self.game.get_robots_velocity(self.my_team_is_yellow) or [
-            (0.0, 0.0)
-        ] * len(enemy_robots)
-
-        # TODO: Not sure if this is sufficient for both blue and yellow scoring
-        # It won't be because note that in real life the blue team is not necessarily
-        # on the left of the pitch
-        goal_x = target_goal_line.coords[0][0]
-        goal_y1 = target_goal_line.coords[1][1]
-        goal_y2 = target_goal_line.coords[0][1]
-
-        # TODO: For now we just look at the first ball, but this will eventually have to be smarter
-        ball_data: BallData = balls[0]
-        ball_vel = self.game.get_ball_velocity()
-
-        ### CASE 1: No one has the ball - Try to intercept it ###
-        if ball_possessor_id is None:
-            print("No one has the ball, trying to intercept")
-            best_interceptor = None
-            best_intercept_score = float("inf")  # Lower is better (closer to ball path)
-            for rid in self.robot_ids:
-                ball_pos = ball_data.x, ball_data.y
-                robot = friendly_robots[rid]
-                # this is a bit hacky for now. we need a better interception function
-                # Calculate intercept position using the intercept_ball function
-                intercept_pos = self.intercept_ball(
-                    (robot.x, robot.y), ball_pos, ball_vel, robot_speed=4.0
-                )  # Use appropriate robot speed
-
-                # Calculate how close the robot is to the intercept position (lower score is better)
-                intercept_score = (
-                    squared_distance(robot, intercept_pos)
-                    if intercept_pos != None
-                    else float("inf")
-                )
-
-                if intercept_score < best_intercept_score:
-                    best_interceptor = rid
-                    best_intercept_score = intercept_score
-
-            # Send the best robot to intercept
-            if best_interceptor is not None:
-                ball_vel = self.game.get_ball_velocity()
-                intercept_pos = self.intercept_ball(
-                    (
-                        friendly_robots[best_interceptor].x,
-                        friendly_robots[best_interceptor].y,
-                    ),
-                    ball_pos,
-                    ball_vel,
-                    robot_speed=4.0,
-                )
-                commands[best_interceptor] = (
-                    go_to_point(
-                        self.pid_oren,
-                        self.pid_trans,
-                        friendly_robots[best_interceptor],
-                        best_interceptor,
-                        intercept_pos,
-                        friendly_robots[best_interceptor].orientation,
-                    )
-                    if intercept_pos != None
-                    else empty_command(dribbler_on=True)
-                )
-
-            for rid in self.robot_ids:
-                if rid == best_interceptor or best_interceptor == None:
-                    continue
-                # If a pass is happening, don't override the receiver's movement
-                if trying_to_pass:
-                    continue  # Let PassBall handle the receiver
-
-                potential_passer_id = (
-                    rid + 1 if rid + 1 <= len(friendly_robots) - 1 else rid - 1
-                )
-                target_pos, sampled_positions, target_pos = find_best_receiver_position(
-                    friendly_robots[rid],
-                    friendly_robots[
-                        potential_passer_id
-                    ],  # PointOnField(ball_pos[0], ball_pos[1]),
-                    enemy_robots,
-                    enemy_velocities,
-                    BALL_V0_MAGNITUDE,
-                    BALL_A_MAGNITUDE,
-                    goal_x,
-                    goal_y1,
-                    goal_y2,
-                    self.shoot_in_left_goal,
-                )
-
-                commands[rid] = go_to_point(
-                    self.pid_oren,
-                    self.pid_trans,
-                    friendly_robots[rid],
-                    rid,
-                    target_pos,
-                    friendly_robots[rid].orientation,
-                )
-
-            return commands, sampled_positions, target_pos
-
-        ### CASE 2: Someone has the ball ###
-        print("We have the ball", ball_possessor_id)
-        possessor_data = friendly_robots[ball_possessor_id]
-
-        # Check shot opportunity
-        shot_quality = find_shot_quality(
-            possessor_data,
-            enemy_robots,
-            goal_x,
-            goal_y1,
-            goal_y2,
-            self.shoot_in_left_goal,
-        )
-        if shot_quality > self.shot_quality_thresh:
-            commands[ball_possessor_id] = kick_ball()
-            return commands, None, None  # Just shoot, no need to pass
-
-        # Check for best pass
-        best_receiver_id = None
-        best_pass_quality = 0
-
-        for rid in self.robot_ids:
-            if rid == ball_possessor_id:
-                continue
-            pq = find_pass_quality(
-                friendly_robots[ball_possessor_id],
-                friendly_robots[rid],
-                enemy_robots,
-                enemy_velocities,
-                BALL_V0_MAGNITUDE,
-                BALL_A_MAGNITUDE,
-                goal_x,
-                goal_y1,
-                goal_y2,
-                self.shoot_in_left_goal,
-            )
-            if pq > best_pass_quality:
-                best_pass_quality = pq
-                best_receiver_id = rid
-        if (
-            best_receiver_id is not None
-            and best_pass_quality > self.pass_quality_thresh
-        ):
-            print("trying to execute a pass")
-            trying_to_pass = True
-            pass_task = PassBall(
-                self.pid_oren,
-                self.pid_trans,
-                self.game,
-                ball_possessor_id,
-                best_receiver_id,
-                (
-                    friendly_robots[best_receiver_id].x,
-                    friendly_robots[best_receiver_id].y,
-                ),
-            )
-            pass_commands = pass_task.enact(passer_has_ball=True)
-            commands[ball_possessor_id] = pass_commands[0]
-            commands[best_receiver_id] = pass_commands[1]
-        else:
-            commands[ball_possessor_id] = empty_command(
-                dribbler_on=True
-            )  # Wait for a better pass
-
-        # Move non-possessing robots to good positions
-        for rid in self.robot_ids:
-            if rid == ball_possessor_id:
-                continue
-            # If a pass is happening, don't override the receiver's movement
-            if trying_to_pass:
-                continue  # Let PassBall handle the receiver
-            enemy_speeds = np.linalg.norm(enemy_velocities, axis=1)
-            target_pos, sampled_positions, target_pos = find_best_receiver_position(
-                friendly_robots[rid],
-                friendly_robots[ball_possessor_id],
-                enemy_robots,
-                enemy_speeds,
-                BALL_V0_MAGNITUDE,
-                BALL_A_MAGNITUDE,
-                goal_x,
-                goal_y1,
-                goal_y2,
-                self.shoot_in_left_goal,
-            )
-
-            commands[rid] = go_to_point(
-                self.pid_oren,
-                self.pid_trans,
-                friendly_robots[rid],
-                rid,
-                target_pos,
-                friendly_robots[rid].orientation,
-            )
-
-        return commands, sampled_positions, target_pos
 
 
 def defend(

@@ -1,5 +1,6 @@
 from entities.data.vision import RobotData, BallData
-from typing import Tuple
+from typing import Tuple, List
+import numpy as np
 
 
 def calculate_ttr():
@@ -8,9 +9,8 @@ def calculate_ttr():
 
 
 def calculate_adjusted_receiver_pos(
-    ball_initial_pos: Tuple[float, float],
     receiver_data: RobotData,
-    ball_data: BallData,
+    ball_traj_points: List[Tuple[float, float]],
 ) -> Tuple[float, float]:
     """
     Returns the adjusted receive position of the receiver based on ball trajectory
@@ -22,23 +22,31 @@ def calculate_adjusted_receiver_pos(
     """
 
     def get_ball_movement_line(
-        ball_ini_pos: Tuple[float, float], ball_pos: Tuple[float, float]
+        ball_traj_points: List[Tuple[float, float]]
     ) -> Tuple[float, float, float]:
         """
         Returns the line equation ax + by + c = 0 of the ball's movement line
         """
-        vx = ball_pos[0] - ball_ini_pos[0]
-        vy = ball_pos[1] - ball_ini_pos[1]
-        b = -vx
-        a = vy
-        c = -a * ball_pos[0] - b * ball_pos[1]
+        points = np.array(ball_traj_points)
+        x = points[:, 0]
+        y = points[:, 1]
+        A = np.vstack([x, np.ones(len(x))]).T
+        m, c = np.linalg.lstsq(A, y, rcond=None)[0]
+
+        # Convert to standard form ax + by + c = 0
+        a = m
+        b = -1
+        c = c
 
         return a, b, c
 
     x1 = receiver_data.x
     y1 = receiver_data.y
 
-    a, b, c = get_ball_movement_line(ball_initial_pos, (ball_data.x, ball_data.y))
+    if len(ball_traj_points) < 2:
+        return (x1, y1)
+
+    a, b, c = get_ball_movement_line(ball_traj_points)
 
     denominator = a**2 + b**2
     assert denominator != 0, "Denominator is zero"
