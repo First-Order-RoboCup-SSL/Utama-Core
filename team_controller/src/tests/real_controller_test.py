@@ -182,20 +182,21 @@ def test_command(
             break
         iter += 1
         cmd = RobotCommand(
-            local_forward_vel=0,
+            local_forward_vel=0.2,
             local_left_vel=0,
-            angular_vel=min(1, iter / ramp_iters) * target_val,
+            angular_vel=0,
+            # angular_vel=min(1, iter / ramp_iters) * target_val,
             kick=0,
             chip=0,
             dribble=dribble,
         )
 
         robot_controller.add_robot_commands(cmd, 0)
-        binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
-        print(
-            f"command sent!\n",
-        )
-        print(binary_representation)
+        # binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
+        # print(
+        #     f"command sent!\n",
+        # )
+        # print(binary_representation)
         robot_controller.send_robot_commands()
         start_time = time.time()
         time.sleep(0.017)
@@ -209,14 +210,13 @@ def main():
         is_team_yellow=True, game_obj=game, n_robots=1
     )
     try:
-        test_command(robot_controller, 0, 100, False, True)
+        test_command(robot_controller, 1, 100, False, True)
         # get_ball_test_with_vision(game, robot_controller)
     except KeyboardInterrupt:
         # try to stop the robot 15 times
         print("Stopping robot.")
-        test_command(robot_controller, 0, 100, True, False)
 
-        for i in range(15):
+        for _ in range(15):
             robot_controller.serial.write(stop_buffer_off)
         robot_controller.serial.close()
 

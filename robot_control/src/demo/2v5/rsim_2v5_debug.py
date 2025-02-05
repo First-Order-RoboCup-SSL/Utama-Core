@@ -128,8 +128,12 @@ def test_rsim_2v5():
             sim_robot_controller.add_robot_commands(cmd0, r0)
             sim_robot_controller.send_robot_commands()
 
+        # r1 pass to r0
         start_t = time.time()
-        while time.time() - start_t < 3:
+        while time.time() - start_t < 10:
+            env.draw_point(
+                receiving_points[1][0], receiving_points[1][1], width=2, color="yellow"
+            )
             cmd1, cmd0 = pass_task1.enact(True)
             sim_robot_controller.add_robot_commands(cmd0, r0)
             sim_robot_controller.add_robot_commands(cmd1, r1)
@@ -137,6 +141,7 @@ def test_rsim_2v5():
 
         del pass_task1
 
+        # r0 score goal
         while not game.is_ball_in_goal(our_side=False):
             cmd0 = score_goal(game, True, r0, pid_oren, pid_trans, True, True)
             sim_robot_controller.add_robot_commands(cmd0, r0)

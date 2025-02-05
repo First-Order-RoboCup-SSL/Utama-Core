@@ -30,7 +30,7 @@ class RobotControlGUI:
         # Robot ID (0-31)
         self.robot_id = tk.IntVar(value=0)
 
-        self.VELOCITY_SCALE = 0.2  # m/s for linear, rad/s for angular
+        self.VELOCITY_SCALE = 0.1  # m/s for linear, rad/s for angular
 
         self.setup_gui()
         self.setup_key_bindings()
@@ -211,17 +211,36 @@ class RobotControlGUI:
         # Schedule next update
         self.root.after(20, self.update_velocities)
 
+    def compute_crc(self, data: bytearray) -> int:
+        """
+        Calculate CRC-8, use 0x07 polynomial.
+        这里的计算对 data 中的每个字节进行处理。
+        """
+        poly = 0x07
+        crc = 0x00
+        for byte in data:
+            crc ^= byte
+            for _ in range(8):
+                if crc & 0x80:
+                    crc = ((crc << 1) ^ poly) & 0xFF
+                else:
+                    crc = (crc << 1) & 0xFF
+        return crc
+
     def create_packet(self):
         """
-        Create packet according to the specified format:
-        Bits 0-15: Local Forward Velocity (float16)
-        Bits 16-31: Local Left Velocity (float16)
-        Bits 32-47: Angular Velocity (float16)
-        Bit 48: Kicker Bottom
-        Bit 49: Kicker Top
-        Bit 50: Dribbler
-        Bits 51-55: Robot ID (5 bits)
-        Bits 56-63: Spare (8 bits)
+        Create data packet to send to robot.
+
+        Bytes:
+          0-1:  Local Forward Velocity (float16)
+          2-3:  Local Left Velocity (float16)
+          4-5:  Angular Velocity (float16)
+          6:    Control bits:
+                    Bit 7: Kicker Bottom (KB)
+                    Bit 6: Kicker Top    (KT)
+                    Bit 5: Dribbler      (DB)
+                    Bits 0-4: Robot ID (5 bits)
+          7:    CRC 校验码（对前 7 个字节计算 CRC-8 得到）
         """
         # Convert velocities to bytes (float16)
         forward_bytes = np.float16(self.velocities["forward"]).view(np.uint16)
@@ -231,32 +250,29 @@ class RobotControlGUI:
         # Combine first 6 bytes of velocities
         packet = bytearray(
             [
-                forward_bytes >> 8,
+                (forward_bytes >> 8) & 0xFF,
                 forward_bytes & 0xFF,
-                left_bytes >> 8,
+                (left_bytes >> 8) & 0xFF,
                 left_bytes & 0xFF,
-                angular_bytes >> 8,
+                (angular_bytes >> 8) & 0xFF,
                 angular_bytes & 0xFF,
             ]
         )
 
         # Create control byte
         control_byte = 0
-        # Set individual bits for switches and robot ID
         if self.switches["dribbler"].get():
-            control_byte |= 0x20
+            control_byte |= 0x20  # Bit 5
         if self.switches["kicker_top"].get():
-            control_byte |= 0x40
+            control_byte |= 0x40  # Bit 6
+            self.switches["kicker_top"].set(False)
         if self.switches["kicker_bottom"].get():
-            control_byte |= 0x80
-
-        # Add robot ID (5 bits)
-        robot_id = self.robot_id.get() & 0x1F  # Ensure 5 bits
-        control_byte |= robot_id
-
-        # Add control byte and spare byte
+            control_byte |= 0x80  # Bit 7
+        robot_id = self.robot_id.get() & 0x0F  # 5 bits only
+        control_byte |= robot_id << 1
         packet.append(control_byte)
-        packet.append(0)  # Spare byte
+        crc = self.compute_crc(packet)
+        packet.append(crc)
 
         return packet
 
@@ -267,31 +283,26 @@ class RobotControlGUI:
                 continue
 
             try:
-                # Create and send packet
+                # 创建并发送数据包
                 packet = self.create_packet()
                 self.serial_port.write(packet)
 
-                # Optional: print packet for debugging
-                print(f"Sent Packet: {packet}")
+                # Optional: 打印数据包用于调试
+                print(f"Sent Packet: {list(packet)}")
             except Exception as e:
                 print(f"Serial send error: {e}")
 
             time.sleep(0.05)  # 20ms delay
 
     def receive_serial_data(self):
-        """Continuously read data from serial port."""
         while self.running:
             if not self.serial_port or not self.serial_port.is_open:
                 time.sleep(0.1)
                 continue
 
             try:
-                # Check if data is available
                 if self.serial_port.in_waiting > 0:
-                    # Read available data
                     data = self.serial_port.readline().decode("utf-8").strip()
-
-                    # Update GUI with received data
                     if data:
                         self.root.after(0, self.update_response_display, data)
             except Exception as e:
@@ -299,20 +310,20 @@ class RobotControlGUI:
                 time.sleep(0.1)
 
     def update_response_display(self, data):
-        """Thread-safe method to update response text widget."""
+        """线程安全地更新响应显示窗口。"""
         self.response_text.config(state="normal")
         self.response_text.insert(tk.END, data + "\n")
         self.response_text.see(tk.END)
         self.response_text.config(state="disabled")
 
     def cleanup(self):
-        """Cleanup method to close threads and serial connection."""
+        """退出前关闭线程和串口连接。"""
         self.running = False
 
         if self.serial_port and self.serial_port.is_open:
             self.serial_port.close()
 
-        # Wait for threads to finish
+        # 等待线程结束
         self.packet_thread.join(timeout=1)
         self.serial_receive_thread.join(timeout=1)
 

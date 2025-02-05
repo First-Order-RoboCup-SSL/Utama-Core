@@ -59,7 +59,7 @@ class RealRobotController(AbstractRobotController):
         Sends the robot commands to the appropriate team (yellow or blue).
         """
         # TODO: I will clean this up after quali
-        self.out_packet[self.n_robots * 8 - 2] += 1  # update last command
+        # self.out_packet[self.n_robots * 8 - 2] += 1  # update last command
         self._serial.write(self.out_packet)
         data_in = self._serial.read_all()
         # time.sleep(0.05)
@@ -124,46 +124,90 @@ class RealRobotController(AbstractRobotController):
             self._robots_info[i] = info
             data_in = data_in << 1  # shift to the next robot's data
 
+    def compute_crc(self, data: bytearray) -> int:
+        """
+        Calculate CRC-8, use 0x07 polynomial.
+        这里的计算对 data 中的每个字节进行处理。
+        """
+        poly = 0x07
+        crc = 0x00
+        for byte in data:
+            crc ^= byte
+            for _ in range(8):
+                if crc & 0x80:
+                    crc = ((crc << 1) ^ poly) & 0xFF
+                else:
+                    crc = (crc << 1) & 0xFF
+        return crc
+
     def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
         """
         Generates the command buffer to be sent to the robot.
         """
         assert robot_id < 6, "Invalid robot_id. Must be between 0 and 5."
 
-        out_bit_sizes = SERIAL_BIT_SIZES["out"]
-        local_forward_vel_buffer = (
-            f'{c_command.local_forward_vel:0{out_bit_sizes["local_forward_vel"]}b}'
-        )
-        local_left_vel_buffer = (
-            f'{c_command.local_left_vel:0{out_bit_sizes["local_left_vel"]}b}'
-        )
-        angular_vel_buffer = f'{c_command.angular_vel:0{out_bit_sizes["angular_vel"]}b}'
-        kick_buffer = f'{c_command.kick:0{out_bit_sizes["kicker_bottom"]}b}'
-        chip_buffer = f'{c_command.chip:0{out_bit_sizes["kicker_top"]}b}'
-        dribble_buffer = f'{c_command.dribble:0{out_bit_sizes["dribbler"]}b}'
-        robot_id_buffer = f'{robot_id:0{out_bit_sizes["robot_id"]}b}'
-        last_command_buffer = f'{0:0{out_bit_sizes["last_command"]}b}'  # last command is written only in send
-        spare_buffer = f'{0:0{out_bit_sizes["spare"]}b}'
-
-        command_buffer = "".join(
+        # Combine first 6 bytes of velocities
+        packet = bytearray(
             [
-                local_forward_vel_buffer,
-                local_left_vel_buffer,
-                angular_vel_buffer,
-                kick_buffer,
-                chip_buffer,
-                dribble_buffer,
-                robot_id_buffer,
-                last_command_buffer,
-                spare_buffer,
+                (c_command.local_forward_vel >> 8) & 0xFF,
+                c_command.local_forward_vel & 0xFF,
+                (c_command.local_left_vel >> 8) & 0xFF,
+                c_command.local_left_vel & 0xFF,
+                (c_command.angular_vel >> 8) & 0xFF,
+                c_command.angular_vel & 0xFF,
             ]
         )
 
-        assert len(command_buffer) == self._rbt_cmd_size * 8
+        # Create control byte
+        control_byte = 0
+        if c_command.dribble:
+            control_byte |= 0x20  # Bit 5
+        if c_command.chip:
+            control_byte |= 0x40  # Bit 6
+        if c_command.kick:
+            control_byte |= 0x80  # Bit 7
+        robot_id = robot_id & 0x0F  # 5 bits only
+        control_byte |= robot_id << 1
+        packet.append(control_byte)
+        crc = self.compute_crc(packet)
+        packet.append(crc)
 
-        return int(command_buffer, 2).to_bytes(
-            self._rbt_cmd_size, byteorder=ENDIAN, signed=False
-        )
+        return packet
+
+        # out_bit_sizes = SERIAL_BIT_SIZES["out"]
+        # local_forward_vel_buffer = (
+        #     f'{c_command.local_forward_vel:0{out_bit_sizes["local_forward_vel"]}b}'
+        # )
+        # local_left_vel_buffer = (
+        #     f'{c_command.local_left_vel:0{out_bit_sizes["local_left_vel"]}b}'
+        # )
+        # angular_vel_buffer = f'{c_command.angular_vel:0{out_bit_sizes["angular_vel"]}b}'
+        # kick_buffer = f'{c_command.kick:0{out_bit_sizes["kicker_bottom"]}b}'
+        # chip_buffer = f'{c_command.chip:0{out_bit_sizes["kicker_top"]}b}'
+        # dribble_buffer = f'{c_command.dribble:0{out_bit_sizes["dribbler"]}b}'
+        # robot_id_buffer = f'{robot_id:0{out_bit_sizes["robot_id"]}b}'
+        # last_command_buffer = f'{0:0{out_bit_sizes["last_command"]}b}'  # last command is written only in send
+
+        # command_buffer = "".join(
+        #     [
+        #         local_forward_vel_buffer,
+        #         local_left_vel_buffer,
+        #         angular_vel_buffer,
+        #         kick_buffer,
+        #         chip_buffer,
+        #         dribble_buffer,
+        #         robot_id_buffer,
+        #         last_command_buffer,
+        #     ]
+        # )
+
+        # assert len(command_buffer) == self._rbt_cmd_size * 8
+
+        # crc_buffer = self.compute_crc()
+
+        # return int(command_buffer, 2).to_bytes(
+        #     self._rbt_cmd_size, byteorder=ENDIAN, signed=False
+        # )
 
     def _convert_float_command(self, robot_id, command: RobotCommand) -> RobotCommand:
         """
@@ -239,6 +283,7 @@ class RealRobotController(AbstractRobotController):
         while time.time() - start_t < MAX_INITIALIZATION_TIME:
             if serial.in_waiting > 0:
                 line = serial.readline().decode("utf-8").rstrip()
+                print(line == AUTH_STR)
                 if line == AUTH_STR:
                     is_ready = True
                     break
