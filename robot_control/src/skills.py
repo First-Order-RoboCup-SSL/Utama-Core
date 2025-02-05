@@ -220,7 +220,7 @@ def align_defenders(
     attacker_position: Tuple[float, float],
     attacker_orientation: Optional[float],
     is_left: bool,
-    env,
+    env = None,
 ) -> Tuple[float, float]:
     """
     Calculates the next point on the defense area that the robots should go to
@@ -243,8 +243,9 @@ def align_defenders(
             predict_goal_y_location(attacker_position, attacker_orientation, is_left)
         )
 
-    env.draw_line([predicted_goal_position, attacker_position], width=1, color="green")
-    env.draw_line([predicted_goal_position, (dx, dy)], width=1, color="yellow")
+    if env:
+        env.draw_line([predicted_goal_position, attacker_position], width=1, color="green")
+        env.draw_line([predicted_goal_position, (dx, dy)], width=1, color="yellow")
 
     # Calculate the cross product relative to the predicted position of the goal
 

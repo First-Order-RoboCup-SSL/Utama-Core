@@ -126,7 +126,7 @@ def test_single_defender(
     )
     env.reset()
 
-    env.teleport_ball(2.25, -1)
+    env.teleport_ball(-2.25, -1)
 
     # Move the other defender out of the way
     not_defender_id = 2 if defender_id == 1 else 1

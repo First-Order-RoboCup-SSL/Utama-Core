@@ -4,6 +4,7 @@ import math
 import threading
 import queue
 import time
+from tkinter import Y
 from typing import Tuple
 
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
@@ -24,8 +25,8 @@ from entities.data.command import RobotCommand
 # Imports from other scripts or modules within the same project
 from robot_control.src.tests.utils import setup_pvp
 from motion_planning.src.pid.pid import get_rsim_pids
-from robot_control.src.skills import face_ball, go_to_point, go_to_ball
-from robot_control.src.intent import score_goal
+from robot_control.src.skills import face_ball, go_to_point, velocity_to_orientation, clamp_to_goal_height, predict_goal_y_location
+from robot_control.src.intent import score_goal, find_likely_enemy_shooter
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +39,53 @@ def ball_out_of_bounds(ball_x: float, ball_y: float) -> bool:
     """
     return abs(ball_x) > 4.5 or abs(ball_y) > 3
 
+def find_goal_position(
+    game: Game,
+    ) -> Tuple[float, float]:
+        
+    if game.my_team_is_yellow:
+        goal_center = -4.5, 0
+    else:
+        goal_center = 4.5, 0
+        
+    # Assume that is_yellow <-> not is_left here # TODO : FIX
+    _, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=game.my_team_is_yellow)
+    shooters_data = find_likely_enemy_shooter(enemy, balls)
+    
+    orientation = None
+    if not shooters_data:
+        target_tracking_coord = game.ball.x, game.ball.y
+        # TODO game.get_ball_velocity() can return (None, None)
+        if (
+            game.get_ball_velocity() is not None
+            and None not in game.get_ball_velocity()
+        ):
+            orientation = velocity_to_orientation(game.get_ball_velocity())
+    else:
+        # TODO (deploy more defenders, or find closest shooter?)
+        sd = shooters_data[0]
+        target_tracking_coord = sd.x, sd.y
+        orientation = sd.orientation
+        
+    if orientation is None:
+        # In case there is no ball velocity or attackers, use centre of goal
+        predicted_goal_position = goal_center
+    else:
+        predicted_goal_position = goal_center[0], clamp_to_goal_height(
+            predict_goal_y_location(target_tracking_coord, orientation, not game.my_team_is_yellow)
+        )
+    
+    return predicted_goal_position
+
 def improved_block_goal_and_attacker(
     robot,
     attacker,
     ball,
-    goal_pos,
+    game: Game,
     pid_oren,
     pid_trans,
     attacker_has_ball: bool,
-    block_ratio: float = 0.3,
+    block_ratio: float = 0.1,
     max_ball_follow_dist: float = 1.0,
 ) -> RobotCommand:
     """
@@ -68,7 +107,9 @@ def improved_block_goal_and_attacker(
     if attacker_has_ball:
         # ========== Prioritize blocking the shot line ==========
         ax, ay = attacker.x, attacker.y
-        gx, gy = goal_pos[0], goal_pos[1]
+        
+        gx, gy = find_goal_position(game)
+        
         agx, agy = (gx - ax), (gy - ay)
         dist_ag = math.hypot(agx, agy)
 
@@ -124,7 +165,7 @@ def dribble_to_target_decision_maker(
     game: Game,
     robot_id: int,
     grsim_controller: GRSimRobotController,
-    safe_distance: float = 0.2,
+    safe_distance: float = 0.1,
 ) -> Tuple[float, float]:
     """
     Determines the optimal (x, y) position for the robot to dribble to,
@@ -179,8 +220,8 @@ def dribble_to_target_decision_maker(
                 perpendicular_dy /= perpendicular_dist
 
             # Move away from the enemy while still progressing towards the goal
-            target_x = robot.x + perpendicular_dx * 100 + goal_dx * 0.5
-            target_y = robot.y + perpendicular_dy * 100 + goal_dy * 0.5
+            target_x = robot.x + perpendicular_dx * 100 + goal_dx * 0.4
+            target_y = robot.y + perpendicular_dy * 100 + goal_dy * 0.4
         else:
             # Move directly towards the goal
             # Move perpendicular to the enemy-robot line to avoid the enemy
@@ -194,8 +235,8 @@ def dribble_to_target_decision_maker(
                 perpendicular_dy /= perpendicular_dist
 
             # Move away from the enemy while still progressing towards the goal
-            target_x = robot.x + perpendicular_dx * safe_distance + goal_dx * 0.3
-            target_y = robot.y + perpendicular_dy * safe_distance + goal_dy * 0.3
+            target_x = robot.x + perpendicular_dx * safe_distance + goal_dx * 0.25
+            target_y = robot.y + perpendicular_dy * safe_distance + goal_dy * 0.25
     
     if goal_dist < 2:
         return None
@@ -309,7 +350,7 @@ def one_on_one(game: Game, stop_event: threading.Event):
                     robot.robot_data,
                     game.enemy_robots[0].robot_data,
                     ball,
-                    goal_pos,
+                    game,
                     pid_oren,
                     pid_trans,
                     attacker_has_ball=True,
@@ -332,7 +373,7 @@ def one_on_one(game: Game, stop_event: threading.Event):
                     robot.robot_data,
                     game.enemy_robots[0].robot_data,
                     ball,
-                    goal_pos,
+                    game,
                     pid_oren,
                     pid_trans,
                     attacker_has_ball=True,
@@ -471,6 +512,7 @@ def pvp_manager(headless: bool):
     except KeyboardInterrupt:
         print("Main thread interrupted. Stopping worker threads...")
         stop_event.set()  # Signal threads to stop
+        TOTAL_ITERATIONS = -1
 
     # Wait for threads to finish
     yellow_thread.join()
@@ -482,6 +524,8 @@ if __name__ == "__main__":
     logging.disable(logging.WARNING)
     try:
         for i in range(TOTAL_ITERATIONS):
+            if TOTAL_ITERATIONS == -1:
+                break
             pvp_manager(headless=False)
             time.sleep(0.1)
     except KeyboardInterrupt:
