@@ -1,6 +1,11 @@
 from calendar import c
 from motion_planning.src.pid.pid import get_real_pids
-from robot_control.src.skills import go_to_point, go_to_ball, turn_on_spot
+from robot_control.src.skills import (
+    go_to_point,
+    go_to_ball,
+    turn_on_spot,
+    empty_command,
+)
 from team_controller.src.controllers import RealRobotController
 from entities.game import Game
 from entities.data.command import RobotCommand
@@ -202,16 +207,38 @@ def test_command(
         time.sleep(0.017)
 
 
+def test_kicker(robot_controller: RealRobotController):
+    cmd0 = RobotCommand(
+        local_forward_vel=0,
+        local_left_vel=0,
+        angular_vel=0,
+        kick=1,
+        chip=0,
+        dribble=0,
+    )
+    for _ in range(15):
+        robot_controller.add_robot_commands(empty_command(dribbler_on=True), 1)
+        robot_controller.send_robot_commands()
+        time.sleep(0.05)
+    robot_controller.add_robot_commands(cmd0, 1)
+    robot_controller.send_robot_commands()
+    time.sleep(0.05)
+    robot_controller.add_robot_commands(empty_command(), 1)
+    robot_controller.send_robot_commands()
+    time.sleep(0.05)
+
+
 def main():
     stop_buffer_off = [0, 0, 0, 0, 0, 0, 0, 0]
 
     game = Game()
     robot_controller = RealRobotController(
-        is_team_yellow=True, game_obj=game, n_robots=1
+        is_team_yellow=True, game_obj=game, n_robots=2
     )
     try:
         test_command(robot_controller, 1, 100, False, True)
         # get_ball_test_with_vision(game, robot_controller)
+        # test_kicker(robot_controller)
     except KeyboardInterrupt:
         # try to stop the robot 15 times
         print("Stopping robot.")

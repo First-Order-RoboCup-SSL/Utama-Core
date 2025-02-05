@@ -60,6 +60,7 @@ class RealRobotController(AbstractRobotController):
         """
         # TODO: I will clean this up after quali
         # self.out_packet[self.n_robots * 8 - 2] += 1  # update last command
+        # print(list(self.out_packet))
         self._serial.write(self.out_packet)
         data_in = self._serial.read_all()
         # time.sleep(0.05)
@@ -274,7 +275,8 @@ class RealRobotController(AbstractRobotController):
         return float_val.view(np.uint16)
 
     def _empty_command(self) -> bytearray:
-        return bytearray(self._rbt_cmd_size * self._n_robots)
+        empty_buffer = bytearray([0] * 6 + [30] + [0])
+        return empty_buffer * self._n_robots
 
     def _init_serial(self) -> Serial:
         serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
@@ -283,10 +285,11 @@ class RealRobotController(AbstractRobotController):
         while time.time() - start_t < MAX_INITIALIZATION_TIME:
             if serial.in_waiting > 0:
                 line = serial.readline().decode("utf-8").rstrip()
-                print(line == AUTH_STR)
                 if line == AUTH_STR:
                     is_ready = True
                     break
+                else:
+                    print(line)
 
         if is_ready:
             print("Serial port opened!")
