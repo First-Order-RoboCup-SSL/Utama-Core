@@ -103,6 +103,7 @@ class GRSimRobotController(AbstractRobotController):
         robot.kick_speed = KICK_SPD if (command.kick or command.chip) > 0 else 0
         robot.kick_angle = CHIP_ANGLE if command.chip > 0 else 0
         robot.dribbler_speed = DRIBBLE_SPD if command.dribble > 0 else 0
+        # print(robot)
 
         local_vel = robot.move_command.local_velocity
         local_vel.forward = command.local_forward_vel
