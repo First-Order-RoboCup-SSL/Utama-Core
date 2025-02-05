@@ -25,7 +25,7 @@ def ball_position(t, x0, v0, a):
 
 
 def interception_chance(
-    env, passer, receiver, opponent, robot_speed, ball_v0_magnitude, ball_a_magnitude
+    passer, receiver, opponent, robot_speed, ball_v0_magnitude, ball_a_magnitude
 ):
 
     # assert type(passer) != tuple
@@ -57,8 +57,6 @@ def interception_chance(
         else float("inf")
     )
 
-    env.draw_point(closest_point[0], closest_point[1], "YELLOW", width=4)
-
     opp_dist_to_pass = np.linalg.norm(closest_point - opp_vector) - ROBOT_RADIUS
     if opp_dist_to_pass > 0:
         opp_to_pass_time = (
@@ -67,23 +65,10 @@ def interception_chance(
     else:
         opp_to_pass_time = 0
 
-    print(
-        "Opponent: ",
-        opponent.x,
-        opponent.y,
-        "Ball time:",
-        ball_time,
-        "Opponent time:",
-        opp_to_pass_time,
-        opp_dist_to_pass,
-    )
-
     if opp_to_pass_time <= ball_time:
         ball_pos = ball_position(opp_to_pass_time, passer, ball_v0, ball_a)
-        # env.draw_point(ball_pos[0], ball_pos[1], "YELLOW", width=4)
         opp_to_ball_dist = np.linalg.norm(ball_pos - closest_point)
         chance = np.log(1 + opp_to_ball_dist)
-        print("hiya we have interception possibility ", chance)
     else:
         chance = 0
         return 0, None, None
@@ -92,7 +77,6 @@ def interception_chance(
 
 
 def find_pass_quality(
-    env,
     passer,
     receiver,
     enemy_positions,
@@ -109,7 +93,6 @@ def find_pass_quality(
     total_interception_chance = 0
     for enemy_pos, enemy_speed in zip(enemy_positions, enemy_speeds):
         interception, _, _ = interception_chance(
-            env,
             passer,
             receiver,
             enemy_pos,
@@ -135,7 +118,6 @@ def find_pass_quality(
     goal_chance_weight = 0.5
     distance_to_goal_weight = 0.2
 
-    print(total_interception_chance)
     if distance_to_passer >= 0.7:
         pass_quality = (
             1
@@ -150,7 +132,6 @@ def find_pass_quality(
 
 
 def find_best_pass(
-    env,
     passer,
     friendly_robots,
     enemy_positions,
@@ -168,7 +149,6 @@ def find_best_pass(
 
     for receiver in friendly_robots:
         pass_quality = find_pass_quality(
-            env,
             passer,
             receiver,
             enemy_positions,
@@ -189,7 +169,6 @@ def find_best_pass(
 
 
 def find_best_receiver_position(
-    env,
     receiver_position,
     passer,
     enemy_positions,
@@ -236,7 +215,6 @@ def find_best_receiver_position(
 
     for candidate in sampled_positions:
         pass_quality = find_pass_quality(
-            env,
             passer,
             candidate,
             enemy_positions,

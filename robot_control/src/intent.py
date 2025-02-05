@@ -14,6 +14,7 @@ from entities.data.command import RobotCommand
 from entities.data.vision import RobotData, BallData
 from robot_control.src.skills import (
     align_defenders,
+    align_defenders_grsim,
     face_ball,
     find_likely_enemy_shooter,
     get_goal_centre,
@@ -60,14 +61,17 @@ class PassBall:
         self.my_team_is_yellow = game.my_team_is_yellow
 
         self.angle_tolerance = 0.01
-        self.sq_dist_tolerance = 0.01
+        self.dist_tolerance = 0.05
         self.ball_in_flight = False
+        self.ball_traj_points = []
         self.ball_launch_pos = None
 
     def enact(self, passer_has_ball: bool) -> Tuple[RobotCommand, RobotCommand]:
         """
         return the command for passer and receiver in that order.
         """
+
+        # TODO: need to ensure this func works when ball_data or robot_pos is None
         passer_ready = False
         receiver_ready = False
 
@@ -118,12 +122,14 @@ class PassBall:
         receiver_oren = receiver_data.orientation
 
         # if ball has already been kicked and heading towards receiver
+        print(self.ball_in_flight)
         if self.ball_in_flight:
-
+            print("ball in fligggghhttttt")
             # TODO: add line filtering to calculate the adjusted position
-
+            if ball_data is not None:
+                self.ball_traj_points.append((ball_data.x, ball_data.y))
             adjusted_pos = calculate_adjusted_receiver_pos(
-                self.ball_launch_pos, receiver_data, ball_data
+                receiver_data, self.ball_traj_points
             )  # we are assuming the adjusted position should be extremely close
             catch_orientation = np.arctan2(
                 ball_data.y - adjusted_pos[1], ball_data.x - adjusted_pos[0]
@@ -144,7 +150,7 @@ class PassBall:
             catch_orientation = normalise_heading(shot_orientation + np.pi)
             if (
                 squared_distance((receiver_data.x, receiver_data.y), self.target_coords)
-                < self.sq_dist_tolerance
+                < self.dist_tolerance
                 and abs(
                     receiver_oren - catch_orientation,
                 )
@@ -165,8 +171,10 @@ class PassBall:
                 )
 
         if passer_ready and receiver_ready:
+            print("imma kick the ball ... to pass it")
             passer_cmd = kick_ball()
-            self.ball_launch_pos = (ball_data.x, ball_data.y)
+            if ball_data is not None:
+                self.ball_traj_points.append((ball_data.x, ball_data.y))
             self.ball_in_flight = True
 
         return passer_cmd, receiver_cmd
@@ -576,5 +584,60 @@ def defend(
         width=5,
         color="RED" if tracking_ball else "PINK",
     )
+
+    return cmd
+
+
+def defend_grsim(
+    pid_oren: PID,
+    pid_2d: TwoDPID,
+    game: Game,
+    is_yellow: bool,
+    defender_id: int,
+) -> RobotCommand:
+    """
+    Same as defend but no visualizations and no env input
+    """
+    # Assume that is_yellow <-> not is_left here # TODO : FIX
+    friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
+    shooters_data = find_likely_enemy_shooter(enemy, balls)
+    orientation = None
+    tracking_ball = False
+
+    # if game.in_box(balls[0].x, balls[0].y):
+    #     print("AAAAAAAAAAAAAAAAAAAAAA")
+    #     # return None
+
+    if not shooters_data:
+        target_tracking_coord = balls[0].x, balls[0].y
+        # TODO game.get_ball_velocity() can return (None, None)
+        if (
+            game.get_ball_velocity() is not None
+            and None not in game.get_ball_velocity()
+        ):
+            orientation = velocity_to_orientation(game.get_ball_velocity())
+            tracking_ball = True
+    else:
+        # TODO (deploy more defenders, or find closest shooter?)
+        sd = shooters_data[0]
+        target_tracking_coord = sd.x, sd.y
+        orientation = sd.orientation
+
+    real_def_pos = friendly[defender_id].x, friendly[defender_id].y
+    current_def_parametric = to_defense_parametric(real_def_pos, is_left=not is_yellow)
+    target = align_defenders_grsim(
+        current_def_parametric, target_tracking_coord, orientation, not is_yellow
+    )
+    cmd = go_to_point(
+        pid_oren,
+        pid_2d,
+        friendly[defender_id],
+        defender_id,
+        target,
+        face_ball(real_def_pos, (balls[0].x, balls[0].y)),
+        dribbling=True,
+    )
+
+    gp = get_goal_centre(is_left=not is_yellow)
 
     return cmd

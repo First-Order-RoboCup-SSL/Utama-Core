@@ -287,6 +287,58 @@ def align_defenders(
         return calculate_defense_area(defender_position, is_left)
 
 
+def align_defenders_grsim(
+    defender_position: float,
+    attacker_position: Tuple[float, float],
+    attacker_orientation: Optional[float],
+    is_left: bool,
+) -> Tuple[float, float]:
+    """
+    Same as align_defenders but for grsim. No visualizations and no env input
+    """
+
+    NO_MOVE_THRES = 1
+
+    # Start by getting the current position of the defenders
+    dx, dy = calculate_defense_area(defender_position, is_left)
+
+    logger.debug(f"DEFENDER {dx} {dy}")
+    goal_centre = get_goal_centre(is_left)
+
+    if attacker_orientation is None:
+        # In case there is no ball velocity or attackers, use centre of goal
+        predicted_goal_position = goal_centre
+    else:
+        predicted_goal_position = goal_centre[0], clamp_to_goal_height(
+            predict_goal_y_location(attacker_position, attacker_orientation, is_left)
+        )
+
+    # Calculate the cross product relative to the predicted position of the goal
+
+    poly = []
+    for t in range(round(1000 * pi / 2), round(1000 * 3 * pi / 2) + 1):
+        poly.append(calculate_defense_area(clamp_to_parametric(t / 1000), is_left))
+
+    goal_to_defender = relative_to((dx, dy), predicted_goal_position)
+    goal_to_attacker = relative_to(attacker_position, predicted_goal_position)
+
+    side = ccw(goal_to_defender, goal_to_attacker)
+    angle = ang_between(goal_to_defender, goal_to_attacker)
+
+    if is_left:
+        side *= -1
+
+    if degrees(angle) > NO_MOVE_THRES:
+        # Move to the correct side
+        next_t = step_curve(defender_position, side)
+        logger.debug(
+            f"RAW NEXT {calculate_defense_area(clamp_to_parametric(next_t), is_left)} {side} {angle}"
+        )
+        return calculate_defense_area(next_t, is_left)
+    else:
+        return calculate_defense_area(defender_position, is_left)
+
+
 def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
     """
     Given a point p on the defenders' parametric curve (as defined by calculate_defense_area), returns the parameter value t

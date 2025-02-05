@@ -129,6 +129,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             ),
             0,
         )
+        """
         sim_robot_controller_defender.add_robot_commands(
             man_mark(
                 not attacker_is_yellow,
@@ -162,6 +163,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             ),
             4,
         )
+        """
 
         sim_robot_controller_defender.send_robot_commands()
 
@@ -187,6 +189,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             enemy_velocities = game.get_robots_velocity(attacker_is_yellow) or [
                 (0.0, 0.0)
             ] * len(enemy_robots)
+            enemy_speeds = np.linalg.norm(enemy_velocities, axis=1)
 
             # TODO: Not sure if this is sufficient for both blue and yellow scoring
             # It won't be because note that in real life the blue team is not necessarily
@@ -282,7 +285,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                             potential_passer_id
                         ],  # PointOnField(ball_pos[0], ball_pos[1]),
                         enemy_robots,
-                        enemy_velocities,
+                        enemy_speeds,
                         BALL_V0_MAGNITUDE,
                         BALL_A_MAGNITUDE,
                         goal_x,
@@ -327,7 +330,6 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                 goal_y2,
                 attacker_is_yellow,
             )
-            print("SHOOOOOOT qualssss", shot_quality, SHOT_QUALITY_THRESHOLD)
             if shot_quality > SHOT_QUALITY_THRESHOLD:
                 print("shooting with chance", shot_quality, SHOT_QUALITY_THRESHOLD)
                 commands[ball_possessor_id] = score_goal(
@@ -362,7 +364,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                     friendly_robots[ball_possessor_id],
                     friendly_robots[rid],
                     enemy_robots,
-                    enemy_velocities,
+                    enemy_speeds,
                     BALL_V0_MAGNITUDE,
                     BALL_A_MAGNITUDE,
                     goal_x,
@@ -373,12 +375,15 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                 if pq > best_pass_quality:
                     best_pass_quality = pq
                     best_receiver_id = rid
-            print("PASS QUALSSS", best_pass_quality, PASS_QUALITY_THRESHOLD)
             if (
                 best_receiver_id is not None
                 and best_pass_quality > PASS_QUALITY_THRESHOLD
             ):
-                print("trying to execute a pass")
+                print(
+                    "trying to execute a pass with quality ",
+                    best_pass_quality,
+                    PASS_QUALITY_THRESHOLD,
+                )
                 trying_to_pass = True
                 pass_task = PassBall(
                     pid_oren_attacker,
@@ -406,7 +411,6 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                 # If a pass is happening, don't override the receiver's movement
                 if trying_to_pass:
                     continue  # Let PassBall handle the receiver
-                enemy_speeds = np.linalg.norm(enemy_velocities, axis=1)
                 target_pos, sampled_positions, _ = find_best_receiver_position(
                     friendly_robots[rid],
                     friendly_robots[ball_possessor_id],
@@ -439,7 +443,6 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                         env.draw_point(sample.x, sample.y, "YELLOW", width=4)
                     else:
                         env.draw_point(sample.x, sample.y, width=2)
-
     assert goal_scored
 
 

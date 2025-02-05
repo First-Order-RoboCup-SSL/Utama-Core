@@ -1,32 +1,50 @@
-import time
-import numpy as np
 import logging
+import random
+import math
+import numpy as np
+import threading
+import queue
+import time
+from typing import Tuple
 
-from typing import Tuple, List
-
-from motion_planning.src.pid.pid import get_rsim_pids
-from robot_control.src.skills import (
-    go_to_ball,
-    go_to_point,
-    goalkeep,
-    empty_command,
-    man_mark,
-)
-from robot_control.src.tests.utils import setup_pvp
-from robot_control.src.utils.pass_quality_utils import (
-    find_best_receiver_position,
-    find_pass_quality,
-)
-from robot_control.src.utils.shooting_utils import find_shot_quality
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from robot_control.src.intent import PassBall, defend, score_goal
-from global_utils.math_utils import squared_distance
+from team_controller.src.controllers.sim.grsim_controller import GRSimController
+from team_controller.src.controllers.sim.grsim_robot_controller import (
+    GRSimRobotController,
+)
+from team_controller.src.config.settings import TIMESTEP
+from motion_planning.src.pid.pid import get_grsim_pids
+from team_controller.src.data import VisionDataReceiver
+from team_controller.src.data.message_enum import MessageType
 
+# from robot_control.src.high_level_skills import DribbleToTarget
+from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
+from entities.game import Game
+from entities.data.command import RobotCommand
+
+# Imports from other scripts or modules within the same project
+from robot_control.src.tests.utils import setup_pvp
+from motion_planning.src.pid.pid import get_rsim_pids
+from robot_control.src.skills import (
+    face_ball,
+    go_to_point,
+    go_to_ball,
+    empty_command,
+    goalkeep,
+)
+from robot_control.src.intent import score_goal, PassBall, defend_grsim
+from global_utils.math_utils import squared_distance
+from robot_control.src.utils.pass_quality_utils import (
+    find_pass_quality,
+    find_best_receiver_position,
+)
+from robot_control.src.utils.shooting_utils import find_shot_quality
 
 logger = logging.getLogger(__name__)
 
-MAX_TIME = 20  # in seconds
+TOTAL_ITERATIONS = 1
+MAX_GAME_TIME = 500
 N_ROBOTS = 7
 DEFENDING_ROBOTS = 5
 ATTACKING_ROBOTS = 2
@@ -36,6 +54,13 @@ SHOT_QUALITY_THRESHOLD = 0.5
 
 BALL_V0_MAGNITUDE = 3
 BALL_A_MAGNITUDE = -0.3
+
+
+def ball_out_of_bounds(ball_x: float, ball_y: float) -> bool:
+    """
+    Check if the ball is out of bounds.
+    """
+    return abs(ball_x) > 4.5 or abs(ball_y) > 3
 
 
 def intercept_ball(
@@ -67,114 +92,45 @@ def intercept_ball(
     return intercept_pos
 
 
-def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: bool):
-    game = Game()
+def attacker_strategy(game: Game, stop_event: threading.Event):
+    """
+    Worker function for the attacking strategy.
+    """
+    sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
+    attacker_is_yellow = game.my_team_is_yellow
+    message_queue = queue.SimpleQueue()
+    vision_receiver = VisionDataReceiver(message_queue)
+    vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
+    vision_thread.daemon = True
+    vision_thread.start()
 
-    N_ROBOTS_ATTACK = 2
-    N_ROBOTS_DEFEND = 5
+    # Initialize PID controllers
+    pid_oren, pid_trans = get_grsim_pids(ATTACKING_ROBOTS)
 
-    N_ROBOTS_YELLOW = N_ROBOTS_ATTACK if attacker_is_yellow else N_ROBOTS_DEFEND
-    N_ROBOTS_BLUE = N_ROBOTS_DEFEND if attacker_is_yellow else N_ROBOTS_ATTACK
-
-    env = SSLStandardEnv(
-        n_robots_blue=N_ROBOTS_BLUE,
-        n_robots_yellow=N_ROBOTS_YELLOW,
-        render_mode="ansi" if headless else "human",
-    )
-    env.reset()
-
-    env.teleport_ball(1, 1)
-
-    sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
-        env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW
-    )
-
-    if attacker_is_yellow:
-        sim_robot_controller_attacker = sim_robot_controller_yellow
-        sim_robot_controller_defender = sim_robot_controller_blue
+    if game.my_team_is_yellow:
+        goal_pos = (4.5, 0)  # Yellow team attacks the blue goal
     else:
-        sim_robot_controller_attacker = sim_robot_controller_blue
-        sim_robot_controller_defender = sim_robot_controller_yellow
+        goal_pos = (-4.5, 0)  # Blue team attacks the yellow goal
 
-    pid_oren_attacker, pid_2d_attacker = get_rsim_pids(N_ROBOTS_ATTACK)
-    pid_oren_defender, pid_2d_defender = get_rsim_pids(N_ROBOTS_DEFEND)
-
-    player1_id = friendly_robot_ids[0]  # Start with robot 0
-    player2_id = friendly_robot_ids[1]  # Start with robot 1
+    goal_scored = False
+    message = None
 
     pass_task = None
     goal_scored = False
 
-    for iter in range(2000):
-        if iter % 100 == 0:
-            print(iter)
+    while not stop_event.is_set():
+        # Process messages from the queue
+        if not message_queue.empty():
+            (message_type, message) = message_queue.get()
+            if message_type == MessageType.VISION:
+                game.add_new_state(message)
+            elif message_type == MessageType.REF:
+                pass
 
-        sim_robot_controller_defender.add_robot_commands(
-            defend(
-                pid_oren_defender,
-                pid_2d_defender,
-                game,
-                not attacker_is_yellow,
-                1,
-                env,
-            ),
-            1,
-        )
-        """
-        sim_robot_controller_defender.add_robot_commands(
-            defend(
-                pid_oren_defender, pid_2d_defender, game, not attacker_is_yellow, 4, env
-            ),
-            4,
-        )
-        """
+        if goal_scored:
+            break
 
-        sim_robot_controller_defender.add_robot_commands(
-            goalkeep(
-                attacker_is_yellow,
-                game,
-                0,
-                pid_oren_defender,
-                pid_2d_defender,
-                not attacker_is_yellow,
-                sim_robot_controller_defender.robot_has_ball(0),
-            ),
-            0,
-        )
-
-        """
-        sim_robot_controller_defender.add_robot_commands(
-            man_mark(
-                not attacker_is_yellow,
-                game,
-                2,
-                0,
-                pid_oren_defender,
-                pid_2d_defender,
-            ),
-            2,
-        )
-    
-        sim_robot_controller_defender.add_robot_commands(
-            man_mark(
-                not attacker_is_yellow,
-                game,
-                3,
-                0,
-                pid_oren_defender,
-                pid_2d_defender,
-            ),
-            3,
-        )
-        """
-
-        sim_robot_controller_defender.send_robot_commands()
-
-        if iter > 10:  # give them chance to spawn in the correct place
-            goal_scored = goal_scored or game.is_ball_in_goal(not attacker_is_yellow)
-            if game.is_ball_in_goal(not attacker_is_yellow):
-                break
-
+        if message is not None:
             commands = {}
             pass_task = None
             trying_to_pass = False
@@ -189,9 +145,19 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
 
             friendly_robots, enemy_robots, balls = latest_frame
 
+            friendly_robot_ids = [0, 1]
+
+            # TODO
+            player1_id = friendly_robot_ids[0]  # Start with robot 0
+            player2_id = friendly_robot_ids[1]  # Start with robot 1
+
             enemy_velocities = game.get_robots_velocity(attacker_is_yellow) or [
                 (0.0, 0.0)
             ] * len(enemy_robots)
+
+            if enemy_velocities is None or all(v is None for v in enemy_velocities):
+                enemy_velocities = [(0.0, 0.0)] * len(enemy_robots)
+
             enemy_speeds = np.linalg.norm(enemy_velocities, axis=1)
 
             # TODO: Not sure if this is sufficient for both blue and yellow scoring
@@ -205,8 +171,8 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             ball_data = balls[0]
             ball_vel = game.get_ball_velocity()
 
-            player1_has_ball = sim_robot_controller_attacker.robot_has_ball(player1_id)
-            player2_has_ball = sim_robot_controller_attacker.robot_has_ball(player2_id)
+            player1_has_ball = sim_robot_controller.robot_has_ball(player1_id)
+            player2_has_ball = sim_robot_controller.robot_has_ball(player2_id)
             ball_possessor_id = None
 
             if player1_has_ball:
@@ -255,8 +221,8 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                     )
                     commands[best_interceptor] = (
                         go_to_point(
-                            pid_oren_attacker,
-                            pid_2d_attacker,
+                            pid_oren,
+                            pid_trans,
                             friendly_robots[best_interceptor],
                             best_interceptor,
                             intercept_pos,
@@ -292,8 +258,8 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                     )
 
                     commands[rid] = go_to_ball(
-                        pid_oren_attacker,
-                        pid_2d_attacker,
+                        pid_oren,
+                        pid_trans,
                         friendly_robots[rid],
                         rid,
                         target_pos,
@@ -302,16 +268,10 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
 
                 # return commands, sampled_positions, target_pos
 
-                sim_robot_controller_attacker.add_robot_commands(commands)
+                sim_robot_controller.add_robot_commands(commands)
                 print("intercepting")
-                sim_robot_controller_attacker.send_robot_commands()
+                sim_robot_controller.send_robot_commands()
 
-                if sampled_positions != None:
-                    for sample in sampled_positions:
-                        if sample == target_pos:
-                            env.draw_point(sample.x, sample.y, "YELLOW", width=4)
-                        else:
-                            env.draw_point(sample.x, sample.y, width=2)
                 continue
 
             ### CASE 2: Someone has the ball ###
@@ -333,21 +293,15 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                     game,
                     True,
                     ball_possessor_id,
-                    pid_oren_attacker,
-                    pid_2d_attacker,
+                    pid_oren,
+                    pid_trans,
                     attacker_is_yellow,
                     attacker_is_yellow,
                 )
                 # return commands, None, None  # Just shoot, no need to pass
-                sim_robot_controller_attacker.add_robot_commands(commands)
-                sim_robot_controller_attacker.send_robot_commands()
+                sim_robot_controller.add_robot_commands(commands)
+                sim_robot_controller.send_robot_commands()
 
-                if sampled_positions != None:
-                    for sample in sampled_positions:
-                        if sample == target_pos:
-                            env.draw_point(sample.x, sample.y, "BLUE", width=2)
-                        else:
-                            env.draw_point(sample.x, sample.y, width=2)
                 continue
 
             # Check for best pass
@@ -375,16 +329,17 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             if (
                 best_receiver_id is not None
                 and best_pass_quality > PASS_QUALITY_THRESHOLD
-            ):
+            ) or trying_to_pass:
                 print(
                     "trying to execute a pass with quality ",
                     best_pass_quality,
                     PASS_QUALITY_THRESHOLD,
                 )
                 trying_to_pass = True
+
                 pass_task = PassBall(
-                    pid_oren_attacker,
-                    pid_2d_attacker,
+                    pid_oren,
+                    pid_trans,
                     game,
                     ball_possessor_id,
                     best_receiver_id,
@@ -393,9 +348,15 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                         friendly_robots[best_receiver_id].y,
                     ),
                 )
+
                 pass_commands = pass_task.enact(passer_has_ball=True)
                 commands[ball_possessor_id] = pass_commands[0]
                 commands[best_receiver_id] = pass_commands[1]
+                # sim_robot_controller.add_robot_commands(commands)
+                # sim_robot_controller.send_robot_commands()
+                if sim_robot_controller.robot_has_ball(best_receiver_id):
+                    print("pass finished")
+                    trying_to_pass = False
             else:
                 commands[ball_possessor_id] = empty_command(
                     dribbler_on=True
@@ -422,8 +383,8 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                 )
 
                 commands[rid] = go_to_point(
-                    pid_oren_attacker,
-                    pid_2d_attacker,
+                    pid_oren,
+                    pid_trans,
                     friendly_robots[rid],
                     rid,
                     (target_pos.x, target_pos.y),
@@ -431,20 +392,199 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                 )
 
             # sim_robot_controller_attacker.send_robot_commands()
-            sim_robot_controller_attacker.add_robot_commands(commands)
-            sim_robot_controller_attacker.send_robot_commands()
+            sim_robot_controller.add_robot_commands(commands)
+            sim_robot_controller.send_robot_commands()
 
-            if sampled_positions != None:
-                for sample in sampled_positions:
-                    if sample == target_pos:
-                        env.draw_point(sample.x, sample.y, "YELLOW", width=4)
-                    else:
-                        env.draw_point(sample.x, sample.y, width=2)
-    assert goal_scored
+            # Check if a goal was scored
+            if (
+                game.is_ball_in_goal(our_side=True)
+                or game.is_ball_in_goal(our_side=False)
+                or ball_out_of_bounds(ball_data.x, ball_data.y)
+            ):
+                goal_scored = True
+                break
+
+
+def defender_strategy(game: Game, stop_event: threading.Event):
+    sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
+    attacker_is_yellow = game.my_team_is_yellow
+    message_queue = queue.SimpleQueue()
+    vision_receiver = VisionDataReceiver(message_queue)
+    vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
+    vision_thread.daemon = True
+    vision_thread.start()
+
+    # Initialize PID controllers
+    pid_oren, pid_trans = get_grsim_pids(DEFENDING_ROBOTS)
+
+    if game.my_team_is_yellow:
+        goal_pos = (4.5, 0)
+    else:
+        goal_pos = (-4.5, 0)
+
+    goal_scored = False
+
+    message = None
+    while not stop_event.is_set():
+        # Process messages from the queue
+        if not message_queue.empty():
+            (message_type, message) = message_queue.get()
+            if message_type == MessageType.VISION:
+                game.add_new_state(message)
+
+            elif message_type == MessageType.REF:
+                pass
+        if goal_scored:
+            break
+
+        if message is not None:
+            _, _, balls = game.get_my_latest_frame(attacker_is_yellow)
+            ball_data = balls[0]
+            """
+            sim_robot_controller.add_robot_commands(
+                defend_grsim(
+                    pid_oren,
+                    pid_trans,
+                    game,
+                    not attacker_is_yellow,
+                    1,
+                ),
+                1,
+            )
+
+            sim_robot_controller.add_robot_commands(
+                defend_grsim(
+                    pid_oren, pid_trans, game, not attacker_is_yellow, 4,
+                ),
+                4,
+            )
+            """
+            sim_robot_controller.add_robot_commands(
+                goalkeep(
+                    attacker_is_yellow,
+                    game,
+                    0,
+                    pid_oren,
+                    pid_trans,
+                    not attacker_is_yellow,
+                    sim_robot_controller.robot_has_ball(0),
+                ),
+                0,
+            )
+
+            """
+            sim_robot_controller.add_robot_commands(
+                man_mark(
+                    not attacker_is_yellow,
+                    game,
+                    2,
+                    0,
+                    pid_oren,
+                    pid_trans,
+                ),
+                2,
+            )
+    
+            sim_robot_controller.add_robot_commands(
+                man_mark(
+                    not attacker_is_yellow,
+                    game,
+                    3,
+                    0,
+                    pid_oren,
+                    pid_trans,
+                ),
+                3,
+            )
+            """
+
+            sim_robot_controller.send_robot_commands()
+
+            # Check if a goal was scored
+            if (
+                game.is_ball_in_goal(our_side=True)
+                or game.is_ball_in_goal(our_side=False)
+                or ball_out_of_bounds(ball_data.x, ball_data.y)
+            ):
+                goal_scored = True
+                break
+
+
+def pvp_manager(headless: bool):
+    """
+    A 1v1 scenario with dynamic switching of attacker/defender roles.
+    """
+    # Initialize Game and environment
+    env = GRSimController()
+
+    env.reset()
+
+    for i in range(ATTACKING_ROBOTS, 6):
+        # yellow team
+        env.set_robot_presence(i, True, False)
+    for i in range(DEFENDING_ROBOTS, 6):
+        # blue team
+        env.set_robot_presence(i, False, False)
+
+    # Random ball placement
+    ball_x = random.uniform(-2.5, 2.5)
+    ball_y = random.uniform(-1.5, 1.5)
+    # env.teleport_ball(ball_x, ball_y)
+    env.teleport_ball(1, 1)
+
+    # Initialize Game objects for each team
+    yellow_game = Game(my_team_is_yellow=True)
+    blue_game = Game(my_team_is_yellow=False)
+
+    # yellow_robs = yellow_game.get_my_latest_frame(True)
+    # print(yellow_robs)
+
+    # Create a stop event to signal threads to stop
+    stop_event = threading.Event()
+
+    # Create threads for each team
+    yellow_thread = threading.Thread(
+        target=attacker_strategy,
+        args=(yellow_game, stop_event),
+    )
+    blue_thread = threading.Thread(
+        target=defender_strategy,
+        args=(blue_game, stop_event),
+    )
+
+    yellow_thread.daemon = True
+    blue_thread.daemon = True
+
+    yellow_thread.start()
+    blue_thread.start()
+
+    time_elapsed = 0
+
+    try:
+        # Wait for threads to finish (they will run until a goal is scored or manually stopped)
+        while yellow_thread.is_alive() or blue_thread.is_alive():
+            time_elapsed += 1
+            time.sleep(0.1)
+            if time_elapsed > MAX_GAME_TIME:
+                print("Game timed out.")
+                stop_event.set()
+                break
+    except KeyboardInterrupt:
+        print("Main thread interrupted. Stopping worker threads...")
+        stop_event.set()  # Signal threads to stop
+
+    # Wait for threads to finish
+    yellow_thread.join()
+    blue_thread.join()
+
+    print("Game over.")
 
 
 if __name__ == "__main__":
+    logging.disable(logging.WARNING)
     try:
-        test_2v5([0, 1], True, False)
+        for i in range(TOTAL_ITERATIONS):
+            pvp_manager(headless=False)
+            time.sleep(0.1)
     except KeyboardInterrupt:
         print("Exiting...")
