@@ -94,6 +94,7 @@ def ray_casting(
 
 # Finds the biggest area of the goal that doesn't have a shadow (the biggest gap) and finds its midpoint for best shot
 # TODO: could add heuristics to prefer shots closer to the goalpost
+# Also returns size of area
 def find_best_shot(
     ball: Tuple[float, float],
     enemy_robots: List[Tuple[float, float]],
@@ -101,7 +102,7 @@ def find_best_shot(
     goal_y1: float,
     goal_y2: float,
     shoot_in_left_goal: bool,
-) -> float:
+) -> Tuple[float, float]:
     shadows = ray_casting(
         ball,
         enemy_robots=enemy_robots,
@@ -130,4 +131,4 @@ def find_best_shot(
     )
     best_shot: float = (largest_gap[0] + largest_gap[1]) / 2
 
-    return best_shot
+    return best_shot, largest_gap[1] - largest_gap[0]
