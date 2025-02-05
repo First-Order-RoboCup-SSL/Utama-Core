@@ -56,8 +56,8 @@ def go_to_ball(
         ball_data.y - this_robot_data.y, ball_data.x - this_robot_data.x
     )
 
-    target_x = ball_data.x - ROBOT_RADIUS * np.cos(target_oren)
-    target_y = ball_data.y - ROBOT_RADIUS * np.sin(target_oren)
+    # target_x = ball_data.x - ROBOT_RADIUS * np.cos(target_oren)
+    # target_y = ball_data.y - ROBOT_RADIUS * np.sin(target_oren)
 
     if dribble_when_near:
         distance = np.hypot(
@@ -70,7 +70,7 @@ def go_to_ball(
         pid_trans=pid_trans,
         this_robot_data=this_robot_data,
         robot_id=robot_id,
-        target_coords=(target_x, target_y),
+        target_coords=(ball_data.x, ball_data.y),# (target_x, target_y),
         target_oren=target_oren,
         dribbling=dribbling,
     )

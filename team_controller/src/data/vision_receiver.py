@@ -62,7 +62,7 @@ class VisionDataReceiver(BaseReceiver):
         )
 
         if all(map(lambda x: x is None, self.robots_yellow_pos)):
-            print("NOTHING FOUND")
+            print("No yellow FOUND")
 
         self.camera_frames[detection.camera_id] = new_frame
         if (
@@ -201,7 +201,26 @@ class VisionDataReceiver(BaseReceiver):
             if data is not None:
                 vision_packet.Clear()  # Clear previous data to avoid memory bloat
                 vision_packet.ParseFromString(data)
+                self.print_detection_info(vision_packet.detection)
                 self._update_data(vision_packet.detection)
+                # print(vision_packet.detection)
 
             self._print_frame_info(t_received, vision_packet.detection)
             # time.sleep(0.0083) # TODO : Block on data?
+
+    def print_detection_info(self, vision_packet_detect):
+        num_yellow_robots = 0
+        num_blue_robots = 0
+        num_balls = 0
+        for _ in range(len(vision_packet_detect.robots_yellow)):
+            num_yellow_robots += 1
+            
+        for _ in range(len(vision_packet_detect.robots_blue)):
+            num_blue_robots += 1
+            
+        for _ in range(len(vision_packet_detect.balls)):
+            num_balls += 1
+            
+        print(f"num of yellow robots detected: {num_yellow_robots}")
+        print(f"num of blue robots detected: {num_blue_robots}")
+        print(f"num of balls detected: {num_balls} \n")
