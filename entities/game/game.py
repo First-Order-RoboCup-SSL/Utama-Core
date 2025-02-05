@@ -352,6 +352,8 @@ class Game:
             return u * t
         else:
             stop_time = -u / a
+            if stop_time < 0:
+                stop_time = float("inf")
             effective_time = min(t, stop_time)
             displacement = (u * effective_time) + (0.5 * a * effective_time**2)
             logger.debug(

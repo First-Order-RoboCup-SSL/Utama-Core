@@ -2,7 +2,7 @@ import random
 from team_controller.src.controllers.sim.rsim_robot_controller import (
     RSimRobotController,
 )
-from motion_planning.src.pid.pid import get_pids
+from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.high_level_skills import DribbleToTarget
 from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from entities.game import Game
@@ -13,7 +13,7 @@ game = Game()
 env = SSLStandardEnv()
 robot_controller = RSimRobotController(True, env, game)
 
-pid_oren, pid_trans = get_pids(6)
+pid_oren, pid_trans = get_rsim_pids(6)
 my_team_is_yellow = True
 target_coords = (random.random() * 4 - 2, random.random() * 4 - 2)
 dribble_task = DribbleToTarget(
