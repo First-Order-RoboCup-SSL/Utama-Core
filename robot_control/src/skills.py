@@ -1,9 +1,11 @@
+import math
 import numpy as np
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from entities.data.command import RobotCommand
 from entities.data.vision import BallData, RobotData
 
+from entities.game.game import Game
 from motion_planning.src.pid import PID
 import logging
 
@@ -330,6 +332,56 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
     t = lo
     return t
 
+def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_trans: TwoDPID, is_yellow: bool, goalie_has_ball: bool):
+    robot_data = game.get_robot_pos(is_yellow, robot_id)
+    if goalie_has_ball:
+        target_oren = (0 if is_left_goal else math.pi)
+        print("TARGET OREN", target_oren)
+        return go_to_point(pid_oren, pid_trans, robot_data, robot_id, ((-4 if is_left_goal else 4), 0), target_oren, True)
+
+    if is_left_goal:
+        target = game.predict_ball_pos_at_x(-4.5)
+    else:
+        target = game.predict_ball_pos_at_x(4.5)
+
+    if not target or abs(target[1]) > 0.5:
+        target = (-4.5 if is_left_goal else 4.5, 0)
+
+
+    if target and not find_likely_enemy_shooter(game.get_robots_pos(not is_yellow), [game.ball]):
+        cmd = go_to_point(
+            pid_oren,
+            pid_trans,
+            robot_data,
+            robot_id,
+            target,
+            face_ball(
+                (robot_data.x, robot_data.y), 
+                (game.ball.x, game.ball.y)
+            ),
+            dribbling=True
+        )
+    else: # TODO : Not sure if we actually need this case? 
+        cmd = go_to_point(
+            pid_oren,
+            pid_trans,
+            robot_data,
+            0,
+            [None, None],
+            face_ball(
+                (robot_data.x, robot_data.y), (game.ball.x, game.ball.y)
+            ),
+        )
+    return cmd
+
+def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
+    ans = []
+    for ball in balls:
+        for er in enemy_robots:
+            if dist((er.x, er.y), (ball.x, ball.y)) < 0.2:
+                # Ball is close to this robot
+                ans.append(er)
+    return list(set(ans))
 
 if __name__ == "__main__":
     logger.debug(f"{to_defense_parametric((3, 2), False)}")

@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from robot_control.src.skills import (
+    find_likely_enemy_shooter,
     get_goal_centre,
     go_to_ball,
     go_to_point,
@@ -15,7 +16,7 @@ from robot_control.src.skills import (
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from robot_control.src.intent import find_likely_enemy_shooter, score_goal
+from robot_control.src.intent import score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP

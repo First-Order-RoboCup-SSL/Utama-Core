@@ -23,10 +23,13 @@ class Robot:
 
     @property
     def robot_data(self) -> RobotData:
-        if self.inactive:
+        if self._robot_data is not None:
             return self._robot_data
+        elif self.inactive:
+            logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
+            return None
         else:
-            logger.warning(" Should not be getting coords of this robot (inactive)")
+            logger.critical(f" Should not be getting coords of robot_id: {self.id} (None)")
             return None
 
     @robot_data.setter
@@ -35,28 +38,35 @@ class Robot:
 
     @property
     def x(self) -> float:
-        if not self.inactive:
+        if self._robot_data is not None:
             return self._robot_data[0]
+        elif self.inactive:
+            logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
+            return None
         else:
-            logger.warning(" Should not be getting x-coords of this robot (inactive)")
+            logger.critical(f" Should not be getting coords of robot_id: {self.id} (None)")
             return None
 
     @property
     def y(self) -> float:
-        if not self.inactive:
+        if self._robot_data is not None:
             return self._robot_data[1]
+        elif self.inactive:
+            logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
+            return None
         else:
-            logger.warning(" Should not be getting y-coords of this robot (inactive)")
+            logger.critical(f" Should not be getting coords of robot_id: {self.id} (None)")
             return None
 
     @property
     def orientation(self) -> float:
-        if not self.inactive:
-            return self._robot_data[2]
+        if self._robot_data is not None:
+            return self._robot_data[3]
+        elif self.inactive:
+            logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
+            return None
         else:
-            logger.warning(
-                " Should not be getting orientation data of this robot (inactive)"
-            )
+            logger.critical(f" Should not be getting coords of this robot_id: {self.id} (None)")
             return None
 
     @property

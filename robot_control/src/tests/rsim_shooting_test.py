@@ -68,7 +68,7 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
                     shoot_in_left_goal=is_yellow,
                 )
 
-                if game.is_ball_in_goal(our_side=not is_yellow):
+                if game.is_ball_in_goal(right_goal=not is_yellow):
                     logger.info("Goal Scored at Position: ", game.get_ball_pos())
                     goal_scored = True
                     break
