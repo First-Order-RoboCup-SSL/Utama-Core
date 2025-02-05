@@ -58,6 +58,8 @@ class RealRobotController(AbstractRobotController):
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
+        # TODO: I will clean this up after quali
+        self.out_packet[self.n_robots * 8 - 2] += 1  # update last command
         self._serial.write(self.out_packet)
         data_in = self._serial.read_all()
         # time.sleep(0.05)
@@ -86,7 +88,7 @@ class RealRobotController(AbstractRobotController):
         c_command = self._convert_float_command(robot_id, command)
         command_buffer = self._generate_command_buffer(robot_id, c_command)
         start_idx = robot_id * self._rbt_cmd_size
-        self._out_packet = command_buffer
+        self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = command_buffer
 
     def robot_has_ball(self, robot_id):
         """
@@ -140,6 +142,7 @@ class RealRobotController(AbstractRobotController):
         chip_buffer = f'{c_command.chip:0{out_bit_sizes["kicker_top"]}b}'
         dribble_buffer = f'{c_command.dribble:0{out_bit_sizes["dribbler"]}b}'
         robot_id_buffer = f'{robot_id:0{out_bit_sizes["robot_id"]}b}'
+        last_command_buffer = f'{0:0{out_bit_sizes["last_command"]}b}'  # last command is written only in send
         spare_buffer = f'{0:0{out_bit_sizes["spare"]}b}'
 
         command_buffer = "".join(
@@ -151,6 +154,7 @@ class RealRobotController(AbstractRobotController):
                 chip_buffer,
                 dribble_buffer,
                 robot_id_buffer,
+                last_command_buffer,
                 spare_buffer,
             ]
         )
@@ -269,6 +273,10 @@ class RealRobotController(AbstractRobotController):
     @property
     def out_packet(self) -> bytearray:
         return self._out_packet
+
+    @property
+    def n_robot(self) -> int:
+        return self._n_robots
 
     @property
     def in_packet_size(self) -> int:

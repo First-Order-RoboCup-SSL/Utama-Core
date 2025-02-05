@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 from entities.data.vision import BallData, RobotData, FrameData, TeamRobotCoords
 from team_controller.src.data.base_receiver import BaseReceiver
 from team_controller.src.utils import network_manager
-from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT, NUM_ROBOTS
+from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
 import logging
 
@@ -97,7 +97,12 @@ class VisionDataReceiver(BaseReceiver):
             ty += r.y
             tz += r.z
 
-        return BallData(tx / len(bs), ty / len(bs), tz / len(bs), min(map(lambda x: x.confidence, bs)))
+        return BallData(
+            tx / len(bs),
+            ty / len(bs),
+            tz / len(bs),
+            min(map(lambda x: x.confidence, bs)),
+        )
 
     def _avg_frames(self, frames: List[FrameData]) -> FrameData:
         frames = [*filter(lambda x: x.ball is not None, frames)]
@@ -121,7 +126,7 @@ class VisionDataReceiver(BaseReceiver):
         avg_yellows = list(map(self._avg_robots, yellow_captured))
         avg_blues = list(map(self._avg_robots, blue_captured))
         avg_balls = list(map(self._avg_balls, ball_captured))
-        
+
         # Trims number of robots in frame to number we expect (num_friendly, num_enemy) currently done to 6
         return FrameData(ts, avg_yellows[:-5], avg_blues[:-5], avg_balls[:-10])
 

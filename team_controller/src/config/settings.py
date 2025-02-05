@@ -26,9 +26,6 @@ BLUE_TEAM_SIM_PORT = 10301
 REFEREE_PORT = 10003
 SIM_CONTROL_PORT = 10300  # IP '127.0.0.1'
 
-# General settings
-NUM_ROBOTS = 6
-
 # PID parameters
 PID_PARAMS = {
     "oren": {
@@ -69,7 +66,8 @@ SERIAL_BIT_SIZES = {
         "kicker_bottom": 1,
         "kicker_top": 1,
         "dribbler": 1,
-        "robot_id": 5,
+        "robot_id": 4,
+        "last_command": 1,
         "spare": 8,
     },
     "in": {"has_ball": 1},  # TODO: add "kicker_charged": 1,

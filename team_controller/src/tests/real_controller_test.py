@@ -209,8 +209,8 @@ def main():
         is_team_yellow=True, game_obj=game, n_robots=1
     )
     try:
-        # test_rotation(robot_controller, 0, 100, False, True)
-        get_ball_test_with_vision(game, robot_controller)
+        test_command(robot_controller, 0, 100, False, True)
+        # get_ball_test_with_vision(game, robot_controller)
     except KeyboardInterrupt:
         # try to stop the robot 15 times
         print("Stopping robot.")
