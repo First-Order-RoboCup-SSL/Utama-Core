@@ -25,13 +25,20 @@ from entities.data.command import RobotCommand
 # Imports from other scripts or modules within the same project
 from robot_control.src.tests.utils import setup_pvp
 from motion_planning.src.pid.pid import get_rsim_pids
-from robot_control.src.skills import face_ball, go_to_point, velocity_to_orientation, clamp_to_goal_height, predict_goal_y_location
+from robot_control.src.skills import (
+    face_ball,
+    go_to_point,
+    velocity_to_orientation,
+    clamp_to_goal_height,
+    predict_goal_y_location,
+)
 from robot_control.src.intent import score_goal, find_likely_enemy_shooter
 
 logger = logging.getLogger(__name__)
 
 TOTAL_ITERATIONS = 10
-MAX_GAME_TIME = 500
+MAX_GAME_TIME = 500000000
+
 
 def ball_out_of_bounds(ball_x: float, ball_y: float) -> bool:
     """
@@ -39,19 +46,20 @@ def ball_out_of_bounds(ball_x: float, ball_y: float) -> bool:
     """
     return abs(ball_x) > 4.5 or abs(ball_y) > 3
 
+
 def find_goal_position(
     game: Game,
-    ) -> Tuple[float, float]:
-        
+) -> Tuple[float, float]:
+
     if game.my_team_is_yellow:
-        goal_center = -4.5, 0
-    else:
         goal_center = 4.5, 0
-        
+    else:
+        goal_center = -4.5, 0
+
     # Assume that is_yellow <-> not is_left here # TODO : FIX
     _, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=game.my_team_is_yellow)
     shooters_data = find_likely_enemy_shooter(enemy, balls)
-    
+
     orientation = None
     if not shooters_data:
         target_tracking_coord = game.ball.x, game.ball.y
@@ -66,16 +74,19 @@ def find_goal_position(
         sd = shooters_data[0]
         target_tracking_coord = sd.x, sd.y
         orientation = sd.orientation
-        
+
     if orientation is None:
         # In case there is no ball velocity or attackers, use centre of goal
         predicted_goal_position = goal_center
     else:
         predicted_goal_position = goal_center[0], clamp_to_goal_height(
-            predict_goal_y_location(target_tracking_coord, orientation, not game.my_team_is_yellow)
+            predict_goal_y_location(
+                target_tracking_coord, orientation, game.my_team_is_yellow
+            )
         )
-    
+
     return predicted_goal_position
+
 
 def improved_block_goal_and_attacker(
     robot,
@@ -107,9 +118,10 @@ def improved_block_goal_and_attacker(
     if attacker_has_ball:
         # ========== Prioritize blocking the shot line ==========
         ax, ay = attacker.x, attacker.y
-        
+
         gx, gy = find_goal_position(game)
-        
+        # print(gx, gy)
+
         agx, agy = (gx - ax), (gy - ay)
         dist_ag = math.hypot(agx, agy)
 
@@ -161,6 +173,7 @@ def improved_block_goal_and_attacker(
     )
     return cmd
 
+
 def dribble_to_target_decision_maker(
     game: Game,
     robot_id: int,
@@ -180,7 +193,7 @@ def dribble_to_target_decision_maker(
     :return: The optimal (x, y) position for the robot to dribble to.
     """
     robot = game.friendly_robots[robot_id]  # Assuming the robot is on the yellow team
-    
+
     if game._my_team_is_yellow:
         goal_x, goal_y = -4.5, 0
     else:
@@ -203,9 +216,9 @@ def dribble_to_target_decision_maker(
                 enemy_dy = robot.y - enemy_robot.y
                 enemy_dist = math.hypot(enemy_dx, enemy_dy)
                 if smallest_enemy_dist == 0 or enemy_dist < smallest_enemy_dist:
-                    smallest_enemy_dist = enemy_dist  
+                    smallest_enemy_dist = enemy_dist
                     enemy_dx = enemy_dx
-                    enemy_dy = enemy_dy    
+                    enemy_dy = enemy_dy
 
         # If the enemy is too close, adjust the target position to avoid interception
         if enemy_dist > safe_distance:
@@ -237,18 +250,19 @@ def dribble_to_target_decision_maker(
             # Move away from the enemy while still progressing towards the goal
             target_x = robot.x + perpendicular_dx * safe_distance + goal_dx * 0.25
             target_y = robot.y + perpendicular_dy * safe_distance + goal_dy * 0.25
-    
+
     if goal_dist < 2:
         return None
     else:
         return target_x, target_y
+
 
 def one_on_one(game: Game, stop_event: threading.Event):
     """
     Worker function for the attacking strategy.
     """
     sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
-    
+
     message_queue = queue.SimpleQueue()
     vision_receiver = VisionDataReceiver(message_queue)
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
@@ -257,16 +271,16 @@ def one_on_one(game: Game, stop_event: threading.Event):
 
     # Initialize PID controllers
     pid_oren, pid_trans = get_grsim_pids(1)
-    
+
     if game.my_team_is_yellow:
         goal_pos = (4.5, 0)  # Yellow team attacks the blue goal
     else:
-        goal_pos = (-4.5, 0)   # Blue team attacks the yellow goal
-        
+        goal_pos = (-4.5, 0)  # Blue team attacks the yellow goal
+
     goal_scored = False
     dribbling = False
     message = None
-    
+
     dribble_task = DribbleToTarget(
         pid_oren,
         pid_trans,
@@ -275,8 +289,8 @@ def one_on_one(game: Game, stop_event: threading.Event):
         (0, 0),
         augment=True,
     )
-    
-    while not stop_event.is_set():    
+
+    while not stop_event.is_set():
         # Process messages from the queue
         if not message_queue.empty():
             (message_type, message) = message_queue.get()
@@ -287,14 +301,15 @@ def one_on_one(game: Game, stop_event: threading.Event):
 
         if goal_scored:
             break
-                
+
         if message is not None:
             robot = game.friendly_robots[0]
             ball = game.ball
-            
-            enemy_dist_from_ball = math.hypot(ball.x - game.enemy_robots[0].x, ball.y - game.enemy_robots[0].y)
-            friendly_dist_from_ball = math.hypot(ball.x - robot.x, ball.y - robot.y)
 
+            enemy_dist_from_ball = math.hypot(
+                ball.x - game.enemy_robots[0].x, ball.y - game.enemy_robots[0].y
+            )
+            friendly_dist_from_ball = math.hypot(ball.x - robot.x, ball.y - robot.y)
 
             # Check if the robot has the ball
             if sim_robot_controller.robot_has_ball(0):
@@ -329,7 +344,9 @@ def one_on_one(game: Game, stop_event: threading.Event):
                         # print("Dribbling to target")
                         cmd = dribble_task.enact(sim_robot_controller.robot_has_ball(0))
                         # Check if the robot is close to the target
-                        error = math.hypot(target_coords[0] - robot.x, target_coords[1] - robot.y)
+                        error = math.hypot(
+                            target_coords[0] - robot.x, target_coords[1] - robot.y
+                        )
                         if error < 0.1:  # Threshold for reaching the target
                             pid_trans.max_velocity = 2.5
                             dribbling = False
@@ -341,11 +358,16 @@ def one_on_one(game: Game, stop_event: threading.Event):
                 # print("Dribbling to target")
                 cmd = dribble_task.enact(sim_robot_controller.robot_has_ball(0))
                 # Check if the robot is close to the target
-                error = math.hypot(target_coords[0] - robot.x, target_coords[1] - robot.y)
+                error = math.hypot(
+                    target_coords[0] - robot.x, target_coords[1] - robot.y
+                )
                 if error < 0.1:  # Threshold for reaching the target
                     pid_trans.max_velocity = 2.5
                     dribbling = False
-            elif enemy_dist_from_ball < 0.05 and enemy_dist_from_ball < friendly_dist_from_ball:
+            elif (
+                enemy_dist_from_ball < 0.05
+                and enemy_dist_from_ball < friendly_dist_from_ball
+            ):
                 cmd = improved_block_goal_and_attacker(
                     robot.robot_data,
                     game.enemy_robots[0].robot_data,
@@ -356,7 +378,7 @@ def one_on_one(game: Game, stop_event: threading.Event):
                     attacker_has_ball=True,
                     block_ratio=0.4,
                     max_ball_follow_dist=1.0,
-                )     
+                )
             elif enemy_dist_from_ball >= friendly_dist_from_ball:
                 # If the robot doesn't have the ball, go to the ball
                 cmd = go_to_point(
@@ -379,20 +401,25 @@ def one_on_one(game: Game, stop_event: threading.Event):
                     attacker_has_ball=True,
                     block_ratio=0.4,
                     max_ball_follow_dist=1.0,
-                )   
+                )
 
             # Send the command to the robot
             sim_robot_controller.add_robot_commands(cmd, 0)
             sim_robot_controller.send_robot_commands()
 
             # Check if a goal was scored
-            if game.is_ball_in_goal(our_side=True) or game.is_ball_in_goal(our_side=False) or ball_out_of_bounds(ball.x, ball.y):
+            if (
+                game.is_ball_in_goal(our_side=True)
+                or game.is_ball_in_goal(our_side=False)
+                or ball_out_of_bounds(ball.x, ball.y)
+            ):
                 goal_scored = True
                 break
 
+
 def strat_def(game: Game, stop_event: threading.Event):
     sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
-    
+
     message_queue = queue.SimpleQueue()
     vision_receiver = VisionDataReceiver(message_queue)
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
@@ -401,14 +428,14 @@ def strat_def(game: Game, stop_event: threading.Event):
 
     # Initialize PID controllers
     pid_oren, pid_trans = get_grsim_pids(1)  # Yellow
-    
+
     if game.my_team_is_yellow:
         goal_pos = (4.5, 0)
     else:
         goal_pos = (-4.5, 0)
-        
+
     goal_scored = False
-    
+
     message = None
     while not stop_event.is_set():
         # Process messages from the queue
@@ -416,19 +443,19 @@ def strat_def(game: Game, stop_event: threading.Event):
             (message_type, message) = message_queue.get()
             if message_type == MessageType.VISION:
                 game.add_new_state(message)
-                
+
             elif message_type == MessageType.REF:
                 pass
         if goal_scored:
             break
-        
+
         if message is not None:
             robot = game.friendly_robots[0]
             enemy = game.enemy_robots[0]
             ball = game.ball
-            
+
             enemy_has_ball = False
-             
+
             cmd = improved_block_goal_and_attacker(
                 robot.robot_data,
                 game.enemy_robots[0].robot_data,
@@ -439,21 +466,20 @@ def strat_def(game: Game, stop_event: threading.Event):
                 attacker_has_ball=True,
                 block_ratio=0.4,
                 max_ball_follow_dist=1.0,
-            ) 
-            
+            )
+
             sim_robot_controller.add_robot_commands(cmd, 0)
             sim_robot_controller.send_robot_commands()
-        
+
             # Check if goal was scored
             if game.is_ball_in_goal(our_side=True):
                 print("Goal scored.")
                 goal_scored = True
                 break
-            
+
             if ball_out_of_bounds(ball.x, ball.y):
                 print("ball_out_of_bounds.")
                 break
-
 
 
 def pvp_manager(headless: bool):
@@ -464,7 +490,7 @@ def pvp_manager(headless: bool):
     env = GRSimController()
 
     env.reset()
-    
+
     for i in range(1, 6):
         env.set_robot_presence(i, True, False)
     for i in range(1, 6):
@@ -474,7 +500,7 @@ def pvp_manager(headless: bool):
     ball_x = random.uniform(-2.5, 2.5)
     ball_y = random.uniform(-1.5, 1.5)
     env.teleport_ball(ball_x, ball_y)
-    
+
     # Initialize Game objects for each team
     yellow_game = Game(my_team_is_yellow=True)
     blue_game = Game(my_team_is_yellow=False)
@@ -497,14 +523,14 @@ def pvp_manager(headless: bool):
 
     yellow_thread.start()
     blue_thread.start()
-    
+
     time_elapsed = 0
-     
+
     try:
         # Wait for threads to finish (they will run until a goal is scored or manually stopped)
         while yellow_thread.is_alive() or blue_thread.is_alive():
             time_elapsed += 1
-            time.sleep(0.1) 
+            time.sleep(0.1)
             if time_elapsed > MAX_GAME_TIME:
                 print("Game timed out.")
                 stop_event.set()
@@ -519,6 +545,7 @@ def pvp_manager(headless: bool):
     blue_thread.join()
 
     print("Game over.")
+
 
 if __name__ == "__main__":
     logging.disable(logging.WARNING)
