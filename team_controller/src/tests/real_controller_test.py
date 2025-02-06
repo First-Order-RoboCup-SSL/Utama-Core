@@ -207,7 +207,7 @@ def test_command(
         time.sleep(0.017)
 
 
-def test_kicker(robot_controller: RealRobotController):
+def test_kicker(robot_controller: RealRobotController, robot_id: int, dribbler_on=True):
     cmd0 = RobotCommand(
         local_forward_vel=0,
         local_left_vel=0,
@@ -217,13 +217,15 @@ def test_kicker(robot_controller: RealRobotController):
         dribble=0,
     )
     for _ in range(15):
-        robot_controller.add_robot_commands(empty_command(dribbler_on=True), 1)
+        robot_controller.add_robot_commands(
+            empty_command(dribbler_on=dribbler_on), robot_id
+        )
         robot_controller.send_robot_commands()
         time.sleep(0.05)
-    robot_controller.add_robot_commands(cmd0, 1)
+    robot_controller.add_robot_commands(cmd0, robot_id)
     robot_controller.send_robot_commands()
     time.sleep(0.05)
-    robot_controller.add_robot_commands(empty_command(), 1)
+    robot_controller.add_robot_commands(empty_command(), robot_id)
     robot_controller.send_robot_commands()
     time.sleep(0.05)
 
@@ -236,9 +238,9 @@ def main():
         is_team_yellow=True, game_obj=game, n_robots=2
     )
     try:
-        test_command(robot_controller, 1, 100, False, True)
+        # test_command(robot_controller, 1, 100, False, True)
         # get_ball_test_with_vision(game, robot_controller)
-        # test_kicker(robot_controller)
+        test_kicker(robot_controller, 0, dribbler_on=False)
     except KeyboardInterrupt:
         # try to stop the robot 15 times
         print("Stopping robot.")

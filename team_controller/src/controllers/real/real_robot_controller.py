@@ -1,7 +1,5 @@
-from math import ceil
 from serial import Serial
 from typing import Union, Optional, Dict, List
-from math import degrees
 import warnings
 import numpy as np
 import time
