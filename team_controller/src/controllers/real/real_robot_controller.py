@@ -18,8 +18,6 @@ from team_controller.src.config.settings import (
     BAUD_RATE,
     PORT,
     TIMEOUT,
-    ENDIAN,
-    SERIAL_BIT_SIZES,
     AUTH_STR,
     MAX_INITIALIZATION_TIME,
 )
@@ -43,11 +41,11 @@ class RealRobotController(AbstractRobotController):
         self._game_obj = game_obj
         self._n_robots = n_robots  # determines buffer size
         self._serial = self._init_serial()
-        self._rbt_cmd_size = ceil(
-            sum(SERIAL_BIT_SIZES["out"].values()) / 8
-        )  # packet size for one robot
+
+        self._EMPTY_ID = 30  # id to indicate empty buffer: 1110 in control byte
+        self._rbt_cmd_size = 8  # packet size for one robot
         self._out_packet = self._empty_command()
-        self._in_packet_size = ceil(sum(SERIAL_BIT_SIZES["in"].values()) / 8)
+        self._in_packet_size = 1  # size of the packet received from the robots
         self._robots_info: List[RobotInfo] = [None] * self._n_robots
 
         logger.debug(
@@ -58,12 +56,10 @@ class RealRobotController(AbstractRobotController):
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
-        # TODO: I will clean this up after quali
         # self.out_packet[self.n_robots * 8 - 2] += 1  # update last command
         # print(list(self.out_packet))
         self._serial.write(self.out_packet)
         data_in = self._serial.read_all()
-        # time.sleep(0.05)
         # self._populate_robots_info(data_in)
 
         self._out_packet = self._empty_command()  # flush the out_packet
@@ -113,9 +109,6 @@ class RealRobotController(AbstractRobotController):
     def _populate_robots_info(self, data_in: bytes) -> None:
         """
         Populates the robots_info list with the data received from the robots.
-
-        # TODO It's a bit awkward now because we haven't confirmed the return packet size and there's likely some spare space in the packet
-        # assumption now is packet of 1 byte, bits[7] to bit[2] are has_ball boolean in order of id 0 to 5. bit[1] to bit[0] are reserved
         """
         for i in range(self._n_robots):
             has_ball = False
@@ -175,41 +168,6 @@ class RealRobotController(AbstractRobotController):
 
         return packet
 
-        # out_bit_sizes = SERIAL_BIT_SIZES["out"]
-        # local_forward_vel_buffer = (
-        #     f'{c_command.local_forward_vel:0{out_bit_sizes["local_forward_vel"]}b}'
-        # )
-        # local_left_vel_buffer = (
-        #     f'{c_command.local_left_vel:0{out_bit_sizes["local_left_vel"]}b}'
-        # )
-        # angular_vel_buffer = f'{c_command.angular_vel:0{out_bit_sizes["angular_vel"]}b}'
-        # kick_buffer = f'{c_command.kick:0{out_bit_sizes["kicker_bottom"]}b}'
-        # chip_buffer = f'{c_command.chip:0{out_bit_sizes["kicker_top"]}b}'
-        # dribble_buffer = f'{c_command.dribble:0{out_bit_sizes["dribbler"]}b}'
-        # robot_id_buffer = f'{robot_id:0{out_bit_sizes["robot_id"]}b}'
-        # last_command_buffer = f'{0:0{out_bit_sizes["last_command"]}b}'  # last command is written only in send
-
-        # command_buffer = "".join(
-        #     [
-        #         local_forward_vel_buffer,
-        #         local_left_vel_buffer,
-        #         angular_vel_buffer,
-        #         kick_buffer,
-        #         chip_buffer,
-        #         dribble_buffer,
-        #         robot_id_buffer,
-        #         last_command_buffer,
-        #     ]
-        # )
-
-        # assert len(command_buffer) == self._rbt_cmd_size * 8
-
-        # crc_buffer = self.compute_crc()
-
-        # return int(command_buffer, 2).to_bytes(
-        #     self._rbt_cmd_size, byteorder=ENDIAN, signed=False
-        # )
-
     def _convert_float_command(self, robot_id, command: RobotCommand) -> RobotCommand:
         """
         Prepares the float values in the command to be formatted to binary in the buffer.
@@ -241,41 +199,24 @@ class RealRobotController(AbstractRobotController):
             )
             local_left_vel = MAX_VEL if command.local_left_vel > 0 else -MAX_VEL
 
-        out_bit_sizes = SERIAL_BIT_SIZES["out"]
         command = RobotCommand(
-            local_forward_vel=self._convert_float(
-                local_forward_vel, out_bit_sizes["local_forward_vel"]
-            ),
-            local_left_vel=self._convert_float(
-                local_left_vel, out_bit_sizes["local_left_vel"]
-            ),
-            angular_vel=self._convert_float(
-                angular_vel,
-                out_bit_sizes["angular_vel"],
-                # degrees(angular_vel), out_bit_sizes["angular_vel"]
-            ),
+            local_forward_vel=self._float16_rep(local_forward_vel),
+            local_left_vel=self._float16_rep(local_left_vel),
+            angular_vel=self._float16_rep(angular_vel),
             kick=command.kick,
             chip=command.chip,
             dribble=command.dribble,
         )
         return command
 
-    def _convert_float(self, val: float, float_size: int) -> int:
+    def _float16_rep(self, value: float) -> np.uint16:
         """
-        Converts a float to an unsigned integer using the specified float size.
-        This allows us to format it to binary and send it to the robot.
+        Converts a float, flattens it to float 16 and represented as uint16 value for transmission.
         """
-        if float_size == 16:
-            float_val = np.float16(val)
-        elif float_size == 32:
-            float_val = np.float32(val)
-        else:
-            raise ValueError(f"Invalid float size: {float_size}")
-
-        return float_val.view(np.uint16)
+        return np.float16(value).view(np.uint16)
 
     def _empty_command(self) -> bytearray:
-        empty_buffer = bytearray([0] * 6 + [30] + [0])
+        empty_buffer = bytearray([0] * 6 + [self._EMPTY_ID] + [0])
         return empty_buffer * self._n_robots
 
     def _init_serial(self) -> Serial:
@@ -329,3 +270,21 @@ class RealRobotController(AbstractRobotController):
     @property
     def in_packet_size(self) -> int:
         return self._in_packet_size
+
+
+if __name__ == "__main__":
+    robot_controller = RealRobotController(
+        is_team_yellow=True, game_obj=Game(), n_robots=2
+    )
+    cmd = RobotCommand(
+        local_forward_vel=0.2,
+        local_left_vel=0,
+        angular_vel=0,
+        kick=0,
+        chip=0,
+        dribble=False,
+    )
+    robot_controller.add_robot_commands(cmd, 0)
+    print(list(robot_controller.out_packet))
+    binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
+    print(binary_representation)

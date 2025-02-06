@@ -56,20 +56,3 @@ PORT = "/dev/ttyACM0"
 AUTH_STR = "<READY!>"
 MAX_INITIALIZATION_TIME = 5
 TIMEOUT = 0.1
-# NOTE: angular_vel, local_forward_vel, local_left_vel are 16 bit floating point.
-# they should not be changed to any arbitrary value.
-SERIAL_BIT_SIZES = {
-    "out": {
-        "angular_vel": 16,
-        "local_forward_vel": 16,
-        "local_left_vel": 16,
-        "kicker_bottom": 1,
-        "kicker_top": 1,
-        "dribbler": 1,
-        "robot_id": 4,
-        "last_command": 1,
-        "spare": 8,
-    },
-    "in": {"has_ball": 1},  # TODO: add "kicker_charged": 1,
-}
-ENDIAN = "big"
