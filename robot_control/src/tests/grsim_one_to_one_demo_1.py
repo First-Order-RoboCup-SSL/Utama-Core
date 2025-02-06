@@ -32,7 +32,7 @@ from robot_control.src.skills import (
     clamp_to_goal_height,
     predict_goal_y_location,
 )
-from robot_control.src.intent import score_goal, find_likely_enemy_shooter
+from robot_control.src.intent import score_goal, find_likely_enemy_shooter, score_goal_
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,7 @@ def find_goal_position(
         goal_center = 4.5, 0
     else:
         goal_center = -4.5, 0
+    goal_center = -4.5, 0
 
     # Assume that is_yellow <-> not is_left here # TODO : FIX
     _, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=game.my_team_is_yellow)
@@ -198,6 +199,7 @@ def dribble_to_target_decision_maker(
         goal_x, goal_y = -4.5, 0
     else:
         goal_x, goal_y = 4.5, 0
+    goal_x, goal_y = -4.5, 0
 
     # If the robot has the ball, move towards the goal while avoiding the enemy
     if grsim_controller.robot_has_ball(robot_id):
@@ -257,11 +259,11 @@ def dribble_to_target_decision_maker(
         return target_x, target_y
 
 
-def one_on_one(game: Game, stop_event: threading.Event):
+def one_on_one(game: Game, stop_event: threading.Event, is_yellow: bool):
     """
     Worker function for the attacking strategy.
     """
-    sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
+    sim_robot_controller = GRSimRobotController(is_team_yellow=is_yellow)
 
     message_queue = queue.SimpleQueue()
     vision_receiver = VisionDataReceiver(message_queue)
@@ -276,6 +278,7 @@ def one_on_one(game: Game, stop_event: threading.Event):
         goal_pos = (4.5, 0)  # Yellow team attacks the blue goal
     else:
         goal_pos = (-4.5, 0)  # Blue team attacks the yellow goal
+    goal_pos = (-4.5, 0)
 
     goal_scored = False
     dribbling = False
@@ -303,26 +306,37 @@ def one_on_one(game: Game, stop_event: threading.Event):
             break
 
         if message is not None:
-            robot = game.friendly_robots[0]
+            if is_yellow:
+                friendly_robot, enemy_robot = (
+                    game.friendly_robots[0],
+                    game.enemy_robots[0],
+                )
+            else:
+                enemy_robot, friendly_robot = (
+                    game.friendly_robots[0],
+                    game.enemy_robots[0],
+                )
             ball = game.ball
 
             enemy_dist_from_ball = math.hypot(
-                ball.x - game.enemy_robots[0].x, ball.y - game.enemy_robots[0].y
+                ball.x - enemy_robot.x, ball.y - enemy_robot.y
             )
-            friendly_dist_from_ball = math.hypot(ball.x - robot.x, ball.y - robot.y)
+            friendly_dist_from_ball = math.hypot(
+                ball.x - friendly_robot.x, ball.y - friendly_robot.y
+            )
 
             # Check if the robot has the ball
             if sim_robot_controller.robot_has_ball(0):
                 # Try to score
-                cmd = score_goal(
+                cmd = score_goal_(
                     game,
                     True,
                     0,
                     pid_oren,
                     pid_trans,
-                    # True,
-                    game.my_team_is_yellow,
-                    False,
+                    True,
+                    True,
+                    is_yellow,
                 )
 
                 # If scoring is not possible, dribble to a better position
@@ -346,7 +360,8 @@ def one_on_one(game: Game, stop_event: threading.Event):
                         cmd = dribble_task.enact(sim_robot_controller.robot_has_ball(0))
                         # Check if the robot is close to the target
                         error = math.hypot(
-                            target_coords[0] - robot.x, target_coords[1] - robot.y
+                            target_coords[0] - friendly_robot.x,
+                            target_coords[1] - friendly_robot.y,
                         )
                         if error < 0.1:  # Threshold for reaching the target
                             pid_trans.max_velocity = 2.5
@@ -360,17 +375,18 @@ def one_on_one(game: Game, stop_event: threading.Event):
                 cmd = dribble_task.enact(sim_robot_controller.robot_has_ball(0))
                 # Check if the robot is close to the target
                 error = math.hypot(
-                    target_coords[0] - robot.x, target_coords[1] - robot.y
+                    target_coords[0] - friendly_robot.x,
+                    target_coords[1] - friendly_robot.y,
                 )
                 if error < 0.1:  # Threshold for reaching the target
                     pid_trans.max_velocity = 2.5
                     dribbling = False
             elif (
-                enemy_dist_from_ball < 0.05
+                enemy_dist_from_ball < 0.4
                 and enemy_dist_from_ball < friendly_dist_from_ball
             ):
                 cmd = improved_block_goal_and_attacker(
-                    robot.robot_data,
+                    friendly_robot.robot_data,
                     game.enemy_robots[0].robot_data,
                     ball,
                     game,
@@ -380,163 +396,28 @@ def one_on_one(game: Game, stop_event: threading.Event):
                     block_ratio=0.4,
                     max_ball_follow_dist=1.0,
                 )
-            elif enemy_dist_from_ball >= friendly_dist_from_ball:
-                # If the robot doesn't have the ball, go to the ball
-                cmd = go_to_point(
-                    pid_oren,
-                    pid_trans,
-                    robot.robot_data,
-                    robot.id,
-                    (ball.x, ball.y),
-                    face_ball((robot.x, robot.y), (ball.x, ball.y)),
-                    dribbling=True,
-                )
-            elif friendly_dist_from_ball >= enemy_dist_from_ball:
-                cmd = improved_block_goal_and_attacker(
-                    robot.robot_data,
-                    game.enemy_robots[0].robot_data,
-                    ball,
-                    game,
-                    pid_oren,
-                    pid_trans,
-                    attacker_has_ball=True,
-                    block_ratio=0.4,
-                    max_ball_follow_dist=1.0,
-                )
-
-            # Send the command to the robot
-            sim_robot_controller.add_robot_commands(cmd, 0)
-            sim_robot_controller.send_robot_commands()
-
-            # Check if a goal was scored
-            if (
-                game.is_ball_in_goal(right_goal=True)
-                or game.is_ball_in_goal(right_goal=False)
-                or ball_out_of_bounds(ball.x, ball.y)
-            ):
-                goal_scored = True
-                break
-
-
-def strat_atk(game: Game, stop_event: threading.Event):
-    """
-    Worker function for the attacking strategy.
-    """
-    sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
-
-    message_queue = queue.SimpleQueue()
-    vision_receiver = VisionDataReceiver(message_queue)
-    vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
-    vision_thread.daemon = True
-    vision_thread.start()
-
-    # Initialize PID controllers
-    pid_oren, pid_trans = get_grsim_pids(1)
-
-    if game.my_team_is_yellow:
-        goal_pos = (4.5, 0)  # Yellow team attacks the blue goal
-    else:
-        goal_pos = (-4.5, 0)  # Blue team attacks the yellow goal
-
-    goal_scored = False
-    dribbling = False
-    message = None
-
-    dribble_task = DribbleToTarget(
-        pid_oren,
-        pid_trans,
-        game,
-        0,
-        (0, 0),
-        augment=True,
-    )
-
-    while not stop_event.is_set():
-        # Process messages from the queue
-        if not message_queue.empty():
-            (message_type, message) = message_queue.get()
-            if message_type == MessageType.VISION:
-                game.add_new_state(message)
-            elif message_type == MessageType.REF:
-                pass
-
-        if goal_scored:
-            break
-
-        if message is not None:
-            robot = game.friendly_robots[0]
-            ball = game.ball
-
-            enemy_dist_from_ball = math.hypot(
-                ball.x - game.enemy_robots[0].x, ball.y - game.enemy_robots[0].y
-            )
-            friendly_dist_from_ball = math.hypot(ball.x - robot.x, ball.y - robot.y)
-
-            # Check if the robot has the ball
-            if sim_robot_controller.robot_has_ball(0):
-                # try to score
-
-                cmd = score_goal(
-                    game,
-                    True,
-                    shooter_id=0,
-                    pid_oren=pid_oren,
-                    pid_trans=pid_trans,
-                    is_yellow=game.my_team_is_yellow,
-                    shoot_in_left_goal=game.my_team_is_yellow,
-                )
-
-                # if scoring is not possible, dribble to a better position
-                if cmd is None:
-                    if not dribbling:
-                        # calculate a target position for dribbling
-                        target_coords = dribble_to_target_decision_maker(
-                            game,
-                            0,  # robot id
-                            sim_robot_controller,
-                            safe_distance=1.0,
-                        )
-                        if target_coords is None:
-                            target_coords = (-1, 0)
-                        if target_coords is not None:
-                            dribble_task.update_coord(target_coords)
-                            dribbling = True
-
-                    # if dribbling, enact the dribble task
-                    if dribbling:
-                        pid_trans.max_velocity = 1.5
-                        # print("dribbling to target")
-                        cmd = dribble_task.enact(sim_robot_controller.robot_has_ball(0))
-                        # check if the robot is close to the target
-                        error = math.hypot(
-                            target_coords[0] - robot.x, target_coords[1] - robot.y
-                        )
-                        if error < 0.1:  # threshold for reaching the target
-                            pid_trans.max_velocity = 2.5
-                            dribbling = False
-                else:
-                    pid_trans.max_velocity = 2.5
-                    dribbling = False  # stop dribbling if scoring is possible
-            elif dribbling:
-                pid_trans.max_velocity = 1.5
-                # print("dribbling to target")
-                cmd = dribble_task.enact(sim_robot_controller.robot_has_ball(0))
-                # check if the robot is close to the target
-                error = math.hypot(
-                    target_coords[0] - robot.x, target_coords[1] - robot.y
-                )
-                if error < 0.1:  # threshold for reaching the target
-                    pid_trans.max_velocity = 2.5
-                    dribbling = False
+            # elif friendly_dist_from_ball >= enemy_dist_from_ball:
+            #     cmd = improved_block_goal_and_attacker(
+            #         robot.robot_data,
+            #         game.enemy_robots[0].robot_data,
+            #         ball,
+            #         game,
+            #         pid_oren,
+            #         pid_trans,
+            #         attacker_has_ball=True,
+            #         block_ratio=0.4,
+            #         max_ball_follow_dist=1.0,
+            #     )
+            # elif enemy_dist_from_ball >= friendly_dist_from_ball:
             else:
                 # If the robot doesn't have the ball, go to the ball
                 cmd = go_to_point(
                     pid_oren,
                     pid_trans,
-                    robot.robot_data,
-                    robot.id,
+                    friendly_robot.robot_data,
+                    friendly_robot.id,
                     (ball.x, ball.y),
-                    face_ball((robot.x, robot.y), (ball.x, ball.y)),
+                    face_ball((friendly_robot.x, friendly_robot.y), (ball.x, ball.y)),
                     dribbling=True,
                 )
 
@@ -551,71 +432,6 @@ def strat_atk(game: Game, stop_event: threading.Event):
                 or ball_out_of_bounds(ball.x, ball.y)
             ):
                 goal_scored = True
-                break
-
-
-def strat_def(game: Game, stop_event: threading.Event):
-    sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
-
-    message_queue = queue.SimpleQueue()
-    vision_receiver = VisionDataReceiver(message_queue)
-    vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
-    vision_thread.daemon = True
-    vision_thread.start()
-
-    # Initialize PID controllers
-    pid_oren, pid_trans = get_grsim_pids(1)  # Yellow
-
-    if game.my_team_is_yellow:
-        goal_pos = (4.5, 0)
-    else:
-        goal_pos = (-4.5, 0)
-
-    goal_scored = False
-
-    message = None
-    while not stop_event.is_set():
-        # Process messages from the queue
-        if not message_queue.empty():
-            (message_type, message) = message_queue.get()
-            if message_type == MessageType.VISION:
-                game.add_new_state(message)
-
-            elif message_type == MessageType.REF:
-                pass
-        if goal_scored:
-            break
-
-        if message is not None:
-            robot = game.friendly_robots[0]
-            enemy = game.enemy_robots[0]
-            ball = game.ball
-
-            enemy_has_ball = False
-
-            cmd = improved_block_goal_and_attacker(
-                robot.robot_data,
-                game.enemy_robots[0].robot_data,
-                ball,
-                game,
-                pid_oren,
-                pid_trans,
-                attacker_has_ball=True,
-                block_ratio=0.4,
-                max_ball_follow_dist=1.0,
-            )
-
-            sim_robot_controller.add_robot_commands(cmd, 0)
-            sim_robot_controller.send_robot_commands()
-
-            # Check if goal was scored
-            if game.is_ball_in_goal(right_goal=True):
-                print("Goal scored.")
-                goal_scored = True
-                break
-
-            if ball_out_of_bounds(ball.x, ball.y):
-                print("ball_out_of_bounds.")
                 break
 
 
@@ -633,26 +449,34 @@ def pvp_manager(headless: bool):
     for i in range(1, 6):
         env.set_robot_presence(i, False, False)
 
-    env.teleport_robot(True, 0, -1, 0)
-    ball_x = random.uniform(-1.5, 0)
-    ball_y = random.uniform(-1.5, 1.5)
-    env.teleport_ball(ball_x, ball_y)
+    env.teleport_robot(True, 0, -1, -1.2)
+    env.teleport_robot(False, 0, -1, 1.2)
+
+    # ball_x = random.uniform(-1.5, 0)
+    # ball_y = random.uniform(-1.5, 1.5)
+    offset = random.uniform(-0.4, 0.4)
+    env.teleport_ball(-1, offset)
 
     # Initialize Game objects for each team
-    yellow_game = Game(my_team_is_yellow=True)
-    blue_game = Game(my_team_is_yellow=False)
+    # yellow_game = Game(my_team_is_yellow=True)
+    # blue_game = Game(my_team_is_yellow=False)
+    game = Game(my_team_is_yellow=True)
 
     # Create a stop event to signal threads to stop
     stop_event = threading.Event()
 
     # Create threads for each team
     yellow_thread = threading.Thread(
-        target=strat_atk,
-        args=(yellow_game, stop_event),
+        target=one_on_one,
+        # target=strat_atk,
+        # args=(yellow_game, stop_event),
+        args=(game, stop_event, True),
     )
     blue_thread = threading.Thread(
-        target=strat_def,
-        args=(blue_game, stop_event),
+        target=one_on_one,
+        # target=strat_def,
+        # args=(blue_game, stop_event),
+        args=(game, stop_event, False),
     )
 
     yellow_thread.daemon = True
