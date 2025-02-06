@@ -24,8 +24,11 @@ def score_goal(
     is_yellow: bool,
     shoot_in_left_goal: bool,
 ) -> RobotCommand:
+    if shoot_in_left_goal:
+        target_goal_line = game_obj.field.LEFT_GOAL_LINE
+    else:
+        target_goal_line = game_obj.field.RIGHT_GOAL_LINE
 
-    target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
     latest_frame = game_obj.get_my_latest_frame(is_yellow)
     if not latest_frame:
         return
