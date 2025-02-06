@@ -221,6 +221,5 @@ class VisionDataReceiver(BaseReceiver):
         for _ in range(len(vision_packet_detect.balls)):
             num_balls += 1
             
-        print(f"num of yellow robots detected: {num_yellow_robots}")
-        print(f"num of blue robots detected: {num_blue_robots}")
+        print(f"num of yellow robots detected: {num_yellow_robots}, blue robots detected: {num_blue_robots}")
         print(f"num of balls detected: {num_balls} \n")
