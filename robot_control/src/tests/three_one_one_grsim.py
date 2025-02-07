@@ -144,6 +144,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
     sim_robot_controller_defender = GRSimRobotController(game.my_team_is_yellow)
     my_team_is_yellow = game.my_team_is_yellow
     message_queue = queue.SimpleQueue()
+
     vision_receiver = VisionDataReceiver(message_queue)
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
     vision_thread.daemon = True
@@ -160,18 +161,17 @@ def defender_strategy(game: Game, stop_event: threading.Event):
             if message_type == MessageType.VISION:
                 game.add_new_state(message)
 
-                print(game.get_robot_pos(False, 0))
-
-                # defender_command = defend(pid_oren_defender, pid_2d_defender, game, my_team_is_yellow, 1, None)
-                # goalie_command = goalkeep(my_team_is_yellow, game, 0, pid_oren_defender, pid_2d_defender, my_team_is_yellow, sim_robot_controller_defender.robot_has_ball(0))
-                goalie_command = go_to_point(pid_oren_defender, pid_2d_defender, game.get_robot_pos(False, 0), 0, (4.5, 0), False)
-                # sim_robot_controller_defender.add_robot_commands(defender_command, 1)
-                print(goalie_command)
-                sim_robot_controller_defender.add_robot_commands(goalie_command, 0)
-                sim_robot_controller_defender.send_robot_commands()
-
             elif message_type == MessageType.REF:
                 pass
+            
+            print(game.get_robot_pos(False, 0))
+
+            defender_command = defend(pid_oren_defender, pid_2d_defender, game, my_team_is_yellow, 1, None)
+            goalie_command = goalkeep(not my_team_is_yellow, game, 0, pid_oren_defender, pid_2d_defender, my_team_is_yellow, sim_robot_controller_defender.robot_has_ball(0))
+            # goalie_command = go_to_point(pid_oren_defender, pid_2d_defender, game.get_robot_pos(False, 0), 0, (4.5, 0), False)
+            sim_robot_controller_defender.add_robot_commands(defender_command, 1)
+            sim_robot_controller_defender.add_robot_commands(goalie_command, 0)
+            sim_robot_controller_defender.send_robot_commands()
     
 def attacker_strategy(game: Game, stop_event: threading.Event):
     sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
@@ -192,12 +192,11 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
             (message_type, message) = message_queue.get()
             if message_type == MessageType.VISION:
                 game.add_new_state(message)
+                time.sleep(0.01)
 
             elif message_type == MessageType.REF:
                 pass
-    
-
-
+        
 def pvp_manager(headless: bool, attacker_is_yellow: bool):
     """
     A 1v1 scenario with dynamic switching of attacker/defender roles.
