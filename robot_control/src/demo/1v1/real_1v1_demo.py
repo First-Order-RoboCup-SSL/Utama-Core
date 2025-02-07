@@ -1,12 +1,9 @@
 from calendar import c
 from motion_planning.src.pid.pid import get_real_pids, get_real_pids_goalie
-from robot_control.src.high_level_skills import DribbleToTarget
 from robot_control.src.intent import score_goal
 from robot_control.src.skills import go_to_point, go_to_ball, goalkeep, turn_on_spot
 from team_controller.src.controllers import RealRobotController
 from entities.game import Game
-from entities.data.command import RobotCommand
-import time
 import queue
 import logging
 import threading
@@ -15,7 +12,7 @@ from team_controller.src.data.vision_receiver import VisionDataReceiver
 import numpy as np
 import random
 import logging
-# from mock import Mock
+from mock import Mock
 import math
 
 logger = logging.getLogger(__name__)
@@ -78,31 +75,21 @@ def one_vs_one_goalie(game: Game, robot_controller_attacker: RealRobotController
             
             robot_controller_goalie.add_robot_commands(goalkeep(True, game, GOALIE_ROBOT_ID, pid_oren_goalie, pid_trans_goalie, not ATTACKER_IS_YELLOW, False), GOALIE_ROBOT_ID)
 
-            if ball_init_pos and math.dist((new_ball_pos.x, new_ball_pos.y), (ball_init_pos.x, ball_init_pos.y)) > 0.1 and stage == 1: # and math.dist((goalie_pos.x, goalie_pos.y), (-4.5, 0)) 
-                stage += 1
-            elif math.dist((attacker_pos.x, attacker_pos.y), (-3, 0.5)) < 0.07 and stage == 2:
-                stage += 1
-                target = (current_x, random.uniform(-1, 1))
-            # elif stage == 3: # target is not None and math.dist((attacker_pos.x, attacker_pos.y), target) < 0.2 and 
-            #     stage += 1
-            
             print(f"STAGE {stage}")
 
-            if stage == 1:  
-                print("STAGE 1", ball_init_pos, new_ball_pos)  
-                robot_controller_attacker.add_robot_commands(go_to_ball(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), ATTACKER_ROBOT_ID, game.ball), ATTACKER_ROBOT_ID)    
-            elif stage == 2:
-                print("STAGE 2")
-                robot_controller_attacker.add_robot_commands(go_to_point(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, (-3, 0.5), None, dribbling=True), ATTACKER_ROBOT_ID)
-            # elif stage == 3:
-            #     print("STAGE 3")
-            #     if not dribble_task and current_x > -3:
-            #         current_x -= 1
-            #         dribble_task = DribbleToTarget(pid_oren_attacker, pid_trans_attacker, game, ATTACKER_ROBOT_ID, target)
-            #         robot_controller_attacker.add_robot_commands(dribble_task.enact(True), ATTACKER_ROBOT_ID)
+            if stage == 1:
+                if robot_controller_attacker.robot_has_ball(ATTACKER_ROBOT_ID):
+                    stage += 1
+                else:
+                    robot_controller_attacker.add_robot_commands(go_to_ball(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), ATTACKER_ROBOT_ID, game.ball), ATTACKER_ROBOT_ID)    
+            elif stage == 2:                
+                if math.dist((attacker_pos.x, attacker_pos.y), (-3, 0.5)) < 0.07 and stage == 2:
+                    stage += 1
+                else:
+                    robot_controller_attacker.add_robot_commands(go_to_point(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, (-3, 0.5), None, dribbling=True), ATTACKER_ROBOT_ID)
             elif stage == 3:
                 cmd = score_goal(game, shooter_has_ball=True, shooter_id=ATTACKER_ROBOT_ID, pid_oren=pid_oren_attacker, pid_trans=pid_trans_attacker, is_yellow=ATTACKER_IS_YELLOW, shoot_in_left_goal=LEFT_GOAL)
-                print(cmd)
+                print("SENDING COMMAND", cmd)
                 if cmd.kick == 1:
                     stage += 1
                 robot_controller_attacker.add_robot_commands(cmd, ATTACKER_ROBOT_ID)
