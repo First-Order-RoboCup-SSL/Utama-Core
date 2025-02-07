@@ -3,6 +3,7 @@ import numpy as np
 from motion_planning.src.pid.pid import TwoDPID
 from global_utils.math_utils import distance, normalise_heading
 from robot_control.src.utils.shooting_utils import find_best_shot
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from entities.game import Game, Field
 from entities.data.command import RobotCommand
@@ -21,7 +22,7 @@ from robot_control.src.skills import (
     velocity_to_orientation,
 )
 from motion_planning.src.pid import PID
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from math import dist
 import logging
 
@@ -251,7 +252,7 @@ def defend(
     game: Game,
     is_yellow: bool,
     defender_id: int,
-    env,
+    env: Optional[SSLStandardEnv],
 ) -> RobotCommand:
     # Assume that is_yellow <-> not is_left here # TODO : FIX
     friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
@@ -295,10 +296,11 @@ def defend(
     )
 
     gp = get_goal_centre(is_left=not is_yellow)
-    env.draw_line(
-        [gp, (target_tracking_coord[0], target_tracking_coord[1])],
-        width=5,
-        color="RED" if tracking_ball else "PINK",
-    )
+    if env:
+        env.draw_line(
+            [gp, (target_tracking_coord[0], target_tracking_coord[1])],
+            width=5,
+            color="RED" if tracking_ball else "PINK",
+        )
 
     return cmd

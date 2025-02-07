@@ -14,6 +14,7 @@ from global_utils.math_utils import normalise_heading
 from motion_planning.src.pid.pid import TwoDPID
 from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
 
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from team_controller.src.config.settings import ROBOT_RADIUS
 
 logger = logging.getLogger(__name__)
@@ -234,7 +235,7 @@ def align_defenders(
     attacker_position: Tuple[float, float],
     attacker_orientation: Optional[float],
     is_left: bool,
-    env,
+    env: Optional[SSLStandardEnv],
 ) -> Tuple[float, float]:
     """
     Calculates the next point on the defense area that the robots should go to
@@ -257,15 +258,17 @@ def align_defenders(
             predict_goal_y_location(attacker_position, attacker_orientation, is_left)
         )
 
-    env.draw_line([predicted_goal_position, attacker_position], width=1, color="green")
-    env.draw_line([predicted_goal_position, (dx, dy)], width=1, color="yellow")
+    if env:
+        env.draw_line([predicted_goal_position, attacker_position], width=1, color="green")
+        env.draw_line([predicted_goal_position, (dx, dy)], width=1, color="yellow")
 
     # Calculate the cross product relative to the predicted position of the goal
 
     poly = []
     for t in range(round(1000 * pi / 2), round(1000 * 3 * pi / 2) + 1):
         poly.append(calculate_defense_area(clamp_to_parametric(t / 1000), is_left))
-    env.draw_polygon(poly, width=3)
+    if env:
+        env.draw_polygon(poly, width=3)
 
     goal_to_defender = relative_to((dx, dy), predicted_goal_position)
     goal_to_attacker = relative_to(attacker_position, predicted_goal_position)
@@ -333,7 +336,7 @@ def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_t
     if not target or abs(target[1]) > 0.5:
         target = (-4.5 if is_left_goal else 4.5, 0)
 
-
+    print("Going to", target)
     if target and not find_likely_enemy_shooter(game.get_robots_pos(not is_yellow), [game.ball]):
         cmd = go_to_point(
             pid_oren,
