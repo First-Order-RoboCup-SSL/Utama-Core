@@ -71,8 +71,8 @@ class RealRobotController(AbstractRobotController):
         Adds robot commands to the packet to be sent to the robot.
         """
         NUMBER_TO_SAM_NUMBER = { # TODO: This obviously is not permanent
-            1: 0,
-            4: 1
+            1: 1,
+            4: 0
         }
 
         super().add_robot_commands(robot_commands, NUMBER_TO_SAM_NUMBER[robot_id])
@@ -82,7 +82,7 @@ class RealRobotController(AbstractRobotController):
         Adds a robot command to the out_packet.
 
         Args:
-            robot_id (int): The ID of the robot.
+            robot_id (int): The ID of the robot.    
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
         c_command = self._convert_float_command(robot_id, command)
