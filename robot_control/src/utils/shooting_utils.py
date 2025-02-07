@@ -111,6 +111,7 @@ def find_best_shot(
         goal_y2=goal_y2,
         shoot_in_left_goal=shoot_in_left_goal,
     )
+    print("SHAADOWWSSS", shadows)
     if not shadows:
         return None
 
