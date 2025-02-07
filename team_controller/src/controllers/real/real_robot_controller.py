@@ -70,7 +70,12 @@ class RealRobotController(AbstractRobotController):
         """
         Adds robot commands to the packet to be sent to the robot.
         """
-        super().add_robot_commands(robot_commands, robot_id)
+        NUMBER_TO_SAM_NUMBER = { # TODO: This obviously is not permanent
+            1: 0,
+            4: 1
+        }
+
+        super().add_robot_commands(robot_commands, NUMBER_TO_SAM_NUMBER[robot_id])
 
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
         """
