@@ -53,7 +53,7 @@ def one_vs_one_goalie(game: Game, robot_controller_attacker: RealRobotController
         (message_type, message) = message_queue.get()
         if message_type == MessageType.VISION:
             game.add_new_state(message)
-
+            print(message)
             if iter == 2:
                 ball_init_pos = game.get_ball_pos()[0]
 
@@ -102,10 +102,11 @@ def main():
     stop_buffer_off = [0, 0, 0, 0, 0, 0, 0, 0]
 
     game = Game()
-    robot_controller_yellow = RealRobotController(
-        is_team_yellow=True, game_obj=game, n_robots=1
-    )
+    # robot_controller_yellow = RealRobotController(
+    #     is_team_yellow=True, game_obj=game, n_robots=1
+    # )
 
+    robot_controller_yellow = Mock()
     robot_controller_blue = Mock()
     
     # RealRobotController(
