@@ -40,7 +40,7 @@ from robot_control.src.intent import (
 
 logger = logging.getLogger(__name__)
 
-TOTAL_ITERATIONS = 10
+TOTAL_ITERATIONS = 2
 MAX_GAME_TIME = 10000
 SHOOT_AT_BLUE_GOAL = True
 # Shoot at blue goal means shooting to the left in rsim environement
@@ -313,6 +313,7 @@ def one_on_one(game: Game, stop_event: threading.Event):
             # Check if the robot has the ball
             if sim_robot_controller.robot_has_ball(0):
                 # Try to score
+                pid_trans.Kp = 8.5
                 cmd = score_goal_demo(
                     game,
                     0,
@@ -325,6 +326,9 @@ def one_on_one(game: Game, stop_event: threading.Event):
 
                 # If scoring is not possible, dribble to a better position
                 if cmd is None:
+                    print(cmd)
+                    pid_trans.Kp = 8.5 / 2
+
                     if not dribbling:
                         # Calculate a target position for dribbling
                         target_coords = dribble_to_target_decision_maker(

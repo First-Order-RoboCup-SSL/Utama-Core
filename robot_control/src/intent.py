@@ -235,7 +235,7 @@ def score_goal_demo(
                 # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
                 # Because 0.02 as a threshold is meaningless (different at different distances)
                 # TODO: consider also adding a distance from goal threshold
-                print(current_oren, shot_orientation)
+                # print(current_oren, shot_orientation)
                 if abs(current_oren - shot_orientation) % np.pi <= 0.05:
                     logger.info("kicking ball")
                     robot_command = kick_ball()
