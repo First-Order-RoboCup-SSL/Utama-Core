@@ -113,7 +113,7 @@ def find_best_shot(
     )
     print("SHAADOWWSSS", shadows)
     if not shadows:
-        return (goal_y2 + goal_y1) / 2, abs(goal_y2 - goal_y1)
+        return None
 
     open_spaces: List[Tuple[float, float]] = []
 
