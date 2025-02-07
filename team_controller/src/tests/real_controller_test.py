@@ -124,7 +124,7 @@ def get_ball_test_with_vision(game: Game, robot_controller: RealRobotController)
                     my_pos.x - initial_ball_pos.x, my_pos.y - initial_ball_pos.y
                 )
 
-                SLOW_FRAMES = 45
+                SLOW_FRAMES = 200
                 print("DIST", distance)
                 if abs(distance) < 0.2 and not done:
                     print("SWITCHING TO BACK")
@@ -167,7 +167,7 @@ def get_ball_test_with_vision(game: Game, robot_controller: RealRobotController)
 
                 # cmd = go_to_point(pid_oren, pid_trans, data, 1, (-2, -0.5), 0, False)
 
-                robot_controller.add_robot_commands(cmd, 0)
+                robot_controller.add_robot_commands(cmd, 1)
                 robot_controller.send_robot_commands()
 
         vision_recieved = False
@@ -217,12 +217,12 @@ def test_kicker(robot_controller: RealRobotController, robot_id: int, dribbler_o
         chip=0,
         dribble=0,
     )
-    for _ in range(15):
-        robot_controller.add_robot_commands(
-            empty_command(dribbler_on=dribbler_on), robot_id
-        )
-        robot_controller.send_robot_commands()
-        time.sleep(0.05)
+    # for _ in range(15):
+    #     robot_controller.add_robot_commands(
+    #         empty_command(dribbler_on=dribbler_on), robot_id
+    #     )
+    #     robot_controller.send_robot_commands()
+    #     time.sleep(0.05)
     robot_controller.add_robot_commands(cmd0, robot_id)
     robot_controller.send_robot_commands()
     time.sleep(0.05)
@@ -242,8 +242,8 @@ def main():
     try:
         # test_command(robot_controller, robot_id, 100, False, False)
         # get_ball_test_with_vision(game, robot_controller)
-        test_kicker(robot_controller, robot_id, dribbler_on=False)
-    except KeyboardInterrupt:
+        test_kicker(robot_controller, 1, dribbler_on=True)
+    finally:
         # try to stop the robot 15 times
         print("Stopping robot.")
 

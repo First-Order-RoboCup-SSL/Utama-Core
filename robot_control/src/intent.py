@@ -176,6 +176,7 @@ class PassBall:
         return passer_cmd, receiver_cmd
 
 
+# intent on scoring goal
 def score_goal_demo(
     game_obj: Game,
     shooter_id: int,
@@ -235,7 +236,7 @@ def score_goal_demo(
                 # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
                 # Because 0.02 as a threshold is meaningless (different at different distances)
                 # TODO: consider also adding a distance from goal threshold
-                print(current_oren, shot_orientation)
+                # print(current_oren, shot_orientation)
                 if abs(current_oren - shot_orientation) % np.pi <= 0.05:
                     logger.info("kicking ball")
                     robot_command = kick_ball()
@@ -338,7 +339,8 @@ def score_goal_(
 
     return robot_command
 
-
+# TODO : THIS REALLY MUST BE FIXED
+count = 0
 def score_goal(
     game_obj: Game,
     shooter_has_ball: bool,
@@ -348,13 +350,13 @@ def score_goal(
     is_yellow: bool,
     shoot_in_left_goal: bool,
 ) -> RobotCommand:
+    global count
 
-    target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
+    target_goal_line = game_obj.field.blue_goal_line if shoot_in_left_goal else game_obj.field.yellow_goal_line # TODO: FIX THIS #  game_obj.field.enemy_goal_line(is_yellow)
     latest_frame = game_obj.get_my_latest_frame(is_yellow)
     if not latest_frame:
         return
     friendly_robots, enemy_robots, balls = latest_frame
-
     # TODO: Not sure if this is sufficient for both blue and yellow scoring
     # It won't be because note that in real life the blue team is not necessarily
     # on the left of the pitch
@@ -365,9 +367,11 @@ def score_goal(
     # calculate best shot from the position of the ball
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
     if friendly_robots and enemy_robots and balls:
-        best_shot, size_of_shot = find_best_shot(
-            balls[0], enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
-        )
+        best_shot = -0.4
+
+        # best_shot, size_of_shot = find_best_shot(
+        #     balls[0], enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
+        # )
 
         shot_orientation = np.atan2((best_shot - balls[0].y), (goal_x - balls[0].x))
 
@@ -377,7 +381,7 @@ def score_goal(
 
         # TODO: For now we just look at the first ball, but this will eventually have to be smarter
         ball_data: BallData = balls[0]
-
+        print("DATA", ball_data, robot_data)
         if ball_data is not None and robot_data is not None:
             if robot_data is not None:
                 if shooter_has_ball:
@@ -388,9 +392,22 @@ def score_goal(
                     # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
                     # Because 0.02 as a threshold is meaningless (different at different distances)
                     # TODO: consider also adding a distance from goal threshold
-                    if abs(current_oren - shot_orientation) <= 0.05:
-                        logger.info("kicking ball")
-                        robot_command = kick_ball()
+                    print("DIFF", abs(current_oren - shot_orientation))
+                    if abs(current_oren - shot_orientation) <= 0.01:
+                        print("kicking ball")
+                        count += 1
+                        if count >= 100:
+                            robot_command = kick_ball()
+                        else:
+                            robot_command = RobotCommand(
+                                local_forward_vel=0.5,
+                                local_left_vel=0,
+                                angular_vel=0,
+                                kick=0,
+                                chip=0,
+                                dribble=0
+                            )
+                            
                     # else, robot has ball, but needs to turn to the right direction
                     # TODO: Consider also advancing closer to the goal
                     else:
