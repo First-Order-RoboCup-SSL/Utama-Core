@@ -1,5 +1,6 @@
 import numpy as np
 
+from entities.game.game_object import Colour
 from motion_planning.src.pid.pid import TwoDPID
 from global_utils.math_utils import distance, normalise_heading
 from robot_control.src.utils.shooting_utils import find_best_shot
@@ -21,12 +22,16 @@ from robot_control.src.skills import (
     velocity_to_orientation,
 )
 from motion_planning.src.pid import PID
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from math import dist
 import logging
 
-from team_controller.src.controllers.common.robot_controller_abstract import AbstractRobotController
-from team_controller.src.controllers.sim.rsim_robot_controller import RSimRobotController
+from team_controller.src.controllers.common.robot_controller_abstract import (
+    AbstractRobotController,
+)
+from team_controller.src.controllers.sim.rsim_robot_controller import (
+    RSimRobotController,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +140,7 @@ class PassBall:
                 self.receiver_id,
                 adjusted_pos,
                 catch_orientation,
-                dribbling=True
+                dribbling=True,
             )
 
         else:
@@ -171,9 +176,171 @@ class PassBall:
         return passer_cmd, receiver_cmd
 
 
+# intent on scoring goal
+def score_goal_demo(
+    game_obj: Game,
+    shooter_id: int,
+    pid_oren: PID,
+    pid_trans: PID,
+    shoot_at_goal_colour: Optional[Colour] = None,
+) -> RobotCommand:
+    """
+    shoot_at_goal_colour should only be used i
+    """
+
+    if not shoot_at_goal_colour:
+        shoot_at_goal_colour = (
+            Colour.BLUE if game_obj.my_team_is_yellow else Colour.YELLOW
+        )
+
+    target_goal_line = game_obj.field.enemy_goal_line(
+        shoot_at_goal_colour == Colour.BLUE
+    )
+
+    # If no frame data, skip
+    if not game_obj.get_latest_frame():
+        return
+
+    friendly_robots = game_obj.friendly_robots
+    enemy_robots = game_obj.enemy_robots
+    ball = game_obj.ball
+    # According to how game works, we take the most confident ball
+
+    goal_x = target_goal_line.coords[0][0]
+    goal_y1 = target_goal_line.coords[1][1]
+    goal_y2 = target_goal_line.coords[0][1]
+
+    # calculate best shot from the position of the ball
+    # TODO: add sampling function to try to find other angles to shoot from that are more optimal
+    if friendly_robots and enemy_robots and ball:
+        best_shot, size_of_shot = find_best_shot(
+            ball, enemy_robots, goal_x, goal_y1, goal_y2, shoot_at_goal_colour
+        )
+
+        shot_orientation = np.atan2((best_shot - ball.y), (goal_x - ball.x))
+
+        robot_data: RobotData = (
+            friendly_robots[shooter_id].robot_data
+            if shooter_id < len(friendly_robots)
+            else None
+        )
+
+        # ball_data: BallData = ball.ball_data
+
+        if ball is not None and robot_data is not None:
+            if robot_data is not None:
+                logging.debug("robot has ball")
+                current_oren = robot_data.orientation
+
+                # if robot has ball and is facing the goal, kick the ball
+                # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
+                # Because 0.02 as a threshold is meaningless (different at different distances)
+                # TODO: consider also adding a distance from goal threshold
+                # print(current_oren, shot_orientation)
+                if abs(current_oren - shot_orientation) % np.pi <= 0.05:
+                    logger.info("kicking ball")
+                    robot_command = kick_ball()
+                # else, robot has ball, but needs to turn to the right direction
+                # TODO: Consider also advancing closer to the goal
+
+                else:
+                    robot_command = turn_on_spot(
+                        pid_oren,
+                        pid_trans,
+                        robot_data,
+                        shooter_id,
+                        shot_orientation,
+                        dribbling=True,
+                        pivot_on_ball=True,
+                    )
+
+    return robot_command
+
+
+def score_goal_(
+    game_obj: Game,
+    shooter_has_ball: bool,
+    shooter_id: int,
+    pid_oren: PID,
+    pid_trans: PID,
+    is_yellow: bool,
+    shoot_in_left_goal: bool,
+    magic_is_yellow_bool_do_not_ever_touch_this_shit: bool,
+) -> RobotCommand:
+
+    target_goal_line = game_obj.field.enemy_goal_line(
+        magic_is_yellow_bool_do_not_ever_touch_this_shit
+    )
+    latest_frame = game_obj.get_my_latest_frame(
+        magic_is_yellow_bool_do_not_ever_touch_this_shit
+    )
+
+    if not latest_frame:
+        return
+    friendly_robots, enemy_robots, balls = latest_frame
+    if not magic_is_yellow_bool_do_not_ever_touch_this_shit:
+        friendly_robots, enemy_robots = enemy_robots, friendly_robots
+
+    # TODO: Not sure if this is sufficient for both blue and yellow scoring
+    # It won't be because note that in real life the blue team is not necessarily
+    # on the left of the pitch
+    goal_x = target_goal_line.coords[0][0]
+    goal_y1 = target_goal_line.coords[1][1]
+    goal_y2 = target_goal_line.coords[0][1]
+
+    # calculate best shot from the position of the ball
+    # TODO: add sampling function to try to find other angles to shoot from that are more optimal
+    if friendly_robots and enemy_robots and balls:
+        best_shot, size_of_shot = find_best_shot(
+            balls[0], enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
+        )
+
+        shot_orientation = np.atan2((best_shot - balls[0].y), (goal_x - balls[0].x))
+
+        robot_data: RobotData = (
+            friendly_robots[shooter_id] if shooter_id < len(friendly_robots) else None
+        )
+
+        # TODO: For now we just look at the first ball, but this will eventually have to be smarter
+        ball_data: BallData = balls[0]
+
+        if ball_data is not None and robot_data is not None:
+            if robot_data is not None:
+                if shooter_has_ball:
+                    logging.debug("robot has ball")
+                    current_oren = robot_data.orientation
+
+                    # if robot has ball and is facing the goal, kick the ball
+                    # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
+                    # Because 0.02 as a threshold is meaningless (different at different distances)
+                    # TODO: consider also adding a distance from goal threshold
+                    print(current_oren, shot_orientation)
+                    if abs(current_oren - shot_orientation) % np.pi <= 0.05:
+                        logger.info("kicking ball")
+                        robot_command = kick_ball()
+                    # else, robot has ball, but needs to turn to the right direction
+                    # TODO: Consider also advancing closer to the goal
+                    else:
+                        robot_command = turn_on_spot(
+                            pid_oren,
+                            pid_trans,
+                            robot_data,
+                            shooter_id,
+                            shot_orientation,
+                            dribbling=shooter_has_ball,
+                            pivot_on_ball=True,
+                        )
+
+                else:
+                    logger.debug("approaching ball %lf", robot_data.orientation)
+                    robot_command = go_to_ball(
+                        pid_oren, pid_trans, robot_data, shooter_id, ball_data
+                    )
+
+    return robot_command
+
 # TODO : THIS REALLY MUST BE FIXED
 count = 0
-# intent on scoring goal
 def score_goal(
     game_obj: Game,
     shooter_has_ball: bool,
@@ -262,6 +429,7 @@ def score_goal(
 
     return robot_command
 
+
 def defend(
     pid_oren: PID,
     pid_2d: TwoDPID,
@@ -275,7 +443,6 @@ def defend(
     shooters_data = find_likely_enemy_shooter(enemy, balls)
     orientation = None
     tracking_ball = False
-
 
     # if game.in_box(balls[0].x, balls[0].y):
     #     print("AAAAAAAAAAAAAAAAAAAAAA")

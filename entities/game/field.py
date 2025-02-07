@@ -29,32 +29,30 @@ class Field:
             [
                 (self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
                 (
-                    self.HALF_LENGTH - 2*self.HALF_DEFENSE_AREA_LENGTH,
+                    self.HALF_LENGTH - 2 * self.HALF_DEFENSE_AREA_LENGTH,
                     self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (
-                    self.HALF_LENGTH - 2*self.HALF_DEFENSE_AREA_LENGTH,
+                    self.HALF_LENGTH - 2 * self.HALF_DEFENSE_AREA_LENGTH,
                     -self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (self.HALF_LENGTH, -self.HALF_DEFENSE_AREA_WIDTH),
                 (self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
-
             ]
         )
         self.BLUE_DEFENSE_AREA = Polygon(
             [
                 (-self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
                 (
-                    -self.HALF_LENGTH + 2*self.HALF_DEFENSE_AREA_LENGTH,
+                    -self.HALF_LENGTH + 2 * self.HALF_DEFENSE_AREA_LENGTH,
                     self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (
-                    -self.HALF_LENGTH + 2*self.HALF_DEFENSE_AREA_LENGTH,
+                    -self.HALF_LENGTH + 2 * self.HALF_DEFENSE_AREA_LENGTH,
                     -self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (-self.HALF_LENGTH, -self.HALF_DEFENSE_AREA_WIDTH),
                 (-self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
-                
             ]
         )
 
@@ -113,7 +111,14 @@ class Field:
     @staticmethod
     def blue_defense_area() -> Polygon:
         return Field().BLUE_DEFENSE_AREA
-    
+
     @staticmethod
     def full_field() -> Polygon:
-        return Polygon([[-Field.HALF_LENGTH, -Field.HALF_WIDTH], [-Field.HALF_LENGTH, Field.HALF_WIDTH], [Field.HALF_LENGTH, Field.HALF_WIDTH], [Field.HALF_LENGTH, -Field.HALF_WIDTH]])
+        return Polygon(
+            [
+                [-Field.HALF_LENGTH, -Field.HALF_WIDTH],
+                [-Field.HALF_LENGTH, Field.HALF_WIDTH],
+                [Field.HALF_LENGTH, Field.HALF_WIDTH],
+                [Field.HALF_LENGTH, -Field.HALF_WIDTH],
+            ]
+        )

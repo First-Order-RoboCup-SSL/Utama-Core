@@ -69,7 +69,7 @@ def go_to_ball(
         pid_trans=pid_trans,
         this_robot_data=this_robot_data,
         robot_id=robot_id,
-        target_coords=(ball_data.x, ball_data.y),# (target_x, target_y),
+        target_coords=(ball_data.x, ball_data.y),  # (target_x, target_y),
         target_oren=target_oren,
         dribbling=dribbling,
     )
@@ -342,9 +342,17 @@ def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_t
     print(robot_data)
     print("HERE")
     if goalie_has_ball:
-        target_oren = (0 if is_left_goal else math.pi)
+        target_oren = 0 if is_left_goal else math.pi
         print("TARGET OREN", target_oren)
-        return go_to_point(pid_oren, pid_trans, robot_data, robot_id, ((-4 if is_left_goal else 4), 0), target_oren, True)
+        return go_to_point(
+            pid_oren,
+            pid_trans,
+            robot_data,
+            robot_id,
+            ((-4 if is_left_goal else 4), 0),
+            target_oren,
+            True,
+        )
 
 
     OFFSET = 0.20
@@ -371,31 +379,29 @@ def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_t
     target = (((-4.5 + OFFSET) if is_left_goal else (4.5 - OFFSET)), target + SIDE_OFFSET)
     print("GOALIE TARGET", target, previous_targets)
 
-
-    if target and not find_likely_enemy_shooter(game.get_robots_pos(not is_yellow), [game.ball]):
+    if target and not find_likely_enemy_shooter(
+        game.get_robots_pos(not is_yellow), [game.ball]
+    ):
         cmd = go_to_point(
             pid_oren,
             pid_trans,
             robot_data,
             robot_id,
             target,
-            face_ball(
-                (robot_data.x, robot_data.y), 
-                (game.ball.x, game.ball.y)
-            ),
+            face_ball((robot_data.x, robot_data.y), (game.ball.x, game.ball.y)),
+            dribbling=True,
         )
-    else: # TODO : Not sure if we actually need this case? 
+    else:  # TODO : Not sure if we actually need this case?
         cmd = go_to_point(
             pid_oren,
             pid_trans,
             robot_data,
             0,
             [None, None],
-            face_ball(
-                (robot_data.x, robot_data.y), (game.ball.x, game.ball.y)
-            ),
+            face_ball((robot_data.x, robot_data.y), (game.ball.x, game.ball.y)),
         )
     return cmd
+
 
 def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
     ans = []
@@ -406,6 +412,7 @@ def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
                 # Ball is close to this robot
                 ans.append(er)
     return list(set(ans))
+
 
 if __name__ == "__main__":
     logger.debug(f"{to_defense_parametric((3, 2), False)}")
