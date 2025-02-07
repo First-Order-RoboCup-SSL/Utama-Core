@@ -39,7 +39,6 @@ def calculate_robot_velocities(
     else:
         forward_vel = 0
         left_vel = 0
-    print("COMMAND", forward_vel, left_vel)
     return RobotCommand(
         local_forward_vel=forward_vel,
         local_left_vel=left_vel,

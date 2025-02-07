@@ -336,7 +336,6 @@ def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_t
     if not target or abs(target[1]) > 0.5:
         target = (-4.5 if is_left_goal else 4.5, 0)
 
-    print("Going to", target)
     if target and not find_likely_enemy_shooter(game.get_robots_pos(not is_yellow), [game.ball]):
         cmd = go_to_point(
             pid_oren,

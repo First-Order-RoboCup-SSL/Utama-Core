@@ -156,22 +156,25 @@ def defender_strategy(game: Game, stop_event: threading.Event):
     message = None
     while not stop_event.is_set():
         # Process messages from the queue
+        start = time.time()
         if not message_queue.empty():
             (message_type, message) = message_queue.get()
+            print(message_queue.qsize())
             if message_type == MessageType.VISION:
                 game.add_new_state(message)
 
+                # # defender_command = defend(pid_oren_defender, pid_2d_defender, game, my_team_is_yellow, 1, None)
+                goalie_command = goalkeep(not my_team_is_yellow, game, 0, pid_oren_defender, pid_2d_defender, my_team_is_yellow, sim_robot_controller_defender.robot_has_ball(0))
+                # # goalie_command = go_to_point(pid_oren_defender, pid_2d_defender, game.get_robot_pos(False, 0), 0, (4.5, 0), False)
+                sim_robot_controller_defender.add_robot_commands(
+                    # {1: defender_command,
+                     {0: goalie_command})
+                sim_robot_controller_defender.send_robot_commands()
+        
             elif message_type == MessageType.REF:
                 pass
-            
-            print(game.get_robot_pos(False, 0))
+        print(time.time() - start)
 
-            defender_command = defend(pid_oren_defender, pid_2d_defender, game, my_team_is_yellow, 1, None)
-            goalie_command = goalkeep(not my_team_is_yellow, game, 0, pid_oren_defender, pid_2d_defender, my_team_is_yellow, sim_robot_controller_defender.robot_has_ball(0))
-            # goalie_command = go_to_point(pid_oren_defender, pid_2d_defender, game.get_robot_pos(False, 0), 0, (4.5, 0), False)
-            sim_robot_controller_defender.add_robot_commands(defender_command, 1)
-            sim_robot_controller_defender.add_robot_commands(goalie_command, 0)
-            sim_robot_controller_defender.send_robot_commands()
     
 def attacker_strategy(game: Game, stop_event: threading.Event):
     sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
@@ -190,13 +193,13 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
         # Process messages from the queue
         if not message_queue.empty():
             (message_type, message) = message_queue.get()
+            print("ATTACKER", message_queue.qsize())
             if message_type == MessageType.VISION:
                 game.add_new_state(message)
-                time.sleep(0.01)
 
             elif message_type == MessageType.REF:
                 pass
-        
+    
 def pvp_manager(headless: bool, attacker_is_yellow: bool):
     """
     A 1v1 scenario with dynamic switching of attacker/defender roles.
