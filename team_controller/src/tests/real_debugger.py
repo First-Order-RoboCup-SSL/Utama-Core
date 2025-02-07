@@ -200,9 +200,9 @@ class RobotControlGUI:
         if "d" in self.active_keys:
             self.velocities["left"] -= self.VELOCITY_SCALE
         if "q" in self.active_keys:
-            self.velocities["angular"] += self.VELOCITY_SCALE
+            self.velocities["angular"] += self.VELOCITY_SCALE * 5
         if "e" in self.active_keys:
-            self.velocities["angular"] -= self.VELOCITY_SCALE
+            self.velocities["angular"] -= self.VELOCITY_SCALE * 5
 
         # Update display labels
         for name, value in self.velocities.items():
@@ -268,8 +268,12 @@ class RobotControlGUI:
             self.switches["kicker_top"].set(False)
         if self.switches["kicker_bottom"].get():
             control_byte |= 0x80  # Bit 7
-        robot_id = self.robot_id.get() & 0x0F  # 5 bits only
+            self.switches["kicker_bottom"].set(False)
+
+        robot_id = self.robot_id.get() & 0x0F  # 4 bits only
         control_byte |= robot_id << 1
+        control_byte |= 1  # always a terminating packet
+
         packet.append(control_byte)
         crc = self.compute_crc(packet)
         packet.append(crc)
@@ -283,11 +287,9 @@ class RobotControlGUI:
                 continue
 
             try:
-                # 创建并发送数据包
-                packet = self.create_packet()
+                packet = list(self.create_packet())
                 self.serial_port.write(packet)
 
-                # Optional: 打印数据包用于调试
                 print(f"Sent Packet: {list(packet)}")
             except Exception as e:
                 print(f"Serial send error: {e}")
@@ -302,7 +304,8 @@ class RobotControlGUI:
 
             try:
                 if self.serial_port.in_waiting > 0:
-                    data = self.serial_port.readline().decode("utf-8").strip()
+                    data = str(bin(self.serial_port.read()[0]))
+                    print(data)
                     if data:
                         self.root.after(0, self.update_response_display, data)
             except Exception as e:

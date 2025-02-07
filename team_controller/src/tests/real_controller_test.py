@@ -175,7 +175,7 @@ def get_ball_test_with_vision(game: Game, robot_controller: RealRobotController)
 
 def test_command(
     robot_controller: RealRobotController,
-    target_val: int,
+    robot_id: int,
     ramp_iters: int,
     ramp_only: bool = False,
     dribble: bool = False,
@@ -187,7 +187,7 @@ def test_command(
             break
         iter += 1
         cmd = RobotCommand(
-            local_forward_vel=0.2,
+            local_forward_vel=0,
             local_left_vel=0,
             angular_vel=0,
             # angular_vel=min(1, iter / ramp_iters) * target_val,
@@ -196,13 +196,14 @@ def test_command(
             dribble=dribble,
         )
 
-        robot_controller.add_robot_commands(cmd, 0)
+        robot_controller.add_robot_commands(cmd, robot_id)
         # binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
         # print(
         #     f"command sent!\n",
         # )
         # print(binary_representation)
         robot_controller.send_robot_commands()
+        print(robot_controller.robot_has_ball(robot_id))
         start_time = time.time()
         time.sleep(0.017)
 
@@ -231,6 +232,7 @@ def test_kicker(robot_controller: RealRobotController, robot_id: int, dribbler_o
 
 
 def main():
+    robot_id = 1
     stop_buffer_off = [0, 0, 0, 0, 0, 0, 0, 0]
 
     game = Game()
@@ -238,15 +240,15 @@ def main():
         is_team_yellow=True, game_obj=game, n_robots=2
     )
     try:
-        # test_command(robot_controller, 1, 100, False, True)
+        # test_command(robot_controller, robot_id, 100, False, False)
         # get_ball_test_with_vision(game, robot_controller)
-        test_kicker(robot_controller, 0, dribbler_on=False)
+        test_kicker(robot_controller, robot_id, dribbler_on=False)
     except KeyboardInterrupt:
         # try to stop the robot 15 times
         print("Stopping robot.")
 
         for _ in range(15):
-            robot_controller.serial.write(stop_buffer_off)
+            robot_controller.send_robot_commands()
         robot_controller.serial.close()
 
     # binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
