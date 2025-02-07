@@ -76,9 +76,9 @@ class DribbleToTarget:
             if not has_ball:
                 ball_data = self.game.get_ball_pos()[0]
                 if self.augment:
-                    delta_x = self.game.get_ball_pos()[0].x - current_x
-                    delta_y = self.game.get_ball_pos()[0].y - current_y
-                    ball_data = BallData(
+                    delta_x = self.game.ball.x - current_x
+                    delta_y = self.game.ball.y - current_y
+                    ball_data = BallData(0, 
                         delta_x * 6 + current_x, delta_y * 6 + current_y, 0
                     )
                 return go_to_ball(

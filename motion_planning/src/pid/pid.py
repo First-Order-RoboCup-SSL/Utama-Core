@@ -25,7 +25,7 @@ def get_grsim_pids(n_robots: int):
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        5 / 2,
+        9 / 2,
         0,
         0,
         num_robots=n_robots,

@@ -175,6 +175,43 @@ class PassBall:
 
         return passer_cmd, receiver_cmd
 
+def is_goal_blocked(game: Game) -> bool:
+    """
+    Determines whether the goal is blocked by enemy robots.
+
+    :param game: The game state containing robot and ball positions.
+    :return: True if the goal is blocked, False otherwise.
+    """
+    ball_x, ball_y = game.ball.x, game.ball.y
+    goal_x = -4.5
+    goal_y_range = (1, -1)  # Goalposts' y-range
+
+    # Define the line equation from ball to goal
+    def is_point_on_line(point, start, end, tolerance=0.1):
+        """Check if a point is approximately on the line segment from start to end."""
+        start = np.array(start)
+        end = np.array(end)
+        point = np.array(point)
+        line_vec = end - start
+        point_vec = point - start
+        proj = np.dot(point_vec, line_vec) / np.dot(line_vec, line_vec)
+        projected_point = start + proj * line_vec
+        
+        return np.linalg.norm(point - projected_point) < tolerance and 0 <= proj <= 1
+
+    # Check if any enemy robot is between the ball and goal
+    for enemy in game.enemy_robots:
+        enemy_x, enemy_y = enemy.x, enemy.y  # Extract coordinates properly
+        
+        # Check if the enemy is between the ball and goal in the x-range
+        if ball_x > enemy_x > goal_x:
+            # Check if the enemy is within the goal's y-range
+            if goal_y_range[1] <= enemy_y <= goal_y_range[0]:  
+                # Check if the enemy is on the ball-to-goal path
+                if is_point_on_line((enemy_x, enemy_y), (ball_x, ball_y), (goal_x, np.mean(goal_y_range))):
+                    return True
+
+    return False
 
 def score_goal_demo(
     game_obj: Game,
@@ -186,7 +223,6 @@ def score_goal_demo(
     """
     shoot_at_goal_colour should only be used i
     """
-
     if not shoot_at_goal_colour:
         shoot_at_goal_colour = (
             Colour.BLUE if game_obj.my_team_is_yellow else Colour.YELLOW
@@ -212,11 +248,14 @@ def score_goal_demo(
     # calculate best shot from the position of the ball
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
     if friendly_robots and enemy_robots and ball:
-        best_shot, size_of_shot = find_best_shot(
+        best_shot = find_best_shot(
             ball, enemy_robots, goal_x, goal_y1, goal_y2, shoot_at_goal_colour
         )
 
-        shot_orientation = np.atan2((best_shot - ball.y), (goal_x - ball.x))
+        if best_shot is None:
+            return None
+        
+        shot_orientation = np.atan2((best_shot[0] - ball.y), (goal_x - ball.x))
 
         robot_data: RobotData = (
             friendly_robots[shooter_id].robot_data
@@ -236,12 +275,13 @@ def score_goal_demo(
                 # Because 0.02 as a threshold is meaningless (different at different distances)
                 # TODO: consider also adding a distance from goal threshold
                 # print(current_oren, shot_orientation)
-                if abs(current_oren - shot_orientation) % np.pi <= 0.05:
+                if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(game_obj):
                     logger.info("kicking ball")
                     robot_command = kick_ball()
                 # else, robot has ball, but needs to turn to the right direction
                 # TODO: Consider also advancing closer to the goal
-
+                elif is_goal_blocked(game_obj):
+                    return None
                 else:
                     robot_command = turn_on_spot(
                         pid_oren,
