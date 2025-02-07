@@ -23,7 +23,6 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 random.seed(10)
 
-
 def one_vs_one_goalie(game: Game, robot_controller_attacker: RealRobotController, robot_controller_goalie: RealRobotController):
     ATTACKER_ROBOT_ID = 1 # 1
     GOALIE_ROBOT_ID = 4 # 4
@@ -44,10 +43,13 @@ def one_vs_one_goalie(game: Game, robot_controller_attacker: RealRobotController
     current_x = -0.5
     goal_scored = False
 
+    stage2_target_x = -3
+    stage2_target_y = 0.5
+
     stage = 1
     iter = 0
     ball_init_pos = None
-
+    turnedits = 0
     while not goal_scored:
         iter += 1
         (message_type, message) = message_queue.get()
@@ -73,8 +75,9 @@ def one_vs_one_goalie(game: Game, robot_controller_attacker: RealRobotController
             new_ball_pos = game.get_ball_pos()[0]
             attacker_pos = game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID)
             
-            robot_controller_goalie.add_robot_commands(goalkeep(True, game, GOALIE_ROBOT_ID, pid_oren_goalie, pid_trans_goalie, not ATTACKER_IS_YELLOW, False), GOALIE_ROBOT_ID)
-
+            goalie_command = goalkeep(True, game, GOALIE_ROBOT_ID, pid_oren_goalie, pid_trans_goalie, not ATTACKER_IS_YELLOW, False)
+            robot_controller_goalie.add_robot_commands(goalie_command, GOALIE_ROBOT_ID)
+            print("GOALIE COMMAND", goalie_command)
             print(f"STAGE {stage}")
 
             if stage == 1:
@@ -83,30 +86,45 @@ def one_vs_one_goalie(game: Game, robot_controller_attacker: RealRobotController
                 else:
                     robot_controller_attacker.add_robot_commands(go_to_ball(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), ATTACKER_ROBOT_ID, game.ball), ATTACKER_ROBOT_ID)    
             elif stage == 2:                
-                if math.dist((attacker_pos.x, attacker_pos.y), (-3, 0.5)) < 0.07 and stage == 2:
+                if math.dist((attacker_pos.x, attacker_pos.y), (stage2_target_x, stage2_target_y)) < 0.07 and stage == 2:
                     stage += 1
                 else:
-                    robot_controller_attacker.add_robot_commands(go_to_point(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, (-3, 0.5), None, dribbling=True), ATTACKER_ROBOT_ID)
+                    target_orientation = math.atan2(stage2_target_y - attacker_pos.y, stage2_target_x - attacker_pos.x)
+                    print("TARGET OREN", target_orientation)
+                    if abs(target_orientation - attacker_pos.orientation) > 0.05 and turnedits < 100:
+                        turnedits += 1
+                        cmd = turn_on_spot(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, target_orientation, dribbling=False, pivot_on_ball=True)
+                        robot_controller_attacker.add_robot_commands(cmd, ATTACKER_ROBOT_ID)
+                        print("TURN ON SPOT", cmd)
+                    else:
+                        cmd = go_to_point(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, (stage2_target_x, stage2_target_y), None, dribbling=True)
+                        print("GO TO POINT", cmd)
+                        robot_controller_attacker.add_robot_commands(cmd, ATTACKER_ROBOT_ID)
+                
             elif stage == 3:
                 cmd = score_goal(game, shooter_has_ball=True, shooter_id=ATTACKER_ROBOT_ID, pid_oren=pid_oren_attacker, pid_trans=pid_trans_attacker, is_yellow=ATTACKER_IS_YELLOW, shoot_in_left_goal=LEFT_GOAL)
                 print("SENDING COMMAND", cmd)
                 if cmd.kick == 1:
                     stage += 1
+                    
                 robot_controller_attacker.add_robot_commands(cmd, ATTACKER_ROBOT_ID)
-        
+            elif stage == 4:
+                # cmd = go_to_point(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, (stage2_target_x, stage2_target_y), None, dribbling=True)
+                break
             robot_controller_attacker.send_robot_commands()
             robot_controller_goalie.send_robot_commands()
+        
         
 
 def main():
     stop_buffer_off = [0, 0, 0, 0, 0, 0, 0, 0]
 
     game = Game()
-    # robot_controller_yellow = RealRobotController(
-    #     is_team_yellow=True, game_obj=game, n_robots=1
-    # )
+    robot_controller_yellow = RealRobotController(
+        is_team_yellow=True, game_obj=game, n_robots=2
+    )
 
-    robot_controller_yellow = Mock()
+    # robot_controller_yellow = Mock()
     robot_controller_blue = Mock()
     
     # RealRobotController(

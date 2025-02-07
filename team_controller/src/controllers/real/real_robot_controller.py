@@ -80,7 +80,8 @@ class RealRobotController(AbstractRobotController):
         """
         NUMBER_TO_SAM_NUMBER = { # TODO: This obviously is not permanent
             1: 1,
-            4: 0
+            4: 0,
+            2: 2
         }
 
         super().add_robot_commands(robot_commands, NUMBER_TO_SAM_NUMBER[robot_id])
@@ -200,8 +201,8 @@ class RealRobotController(AbstractRobotController):
             angular_vel = (
                 MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
             )
-
-        if abs(command.local_forward_vel) > MAX_VEL:
+        # TODO put back to max_vel
+        if abs(command.local_forward_vel) > 0.8:
             warnings.warn(
                 f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
             )

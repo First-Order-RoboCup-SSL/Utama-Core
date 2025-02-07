@@ -341,6 +341,7 @@ def score_goal_(
 
 # TODO : THIS REALLY MUST BE FIXED
 count = 0
+waiting_to_kick = False
 def score_goal(
     game_obj: Game,
     shooter_has_ball: bool,
@@ -350,7 +351,7 @@ def score_goal(
     is_yellow: bool,
     shoot_in_left_goal: bool,
 ) -> RobotCommand:
-    global count
+    global count, waiting_to_kick
 
     target_goal_line = game_obj.field.blue_goal_line if shoot_in_left_goal else game_obj.field.yellow_goal_line # TODO: FIX THIS #  game_obj.field.enemy_goal_line(is_yellow)
     latest_frame = game_obj.get_my_latest_frame(is_yellow)
@@ -367,7 +368,7 @@ def score_goal(
     # calculate best shot from the position of the ball
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
     if friendly_robots and enemy_robots and balls:
-        best_shot = -0.4
+        best_shot = -0.3
 
         # best_shot, size_of_shot = find_best_shot(
         #     balls[0], enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
@@ -378,7 +379,6 @@ def score_goal(
         robot_data: RobotData = (
             friendly_robots[shooter_id] if shooter_id < len(friendly_robots) else None
         )
-
         # TODO: For now we just look at the first ball, but this will eventually have to be smarter
         ball_data: BallData = balls[0]
         print("DATA", ball_data, robot_data)
@@ -393,20 +393,46 @@ def score_goal(
                     # Because 0.02 as a threshold is meaningless (different at different distances)
                     # TODO: consider also adding a distance from goal threshold
                     print("DIFF", abs(current_oren - shot_orientation))
-                    if abs(current_oren - shot_orientation) <= 0.01:
-                        print("kicking ball")
+                    if abs(current_oren - shot_orientation) <= 0.05 or waiting_to_kick:
+                        print("kicking ball", count)
                         count += 1
-                        if count >= 100:
-                            robot_command = kick_ball()
-                        else:
+                        waiting_to_kick = True
+                        print("KICK COUNT", count, waiting_to_kick)
+                        if count >= 93:
+                            print("WOULD HAVE ACTUALLY KICKED")
+                            # robot_command = kick_ball()
+                            robot_command = RobotCommand(0,0,0,0,0,0)
+                        elif count > 80 and count < 93:
+                            print("SENDING ROBOT FORWARDS FAST")
                             robot_command = RobotCommand(
-                                local_forward_vel=0.5,
+                                local_forward_vel=0.8,
+                                local_left_vel=0,
+                                angular_vel=0,
+                                kick=0,
+                                chip=0,
+                                dribble=0
+                        )
+                        elif count > 30 and count <= 80:
+                            print("TURNING DRIBBLER OFF")
+                            robot_command = RobotCommand(
+                                local_forward_vel=0,
                                 local_left_vel=0,
                                 angular_vel=0,
                                 kick=0,
                                 chip=0,
                                 dribble=0
                             )
+                        else:
+                            print("TURNING DRIBBLER ON")
+                            robot_command = RobotCommand(
+                                local_forward_vel=0.0,
+                                local_left_vel=0,
+                                angular_vel=0,
+                                kick=0,
+                                chip=0,
+                                dribble=1
+                            )
+
                             
                     # else, robot has ball, but needs to turn to the right direction
                     # TODO: Consider also advancing closer to the goal

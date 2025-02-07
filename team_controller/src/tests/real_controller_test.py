@@ -181,11 +181,15 @@ def test_command(
     dribble: bool = False,
 ):
     iter = 0
+    stop_its = 100
     start_time = time.time()
     while True:
         if ramp_only and iter > ramp_iters:
             break
         iter += 1
+        print(iter)
+        if stop_its == iter:
+            dribble = not dribble
         cmd = RobotCommand(
             local_forward_vel=0,
             local_left_vel=0,
@@ -240,7 +244,7 @@ def main():
         is_team_yellow=True, game_obj=game, n_robots=2
     )
     try:
-        # test_command(robot_controller, robot_id, 100, False, False)
+        # test_command(robot_controller, robot_id, 100, False, True)
         # get_ball_test_with_vision(game, robot_controller)
         test_kicker(robot_controller, 1, dribbler_on=True)
     finally:

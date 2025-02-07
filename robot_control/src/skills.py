@@ -362,7 +362,7 @@ def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_t
     else:
         new_target = game.predict_ball_pos_at_x(4.5 - OFFSET)
     
-    if new_target:
+    if new_target and abs(new_target[1]) < 0.7:
         previous_targets.append(new_target[1])
     if len(previous_targets) > 8:
         del previous_targets[0]
@@ -388,8 +388,10 @@ def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_t
             robot_data,
             robot_id,
             target,
-            face_ball((robot_data.x, robot_data.y), (game.ball.x, game.ball.y)),
-            dribbling=True,
+            face_ball(
+                (robot_data.x, robot_data.y), 
+                (game.ball.x, game.ball.y)
+            ),
         )
     else:  # TODO : Not sure if we actually need this case?
         cmd = go_to_point(
