@@ -5,26 +5,27 @@ import threading
 import queue
 import time
 from tkinter import Y
-from typing import Tuple
+from typing import Optional, Tuple
 
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+import numpy as np
+
+from entities.game.game_object import Colour
 from entities.game import Game
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.grsim_robot_controller import (
     GRSimRobotController,
 )
-from team_controller.src.config.settings import TIMESTEP
-from motion_planning.src.pid.pid import get_grsim_pids
+from motion_planning.src.pid.pid import PID, get_grsim_pids
 from team_controller.src.data import VisionDataReceiver
 from team_controller.src.data.message_enum import MessageType
 from robot_control.src.high_level_skills import DribbleToTarget
-from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from entities.game import Game
 from entities.data.command import RobotCommand
 
 # Imports from other scripts or modules within the same project
 from robot_control.src.tests.utils import setup_pvp
 from motion_planning.src.pid.pid import get_rsim_pids
+
 from robot_control.src.skills import (
     face_ball,
     go_to_point,
@@ -32,12 +33,17 @@ from robot_control.src.skills import (
     clamp_to_goal_height,
     predict_goal_y_location,
 )
-from robot_control.src.intent import score_goal, find_likely_enemy_shooter, score_goal_
+from robot_control.src.intent import (
+    find_likely_enemy_shooter,
+    score_goal_demo,
+)
 
 logger = logging.getLogger(__name__)
 
 TOTAL_ITERATIONS = 10
-MAX_GAME_TIME = 1000
+MAX_GAME_TIME = 10000
+SHOOT_AT_BLUE_GOAL = True
+# Shoot at blue goal means shooting to the left in rsim environement
 
 
 def ball_out_of_bounds(ball_x: float, ball_y: float) -> bool:
@@ -51,15 +57,10 @@ def find_goal_position(
     game: Game,
 ) -> Tuple[float, float]:
 
-    if game.my_team_is_yellow:
-        goal_center = 4.5, 0
-    else:
-        goal_center = -4.5, 0
-    goal_center = -4.5, 0
+    goal_center = (-4.5, 0) if SHOOT_AT_BLUE_GOAL else (4.5, 0)
 
-    # Assume that is_yellow <-> not is_left here # TODO : FIX
-    _, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=game.my_team_is_yellow)
-    shooters_data = find_likely_enemy_shooter(enemy, balls)
+    enemy = game.enemy_robots_data
+    shooters_data = find_likely_enemy_shooter(enemy, [game.ball])
 
     orientation = None
     if not shooters_data:
@@ -195,11 +196,7 @@ def dribble_to_target_decision_maker(
     """
     robot = game.friendly_robots[robot_id]  # Assuming the robot is on the yellow team
 
-    if game._my_team_is_yellow:
-        goal_x, goal_y = -4.5, 0
-    else:
-        goal_x, goal_y = 4.5, 0
-    goal_x, goal_y = -4.5, 0
+    goal_x, goal_y = -4.5 if SHOOT_AT_BLUE_GOAL else 4.5, 0
 
     # If the robot has the ball, move towards the goal while avoiding the enemy
     if grsim_controller.robot_has_ball(robot_id):
@@ -259,11 +256,11 @@ def dribble_to_target_decision_maker(
         return target_x, target_y
 
 
-def one_on_one(game: Game, stop_event: threading.Event, is_yellow: bool):
+def one_on_one(game: Game, stop_event: threading.Event):
     """
     Worker function for the attacking strategy.
     """
-    sim_robot_controller = GRSimRobotController(is_team_yellow=is_yellow)
+    sim_robot_controller = GRSimRobotController(is_team_yellow=game.my_team_is_yellow)
 
     message_queue = queue.SimpleQueue()
     vision_receiver = VisionDataReceiver(message_queue)
@@ -273,12 +270,6 @@ def one_on_one(game: Game, stop_event: threading.Event, is_yellow: bool):
 
     # Initialize PID controllers
     pid_oren, pid_trans = get_grsim_pids(1)
-
-    if game.my_team_is_yellow:
-        goal_pos = (4.5, 0)  # Yellow team attacks the blue goal
-    else:
-        goal_pos = (-4.5, 0)  # Blue team attacks the yellow goal
-    goal_pos = (-4.5, 0)
 
     goal_scored = False
     dribbling = False
@@ -306,16 +297,10 @@ def one_on_one(game: Game, stop_event: threading.Event, is_yellow: bool):
             break
 
         if message is not None:
-            if is_yellow:
-                friendly_robot, enemy_robot = (
-                    game.friendly_robots[0],
-                    game.enemy_robots[0],
-                )
-            else:
-                enemy_robot, friendly_robot = (
-                    game.friendly_robots[0],
-                    game.enemy_robots[0],
-                )
+            friendly_robot, enemy_robot = (
+                game.friendly_robots[0],
+                game.enemy_robots[0],
+            )
             ball = game.ball
 
             enemy_dist_from_ball = math.hypot(
@@ -328,15 +313,14 @@ def one_on_one(game: Game, stop_event: threading.Event, is_yellow: bool):
             # Check if the robot has the ball
             if sim_robot_controller.robot_has_ball(0):
                 # Try to score
-                cmd = score_goal_(
+                cmd = score_goal_demo(
                     game,
-                    True,
                     0,
                     pid_oren,
                     pid_trans,
-                    True,
-                    True,
-                    is_yellow,
+                    shoot_at_goal_colour=(
+                        Colour.BLUE if SHOOT_AT_BLUE_GOAL else Colour.YELLOW
+                    ),
                 )
 
                 # If scoring is not possible, dribble to a better position
@@ -435,32 +419,30 @@ def one_on_one(game: Game, stop_event: threading.Event, is_yellow: bool):
                 break
 
 
-def pvp_manager(headless: bool):
+def one_to_one_sim(headless: bool):
     """
     A 1v1 scenario with dynamic switching of attacker/defender roles.
     """
+
     # Initialize Game and environment
     env = GRSimController()
-
     env.reset()
-
     for i in range(1, 6):
-        env.set_robot_presence(i, True, False)
+        env.set_robot_presence(i, is_team_yellow=True, is_present=False)
     for i in range(1, 6):
-        env.set_robot_presence(i, False, False)
+        env.set_robot_presence(i, is_team_yellow=False, is_present=False)
 
+    # Teleport robot
     env.teleport_robot(True, 0, -1, -1.2)
     env.teleport_robot(False, 0, -1, 1.2)
 
-    # ball_x = random.uniform(-1.5, 0)
-    # ball_y = random.uniform(-1.5, 1.5)
-    offset = random.uniform(-0.4, 0.4)
+    # Teleport ball
+    offset = random.uniform(-0.1, 0.1)
     env.teleport_ball(-1, offset)
 
     # Initialize Game objects for each team
-    # yellow_game = Game(my_team_is_yellow=True)
-    # blue_game = Game(my_team_is_yellow=False)
-    game = Game(my_team_is_yellow=True)
+    yellow_game = Game(my_team_is_yellow=True)
+    blue_game = Game(my_team_is_yellow=False)
 
     # Create a stop event to signal threads to stop
     stop_event = threading.Event()
@@ -468,15 +450,11 @@ def pvp_manager(headless: bool):
     # Create threads for each team
     yellow_thread = threading.Thread(
         target=one_on_one,
-        # target=strat_atk,
-        # args=(yellow_game, stop_event),
-        args=(game, stop_event, True),
+        args=(yellow_game, stop_event),
     )
     blue_thread = threading.Thread(
         target=one_on_one,
-        # target=strat_def,
-        # args=(blue_game, stop_event),
-        args=(game, stop_event, False),
+        args=(blue_game, stop_event),
     )
 
     yellow_thread.daemon = True
@@ -499,7 +477,6 @@ def pvp_manager(headless: bool):
     except KeyboardInterrupt:
         print("Main thread interrupted. Stopping worker threads...")
         stop_event.set()  # Signal threads to stop
-        TOTAL_ITERATIONS = -1
 
     # Wait for threads to finish
     yellow_thread.join()
@@ -511,10 +488,11 @@ def pvp_manager(headless: bool):
 if __name__ == "__main__":
     logging.disable(logging.WARNING)
     try:
-        for i in range(TOTAL_ITERATIONS):
-            if TOTAL_ITERATIONS == -1:
-                break
-            pvp_manager(headless=False)
+        # for i in range(TOTAL_ITERATIONS):
+        #     if TOTAL_ITERATIONS == -1:
+        #         break
+        while True:
+            one_to_one_sim(headless=False)
             time.sleep(0.1)
     except KeyboardInterrupt:
         print("Exiting...")

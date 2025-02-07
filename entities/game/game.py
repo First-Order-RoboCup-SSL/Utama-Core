@@ -79,6 +79,10 @@ class Game:
         return self._predicted_next_frame
 
     @property
+    def friendly_robots_data(self) -> List[Robot]:
+        return [r.robot_data for r in self._friendly_robots]
+
+    @property
     def friendly_robots(self) -> List[Robot]:
         return self._friendly_robots
 
@@ -88,6 +92,10 @@ class Game:
             # TODO: temporary fix for robot data being None
             if robot_data is not None:
                 self._friendly_robots[robot_id].robot_data = robot_data
+
+    @property
+    def enemy_robots_data(self) -> List[Robot]:
+        return [r.robot_data for r in self._enemy_robots]
 
     @property
     def enemy_robots(self) -> List[Robot]:
@@ -165,6 +173,7 @@ class Game:
             self.friendly_robots = frame_data.blue_robots
             self.enemy_robots = frame_data.yellow_robots
         self._ball = frame_data.ball[0]  # TODO: Don't always take first ball pos
+        # BUG: self._ball is of type Ball, frame_data.ball[0] is of type BallData!
 
     ### Robot data retrieval ###
     def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
@@ -493,9 +502,7 @@ class Game:
         return (totalX / iter, totalY / iter)
 
     def in_box(x_coord: float, y_coord: float):
-        return ((x_coord < 1 and abs(y_coord) < 1)
-                or 
-                (x_coord > 8 and abs(y_coord) < 1))
+        return (x_coord < 1 and abs(y_coord) < 1) or (x_coord > 8 and abs(y_coord) < 1)
 
 
 if __name__ == "__main__":
