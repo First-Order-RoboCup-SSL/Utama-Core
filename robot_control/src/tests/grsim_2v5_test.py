@@ -50,12 +50,11 @@ N_ROBOTS = 8
 DEFENDING_ROBOTS = 6
 ATTACKING_ROBOTS = 2
 # TARGET_COORDS = (-2, 3)
-PASS_QUALITY_THRESHOLD = 1.5
-SHOT_QUALITY_THRESHOLD = 0.3
+PASS_QUALITY_THRESHOLD = 1.15
+SHOT_QUALITY_THRESHOLD = 0.5
 
 BALL_V0_MAGNITUDE = 3
 BALL_A_MAGNITUDE = -0.3
-START = 0
 
 
 def ball_out_of_bounds(ball_x: float, ball_y: float) -> bool:
@@ -122,12 +121,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
     trying_to_pass = False
     passer = None
 
-    shoot_in_left_goal = game.my_team_is_yellow
-
-    if shoot_in_left_goal:
-        target_goal_line = game.field.LEFT_GOAL_LINE
-    else:
-        target_goal_line = game.field.RIGHT_GOAL_LINE
+    target_goal_line = game.field.enemy_goal_line(attacker_is_yellow)
     friendly_robot_ids = [0, 1]
 
     # TODO
@@ -295,7 +289,6 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                     goal_y2,
                     attacker_is_yellow,
                 )
-                print("the shot quality is ", shot_quality)
                 if shot_quality > SHOT_QUALITY_THRESHOLD:
                     print("shooting with chance", shot_quality, SHOT_QUALITY_THRESHOLD)
                     commands[ball_possessor_id] = score_goal(
@@ -352,12 +345,10 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                             friendly_robots[best_receiver_id].y,
                         ),
                     )
-                end = time.time()
-                START = end + 1 if START == None else START
+
                 if (
                     best_receiver_id is not None
                     and best_pass_quality > PASS_QUALITY_THRESHOLD
-                    and end - START >= 2
                 ):
                     print(
                         "trying to execute a pass with quality ",
@@ -376,7 +367,6 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                     if sim_robot_controller.robot_has_ball(best_receiver_id):
                         print("pass finished")
                         trying_to_pass = False
-                        pass_task = None
                 else:
                     commands[ball_possessor_id] = empty_command(
                         dribbler_on=True
@@ -455,7 +445,6 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                         trying_to_pass = False
                         passer = None
                         pass_task = None
-                        START = time.time()
                 else:
                     commands[passer] = empty_command(
                         dribbler_on=True
@@ -512,7 +501,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
         if message is not None:
             _, _, balls = game.get_my_latest_frame(my_team_is_yellow)
             ball_data = balls[0]
-            """
+
             sim_robot_controller.add_robot_commands(
                 defend_grsim(
                     pid_oren,
@@ -523,8 +512,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
                 ),
                 1,
             )
-            """
-            """
+
             sim_robot_controller.add_robot_commands(
                 defend_grsim(
                     pid_oren,
@@ -535,7 +523,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
                 ),
                 4,
             )
-            """
+
             sim_robot_controller.add_robot_commands(
                 goalkeep(
                     not my_team_is_yellow,
@@ -548,7 +536,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
                 ),
                 0,
             )
-            """
+
             sim_robot_controller.add_robot_commands(
                 man_mark(
                     my_team_is_yellow,
@@ -572,7 +560,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
                 ),
                 3,
             )
-            """
+
             sim_robot_controller.send_robot_commands()
 
             # Check if a goal was scored
@@ -586,6 +574,9 @@ def defender_strategy(game: Game, stop_event: threading.Event):
 
 
 def pvp_manager(headless: bool):
+    """
+    A 1v1 scenario with dynamic switching of attacker/defender roles.
+    """
     # Initialize Game and environment
     env = GRSimController()
 
@@ -601,8 +592,8 @@ def pvp_manager(headless: bool):
     # Random ball placement
     ball_x = random.uniform(-2.5, 2.5)
     ball_y = random.uniform(-1.5, 1.5)
-    # env.teleport_ball(0.5, 0)
     env.teleport_ball(ball_x, ball_y)
+    # env.teleport_ball(1, 1)
 
     # Initialize Game objects for each team
     yellow_game = Game(my_team_is_yellow=True)

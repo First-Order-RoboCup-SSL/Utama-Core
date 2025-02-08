@@ -66,7 +66,7 @@ class PassBall:
         self.ball_traj_points = []
         self.ball_launch_pos = None
 
-    def enact(self, passer_has_ball: bool) -> Tuple[bool, RobotCommand, RobotCommand]:
+    def enact(self, passer_has_ball: bool) -> Tuple[RobotCommand, RobotCommand]:
         """
         return the command for passer and receiver in that order.
         """
@@ -99,7 +99,6 @@ class PassBall:
             )
 
         else:
-            print("some orientations, ", passer_oren, shot_orientation)
             if (
                 abs(passer_oren - shot_orientation) <= self.angle_tolerance
                 or self.ball_in_flight
@@ -183,7 +182,6 @@ class PassBall:
             if ball_data is not None:
                 self.ball_traj_points.append((ball_data.x, ball_data.y))
             self.ball_in_flight = True
-            pass_executed = True
 
         print(f"ball in flight: {self.ball_in_flight}")
 
@@ -201,11 +199,7 @@ def score_goal(
     shoot_in_left_goal: bool,
 ) -> RobotCommand:
 
-    if shoot_in_left_goal:
-        target_goal_line = game_obj.field.LEFT_GOAL_LINE
-    else:
-        target_goal_line = game_obj.field.RIGHT_GOAL_LINE
-
+    target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
     latest_frame = game_obj.get_my_latest_frame(is_yellow)
     if not latest_frame:
         return
