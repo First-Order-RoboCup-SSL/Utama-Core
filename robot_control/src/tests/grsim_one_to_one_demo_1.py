@@ -4,7 +4,6 @@ import math
 import threading
 import queue
 import time
-from tkinter import Y
 from typing import Tuple
 import sys 
 
@@ -361,7 +360,7 @@ def one_on_one(game: Game, friendly_robot_id: int, enemy_robot_id: int, stop_eve
                     pid_trans.max_velocity = 2.5
                     dribbling = False
             elif (
-                enemy_dist_from_ball < 0.05
+                enemy_dist_from_ball < 0.4
                 and enemy_dist_from_ball < friendly_dist_from_ball
             ):
                 cmd = improved_block_goal_and_attacker(
@@ -372,10 +371,10 @@ def one_on_one(game: Game, friendly_robot_id: int, enemy_robot_id: int, stop_eve
                     pid_oren,
                     pid_trans,
                     attacker_has_ball=True,
-                    block_ratio=0.4,
+                    block_ratio=0.2,
                     max_ball_follow_dist=1.0,
                 )
-            elif enemy_dist_from_ball < 0.4 and enemy_dist_from_ball <= friendly_dist_from_ball:
+            else:
                 # If the robot doesn't have the ball, go to the ball
                 cmd = go_to_point(
                     pid_oren,
@@ -386,20 +385,9 @@ def one_on_one(game: Game, friendly_robot_id: int, enemy_robot_id: int, stop_eve
                     face_ball((friendly.x, friendly.y), (ball.x, ball.y)),
                     dribbling=True,
                 )
-            elif friendly_dist_from_ball < 0.4 and friendly_dist_from_ball >= enemy_dist_from_ball:
-                cmd = improved_block_goal_and_attacker(
-                    friendly.robot_data,
-                    enemy.robot_data,
-                    ball,
-                    game,
-                    pid_oren,
-                    pid_trans,
-                    attacker_has_ball=True,
-                    block_ratio=0.4,
-                    max_ball_follow_dist=1.0,
-                )
 
             # Send the command to the robot
+            print(f"Yellow: {game.my_team_is_yellow}, Robot {friendly_robot_id} cmd: {cmd}\n")
             sim_robot_controller.add_robot_commands(cmd, friendly_robot_id)
             sim_robot_controller.send_robot_commands()
 
