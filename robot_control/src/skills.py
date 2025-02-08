@@ -143,6 +143,7 @@ def calculate_defense_area(t: float, is_left: bool):
     https://www.desmos.com/calculator/nmaf7rpmnw
     """
     assert pi / 2 <= t <= 3 * pi / 2, t
+    # print("T", t)
     a, r = 1.1, 2.1
     rp = a * ((1 - r) * (abs(cos(t)) * cos(t)) + r * cos(t)), a * (
         (1 - r) * (abs(sin(t)) * sin(t)) + r * sin(t)
@@ -319,7 +320,7 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
             lo = mi1
 
     t = lo
-    return t
+    return clamp_to_parametric(t)
 
 def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_trans: TwoDPID, is_yellow: bool, goalie_has_ball: bool):
     robot_data = game.get_robot_pos(is_yellow, robot_id)

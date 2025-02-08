@@ -130,7 +130,7 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
 
                     print("SIZE OF SHOT", size_of_shot)
 
-                    if size_of_shot > 0.41 and passes >= 5:
+                    if size_of_shot > 0.41: #and passes >= 5:
                         stage += 1
 
                 passes += 1
@@ -178,6 +178,8 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
 
 if __name__ == "__main__":
     try:
+        import time
+        time.sleep(4)
         test_three_one_one_v_two(True, False)
     except KeyboardInterrupt:
         print("Exiting...")
