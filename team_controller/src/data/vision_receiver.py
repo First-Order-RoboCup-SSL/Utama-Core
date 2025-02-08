@@ -205,7 +205,7 @@ class VisionDataReceiver(BaseReceiver):
                 self._update_data(vision_packet.detection)
                 # print(vision_packet.detection)
 
-            self._print_frame_info(t_received, vision_packet.detection)
+            # self._print_frame_info(t_received, vision_packet.detection)
             # time.sleep(0.0083) # TODO : Block on data?
 
     def print_detection_info(self, vision_packet_detect):

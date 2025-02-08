@@ -4,9 +4,8 @@ import math
 import threading
 import queue
 import time
-from tkinter import Y
 from typing import Optional, Tuple
-
+import sys
 import numpy as np
 
 from entities.game.game_object import Colour
@@ -31,6 +30,7 @@ from motion_planning.src.pid.pid import get_rsim_pids
 
 from robot_control.src.skills import (
     face_ball,
+    go_to_ball,
     go_to_point,
     velocity_to_orientation,
     clamp_to_goal_height,
@@ -43,7 +43,7 @@ from robot_control.src.intent import (
 
 logger = logging.getLogger(__name__)
 
-TOTAL_ITERATIONS = 2
+TOTAL_ITERATIONS = 100
 MAX_GAME_TIME = 10000
 SHOOT_AT_BLUE_GOAL = True
 CLOSE = False
@@ -255,17 +255,17 @@ def dribble_to_target_decision_maker(
             target_x = robot.x + perpendicular_dx * safe_distance + goal_dx * 0.25
             target_y = robot.y + perpendicular_dy * safe_distance + goal_dy * 0.25
              
-    if goal_dist < 2:
-        return None
-    else:
-        return target_x, target_y
+        if goal_dist < 2:
+            return None
+        else:
+            return target_x, target_y
 
 def one_on_one(game: Game, stop_event: threading.Event):
     """
     Worker function for the attacking strategy.
     """
-    robot_controller = RealRobotController(
-        is_team_yellow=game.my_team_is_yellow, game_obj=game, n_robots=1
+    robot_controller = GRSimRobotController(
+        is_team_yellow=game.my_team_is_yellow
     )
     
     message_queue = queue.SimpleQueue()
@@ -287,7 +287,7 @@ def one_on_one(game: Game, stop_event: threading.Event):
         game,
         0,
         (0, 0),
-        augment=False,
+        augment=True,
     )
 
     while not stop_event.is_set():
@@ -317,7 +317,7 @@ def one_on_one(game: Game, stop_event: threading.Event):
             )
             
             pid_trans.Kp = 10.5
-            pid_trans.max_velocity = 1.5
+            pid_trans.max_velocity = 1
             # Check if the robot has the ball
             if robot_controller.robot_has_ball(0):
                 # Try to score
@@ -330,7 +330,6 @@ def one_on_one(game: Game, stop_event: threading.Event):
                         Colour.BLUE if SHOOT_AT_BLUE_GOAL else Colour.YELLOW
                     ),
                 )
-                print(cmd)
                 # If scoring is not possible, dribble to a better position
                 if cmd is None:
                     pid_trans.Kp = 8.5 / 2
@@ -348,7 +347,8 @@ def one_on_one(game: Game, stop_event: threading.Event):
 
                     # If dribbling, enact the dribble task
                     if dribbling:
-                        pid_trans.max_velocity = 0.5
+                        print(f"Yellow: {game.my_team_is_yellow} Dribbling")
+                        pid_trans.max_velocity = 0.8
                         # print("Dribbling to target")
                         cmd = dribble_task.enact(robot_controller.robot_has_ball(0))
                         # Check if the robot is close to the target
@@ -357,14 +357,15 @@ def one_on_one(game: Game, stop_event: threading.Event):
                             target_coords[1] - friendly_robot.y,
                         )
                         if error < 0.02:  # Threshold for reaching the target
-                            pid_trans.max_velocity = 0.5
+                            print(f"Yellow: {game.my_team_is_yellow} Dribble task complete")
+                            pid_trans.max_velocity = 1.5
                             dribbling = False
                 else:
-                    pid_trans.max_velocity = 0.5
+                    pid_trans.max_velocity = 1
                     dribbling = False  # Stop dribbling if scoring is possible
             elif dribbling:
-                pid_trans.max_velocity = 0.5
-                # print("Dribbling to target")
+                pid_trans.max_velocity = 0.8
+                print(f"Yellow: {game.my_team_is_yellow} Dribbling")
                 cmd = dribble_task.enact(robot_controller.robot_has_ball(0))
                 # Check if the robot is close to the target
                 error = math.hypot(
@@ -372,14 +373,15 @@ def one_on_one(game: Game, stop_event: threading.Event):
                     target_coords[1] - friendly_robot.y,
                 )
                 if error < 0.02:  # Threshold for reaching the target
-                    pid_trans.max_velocity = 0.5
+                    print(f"Yellow: {game.my_team_is_yellow} Dribble task complete")
+                    pid_trans.max_velocity = 1
                     dribbling = False
             elif (
                 enemy_dist_from_ball < 0.4
-                and enemy_dist_from_ball < friendly_dist_from_ball
+                and enemy_dist_from_ball <= friendly_dist_from_ball
             ):  
                 pid_trans.Kp = 8.5/2
-                pid_trans.max_velocity = 0.5
+                pid_trans.max_velocity = 0.6
                 
                 cmd = improved_block_goal_and_attacker(
                     friendly_robot.robot_data,
@@ -407,7 +409,7 @@ def one_on_one(game: Game, stop_event: threading.Event):
             # elif enemy_dist_from_ball >= friendly_dist_from_ball:
             else:
                 pid_trans.Kp = 8.5/2
-                pid_trans.max_velocity = 0.5
+                pid_trans.max_velocity = 1
                 # If the robot doesn't have the ball, go to the ball
                 cmd = go_to_point(
                     pid_oren,
@@ -432,6 +434,99 @@ def one_on_one(game: Game, stop_event: threading.Event):
                 goal_scored = True
                 break
 
+def dribble(game: Game, stop_event: threading.Event):
+    robot_controller = GRSimRobotController(
+        is_team_yellow=game.my_team_is_yellow
+    )
+    
+    message_queue = queue.SimpleQueue()
+    vision_receiver = VisionDataReceiver(message_queue)
+    vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
+    vision_thread.daemon = True
+    vision_thread.start()
+
+    # Initialize PID controllers
+    pid_oren, pid_trans = get_grsim_pids(1)
+
+    goal_scored = False
+    dribbling = False
+    message = None
+    target_coords = None
+
+    dribble_task = DribbleToTarget(
+        pid_oren,
+        pid_trans,
+        game,
+        0,
+        (0, 0),
+        augment=True,
+    )
+    
+    while not stop_event.is_set():
+        # Process messages from the queue
+        if not message_queue.empty():
+            (message_type, message) = message_queue.get()
+            if message_type == MessageType.VISION:
+                game.add_new_state(message)
+            elif message_type == MessageType.REF:
+                pass
+
+        if goal_scored:
+            break
+
+        if message is not None:
+            friendly_robot, enemy_robot = (
+                game.friendly_robots[0],
+                game.enemy_robots[0],
+            )
+            ball = game.ball
+            
+            pid_trans.max_velocity = 1
+
+            if robot_controller.robot_has_ball(0):
+                pid_trans.Kp = 8.5 / 2
+                if not dribbling:
+                    print("Finding Drible")
+                    # Calculate a target position for dribbling
+                    target_coords = dribble_to_target_decision_maker(
+                        game,
+                        0,  # Robot ID
+                        robot_controller,
+                        safe_distance=1.0,
+                    )
+                    if target_coords is not None:
+                        dribble_task.update_coord(target_coords)
+                        dribbling = True
+            elif not dribbling:
+                cmd = go_to_ball(pid_oren, pid_trans, friendly_robot.robot_data, 0, ball)
+            # If dribbling, enact the dribble task
+            if dribbling:
+                print(f"Yellow: {game.my_team_is_yellow} Dribbling")
+                pid_trans.max_velocity = 0.8
+                # print("Dribbling to target")
+                cmd = dribble_task.enact(robot_controller.robot_has_ball(0))
+                # Check if the robot is close to the target
+                error = math.hypot(
+                    target_coords[0] - friendly_robot.x,
+                    target_coords[1] - friendly_robot.y,
+                )
+                if error < 0.02:  # Threshold for reaching the target
+                    print(f"Yellow: {game.my_team_is_yellow} Dribble task complete")
+                    pid_trans.max_velocity = 1
+                    dribbling = False
+                    
+            # Send the command to the robot
+            robot_controller.add_robot_commands(cmd, 0)
+            robot_controller.send_robot_commands()
+
+            # Check if a goal was scored
+            if (
+                game.is_ball_in_goal(right_goal=True)
+                or game.is_ball_in_goal(right_goal=False)
+                or ball_out_of_bounds(ball.x, ball.y)
+            ):
+                goal_scored = True
+                break
 
 def one_to_one_sim(headless: bool):
     """
@@ -447,11 +542,11 @@ def one_to_one_sim(headless: bool):
         env.set_robot_presence(i, is_team_yellow=False, is_present=False)
 
     # Teleport robot
-    env.teleport_robot(True, 0, -2, -1.2)
-    env.teleport_robot(False, 0, -2.5, 1.2)
+    env.teleport_robot(True, 0, -1, -1.2)
+    env.teleport_robot(False, 0, -1, 1.2)
 
     # Teleport ball
-    offset = random.uniform(-0.5, 0)
+    offset = random.uniform(-0.5, 0.5)
     env.teleport_ball(-2, offset)
 
     # Initialize Game objects for each team
@@ -462,26 +557,26 @@ def one_to_one_sim(headless: bool):
     stop_event = threading.Event()
 
     # Create threads for each team
-    yellow_thread = threading.Thread(
-        target=one_on_one,
-        args=(yellow_game, stop_event),
-    )
+    # yellow_thread = threading.Thread(
+    #     target=one_on_one,
+    #     args=(yellow_game, stop_event),
+    # )
     blue_thread = threading.Thread(
-        target=one_on_one,
+        target=dribble,
         args=(blue_game, stop_event),
     )
 
-    yellow_thread.daemon = True
+    # yellow_thread.daemon = True
     blue_thread.daemon = True
 
-    yellow_thread.start()
+    # yellow_thread.start()
     blue_thread.start()
 
     time_elapsed = 0
 
     try:
         # Wait for threads to finish (they will run until a goal is scored or manually stopped)
-        while yellow_thread.is_alive() or blue_thread.is_alive():
+        while blue_thread.is_alive():
             time_elapsed += 1
             time.sleep(0.1)
             if time_elapsed > MAX_GAME_TIME:
@@ -491,9 +586,10 @@ def one_to_one_sim(headless: bool):
     except KeyboardInterrupt:
         print("Main thread interrupted. Stopping worker threads...")
         stop_event.set()  # Signal threads to stop
+        raise
 
     # Wait for threads to finish
-    yellow_thread.join()
+    # yellow_thread.join()
     blue_thread.join()
 
     print("Game over.")
@@ -502,14 +598,9 @@ def one_to_one_sim(headless: bool):
 if __name__ == "__main__":
     logging.disable(logging.WARNING)
     try:
-        # for i in range(TOTAL_ITERATIONS):
-        #     if TOTAL_ITERATIONS == -1:
-        #         break
-        while True:
-            one_to_one_sim(headless=False)
-            CLOSE = True
-            if CLOSE: 
-                break
-            time.sleep(0.01)
+        for i in range(TOTAL_ITERATIONS):
+            one_to_one_sim(headless=False)  # This will now propagate the exception
+            time.sleep(0.1)
     except KeyboardInterrupt:
         print("Exiting...")
+        sys.exit(0)  # Ensures the program exits cleanly

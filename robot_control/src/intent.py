@@ -187,7 +187,7 @@ def is_goal_blocked(game: Game) -> bool:
     goal_y_range = (1, -1)  # Goalposts' y-range
 
     # Define the line equation from ball to goal
-    def is_point_on_line(point, start, end, tolerance=0.1):
+    def is_point_on_line(point, start, end, tolerance=0.15):
         """Check if a point is approximately on the line segment from start to end."""
         start = np.array(start)
         end = np.array(end)
@@ -252,8 +252,11 @@ def score_goal_demo(
             ball, enemy_robots, goal_x, goal_y1, goal_y2, shoot_at_goal_colour
         )
 
-        if best_shot is None:
+        if best_shot is None and is_goal_blocked(game_obj):
             return None
+        else:
+            best_shot = 0, goal_y2 - goal_y1
+            
         
         shot_orientation = np.atan2((best_shot[0] - ball.y), (goal_x - ball.x))
 
