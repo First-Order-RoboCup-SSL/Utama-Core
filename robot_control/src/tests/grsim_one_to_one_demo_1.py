@@ -27,7 +27,7 @@ from robot_control.src.skills import (
     clamp_to_goal_height,
     predict_goal_y_location,
 )
-from robot_control.src.intent import score_goal, find_likely_enemy_shooter
+from robot_control.src.intent import score_goal_one_v_one, find_likely_enemy_shooter
 
 logger = logging.getLogger(__name__)
 
@@ -309,14 +309,11 @@ def one_on_one(game: Game, friendly_robot_id: int, enemy_robot_id: int, stop_eve
             # Check if the robot has the ball
             if sim_robot_controller.robot_has_ball(friendly_robot_id):
                 # Try to score
-                cmd = score_goal(
+                cmd = score_goal_one_v_one(
                     game,
-                    True,
                     friendly_robot_id,
                     pid_oren,
                     pid_trans,
-                    game.my_team_is_yellow,
-                    False,
                 )
 
                 # If scoring is not possible, dribble to a better position
@@ -387,7 +384,7 @@ def one_on_one(game: Game, friendly_robot_id: int, enemy_robot_id: int, stop_eve
                 )
 
             # Send the command to the robot
-            print(f"Yellow: {game.my_team_is_yellow}, Robot {friendly_robot_id} cmd: {cmd}\n")
+            # print(f"Yellow: {game.my_team_is_yellow}, Robot {friendly_robot_id} cmd: {cmd}\n")
             sim_robot_controller.add_robot_commands(cmd, friendly_robot_id)
             sim_robot_controller.send_robot_commands()
 
