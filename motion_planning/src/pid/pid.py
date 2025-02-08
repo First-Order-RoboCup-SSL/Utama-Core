@@ -16,7 +16,7 @@ def get_real_pids(n_robots: int):
         0,
         num_robots=n_robots,
     )
-    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 3, 0.0, 0.05, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 3, 0.05, 0.1, num_robots=n_robots)
     return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=0.2), PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=0.05)
 
 
