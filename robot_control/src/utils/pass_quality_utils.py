@@ -45,7 +45,7 @@ def interception_chance(
     )
     if projection < 0 or projection > 1:
         return 0, None, None
-    closest_point = passer_vector + projection * passer_to_opp_vec
+    closest_point = passer_vector + projection * passer_to_receiver_vec
     ball_distance = np.linalg.norm(closest_point - passer_vector)
     ball_speed = np.linalg.norm(ball_v0)
     ball_time_roots = np.roots(
@@ -65,7 +65,10 @@ def interception_chance(
     else:
         opp_to_pass_time = 0
 
-    if opp_to_pass_time <= ball_time:
+    if opp_to_pass_time == 0:
+        chance = float("inf")
+        return chance, closest_point, np.array(passer)
+    elif opp_to_pass_time <= ball_time:
         ball_pos = ball_position(opp_to_pass_time, passer, ball_v0, ball_a)
         opp_to_ball_dist = np.linalg.norm(ball_pos - closest_point)
         chance = np.log(1 + opp_to_ball_dist)
@@ -105,6 +108,15 @@ def find_pass_quality(
         receiver, enemy_positions, goal_x, goal_y1, goal_y2, shoot_in_left_goal
     )
 
+    print(
+        "interception chance is: ",
+        total_interception_chance,
+        "receiver is at ",
+        (receiver.x, receiver.y),
+        "passer is at ",
+        (passer.x, passer.y),
+    )
+
     distance_to_goal_ratio = (np.absolute(receiver.x - goal_x)) / np.absolute(
         2 * goal_x
     )
@@ -114,11 +126,11 @@ def find_pass_quality(
     # these will be adjusted
     interception_chance_weight = 3
     goal_chance_weight = 0.5
-    distance_to_goal_weight = 0.2
+    distance_to_goal_weight = 0.3
 
     if distance_to_passer >= 0.7:
         pass_quality = (
-            1
+            1.5
             - interception_chance_weight * total_interception_chance
             + goal_chance_weight * goal_chance
             - distance_to_goal_weight * distance_to_goal_ratio

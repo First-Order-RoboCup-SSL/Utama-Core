@@ -26,12 +26,12 @@ from global_utils.math_utils import distance
 
 logger = logging.getLogger(__name__)
 
-MAX_TIME = 20  # in seconds
+MAX_TIME = 40  # in seconds
 N_ROBOTS = 7
-DEFENDING_ROBOTS = 5
+DEFENDING_ROBOTS = 6
 ATTACKING_ROBOTS = 2
 # TARGET_COORDS = (-2, 3)
-PASS_QUALITY_THRESHOLD = 1.15
+PASS_QUALITY_THRESHOLD = 1.5
 SHOT_QUALITY_THRESHOLD = 0.5
 
 BALL_V0_MAGNITUDE = 3
@@ -71,7 +71,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
     game = Game()
 
     N_ROBOTS_ATTACK = 2
-    N_ROBOTS_DEFEND = 5
+    N_ROBOTS_DEFEND = 6
 
     N_ROBOTS_YELLOW = N_ROBOTS_ATTACK if attacker_is_yellow else N_ROBOTS_DEFEND
     N_ROBOTS_BLUE = N_ROBOTS_DEFEND if attacker_is_yellow else N_ROBOTS_ATTACK
@@ -83,7 +83,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
     )
     env.reset()
 
-    env.teleport_ball(1, 1)
+    env.teleport_ball(1.1, 0.4)
 
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
         env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW
@@ -105,7 +105,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
     pass_task = None
     goal_scored = False
 
-    for iter in range(2000):
+    for iter in range(4000):
         if iter % 100 == 0:
             print(iter)
 
@@ -154,19 +154,18 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             ),
             2,
         )
-    
+        """
         sim_robot_controller_defender.add_robot_commands(
             man_mark(
                 not attacker_is_yellow,
                 game,
-                3,
+                2,
                 0,
                 pid_oren_defender,
                 pid_2d_defender,
             ),
-            3,
+            2,
         )
-        """
 
         sim_robot_controller_defender.send_robot_commands()
 
@@ -181,7 +180,12 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             sampled_positions = None
             target_pos = None
 
-            target_goal_line = game.field.enemy_goal_line(attacker_is_yellow)
+            shoot_in_left_goal = game.my_team_is_yellow
+
+            if shoot_in_left_goal:
+                target_goal_line = game.field.LEFT_GOAL_LINE
+            else:
+                target_goal_line = game.field.RIGHT_GOAL_LINE
             latest_frame = game.get_my_latest_frame(attacker_is_yellow)
 
             # if not latest_frame:
