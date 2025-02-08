@@ -382,7 +382,7 @@ def one_on_one(game: Game, stop_event: threading.Event, friendly_robot_id: int, 
                 
                 cmd = improved_block_goal_and_attacker(
                     friendly_robot.robot_data,
-                    game.enemy_robots[enemy_robot_id].robot_data,
+                    enemy_robot.robot_data,
                     ball,
                     game,
                     pid_oren,
@@ -440,7 +440,7 @@ def one_on_one(game: Game, stop_event: threading.Event, friendly_robot_id: int, 
                 break
 
 
-def one_to_one_sim(headless: bool):
+def one_to_one_real(headless: bool):
     """
     A 1v1 scenario with dynamic switching of attacker/defender roles.
     """
