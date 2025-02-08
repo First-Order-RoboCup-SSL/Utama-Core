@@ -270,7 +270,11 @@ def one_on_one(game: Game, friendly_robot_id: int, enemy_robot_id: int, stop_eve
 
     # Initialize PID controllers
     pid_oren, pid_trans = get_grsim_pids(1)
-
+    pid_oren.max_output = 4
+    pid_oren.min_output = -4
+    pid_trans.max_velocity = 2.5
+    
+    
     goal_scored = False
     dribbling = False
     message = None
@@ -281,7 +285,7 @@ def one_on_one(game: Game, friendly_robot_id: int, enemy_robot_id: int, stop_eve
         game,
         friendly_robot_id,
         (0, 0),
-        augment=True,
+        augment=False,
     )
 
     while not stop_event.is_set():
@@ -384,14 +388,14 @@ def one_on_one(game: Game, friendly_robot_id: int, enemy_robot_id: int, stop_eve
                 )
 
             # Send the command to the robot
-            print(f"Yellow: {game.my_team_is_yellow}, Robot {friendly_robot_id} cmd: {cmd}\n")
+            # print(f"Yellow: {game.my_team_is_yellow}, Robot {friendly_robot_id} cmd: {cmd}\n")
             sim_robot_controller.add_robot_commands(cmd, friendly_robot_id)
             sim_robot_controller.send_robot_commands()
 
             # Check if a goal was scored
             if (
-                game.is_ball_in_goal(our_side=True)
-                or game.is_ball_in_goal(our_side=False)
+                game.is_ball_in_goal(right_goal=True)
+                or game.is_ball_in_goal(right_goal=False)
                 or ball_out_of_bounds(ball.x, ball.y)
             ):
                 goal_scored = True
@@ -409,6 +413,9 @@ def strat_def(game: Game, stop_event: threading.Event):
 
     # Initialize PID controllers
     pid_oren, pid_trans = get_grsim_pids(1)  # Yellow
+    
+    pid_oren.max_output = 4
+    pid_oren.min_output = -4
 
     if game.my_team_is_yellow:
         goal_pos = (4.5, 0)
