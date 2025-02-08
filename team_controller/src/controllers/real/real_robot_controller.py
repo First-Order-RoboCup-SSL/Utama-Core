@@ -80,7 +80,7 @@ class RealRobotController(AbstractRobotController):
         """
         NUMBER_TO_SAM_NUMBER = { # TODO: This obviously is not permanent
             1: 1,
-            4: 0,
+            3: 0,
             2: 2
         }
 

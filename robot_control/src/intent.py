@@ -408,7 +408,7 @@ def score_goal(
     # calculate best shot from the position of the ball
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
     if friendly_robots and enemy_robots and balls:
-        best_shot = -0.3
+        best_shot = -0.1
 
         # best_shot, size_of_shot = find_best_shot(
         #     balls[0], enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
@@ -470,7 +470,7 @@ def score_goal(
                                 angular_vel=0,
                                 kick=0,
                                 chip=0,
-                                dribble=1
+                                dribble=0
                             )
 
                             

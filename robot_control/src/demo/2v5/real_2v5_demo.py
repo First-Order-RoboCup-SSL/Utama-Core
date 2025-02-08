@@ -14,10 +14,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 MAX_TIME = 20  # in seconds
-N_YELLOW = 2
+N_YELLOW = 4
 N_BLUE = 5
 
-r0 = 0
+r0 = 3
 r1 = 1
 
 receiving_point = (-3, 2)
@@ -31,9 +31,10 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 def read_to_game(message_queue: queue.SimpleQueue, game: Game):
     (message_type, message) = message_queue.get()  # Infinite timeout for now
-
+    print(message_queue.qsize())
     if message_type == MessageType.VISION:
         game.add_new_state(message)
+        print(message)
         vision_recieved = True
     elif message_type == MessageType.REF:
         pass
@@ -55,31 +56,32 @@ def test_rsim_2v5():
     data_thread.start()
 
     robot_controller = RealRobotController(
-        is_team_yellow=True, game_obj=game, n_robots=2
+        is_team_yellow=True, game_obj=game, n_robots=4
     )
     target_ball_pos = (game.ball.x, game.ball.y)
 
     try:
-        while distance((game.ball.x, game.ball.y), target_ball_pos) < 0.1:
-            read_to_game(message_queue, game)
-            print("Getting to ball")
-            r1_data = game.get_robot_pos(True, r1)
-            cmd1 = go_to_ball(
-                pid_oren,
-                pid_trans,
-                r1_data,
-                r1,
-                game.ball,
-            )
-            robot_controller.add_robot_commands(cmd1, r1)
-            robot_controller.send_robot_commands()
+        # while distance((game.ball.x, game.ball.y), target_ball_pos) < 0.1:
+        #     read_to_game(message_queue, game)
+        #     print("Getting to ball")
+        #     r1_data = game.get_robot_pos(True, r1)
+        #     cmd1 = go_to_ball(
+        #         pid_oren,
+        #         pid_trans,
+        #         r1_data,
+        #         r1,
+        #         game.ball,
+        #     )
+        #     robot_controller.add_robot_commands(cmd1, r1)
+        #     robot_controller.send_robot_commands()
         # r1 get to pos
         while True:
             read_to_game(message_queue, game)
             print("Getting to pos")
-            r1_data = game.get_robot_pos(True, r1)
-            r0_data = game.get_robot_pos(True, r0)
-            if distance((r0_data.x, r0_data.y), receiving_point) < 0.05:
+            # r1_data = game.get_robot_pos(True, r1)
+            r0_data = game.get_robot_pos(True, 3)
+
+            if distance((r0_data.x, r0_data.y), receiving_point) < 0.1:
                 break
             cmd0 = go_to_point(
                 pid_oren,
@@ -89,40 +91,48 @@ def test_rsim_2v5():
                 receiving_point,
                 r0_data.orientation,
             )
-            cmd1 = go_to_point(
-                pid_oren,
-                pid_trans,
-                r1_data,
-                r1,
-                passing_point,
-                r1_data.orientation,
-                True,
-            )
+            print(cmd0, distance((r0_data.x, r0_data.y), receiving_point))
+            # cmd1 = go_to_point(
+            #     pid_oren,
+            #     pid_trans,
+            #     r1_data,
+            #     r1,
+            #     passing_point,
+            #     r1_data.orientation,
+            #     True,
+            # )
 
-            robot_controller.add_robot_commands(cmd1, r1)
+            # robot_controller.add_robot_commands(cmd1, r1)
             robot_controller.add_robot_commands(cmd0, r0)
             robot_controller.send_robot_commands()
 
         # r1 pass to r0
-        pass_task1 = PassBall(pid_oren, pid_trans, game, r1, r0, receiving_point)
-        start_t = time.time()
-        while time.time() - start_t < 5:
-            read_to_game(message_queue, game)
-            print("Passing")
-            cmd1, cmd0 = pass_task1.enact(True)
-            robot_controller.add_robot_commands(cmd0, r0)
-            robot_controller.add_robot_commands(cmd1, r1)
-            robot_controller.send_robot_commands()
+        # pass_task1 = PassBall(pid_oren, pid_trans, game, r1, r0, receiving_point)
+        # start_t = time.time()
+        # while time.time() - start_t < 5:
+        #     read_to_game(message_queue, game)
+        #     print("Passing")
+        #     cmd1, cmd0 = pass_task1.enact(True)
+        #     # robot_controller.add_robot_commands(cmd0, r0)
+        #     robot_controller.add_robot_commands(cmd1, r1)
+        #     robot_controller.send_robot_commands()
 
-        del pass_task1
+        # del pass_task1
 
-        # r0 score goal
-        while not game.is_ball_in_goal(our_side=False):
-            read_to_game(message_queue, game)
-            print("scoring goal")
-            cmd0 = score_goal(game, True, r0, pid_oren, pid_trans, True, True)
-            robot_controller.add_robot_commands(cmd0, r0)
-            robot_controller.send_robot_commands()
+        # # r0 score goal
+        # while not game.is_ball_in_goal(our_side=False):
+        #     read_to_game(message_queue, game)
+        #     print("scoring goal")
+        #     cmd0 = score_goal(game, True, r0, pid_oren, pid_trans, True, True)
+        #     robot_controller.add_robot_commands(cmd0, r0)
+        #     robot_controller.send_robot_commands()
 
     except KeyboardInterrupt:
-        print("Exiting...")
+        print("Stopping robot.")
+    finally:
+        for i in range(15): # Try really hard to stop the robots!
+            robot_controller.send_robot_commands()
+
+
+if __name__ == "__main__":
+    test_rsim_2v5()
