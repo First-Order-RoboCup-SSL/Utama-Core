@@ -58,8 +58,17 @@ def rad_to_deg(radians: float):
     return degrees % 360
 
 
-def distance(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
+def squared_distance(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
     """
-    Calculate the Euclidean distance between two points in 2D space using the Pythagorean theorem.
+    Calculate the squared Euclidean distance between two 2D points.
+
+    This functions should be considered first, before distance() function, as it is much faster.
+
+    Parameters:
+        point1 (Tuple[float, float]): Coordinates of the first point (x1, y1).
+        point2 (Tuple[float, float]): Coordinates of the second point (x2, y2).
+
+    Returns:
+        float: The Euclidean distance between the two points.
     """
-    return np.hypot(point2[0] - point1[0], point2[1] - point1[1])
+    return (point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2

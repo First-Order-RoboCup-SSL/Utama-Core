@@ -1,6 +1,6 @@
 import numpy as np
 from entities.game.robot import RobotData
-from global_utils.math_utils import distance
+from global_utils.math_utils import squared_distance
 
 ROBOT_RADIUS = 0.09
 
@@ -109,7 +109,9 @@ def find_pass_quality(
         2 * goal_x
     )
 
-    distance_to_passer = distance((passer.x, passer.y), (receiver.x, receiver.y))
+    distance_to_passer = np.sqrt(
+        squared_distance((passer.x, passer.y), (receiver.x, receiver.y))
+    )
 
     # these will be adjusted
     interception_chance_weight = 3
