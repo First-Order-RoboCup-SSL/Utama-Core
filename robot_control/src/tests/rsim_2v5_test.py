@@ -4,7 +4,7 @@ import logging
 
 from typing import Tuple, List
 
-from motion_planning.src.pid.pid import get_rsim_pids
+from motion_planning.src.pid.pid import get_rsim_pids, get_rsim_defender_pids
 from robot_control.src.skills import (
     go_to_ball,
     go_to_point,
@@ -32,7 +32,7 @@ DEFENDING_ROBOTS = 5
 ATTACKING_ROBOTS = 2
 # TARGET_COORDS = (-2, 3)
 PASS_QUALITY_THRESHOLD = 1.15
-SHOT_QUALITY_THRESHOLD = 0.5
+SHOT_QUALITY_THRESHOLD = 0.1
 
 BALL_V0_MAGNITUDE = 3
 BALL_A_MAGNITUDE = -0.3
@@ -68,10 +68,11 @@ def intercept_ball(
 
 
 def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: bool):
+
     game = Game()
 
     N_ROBOTS_ATTACK = 2
-    N_ROBOTS_DEFEND = 5
+    N_ROBOTS_DEFEND = 6
 
     N_ROBOTS_YELLOW = N_ROBOTS_ATTACK if attacker_is_yellow else N_ROBOTS_DEFEND
     N_ROBOTS_BLUE = N_ROBOTS_DEFEND if attacker_is_yellow else N_ROBOTS_ATTACK
@@ -84,10 +85,13 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
     env.reset()
 
     env.teleport_ball(1, 1)
+    env.teleport_robot(False, 3, 0, 0)
+    env.teleport_robot(False, 2, 1.5, 0)
 
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
         env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW
     )
+    time.sleep(2)
 
     if attacker_is_yellow:
         sim_robot_controller_attacker = sim_robot_controller_yellow
@@ -97,13 +101,14 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
         sim_robot_controller_defender = sim_robot_controller_yellow
 
     pid_oren_attacker, pid_2d_attacker = get_rsim_pids(N_ROBOTS_ATTACK)
-    pid_oren_defender, pid_2d_defender = get_rsim_pids(N_ROBOTS_DEFEND)
+    pid_oren_defender, pid_2d_defender = get_rsim_defender_pids(N_ROBOTS_DEFEND)
 
     player1_id = friendly_robot_ids[0]  # Start with robot 0
     player2_id = friendly_robot_ids[1]  # Start with robot 1
 
     pass_task = None
     goal_scored = False
+    num_passes = 0
 
     for iter in range(2000):
         if iter % 100 == 0:
@@ -120,6 +125,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             ),
             1,
         )
+
         """
         sim_robot_controller_defender.add_robot_commands(
             defend(
@@ -327,7 +333,10 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                 goal_y2,
                 attacker_is_yellow,
             )
-            if shot_quality > SHOT_QUALITY_THRESHOLD:
+            print(num_passes)
+            if (
+                shot_quality > SHOT_QUALITY_THRESHOLD or num_passes >= 320
+            ) and num_passes >= 320:
                 print("shooting with chance", shot_quality, SHOT_QUALITY_THRESHOLD)
                 commands[ball_possessor_id] = score_goal(
                     game,
@@ -394,6 +403,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                     ),
                 )
                 pass_commands = pass_task.enact(passer_has_ball=True)
+                num_passes += 1
                 commands[ball_possessor_id] = pass_commands[0]
                 commands[best_receiver_id] = pass_commands[1]
             else:
@@ -441,10 +451,12 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                     else:
                         env.draw_point(sample.x, sample.y, width=2)
     assert goal_scored
+    time.sleep(2)
 
 
 if __name__ == "__main__":
     try:
+        time.sleep(3)
         test_2v5([0, 1], True, False)
     except KeyboardInterrupt:
         print("Exiting...")

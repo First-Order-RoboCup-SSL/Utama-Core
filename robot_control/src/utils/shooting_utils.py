@@ -2,6 +2,7 @@ from typing import List, Tuple
 import numpy as np
 from team_controller.src.config.settings import ROBOT_RADIUS
 from robot_control.src.utils.pass_quality_utils import PointOnField
+from entities.game.ball import BallData
 
 
 def point_to_robot_dist(

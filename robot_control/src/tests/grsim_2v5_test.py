@@ -51,7 +51,7 @@ DEFENDING_ROBOTS = 5
 ATTACKING_ROBOTS = 2
 # TARGET_COORDS = (-2, 3)
 PASS_QUALITY_THRESHOLD = 1.15
-SHOT_QUALITY_THRESHOLD = 0.5
+SHOT_QUALITY_THRESHOLD = 0.3
 
 BALL_V0_MAGNITUDE = 3
 BALL_A_MAGNITUDE = -0.3
@@ -441,7 +441,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
         if message is not None:
             _, _, balls = game.get_my_latest_frame(my_team_is_yellow)
             ball_data = balls[0]
-
+            """
             sim_robot_controller.add_robot_commands(
                 defend_grsim(
                     pid_oren,
@@ -463,20 +463,20 @@ def defender_strategy(game: Game, stop_event: threading.Event):
                 ),
                 4,
             )
-
+            """
             sim_robot_controller.add_robot_commands(
                 goalkeep(
-                    not my_team_is_yellow,
+                    my_team_is_yellow,
                     game,
                     0,
                     pid_oren,
                     pid_trans,
-                    my_team_is_yellow,
+                    not my_team_is_yellow,
                     sim_robot_controller.robot_has_ball(0),
                 ),
                 0,
             )
-
+            """
             sim_robot_controller.add_robot_commands(
                 man_mark(
                     my_team_is_yellow,
@@ -500,7 +500,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
                 ),
                 3,
             )
-
+            """
             sim_robot_controller.send_robot_commands()
 
             # Check if a goal was scored
