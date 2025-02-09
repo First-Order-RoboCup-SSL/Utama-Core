@@ -269,32 +269,31 @@ def score_goal_demo(
         # ball_data: BallData = ball.ball_data
 
         if ball is not None and robot_data is not None:
-            if robot_data is not None:
-                logging.debug("robot has ball")
-                current_oren = robot_data.orientation
+            logging.debug("robot has ball")
+            current_oren = robot_data.orientation
 
-                # if robot has ball and is facing the goal, kick the ball
-                # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
-                # Because 0.02 as a threshold is meaningless (different at different distances)
-                # TODO: consider also adding a distance from goal threshold
-                # print(current_oren, shot_orientation)
-                if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(game_obj):
-                    logger.info("kicking ball")
-                    robot_command = kick_ball()
-                # else, robot has ball, but needs to turn to the right direction
-                # TODO: Consider also advancing closer to the goal
-                elif is_goal_blocked(game_obj):
-                    return None
-                else:
-                    robot_command = turn_on_spot(
-                        pid_oren,
-                        pid_trans,
-                        robot_data,
-                        shooter_id,
-                        shot_orientation,
-                        dribbling=True,
-                        pivot_on_ball=True,
-                    )
+            # if robot has ball and is facing the goal, kick the ball
+            # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
+            # Because 0.02 as a threshold is meaningless (different at different distances)
+            # TODO: consider also adding a distance from goal threshold
+            # print(current_oren, shot_orientation)
+            if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(game_obj):
+                logger.info("kicking ball")
+                robot_command = kick_ball()
+            # else, robot has ball, but needs to turn to the right direction
+            # TODO: Consider also advancing closer to the goal
+            elif is_goal_blocked(game_obj):
+                return None
+            else:
+                robot_command = turn_on_spot(
+                    pid_oren,
+                    pid_trans,
+                    robot_data,
+                    shooter_id,
+                    shot_orientation,
+                    dribbling=True,
+                    pivot_on_ball=True,
+                )
 
     return robot_command
 

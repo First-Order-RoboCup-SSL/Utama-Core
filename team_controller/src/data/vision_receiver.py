@@ -62,7 +62,8 @@ class VisionDataReceiver(BaseReceiver):
         )
 
         if all(map(lambda x: x is None, self.robots_yellow_pos)):
-            print("No yellow FOUND")
+            # print("No yellow FOUND")
+            pass
 
         self.camera_frames[detection.camera_id] = new_frame
         if (
