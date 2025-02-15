@@ -48,7 +48,7 @@ def get_grsim_pids(n_robots: int):
         17.5,
         0.150,
         0,
-        num_robots=6,
+        num_robots=n_robots,
         integral_min=-10,
         integral_max=10,
     )
@@ -70,7 +70,7 @@ def get_rsim_pids(n_robots: int):
         17.5,
         0.150,
         0,
-        num_robots=6,
+        num_robots=n_robots,
         integral_min=-10,
         integral_max=10,
     )
@@ -137,8 +137,8 @@ class PID(AbstractPID[float]):
         self.Kd = Kd
         self.Ki = Ki
 
-        self.pre_errors = {i: 0.0 for i in range(num_robots)}
-        self.integrals = {i: 0.0 for i in range(num_robots)}
+        self.pre_errors = {i: 0.0 for i in range(6)}
+        self.integrals = {i: 0.0 for i in range(6)}
 
         # Anti-windup limits
         self.integral_min = integral_min
@@ -146,7 +146,7 @@ class PID(AbstractPID[float]):
         
         self.prev_time = 0
 
-        self.first_pass = {i: True for i in range(num_robots)}
+        self.first_pass = {i: True for i in range(6)}
 
     def calculate(
         self,
@@ -192,7 +192,12 @@ class PID(AbstractPID[float]):
 
         # Derivative term
         if self.Kd != 0 and not self.first_pass[robot_id]:
-            derivative = (error - self.pre_errors[robot_id]) / round(call_func_time - self.prev_time, 4)
+            if round(call_func_time - self.prev_time, 4) > 0:
+                dt = round(call_func_time - self.prev_time, 4)
+            else:
+                dt = 0.016
+                
+            derivative = (error - self.pre_errors[robot_id]) / dt
             Dout = self.Kd * derivative
         else:
             Dout = 0.0
@@ -212,13 +217,15 @@ class PID(AbstractPID[float]):
 
         self.pre_errors[robot_id] = error
         self.prev_time = time.time()
+        print(f"first pass: {self.first_pass}")
         return output
 
     def reset(self, robot_id: int):
         """Reset the error and integral for the specified robot."""
         self.pre_errors[robot_id] = 0.0
         self.integrals[robot_id] = 0.0
-        self.first_pass = {i: True for i in range(self.num_robots)}
+        self.first_pass = {i: True for i in range(6)}
+        print("Reset PID")
 
 class TwoDPID(AbstractPID[Tuple[float, float]]):
     """
