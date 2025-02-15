@@ -29,7 +29,7 @@ class Robot:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
         else:
-            logger.critical(f" Should not be getting coords of robot_id: {self.id} (None)")
+            logger.warning(f" Should not be getting coords of robot_id: {self.id} (None)")
             return None
 
     @robot_data.setter
@@ -61,7 +61,7 @@ class Robot:
     @property
     def orientation(self) -> float:
         if self._robot_data is not None:
-            return self._robot_data[3]
+            return self._robot_data[2]
         elif self.inactive:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
