@@ -1,38 +1,48 @@
-import numpy as np
-from typing import Optional, Union, Tuple, Generic, TypeVar
+import numpy as np 
+from typing import Optional, Tuple, Generic, TypeVar
 from abc import ABC, abstractmethod
 import time
 import math
-from team_controller.src.config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL
+from team_controller.src.config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL, REAL_MAX_ANGULAR_VEL, REAL_MAX_VEL
 
-
+# Helper functions to create PID controllers.
+# Note: These parameters could be moved to an external configuration.
 def get_real_pids(n_robots: int):
     pid_oren = PID(
         TIMESTEP,
-        MAX_ANGULAR_VEL,
-        -MAX_ANGULAR_VEL,
+        REAL_MAX_ANGULAR_VEL,
+        -REAL_MAX_ANGULAR_VEL,
         1.5,
         0,
         0,
         num_robots=n_robots,
+        integral_min=-10,  # example limit for anti-windup
+        integral_max=10,
     )
-    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 3, 0.05, 0.1, num_robots=n_robots)
+    pid_trans = TwoDPID(
+        TIMESTEP,
+        REAL_MAX_VEL,
+        3,
+        0.05,
+        0.1,
+        num_robots=n_robots,
+    )
     return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=0.2), PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=0.05)
-
 
 def get_real_pids_goalie(n_robots: int):
     pid_oren = PID(
         TIMESTEP,
-        MAX_ANGULAR_VEL,
-        -MAX_ANGULAR_VEL,
+        REAL_MAX_ANGULAR_VEL,
+        -REAL_MAX_ANGULAR_VEL,
         1.5,
         0,
         0,
         num_robots=n_robots,
+        integral_min=-10,
+        integral_max=10,
     )
-    pid_trans = TwoDPID(TIMESTEP, 2, 8, 0.0, 1, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, 2, 8.5, 0.025, 1, num_robots=n_robots)
     return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=2), PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=1)
-
 
 def get_grsim_pids(n_robots: int):
     pid_oren = PID(
@@ -43,65 +53,87 @@ def get_grsim_pids(n_robots: int):
         0.12,
         0,
         num_robots=n_robots,
+        integral_min=-10,
+        integral_max=10,
     )
-    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0.0, num_robots=n_robots)
+    pid_trans = TwoDPID(
+        TIMESTEP,
+        MAX_VEL,
+        8.5,
+        0.025,
+        0.0,
+        num_robots=n_robots,
+    )
     return pid_oren, pid_trans
 
 def get_rsim_pids(n_robots: int):
-    # no clamping for oreintation otherwise the robot becomes unstable
     pid_oren = PID(
-        TIMESTEP, MAX_ANGULAR_VEL, -MAX_ANGULAR_VEL, 18.5, 0.12, 0, num_robots=6
+        TIMESTEP,
+        MAX_ANGULAR_VEL,
+        -MAX_ANGULAR_VEL,
+        17.5,
+        0.150,
+        0,
+        num_robots=6,
+        integral_min=-10,
+        integral_max=10,
     )
-    # speeds faster than 2.3 m/s cause the robot to lose control (due to the physics engine,
-    # rsim becomes wierd there is some sot of limiter on the robots)
-    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0, num_robots=n_robots)
-    # return PIDAccelerationLimiterWrapper(pid_oren, 50), PIDAccelerationLimiterWrapper(pid_trans, 0.1)
+    pid_trans = TwoDPID(
+        TIMESTEP,
+        MAX_VEL,
+        8,
+        0.025,
+        0,
+        num_robots=n_robots,
+    )
     return pid_oren, pid_trans
-
 
 T = TypeVar("T")
 class AbstractPID(ABC, Generic[T]):
     
     @abstractmethod
     def calculate(self, target: T, current: T) -> T:
-        """Can have other keyword args - this highlights structure of function"""
+        """Perform a PID calculation."""
         ...
     
     @abstractmethod
     def reset(self, robot_id: int):
+        """Reset the PID controller state for a given robot."""
         ...
 
 class PID(AbstractPID[float]):
     """
-    A Proportional-Integral-Derivative (PID) controller for managing error corrections over time.
+    A Proportional-Integral-Derivative (PID) controller for managing error corrections.
 
     Args:
-        dt (float): Time step for each PID update; must be positive.
-        max_output (float): Maximum output value that the controller can produce.
-        min_output (float): Minimum output value that the controller can produce.
+        dt (float): Time step for each update.
+        max_output (Optional[float]): Maximum output value (None for no limit).
+        min_output (Optional[float]): Minimum output value (None for no limit).
         Kp (float): Proportional gain.
         Kd (float): Derivative gain.
         Ki (float): Integral gain.
-        num_robots (int): Number of robots being controlled; each has separate error tracking.
-
-    Raises:
-        ValueError: If `dt` is not greater than zero.
+        num_robots (int): Number of robots (each maintains its own error tracking).
+        integral_min (Optional[float]): Minimum allowed integral value.
+        integral_max (Optional[float]): Maximum allowed integral value.
     """
-
     def __init__(
         self,
         dt: float,
-        max_output: float,
-        min_output: float,
+        max_output: Optional[float],
+        min_output: Optional[float],
         Kp: float,
         Kd: float,
         Ki: float,
         num_robots: int,
+        integral_min: Optional[float] = None,
+        integral_max: Optional[float] = None,
     ):
         if dt <= 0:
             raise ValueError("dt should be greater than zero")
         self.dt = dt
 
+        self.num_robots = num_robots
+        
         self.max_output = max_output
         self.min_output = min_output
 
@@ -112,7 +144,13 @@ class PID(AbstractPID[float]):
         self.pre_errors = {i: 0.0 for i in range(num_robots)}
         self.integrals = {i: 0.0 for i in range(num_robots)}
 
-        self.first_pass = True
+        # Anti-windup limits
+        self.integral_min = integral_min
+        self.integral_max = integral_max
+        
+        self.prev_time = 0
+
+        self.first_pass = {i: True for i in range(num_robots)}
 
     def calculate(
         self,
@@ -123,72 +161,74 @@ class PID(AbstractPID[float]):
         normalize_range: Optional[float] = None,
     ) -> float:
         """
-        Compute the PID output to move a robot towards a target position.
+        Compute the PID output to move a robot towards a target.
 
         Args:
-            target (float): Desired target value (e.g., target position).
-            current (float): Current observed value (e.g., current position).
-            robot_id (int): Unique identifier for the robot to apply this control to.
-            oren (bool): Whether to adjust for angular orientation. Default is False.
-            normalize_range (Optional[float]): If provided, scales the output by this range.
+            target (float): Desired value.
+            current (float): Current value.
+            robot_id (int): Unique robot identifier.
+            oren (bool): If True, treats error as an angular difference.
+            normalize_range (Optional[float]): If provided, scales the output.
 
         Returns:
-            float: The PID control output value, limited between `min_output` and `max_output`.
-
-        This function calculates the PID output by computing proportional, integral, and derivative terms,
-        with optional normalization in order to try and keep all the output values within a range. When
-        `oren` is True, the error calculation is modified to handle angular differences. Clamping is
-        applied to prevent integral wind-up and to limit the total output.
+            float: Clamped PID output.
         """
-
-        # Calculate error
+        call_func_time = time.time()
         error = target - current
 
-        # Adjust error if orientation (oren) is considered
+        # Adjust error for angular measurements
         if oren:
-            error = np.atan2(np.sin(error), np.cos(error))
-            # if error < np.deg2rad(2):
-            #     error = 0.0
+            error = np.arctan2(np.sin(error), np.cos(error))
 
-        # Calculate PID output
+        # Proportional term
         Pout = self.Kp * error if self.Kp != 0 else 0.0
 
-        # Integral term with clamping
+        # Integral term with anti-windup
         if self.Ki != 0:
             self.integrals[robot_id] += error * self.dt
+            if self.integral_max is not None:
+                self.integrals[robot_id] = min(self.integrals[robot_id], self.integral_max)
+            if self.integral_min is not None:
+                self.integrals[robot_id] = max(self.integrals[robot_id], self.integral_min)
             Iout = self.Ki * self.integrals[robot_id]
         else:
             Iout = 0.0
 
         # Derivative term
-        if self.Kd != 0 and not self.first_pass:
-            derivative = (error - self.pre_errors[robot_id]) / self.dt
+        if self.Kd != 0 and not self.first_pass[robot_id]:
+            derivative = (error - self.pre_errors[robot_id]) / round(call_func_time - self.prev_time, 4)
             Dout = self.Kd * derivative
         else:
             Dout = 0.0
-            self.first_pass = False
+            self.first_pass[robot_id] = False
 
-        # Total output with clamping
         output = Pout + Iout + Dout
 
         # Apply optional normalization
         if normalize_range is not None and normalize_range != 0:
             output /= normalize_range
 
-        # apply clamping
-        if self.max_output and self.min_output:
-            output = max(self.min_output, min(self.max_output, output))
-        # Save error for next calculation
+        # Consistent output clamping
+        if self.max_output is not None:
+            output = min(self.max_output, output)
+        if self.min_output is not None:
+            output = max(self.min_output, output)
+
         self.pre_errors[robot_id] = error
+        self.prev_time = time.time()
         return output
 
     def reset(self, robot_id: int):
+        """Reset the error and integral for the specified robot."""
         self.pre_errors[robot_id] = 0.0
         self.integrals[robot_id] = 0.0
-        self.first_pass = True
-
+        self.first_pass = {i: True for i in range(self.num_robots)}
 
 class TwoDPID(AbstractPID[Tuple[float, float]]):
+    """
+    A 2D PID controller that independently controls the X and Y dimensions and scales
+    the resulting velocity vector to a maximum speed if needed.
+    """
     def __init__(
         self,
         dt: float,
@@ -197,40 +237,37 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         Kd: float,
         Ki: float,
         num_robots: int,
+        integral_min: Optional[float] = None,
+        integral_max: Optional[float] = None,
     ):
         self.max_velocity = max_velocity
-
-        self.dimX = PID(dt, None, None, Kp, Kd, Ki, num_robots)
-        self.dimY = PID(dt, None, None, Kp, Kd, Ki, num_robots)
+        self.dimX = PID(dt, None, None, Kp, Kd, Ki, num_robots, integral_min, integral_max)
+        self.dimY = PID(dt, None, None, Kp, Kd, Ki, num_robots, integral_min, integral_max)
 
     def calculate(
-        self, target: Tuple[float, float], current: Tuple[float, float], robot_id
-    ):
-        x_vel = self.dimX.calculate(
-            target[0], current[0], robot_id, False, normalize_range=4.5
-        )
-        y_vel = self.dimY.calculate(
-            target[1], current[1], robot_id, False, normalize_range=3
-        )
+        self, target: Tuple[float, float], current: Tuple[float, float], robot_id: int
+    ) -> Tuple[float, float]:
+        x_vel = self.dimX.calculate(target[0], current[0], robot_id, oren=False, normalize_range=4.5)
+        y_vel = self.dimY.calculate(target[1], current[1], robot_id, oren=False, normalize_range=3)
         return self.scale_velocity(x_vel, y_vel, self.max_velocity)
 
-    def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float):
-        current_vel = np.hypot(x_vel, y_vel)
-
+    def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float) -> Tuple[float, float]:
+        current_vel = math.hypot(x_vel, y_vel)
         if current_vel > max_vel:
             scaling_factor = max_vel / current_vel
-
             x_vel *= scaling_factor
             y_vel *= scaling_factor
-
         return x_vel, y_vel
 
     def reset(self, robot_id: int):
         self.dimX.reset(robot_id)
         self.dimY.reset(robot_id)
 
-
 class PIDAccelerationLimiterWrapper:
+    """
+    Wraps a PID controller and limits the acceleration (i.e. the rate of change of the output)
+    between successive calls.
+    """
     def __init__(self, internal_pid: AbstractPID, max_acceleration: float):
         self._internal_pid = internal_pid
         self._last_result_time = None
@@ -238,60 +275,50 @@ class PIDAccelerationLimiterWrapper:
         self._max_acceleration = max_acceleration
 
     def calculate(self, *args, **kwargs):
-        # Forward the arguments to the internal pid controller
         result = self._internal_pid.calculate(*args, **kwargs)
         current_time = time.time()
         if self._last_result_time is None:
-            # Assume the worst case, which is one frame ago eg 16.6ms
-            time_since_last = 16.6 / 1000
+            time_since_last = 16.6 / 1000  # Assume ~16.6ms if first call
         else:
             time_since_last = current_time - self._last_result_time
         self._last_result_time = current_time
 
-        # Maximum allowed change in velocity in this time step
-        dv = time_since_last * self._max_acceleration
+        # Maximum allowed change based on the acceleration limit.
+        dv_allowed = time_since_last * self._max_acceleration
 
-        if isinstance(result, float) or isinstance(result, int):
-            usable_last_result = 0 if self._last_result is None else self._last_result
-            difference = result - usable_last_result
-            if difference >= 0:
-                difference = min(difference, dv)
-            else:
-                difference = max(difference, -dv)
-            reduced_result = usable_last_result + difference
+        if isinstance(result, (float, int)):
+            last_val = 0 if self._last_result is None else self._last_result
+            diff = result - last_val
+            # Clamp the change in output
+            diff = max(-dv_allowed, min(dv_allowed, diff))
+            limited_result = last_val + diff
         elif isinstance(result, tuple):
-            # Need to scale down the vector with respect to each direction
-            usable_last_result = (0,0) if self._last_result is None else self._last_result
-            norm = math.dist(usable_last_result, result)
-            if norm < dv:
-                reduced_result = result
+            last_val = (0.0, 0.0) if self._last_result is None else self._last_result
+            dx = result[0] - last_val[0]
+            dy = result[1] - last_val[1]
+            norm_diff = math.hypot(dx, dy)
+            if norm_diff <= dv_allowed or norm_diff == 0:
+                limited_result = result
             else:
-                if norm != 0:
-                    # Don't allow scaling above the maximum
-                    ratio = min(1, self._max_acceleration / norm)
-                    dx, dy = (result[0]-usable_last_result[0]) * ratio, (result[1]-usable_last_result[1]) * ratio
-                    reduced_result = usable_last_result[0] + dx, usable_last_result[1] + dy
-                else:
-                    reduced_result = result
+                scale = dv_allowed / norm_diff
+                limited_result = (last_val[0] + dx * scale, last_val[1] + dy * scale)
         else:
-            raise NotImplementedError(f"Can only wrap tuples of float or Tuple[float, float] not {type(result)}")
-        self._last_result = reduced_result
-        return reduced_result
+            raise NotImplementedError(f"Unsupported type for acceleration limiter: {type(result)}")
+        self._last_result = limited_result
+        return limited_result
 
     def reset(self, robot_id: int):
         self._internal_pid.reset(robot_id)
+        self._last_result = None
+        self._last_result_time = None
 
-
-
-
-if __name__=="__main__":
-    
+if __name__ == "__main__":
+    # Example usage for testing purposes.
     pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0.0, num_robots=6)
     pid_trans2 = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0.0, num_robots=6)
 
-    pid_trans_limited = PIDAccelerationLimiterWrapper(pid_trans2)
+    pid_trans_limited = PIDAccelerationLimiterWrapper(pid_trans2, max_acceleration=0.05)
     for pid in [pid_trans, pid_trans_limited]:
-        result = pid.calculate((100,100), (0,0), 0)
-
+        result = pid.calculate((100, 100), (0, 0), 0)
         print(result)
-        print(math.dist((0,0), result))
+        print(math.hypot(result[0], result[1]))

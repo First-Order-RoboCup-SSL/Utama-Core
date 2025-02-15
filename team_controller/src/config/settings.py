@@ -4,9 +4,14 @@ from numpy import pi
 TIMESTEP = 0.0167
 
 # maximum (real and sim) robot settings
-MAX_VEL = 0.1
+REAL_MAX_VEL = 0.1
 # any slower and the robots become unstable
-MAX_ANGULAR_VEL = 2
+REAL_MAX_ANGULAR_VEL = 2
+
+# maximum (real and sim) robot settings
+MAX_VEL = 2
+# any slower and the robots become unstable
+MAX_ANGULAR_VEL = 4
 
 ROBOT_RADIUS = 0.09  # TODO: probably not the best place to put this
 
