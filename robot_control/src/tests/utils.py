@@ -52,6 +52,7 @@ def one_robot_placement(
         latest_frame = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
         if latest_frame:
             friendly_robots, enemy_robots, balls = latest_frame
+            bx, by = game.ball.x, game.ball.y
             cx, cy, co = friendly_robots[team_robot_id]
             error = math.dist((tx, ty), (cx, cy))
 
@@ -61,7 +62,8 @@ def one_robot_placement(
                 pid_2d.reset(team_robot_id)
                 pid_oren.reset(team_robot_id)
 
-            oren = target_oren if ty > 0 else -target_oren
+            # changed so the robot tracks the ball while moving
+            oren = np.atan2(by - cy, bx - cx)
             cmd = go_to_point(
                 pid_oren,
                 pid_2d,

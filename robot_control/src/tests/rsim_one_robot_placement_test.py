@@ -16,6 +16,7 @@ import pytest
 
 N_ROBOTS = 6
 
+### Note: Fully Commit this file Thanks :) ###
 
 def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: bool):
     """When the tests are run with pytest, these parameters are filled in
@@ -37,7 +38,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
     )
     env.reset()
 
-    env.teleport_ball(1, 1)
+    env.teleport_ball(1, 0)
     pid_oren, pid_2d = get_rsim_pids(N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
 
     sim_robot_controller = RSimRobotController(
