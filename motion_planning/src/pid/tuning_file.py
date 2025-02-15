@@ -10,6 +10,8 @@ from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from team_controller.src.controllers import RSimRobotController
 
+### Note: Fully Commit this file Thanks :) ###
+
 N_ROBOTS = 6
 
 def get_rsim_pids_tuned(n_robots: int,
@@ -105,10 +107,6 @@ def run_simulation(kp_oren: float,
     TARGET_OREN = math.pi / 2
     game = Game()
     
-    if is_yellow:
-        robot = game.friendly_robots[robot_to_place]
-    else:
-        robot = game.enemy_robots[robot_to_place]
     ball = game.ball
     
     N_ROBOTS_BLUE = N_ROBOTS
@@ -216,7 +214,7 @@ def auto_tune_pid():
                     for ki_trans in ki_trans_values:
                         variability, avg_trans_err, avg_oren_err = run_simulation(
                             kp_oren, kd_oren, kp_trans, kd_trans, ki_trans,
-                            robot_to_place=1, is_yellow=False, headless=True
+                            robot_to_place=1, is_yellow=False, headless=False
                         )
                         # Compute a combined cost
                         score = (w_variability * variability +

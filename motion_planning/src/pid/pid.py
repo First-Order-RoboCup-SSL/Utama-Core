@@ -6,7 +6,7 @@ import math
 from team_controller.src.config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL, REAL_MAX_ANGULAR_VEL, REAL_MAX_VEL
 
 # Helper functions to create PID controllers.
-# Note: These parameters could be moved to an external configuration.
+### Note: Fully Commit this file Thanks :) ###
 def get_real_pids(n_robots: int):
     pid_oren = PID(
         TIMESTEP,
@@ -16,8 +16,6 @@ def get_real_pids(n_robots: int):
         0,
         0,
         num_robots=n_robots,
-        integral_min=-10,  # example limit for anti-windup
-        integral_max=10,
     )
     pid_trans = TwoDPID(
         TIMESTEP,
@@ -38,8 +36,6 @@ def get_real_pids_goalie(n_robots: int):
         0,
         0,
         num_robots=n_robots,
-        integral_min=-10,
-        integral_max=10,
     )
     pid_trans = TwoDPID(TIMESTEP, 2, 8.5, 0.025, 1, num_robots=n_robots)
     return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=2), PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=1)
@@ -49,10 +45,10 @@ def get_grsim_pids(n_robots: int):
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        10.5,
-        0.12,
+        17.5,
+        0.150,
         0,
-        num_robots=n_robots,
+        num_robots=6,
         integral_min=-10,
         integral_max=10,
     )

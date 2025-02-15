@@ -6,6 +6,7 @@ from motion_planning.src.pid import PID
 from motion_planning.src.pid.pid import TwoDPID
 import numpy as np
 
+### Note: Fully Commit this file Thanks :) ###
 
 def calculate_robot_velocities(
     pid_oren: PID,
@@ -35,7 +36,19 @@ def calculate_robot_velocities(
         forward_vel, left_vel = pid_trans.calculate(
             (target_x, target_y), (current_x, current_y), robot_id
         )
-        forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren + (angular_vel*(1/60) / 2))
+        
+        forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren)
+        
+        resultant_vel = np.linalg.norm([forward_vel, left_vel])
+        oren_offset = (angular_vel*(1/60) / 1.8) * resultant_vel / pid_trans.max_velocity # scales linearly [0, 1]
+        
+        if left_vel > 0:
+            oren_offset *= -1
+        else:
+            oren_offset *= 1
+        # print(f"Oren offset: {oren_offset}, angular vel: {angular_vel}, resultant vel: {resultant_vel}")  
+        angular_vel += oren_offset*60
+        # print(f"diff: {oren_offset*60}, New angular vel: {angular_vel}, direction: {left_vel}")
     else:
         forward_vel = 0
         left_vel = 0
