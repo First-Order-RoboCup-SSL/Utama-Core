@@ -4,7 +4,6 @@ import math
 import threading
 import queue
 import time
-from tkinter import Y
 from typing import Tuple
 
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv

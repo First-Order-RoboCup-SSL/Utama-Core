@@ -217,7 +217,6 @@ class PID(AbstractPID[float]):
 
         self.pre_errors[robot_id] = error
         self.prev_time = time.time()
-        print(f"first pass: {self.first_pass}")
         return output
 
     def reset(self, robot_id: int):
