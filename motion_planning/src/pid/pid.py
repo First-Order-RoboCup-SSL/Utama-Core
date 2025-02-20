@@ -15,7 +15,6 @@ def get_real_pids(n_robots: int):
         1.5,
         0,
         0,
-        num_robots=n_robots,
     )
     pid_trans = TwoDPID(
         TIMESTEP,
@@ -23,7 +22,6 @@ def get_real_pids(n_robots: int):
         3,
         0.05,
         0.1,
-        num_robots=n_robots,
     )
     return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=0.2), PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=0.05)
 
@@ -35,12 +33,11 @@ def get_real_pids_goalie(n_robots: int):
         1.5,
         0,
         0,
-        num_robots=n_robots,
     )
-    pid_trans = TwoDPID(TIMESTEP, 2, 8.5, 0.025, 1, num_robots=n_robots)
+    pid_trans = TwoDPID(TIMESTEP, 2, 8.5, 0.025, 1)
     return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=2), PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=1)
 
-def get_grsim_pids(n_robots: int):
+def get_grsim_pids():
     pid_oren = PID(
         TIMESTEP,
         MAX_ANGULAR_VEL,
@@ -48,7 +45,6 @@ def get_grsim_pids(n_robots: int):
         17.5,
         0.150,
         0,
-        num_robots=n_robots,
         integral_min=-10,
         integral_max=10,
     )
@@ -58,33 +54,32 @@ def get_grsim_pids(n_robots: int):
         8.5,
         0.025,
         0.0,
-        num_robots=n_robots,
+        integral_min=-5,
+        integral_max=5,
     )
-    return pid_oren,  PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=2)
+    return pid_oren,  PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=2, dt=TIMESTEP)
 
-def get_rsim_pids(n_robots: int):
+def get_rsim_pids():
     pid_oren = PID(
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        18.19,
-        0.05,
+        20.5,
+        0.075,
         0,
-        num_robots=n_robots,
         integral_min=-10,
         integral_max=10,
     )
     pid_trans = TwoDPID(
         TIMESTEP,
         MAX_VEL,
-        0.65,
+        1.8,
+        0.025,
         0,
-        0,
-        num_robots=n_robots,
         integral_min=-5,
         integral_max=5,
     )
-    return pid_oren,  PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=2)
+    return pid_oren,  PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=2, dt=TIMESTEP)
 
 T = TypeVar("T")
 class AbstractPID(ABC, Generic[T]):
@@ -122,15 +117,12 @@ class PID(AbstractPID[float]):
         Kp: float,
         Kd: float,
         Ki: float,
-        num_robots: int,
         integral_min: Optional[float] = None,
         integral_max: Optional[float] = None,
     ):
         if dt <= 0:
             raise ValueError("dt should be greater than zero")
         self.dt = dt
-
-        self.num_robots = num_robots
         
         self.max_output = max_output
         self.min_output = min_output
@@ -243,15 +235,12 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         Kp: float,
         Kd: float,
         Ki: float,
-        num_robots: int,
         integral_min: Optional[float] = None,
         integral_max: Optional[float] = None,
     ):  
         if dt <= 0:
             raise ValueError("dt should be greater than zero")
         self.dt = dt
-
-        self.num_robots = num_robots
         
         self.max_velocity = max_velocity
         
@@ -337,53 +326,62 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
 
 class PIDAccelerationLimiterWrapper:
     """
-    Wraps a PID controller and limits the acceleration (i.e. the rate of change of the output)
-    between successive calls.
+    Wraps a PID controller and limits the acceleration using a fixed time step (dt).
+    Maintains separate state for each robot to prevent interference.
     """
-    def __init__(self, internal_pid: AbstractPID, max_acceleration: float):
+    def __init__(self, internal_pid: AbstractPID, max_acceleration: float, dt: float = TIMESTEP):
         self._internal_pid = internal_pid
-        self._last_result_time = None
-        self._last_result = None
+        self._last_results = {}  # Key: robot_id
         self._max_acceleration = max_acceleration
+        self.dt = dt
 
     def calculate(self, *args, **kwargs):
         result = self._internal_pid.calculate(*args, **kwargs)
-        current_time = time.time()
-        if self._last_result_time is None:
-            time_since_last = 16.6 / 1000  # Assume ~16.6ms if first call
-        else:
-            time_since_last = current_time - self._last_result_time
-        self._last_result_time = current_time
-
-        # Maximum allowed change based on the acceleration limit.
-        dv_allowed = time_since_last * self._max_acceleration
+        
+        # Extract robot_id from arguments (3rd positional arg or kwargs)
+        robot_id = args[2] if len(args) >= 3 else kwargs.get('robot_id', 0)
+        
+        # Get last result for this robot
+        last_result = self._last_results.get(robot_id, None)
+        
+        # Calculate maximum allowed change per timestep
+        dv_allowed = self._max_acceleration * self.dt
 
         if isinstance(result, (float, int)):
-            last_val = 0 if self._last_result is None else self._last_result
+            # Handle scalar outputs
+            last_val = 0.0 if last_result is None else last_result
             diff = result - last_val
-            # Clamp the change in output
             diff = max(-dv_allowed, min(dv_allowed, diff))
             limited_result = last_val + diff
         elif isinstance(result, tuple):
-            last_val = (0.0, 0.0) if self._last_result is None else self._last_result
+            # Handle 2D vector outputs
+            last_val = (0.0, 0.0) if last_result is None else last_result
             dx = result[0] - last_val[0]
             dy = result[1] - last_val[1]
             norm_diff = math.hypot(dx, dy)
-            if norm_diff <= dv_allowed or norm_diff == 0:
+            
+            if norm_diff <= dv_allowed:
                 limited_result = result
             else:
                 scale = dv_allowed / norm_diff
-                limited_result = (last_val[0] + dx * scale, last_val[1] + dy * scale)
+                limited_result = (
+                    last_val[0] + dx * scale,
+                    last_val[1] + dy * scale
+                )
         else:
-            raise NotImplementedError(f"Unsupported type for acceleration limiter: {type(result)}")
-        self._last_result = limited_result
+            raise NotImplementedError(f"Unsupported output type: {type(result)}")
+
+        # Update stored state
+        self._last_results[robot_id] = limited_result
+        # print(f"Result: {result}, Limited Result: {limited_result}, last_result: {last_result}")
         return limited_result
 
     def reset(self, robot_id: int):
+        """Reset both the internal PID and acceleration state for this robot"""
         self._internal_pid.reset(robot_id)
-        self._last_result = None
-        self._last_result_time = None
-
+        if robot_id in self._last_results:
+            del self._last_results[robot_id]
+                    
 if __name__ == "__main__":
     # Example usage for testing purposes.
     pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0.0, num_robots=6)

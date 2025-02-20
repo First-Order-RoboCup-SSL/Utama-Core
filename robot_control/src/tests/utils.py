@@ -88,7 +88,7 @@ def one_robot_placement(
             gx, gy = rotate_vector(cmd.local_forward_vel, cmd.local_left_vel, -co)
 
             # Draw the global velocity vector
-            env.draw_line([(cx, cy), (gx + cx, gy + cy)], color="black")
+            env.draw_line([(cx, cy), (gx + cx, gy + cy)], color="black", width=2)
             
             controller.add_robot_commands(cmd, team_robot_id)
             controller.send_robot_commands()

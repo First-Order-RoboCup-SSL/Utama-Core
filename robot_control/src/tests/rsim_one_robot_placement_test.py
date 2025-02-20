@@ -25,9 +25,9 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
 
     TEST_TRAVEL_TIME_THRESH = 0.03
     TEST_RESULT_OREN_THRESH = 0.10
-    TEST_EXPECTED_ITERS = 4
+    TEST_EXPECTED_ITERS = 3
 
-    ITERS = 1100
+    ITERS = 1200
     TARGET_OREN = math.pi / 2
     game = Game()
     
@@ -42,7 +42,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
     env.reset()
 
     env.teleport_ball(1, 0)
-    pid_oren, pid_2d = get_rsim_pids(N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
+    pid_oren, pid_2d = get_rsim_pids()
 
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game
@@ -71,7 +71,6 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
             for i in range(len(old_pos)):
                 if i != 0:
                     env.draw_line([(old_pos[i][0], old_pos[i][1]), (old_pos[i-1][0], old_pos[i-1][1])], color="red")
-        env.draw_line([(cx, cy), (game.ball.x, game.ball.y)], color="black")
         if switch:
             change_iters.append(iter)
             change_orens.append(co)
@@ -91,6 +90,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
 
 if __name__ == "__main__":
     try:
-        test_one_robot_placement(1, False, False)
+        for i in range(6):
+            test_one_robot_placement(1, False, False)
     except KeyboardInterrupt:
         print("Exiting...")

@@ -217,7 +217,7 @@ def auto_tune_pid():
     best_params = current_params.copy()
     stagnation_counter = 0
     min_step_size = 0.05  # Minimum step size for termination
-    weights = (2, 1.2, 1.0)  # w_variability, w_avg_trans, w_avg_oren
+    weights = (1.0, 1.0, 1.2)  # w_variability, w_avg_trans, w_avg_oren
 
     # Track parameter and score history for convergence
     param_history = {param: [] for param in param_ranges}
