@@ -79,10 +79,6 @@ class Game:
         return self._predicted_next_frame
 
     @property
-    def friendly_robots_data(self) -> List[Robot]:
-        return [r.robot_data for r in self._friendly_robots]
-
-    @property
     def friendly_robots(self) -> List[Robot]:
         return self._friendly_robots
 
@@ -92,10 +88,6 @@ class Game:
             # TODO: temporary fix for robot data being None
             if robot_data is not None:
                 self._friendly_robots[robot_id].robot_data = robot_data
-
-    @property
-    def enemy_robots_data(self) -> List[Robot]:
-        return [r.robot_data for r in self._enemy_robots]
 
     @property
     def enemy_robots(self) -> List[Robot]:
@@ -476,7 +468,7 @@ class Game:
                     averageVelocity[0] += curr_vel[0]
                     averageVelocity[1] += curr_vel[1]
                 elif missing_velocities == WINDOW - 1:
-                    # logging.warning(f"No velocity data to calculate acceleration for frame {len(self._records) - j}")
+                    logging.warning(f"No velocity data to calculate acceleration for frame {len(self._records) - j}")
                     return None
                 else:
                     missing_velocities += 1

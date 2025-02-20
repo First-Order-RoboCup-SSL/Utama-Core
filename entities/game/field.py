@@ -4,28 +4,26 @@ from shapely.geometry import Point
 
 
 class Field:
-    HALF_LENGTH = 4.5  # x value
-    HALF_WIDTH = 3  # y value
-    HALF_GOAL_WIDTH = 0.5
-    HALF_DEFENSE_AREA_LENGTH = 0.5
-    HALF_DEFENSE_AREA_WIDTH = 1
-
-    def __init__(self):
-
-        self.YELLOW_GOAL_LINE = LineString(
+    def __init__(self):  # TODO: Make these static
+        self.HALF_LENGTH = 4.5  # x value
+        self.HALF_WIDTH = 3  # y value
+        self.HALF_GOAL_WIDTH = 0.5
+        self.HALF_DEFENSE_AREA_LENGTH = 0.5
+        self.HALF_DEFENSE_AREA_WIDTH = 1
+        self.RIGHT_GOAL_LINE = LineString(
             [
                 (self.HALF_LENGTH, self.HALF_GOAL_WIDTH),
                 (self.HALF_LENGTH, -self.HALF_GOAL_WIDTH),
             ]
         )
-        self.BLUE_GOAL_LINE = LineString(
+        self.LEFT_GOAL_LINE = LineString(
             [
                 (-self.HALF_LENGTH, self.HALF_GOAL_WIDTH),
                 (-self.HALF_LENGTH, -self.HALF_GOAL_WIDTH),
             ]
         )
         self.CENTER_CIRCLE = Point(0, 0).buffer(0.5)  # center circle with radius 500
-        self.YELLOW_DEFENSE_AREA = Polygon(
+        self.RIGHT_DEFENSE_AREA = Polygon(
             [
                 (self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
                 (
@@ -40,7 +38,7 @@ class Field:
                 (self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
             ]
         )
-        self.BLUE_DEFENSE_AREA = Polygon(
+        self.LEFT_DEFENSE_AREA = Polygon(
             [
                 (-self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
                 (

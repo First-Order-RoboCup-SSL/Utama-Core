@@ -56,7 +56,7 @@ class DribbleToTarget:
         self.augment = augment
 
     def enact(self, has_ball: bool):
-        this_robot_data = self.game.get_robot_pos(True, self.robot_id)
+        this_robot_data = self.game.friendly_robots[self.robot_id].robot_data
         current_x, current_y, current_oren = this_robot_data
         target_x, target_y = self.target_coords
         self._update_dribble_distance(
@@ -74,7 +74,7 @@ class DribbleToTarget:
             )
         else:
             if not has_ball:
-                ball_data = self.game.get_ball_pos()[0]
+                ball_data = self.game.ball
                 if self.augment:
                     delta_x = self.game.ball.x - current_x
                     delta_y = self.game.ball.y - current_y
@@ -88,8 +88,8 @@ class DribbleToTarget:
                     self.robot_id,
                     ball_data,
                 )
-            elif self.dribbled_distance < 0.55:
-                target_oren = np.arctan2(target_y - current_y, target_x - current_x)
+            elif self.dribbled_distance < 0.65:
+                target_oren = np.atan2(target_y - current_y, target_x - current_x)
                 return calculate_robot_velocities(
                     self.pid_oren,
                     self.pid_trans,

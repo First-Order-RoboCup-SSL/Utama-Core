@@ -1,11 +1,11 @@
 import math
 import numpy as np
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from entities.data.command import RobotCommand
 from entities.data.vision import BallData, RobotData
 
-from entities.game.game import Game
+from entities.game.game import Game, Ball
 from motion_planning.src.pid import PID
 import logging
 
@@ -46,7 +46,7 @@ def go_to_ball(
     pid_trans: TwoDPID,
     this_robot_data: RobotData,
     robot_id: int,
-    ball_data: BallData,
+    ball_data: Union[BallData, Ball],
     dribble_when_near: bool = True,
     dribble_threshold: float = 0.5,
 ) -> RobotCommand:

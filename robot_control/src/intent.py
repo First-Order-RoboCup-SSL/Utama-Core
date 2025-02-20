@@ -187,7 +187,7 @@ def is_goal_blocked(game: Game) -> bool:
     goal_y_range = (1, -1)  # Goalposts' y-range
 
     # Define the line equation from ball to goal
-    def is_point_on_line(point, start, end, tolerance=0.1):
+    def is_point_on_line(point, start, end, tolerance=0.15):
         """Check if a point is approximately on the line segment from start to end."""
         start = np.array(start)
         end = np.array(end)
@@ -253,8 +253,11 @@ def score_goal_demo(
             ball, enemy_robots, goal_x, goal_y1, goal_y2, shoot_at_goal_colour
         )
 
-        if best_shot is None:
+        if best_shot is None and is_goal_blocked(game_obj):
             return None
+        else:
+            best_shot = 0, goal_y2 - goal_y1
+            
         
         shot_orientation = np.atan2((best_shot[0] - ball.y), (goal_x - ball.x))
 
@@ -267,32 +270,31 @@ def score_goal_demo(
         # ball_data: BallData = ball.ball_data
 
         if ball is not None and robot_data is not None:
-            if robot_data is not None:
-                logging.debug("robot has ball")
-                current_oren = robot_data.orientation
+            logging.debug("robot has ball")
+            current_oren = robot_data.orientation
 
-                # if robot has ball and is facing the goal, kick the ball
-                # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
-                # Because 0.02 as a threshold is meaningless (different at different distances)
-                # TODO: consider also adding a distance from goal threshold
-                # print(current_oren, shot_orientation)
-                if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(game_obj):
-                    logger.info("kicking ball")
-                    robot_command = kick_ball()
-                # else, robot has ball, but needs to turn to the right direction
-                # TODO: Consider also advancing closer to the goal
-                elif is_goal_blocked(game_obj):
-                    return None
-                else:
-                    robot_command = turn_on_spot(
-                        pid_oren,
-                        pid_trans,
-                        robot_data,
-                        shooter_id,
-                        shot_orientation,
-                        dribbling=True,
-                        pivot_on_ball=True,
-                    )
+            # if robot has ball and is facing the goal, kick the ball
+            # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
+            # Because 0.02 as a threshold is meaningless (different at different distances)
+            # TODO: consider also adding a distance from goal threshold
+            # print(current_oren, shot_orientation)
+            if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(game_obj):
+                logger.info("kicking ball")
+                robot_command = kick_ball()
+            # else, robot has ball, but needs to turn to the right direction
+            # TODO: Consider also advancing closer to the goal
+            elif is_goal_blocked(game_obj):
+                return None
+            else:
+                robot_command = turn_on_spot(
+                    pid_oren,
+                    pid_trans,
+                    robot_data,
+                    shooter_id,
+                    shot_orientation,
+                    dribbling=True,
+                    pivot_on_ball=True,
+                )
 
     return robot_command
 
@@ -474,6 +476,7 @@ def score_goal(
     is_yellow: bool,
     shoot_in_left_goal: bool,
 ) -> RobotCommand:
+
     global count, waiting_to_kick
 
     target_goal_line = game_obj.field.blue_goal_line if shoot_in_left_goal else game_obj.field.yellow_goal_line # TODO: FIX THIS #  game_obj.field.enemy_goal_line(is_yellow)
