@@ -82,7 +82,7 @@ def get_rsim_pids(n_robots: int):
         0,
         num_robots=n_robots,
     )
-    return pid_oren, pid_trans
+    return pid_oren,  PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=2)
 
 T = TypeVar("T")
 class AbstractPID(ABC, Generic[T]):
@@ -219,8 +219,8 @@ class PID(AbstractPID[float]):
 
         self.pre_errors[robot_id] = error
         self.prev_time = time.time()
-        # self.errors.append(error)
-        # print(f"Error: {error}, Avg Error: {np.mean(self.errors)}")
+        self.errors.append(error)
+        print(f"Error: {error}, Avg Error: {np.mean(self.errors)}")
         return output
 
     def reset(self, robot_id: int):

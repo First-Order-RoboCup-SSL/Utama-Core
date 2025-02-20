@@ -72,7 +72,7 @@ def one_robot_placement(
                 friendly_robots[team_robot_id],
                 team_robot_id,
                 (tx, ty),
-                2,
+                oren,
             )
             # Rotate the local forward and left velocities to the global frame
             lf_x, lf_y = rotate_vector(cmd.local_forward_vel, 0, -co)

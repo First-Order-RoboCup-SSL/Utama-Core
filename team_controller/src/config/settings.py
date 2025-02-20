@@ -9,7 +9,7 @@ REAL_MAX_VEL = 0.1
 REAL_MAX_ANGULAR_VEL = 2
 
 # maximum (real and sim) robot settings
-MAX_VEL = 1
+MAX_VEL = 2
 # any slower and the robots become unstable
 MAX_ANGULAR_VEL = 4
 
