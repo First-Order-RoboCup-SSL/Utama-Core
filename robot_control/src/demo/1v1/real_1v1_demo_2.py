@@ -1,4 +1,5 @@
 from calendar import c
+from entities.data.command import RobotCommand
 from motion_planning.src.pid.pid import get_real_pids, get_real_pids_goalie
 from robot_control.src.intent import score_goal
 from robot_control.src.skills import go_to_point, go_to_ball, goalkeep, turn_on_spot
@@ -14,6 +15,7 @@ import random
 import logging
 from mock import Mock
 import math
+import time
 
 logger = logging.getLogger(__name__)
  
@@ -46,7 +48,11 @@ def one_vs_one_goalie(game: Game, robot_controller_attacker: RealRobotController
     stage2_target_x = -3
     stage2_target_y = 0.5
 
+    stage3_target_x = -3
+    stage3_target_y = 1.5
+
     stage = 1
+    start = None
     iter = 0
     ball_init_pos = None
     turnedits = 0
@@ -89,33 +95,51 @@ def one_vs_one_goalie(game: Game, robot_controller_attacker: RealRobotController
                 if math.dist((attacker_pos.x, attacker_pos.y), (stage2_target_x, stage2_target_y)) < 0.07 and stage == 2:
                     stage += 1
                 else:
-                    target_orientation = math.atan2(stage2_target_y - attacker_pos.y, stage2_target_x - attacker_pos.x)
-                    print("TARGET OREN", target_orientation)
-                    if abs(target_orientation - attacker_pos.orientation) > 0.05 and turnedits < 100:
-                        turnedits += 1
-                        cmd = turn_on_spot(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, target_orientation, dribbling=False, pivot_on_ball=True)
-                        robot_controller_attacker.add_robot_commands(cmd, ATTACKER_ROBOT_ID)
-                        print("TURN ON SPOT", cmd)
-                    else:
-                        cmd = go_to_point(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, (stage2_target_x, stage2_target_y), None, dribbling=True)
-                        print("GO TO POINT", cmd)
-                        robot_controller_attacker.add_robot_commands(cmd, ATTACKER_ROBOT_ID)
-                
+                    cmd = go_to_point(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, (stage2_target_x, stage2_target_y), None, dribbling=True)
+                    print("GO TO POINT", cmd)
+                    robot_controller_attacker.add_robot_commands(cmd, ATTACKER_ROBOT_ID)
             elif stage == 3:
+                target_orientation = math.pi / 2
+                if abs(target_orientation - attacker_pos.orientation) < 0.05:
+                    stage += 1
+                else:
+                    cmd = turn_on_spot(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, target_orientation, dribbling=False, pivot_on_ball=True)
+                    robot_controller_attacker.add_robot_commands(cmd, ATTACKER_ROBOT_ID)                
+            elif stage == 4:
+                print("STAGE 4")
+                if not start:
+                    start = time.time()
+                if time.time() - start > 0.1:
+                    stage += 1
+                else:
+                    cmd = RobotCommand(
+                        local_left_vel=-0.2,
+                        local_forward_vel=0,
+                        angular_vel=0,
+                        kick=0,
+                        chip=0,
+                        dribble=0
+                    ) 
+                    robot_controller_attacker.add_robot_commands(cmd, ATTACKER_ROBOT_ID)
+            elif stage == 5:
+                print("DIST", math.dist((attacker_pos.x, attacker_pos.y), (stage3_target_x, stage3_target_y)))
+                if math.dist((attacker_pos.x, attacker_pos.y), (stage3_target_x, stage3_target_y)) < 0.07:
+                    stage += 1
+                else:
+                    cmd = go_to_point(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, (stage3_target_x, stage3_target_y), None, dribbling=True)
+                    print("GO TO POINT", cmd)
+                    robot_controller_attacker.add_robot_commands(cmd, ATTACKER_ROBOT_ID)
+            elif stage == 6:
                 cmd = score_goal(game, shooter_has_ball=True, shooter_id=ATTACKER_ROBOT_ID, pid_oren=pid_oren_attacker, pid_trans=pid_trans_attacker, is_yellow=ATTACKER_IS_YELLOW, shoot_in_left_goal=LEFT_GOAL)
                 print("SENDING COMMAND", cmd)
                 if cmd.kick == 1:
                     stage += 1
                     
                 robot_controller_attacker.add_robot_commands(cmd, ATTACKER_ROBOT_ID)
-            elif stage == 4:
-                # cmd = go_to_point(pid_oren_attacker, pid_trans_attacker, game.get_robot_pos(ATTACKER_IS_YELLOW, ATTACKER_ROBOT_ID), 1, (stage2_target_x, stage2_target_y), None, dribbling=True)
-                break
             robot_controller_attacker.send_robot_commands()
             # robot_controller_goalie.send_robot_commands()
         
         
-
 def main():
     stop_buffer_off = [0, 0, 0, 0, 0, 0, 0, 0]
 

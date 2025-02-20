@@ -54,11 +54,19 @@ class RealRobotController(AbstractRobotController):
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
-        # self.out_packet[self.n_robots * 8 - 2] += 1  # update last command
         # print(list(self.out_packet))
+        # binary_representation = [f"{byte:08b}" for byte in self.out_packet]
+        # print(binary_representation)
         self._serial.write(self.out_packet)
         data_in = self._serial.read_all()
-        # self._populate_robots_info(data_in)
+        # print(data_in)
+
+        # TODO: this is only for quali: fix this after quali
+        if len(data_in) == 1:
+            if data_in[0] & 0b01000000:
+                self._robots_info[1] = RobotInfo(has_ball=True)
+            else:
+                self._robots_info[1] = RobotInfo(has_ball=False)
 
         self._out_packet = self._empty_command()  # flush the out_packet
 
@@ -70,14 +78,20 @@ class RealRobotController(AbstractRobotController):
         """
         Adds robot commands to the packet to be sent to the robot.
         """
-        super().add_robot_commands(robot_commands, robot_id)
+        NUMBER_TO_SAM_NUMBER = { # TODO: This obviously is not permanent
+            1: 1,
+            3: 0,
+            2: 2
+        }
+
+        super().add_robot_commands(robot_commands, NUMBER_TO_SAM_NUMBER[robot_id])
 
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
         """
         Adds a robot command to the out_packet.
 
         Args:
-            robot_id (int): The ID of the robot.
+            robot_id (int): The ID of the robot.    
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
         c_command = self._convert_float_command(robot_id, command)
@@ -104,17 +118,17 @@ class RealRobotController(AbstractRobotController):
         else:
             return False
 
-    def _populate_robots_info(self, data_in: bytes) -> None:
-        """
-        Populates the robots_info list with the data received from the robots.
-        """
-        for i in range(self._n_robots):
-            has_ball = False
-            if data_in[0] & 0b10000000:
-                has_ball = True
-            info = RobotInfo(has_ball=has_ball)
-            self._robots_info[i] = info
-            data_in = data_in << 1  # shift to the next robot's data
+    # def _populate_robots_info(self, data_in: bytes) -> None:
+    #     """
+    #     Populates the robots_info list with the data received from the robots.
+    #     """
+    #     for i in range(self._n_robots):
+    #         has_ball = False
+    #         if data_in[0] & 0b10000000:
+    #             has_ball = True
+    #         info = RobotInfo(has_ball=has_ball)
+    #         self._robots_info[i] = info
+    #         data_in = data_in << 1  # shift to the next robot's data
 
     def compute_crc(self, data: bytearray) -> int:
         """
@@ -160,6 +174,9 @@ class RealRobotController(AbstractRobotController):
             control_byte |= 0x80  # Bit 7
         robot_id = robot_id & 0x0F  # 5 bits only
         control_byte |= robot_id << 1
+        # set last bit as 1 if its the last command
+        if robot_id == self._n_robots - 1:
+            control_byte |= 0x01
         packet.append(control_byte)
         crc = self.compute_crc(packet)
         packet.append(crc)
@@ -184,8 +201,8 @@ class RealRobotController(AbstractRobotController):
             angular_vel = (
                 MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
             )
-
-        if abs(command.local_forward_vel) > MAX_VEL:
+        # TODO put back to max_vel
+        if abs(command.local_forward_vel) > 0.8:
             warnings.warn(
                 f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
             )
@@ -215,7 +232,8 @@ class RealRobotController(AbstractRobotController):
 
     def _empty_command(self) -> bytearray:
         empty_buffer = bytearray([0] * 6 + [self._EMPTY_ID] + [0])
-        return empty_buffer * self._n_robots
+        empty_last_buffer = bytearray([0] * 6 + [self._EMPTY_ID + 1] + [0])
+        return empty_buffer * (self._n_robots - 1) + empty_last_buffer
 
     def _init_serial(self) -> Serial:
         serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)

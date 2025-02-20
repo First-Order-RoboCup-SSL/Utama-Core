@@ -120,7 +120,7 @@ class Game:
             self._ball.ball_data = value
 
     def is_ball_in_goal(self, right_goal: bool):
-        ball_pos = self.get_ball_pos()[0]
+        ball_pos = self.ball
         return (
             ball_pos.x < -self.field.HALF_LENGTH
             and (
