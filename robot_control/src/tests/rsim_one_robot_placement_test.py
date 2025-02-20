@@ -90,7 +90,6 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
 
 if __name__ == "__main__":
     try:
-        for i in range(6):
-            test_one_robot_placement(1, False, False)
+        test_one_robot_placement(1, False, False)
     except KeyboardInterrupt:
         print("Exiting...")
