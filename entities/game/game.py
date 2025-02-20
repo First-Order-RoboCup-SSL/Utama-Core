@@ -28,11 +28,12 @@ class Game:
     def __init__(
         self,
         my_team_is_yellow=True,
+        my_team_left=False,
         num_friendly_robots: int = 6,
         num_enemy_robots: int = 6,
     ):
         self._my_team_is_yellow = my_team_is_yellow
-        self._field = Field()
+        self._field = Field(my_team_is_yellow, my_team_left)
 
         self._records: List[FrameData] = []
         self._predicted_next_frame: PredictedFrame = None

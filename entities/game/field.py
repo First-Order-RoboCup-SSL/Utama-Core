@@ -4,7 +4,10 @@ from shapely.geometry import Point
 
 
 class Field:
-    def __init__(self):  # TODO: Make these static
+    def __init__(self, my_team_is_yellow: bool, my_team_right: bool):  # TODO: Make these static
+        self.my_team_right = my_team_right
+        self.my_team_is_yellow = my_team_is_yellow
+        
         self.HALF_LENGTH = 4.5  # x value
         self.HALF_WIDTH = 3  # y value
         self.HALF_GOAL_WIDTH = 0.5
@@ -56,15 +59,15 @@ class Field:
 
     def my_goal_line(self, my_team_is_yellow) -> LineString:
         if my_team_is_yellow:
-            return self.yellow_goal_line
+            return self.RIGHT_GOAL_LINE
         else:
-            return self.blue_goal_line
+            return self.LEFT_GOAL_LINE
 
     def enemy_goal_line(self, my_team_is_yellow) -> LineString:
         if my_team_is_yellow:
-            return self.blue_goal_line
+            return self.LEFT_GOAL_LINE
         else:
-            return self.yellow_goal_line
+            return self.RIGHT_GOAL_LINE
 
     def my_defense_area(self, my_team_is_yellow) -> LineString:
         if my_team_is_yellow:
