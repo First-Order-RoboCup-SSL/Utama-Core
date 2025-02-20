@@ -265,7 +265,7 @@ def dribble_to_target_decision_maker(
         else:
             return target_x, target_y
 
-def one_on_one(game: Game, stop_event: threading.Event, friendly_robot_id: int, enemy_robot_id: int, robot_controller: RealRobotController):
+def one_on_one(game: Game, stop_event: threading.Event, friendly_robot_id: int, enemy_robot_id: int, robot_controller: RealRobotController = None):
     robot_controller = GRSimRobotController(
         is_team_yellow=game.my_team_is_yellow
     )
@@ -277,7 +277,7 @@ def one_on_one(game: Game, stop_event: threading.Event, friendly_robot_id: int, 
     vision_thread.start()
 
     # Initialize PID controllers
-    pid_oren, pid_trans = get_grsim_pids(1)
+    pid_oren, pid_trans = get_grsim_pids()
 
     goal_scored = False
     dribbling = False
@@ -454,18 +454,18 @@ def one_to_one_sim(headless: bool):
     # Create a stop event to signal threads to stop
     stop_event = threading.Event()
 
-    robot_controller = RealRobotController(
-        is_team_yellow=True, game_obj=yellow_game, n_robots=5
-    )
+    # robot_controller = RealRobotController(
+    #     is_team_yellow=True, game_obj=yellow_game, n_robots=5
+    # )
     
     # Create threads for each team
     yellow_thread = threading.Thread(
         target=one_on_one,
-        args=(yellow_game, stop_event, 3, 4, robot_controller),
+        args=(yellow_game, stop_event, 0, 0),
     )
     blue_thread = threading.Thread(
         target=one_on_one,
-        args=(blue_game, stop_event, 4, 3,  robot_controller),
+        args=(blue_game, stop_event, 0, 0),
     )
 
     yellow_thread.daemon = True
@@ -487,8 +487,8 @@ def one_to_one_sim(headless: bool):
                 break
     except KeyboardInterrupt:
         print("Main thread interrupted. Stopping worker threads...")#
-        for i in range(8): # Try really hard to stop the robots!
-            robot_controller.serial.write(stop_buffer_off)
+        # for i in range(8): # Try really hard to stop the robots!
+        #     robot_controller.serial.write(stop_buffer_off)
         stop_event.set()  # Signal threads to stop
         raise
 

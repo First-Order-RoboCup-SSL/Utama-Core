@@ -32,8 +32,8 @@ def calculate_robot_velocities(
             (target_x, target_y), (current_x, current_y), robot_id
         )
     else:
-        forward_vel = 0
-        left_vel = 0
+        global_x = 0
+        global_y = 0
     
     forward_vel, left_vel = rotate_vector(global_x, global_y, current_oren)
 
