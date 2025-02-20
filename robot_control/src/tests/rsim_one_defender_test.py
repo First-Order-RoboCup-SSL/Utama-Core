@@ -75,8 +75,8 @@ def test_single_defender(
     not_defender_id = 2 if defender_id == 1 else 1
     env.teleport_robot(defender_is_yellow, not_defender_id, 0, 0, 0)
 
-    pid_oren_y, pid_2d_y = get_rsim_pids(N_ROBOTS_YELLOW)
-    pid_oren_b, pid_2d_b = get_rsim_pids(N_ROBOTS_BLUE)
+    pid_oren_y, pid_2d_y = get_rsim_pids()
+    pid_oren_b, pid_2d_b = get_rsim_pids()
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
         env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW
     )
