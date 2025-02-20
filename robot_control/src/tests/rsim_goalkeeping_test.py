@@ -9,6 +9,7 @@ from robot_control.src.intent import find_likely_enemy_shooter, score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.config.settings import TIMESTEP
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,8 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
     goal_scored = False
     shoot_in_left_goal = random.random() > 0.5
 
+    time.sleep(2)
+    
     for iter in range(ITERS):
         # TODO: We should move robot_has_ball within game obj as well
         # This will do for now.
@@ -78,6 +81,11 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
             friendly, enemy, balls = game.get_my_latest_frame(
                 my_team_is_yellow=defender_is_yellow
             )
+            
+            f = game.predict_next_frame()
+            if f:
+                env.draw_point(f.friendly_robots[shooter_id].x, f.friendly_robots[shooter_id].y, color="YELLOW")
+                env.draw_point(f.enemy_robots[0].x, f.enemy_robots[0].y, color="BLUE")
 
             attack_cmd = score_goal(
                 game,
@@ -86,7 +94,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 pid_oren=pid_oren_a,
                 pid_trans=pid_2d_a,
                 is_yellow=not defender_is_yellow,
-                shoot_in_left_goal=shoot_in_left_goal,
+                shoot_in_left_goal=True,
             )
 
             if game.is_ball_in_goal(our_side=not defender_is_yellow):
@@ -100,9 +108,8 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 target = game.predict_ball_pos_at_x(4.5 - 0.4)
             else:
                 target = game.predict_ball_pos_at_x(-4.5 + 0.4)
-
+            
             if target and not find_likely_enemy_shooter(enemy, balls):
-                print(target)
                 defend_cmd = go_to_point(
                     pid_oren_d,
                     pid_2d_d,
