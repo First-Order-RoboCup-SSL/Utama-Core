@@ -181,58 +181,122 @@ def run_simulation(kp_oren: float,
 
 def auto_tune_pid():
     """
-    Perform a parameter sweep over a range of PID gains for both the orientation
-    and translation controllers. The cost function is defined as a weighted sum of:
-      - Travel time variability
-      - Average translation error over the run
-      - Average orientation error over the run
-
-    Adjust the weights as needed for your application.
+    Enhanced auto-tuner using adaptive step sizing with momentum-based exploration.
+    Starts with large parameter steps, then progressively refines using smaller steps
+    when approaching optimal regions.
     """
-    # Define search ranges for orientation PID gains.
-    kp_oren_values = np.linspace(15.0, 20.0, 3)   # e.g., 15, 17.5, 20
-    kd_oren_values = np.linspace(0.05, 0.15, 3)     # e.g., 0.05, 0.10, 0.15
+    # Define initial search boundaries (keep your original ranges)
+    param_ranges = {
+        'kp_oren': (15.0, 20.0),
+        'kd_oren': (0.05, 0.15),
+        'kp_trans': (2.0, 8.0),
+        'kd_trans': (0.005, 0.05),
+        'ki_trans': (0.0, 0.05)
+    }
 
-    # Define search ranges for translation PID gains.
-    kp_trans_values = np.linspace(8.0, 9.0, 3)      # e.g., 8.0, 8.5, 9.0
-    kd_trans_values = np.linspace(0.015, 0.035, 3)    # e.g., 0.015, 0.025, 0.035
-    ki_trans_values = [0.0, 0.05]                     # try with and without integral action
+    # Initialize parameters with mid-range values
+    current_params = {
+        'kp_oren': np.mean(param_ranges['kp_oren']),
+        'kd_oren': np.mean(param_ranges['kd_oren']),
+        'kp_trans': np.mean(param_ranges['kp_trans']),
+        'kd_trans': np.mean(param_ranges['kd_trans']),
+        'ki_trans': param_ranges['ki_trans'][1]  # Start with max Ki
+    }
+
+    # Adaptive step sizes (initial = 25% of parameter range)
+    steps = {
+        'kp_oren': (param_ranges['kp_oren'][1] - param_ranges['kp_oren'][0]) * 0.25,
+        'kd_oren': (param_ranges['kd_oren'][1] - param_ranges['kd_oren'][0]) * 0.25,
+        'kp_trans': (param_ranges['kp_trans'][1] - param_ranges['kp_trans'][0]) * 0.25,
+        'kd_trans': (param_ranges['kd_trans'][1] - param_ranges['kd_trans'][0]) * 0.25,
+        'ki_trans': param_ranges['ki_trans'][1] * 0.25
+    }
 
     best_score = float('inf')
-    best_params = None
+    best_params = current_params.copy()
+    stagnation_counter = 0
+    min_step_size = 0.01  # Minimum step size for termination
+    weights = (0.4, 1.6, 1.0)  # w_variability, w_avg_trans, w_avg_oren
+    
+    # Define tuning order groups
+    tune_groups = [
+        ['kp_oren', 'kp_trans'],  # First tune all Kp terms
+        ['kd_oren', 'kd_trans'],  # Then tune Kd terms
+        ['ki_trans']             # Finally tune Ki terms
+    ]
 
-    # Weights for the different error components (adjust as necessary)
-    w_variability = 0.4
-    w_avg_trans = 1.6
-    w_avg_oren = 1.0
+    while True:
+        improved = False
+        
+        # Process groups in specified order
+        for group in tune_groups:
+            # Randomize within group to avoid directional bias
+            params_to_adjust = np.random.permutation(group)
+            
+            for param in params_to_adjust:
+                original_value = current_params[param]
+                
+                # Positive direction test
+                current_params[param] = np.clip(
+                    original_value + steps[param],
+                    *param_ranges[param]
+                )
+                score_pos = _evaluate_params(current_params, weights)
+                
+                # Negative direction test
+                current_params[param] = np.clip(
+                    original_value - steps[param],
+                    *param_ranges[param]
+                )
+                score_neg = _evaluate_params(current_params, weights)
+                
+                # Update logic
+                if min(score_pos, score_neg) < best_score:
+                    improved = True
+                    if score_pos < score_neg:
+                        current_params[param] = original_value + steps[param]
+                        steps[param] *= 1.3
+                        best_score = score_pos
+                    else:
+                        current_params[param] = original_value - steps[param]
+                        steps[param] *= 1.3
+                        best_score = score_neg
+                    best_params = current_params.copy()
+                    print(f"New best score: {best_score:.4f}, best params: {best_params}")
+                    stagnation_counter = 0
+                else:
+                    current_params[param] = original_value
+                    steps[param] *= 0.7    
+                                
+        if not improved:
+            stagnation_counter += 1
+            # Random jump to escape local minima
+            if stagnation_counter > 3:
+                for param in param_ranges:
+                    current_params[param] = np.random.uniform(*param_ranges[param])
+                stagnation_counter = 0
+                
+        # Termination condition
+        if all(step < min_step_size for step in steps.values()):
+            break
 
-    # Nested sweep over all parameters
-    for kp_oren in kp_oren_values:
-        for kd_oren in kd_oren_values:
-            for kp_trans in kp_trans_values:
-                for kd_trans in kd_trans_values:
-                    for ki_trans in ki_trans_values:
-                        variability, avg_trans_err, avg_oren_err = run_simulation(
-                            kp_oren, kd_oren, kp_trans, kd_trans, ki_trans,
-                            robot_to_place=1, is_yellow=False, headless=False
-                        )
-                        # Compute a combined cost
-                        score = (w_variability * variability +
-                                 w_avg_trans * avg_trans_err +
-                                 w_avg_oren * avg_oren_err)
-                        print(f"Testing: kp_oren={kp_oren:.3f}, kd_oren={kd_oren:.3f}, "
-                              f"kp_trans={kp_trans:.3f}, kd_trans={kd_trans:.3f}, ki_trans={ki_trans:.3f} -> "
-                              f"variability={variability:.4f}, "
-                              f"avg_trans_err={avg_trans_err:.4f}, avg_oren_err={avg_oren_err:.4f}, score={score:.4f}")
-                        if score < best_score:
-                            best_score = score
-                            best_params = (kp_oren, kd_oren, kp_trans, kd_trans, ki_trans)
+    print("\nOptimized parameters:")
+    print(f"Orientation: Kp={best_params['kp_oren']:.3f}, Kd={best_params['kd_oren']:.3f}")
+    print(f"Translation: Kp={best_params['kp_trans']:.3f}, Kd={best_params['kd_trans']:.3f}, Ki={best_params['ki_trans']:.3f}")
+    print(f"Best score: {best_score:.4f}")
+    return best_params
 
-    print("\nBest parameters found:")
-    print(f"Orientation: Kp = {best_params[0]:.3f}, Kd = {best_params[1]:.3f}")
-    print(f"Translation: Kp = {best_params[2]:.3f}, Kd = {best_params[3]:.3f}, Ki = {best_params[4]:.3f}")
-    print(f"With cost score: {best_score:.4f}")
-
+def _evaluate_params(params, weights):
+    """Helper function to run simulation and calculate score"""
+    variability, avg_trans_err, avg_oren_err = run_simulation(
+        params['kp_oren'], params['kd_oren'],
+        params['kp_trans'], params['kd_trans'], params['ki_trans'],
+        robot_to_place=1, is_yellow=False, headless=True
+    )
+    return (weights[0] * variability + 
+            weights[1] * avg_trans_err + 
+            weights[2] * avg_oren_err)
+    
 if __name__ == "__main__":
     try:
         auto_tune_pid()

@@ -67,8 +67,8 @@ def get_rsim_pids(n_robots: int):
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        17.5,
-        0.150,
+        20,
+        0.063,
         0,
         num_robots=n_robots,
         integral_min=-10,
@@ -77,8 +77,8 @@ def get_rsim_pids(n_robots: int):
     pid_trans = TwoDPID(
         TIMESTEP,
         MAX_VEL,
-        8,
-        0.025,
+        1.8,
+        0.009,
         0,
         num_robots=n_robots,
     )
@@ -147,6 +147,8 @@ class PID(AbstractPID[float]):
         self.prev_time = 0
 
         self.first_pass = {i: True for i in range(6)}
+        
+        self.errors = []
 
     def calculate(
         self,
@@ -217,14 +219,15 @@ class PID(AbstractPID[float]):
 
         self.pre_errors[robot_id] = error
         self.prev_time = time.time()
+        # self.errors.append(error)
+        # print(f"Error: {error}, Avg Error: {np.mean(self.errors)}")
         return output
 
     def reset(self, robot_id: int):
         """Reset the error and integral for the specified robot."""
         self.pre_errors[robot_id] = 0.0
         self.integrals[robot_id] = 0.0
-        self.first_pass = {i: True for i in range(6)}
-        print("Reset PID")
+        self.first_pass[robot_id] = True
 
 class TwoDPID(AbstractPID[Tuple[float, float]]):
     """
@@ -241,17 +244,80 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         num_robots: int,
         integral_min: Optional[float] = None,
         integral_max: Optional[float] = None,
-    ):
+    ):  
+        if dt <= 0:
+            raise ValueError("dt should be greater than zero")
+        self.dt = dt
+
+        self.num_robots = num_robots
+        
         self.max_velocity = max_velocity
-        self.dimX = PID(dt, None, None, Kp, Kd, Ki, num_robots, integral_min, integral_max)
-        self.dimY = PID(dt, None, None, Kp, Kd, Ki, num_robots, integral_min, integral_max)
+        
+        self.Kp = Kp
+        self.Kd = Kd
+        self.Ki = Ki
+
+        self.pre_errors = {i: 0.0 for i in range(6)}
+        self.integrals = {i: 0.0 for i in range(6)}
+
+        # Anti-windup limits
+        self.integral_min = integral_min
+        self.integral_max = integral_max
+        
+        self.prev_time = 0
+
+        self.first_pass = {i: True for i in range(6)}
 
     def calculate(
         self, target: Tuple[float, float], current: Tuple[float, float], robot_id: int
     ) -> Tuple[float, float]:
-        x_vel = self.dimX.calculate(target[0], current[0], robot_id, oren=False, normalize_range=4.5)
-        y_vel = self.dimY.calculate(target[1], current[1], robot_id, oren=False, normalize_range=3)
-        return self.scale_velocity(x_vel, y_vel, self.max_velocity)
+        
+        call_func_time = time.time()
+        
+        dx = target[0] - current[0]
+        dy = target[1] - current[1]
+
+        error = math.hypot(dx, dy)
+        
+        # Proportional term
+        Pout = self.Kp * error if self.Kp != 0 else 0.0
+
+        # Integral term with anti-windup
+        if self.Ki != 0:
+            self.integrals[robot_id] += error * self.dt
+            if self.integral_max is not None:
+                self.integrals[robot_id] = min(self.integrals[robot_id], self.integral_max)
+            if self.integral_min is not None:
+                self.integrals[robot_id] = max(self.integrals[robot_id], self.integral_min)
+            Iout = self.Ki * self.integrals[robot_id]
+        else:
+            Iout = 0.0
+
+        # Derivative term
+        if self.Kd != 0 and not self.first_pass[robot_id]:
+            if round(call_func_time - self.prev_time, 4) > 0:
+                dt = round(call_func_time - self.prev_time, 4)
+            else:
+                dt = 0.016
+                
+            derivative = (error - self.pre_errors[robot_id]) / dt
+            Dout = self.Kd * derivative
+        else:
+            Dout = 0.0
+            self.first_pass[robot_id] = False
+
+        output = Pout + Iout + Dout
+            
+        self.pre_errors[robot_id] = error
+        self.prev_time = time.time()
+
+        # Convert output to directional velocities
+        if error == 0.0:
+            return 0.0, 0.0
+        else:
+            x_vel = output * (dx / error)
+            y_vel = output * (dy / error)
+            return self.scale_velocity(x_vel, y_vel, self.max_velocity)
 
     def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float) -> Tuple[float, float]:
         current_vel = math.hypot(x_vel, y_vel)
@@ -262,8 +328,10 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         return x_vel, y_vel
 
     def reset(self, robot_id: int):
-        self.dimX.reset(robot_id)
-        self.dimY.reset(robot_id)
+        """Reset the error and integral for the specified robot."""
+        self.pre_errors[robot_id] = 0.0
+        self.integrals[robot_id] = 0.0
+        self.first_pass[robot_id] = True
 
 class PIDAccelerationLimiterWrapper:
     """

@@ -13,6 +13,7 @@ from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement
 import pytest
+import time
 
 N_ROBOTS = 6
 
@@ -29,6 +30,8 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
     ITERS = 1100
     TARGET_OREN = math.pi / 2
     game = Game()
+    
+    old_pos = []
 
     N_ROBOTS_BLUE = N_ROBOTS
     N_ROBOTS_YELLOW = N_ROBOTS
@@ -44,6 +47,8 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game
     )
+    time.sleep(0.5)
+    
     one_step = one_robot_placement(
         sim_robot_controller,
         is_yellow,
@@ -53,16 +58,25 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
         robot_to_place,
         game,
         TARGET_OREN,
+        env,
     )
 
     change_iters = []
     change_orens = []
 
     for iter in range(ITERS):
-        switch, _, _, co = one_step()
+        switch, cx, cy, co = one_step()
+        old_pos.append((cx, cy))
+        if old_pos and len(old_pos) > 1:
+            for i in range(len(old_pos)):
+                if i != 0:
+                    env.draw_line([(old_pos[i][0], old_pos[i][1]), (old_pos[i-1][0], old_pos[i-1][1])], color="red")
+        env.draw_line([(cx, cy), (game.ball.x, game.ball.y)], color="black")
         if switch:
             change_iters.append(iter)
             change_orens.append(co)
+        if len(change_iters) > 3:
+            break
     assert len(change_iters) > TEST_EXPECTED_ITERS
     travel_time_0 = change_iters[1] - change_iters[0]
 
