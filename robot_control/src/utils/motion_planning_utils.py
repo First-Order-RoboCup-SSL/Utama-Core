@@ -46,10 +46,10 @@ def calculate_robot_velocities(
     #     dx = travel_dist * global_x/resultant_vel
     #     dy = travel_dist * global_y/resultant_vel
     
-    # if target_oren is not None:
-    #     angular_vel = pid_oren.calculate(target_oren, current_oren, robot_id, oren=True, normalize_range=np.pi)
-    # else:
-    #     angular_vel = 0
+    if target_oren is not None:
+        angular_vel = pid_oren.calculate(target_oren, current_oren, robot_id, oren=True, normalize_range=np.pi)
+    else:
+        angular_vel = 0
         
 
     #     resultant_vel = np.linalg.norm([global_x, global_y])       

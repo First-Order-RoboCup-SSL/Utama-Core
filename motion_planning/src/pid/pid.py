@@ -219,8 +219,8 @@ class PID(AbstractPID[float]):
 
         self.pre_errors[robot_id] = error
         self.prev_time = time.time()
-        self.errors.append(error)
-        print(f"Error: {error}, Avg Error: {np.mean(self.errors)}")
+        # self.errors.append(error)
+        # print(f"Error: {error}, Avg Error: {np.mean(self.errors)}")
         return output
 
     def reset(self, robot_id: int):
