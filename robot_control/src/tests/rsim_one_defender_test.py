@@ -122,7 +122,6 @@ def test_single_defender(
             pid_oren_d,
             pid_2d_d,
             game,
-            sim_robot_controller_defender,
             defender_is_yellow,
             defender_id,
             env,
