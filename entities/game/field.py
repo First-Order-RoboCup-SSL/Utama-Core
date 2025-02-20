@@ -95,11 +95,11 @@ class Field:
 
     @property
     def yellow_goal_line(self) -> LineString:
-        return self.YELLOW_GOAL_LINE
+        return self.RIGHT_GOAL_LINE
 
     @property
     def blue_goal_line(self) -> LineString:
-        return self.BLUE_GOAL_LINE
+        return self.LEFT_GOAL_LINE
 
     @property
     def center_circle(self) -> Point:
@@ -107,11 +107,11 @@ class Field:
 
     @staticmethod
     def yellow_defense_area() -> Polygon:
-        return Field().YELLOW_DEFENSE_AREA
+        return Field().RIGHT_DEFENSE_AREA
 
     @staticmethod
     def blue_defense_area() -> Polygon:
-        return Field().BLUE_DEFENSE_AREA
+        return Field().LEFT_DEFENSE_AREA
 
     @staticmethod
     def full_field() -> Polygon:
