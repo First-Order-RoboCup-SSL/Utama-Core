@@ -60,15 +60,15 @@ def get_grsim_pids(n_robots: int):
         0.0,
         num_robots=n_robots,
     )
-    return pid_oren, pid_trans
+    return pid_oren,  PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=2)
 
 def get_rsim_pids(n_robots: int):
     pid_oren = PID(
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        20,
-        0.063,
+        18.19,
+        0.05,
         0,
         num_robots=n_robots,
         integral_min=-10,
@@ -77,10 +77,12 @@ def get_rsim_pids(n_robots: int):
     pid_trans = TwoDPID(
         TIMESTEP,
         MAX_VEL,
-        1.8,
-        0.009,
+        0.65,
+        0,
         0,
         num_robots=n_robots,
+        integral_min=-5,
+        integral_max=5,
     )
     return pid_oren,  PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=2)
 
