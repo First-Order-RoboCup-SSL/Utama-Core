@@ -44,7 +44,7 @@ class Game:
         self._enemy_robots: List[Robot] = [
             Robot(id, is_friendly=False) for id in range(num_enemy_robots)
         ]
-        self._ball: Ball = Ball(BallData(0, 0, 0, 0))
+        self._ball: Ball = Ball(BallData(0, 0, 0, 1))
 
         self._yellow_score = 0
         self._blue_score = 0
@@ -163,8 +163,8 @@ class Game:
             self.friendly_robots = frame_data.yellow_robots
             self.enemy_robots = frame_data.blue_robots
         else:
-            self.friendly_robots = frame_data.blue_robots
-            self.enemy_robots = frame_data.yellow_robots
+            self._friendly_robots = frame_data.blue_robots
+            self._enemy_robots = frame_data.yellow_robots
         self._ball = frame_data.ball[0]  # TODO: Don't always take first ball pos
         # BUG: self._ball is of type Ball, frame_data.ball[0] is of type BallData!
 
@@ -420,7 +420,7 @@ class Game:
         current_pos = self._get_object_position_at_frame(frame, object)
 
         if current_pos is None or previous_pos is None:
-            # logger.warning("No position data to calculate velocity for frame %d", frame)
+            logger.warning("No position data to calculate velocity for frame %d", frame)
             return None
 
         previous_time_received = previous_frame.ts
@@ -493,19 +493,3 @@ class Game:
             futureAverageVelocity = tuple(averageVelocity)
 
         return (totalX / iter, totalY / iter)
-
-    def in_box(x_coord: float, y_coord: float):
-        return (x_coord < 1 and abs(y_coord) < 1) or (x_coord > 8 and abs(y_coord) < 1)
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
-    game = Game()
-    print(game.ball.x)
-    print(game.ball.y)
-    print(game.ball.z)
-    game.ball = BallData(1, 2, 3, 1)
-    print(game.ball.x)
-    print(game.ball.y)
-    print(game.ball.z)

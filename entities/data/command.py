@@ -10,6 +10,7 @@ class RobotCommand(NamedTuple):
     chip: bool
     dribble: bool
 
+# Grsim Inverse Kinematics
 class RobotVelCommand(NamedTuple):
     front_right: float
     back_right: float

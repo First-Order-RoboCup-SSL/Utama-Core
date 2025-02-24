@@ -1,6 +1,6 @@
 import numpy as np 
-from typing import Optional, Tuple, Generic, TypeVar
-from abc import ABC, abstractmethod
+from typing import Optional, Tuple
+from motion_planning.src.pid.pid_abstract import AbstractPID
 import time
 import math
 from team_controller.src.config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL, REAL_MAX_ANGULAR_VEL, REAL_MAX_VEL
@@ -80,19 +80,6 @@ def get_rsim_pids():
         integral_max=5,
     )
     return pid_oren,  PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=2, dt=TIMESTEP)
-
-T = TypeVar("T")
-class AbstractPID(ABC, Generic[T]):
-    
-    @abstractmethod
-    def calculate(self, target: T, current: T) -> T:
-        """Perform a PID calculation."""
-        ...
-    
-    @abstractmethod
-    def reset(self, robot_id: int):
-        """Reset the PID controller state for a given robot."""
-        ...
 
 class PID(AbstractPID[float]):
     """
