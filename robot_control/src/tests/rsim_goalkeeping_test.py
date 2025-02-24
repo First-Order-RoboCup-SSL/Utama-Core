@@ -39,8 +39,8 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
 
     env.teleport_ball(1, 1)
 
-    pid_oren_y, pid_2d_y = get_rsim_pids(N_ROBOTS_YELLOW)
-    pid_oren_b, pid_2d_b = get_rsim_pids(N_ROBOTS_BLUE)
+    pid_oren_y, pid_2d_y = get_rsim_pids()
+    pid_oren_b, pid_2d_b = get_rsim_pids()
 
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
         env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW

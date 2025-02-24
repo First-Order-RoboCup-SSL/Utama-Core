@@ -13,7 +13,7 @@ game = Game()
 env = SSLStandardEnv()
 robot_controller = RSimRobotController(True, env, game)
 
-pid_oren, pid_trans = get_rsim_pids(6)
+pid_oren, pid_trans = get_rsim_pids()
 my_team_is_yellow = True
 
 target_coords = [(4, 2.5), (4, -2.5), (-4, -2.5), (-4, 2.5)]

@@ -72,8 +72,8 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
         sim_robot_controller_defender = sim_robot_controller_yellow
 
 
-    pid_oren_attacker, pid_2d_attacker = get_rsim_pids(N_ROBOTS_ATTACK)
-    pid_oren_defender, pid_2d_defender = get_rsim_pids(N_ROBOTS_DEFEND)
+    pid_oren_attacker, pid_2d_attacker = get_rsim_pids()
+    pid_oren_defender, pid_2d_defender = get_rsim_pids()
 
     possessor = 1
     dp = 1

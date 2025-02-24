@@ -39,7 +39,7 @@ def test_passing(passer_id: int, receiver_id: int, is_yellow: bool, headless: bo
     env.reset()
     env.teleport_ball(1, 1)
 
-    pid_oren, pid_trans = get_rsim_pids(N_ROBOTS)
+    pid_oren, pid_trans = get_rsim_pids()
 
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game
