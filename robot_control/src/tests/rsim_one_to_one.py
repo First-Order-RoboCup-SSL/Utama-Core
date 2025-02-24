@@ -112,8 +112,8 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
     env.teleport_ball(ball_x, ball_y)
 
     # 2) PID controllers
-    pid_oren_y, pid_2d_y = get_rsim_pids(1)  # Yellow
-    pid_oren_b, pid_2d_b = get_rsim_pids(1)  # Blue
+    pid_oren_y, pid_2d_y = get_rsim_pids()  # Yellow
+    pid_oren_b, pid_2d_b = get_rsim_pids()  # Blue
 
     # 3) Setup PVP robot controllers
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
@@ -139,10 +139,8 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
         attacker_robot = enemy[0]
 
         # Also direct access by color
-        yellow_robots = game.get_yellow_robots()
-        blue_robots = game.get_blue_robots()
-        yellow_robot = yellow_robots[0]
-        blue_robot = blue_robots[0]
+        yellow_robot = game.friendly_robots[0]
+        blue_robot = game.enemy_robots[0]
 
         # Who has the ball?
         yellow_has_ball = sim_robot_controller_yellow.robot_has_ball(0)
@@ -244,12 +242,12 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
             sim_robot_controller_blue.send_robot_commands()
 
         # Check if goal was scored
-        if game.is_ball_in_goal(our_side=(defender_is_yellow)):
+        if game.is_ball_in_goal(right_goal=defender_is_yellow):
             a = f"[Iteration {i}] The attacker scored successfully! Ball pos: {game.get_ball_pos()}"
             logger.info(a)
             goal_scored = True
         
-        if game.is_ball_in_goal(our_side=(not defender_is_yellow)):
+        if game.is_ball_in_goal(right_goal=not defender_is_yellow):
             a = f"[Iteration {i}] The attacker scored successfully! Ball pos: {game.get_ball_pos()}"
             logger.info(a)
             goal_scored = True
