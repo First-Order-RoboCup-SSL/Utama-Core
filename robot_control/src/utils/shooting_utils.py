@@ -139,7 +139,7 @@ def find_best_shot(
         shoot_in_left_goal=shoot_in_left_goal,
     )
     if not shadows:
-        return (goal_y2 + goal_y1) / 2, [goal_y1, goal_y2]
+        return None
 
     open_spaces: List[Tuple[float, float]] = []
 
