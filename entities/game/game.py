@@ -28,12 +28,12 @@ class Game:
     def __init__(
         self,
         my_team_is_yellow=True,
-        my_team_right=False,
+        my_team_is_right=False,
         num_friendly_robots: int = 6,
         num_enemy_robots: int = 6,
     ):
         self._my_team_is_yellow = my_team_is_yellow
-        self._field = Field(my_team_is_yellow, my_team_right)
+        self._field = Field(my_team_is_yellow, my_team_is_right)
 
         self._records: List[FrameData] = []
         self._predicted_next_frame: PredictedFrame = None
@@ -163,8 +163,8 @@ class Game:
             self.friendly_robots = frame_data.yellow_robots
             self.enemy_robots = frame_data.blue_robots
         else:
-            self._friendly_robots = frame_data.blue_robots
-            self._enemy_robots = frame_data.yellow_robots
+            self.friendly_robots = frame_data.blue_robots
+            self.enemy_robots = frame_data.yellow_robots
         self._ball = frame_data.ball[0]  # TODO: Don't always take first ball pos
         # BUG: self._ball is of type Ball, frame_data.ball[0] is of type BallData!
 

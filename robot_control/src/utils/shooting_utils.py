@@ -1,21 +1,16 @@
 from typing import List, Tuple
 import numpy as np
+import math
 from team_controller.src.config.settings import ROBOT_RADIUS
 from robot_control.src.utils.pass_quality_utils import PointOnField
 from entities.game.ball import BallData
+from entities.game.game import Game
 
-
-def point_to_robot_dist(
-    point_x: float, point_y: float, robot_x: float, robot_y: float
-) -> float:
-    return np.sqrt((point_y - robot_y) ** 2 + (point_x - robot_x) ** 2)
-
-
+# TODO: may change to bounded form from [-pi, pi]
 def angle_to_robot(
     point_x: float, point_y: float, robot_x: float, robot_y: float
 ) -> float:
     return np.arctan((robot_y - point_y) / (robot_x - point_x))
-
 
 def angle_between_points(main_point, point1, point2):
     """
@@ -92,17 +87,16 @@ def ray_casting(
     goal_x: float,
     goal_y1: float,
     goal_y2: float,
-    shoot_in_left_goal: bool,
 ) -> List[Tuple[float, float]]:
     shadows: List[Tuple[float, float]] = []
 
-    goal_mult = (
-        -1 if shoot_in_left_goal else 1
+    goal_multi = (
+        -1 if goal_x < 0 else 1
     )  # flips the goalward direction if we are shooting left
     for enemy in enemy_robots:
         if enemy is not None:
-            if goal_mult * enemy.x > goal_mult * point.x:
-                dist: float = point_to_robot_dist(point.x, point.y, enemy.x, enemy.y)
+            if goal_multi * enemy.x > goal_multi * point.x:
+                dist: float = math.dist((point.x, point.y), (enemy.x, enemy.y))
                 angle_to_robot_: float = angle_to_robot(
                     point.x, point.y, enemy.x, enemy.y
                 )
@@ -128,7 +122,6 @@ def find_best_shot(
     goal_x: float,
     goal_y1: float,
     goal_y2: float,
-    shoot_in_left_goal: bool,
 ) -> Tuple[float, Tuple[float, float]]:
     shadows = ray_casting(
         point,
@@ -136,10 +129,9 @@ def find_best_shot(
         goal_x=goal_x,
         goal_y1=goal_y1,
         goal_y2=goal_y2,
-        shoot_in_left_goal=shoot_in_left_goal,
     )
     if not shadows:
-        return None
+        return None, None
 
     open_spaces: List[Tuple[float, float]] = []
 
@@ -202,3 +194,41 @@ def find_shot_quality(
         else 0
     )
     return shot_quality
+
+def is_goal_blocked(game: Game) -> bool:
+    """
+    Determines whether the goal is blocked by enemy robots.
+
+    :param game: The game state containing robot and ball positions.
+    :return: True if the goal is blocked, False otherwise.
+    """
+    ball_x, ball_y = game.ball.x, game.ball.y
+    goal_x = game.field.enemy_goal_line(game.my_team_is_yellow).coords[0][0]
+    goal_y_range = (game.field.enemy_goal_line(game.my_team_is_yellow).coords[0][1], game.field.enemy_goal_line(game.my_team_is_yellow).coords[1][1])
+
+    # Define the line equation from ball to goal
+    def is_point_on_line(point, start, end, tolerance=0.15):
+        """Check if a point is approximately on the line segment from start to end."""
+        start = np.array(start)
+        end = np.array(end)
+        point = np.array(point)
+        line_vec = end - start
+        point_vec = point - start
+        proj = np.dot(point_vec, line_vec) / np.dot(line_vec, line_vec)
+        projected_point = start + proj * line_vec
+        
+        return np.linalg.norm(point - projected_point) < tolerance and 0 <= proj <= 1
+
+    # Check if any enemy robot is between the ball and goal
+    for enemy in game.enemy_robots:
+        enemy_x, enemy_y = enemy.x, enemy.y  # Extract coordinates properly
+        
+        # Check if the enemy is between the ball and goal in the x-range
+        if ball_x > enemy_x > goal_x:
+            # Check if the enemy is within the goal's y-range
+            if goal_y_range[1] <= enemy_y <= goal_y_range[0]:  
+                # Check if the enemy is on the ball-to-goal path
+                if is_point_on_line((enemy_x, enemy_y), (ball_x, ball_y), (goal_x, np.mean(goal_y_range))):
+                    return True
+
+    return False

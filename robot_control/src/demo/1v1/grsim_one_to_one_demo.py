@@ -39,7 +39,7 @@ from robot_control.src.skills import (
 )
 from robot_control.src.intent import (
     find_likely_enemy_shooter,
-    score_goal_demo,
+    score_goal,
 )
 
 logger = logging.getLogger(__name__)
@@ -322,14 +322,12 @@ def one_on_one(game: Game, stop_event: threading.Event, friendly_robot_id: int, 
             )
                         
             if robot_controller.robot_has_ball(0):
-                cmd = score_goal_demo(
+                cmd = score_goal(
                     game,
+                    True,
                     friendly_robot_id,
                     pid_oren,
                     pid_trans,
-                    shoot_at_goal_colour=(
-                        Colour.BLUE if SHOOT_AT_BLUE_GOAL else Colour.YELLOW
-                    ),
                 )
                 if cmd is None:
                     can_score = False
