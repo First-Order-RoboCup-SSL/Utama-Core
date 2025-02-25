@@ -66,8 +66,6 @@ def test_single_defender(
 
     # Move the other defender out of the way
     for i in range(0, 6):
-        if i != defender_id:
-            env_controller.set_robot_presence(i, defender_is_yellow, False)
         if i != shooter_id:
             env_controller.set_robot_presence(i, not defender_is_yellow, False)
 
