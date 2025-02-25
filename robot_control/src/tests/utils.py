@@ -67,9 +67,9 @@ def one_robot_placement(
             # changed so the robot tracks the ball while moving
             oren = np.atan2(by - cy, bx - cx)
             cmd = go_to_point(
+                game,
                 pid_oren,
                 pid_2d,
-                friendly_robots[team_robot_id],
                 team_robot_id,
                 (tx, ty),
                 oren,

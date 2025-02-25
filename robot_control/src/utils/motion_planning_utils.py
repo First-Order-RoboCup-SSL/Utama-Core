@@ -24,19 +24,19 @@ def calculate_robot_velocities(
     # TODO: This should eventually be stored within motion planning
     """
 
-    current_x, current_y, current_oren = game.friendly_robots[robot_id]
+    robot = game.friendly_robots[robot_id]
 
     target_x, target_y = target_coords[:2]
 
     if target_x is not None and target_y is not None:
         global_x, global_y = pid_trans.calculate(
-            (target_x, target_y), (current_x, current_y), robot_id
+            (target_x, target_y), (robot.x, robot.y), robot_id
         )
     else:
         global_x = 0
         global_y = 0
     
-    forward_vel, left_vel = rotate_vector(global_x, global_y, current_oren)
+    forward_vel, left_vel = rotate_vector(global_x, global_y, robot.orientation)
 
     # if forward_vel and left_vel:
     
@@ -48,7 +48,7 @@ def calculate_robot_velocities(
     #     dy = travel_dist * global_y/resultant_vel
     
     if target_oren is not None:
-        angular_vel = pid_oren.calculate(target_oren, current_oren, robot_id, oren=True, normalize_range=np.pi)
+        angular_vel = pid_oren.calculate(target_oren, robot.orientation, robot_id, oren=True, normalize_range=np.pi)
     else:
         angular_vel = 0
         
