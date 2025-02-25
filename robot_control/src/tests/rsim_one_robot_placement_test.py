@@ -4,7 +4,7 @@ import numpy as np
 import math
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from robot_control.src.skills import go_to_ball, go_to_point
-from team_controller.src.controllers import RSimRobotController
+from team_controller.src.controllers import RSimRobotController, RSimController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from robot_control.src.intent import score_goal
@@ -40,14 +40,22 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
         n_robots_blue=N_ROBOTS_BLUE, render_mode="ansi" if headless else "human"
     )
     env.reset()
+    
+    env_controller = RSimController(env)
+
+    # Move the other defender out of the way
+    for i in range(0, 6):
+        if robot_to_place != i:
+            env_controller.set_robot_presence(i, is_yellow, False)
+        env_controller.set_robot_presence(i, not is_yellow, False)
 
     env.teleport_ball(1, 0)
+    
     pid_oren, pid_2d = get_rsim_pids()
 
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game
     )
-    time.sleep(0.5)
     
     one_step = one_robot_placement(
         sim_robot_controller,
