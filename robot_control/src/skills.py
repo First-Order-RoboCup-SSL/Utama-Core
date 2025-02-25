@@ -42,18 +42,20 @@ def kick_ball() -> RobotCommand:
 
 
 def go_to_ball(
+    game: Game,
     pid_oren: PID,
     pid_trans: TwoDPID,
-    this_robot_data: RobotData,
     robot_id: int,
-    ball_data: Union[BallData, Ball],
     dribble_when_near: bool = True,
     dribble_threshold: float = 0.5,
 ) -> RobotCommand:
 
+    ball = game.ball
+    robot = game.friendly_robots[robot_id]
+    
     # TODO: add a optional target_oren flag
     target_oren = np.arctan2(
-        ball_data.y - this_robot_data.y, ball_data.x - this_robot_data.x
+        ball.y - robot.y, ball.x - robot.x
     )
 
     # target_x = ball_data.x - ROBOT_RADIUS * np.cos(target_oren)
@@ -61,37 +63,36 @@ def go_to_ball(
 
     if dribble_when_near:
         distance = np.hypot(
-            ball_data.y - this_robot_data.y, ball_data.x - this_robot_data.x
+            ball.y - robot.y, ball.x - robot.x
         )
         dribbling = distance < dribble_threshold
     return calculate_robot_velocities(
         pid_oren=pid_oren,
         pid_trans=pid_trans,
-        this_robot_data=this_robot_data,
         robot_id=robot_id,
-        target_coords=(ball_data.x, ball_data.y),  # (target_x, target_y),
+        target_coords=(ball.x, ball.y),  # (target_x, target_y),
         target_oren=target_oren,
         dribbling=dribbling,
     )
 
-
+# util function??
 def face_ball(current: Tuple[float, float], ball: Tuple[float, float]) -> float:
     return np.arctan2(ball[1] - current[1], ball[0] - current[0])
 
 
 def go_to_point(
+    game: Game,
     pid_oren: PID,
     pid_trans: PID,
-    this_robot_data: RobotData,
     robot_id: int,
     target_coords: Tuple[float, float],
     target_oren: float,
     dribbling: bool = False,
 ) -> RobotCommand:
     return calculate_robot_velocities(
+        game=game,
         pid_oren=pid_oren,
         pid_trans=pid_trans,
-        this_robot_data=this_robot_data,
         robot_id=robot_id,
         target_coords=target_coords,
         target_oren=target_oren,
@@ -100,9 +101,9 @@ def go_to_point(
 
 
 def turn_on_spot(
+    game: Game,
     pid_oren: PID,
     pid_trans: PID,
-    this_robot_data: RobotData,
     robot_id: int,
     target_oren: float,
     dribbling: bool = False,
@@ -114,9 +115,9 @@ def turn_on_spot(
     pivot_on_ball: If True, the robot will pivot on the ball, otherwise it will pivot on its own centre.
     """
     turn = calculate_robot_velocities(
+        game=game,
         pid_oren=pid_oren,
         pid_trans=pid_trans,
-        this_robot_data=this_robot_data,
         robot_id=robot_id,
         target_coords=(None, None),
         target_oren=target_oren,
@@ -130,7 +131,7 @@ def turn_on_spot(
 
     return turn
 
-
+# util function??
 def predict_goal_y_location(
     shooter_position: Tuple[float, float], orientation: float, shoots_left: bool
 ) -> float:
@@ -141,7 +142,7 @@ def predict_goal_y_location(
     t = (gx - shooter_position[0]) / dx
     return shooter_position[1] + t * dy
 
-
+# util function??
 def calculate_defense_area(t: float, is_left: bool):
     """
     Defenders' path around the goal in the form of a rounded rectangle
@@ -161,7 +162,7 @@ def calculate_defense_area(t: float, is_left: bool):
     )
     return make_relative_to_goal_centre(rp, is_left)
 
-
+# util function??
 def make_relative_to_goal_centre(
     p: Tuple[float, float], is_left_goal: bool
 ) -> Tuple[float, float]:
@@ -175,19 +176,19 @@ def make_relative_to_goal_centre(
 
 EPS = 1e-5
 
-
+# util function??
 def get_goal_centre(is_left: bool) -> Tuple[float, float]:
     return -4.5 if is_left else 4.5, 0
 
-
+# util function??
 def relative_to(p: Tuple[float, float], o: Tuple[float, float]) -> Tuple[float, float]:
     return p[0] - o[0], p[1] - o[1]
 
-
+# util function??
 def cross(v1, v2) -> float:
     return v1[0] * v2[1] - v1[1] * v2[0]
 
-
+# util function??
 def ccw(v1, v2) -> int:
     # 1 if v1 is ccw of v2, -1 of v1 is cw of v2, 0 if colinear
     mag = cross(v1, v2)
@@ -198,15 +199,15 @@ def ccw(v1, v2) -> int:
     else:
         return -1
 
-
+# util function??
 def dot(v1, v2) -> float:
     return v1[0] * v2[0] + v1[1] * v2[1]
 
-
+# util function??
 def mag(v) -> float:
     return sqrt(v[0] * v[0] + v[1] * v[1])
 
-
+# util function??
 def ang_between(v1, v2):
     res = dot(v1, v2) / (mag(v1) * mag(v2))
     if res > 0:
@@ -217,23 +218,23 @@ def ang_between(v1, v2):
 
     return acos(res)
 
-
+# util function??
 def step_curve(t: float, direction: int):
     STEP_SIZE = 0.0872665 * 2
     if direction == 0:
         return t
     return direction * STEP_SIZE + t
 
-
+# util function??
 def clamp_to_goal_height(y: float) -> float:
     return max(min(y, 0.5), -0.5)
 
-
+# util function??
 def clamp_to_parametric(t: float) -> float:
     # parametric is between pi /2 and 3pi / 2
     return min(3 * pi / 2, max(t, pi / 2))
 
-
+# util function??
 def velocity_to_orientation(p: Tuple[float, float]) -> float:
     # Takes a velocity and converts to orientation in radians identical to robot orientation
     res = atan2(p[1], p[0])
@@ -241,7 +242,7 @@ def velocity_to_orientation(p: Tuple[float, float]) -> float:
         res += 2 * pi
     return res
 
-
+# util function??
 def align_defenders(
     defender_position: float,
     attacker_position: Tuple[float, float],
@@ -299,7 +300,7 @@ def align_defenders(
     else:
         return calculate_defense_area(defender_position, is_left)
 
-
+# util function??
 def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
     """
     Given a point p on the defenders' parametric curve (as defined by calculate_defense_area), returns the parameter value t
@@ -404,7 +405,7 @@ def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_t
         )
     return cmd
 
-
+# util function??
 def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
     ans = []
     for ball in balls:

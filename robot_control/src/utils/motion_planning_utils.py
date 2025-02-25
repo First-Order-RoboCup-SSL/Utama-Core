@@ -1,6 +1,7 @@
 from typing import Tuple, Union
 from entities.data.command import RobotCommand
 from entities.data.vision import RobotData
+from entities.game import Game
 from global_utils.math_utils import rotate_vector
 from motion_planning.src.pid import PID
 from motion_planning.src.pid.pid import TwoDPID
@@ -9,9 +10,9 @@ import numpy as np
 ### Note: Fully Commit this file Thanks :) ###
 
 def calculate_robot_velocities(
+    game: Game,
     pid_oren: PID,
     pid_trans: TwoDPID,
-    this_robot_data: RobotData,
     robot_id: int,
     target_coords: Union[Tuple[float, float], Tuple[float, float, float]],
     target_oren: float,
@@ -23,7 +24,7 @@ def calculate_robot_velocities(
     # TODO: This should eventually be stored within motion planning
     """
 
-    current_x, current_y, current_oren = this_robot_data
+    current_x, current_y, current_oren = game.friendly_robots[robot_id]
 
     target_x, target_y = target_coords[:2]
 
