@@ -35,7 +35,6 @@ from robot_control.src.skills import (
     velocity_to_orientation,
     clamp_to_goal_height,
     predict_goal_y_location,
-    go_to_ball,
 )
 from robot_control.src.intent import (
     find_likely_enemy_shooter,

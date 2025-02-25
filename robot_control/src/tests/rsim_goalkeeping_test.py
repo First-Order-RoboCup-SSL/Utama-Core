@@ -37,7 +37,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
     )
     env.reset()
 
-    env.teleport_ball(1, 1)
+    env.teleport_ball(-1, 1)
 
     pid_oren_y, pid_2d_y = get_rsim_pids()
     pid_oren_b, pid_2d_b = get_rsim_pids()
@@ -86,7 +86,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
             if f:
                 env.draw_point(f.friendly_robots[shooter_id].x, f.friendly_robots[shooter_id].y, color="YELLOW")
                 env.draw_point(f.enemy_robots[0].x, f.enemy_robots[0].y, color="BLUE")
-
+        
             attack_cmd = score_goal(
                 game,
                 sim_robot_controller_attacker.robot_has_ball(shooter_id),

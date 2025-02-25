@@ -17,6 +17,9 @@ class Robot:
         if is_friendly:
             self._has_ball = False
 
+    def __bool__(self):
+        return self._robot_data is not None
+    
     @property
     def id(self) -> int:
         return self._id

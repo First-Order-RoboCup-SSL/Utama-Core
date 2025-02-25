@@ -5,6 +5,7 @@ from team_controller.src.config.settings import ROBOT_RADIUS
 from robot_control.src.utils.pass_quality_utils import PointOnField
 from entities.game.ball import BallData
 from entities.game.game import Game
+from entities.game.robot import Robot
 
 # TODO: may change to bounded form from [-pi, pi]
 def angle_to_robot(
@@ -83,7 +84,7 @@ def filter_and_merge_shadows(
 # Casts a ray along the 2 tangents to each enemy robot, and calls filter_and_merge_shadows
 def ray_casting(
     point: Tuple[float, float],
-    enemy_robots: List[Tuple[float, float]],
+    enemy_robots: List[Robot],
     goal_x: float,
     goal_y1: float,
     goal_y2: float,
@@ -94,17 +95,17 @@ def ray_casting(
         -1 if goal_x < 0 else 1
     )  # flips the goalward direction if we are shooting left
     for enemy in enemy_robots:
-        if enemy is not None:
-            if goal_multi * enemy.x > goal_multi * point.x:
-                dist: float = math.dist((point.x, point.y), (enemy.x, enemy.y))
+        if enemy:
+            if goal_multi * enemy.x > goal_multi * point[0]:
+                dist: float = math.dist((point[0], point[1]), (enemy.x, enemy.y))
                 angle_to_robot_: float = angle_to_robot(
-                    point.x, point.y, enemy.x, enemy.y
+                    point[0], point[1], enemy.x, enemy.y
                 )
                 alpha: float = np.arcsin(ROBOT_RADIUS / dist)
                 shadows.append(
                     shadow(
-                        point.x,
-                        point.y,
+                        point[0],
+                        point[1],
                         angle_to_robot_ + alpha,
                         angle_to_robot_ - alpha,
                         goal_x,
@@ -195,40 +196,55 @@ def find_shot_quality(
     )
     return shot_quality
 
-def is_goal_blocked(game: Game) -> bool:
-    """
-    Determines whether the goal is blocked by enemy robots.
+import numpy as np
 
+def is_goal_blocked(game: Game, shooter: Robot) -> bool:
+    """
+    Determines whether the goal is blocked by enemy robots (considering them as circles).
+    
     :param game: The game state containing robot and ball positions.
     :return: True if the goal is blocked, False otherwise.
     """
+
     ball_x, ball_y = game.ball.x, game.ball.y
-    goal_x = game.field.enemy_goal_line(game.my_team_is_yellow).coords[0][0]
-    goal_y_range = (game.field.enemy_goal_line(game.my_team_is_yellow).coords[0][1], game.field.enemy_goal_line(game.my_team_is_yellow).coords[1][1])
+    goal_x = game.field.enemy_goal_line(not game.my_team_is_yellow).coords[0][0]
 
-    # Define the line equation from ball to goal
-    def is_point_on_line(point, start, end, tolerance=0.15):
-        """Check if a point is approximately on the line segment from start to end."""
-        start = np.array(start)
-        end = np.array(end)
-        point = np.array(point)
-        line_vec = end - start
-        point_vec = point - start
+    # Shooter orientation
+    shooter_orientation = shooter.orientation  # Angle in radians
+
+    # Define a unit vector in the shooter's direction
+    shot_direction = np.array([np.cos(shooter_orientation), np.sin(shooter_orientation)])
+
+    # Define the goal center
+    goal_pos = np.array([goal_x, 0])  # Use the center of the goal
+
+    # Define the shooting line from ball position in the shooter's direction
+    line_start = np.array([ball_x, ball_y])
+    goal_vector = goal_pos - np.array([ball_x, ball_y])
+    scale_factor = np.dot(goal_vector, shot_direction) / np.dot(shot_direction, shot_direction)
+    line_end = line_start + (scale_factor * 1.1) * shot_direction  # Find the closest intersection
+
+    # Helper function: shortest distance from a point to a line segment
+    def distance_point_to_line(point, line_start, line_end):
+        line_vec = line_end - line_start
+        point_vec = point - line_start
         proj = np.dot(point_vec, line_vec) / np.dot(line_vec, line_vec)
-        projected_point = start + proj * line_vec
-        
-        return np.linalg.norm(point - projected_point) < tolerance and 0 <= proj <= 1
+        proj = np.clip(proj, 0, 1)  # Keep projection within the segment
+        closest_point = line_start + proj * line_vec
+        return np.linalg.norm(point - closest_point)
 
-    # Check if any enemy robot is between the ball and goal
-    for enemy in game.enemy_robots:
-        enemy_x, enemy_y = enemy.x, enemy.y  # Extract coordinates properly
-        
-        # Check if the enemy is between the ball and goal in the x-range
-        if ball_x > enemy_x > goal_x:
-            # Check if the enemy is within the goal's y-range
-            if goal_y_range[1] <= enemy_y <= goal_y_range[0]:  
-                # Check if the enemy is on the ball-to-goal path
-                if is_point_on_line((enemy_x, enemy_y), (ball_x, ball_y), (goal_x, np.mean(goal_y_range))):
-                    return True
+    robot_radius = ROBOT_RADIUS  # Assume field provides robot radius info
 
-    return False
+    # Check if any enemy robot blocks the shooting path
+    for enemy_robot in game.enemy_robots:
+        if enemy_robot:
+            robot_pos = np.array([enemy_robot.x, enemy_robot.y])
+            distance = distance_point_to_line(robot_pos, line_start, line_end)
+            
+            print(f"Distance from robot {enemy_robot.id} to shot line: {distance}, robot radius: {robot_radius * 1.2}")
+            
+            if distance <= robot_radius * 1.2:  # Consider robot as a circle
+                return True  # Shot is blocked
+
+    return False  # No robot is blocking
+
