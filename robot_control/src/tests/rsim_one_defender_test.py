@@ -3,23 +3,15 @@ import os
 import numpy as np
 import pytest
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import (
-    get_goal_centre,
-    go_to_ball,
-    go_to_point,
-    align_defenders,
-    to_defense_parametric,
-    face_ball,
-    velocity_to_orientation,
-)
-from team_controller.src.controllers import RSimRobotController
+from team_controller.src.controllers import RSimRobotController, RSimController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from robot_control.src.intent import defend, score_goal
+from robot_control.src.utils.shooting_utils import find_best_shot
 from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
-from robot_control.src.tests.utils import one_robot_placement, setup_pvp
+from robot_control.src.tests.utils import setup_pvp
 import logging
 
 logger = logging.getLogger(__name__)
@@ -54,7 +46,7 @@ def test_single_defender(
     defender_id: int, shooter_id: int, defender_is_yellow: bool, headless: bool
 ):
     game = Game()
-
+    
     if defender_is_yellow:
         N_ROBOTS_YELLOW = 3
         N_ROBOTS_BLUE = 6
@@ -67,13 +59,17 @@ def test_single_defender(
         n_robots_yellow=N_ROBOTS_YELLOW,
         render_mode="ansi" if headless else "human",
     )
+    env_controller = RSimController(env)
     env.reset()
 
     env.teleport_ball(2.25, -1)
 
     # Move the other defender out of the way
-    not_defender_id = 2 if defender_id == 1 else 1
-    env.teleport_robot(defender_is_yellow, not_defender_id, 0, 0, 0)
+    for i in range(0, 6):
+        if i != defender_id:
+            env_controller.set_robot_presence(i, defender_is_yellow, False)
+        if i != shooter_id:
+            env_controller.set_robot_presence(i, not defender_is_yellow, False)
 
     pid_oren_y, pid_2d_y = get_rsim_pids()
     pid_oren_b, pid_2d_b = get_rsim_pids()

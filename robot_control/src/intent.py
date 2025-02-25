@@ -197,12 +197,12 @@ def score_goal(
         return None
 
     if is_yellow is not None:
-        if game_obj.my_team_is_yellow == is_yellow:
-            friendly_robots = game_obj.friendly_robots
-            enemy_robots = game_obj.enemy_robots
+        if game_obj.my_team_is_yellow != is_yellow:
+            defender_robots = game_obj.friendly_robots # Defenders
+            shooter = game_obj.enemy_robots[shooter_id] # Shooter
         else:
-            friendly_robots = game_obj.enemy_robots
-            enemy_robots = game_obj.friendly_robots
+            defender_robots = game_obj.enemy_robots
+            shooter = game_obj.friendly_robots[shooter_id]
         ball = game_obj.ball
     
     # According to how game works, we take the most confident ball
@@ -213,19 +213,19 @@ def score_goal(
 
     # calculate best shot from the position of the ball
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
-    if friendly_robots and enemy_robots and ball:
-        shooter = friendly_robots[shooter_id]
+    if defender_robots and shooter and ball:
         
         best_shot, _ = find_best_shot(
-            ball, enemy_robots, goal_x, goal_y1, goal_y2
+            ball, defender_robots, goal_x, goal_y1, goal_y2
         )
-
-        if best_shot is None and is_goal_blocked(game_obj):
+                
+        # Safe fall-back if no best shot is found
+        if best_shot is None and is_goal_blocked(game_obj, (goal_x, goal_y2 - goal_y1), defender_robots):
             return None
-        else:
-            best_shot = 0, goal_y2 - goal_y1
-                    
-        shot_orientation = np.atan2((best_shot[0] - ball.y), (goal_x - ball.x))
+        elif best_shot is None and not is_goal_blocked(game_obj, (goal_x,  goal_y2 - goal_y1), defender_robots):
+            best_shot = (goal_y2 + goal_y1) / 2
+                
+        shot_orientation = np.atan2((best_shot - ball.y), (goal_x - ball.x))
         
         # robot_data: RobotData = (
         #     friendly_robots[shooter_id].robot_data
@@ -239,20 +239,14 @@ def score_goal(
             if shooter_has_ball:
                 logging.debug("robot has ball")
                 current_oren = shooter.orientation
-                print(is_goal_blocked(game_obj, shooter))
                 # if robot has ball and is facing the goal, kick the ball
                 # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
                 # Because 0.02 as a threshold is meaningless (different at different distances)
                 # TODO: consider also adding a distance from goal threshold
-                # print(current_oren, shot_orientation)
-                if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(game_obj, shooter):
+                if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(game_obj, (goal_x, best_shot), defender_robots):
                     logger.info("kicking ball")
                     robot_command = kick_ball()
-                # else, robot has ball, but needs to turn to the right direction
                 # TODO: Consider also advancing closer to the goal
-                elif is_goal_blocked(game_obj, shooter):
-                    print("goal is blocked")
-                    return None
                 else:
                     print("turning on spot")
                     robot_command = turn_on_spot(
@@ -265,7 +259,6 @@ def score_goal(
                         pivot_on_ball=True,
                     )
             else:
-                # print("approaching ball", robot_data.orientation)
                 robot_command = go_to_ball(
                     pid_oren, pid_trans, shooter.robot_data, shooter_id, ball
                 )

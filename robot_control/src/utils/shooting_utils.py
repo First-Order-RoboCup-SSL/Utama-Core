@@ -124,6 +124,24 @@ def find_best_shot(
     goal_y1: float,
     goal_y2: float,
 ) -> Tuple[float, Tuple[float, float]]:
+    """
+    Determines the best y-coordinate along the goal line (at x = goal_x) to shoot,
+    such that the shot is farthest from any enemy robots' shadows.
+
+    Args:
+        point: The (x, y) coordinate from which the shot is being taken.
+        enemy_robots: List of (x, y) positions for enemy robots.
+        goal_x: The x-coordinate of the goal line.
+        goal_y1: The lower y-coordinate of the goal.
+        goal_y2: The upper y-coordinate of the goal.
+
+    Returns:
+        A tuple containing:
+          - best_shot: the y-coordinate of the optimal shot.
+          - largest_gap: a tuple (start, end) representing the open interval where the shot lies.
+        If there is no open space, returns (None, None).
+    """
+    # Get shadow intervals from enemy robots along the goal line.
     shadows = ray_casting(
         point,
         enemy_robots=enemy_robots,
@@ -131,25 +149,71 @@ def find_best_shot(
         goal_y1=goal_y1,
         goal_y2=goal_y2,
     )
-    if not shadows:
-        return None, None
 
+    # If no shadows exist, the entire goal is open.
+    if not shadows:
+        best_shot = (goal_y1 + goal_y2) / 2
+        return best_shot, (goal_y1, goal_y2)
+
+    # Sort the shadow intervals by their starting y-coordinate.
+    shadows.sort(key=lambda interval: interval[0])
+
+    # Merge overlapping or adjacent shadow intervals.
+    merged_shadows = [shadows[0]]
+    for current in shadows[1:]:
+        last = merged_shadows[-1]
+        if current[0] <= last[1]:
+            # Overlapping or adjacent intervals; merge them.
+            merged_shadows[-1] = (last[0], max(last[1], current[1]))
+        else:
+            merged_shadows.append(current)
+
+    # Find open spaces on the goal line between merged shadows.
     open_spaces: List[Tuple[float, float]] = []
 
-    if shadows[0][0] > goal_y1:
-        open_spaces.append((goal_y1, shadows[0][0]))
+    # Check for an open interval before the first shadow.
+    if merged_shadows[0][0] > goal_y1:
+        open_spaces.append((goal_y1, merged_shadows[0][0]))
 
-    for i in range(1, len(shadows)):
-        if shadows[i][0] > shadows[i - 1][1]:
-            open_spaces.append((shadows[i - 1][1], shadows[i][0]))
+    # Check for gaps between consecutive shadows.
+    for i in range(1, len(merged_shadows)):
+        prev_shadow = merged_shadows[i - 1]
+        curr_shadow = merged_shadows[i]
+        if curr_shadow[0] > prev_shadow[1]:
+            open_spaces.append((prev_shadow[1], curr_shadow[0]))
 
-    if shadows[-1][1] < goal_y2:
-        open_spaces.append((shadows[-1][1], goal_y2))
+    # Check for an open interval after the last shadow.
+    if merged_shadows[-1][1] < goal_y2:
+        open_spaces.append((merged_shadows[-1][1], goal_y2))
 
-    largest_gap: Tuple[float, float] = max(
-        open_spaces + [(0, 0)], key=lambda x: x[1] - x[0]
-    )
-    best_shot: float = (largest_gap[0] + largest_gap[1]) / 2
+    # If there are no open intervals, no shot is possible.
+    if not open_spaces:
+        return None, None
+
+    # Evaluate each open interval: choose a candidate shot and compute its "clearance"
+    # (i.e. the distance to the nearest shadow boundary).
+    best_candidate = None
+    best_gap = None
+    best_clearance = -1
+    for interval in open_spaces:
+        s, e = interval
+        # If the interval touches a goal boundary, the best candidate is that boundary.
+        if s == goal_y1:
+            candidate = s
+            clearance = e - s  # Full gap length is clearance.
+        elif e == goal_y2:
+            candidate = e
+            clearance = e - s
+        else:
+            candidate = (s + e) / 2
+            clearance = (e - s) / 2
+        
+        if clearance > best_clearance:
+            best_clearance = clearance
+            best_candidate = candidate
+            best_gap = interval
+            
+    return best_candidate, best_gap
 
     return best_shot, largest_gap
 
@@ -198,7 +262,7 @@ def find_shot_quality(
 
 import numpy as np
 
-def is_goal_blocked(game: Game, shooter: Robot) -> bool:
+def is_goal_blocked(game: Game, best_shot: Tuple[float, float], defenders: List[Robot]) -> bool:
     """
     Determines whether the goal is blocked by enemy robots (considering them as circles).
     
@@ -207,22 +271,10 @@ def is_goal_blocked(game: Game, shooter: Robot) -> bool:
     """
 
     ball_x, ball_y = game.ball.x, game.ball.y
-    goal_x = game.field.enemy_goal_line(not game.my_team_is_yellow).coords[0][0]
-
-    # Shooter orientation
-    shooter_orientation = shooter.orientation  # Angle in radians
-
-    # Define a unit vector in the shooter's direction
-    shot_direction = np.array([np.cos(shooter_orientation), np.sin(shooter_orientation)])
-
-    # Define the goal center
-    goal_pos = np.array([goal_x, 0])  # Use the center of the goal
-
+    
     # Define the shooting line from ball position in the shooter's direction
     line_start = np.array([ball_x, ball_y])
-    goal_vector = goal_pos - np.array([ball_x, ball_y])
-    scale_factor = np.dot(goal_vector, shot_direction) / np.dot(shot_direction, shot_direction)
-    line_end = line_start + (scale_factor * 1.1) * shot_direction  # Find the closest intersection
+    line_end = np.array([best_shot[0], best_shot[1]])  # Use the best shot position
 
     # Helper function: shortest distance from a point to a line segment
     def distance_point_to_line(point, line_start, line_end):
@@ -236,14 +288,12 @@ def is_goal_blocked(game: Game, shooter: Robot) -> bool:
     robot_radius = ROBOT_RADIUS  # Assume field provides robot radius info
 
     # Check if any enemy robot blocks the shooting path
-    for enemy_robot in game.enemy_robots:
-        if enemy_robot:
-            robot_pos = np.array([enemy_robot.x, enemy_robot.y])
+    for defender in defenders:
+        if defender:
+            robot_pos = np.array([defender.x, defender.y])
             distance = distance_point_to_line(robot_pos, line_start, line_end)
-            
-            print(f"Distance from robot {enemy_robot.id} to shot line: {distance}, robot radius: {robot_radius * 1.2}")
-            
-            if distance <= robot_radius * 1.2:  # Consider robot as a circle
+                        
+            if distance <= robot_radius:  # Consider robot as a circle
                 return True  # Shot is blocked
 
     return False  # No robot is blocking
