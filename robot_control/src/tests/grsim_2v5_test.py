@@ -32,6 +32,7 @@ from robot_control.src.skills import (
     go_to_ball,
     empty_command,
     goalkeep,
+    man_mark,
 )
 from robot_control.src.intent import score_goal, PassBall, defend_grsim
 from global_utils.math_utils import distance
@@ -467,7 +468,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
 
 def defender_strategy(game: Game, stop_event: threading.Event):
     sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
-    attacker_is_yellow = game.my_team_is_yellow
+    my_team_is_yellow = game.my_team_is_yellow
     message_queue = queue.SimpleQueue()
     vision_receiver = VisionDataReceiver(message_queue)
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
@@ -498,15 +499,15 @@ def defender_strategy(game: Game, stop_event: threading.Event):
             break
 
         if message is not None:
-            _, _, balls = game.get_my_latest_frame(attacker_is_yellow)
+            _, _, balls = game.get_my_latest_frame(my_team_is_yellow)
             ball_data = balls[0]
-            """
+
             sim_robot_controller.add_robot_commands(
                 defend_grsim(
                     pid_oren,
                     pid_trans,
                     game,
-                    not attacker_is_yellow,
+                    my_team_is_yellow,
                     1,
                 ),
                 1,
@@ -514,28 +515,31 @@ def defender_strategy(game: Game, stop_event: threading.Event):
 
             sim_robot_controller.add_robot_commands(
                 defend_grsim(
-                    pid_oren, pid_trans, game, not attacker_is_yellow, 4,
+                    pid_oren,
+                    pid_trans,
+                    game,
+                    my_team_is_yellow,
+                    4,
                 ),
                 4,
             )
-            """
+
             sim_robot_controller.add_robot_commands(
                 goalkeep(
-                    attacker_is_yellow,
+                    not my_team_is_yellow,
                     game,
                     0,
                     pid_oren,
                     pid_trans,
-                    not attacker_is_yellow,
+                    my_team_is_yellow,
                     sim_robot_controller.robot_has_ball(0),
                 ),
                 0,
             )
 
-            """
             sim_robot_controller.add_robot_commands(
                 man_mark(
-                    not attacker_is_yellow,
+                    my_team_is_yellow,
                     game,
                     2,
                     0,
@@ -544,10 +548,10 @@ def defender_strategy(game: Game, stop_event: threading.Event):
                 ),
                 2,
             )
-    
+
             sim_robot_controller.add_robot_commands(
                 man_mark(
-                    not attacker_is_yellow,
+                    my_team_is_yellow,
                     game,
                     3,
                     0,
@@ -556,7 +560,6 @@ def defender_strategy(game: Game, stop_event: threading.Event):
                 ),
                 3,
             )
-            """
 
             sim_robot_controller.send_robot_commands()
 
