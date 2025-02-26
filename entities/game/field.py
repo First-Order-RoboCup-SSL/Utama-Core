@@ -4,65 +4,70 @@ from shapely.geometry import Point
 
 
 class Field:
-    def __init__(self): # TODO: Make these static
+    def __init__(self, my_team_is_yellow: bool, my_team_right: bool):  # TODO: Make these static
+        self.my_team_right = my_team_right
+        self.my_team_is_yellow = my_team_is_yellow
+        
         self.HALF_LENGTH = 4.5  # x value
         self.HALF_WIDTH = 3  # y value
         self.HALF_GOAL_WIDTH = 0.5
         self.HALF_DEFENSE_AREA_LENGTH = 0.5
         self.HALF_DEFENSE_AREA_WIDTH = 1
-        self.YELLOW_GOAL_LINE = LineString(
+        self.RIGHT_GOAL_LINE = LineString(
             [
                 (self.HALF_LENGTH, self.HALF_GOAL_WIDTH),
                 (self.HALF_LENGTH, -self.HALF_GOAL_WIDTH),
             ]
         )
-        self.BLUE_GOAL_LINE = LineString(
+        self.LEFT_GOAL_LINE = LineString(
             [
                 (-self.HALF_LENGTH, self.HALF_GOAL_WIDTH),
                 (-self.HALF_LENGTH, -self.HALF_GOAL_WIDTH),
             ]
         )
         self.CENTER_CIRCLE = Point(0, 0).buffer(0.5)  # center circle with radius 500
-        self.YELLOW_DEFENSE_AREA = Polygon(
+        self.RIGHT_DEFENSE_AREA = Polygon(
             [
                 (self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
                 (
-                    self.HALF_LENGTH - self.HALF_DEFENSE_AREA_LENGTH,
+                    self.HALF_LENGTH - 2 * self.HALF_DEFENSE_AREA_LENGTH,
                     self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (
-                    self.HALF_LENGTH - self.HALF_DEFENSE_AREA_LENGTH,
+                    self.HALF_LENGTH - 2 * self.HALF_DEFENSE_AREA_LENGTH,
                     -self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (self.HALF_LENGTH, -self.HALF_DEFENSE_AREA_WIDTH),
+                (self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
             ]
         )
-        self.BLUE_DEFENSE_AREA = Polygon(
+        self.LEFT_DEFENSE_AREA = Polygon(
             [
                 (-self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
                 (
-                    -self.HALF_LENGTH + self.HALF_DEFENSE_AREA_LENGTH,
+                    -self.HALF_LENGTH + 2 * self.HALF_DEFENSE_AREA_LENGTH,
                     self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (
-                    -self.HALF_LENGTH + self.HALF_DEFENSE_AREA_LENGTH,
+                    -self.HALF_LENGTH + 2 * self.HALF_DEFENSE_AREA_LENGTH,
                     -self.HALF_DEFENSE_AREA_WIDTH,
                 ),
                 (-self.HALF_LENGTH, -self.HALF_DEFENSE_AREA_WIDTH),
+                (-self.HALF_LENGTH, self.HALF_DEFENSE_AREA_WIDTH),
             ]
         )
 
     def my_goal_line(self, my_team_is_yellow) -> LineString:
         if my_team_is_yellow:
-            return self.yellow_goal_line
+            return self.RIGHT_GOAL_LINE
         else:
-            return self.blue_goal_line
+            return self.LEFT_GOAL_LINE
 
     def enemy_goal_line(self, my_team_is_yellow) -> LineString:
         if my_team_is_yellow:
-            return self.blue_goal_line
+            return self.LEFT_GOAL_LINE
         else:
-            return self.yellow_goal_line
+            return self.RIGHT_GOAL_LINE
 
     def my_defense_area(self, my_team_is_yellow) -> LineString:
         if my_team_is_yellow:
@@ -90,20 +95,31 @@ class Field:
 
     @property
     def yellow_goal_line(self) -> LineString:
-        return self.YELLOW_GOAL_LINE
+        return self.RIGHT_GOAL_LINE
 
     @property
     def blue_goal_line(self) -> LineString:
-        return self.BLUE_GOAL_LINE
+        return self.LEFT_GOAL_LINE
 
     @property
     def center_circle(self) -> Point:
         return self.CENTER_CIRCLE
 
-    @property
-    def yellow_defense_area(self) -> Polygon:
-        return self.YELLOW_DEFENSE_AREA
+    @staticmethod
+    def yellow_defense_area() -> Polygon:
+        return Field().RIGHT_DEFENSE_AREA
 
-    @property
-    def blue_defense_area(self) -> Polygon:
-        return self.BLUE_DEFENSE_AREA
+    @staticmethod
+    def blue_defense_area() -> Polygon:
+        return Field().LEFT_DEFENSE_AREA
+
+    @staticmethod
+    def full_field() -> Polygon:
+        return Polygon(
+            [
+                [-Field.HALF_LENGTH, -Field.HALF_WIDTH],
+                [-Field.HALF_LENGTH, Field.HALF_WIDTH],
+                [Field.HALF_LENGTH, Field.HALF_WIDTH],
+                [Field.HALF_LENGTH, -Field.HALF_WIDTH],
+            ]
+        )

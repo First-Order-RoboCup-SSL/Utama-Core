@@ -56,3 +56,10 @@ def rad_to_deg(radians: float):
     """
     degrees = np.rad2deg(radians)
     return degrees % 360
+
+
+def distance(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
+    """
+    Calculate the Euclidean distance between two points in 2D space using the Pythagorean theorem.
+    """
+    return np.hypot(point2[0] - point1[0], point2[1] - point1[1])

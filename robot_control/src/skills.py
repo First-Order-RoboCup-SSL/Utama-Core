@@ -1,17 +1,34 @@
+import math
 import numpy as np
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from entities.data.command import RobotCommand
 from entities.data.vision import BallData, RobotData
 
+from entities.game.game import Game, Ball
 from motion_planning.src.pid import PID
 import logging
 
-from math import atan, atan2, dist, sqrt, cos, sin, pi, acos, degrees, asin
+from math import atan2, dist, sqrt, cos, sin, pi, acos, degrees
+from global_utils.math_utils import normalise_heading, distance
 from motion_planning.src.pid.pid import TwoDPID
 from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
 
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+from team_controller.src.config.settings import ROBOT_RADIUS
+
 logger = logging.getLogger(__name__)
+
+
+def empty_command(dribbler_on: bool = False) -> RobotCommand:
+    return RobotCommand(
+        local_forward_vel=0,
+        local_left_vel=0,
+        angular_vel=0,
+        kick=0,
+        chip=0,
+        dribble=dribbler_on,
+    )
 
 
 def kick_ball() -> RobotCommand:
@@ -25,45 +42,58 @@ def kick_ball() -> RobotCommand:
     )
 
 
-# TODO: this pid system is v clumsy, and will eventually be streamlined with robot object
-# Ideally, we should have one PID for each robot and not have one giant PID for all robots
 def go_to_ball(
+    game: Game,
     pid_oren: PID,
     pid_trans: TwoDPID,
-    this_robot_data: RobotData,
     robot_id: int,
-    ball_data: BallData,
+    dribble_when_near: bool = True,
+    dribble_threshold: float = 0.5,
 ) -> RobotCommand:
+
+    ball = game.ball
+    robot = game.friendly_robots[robot_id]
+    
+    # TODO: add a optional target_oren flag
     target_oren = np.arctan2(
-        ball_data.y - this_robot_data.y, ball_data.x - this_robot_data.x
+        ball.y - robot.y, ball.x - robot.x
     )
+
+    # target_x = ball_data.x - ROBOT_RADIUS * np.cos(target_oren)
+    # target_y = ball_data.y - ROBOT_RADIUS * np.sin(target_oren)
+
+    if dribble_when_near:
+        distance = np.hypot(
+            ball.y - robot.y, ball.x - robot.x
+        )
+        dribbling = distance < dribble_threshold
     return calculate_robot_velocities(
         pid_oren=pid_oren,
         pid_trans=pid_trans,
-        this_robot_data=this_robot_data,
         robot_id=robot_id,
-        target_coords=ball_data,
+        target_coords=(ball.x, ball.y),  # (target_x, target_y),
         target_oren=target_oren,
+        dribbling=dribbling,
     )
 
-
+# util function??
 def face_ball(current: Tuple[float, float], ball: Tuple[float, float]) -> float:
     return np.arctan2(ball[1] - current[1], ball[0] - current[0])
 
 
 def go_to_point(
+    game: Game,
     pid_oren: PID,
     pid_trans: PID,
-    this_robot_data: RobotData,
     robot_id: int,
     target_coords: Tuple[float, float],
     target_oren: float,
     dribbling: bool = False,
 ) -> RobotCommand:
     return calculate_robot_velocities(
+        game=game,
         pid_oren=pid_oren,
         pid_trans=pid_trans,
-        this_robot_data=this_robot_data,
         robot_id=robot_id,
         target_coords=target_coords,
         target_oren=target_oren,
@@ -72,24 +102,37 @@ def go_to_point(
 
 
 def turn_on_spot(
+    game: Game,
     pid_oren: PID,
     pid_trans: PID,
-    this_robot_data: RobotData,
     robot_id: int,
     target_oren: float,
     dribbling: bool = False,
+    pivot_on_ball: bool = False,
 ) -> RobotCommand:
-    return calculate_robot_velocities(
+    """
+    Turns the robot on the spot to face the target orientation.
+
+    pivot_on_ball: If True, the robot will pivot on the ball, otherwise it will pivot on its own centre.
+    """
+    turn = calculate_robot_velocities(
+        game=game,
         pid_oren=pid_oren,
         pid_trans=pid_trans,
-        this_robot_data=this_robot_data,
         robot_id=robot_id,
         target_coords=(None, None),
         target_oren=target_oren,
         dribbling=dribbling,
     )
 
+    if pivot_on_ball:
+        angular_vel = turn.angular_vel
+        local_left_vel = -angular_vel * 1.8 * ROBOT_RADIUS
+        turn = turn._replace(local_left_vel=local_left_vel)
 
+    return turn
+
+# util function??
 def predict_goal_y_location(
     shooter_position: Tuple[float, float], orientation: float, shoots_left: bool
 ) -> float:
@@ -100,7 +143,7 @@ def predict_goal_y_location(
     t = (gx - shooter_position[0]) / dx
     return shooter_position[1] + t * dy
 
-
+# util function??
 def calculate_defense_area(t: float, is_left: bool):
     """
     Defenders' path around the goal in the form of a rounded rectangle
@@ -114,13 +157,14 @@ def calculate_defense_area(t: float, is_left: bool):
     https://www.desmos.com/calculator/nmaf7rpmnw
     """
     assert pi / 2 <= t <= 3 * pi / 2, t
+    # print("T", t)
     a, r = 1.1, 2.1
     rp = a * ((1 - r) * (abs(cos(t)) * cos(t)) + r * cos(t)), a * (
         (1 - r) * (abs(sin(t)) * sin(t)) + r * sin(t)
     )
     return make_relative_to_goal_centre(rp, is_left)
 
-
+# util function??
 def make_relative_to_goal_centre(
     p: Tuple[float, float], is_left_goal: bool
 ) -> Tuple[float, float]:
@@ -134,19 +178,19 @@ def make_relative_to_goal_centre(
 
 EPS = 1e-5
 
-
+# util function??
 def get_goal_centre(is_left: bool) -> Tuple[float, float]:
     return -4.5 if is_left else 4.5, 0
 
-
+# util function??
 def relative_to(p: Tuple[float, float], o: Tuple[float, float]) -> Tuple[float, float]:
     return p[0] - o[0], p[1] - o[1]
 
-
+# util function??
 def cross(v1, v2) -> float:
     return v1[0] * v2[1] - v1[1] * v2[0]
 
-
+# util function??
 def ccw(v1, v2) -> int:
     # 1 if v1 is ccw of v2, -1 of v1 is cw of v2, 0 if colinear
     mag = cross(v1, v2)
@@ -157,15 +201,15 @@ def ccw(v1, v2) -> int:
     else:
         return -1
 
-
+# util function??
 def dot(v1, v2) -> float:
     return v1[0] * v2[0] + v1[1] * v2[1]
 
-
+# util function??
 def mag(v) -> float:
     return sqrt(v[0] * v[0] + v[1] * v[1])
 
-
+# util function??
 def ang_between(v1, v2):
     res = dot(v1, v2) / (mag(v1) * mag(v2))
     if res > 0:
@@ -176,23 +220,23 @@ def ang_between(v1, v2):
 
     return acos(res)
 
-
+# util function??
 def step_curve(t: float, direction: int):
-    STEP_SIZE = 0.0872665
+    STEP_SIZE = 0.0872665 * 2
     if direction == 0:
         return t
     return direction * STEP_SIZE + t
 
-
+# util function??
 def clamp_to_goal_height(y: float) -> float:
     return max(min(y, 0.5), -0.5)
 
-
+# util function??
 def clamp_to_parametric(t: float) -> float:
     # parametric is between pi /2 and 3pi / 2
     return min(3 * pi / 2, max(t, pi / 2))
 
-
+# util function??
 def velocity_to_orientation(p: Tuple[float, float]) -> float:
     # Takes a velocity and converts to orientation in radians identical to robot orientation
     res = atan2(p[1], p[0])
@@ -200,13 +244,13 @@ def velocity_to_orientation(p: Tuple[float, float]) -> float:
         res += 2 * pi
     return res
 
-
+# util function??
 def align_defenders(
     defender_position: float,
     attacker_position: Tuple[float, float],
     attacker_orientation: Optional[float],
     is_left: bool,
-    env,
+    env: Optional[SSLStandardEnv],
 ) -> Tuple[float, float]:
     """
     Calculates the next point on the defense area that the robots should go to
@@ -229,15 +273,17 @@ def align_defenders(
             predict_goal_y_location(attacker_position, attacker_orientation, is_left)
         )
 
-    env.draw_line([predicted_goal_position, attacker_position], width=1, color="green")
-    env.draw_line([predicted_goal_position, (dx, dy)], width=1, color="yellow")
+    if env:
+        env.draw_line([predicted_goal_position, attacker_position], width=1, color="green")
+        env.draw_line([predicted_goal_position, (dx, dy)], width=1, color="yellow")
 
     # Calculate the cross product relative to the predicted position of the goal
 
     poly = []
     for t in range(round(1000 * pi / 2), round(1000 * 3 * pi / 2) + 1):
         poly.append(calculate_defense_area(clamp_to_parametric(t / 1000), is_left))
-    env.draw_polygon(poly, width=3)
+    if env:
+        env.draw_polygon(poly, width=3)
 
     goal_to_defender = relative_to((dx, dy), predicted_goal_position)
     goal_to_attacker = relative_to(attacker_position, predicted_goal_position)
@@ -258,7 +304,7 @@ def align_defenders(
     else:
         return calculate_defense_area(defender_position, is_left)
 
-
+# util function??
 def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
     """
     Given a point p on the defenders' parametric curve (as defined by calculate_defense_area), returns the parameter value t
@@ -288,7 +334,91 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
             lo = mi1
 
     t = lo
-    return t
+    return clamp_to_parametric(t)
+
+
+# TODO : This also really needs to be moved into a class
+previous_targets = []
+def goalkeep(is_left_goal: bool, game: Game, robot_id: int, pid_oren: PID, pid_trans: TwoDPID, is_yellow: bool, goalie_has_ball: bool):
+    global previous_targets
+
+    robot_data = game.get_robot_pos(is_yellow, robot_id)
+    print(is_yellow, robot_id)
+    print(robot_data)
+    print("HERE")
+    if goalie_has_ball:
+        target_oren = 0 if is_left_goal else math.pi
+        print("TARGET OREN", target_oren)
+        return go_to_point(
+            pid_oren,
+            pid_trans,
+            robot_data,
+            robot_id,
+            ((-4 if is_left_goal else 4), 0),
+            target_oren,
+            True,
+        )
+
+
+    OFFSET = 0.20
+    
+    if is_left_goal:
+        new_target = game.predict_ball_pos_at_x(-4.5 + OFFSET)
+    else:
+        new_target = game.predict_ball_pos_at_x(4.5 - OFFSET)
+    
+    if new_target and abs(new_target[1]) < 0.7:
+        previous_targets.append(new_target[1])
+    if len(previous_targets) > 8:
+        del previous_targets[0]
+
+    if len(previous_targets) == 0:
+        target = 0
+    else:
+        target = sum(previous_targets) / len(previous_targets)
+        if abs(target) > 0.6:
+            target = 0 
+    
+    SIDE_OFFSET = 0.05
+    print("IF LEFT GOAL", is_left_goal)
+    target = (((-4.5 + OFFSET) if is_left_goal else (4.5 - OFFSET)), target + SIDE_OFFSET)
+    print("GOALIE TARGET", target, previous_targets)
+
+    if target and not find_likely_enemy_shooter(
+        game.get_robots_pos(not is_yellow), [game.ball]
+    ):
+        cmd = go_to_point(
+            pid_oren,
+            pid_trans,
+            robot_data,
+            robot_id,
+            target,
+            face_ball(
+                (robot_data.x, robot_data.y), 
+                (game.ball.x, game.ball.y)
+            ),
+        )
+    else:  # TODO : Not sure if we actually need this case?
+        cmd = go_to_point(
+            pid_oren,
+            pid_trans,
+            robot_data,
+            0,
+            [None, None],
+            face_ball((robot_data.x, robot_data.y), (game.ball.x, game.ball.y)),
+        )
+    return cmd
+
+# util function??
+def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
+    ans = []
+    for ball in balls:
+        for er in enemy_robots:
+            
+            if er and dist((er.x, er.y), (ball.x, ball.y)) < 0.2:
+                # Ball is close to this robot
+                ans.append(er)
+    return list(set(ans))
 
 
 if __name__ == "__main__":

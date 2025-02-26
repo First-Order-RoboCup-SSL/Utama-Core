@@ -4,8 +4,16 @@ from numpy import pi
 TIMESTEP = 0.0167
 
 # maximum (real and sim) robot settings
-MAX_VEL = 1.5
-MAX_ANGULAR_VEL = 8
+REAL_MAX_VEL = 0.1
+# any slower and the robots become unstable
+REAL_MAX_ANGULAR_VEL = 2
+
+# maximum (real and sim) robot settings
+MAX_VEL = 2
+# any slower and the robots become unstable
+MAX_ANGULAR_VEL = 4
+
+ROBOT_RADIUS = 0.09  # TODO: probably not the best place to put this
 
 # sim kick speed
 KICK_SPD = 5
@@ -23,9 +31,6 @@ BLUE_TEAM_SIM_PORT = 10301
 REFEREE_PORT = 10003
 SIM_CONTROL_PORT = 10300  # IP '127.0.0.1'
 
-# General settings
-NUM_ROBOTS = 6
-
 # PID parameters
 PID_PARAMS = {
     "oren": {
@@ -41,30 +46,18 @@ PID_PARAMS = {
         "Kd": 0,
         "Ki": 0.2,
         "dt": TIMESTEP,
-        "max": MAX_VEL,
-        "min": -MAX_VEL,
+        "max_vel": MAX_VEL,
     },
 }
 
 # Simulation controller
 ADD_Y_COORD = -3.15
-REMOVAL_Y_COORD = -3.8
+REMOVAL_Y_COORD = -10
 TELEPORT_X_COORDS = [0.4, 0.8, 1.2, 1.6, 2, 2.4]
 
 # real controller
 BAUD_RATE = 115200
-PORT = "COM3"
+PORT = "/dev/ttyACM0"
+AUTH_STR = "<READY!>"
+MAX_INITIALIZATION_TIME = 5
 TIMEOUT = 0.1
-# s: signed, u: unsigned
-SERIAL_BIT_SIZES = {
-    "out": {
-        "angular_vel": (7, "s"),
-        "local_forward_vel": (7, "s"),
-        "local_left_vel": (7, "s"),
-        "kicker_bottom": (1, "u"),
-        "kicker_top": (1, "u"),
-        "dribbler": (1, "u"),
-    },
-    "in": {"kicker_charged": (1, "u"), "has_ball": (1, "u")},
-}
-ENDIAN = "big"

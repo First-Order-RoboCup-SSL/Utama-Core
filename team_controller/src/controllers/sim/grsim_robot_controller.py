@@ -1,7 +1,7 @@
 from typing import Tuple, Optional, Dict, List, Union
 import warnings
 
-from entities.data.command import RobotCommand, RobotInfo
+from entities.data.command import RobotCommand, RobotVelCommand, RobotInfo
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -24,6 +24,7 @@ from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import
     RobotFeedback,
 )
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -45,14 +46,23 @@ class GRSimRobotController(AbstractRobotController):
             self.net = network_manager.NetworkManager(address=(address, port[1]))
 
         self.robots_info: List[RobotInfo] = [None] * 6
+        self.net_diff_sum = 0
+        self.net_diff_total = 0
 
     def send_robot_commands(self) -> None:
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
         logger.debug(f"Sending Robot Commands")
-
+        
+        net_start = time.time()
         data = self.net.send_command(self.out_packet, is_sim_robot_cmd=True)
+        net_end = time.time()
+        net_diff = net_end - net_start
+
+        self.net_diff_sum += net_diff
+        self.net_diff_total += 1
+        print("NET DIFF", net_diff, "NET DIFF AVG", self.net_diff_sum / self.net_diff_total)
 
         # manages the response packet that is received
         if data:
@@ -103,11 +113,33 @@ class GRSimRobotController(AbstractRobotController):
         robot.kick_speed = KICK_SPD if (command.kick or command.chip) > 0 else 0
         robot.kick_angle = CHIP_ANGLE if command.chip > 0 else 0
         robot.dribbler_speed = DRIBBLE_SPD if command.dribble > 0 else 0
+        # print(robot)
 
         local_vel = robot.move_command.local_velocity
         local_vel.forward = command.local_forward_vel
         local_vel.left = command.local_left_vel
         local_vel.angular = command.angular_vel
+        
+    def _add_robot_wheel_vel_command(self, command: RobotVelCommand, robot_id: int) -> None:
+        """
+        Adds a robot command to the out_packet.
+
+        Args:
+            robot_id (int): The ID of the robot.
+            command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
+        """
+        robot = self.out_packet.robot_commands.add()
+        robot.id = robot_id
+        robot.kick_speed = KICK_SPD if (command.kick or command.chip) > 0 else 0
+        robot.kick_angle = CHIP_ANGLE if command.chip > 0 else 0
+        robot.dribbler_speed = DRIBBLE_SPD if command.dribble > 0 else 0
+
+        wheel_vel = robot.move_command.wheel_velocity
+        wheel_vel.front_right = command.front_right
+        wheel_vel.front_left = command.front_left
+        wheel_vel.back_right = command.back_right
+        wheel_vel.back_left = command.back_left
+        
 
     def robot_has_ball(self, robot_id: int) -> bool:
         """

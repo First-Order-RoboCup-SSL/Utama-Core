@@ -31,9 +31,8 @@ def data_update_listener(receiver: VisionDataReceiver):
 
 
 def main():
-    game = Game(my_team_is_yellow=True)
-    # GRSimController().teleport_ball(0, 0, 2, 2.5)
-    GRSimController().teleport_ball(0, 0, 0, 0)
+    game = Game(my_team_is_yellow=True, num_friendly_robots=6, num_enemy_robots=6)
+    GRSimController().teleport_ball(0, 0, 2, 2.5)
     time.sleep(0.2)
 
     message_queue = queue.SimpleQueue()
@@ -56,7 +55,15 @@ def main():
 
     TIME = 1 / 60 * 10  # frames in seconds
     FRAMES_IN_TIME = round(60 * TIME)
+
+    # TODO: Not implemented
+    # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
+    # referee_thread.daemon = True
+    # referee_thread.start()
     frames = 0
+
+    # To debug
+    logging.basicConfig(level=logging.DEBUG)
 
     try:
         logger.debug("LOCATED BALL")
@@ -204,6 +211,12 @@ def main1():
                     f"After robot is_active( {game.friendly_robots[0].inactive} ) Coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}\n"
                 )
 
+                ### Getting coordinate data ###
+                print(
+                    f"Friendly(Yellow) Robot 1 coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}, {game.friendly_robots[0].orientation}"
+                )
+                print(f"Ball coords: {game.ball.x}, {game.ball.y}, {game.ball.z}\n\n")
+
             if message_type == MessageType.REF:
                 pass
 
@@ -212,16 +225,7 @@ def main1():
 
                 ### for demo purposes (displays when robot info is received) ####
                 for i in range(6):
-                    print(f"Robot {i} has ball: {game.friendly_robots[i].has_ball}")
-
-            ### Getting coordinate data ###
-            print(
-                f"Friendly(Yellow) Robot 1 coords: {game.friendly_robots[0].x}, {game.friendly_robots[0].y}, {game.friendly_robots[0].orientation}"
-            )
-            print(f"Ball coords: {game.ball.x}, {game.ball.y}, {game.ball.z}\n")
-
-            # to just demonstrate the print statements
-            break
+                    print(f"Robot {i} has ball: {game.friendly_robots[i].has_ball}\n\n")
 
     except KeyboardInterrupt:
         print("Stopping main program.")

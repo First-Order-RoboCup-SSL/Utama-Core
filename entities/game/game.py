@@ -15,6 +15,12 @@ from entities.referee.referee_command import RefereeCommand
 from entities.referee.stage import Stage
 
 from team_controller.src.config.settings import TIMESTEP
+<<<<<<< HEAD
+=======
+
+# TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
+# TODO: Namespace conflict for robot. We need to resolve this ASAP.
+>>>>>>> main
 
 import logging, warnings
 
@@ -26,20 +32,39 @@ class Game:
     Class containing states of the entire game and field information.
     """
 
-    def __init__(self, my_team_is_yellow=True):
+    def __init__(
+        self,
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        num_friendly_robots: int = 6,
+        num_enemy_robots: int = 6,
+    ):
         self._my_team_is_yellow = my_team_is_yellow
+<<<<<<< HEAD
         self._field = Field()
+=======
+        self._field = Field(my_team_is_yellow, my_team_is_right)
+>>>>>>> main
 
         self._records: List[FrameData] = []
         self._predicted_next_frame: PredictedFrame = None
 
         self._friendly_robots: List[Robot] = [
+<<<<<<< HEAD
             Robot(id, is_friendly=True) for id in range(6)
         ]
         self._enemy_robots: List[Robot] = [
             Robot(id, is_friendly=False) for id in range(6)
         ]
         self._ball: Ball = Ball()
+=======
+            Robot(id, is_friendly=True) for id in range(num_friendly_robots)
+        ]
+        self._enemy_robots: List[Robot] = [
+            Robot(id, is_friendly=False) for id in range(num_enemy_robots)
+        ]
+        self._ball: Ball = Ball(BallData(0, 0, 0, 1))
+>>>>>>> main
 
         self._yellow_score = 0
         self._blue_score = 0
@@ -99,27 +124,42 @@ class Game:
 
     @ball.setter
     def ball(self, value: BallData):
-        self._ball.ball_data = value
+        # Temporary fix for when the ball is None
+        if value is not None:
+            self._ball.ball_data = value
 
-    def is_ball_in_goal(self, left_goal: bool):
-        ball_pos = self.get_ball_pos()[0]
+    def is_ball_in_goal(self, right_goal: bool):
+        ball_pos = self.ball
         return (
             ball_pos.x < -self.field.HALF_LENGTH
             and (
                 ball_pos.y < self.field.HALF_GOAL_WIDTH
                 and ball_pos.y > -self.field.HALF_GOAL_WIDTH
             )
-            and left_goal
+            and not right_goal
             or ball_pos.x > self.field.HALF_LENGTH
             and (
                 ball_pos.y < self.field.HALF_GOAL_WIDTH
                 and ball_pos.y > -self.field.HALF_GOAL_WIDTH
             )
-            and not left_goal
+            and right_goal
         )
 
     def add_new_state(self, frame_data: FrameData) -> None:
         if isinstance(frame_data, FrameData):
+            # if self.my_team_is_yellow:
+            #     if len(yellow_robot_data) != len(self._friendly_robots):
+            #         logger.warning(f"Expected data for {len(self.friendly_robots)} friendly robots but found {len(yellow_robot_data)} in frame")
+
+            #     if len(blue_robot_data) != len(self._enemy_robots):
+            #         logger.warning(f"Expected data for {len(self._enemy_robots)} enemy (blue) robots but found {len(blue_robot_data)} in frame")
+            # else:
+            #     if len(yellow_robot_data) != len(self._enemy_robots):
+            #         logger.warning(f"Expected data for {len(self._enemy_robots)} enemy (yellow) robots but found {len(yellow_robot_data)} in frame")
+
+            #     if len(blue_robot_data) != len(self._friendly_robots):
+            #         logger.warning(f"Expected data for {len(self._friendly_robots)} friendly (blue) robots but found {len(blue_robot_data)} in frame")
+
             self._records.append(frame_data)
             self._predicted_next_frame = self._reorganise_frame(
                 self.predict_frame_after(TIMESTEP)
@@ -131,6 +171,7 @@ class Game:
     def add_robot_info(self, robots_info: List[RobotInfo]) -> None:
         for robot_id, robot_info in enumerate(robots_info):
             self._friendly_robots[robot_id].has_ball = robot_info.has_ball
+            # Extensible with more info (remeber to add the property in robot.py)
 
     def _update_data(self, frame_data: FrameData) -> None:
         if self.my_team_is_yellow:
@@ -139,7 +180,8 @@ class Game:
         else:
             self.friendly_robots = frame_data.blue_robots
             self.enemy_robots = frame_data.yellow_robots
-        self._ball = frame_data.ball[0]
+        self._ball = frame_data.ball[0]  # TODO: Don't always take first ball pos
+        # BUG: self._ball is of type Ball, frame_data.ball[0] is of type BallData!
 
     def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
         if not self._records:
@@ -159,12 +201,19 @@ class Game:
     def get_robots_velocity(self, is_yellow: bool) -> List[tuple]:
         if len(self._records) <= 1:
             return None
-        return [
-            self.get_object_velocity(
-                RobotEntity(i, Colour.YELLOW if is_yellow else Colour.BLUE)
-            )
-            for i in range(len(self.get_robots_pos(is_yellow)))
-        ]
+        if is_yellow:
+            # TODO: potential namespace conflict when robot (robot.py) entity is reintroduced. Think about integrating the two
+            return [
+                self.get_object_velocity(RobotEntity(i, Colour.YELLOW))
+                for i in range(
+                    len(self.get_robots_pos(True))
+                )  # TODO: This is a bit of a hack, we should be able to get the number of robots from the field
+            ]
+        else:
+            return [
+                self.get_object_velocity(RobotEntity(i, Colour.BLUE))
+                for i in range(len(self.get_robots_pos(False)))
+            ]
 
     def get_ball_pos(self) -> List[BallData]:
         if not self._records:
@@ -181,6 +230,9 @@ class Game:
     def get_my_latest_frame(
         self, my_team_is_yellow: bool
     ) -> tuple[RobotData, RobotData, BallData]:
+        """
+        FrameData rearranged as Tuple(friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
+        """
         if not self._records:
             return None
         latest_frame = self.get_latest_frame()
@@ -197,14 +249,15 @@ class Game:
     def predict_my_next_frame(
         self, my_team_is_yellow: bool
     ) -> tuple[RobotData, RobotData, BallData]:
+        """
+        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on my_team_is_yellow
+        """
         if self._predicted_next_frame is None:
             return None
         warnings.warn(
             "Use game.predicted_next_frame instead", DeprecationWarning, stacklevel=2
         )
-        return self._reorganise_frame_data(
-            self._predicted_next_frame, my_team_is_yellow
-        )
+        return self._reorganise_frame_data(self._predicted_next_frame)
 
     def predict_frame_after(self, t: float) -> FrameData:
         yellow_pos = [
@@ -223,7 +276,7 @@ class Game:
                 self._records[-1].ts + t,
                 list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),
                 list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
-                [BallData(ball_pos[0], ball_pos[1], 0)],
+                [BallData(ball_pos[0], ball_pos[1], 0, 1)],  # TODO : Support z axis
             )
 
     def _reorganise_frame(self, frame: FrameData) -> Optional[PredictedFrame]:
@@ -239,11 +292,79 @@ class Game:
         self, frame_data: FrameData, my_team_is_yellow: bool
     ) -> tuple[RobotData, RobotData, BallData]:
         _, yellow_robots, blue_robots, balls = frame_data
+        if my_team_is_yellow:
+            return yellow_robots, blue_robots, balls
+        else:
+            return blue_robots, yellow_robots, balls
+
+    ### General Object Position Prediction ###
+    def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
+        # If t is after the object has stopped we return the position at which object stopped.
+        sx = 0
+        sy = 0
+
+        acceleration = self.get_object_acceleration(object)
+
+        if acceleration is None:
+            return None
+
+        ax, ay = acceleration
+        vels = self.get_object_velocity(object)
+
+        if vels is None:
+            ux, uy = None, None
+        else:
+            ux, uy = vels
+
+        if object is Ball:
+            ball = self.get_ball_pos()
+            start_x, start_y = ball[0].x, ball[0].y
+        else:
+            posn = self._get_object_position_at_frame(len(self._records) - 1, object)
+            start_x, start_y = posn.x, posn.y
+
+        if ax and ux:
+            sx = self._calculate_displacement(ux, ax, t)
+
+        if ay and uy:
+            sy = self._calculate_displacement(uy, ay, t)
+
         return (
-            (yellow_robots, blue_robots, balls)
-            if my_team_is_yellow
-            else (blue_robots, yellow_robots, balls)
-        )
+            start_x + sx,
+            start_y + sy,
+        )  # TODO: Doesn't take into account spin / angular vel
+
+    def _calculate_displacement(self, u, a, t):
+        if a == 0:  # Handle zero acceleration case
+            return u * t
+        else:
+            stop_time = -u / a
+            if stop_time < 0:
+                stop_time = float("inf")
+            effective_time = min(t, stop_time)
+            displacement = (u * effective_time) + (0.5 * a * effective_time**2)
+            logger.debug(
+                f"Displacement: {displacement} for time: {effective_time}, stop time: {stop_time}"
+            )
+            return displacement
+
+    def predict_ball_pos_at_x(self, x: float) -> Optional[tuple]:
+        vel = self.get_ball_velocity()
+
+        if not vel or not vel[0] or not vel[0]:
+            return None
+
+        ux, uy = vel
+        pos = self.get_ball_pos()[0]
+        bx = pos.x
+        by = pos.y
+
+        if uy == 0:
+            return (bx, by)
+
+        t = (x - bx) / ux
+        y = by + uy * t
+        return (x, y)
 
     def get_object_velocity(self, object: GameObject) -> Optional[tuple]:
         return self._get_object_velocity_at_frame(len(self._records) - 1, object)
@@ -271,11 +392,19 @@ class Game:
         previous_pos = self._get_object_position_at_frame(frame - 1, object)
         current_pos = self._get_object_position_at_frame(frame, object)
 
+        if current_pos is None or previous_pos is None:
+            logger.warning("No position data to calculate velocity for frame %d", frame)
+            return None
+
         previous_time_received = previous_frame.ts
         time_received = current_frame.ts
 
         if time_received < previous_time_received:
-            logger.warning("Timestamps out of order for vision data")
+            logger.warning(
+                "Timestamps out of order for vision data %f should be after %f",
+                time_received,
+                previous_time_received,
+            )
             return None
 
         dt_secs = time_received - previous_time_received
@@ -300,7 +429,7 @@ class Game:
             missing_velocities = 0
             averageVelocity = [0, 0]
             windowStart = 1 + (i * WINDOW)
-            windowEnd = windowStart + WINDOW
+            windowEnd = windowStart + WINDOW  # Excluded
             windowMiddle = (windowStart + windowEnd) // 2
 
             for j in range(windowStart, windowEnd):
@@ -310,6 +439,9 @@ class Game:
                 if curr_vel:
                     averageVelocity[0] += curr_vel[0]
                     averageVelocity[1] += curr_vel[1]
+                elif missing_velocities == WINDOW - 1:
+                    logging.warning(f"No velocity data to calculate acceleration for frame {len(self._records) - j}")
+                    return None
                 else:
                     missing_velocities += 1
 
@@ -321,7 +453,9 @@ class Game:
                     self._records[-windowMiddle + WINDOW].ts
                     - self._records[-windowMiddle].ts
                 )
-                accelX = (futureAverageVelocity[0] - averageVelocity[0]) / dt
+                accelX = (
+                    futureAverageVelocity[0] - averageVelocity[0]
+                ) / dt  # TODO vec
                 accelY = (futureAverageVelocity[1] - averageVelocity[1]) / dt
                 totalX += accelX
                 totalY += accelY
@@ -330,37 +464,6 @@ class Game:
             futureAverageVelocity = tuple(averageVelocity)
 
         return (totalX / iter, totalY / iter)
-
-    def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
-        acc = self.get_object_acceleration(object)
-        if acc is None:
-            return None
-
-        ax, ay = acc
-        ux, uy = self.get_object_velocity(object)
-
-        if object is Ball:
-            ball = self.get_ball_pos()
-            start_x, start_y = ball[0].x, ball[0].y
-        else:
-            posn = self._get_object_position_at_frame(len(self._records) - 1, object)
-            start_x, start_y = posn.x, posn.y
-
-        if ax == 0:
-            sx = 0
-        else:
-            tx_stop = -ux / ax
-            tx = min(t, tx_stop)
-            sx = ux * tx + 0.5 * ax * tx * tx
-
-        if ay == 0:
-            sy = 0
-        else:
-            ty_stop = -uy / ay
-            ty = min(t, ty_stop)
-            sy = uy * ty + 0.5 * ay * ty * ty
-
-        return (start_x + sx, start_y + sy)
 
     def add_new_referee_data(self, referee_data: RefereeData) -> None:
         if not self._referee_records:

@@ -1,6 +1,8 @@
-from math import ceil
 from serial import Serial
 from typing import Union, Optional, Dict, List
+import warnings
+import numpy as np
+import time
 
 from entities.data.command import RobotCommand, RobotInfo
 from entities.game import Game
@@ -14,8 +16,8 @@ from team_controller.src.config.settings import (
     BAUD_RATE,
     PORT,
     TIMEOUT,
-    ENDIAN,
-    SERIAL_BIT_SIZES,
+    AUTH_STR,
+    MAX_INITIALIZATION_TIME,
 )
 import logging
 
@@ -25,21 +27,24 @@ logger = logging.getLogger(__name__)
 class RealRobotController(AbstractRobotController):
     """
     Robot Controller for Real Robots.
+
+    Args:
+        is_team_yellow (bool): True if the team is yellow, False if the team is blue.
+        game_obj (Game): The game object storing all game state data.
+        n_robots (int): The number of robots in the team. Directly affects output buffer size. Default is 6.
     """
 
-    def __init__(self, is_team_yellow: bool, game_obj: Game):
+    def __init__(self, is_team_yellow: bool, game_obj: Game, n_robots: int = 6):
         self._is_team_yellow = is_team_yellow
         self._game_obj = game_obj
-        self._serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
-        self._rbt_cmd_size = self._get_byte_size(
-            SERIAL_BIT_SIZES["out"]
-        )  # packet size for one robot
-        self._quant_dict = (
-            self._generate_quant_dict()
-        )  # generate values commonly used to quantise output
+        self._n_robots = n_robots  # determines buffer size
+        self._serial = self._init_serial()
+
+        self._EMPTY_ID = 30  # id to indicate empty buffer: 1110 in control byte
+        self._rbt_cmd_size = 8  # packet size for one robot
         self._out_packet = self._empty_command()
-        self._in_packet_size = self._get_byte_size(SERIAL_BIT_SIZES["in"])
-        self._robots_info: List[RobotInfo] = [None] * 6
+        self._in_packet_size = 1  # size of the packet received from the robots
+        self._robots_info: List[RobotInfo] = [None] * self._n_robots
 
         logger.debug(
             f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}"
@@ -49,9 +54,19 @@ class RealRobotController(AbstractRobotController):
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
+        # print(list(self.out_packet))
+        # binary_representation = [f"{byte:08b}" for byte in self.out_packet]
+        # print(binary_representation)
         self._serial.write(self.out_packet)
-        data_in = self._serial.read(self._in_packet_size)
-        self._populate_robots_info(data_in)
+        data_in = self._serial.read_all()
+        # print(data_in)
+
+        # TODO: this is only for quali: fix this after quali
+        if len(data_in) == 1:
+            if data_in[0] & 0b01000000:
+                self._robots_info[1] = RobotInfo(has_ball=True)
+            else:
+                self._robots_info[1] = RobotInfo(has_ball=False)
 
         self._out_packet = self._empty_command()  # flush the out_packet
 
@@ -70,11 +85,11 @@ class RealRobotController(AbstractRobotController):
         Adds a robot command to the out_packet.
 
         Args:
-            robot_id (int): The ID of the robot.
+            robot_id (int): The ID of the robot.    
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
-        q_command = self._quantise_command(command)
-        command_buffer = self._generate_command_buffer(q_command)
+        c_command = self._convert_float_command(robot_id, command)
+        command_buffer = self._generate_command_buffer(robot_id, c_command)
         start_idx = robot_id * self._rbt_cmd_size
         self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = command_buffer
 
@@ -97,142 +112,142 @@ class RealRobotController(AbstractRobotController):
         else:
             return False
 
-    def _populate_robots_info(self, data_in: bytes) -> None:
+    # def _populate_robots_info(self, data_in: bytes) -> None:
+    #     """
+    #     Populates the robots_info list with the data received from the robots.
+    #     """
+    #     for i in range(self._n_robots):
+    #         has_ball = False
+    #         if data_in[0] & 0b10000000:
+    #             has_ball = True
+    #         info = RobotInfo(has_ball=has_ball)
+    #         self._robots_info[i] = info
+    #         data_in = data_in << 1  # shift to the next robot's data
+
+    def compute_crc(self, data: bytearray) -> int:
         """
-        Populates the robots_info list with the data received from the robots.
-
-        # TODO It's a bit awkward now because we haven't confirmed the return packet size and there's likely some spare space in the packet
-        # assumption now is packet of 1 byte, bits[7] to bit[2] are has_ball boolean in order of id 0 to 5. bit[1] to bit[0] are reserved
+        Calculate CRC-8, use 0x07 polynomial.
+        这里的计算对 data 中的每个字节进行处理。
         """
-        for i in range(6):
-            has_ball = False
-            if data_in[0] & 0b10000000:
-                has_ball = True
-            info = RobotInfo(has_ball=has_ball)
-            self._robots_info[i] = info
-            data_in = data_in << 1  # shift to the next robot's data
+        poly = 0x07
+        crc = 0x00
+        for byte in data:
+            crc ^= byte
+            for _ in range(8):
+                if crc & 0x80:
+                    crc = ((crc << 1) ^ poly) & 0xFF
+                else:
+                    crc = (crc << 1) & 0xFF
+        return crc
 
-    def _generate_quant_dict(self) -> Dict:
-        """
-        Generates a dictionary of the maximum and minimum quantised values for each key in the SERIAL_BIT_SIZES dictionary.
-        """
-        quant_dict = {}
-        for key, bit_size in SERIAL_BIT_SIZES["out"].items():
-            n_bits = bit_size[0]
-            signed = True if bit_size[1] == "s" else False
-            if signed:
-                half_range = 2 ** (n_bits - 1)
-                max_quantised = half_range - 1
-                min_quantised = -half_range
-            else:
-                max_quantised = 2**n_bits - 1
-                min_quantised = 0
-            quant_dict[key] = (max_quantised, min_quantised)
-        return quant_dict
-
-    def _quantise_command(self, command: RobotCommand) -> RobotCommand:
-        """
-        Quantizes the robot command to the appropriate bit size.
-        """
-        q_angular_vel = self._quantise(
-            command.angular_vel, MAX_ANGULAR_VEL, *self._quant_dict["angular_vel"]
-        )
-        q_local_forward_vel = self._quantise(
-            command.local_forward_vel, MAX_VEL, *self._quant_dict["local_forward_vel"]
-        )
-        q_local_left_vel = self._quantise(
-            command.local_left_vel, MAX_VEL, *self._quant_dict["local_left_vel"]
-        )
-        q_kick = 1 if command.kick > 0 else 0
-        q_chip = 1 if command.chip > 0 else 0
-        q_dribble = 1 if command.dribble > 0 else 0
-
-        return RobotCommand(
-            local_forward_vel=q_local_forward_vel,
-            local_left_vel=q_local_left_vel,
-            angular_vel=q_angular_vel,
-            kick=q_kick,
-            chip=q_chip,
-            dribble=q_dribble,
-        )
-
-    def _quantise(
-        self,
-        value: float,
-        max_actual: float,
-        max_quantised: int,
-        min_quantised: int,
-    ) -> int:
-        """
-        Normalize a floating-point value and map it to a quantized twos-complement integer range.
-
-        Note the asymmetry in the quantization due to the natural limit of signed values.
-
-        Args:
-            value (float): The input value to be quantized.
-            max_actual (float): The maximum possible absolute value for normalization.
-            max_quantised (int): The upper bound of the quantized range.
-            min_quantised (int): The lower bound of the quantized range.
-
-        Returns:
-            int: The quantized integer value (two's complement: instead of -4 return its complement).
-
-        Raises:
-            AssertionError: If `max_actual` is zero.
-        """
-        assert max_actual != 0
-        assert value <= max_actual and value >= -max_actual
-
-        norm_value = value / max_actual
-        if norm_value >= 0:
-            quantised = round(norm_value * max_quantised)
-        else:
-            quantised = -((2 * min_quantised) + round(norm_value * min_quantised))
-        return quantised
-
-    def _generate_command_buffer(self, q_command: RobotCommand) -> bytes:
+    def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
         """
         Generates the command buffer to be sent to the robot.
         """
-        out_bit_sizes = SERIAL_BIT_SIZES["out"]
-        angular_vel_buffer = (
-            f'{q_command.angular_vel:0{out_bit_sizes["angular_vel"][0]}b}'
-        )
-        local_forward_vel_buffer = (
-            f'{q_command.local_forward_vel:0{out_bit_sizes["local_forward_vel"][0]}b}'
-        )
-        local_left_vel_buffer = (
-            f'{q_command.local_left_vel:0{out_bit_sizes["local_left_vel"][0]}b}'
-        )
-        kick_buffer = f'{q_command.kick:0{out_bit_sizes["kicker_bottom"][0]}b}'
-        chip_buffer = f'{q_command.chip:0{out_bit_sizes["kicker_top"][0]}b}'
-        dribble_buffer = f'{q_command.dribble:0{out_bit_sizes["dribbler"][0]}b}'
+        assert robot_id < 6, "Invalid robot_id. Must be between 0 and 5."
 
-        command_buffer = "".join(
+        # Combine first 6 bytes of velocities
+        packet = bytearray(
             [
-                angular_vel_buffer,
-                local_forward_vel_buffer,
-                local_left_vel_buffer,
-                kick_buffer,
-                chip_buffer,
-                dribble_buffer,
+                (c_command.local_forward_vel >> 8) & 0xFF,
+                c_command.local_forward_vel & 0xFF,
+                (c_command.local_left_vel >> 8) & 0xFF,
+                c_command.local_left_vel & 0xFF,
+                (c_command.angular_vel >> 8) & 0xFF,
+                c_command.angular_vel & 0xFF,
             ]
         )
 
-        assert len(command_buffer) == self._rbt_cmd_size * 8
+        # Create control byte
+        control_byte = 0
+        if c_command.dribble:
+            control_byte |= 0x20  # Bit 5
+        if c_command.chip:
+            control_byte |= 0x40  # Bit 6
+        if c_command.kick:
+            control_byte |= 0x80  # Bit 7
+        robot_id = robot_id & 0x0F  # 5 bits only
+        control_byte |= robot_id << 1
+        # set last bit as 1 if its the last command
+        if robot_id == self._n_robots - 1:
+            control_byte |= 0x01
+        packet.append(control_byte)
+        crc = self.compute_crc(packet)
+        packet.append(crc)
 
-        return int(command_buffer, 2).to_bytes(
-            self._rbt_cmd_size, byteorder=ENDIAN, signed=False
+        return packet
+
+    def _convert_float_command(self, robot_id, command: RobotCommand) -> RobotCommand:
+        """
+        Prepares the float values in the command to be formatted to binary in the buffer.
+
+        Also converts angular velocity to degrees per second.
+        """
+
+        angular_vel = command.angular_vel
+        local_forward_vel = command.local_forward_vel
+        local_left_vel = command.local_left_vel
+
+        if abs(command.angular_vel) > MAX_ANGULAR_VEL:
+            warnings.warn(
+                f"Angular velocity for robot {robot_id} is greater than the maximum angular velocity. Clipping to {MAX_ANGULAR_VEL}."
+            )
+            angular_vel = (
+                MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
+            )
+        # TODO put back to max_vel
+        if abs(command.local_forward_vel) > 0.8:
+            warnings.warn(
+                f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
+            )
+            local_forward_vel = MAX_VEL if command.local_forward_vel > 0 else -MAX_VEL
+
+        if abs(command.local_left_vel) > MAX_VEL:
+            warnings.warn(
+                f"Local left velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
+            )
+            local_left_vel = MAX_VEL if command.local_left_vel > 0 else -MAX_VEL
+
+        command = RobotCommand(
+            local_forward_vel=self._float16_rep(local_forward_vel),
+            local_left_vel=self._float16_rep(local_left_vel),
+            angular_vel=self._float16_rep(angular_vel),
+            kick=command.kick,
+            chip=command.chip,
+            dribble=command.dribble,
         )
+        return command
 
-    def _get_byte_size(self, bit_dict: dict) -> int:
+    def _float16_rep(self, value: float) -> np.uint16:
         """
-        Returns the byte size of the dictionary. (ceil divide)
+        Converts a float, flattens it to float 16 and represented as uint16 value for transmission.
         """
-        return ceil(sum(value[0] for value in bit_dict.values()) / 8)
+        return np.float16(value).view(np.uint16)
 
     def _empty_command(self) -> bytearray:
-        return bytearray(self._rbt_cmd_size * 6)
+        empty_buffer = bytearray([0] * 6 + [self._EMPTY_ID] + [0])
+        empty_last_buffer = bytearray([0] * 6 + [self._EMPTY_ID + 1] + [0])
+        return empty_buffer * (self._n_robots - 1) + empty_last_buffer
+
+    def _init_serial(self) -> Serial:
+        serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
+        start_t = time.time()
+        is_ready = False
+        while time.time() - start_t < MAX_INITIALIZATION_TIME:
+            if serial.in_waiting > 0:
+                line = serial.readline().decode("utf-8").rstrip()
+                if line == AUTH_STR:
+                    is_ready = True
+                    break
+                else:
+                    print(line)
+
+        if is_ready:
+            print("Serial port opened!")
+            serial.reset_input_buffer()  # temporary implementation to clear debugging info in input
+        else:
+            raise ConnectionError("Could not connect: Invalid authentication string!")
+        return serial
 
     @property
     def is_team_yellow(self) -> bool:
@@ -241,6 +256,10 @@ class RealRobotController(AbstractRobotController):
     @property
     def game_obj(self) -> Game:
         return self._game_obj
+
+    @property
+    def n_robots(self) -> int:
+        return self._n_robots
 
     @property
     def serial(self) -> Serial:
@@ -255,5 +274,27 @@ class RealRobotController(AbstractRobotController):
         return self._out_packet
 
     @property
+    def n_robot(self) -> int:
+        return self._n_robots
+
+    @property
     def in_packet_size(self) -> int:
         return self._in_packet_size
+
+
+if __name__ == "__main__":
+    robot_controller = RealRobotController(
+        is_team_yellow=True, game_obj=Game(), n_robots=2
+    )
+    cmd = RobotCommand(
+        local_forward_vel=0.2,
+        local_left_vel=0,
+        angular_vel=0,
+        kick=0,
+        chip=0,
+        dribble=False,
+    )
+    robot_controller.add_robot_commands(cmd, 0)
+    print(list(robot_controller.out_packet))
+    binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
+    print(binary_representation)

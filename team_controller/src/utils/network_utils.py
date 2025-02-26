@@ -2,6 +2,7 @@ import socket
 import struct
 import logging
 from typing import Optional, Tuple
+import time
 
 from team_controller.src.config.settings import MULTICAST_GROUP, LOCAL_HOST
 import logging
@@ -79,6 +80,9 @@ def receive_data(sock: socket.socket) -> Optional[bytes]:
         return None
 
 
+send_sock = None
+
+
 def send_command(
     address: Tuple[str, int], command: object, is_sim_robot_cmd: bool = False
 ) -> Optional[bytes]:
@@ -98,14 +102,21 @@ def send_command(
     Errors during serialization or socket operations are logged, with specific handling if the `SerializeToString`
     method is missing.
     """
+    global send_sock
+
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as send_sock:
-            serialized_command = command.SerializeToString()
-            send_sock.sendto(serialized_command, address)
-            if is_sim_robot_cmd:
-                data = receive_data(send_sock)
-                return data
-            logger.info("Command sent to %s", address)
+        if not send_sock:
+            send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        start = time.time()
+        serialized_command = command.SerializeToString()
+        send_sock.sendto(serialized_command, address)
+
+        if is_sim_robot_cmd:
+            data = receive_data(send_sock)
+            return data
+        logger.info("Command sent to %s", address)
+
     except AttributeError:
         logger.error("Command object has no SerializeToString method")
     except socket.error as e:
