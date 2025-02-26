@@ -16,9 +16,6 @@ from entities.referee.stage import Stage
 
 from config.settings import TIMESTEP
 
-# TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
-# TODO: Namespace conflict for robot. We need to resolve this ASAP.
-
 import logging, warnings
 
 logger = logging.getLogger(__name__)
