@@ -13,7 +13,7 @@ from entities.data.command import RobotCommand
 from entities.data.vision import RobotData, BallData
 from team_controller.src.controllers import GRSimRobotController
 from motion_planning.src.pid.pid import PID
-from team_controller.src.config.settings import (
+from config.settings import (
     PID_PARAMS,
 )
 from team_controller.src.config.starting_formation import YELLOW_START_ONE

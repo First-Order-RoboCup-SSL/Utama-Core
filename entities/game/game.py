@@ -1,5 +1,4 @@
-from typing import List, Optional, NamedTuple
-from entities.game import game_object
+from typing import List, Optional
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData, PredictedFrame
 from entities.data.referee import RefereeData
@@ -14,10 +13,7 @@ from entities.game.team_info import TeamInfo
 from entities.referee.referee_command import RefereeCommand
 from entities.referee.stage import Stage
 
-from team_controller.src.config.settings import TIMESTEP
-
-# TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
-# TODO: Namespace conflict for robot. We need to resolve this ASAP.
+from config.settings import TIMESTEP
 
 import logging, warnings
 
@@ -40,7 +36,7 @@ class Game:
         self._my_team_is_right = (
             my_team_is_right if my_team_is_right is not None else my_team_is_yellow
         )
-        self._field = Field(my_team_is_yellow, self._my_team_is_right)
+        self._field = Field(self._my_team_is_right)
 
         self._records: List[FrameData] = []
         self._predicted_next_frame: PredictedFrame = None
@@ -89,32 +85,15 @@ class Game:
     def friendly_robots(self) -> List[Robot]:
         return self._friendly_robots
 
-    @friendly_robots.setter
-    def friendly_robots(self, value: List[RobotData]):
-        for robot_id, robot_data in enumerate(value):
-            if robot_data is not None:
-                self._friendly_robots[robot_id].robot_data = robot_data
-
     @property
     def enemy_robots(self) -> List[Robot]:
         return self._enemy_robots
-
-    @enemy_robots.setter
-    def enemy_robots(self, value: List[RobotData]):
-        for robot_id, robot_data in enumerate(value):
-            if robot_data is not None:
-                self._enemy_robots[robot_id].robot_data = robot_data
 
     @property
     def ball(self) -> Ball:
         return self._ball
 
-    @ball.setter
-    def ball(self, value: BallData):
-        # Temporary fix for when the ball is None
-        if value is not None:
-            self._ball.ball_data = value
-
+    # Put in the field class?
     def is_ball_in_goal(self, right_goal: bool):
         ball_pos = self.ball
         return (
@@ -134,19 +113,6 @@ class Game:
 
     def add_new_state(self, frame_data: FrameData) -> None:
         if isinstance(frame_data, FrameData):
-            # if self.my_team_is_yellow:
-            #     if len(yellow_robot_data) != len(self._friendly_robots):
-            #         logger.warning(f"Expected data for {len(self.friendly_robots)} friendly robots but found {len(yellow_robot_data)} in frame")
-
-            #     if len(blue_robot_data) != len(self._enemy_robots):
-            #         logger.warning(f"Expected data for {len(self._enemy_robots)} enemy (blue) robots but found {len(blue_robot_data)} in frame")
-            # else:
-            #     if len(yellow_robot_data) != len(self._enemy_robots):
-            #         logger.warning(f"Expected data for {len(self._enemy_robots)} enemy (yellow) robots but found {len(yellow_robot_data)} in frame")
-
-            #     if len(blue_robot_data) != len(self._friendly_robots):
-            #         logger.warning(f"Expected data for {len(self._friendly_robots)} friendly (blue) robots but found {len(blue_robot_data)} in frame")
-
             self._records.append(frame_data)
             self._predicted_next_frame = self._reorganise_frame(
                 self.predict_frame_after(TIMESTEP)
@@ -162,14 +128,26 @@ class Game:
 
     def _update_data(self, frame_data: FrameData) -> None:
         if self.my_team_is_yellow:
-            self.friendly_robots = frame_data.yellow_robots
-            self.enemy_robots = frame_data.blue_robots
+            self._update_robots(frame_data.yellow_robots, frame_data.blue_robots)
         else:
-            self.friendly_robots = frame_data.blue_robots
-            self.enemy_robots = frame_data.yellow_robots
-        self._ball = frame_data.ball[0]  # TODO: Don't always take first ball pos
-        # BUG: self._ball is of type Ball, frame_data.ball[0] is of type BallData!
+            self._update_robots(frame_data.blue_robots, frame_data.yellow_robots)
+        self._update_ball(frame_data.ball[0])  # Ensures BallData is correctly assigned
+        
+    def _update_robots(self, friendly_robot_data: List[RobotData], enemy_robot_data: List[RobotData]) -> None:
+        """Updates robot data safely without exposing direct modification."""
+        for robot_id, robot_data in enumerate(friendly_robot_data):
+            if robot_data is not None:
+                self._friendly_robots[robot_id].robot_data = robot_data
 
+        for robot_id, robot_data in enumerate(enemy_robot_data):
+            if robot_data is not None:
+                self._enemy_robots[robot_id].robot_data = robot_data
+
+    def _update_ball(self, ball_data: BallData) -> None:
+        """Updates the ball's internal state instead of replacing the object."""
+        if ball_data is not None:
+            self._ball.ball_data = ball_data  # Ensuring we don't overwrite the Ball instance
+  
     def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
         if not self._records:
             return None

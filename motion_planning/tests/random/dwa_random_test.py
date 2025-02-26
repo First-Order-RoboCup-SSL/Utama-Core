@@ -12,7 +12,7 @@ from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from team_controller.src.config.settings import TIMESTEP
 from motion_planning.src.planning.path_planner import DynamicWindowPlanner
-from team_controller.src.config.settings import ROBOT_RADIUS
+from config.settings import ROBOT_RADIUS
 import random
 import logging
 from math import dist

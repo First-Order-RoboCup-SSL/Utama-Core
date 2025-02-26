@@ -10,7 +10,7 @@ from entities.game import Game
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
-from team_controller.src.config.settings import (
+from config.settings import (
     MAX_ANGULAR_VEL,
     MAX_VEL,
     BAUD_RATE,

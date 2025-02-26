@@ -50,15 +50,6 @@ def calculate_robot_velocities(
     else:
         angular_vel = 0
         
-
-    if target_x is not None and target_y is not None:
-        forward_vel, left_vel = pid_trans.calculate(
-            (target_x, target_y), (current_x, current_y), robot_id
-        )
-        forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren + (angular_vel*(1/60) / 2))
-    else:
-        forward_vel = 0
-        left_vel = 0
     #     resultant_vel = np.linalg.norm([global_x, global_y])       
     #     oren_offset = (angular_vel / 2) * resultant_vel / pid_trans.max_velocity # scales linearly [0, 1]
         
