@@ -32,12 +32,15 @@ class Game:
     def __init__(
         self,
         my_team_is_yellow=True,
-        my_team_is_right=False,
+        my_team_is_right=None,
         num_friendly_robots: int = 6,
         num_enemy_robots: int = 6,
     ):
         self._my_team_is_yellow = my_team_is_yellow
-        self._field = Field(my_team_is_yellow, my_team_is_right)
+        self._my_team_is_right = (
+            my_team_is_right if my_team_is_right is not None else my_team_is_yellow
+        )
+        self._field = Field(my_team_is_yellow, self._my_team_is_right)
 
         self._records: List[FrameData] = []
         self._predicted_next_frame: PredictedFrame = None
@@ -115,16 +118,16 @@ class Game:
     def is_ball_in_goal(self, right_goal: bool):
         ball_pos = self.ball
         return (
-            ball_pos.x < -self.field.HALF_LENGTH
+            ball_pos.x < -self.field.half_length
             and (
-                ball_pos.y < self.field.HALF_GOAL_WIDTH
-                and ball_pos.y > -self.field.HALF_GOAL_WIDTH
+                ball_pos.y < self.field.half_goal_width
+                and ball_pos.y > -self.field.half_goal_width
             )
             and not right_goal
-            or ball_pos.x > self.field.HALF_LENGTH
+            or ball_pos.x > self.field.half_length
             and (
-                ball_pos.y < self.field.HALF_GOAL_WIDTH
-                and ball_pos.y > -self.field.HALF_GOAL_WIDTH
+                ball_pos.y < self.field.half_goal_width
+                and ball_pos.y > -self.field.half_goal_width
             )
             and right_goal
         )
