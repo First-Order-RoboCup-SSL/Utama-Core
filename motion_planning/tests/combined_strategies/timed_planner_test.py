@@ -1,22 +1,11 @@
-import sys
-import os
 from typing import List
-import numpy as np
-import pytest
-from shapely import Point
-from entities.game.game_object import Colour, GameObject, Robot as GameRobot
+from entities.game.game_object import Colour, Robot as GameRobot
 from motion_planning.src.planning.exit_strategies import ClosestPointExit
-from motion_planning.src.planning.path_planner import point_to_tuple
-from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
+from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.skills import (
-    get_goal_centre,
-    go_to_ball,
     go_to_point,
-    align_defenders,
     mag,
-    to_defense_parametric,
     face_ball,
-    velocity_to_orientation,
 )
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
@@ -24,12 +13,7 @@ from entities.game import Game
 from motion_planning.src.planning.controller import TempObstacleType, TimedSwitchController
 from team_controller.src.config.settings import ROBOT_RADIUS
 import random
-import time
 from math import dist
-
-# logger = logging.getLogger(__name__)
-# logging.basicConfig(level=logging.DEBUG)
-
 
 def test_pathfinding(headless: bool, moving: bool):
     game = Game()
@@ -132,19 +116,6 @@ def make_wall(
         x, y, safe_robots, horizontal, spread_factor
     ):
         env.teleport_robot(is_team_yellow, robot_id, posn[0], posn[1])
-
-
-def randomly_spawn_robots(
-    env: SSLStandardEnv, is_team_yellow: bool, safe_robots: List[int]
-):
-    for i in range(6):
-        if i not in safe_robots:
-            env.teleport_robot(
-                is_team_yellow,
-                i,
-                random.uniform(-4.5, 4.5),
-                random.uniform(-2.25, 2.25),
-            )
 
 
 if __name__ == "__main__":

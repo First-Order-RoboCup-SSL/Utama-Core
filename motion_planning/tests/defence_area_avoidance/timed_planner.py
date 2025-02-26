@@ -1,7 +1,5 @@
-from typing import List
-from entities.game.field import Field
 from entities.game.game_object import Colour, Robot as GameRobot
-from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
+from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.skills import (
     go_to_point,
     mag,
@@ -20,7 +18,7 @@ logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.DEBUG)
 
 
-def test_pathfinding(headless: bool, moving: bool):
+def test_pathfinding(headless: bool):
     game = Game()
     N_ROBOTS_YELLOW = 6
     N_ROBOTS_BLUE = 6
@@ -34,11 +32,8 @@ def test_pathfinding(headless: bool, moving: bool):
 
     env.reset()
     mover_id = 1
-
     env.teleport_ball(2.25, -1)
-
     env.teleport_robot(True, mover_id, 4, 2.5)
-
     is_yellow = True
     pid_oren, pid_2d = get_rsim_pids(N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
 
@@ -47,8 +42,6 @@ def test_pathfinding(headless: bool, moving: bool):
     )
 
     hybrid = TimedSwitchController(N_ROBOTS_YELLOW, game, Colour.YELLOW, env)
-    # hybrid = DynamicWindowPlanner(game)
-    # hybrid = BisectorPlanner(game, Colour.YELLOW, env)
     target = (4, -2.5)
 
     for _ in range(5000):
@@ -86,54 +79,9 @@ def test_pathfinding(headless: bool, moving: bool):
         sim_robot_controller.add_robot_commands(cmd, mover_id)
 
         sim_robot_controller.send_robot_commands()
-        # time.sleep(0.1)
-
-def calculate_wall_posns(
-    x, y, safe_robots: List[int], horizontal: bool, spread_factor: int
-):
-    return [
-        (
-            robot_id,
-            (
-                (x + spread_factor * (2 * ROBOT_RADIUS) * posn_number, y)
-                if horizontal
-                else (x, y + spread_factor * (2 * ROBOT_RADIUS) * posn_number)
-            ),
-        )
-        for (posn_number, robot_id) in zip(range(6), set(range(6)) - set(safe_robots))
-    ]
-
-
-def make_wall(
-    env: SSLStandardEnv,
-    is_team_yellow: bool,
-    x: int,
-    y: int,
-    safe_robots: List[int],
-    horizontal: bool = False,
-    spread_factor: int = 1.5,
-):
-    for robot_id, posn in calculate_wall_posns(
-        x, y, safe_robots, horizontal, spread_factor
-    ):
-        env.teleport_robot(is_team_yellow, robot_id, posn[0], posn[1])
-
-
-def randomly_spawn_robots(
-    env: SSLStandardEnv, is_team_yellow: bool, safe_robots: List[int]
-):
-    for i in range(6):
-        if i not in safe_robots:
-            env.teleport_robot(
-                is_team_yellow,
-                i,
-                random.uniform(-4.5, 4.5),
-                random.uniform(-2.25, 2.25),
-            )
-
 
 if __name__ == "__main__":
     try:
-        test_pathfinding(False, False)
+        test_pathfinding(False)
     except KeyboardInterrupt:
         print("Exiting...")

@@ -1,32 +1,16 @@
-import sys
-import os
 from typing import List
-import numpy as np
-import pytest
-from shapely import Point
-from entities.game.game_object import Colour, GameObject, Robot as GameRobot
+from entities.game.game_object import  Robot as GameRobot
 from motion_planning.src.planning.path_planner import point_to_tuple
-from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
+from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.skills import (
-    get_goal_centre,
-    go_to_ball,
     go_to_point,
-    align_defenders,
     mag,
-    to_defense_parametric,
     face_ball,
-    velocity_to_orientation,
 )
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from robot_control.src.intent import find_likely_enemy_shooter, score_goal
-from motion_planning.src.pid import PID
-from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
-from team_controller.src.config.settings import TIMESTEP
-from robot_control.src.tests.utils import one_robot_placement, setup_pvp
-from motion_planning.src.planning.path_planner import DynamicWindowPlanner, RRTPlanner
-from team_controller.src.config.settings import ROBOT_RADIUS
+from motion_planning.src.planning.path_planner import RRTPlanner
 import random
 import logging
 import time
@@ -36,7 +20,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-def test_pathfinding(headless: bool, moving: bool):
+def test_pathfinding(headless: bool):
     game = Game()
     N_ROBOTS_YELLOW = 6
     N_ROBOTS_BLUE = 6
@@ -154,6 +138,6 @@ def randomly_spawn_robots(
 
 if __name__ == "__main__":
     try:
-        test_pathfinding(False, False)
+        test_pathfinding(False)
     except KeyboardInterrupt:
         print("Exiting...")
