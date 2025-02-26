@@ -5,7 +5,7 @@ from team_controller.src.config.starting_formation import (
     YELLOW_START_ONE,
 )
 from team_controller.src.utils import network_manager
-from team_controller.src.config.settings import (
+from config.settings import (
     LOCAL_HOST,
     SIM_CONTROL_PORT,
     TELEPORT_X_COORDS,

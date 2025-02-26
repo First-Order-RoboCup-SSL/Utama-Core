@@ -5,7 +5,7 @@ from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from robot_control.src.intent import PassBall
 from motion_planning.src.pid import PID
-from team_controller.src.config.settings import TIMESTEP
+from config.settings import TIMESTEP
 import logging
 import random
 

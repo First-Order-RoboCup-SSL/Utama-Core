@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 from entities.data.vision import BallData, RobotData, FrameData, TeamRobotCoords
 from team_controller.src.data.base_receiver import BaseReceiver
 from team_controller.src.utils import network_manager
-from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT
+from config.settings import MULTICAST_GROUP, VISION_PORT
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
 import logging
 

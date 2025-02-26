@@ -4,7 +4,7 @@ import numpy as np
 import math
 import time
 from motion_planning.src.pid.pid import TwoDPID, PID, PIDAccelerationLimiterWrapper
-from team_controller.src.config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL
+from config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL
 from robot_control.src.tests.utils import one_robot_placement
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game

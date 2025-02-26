@@ -24,10 +24,10 @@ from entities.game import Game
 from robot_control.src.intent import find_likely_enemy_shooter, score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
-from team_controller.src.config.settings import TIMESTEP
+from config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 from motion_planning.src.planning.path_planner import DynamicWindowPlanner
-from team_controller.src.config.settings import ROBOT_RADIUS
+from config.settings import ROBOT_RADIUS
 import random
 import logging
 import time

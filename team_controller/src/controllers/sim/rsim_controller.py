@@ -2,7 +2,7 @@ from team_controller.src.controllers.common.sim_controller_abstract import (
     AbstractSimController,
 )
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
-from team_controller.src.config.settings import (
+from config.settings import (
     LOCAL_HOST,
     SIM_CONTROL_PORT,
     TELEPORT_X_COORDS,

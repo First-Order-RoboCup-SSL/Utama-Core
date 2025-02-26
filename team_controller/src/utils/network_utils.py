@@ -4,7 +4,7 @@ import logging
 from typing import Optional, Tuple
 import time
 
-from team_controller.src.config.settings import MULTICAST_GROUP, LOCAL_HOST
+from config.settings import MULTICAST_GROUP, LOCAL_HOST
 import logging
 
 logger = logging.getLogger(__name__)
