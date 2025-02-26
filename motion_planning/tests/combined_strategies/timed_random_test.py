@@ -7,7 +7,7 @@ import time
 from entities.game.game_object import Colour, GameObject, Robot as GameRobot
 
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from motion_planning.src.planning.controller import HybridWaypointMotionController, TempObstacleType, TimedSwitchController
+from motion_planning.src.planning.controller import TempObstacleType, TimedSwitchController
 from robot_control.src.skills import (
     get_goal_centre,
     go_to_ball,
