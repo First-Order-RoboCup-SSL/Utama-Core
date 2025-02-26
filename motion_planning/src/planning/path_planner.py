@@ -614,7 +614,7 @@ class BisectorPlanner:
         if self._env is not None:
             self._env.draw_line(halves[0].coords, width=3)
             self._env.draw_line(halves[1].coords, width=3)
-
+        got = None
         for s in range(
             int(
                 max(Field.HALF_LENGTH * 2, Field.HALF_WIDTH * 2)
@@ -638,14 +638,21 @@ class BisectorPlanner:
                     if self._env is not None:
 
                         self._env.draw_point(*point_to_tuple(p1), color="PINK", width=1)
-                        col = "GREEN" if not intersects_any_polygon(seg1, temporary_obstacles) else "RED"
+                        col = "GREEN" if not intersects_any_polygon(seg1, temporary_obstacles) and not intersects_any_polygon(seg2, temporary_obstacles) else "RED"
                         self._env.draw_line(list(seg1.coords), width=1, color=col)
-                        self._env.draw_line(list(seg2.coords), width=3, color="PINK")
+                        self._env.draw_line(list(seg2.coords), width=3, color=col)
                     if not intersects_any_polygon(
                         seg1, temporary_obstacles
                     ) and not intersects_any_polygon(seg2, temporary_obstacles):
-                        return point_to_tuple(p1)
+                        if got is None:
+                            got = point_to_tuple(p1)
+                else:
+                    self._env.draw_line(list(seg1.coords), width=1, color="RED")
+                    self._env.draw_line(list(seg2.coords), width=1, color="RED")
 
+
+        if got:
+            return got
         return point_to_tuple(midpoint)
 
     def _segment_intersects(

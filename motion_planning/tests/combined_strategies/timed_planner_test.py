@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 from shapely import Point
 from entities.game.game_object import Colour, GameObject, Robot as GameRobot
+from motion_planning.src.planning.exit_strategies import ClosestPointExit
 from motion_planning.src.planning.path_planner import point_to_tuple
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from robot_control.src.skills import (
@@ -47,7 +48,7 @@ def test_pathfinding(headless: bool, moving: bool):
 
     env.teleport_ball(2.25, -1)
 
-    env.teleport_robot(True, mover_id, 3.5, 0)
+    env.teleport_robot(True, mover_id, 4, 0.3)
 
     is_yellow = True
     pid_oren, pid_2d = get_rsim_pids(N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
@@ -56,7 +57,7 @@ def test_pathfinding(headless: bool, moving: bool):
         is_team_yellow=is_yellow, env=env, game_obj=game
     )
 
-    hybrid = TimedSwitchController(N_ROBOTS_YELLOW, game, Colour.YELLOW, env)
+    hybrid = TimedSwitchController(N_ROBOTS_YELLOW, game, ClosestPointExit(), Colour.YELLOW, env)
     targets = [(0, 0)] + [
         (random.uniform(-4.5, 4.5), random.uniform(-2.25, 2.25)) for _ in range(1000)
     ]
