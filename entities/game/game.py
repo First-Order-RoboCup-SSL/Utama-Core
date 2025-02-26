@@ -12,6 +12,7 @@ from entities.game.ball import Ball
 from team_controller.src.config.settings import TIMESTEP
 
 # TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
+# TODO: Namespace conflict for robot. We need to resolve this ASAP.
 
 import logging, warnings
 
@@ -27,11 +28,12 @@ class Game:
     def __init__(
         self,
         my_team_is_yellow=True,
+        my_team_is_right=False,
         num_friendly_robots: int = 6,
         num_enemy_robots: int = 6,
     ):
         self._my_team_is_yellow = my_team_is_yellow
-        self._field = Field()
+        self._field = Field(my_team_is_yellow, my_team_is_right)
 
         self._records: List[FrameData] = []
         self._predicted_next_frame: PredictedFrame = None
@@ -42,7 +44,7 @@ class Game:
         self._enemy_robots: List[Robot] = [
             Robot(id, is_friendly=False) for id in range(num_enemy_robots)
         ]
-        self._ball: Ball = Ball(BallData(0, 0, 0))
+        self._ball: Ball = Ball(BallData(0, 0, 0, 1))
 
         self._yellow_score = 0
         self._blue_score = 0
@@ -110,21 +112,21 @@ class Game:
         if value is not None:
             self._ball.ball_data = value
 
-    def is_ball_in_goal(self, our_side: bool):
-        ball_pos = self.get_ball_pos()[0]
+    def is_ball_in_goal(self, right_goal: bool):
+        ball_pos = self.ball
         return (
             ball_pos.x < -self.field.HALF_LENGTH
             and (
                 ball_pos.y < self.field.HALF_GOAL_WIDTH
                 and ball_pos.y > -self.field.HALF_GOAL_WIDTH
             )
-            and not our_side
+            and not right_goal
             or ball_pos.x > self.field.HALF_LENGTH
             and (
                 ball_pos.y < self.field.HALF_GOAL_WIDTH
                 and ball_pos.y > -self.field.HALF_GOAL_WIDTH
             )
-            and our_side
+            and right_goal
         )
 
     ### Game state management ###
@@ -164,6 +166,7 @@ class Game:
             self.friendly_robots = frame_data.blue_robots
             self.enemy_robots = frame_data.yellow_robots
         self._ball = frame_data.ball[0]  # TODO: Don't always take first ball pos
+        # BUG: self._ball is of type Ball, frame_data.ball[0] is of type BallData!
 
     ### Robot data retrieval ###
     def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
@@ -275,7 +278,7 @@ class Game:
                 self._records[-1].ts + t,
                 list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),
                 list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
-                [BallData(ball_pos[0], ball_pos[1], 0)],  # TODO : Support z axis
+                [BallData(ball_pos[0], ball_pos[1], 0, 1)],  # TODO : Support z axis
             )
 
     def _reorganise_frame(self, frame: FrameData) -> Optional[PredictedFrame]:
@@ -415,7 +418,7 @@ class Game:
 
         previous_pos = self._get_object_position_at_frame(frame - 1, object)
         current_pos = self._get_object_position_at_frame(frame, object)
-        
+
         if current_pos is None or previous_pos is None:
             logger.warning("No position data to calculate velocity for frame %d", frame)
             return None
@@ -433,7 +436,7 @@ class Game:
             return None
 
         dt_secs = time_received - previous_time_received
-        
+
         vx = (current_pos.x - previous_pos.x) / dt_secs
         vy = (current_pos.y - previous_pos.y) / dt_secs
 
@@ -490,16 +493,3 @@ class Game:
             futureAverageVelocity = tuple(averageVelocity)
 
         return (totalX / iter, totalY / iter)
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
-    game = Game()
-    print(game.ball.x)
-    print(game.ball.y)
-    print(game.ball.z)
-    game.ball = BallData(1, 2, 3)
-    print(game.ball.x)
-    print(game.ball.y)
-    print(game.ball.z)

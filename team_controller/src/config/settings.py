@@ -4,9 +4,14 @@ from numpy import pi
 TIMESTEP = 0.0167
 
 # maximum (real and sim) robot settings
-MAX_VEL = 2.5
+REAL_MAX_VEL = 0.1
 # any slower and the robots become unstable
-MAX_ANGULAR_VEL = 8
+REAL_MAX_ANGULAR_VEL = 2
+
+# maximum (real and sim) robot settings
+MAX_VEL = 2
+# any slower and the robots become unstable
+MAX_ANGULAR_VEL = 4
 
 ROBOT_RADIUS = 0.09  # TODO: probably not the best place to put this
 
@@ -25,9 +30,6 @@ YELLOW_TEAM_SIM_PORT = 10302
 BLUE_TEAM_SIM_PORT = 10301
 REFEREE_PORT = 10003
 SIM_CONTROL_PORT = 10300  # IP '127.0.0.1'
-
-# General settings
-NUM_ROBOTS = 6
 
 # PID parameters
 PID_PARAMS = {
@@ -50,25 +52,12 @@ PID_PARAMS = {
 
 # Simulation controller
 ADD_Y_COORD = -3.15
-REMOVAL_Y_COORD = -3.8
+REMOVAL_Y_COORD = -10
 TELEPORT_X_COORDS = [0.4, 0.8, 1.2, 1.6, 2, 2.4]
 
 # real controller
 BAUD_RATE = 115200
-PORT = "COM3"
+PORT = "/dev/ttyACM0"
+AUTH_STR = "<READY!>"
+MAX_INITIALIZATION_TIME = 5
 TIMEOUT = 0.1
-# NOTE: angular_vel, local_forward_vel, local_left_vel are 16 bit floating point.
-# they should not be changed to any arbitrary value.
-SERIAL_BIT_SIZES = {
-    "out": {
-        "angular_vel": 16,
-        "local_forward_vel": 16,
-        "local_left_vel": 16,
-        "kicker_bottom": 1,
-        "kicker_top": 1,
-        "dribbler": 1,
-        "spare": 13,
-    },
-    "in": {"has_ball": 1},  # TODO: add "kicker_charged": 1,
-}
-ENDIAN = "big"
