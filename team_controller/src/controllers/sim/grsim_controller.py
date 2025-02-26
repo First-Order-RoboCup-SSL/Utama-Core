@@ -1,6 +1,6 @@
 from typing import Tuple
 
-from team_controller.src.config.starting_formation import (
+from config.starting_formation import (
     BLUE_START_ONE,
     YELLOW_START_ONE,
 )

@@ -1,7 +1,5 @@
 import numpy as np
 
-# TODO: Move this out to HLS some day soon.
-
 # Starting positions for yellow team
 YELLOW_START_ONE = [
     (4.2000, 0.0, np.pi),

@@ -27,15 +27,11 @@ class Game:
 
     def __init__(
         self,
-        my_team_is_yellow=True,
-        my_team_is_right=None,
-        num_friendly_robots: int = 6,
-        num_enemy_robots: int = 6,
+        my_team_is_yellow: bool,
+        my_team_is_right: bool
     ):
         self._my_team_is_yellow = my_team_is_yellow
-        self._my_team_is_right = (
-            my_team_is_right if my_team_is_right is not None else my_team_is_yellow
-        )
+        self._my_team_is_right = my_team_is_right
         self._field = Field(self._my_team_is_right)
 
         self._records: List[FrameData] = []

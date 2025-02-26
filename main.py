@@ -8,6 +8,7 @@ from typing import List, Type
 
 from entities.data.command import RobotInfo
 from entities.data.vision import PredictedFrame
+from vision.vision_processor import VisionProcessor
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.tests.grsim_robot_controller_startup_test import (
     StartUpController,
@@ -65,16 +66,24 @@ def main():
     # To debug
     logging.basicConfig(level=logging.DEBUG)
 
+
     try:
-        logger.debug("LOCATED BALL")
         logger.debug(
             f"Predicting robot position with {FRAMES_IN_TIME} frames of motion"
         )
 
         predictions: List[PredictedFrame] = []
+
+        startup_waiter = VisionProcessor()
+        while not startup_waiter.is_ready():
+            (message_type, message) = message_queue.get()  # Infinite timeout for now
+            if message_type == MessageType.VISION:
+                predictions.add_new_State(message)
+        
+        game = predictions.get_game()
+
         while True:
             (message_type, message) = message_queue.get()  # Infinite timeout for now
-
             if message_type == MessageType.VISION:
                 frames += 1
                 game.add_new_state(message)
