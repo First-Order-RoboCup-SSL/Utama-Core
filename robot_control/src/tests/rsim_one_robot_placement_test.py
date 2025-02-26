@@ -17,8 +17,6 @@ import time
 
 N_ROBOTS = 6
 
-### Note: Fully Commit this file Thanks :) ###
-
 def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: bool):
     """When the tests are run with pytest, these parameters are filled in
     based on whether we are in full or quick test mode (see conftest.py)"""

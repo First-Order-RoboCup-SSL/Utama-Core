@@ -10,8 +10,6 @@ from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from team_controller.src.controllers import RSimRobotController
 
-### Note: Fully Commit this file Thanks :) ###
-
 N_ROBOTS = 6
 
 def get_rsim_pids_tuned(n_robots: int,

@@ -7,8 +7,6 @@ from motion_planning.src.pid import PID
 from motion_planning.src.pid.pid import TwoDPID
 import numpy as np
 
-### Note: Fully Commit this file Thanks :) ###
-
 def calculate_robot_velocities(
     game: Game,
     pid_oren: PID,

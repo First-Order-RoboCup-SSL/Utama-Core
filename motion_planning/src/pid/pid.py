@@ -6,7 +6,6 @@ import math
 from team_controller.src.config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL, REAL_MAX_ANGULAR_VEL, REAL_MAX_VEL
 
 # Helper functions to create PID controllers.
-### Note: Fully Commit this file Thanks :) ###
 def get_real_pids(n_robots: int):
     pid_oren = PID(
         TIMESTEP,
