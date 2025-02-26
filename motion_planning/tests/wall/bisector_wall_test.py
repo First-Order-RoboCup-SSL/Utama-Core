@@ -22,10 +22,10 @@ from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 from motion_planning.src.planning.path_planner import BisectorPlanner
-from robot_control.src.find_best_shot import ROBOT_RADIUS 
 import random
 from math import dist
 
+ROBOT_RADIUS = 0.09
 # logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.DEBUG)
 
@@ -63,7 +63,7 @@ def test_pathfinding(headless: bool, moving: bool):
     target = targets.pop(0)
     ba_targets = [(random.uniform(-4.5, 4.5), random.uniform(-2.25, 2.25)) for _ in range(6)]
 
-    make_wall(env, True, 0.5, -1, [mover_id], False, 2.2)
+    make_wall(env, True, 0.5, -0.5, [mover_id], False, 1.5)
     # make_wall(env, True, 0.5, 0, [mover_id], False, 2.2)
     
     for i in range(5000):
