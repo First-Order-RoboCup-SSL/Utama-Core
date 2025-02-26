@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 from entities.data.vision import BallData, RobotData, FrameData, TeamRobotCoords
 from team_controller.src.data.base_receiver import BaseReceiver
 from team_controller.src.utils import network_manager
-from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT, NUM_ROBOTS
+from team_controller.src.config.settings import MULTICAST_GROUP, VISION_PORT
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
 import logging
 
@@ -94,7 +94,12 @@ class VisionDataReceiver(BaseReceiver):
             ty += r.y
             tz += r.z
 
-        return BallData(tx / len(bs), ty / len(bs), tz / len(bs))
+        return BallData(
+            tx / len(bs),
+            ty / len(bs),
+            tz / len(bs),
+            min(map(lambda x: x.confidence, bs)),
+        )
 
     def _avg_frames(self, frames: List[FrameData]) -> FrameData:
         frames = [*filter(lambda x: x.ball is not None, frames)]
@@ -118,7 +123,7 @@ class VisionDataReceiver(BaseReceiver):
         avg_yellows = list(map(self._avg_robots, yellow_captured))
         avg_blues = list(map(self._avg_robots, blue_captured))
         avg_balls = list(map(self._avg_balls, ball_captured))
-        
+
         # Trims number of robots in frame to number we expect (num_friendly, num_enemy) currently done to 6
         return FrameData(ts, avg_yellows[:-5], avg_blues[:-5], avg_balls[:-10])
 
@@ -134,9 +139,12 @@ class VisionDataReceiver(BaseReceiver):
                     ball.x / 1000,
                     ball.y / 1000,
                     (ball.z / 1000) if ball.HasField("z") else 0.0,
+                    ball.confidence,
                 )
             )
-        self.ball_pos = ball_pos
+        # sorted by ball confidence
+        sorted_balls = sorted(ball_pos, key=lambda ball: ball.confidence)
+        self.ball_pos = sorted_balls
 
     def _update_robots_pos(self, detection: object) -> None:
         # Update both yellow and blue robots from detection.
@@ -190,7 +198,27 @@ class VisionDataReceiver(BaseReceiver):
             if data is not None:
                 vision_packet.Clear()  # Clear previous data to avoid memory bloat
                 vision_packet.ParseFromString(data)
+                self.log_detection_info(vision_packet.detection)
                 self._update_data(vision_packet.detection)
+                # print(vision_packet.detection)
 
-            self._print_frame_info(t_received, vision_packet.detection)
+            # self._print_frame_info(t_received, vision_packet.detection)
             # time.sleep(0.0083) # TODO : Block on data?
+
+    def log_detection_info(self, vision_packet_detect):
+        num_yellow_robots = 0
+        num_blue_robots = 0
+        num_balls = 0
+        for _ in range(len(vision_packet_detect.robots_yellow)):
+            num_yellow_robots += 1
+
+        for _ in range(len(vision_packet_detect.robots_blue)):
+            num_blue_robots += 1
+
+        for _ in range(len(vision_packet_detect.balls)):
+            num_balls += 1
+
+        logger.debug(
+            f"num of yellow robots detected: {num_yellow_robots}, blue robots detected: {num_blue_robots}, num of balls detected: {num_balls} \n"
+        )
+

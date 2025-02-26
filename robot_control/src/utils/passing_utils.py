@@ -43,6 +43,9 @@ def calculate_adjusted_receiver_pos(
     x1 = receiver_data.x
     y1 = receiver_data.y
 
+    if len(ball_traj_points) < 2:
+        return (x1, y1)
+
     a, b, c = get_ball_movement_line(ball_traj_points)
 
     denominator = a**2 + b**2

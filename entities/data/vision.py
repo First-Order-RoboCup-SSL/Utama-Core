@@ -7,6 +7,7 @@ class BallData(NamedTuple):
     x: float
     y: float
     z: float
+    confidence: float
 
 class RobotData(NamedTuple):
     x: float

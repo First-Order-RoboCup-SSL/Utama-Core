@@ -61,7 +61,7 @@ class GRSimController(AbstractSimController):
     def _create_teleport_ball_command(
         self, x: float, y: float, vx: float, vy: float
     ) -> object:
-        tele_ball = TeleportBall(x=x, y=y, vx=vx, vy=vy)
+        tele_ball = TeleportBall(x=x, y=y, z=0.01, vx=vx, vy=vy)
         sim_control = SimulatorControl()
         sim_control.teleport_ball.CopyFrom(tele_ball)
         return sim_control

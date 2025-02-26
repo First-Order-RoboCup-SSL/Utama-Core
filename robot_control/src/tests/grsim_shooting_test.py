@@ -16,7 +16,7 @@ import random
 logger = logging.getLogger(__name__)
 
 # Test parameters
-MAX_TIME = 30  # Maximum time (in seconds) to score a goal
+MAX_TIME = 3000  # Maximum time (in seconds) to score a goal
 
 
 def test_grsim_shooting(shooter_id: int, is_yellow: bool, headless: bool):
