@@ -1,16 +1,16 @@
 import numpy as np
-
-from entities.game.game_object import Colour
+from global_utils.math_utils import distance, normalise_heading
+from robot_control.src.utils.shooting_utils import find_best_shot
 from motion_planning.src.pid.pid import TwoDPID
 from global_utils.math_utils import distance, normalise_heading
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from robot_control.src.utils.shooting_utils import find_best_shot, is_goal_blocked
-from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
-from entities.game import Game, Field
+from entities.game import Game
 from entities.data.command import RobotCommand
-from entities.data.vision import RobotData, BallData
+from entities.data.vision import RobotData
 from robot_control.src.skills import (
     align_defenders,
+    align_defenders_grsim,
     face_ball,
     find_likely_enemy_shooter,
     get_goal_centre,
@@ -23,6 +23,7 @@ from robot_control.src.skills import (
     velocity_to_orientation,
 )
 from motion_planning.src.pid import PID
+from motion_planning.src.pid.pid import TwoDPID
 from typing import List, Optional, Tuple
 from math import dist
 import logging
@@ -38,6 +39,10 @@ logger = logging.getLogger(__name__)
 
 
 from robot_control.src.utils.passing_utils import calculate_adjusted_receiver_pos
+
+
+BALL_V0_MAGNITUDE = 3
+BALL_A_MAGNITUDE = -0.3
 
 
 class PassBall:
@@ -102,10 +107,12 @@ class PassBall:
                 or self.ball_in_flight
             ):
                 passer_ready = True
+                print("our passy boy is ready to execute the passy pass")
                 passer_cmd = empty_command(
                     dribbler_on=True
                 )  # default action is to wait. Unless both are ready then intiate pass
             else:
+                print("our passy  boy is turning")
                 passer_cmd = turn_on_spot(
                     self.pid_oren,
                     self.pid_trans,
@@ -157,6 +164,7 @@ class PassBall:
 
                 receiver_cmd = empty_command(dribbler_on=True)
                 receiver_ready = True
+                print("our receivy boy is ready (spoiler: it aint)")
 
             else:
                 receiver_cmd = go_to_point(
@@ -167,12 +175,19 @@ class PassBall:
                     self.target_coords,
                     catch_orientation,
                 )
+                print(
+                    "hey bruv here is where the receivy boy is trying to go to",
+                    self.target_coords,
+                )
 
         if passer_ready and receiver_ready:
+            print("ready for the kick...not really :(")
             passer_cmd = kick_ball()
             if ball_data is not None:
                 self.ball_traj_points.append((ball_data.x, ball_data.y))
             self.ball_in_flight = True
+
+        print(f"ball in flight: {self.ball_in_flight}")
 
         return passer_cmd, receiver_cmd
 

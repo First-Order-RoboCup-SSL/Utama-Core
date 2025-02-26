@@ -188,14 +188,14 @@ class Game:
         if is_yellow:
             # TODO: potential namespace conflict when robot (robot.py) entity is reintroduced. Think about integrating the two
             return [
-                self.get_object_velocity(RobotEntity(i, Colour.YELLOW))
+                self.get_object_velocity(RobotEntity(Colour.YELLOW, i))
                 for i in range(
                     len(self.get_robots_pos(True))
                 )  # TODO: This is a bit of a hack, we should be able to get the number of robots from the field
             ]
         else:
             return [
-                self.get_object_velocity(RobotEntity(i, Colour.BLUE))
+                self.get_object_velocity(RobotEntity(Colour.BLUE, i))
                 for i in range(len(self.get_robots_pos(False)))
             ]
 

@@ -3,7 +3,6 @@ import numpy as np
 import math
 from team_controller.src.config.settings import ROBOT_RADIUS
 from robot_control.src.utils.pass_quality_utils import PointOnField
-from entities.game.ball import BallData
 from entities.game.game import Game
 from entities.game.robot import Robot
 
@@ -38,7 +37,6 @@ def angle_between_points(main_point, point1, point2):
     angle_rad = np.arccos(np.clip(dot_product / norm_product, -1.0, 1.0))
     return angle_rad
 
-
 # Calculates the intersection of 2 rays with the goal
 def shadow(
     start_x: float, start_y: float, angle1: float, angle2: float, goal_x: float
@@ -48,7 +46,6 @@ def shadow(
     shadow_start: float = start_y + slope1 * (goal_x - start_x)
     shadow_end: float = start_y + slope2 * (goal_x - start_x)
     return tuple(sorted((shadow_start, shadow_end)))
-
 
 # Filters the shadows to only keep the ones relevant to the shot and merges overlapping shadows
 def filter_and_merge_shadows(
@@ -79,7 +76,6 @@ def filter_and_merge_shadows(
             )
 
     return merged_shadows
-
 
 # Casts a ray along the 2 tangents to each enemy robot, and calls filter_and_merge_shadows
 def ray_casting(
@@ -113,7 +109,6 @@ def ray_casting(
                 )
                 shadows = filter_and_merge_shadows(shadows, goal_y1, goal_y2)
     return shadows
-
 
 # Finds the biggest area of the goal that doesn't have a shadow (the biggest gap) and finds its midpoint for best shot
 # TODO: could add heuristics to prefer shots closer to the goalpost
@@ -215,9 +210,6 @@ def find_best_shot(
             
     return best_candidate, best_gap
 
-    return best_shot, largest_gap
-
-
 def find_shot_quality(
     point: Tuple[float, float],
     enemy_robots,
@@ -260,8 +252,6 @@ def find_shot_quality(
     )
     return shot_quality
 
-import numpy as np
-
 def is_goal_blocked(game: Game, best_shot: Tuple[float, float], defenders: List[Robot]) -> bool:
     """
     Determines whether the goal is blocked by enemy robots (considering them as circles).
@@ -297,4 +287,3 @@ def is_goal_blocked(game: Game, best_shot: Tuple[float, float], defenders: List[
                 return True  # Shot is blocked
 
     return False  # No robot is blocking
-
