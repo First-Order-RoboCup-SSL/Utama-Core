@@ -1,13 +1,11 @@
 import logging
 import random
-import math
 import numpy as np
 import threading
 import queue
 import time
 from typing import Tuple
 
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.grsim_robot_controller import (
@@ -19,22 +17,19 @@ from team_controller.src.data import VisionDataReceiver
 from team_controller.src.data.message_enum import MessageType
 
 # from robot_control.src.high_level_skills import DribbleToTarget
-from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from entities.game import Game
-from entities.data.command import RobotCommand
 
 # Imports from other scripts or modules within the same project
 from robot_control.src.tests.utils import setup_pvp
 from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.skills import (
-    face_ball,
     go_to_point,
     go_to_ball,
     empty_command,
     goalkeep,
     man_mark,
 )
-from robot_control.src.intent import score_goal, PassBall, defend_grsim
+from robot_control.src.intent import defend, score_goal, PassBall
 from global_utils.math_utils import distance
 from robot_control.src.utils.pass_quality_utils import (
     find_pass_quality,
@@ -503,23 +498,25 @@ def defender_strategy(game: Game, stop_event: threading.Event):
             ball_data = balls[0]
 
             sim_robot_controller.add_robot_commands(
-                defend_grsim(
+                defend(
                     pid_oren,
                     pid_trans,
                     game,
                     my_team_is_yellow,
                     1,
+                    None
                 ),
                 1,
             )
 
             sim_robot_controller.add_robot_commands(
-                defend_grsim(
+                defend(
                     pid_oren,
                     pid_trans,
                     game,
                     my_team_is_yellow,
                     4,
+                    None
                 ),
                 4,
             )

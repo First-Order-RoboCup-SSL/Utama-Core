@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from robot_control.src.skills import (
+    find_likely_enemy_shooter,
     get_goal_centre,
     go_to_ball,
     go_to_point,
@@ -15,7 +16,7 @@ from robot_control.src.skills import (
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from robot_control.src.intent import find_likely_enemy_shooter, score_goal
+from robot_control.src.intent import score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
@@ -150,8 +151,8 @@ def test_two_defenders(
     # not_defender_id = 2 if defender_id == 1 else 1
     # env.teleport_robot(defender_is_yellow, not_defender_id, 0, 0, 0)
 
-    pid_oren_y, pid_2d_y = get_rsim_pids(N_ROBOTS_YELLOW)
-    pid_oren_b, pid_2d_b = get_rsim_pids(N_ROBOTS_BLUE)
+    pid_oren_y, pid_2d_y = get_rsim_pids()
+    pid_oren_b, pid_2d_b = get_rsim_pids()
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
         env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW
     )

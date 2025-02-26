@@ -1,17 +1,13 @@
 import numpy as np
-import time
-
 from global_utils.math_utils import distance, normalise_heading
-from robot_control.src.utils.shooting_utils import find_best_shot, find_shot_quality
-from robot_control.src.utils.pass_quality_utils import (
-    find_pass_quality,
-    find_best_receiver_position,
-    PointOnField,
-)
-from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
-from entities.game import Game, Field
+from robot_control.src.utils.shooting_utils import find_best_shot
+from motion_planning.src.pid.pid import TwoDPID
+from global_utils.math_utils import distance, normalise_heading
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+from robot_control.src.utils.shooting_utils import find_best_shot, is_goal_blocked
+from entities.game import Game
 from entities.data.command import RobotCommand
-from entities.data.vision import RobotData, BallData
+from entities.data.vision import RobotData
 from robot_control.src.skills import (
     align_defenders,
     align_defenders_grsim,
@@ -28,9 +24,16 @@ from robot_control.src.skills import (
 )
 from motion_planning.src.pid import PID
 from motion_planning.src.pid.pid import TwoDPID
-from typing import List, Tuple, Dict, Optional
+from typing import List, Optional, Tuple
 from math import dist
 import logging
+
+from team_controller.src.controllers.common.robot_controller_abstract import (
+    AbstractRobotController,
+)
+from team_controller.src.controllers.sim.rsim_robot_controller import (
+    RSimRobotController,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +148,7 @@ class PassBall:
                 self.receiver_id,
                 adjusted_pos,
                 catch_orientation,
+                dribbling=True,
             )
 
         else:
@@ -187,7 +191,6 @@ class PassBall:
 
         return passer_cmd, receiver_cmd
 
-
 # intent on scoring goal
 def score_goal(
     game_obj: Game,
@@ -195,84 +198,90 @@ def score_goal(
     shooter_id: int,
     pid_oren: PID,
     pid_trans: PID,
-    is_yellow: bool,
-    shoot_in_left_goal: bool,
+    is_yellow: bool = None,
+    shoot_in_left_goal: bool = None,
 ) -> RobotCommand:
+    """
+    shoot_at_goal_colour should only be used i
+    """
+    target_goal_line = game_obj.field.enemy_goal_line(
+        is_yellow
+    )
 
-    target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
-    latest_frame = game_obj.get_my_latest_frame(is_yellow)
-    if not latest_frame:
-        return
-    friendly_robots, enemy_robots, balls = latest_frame
+    # If no frame data, skip
+    if not game_obj.get_latest_frame():
+        return None
 
-    # TODO: Not sure if this is sufficient for both blue and yellow scoring
-    # It won't be because note that in real life the blue team is not necessarily
-    # on the left of the pitch
+    if is_yellow is not None:
+        if game_obj.my_team_is_yellow != is_yellow:
+            defender_robots = game_obj.friendly_robots # Defenders
+            shooter = game_obj.enemy_robots[shooter_id] # Shooter
+        else:
+            defender_robots = game_obj.enemy_robots
+            shooter = game_obj.friendly_robots[shooter_id]
+        ball = game_obj.ball
+    
+    # According to how game works, we take the most confident ball
+
     goal_x = target_goal_line.coords[0][0]
     goal_y1 = target_goal_line.coords[1][1]
     goal_y2 = target_goal_line.coords[0][1]
 
     # calculate best shot from the position of the ball
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
-    if friendly_robots and enemy_robots and balls:
-        print(balls[0])
+    if defender_robots and shooter and ball:
+        
         best_shot, _ = find_best_shot(
-            balls[0], enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
+            ball, defender_robots, goal_x, goal_y1, goal_y2
         )
+                
+        # Safe fall-back if no best shot is found
+        if best_shot is None and is_goal_blocked(game_obj, (goal_x, goal_y2 - goal_y1), defender_robots):
+            return None
+        elif best_shot is None and not is_goal_blocked(game_obj, (goal_x,  goal_y2 - goal_y1), defender_robots):
+            best_shot = (goal_y2 + goal_y1) / 2
+                
+        shot_orientation = np.atan2((best_shot - ball.y), (goal_x - ball.x))
+        
+        # robot_data: RobotData = (
+        #     friendly_robots[shooter_id].robot_data
+        #     if shooter_id < len(friendly_robots)
+        #     else None
+        # )
 
-        shot_orientation = np.atan2((best_shot - balls[0].y), (goal_x - balls[0].x))
+        # ball_data: BallData = ball.ball_data
 
-        robot_data: RobotData = (
-            friendly_robots[shooter_id] if shooter_id < len(friendly_robots) else None
-        )
-
-        # TODO: For now we just look at the first ball, but this will eventually have to be smarter
-        ball_data: BallData = balls[0]
-
-        if ball_data is not None and robot_data is not None:
-            if robot_data is not None:
-                if shooter_has_ball:
-                    logging.debug("robot has ball")
-                    current_oren = robot_data.orientation
-
-                    # if robot has ball and is facing the goal, kick the ball
-                    # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
-                    # Because 0.02 as a threshold is meaningless (different at different distances)
-                    # TODO: consider also adding a distance from goal threshold
-                    if abs(current_oren - shot_orientation) <= 0.01:
-                        logger.info("kicking ball")
-                        robot_command = kick_ball()
-                    # else, robot has ball, but needs to turn to the right direction
-                    # TODO: Consider also advancing closer to the goal
-                    else:
-                        robot_command = turn_on_spot(
-                            pid_oren,
-                            pid_trans,
-                            robot_data,
-                            shooter_id,
-                            shot_orientation,
-                            dribbling=shooter_has_ball,
-                            pivot_on_ball=True,
-                        )
-
+        if ball is not None and shooter:
+            if shooter_has_ball:
+                logging.debug("robot has ball")
+                current_oren = shooter.orientation
+                # if robot has ball and is facing the goal, kick the ball
+                # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
+                # Because 0.02 as a threshold is meaningless (different at different distances)
+                # TODO: consider also adding a distance from goal threshold
+                if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(game_obj, (goal_x, best_shot), defender_robots):
+                    logger.info("kicking ball")
+                    robot_command = kick_ball()
+                # TODO: Consider also advancing closer to the goal
                 else:
-                    logger.debug("approaching ball %lf", robot_data.orientation)
-                    robot_command = go_to_ball(
-                        pid_oren, pid_trans, robot_data, shooter_id, ball_data
+                    print("turning on spot")
+                    robot_command = turn_on_spot(
+                        pid_oren,
+                        pid_trans,
+                        shooter.robot_data,
+                        shooter_id,
+                        shot_orientation,
+                        dribbling=True,
+                        pivot_on_ball=True,
                     )
-
+            else:
+                robot_command = go_to_ball(
+                    pid_oren, pid_trans, shooter.robot_data, shooter_id, ball
+                )
+        else:
+            # TODO: Will stall/skip if ball and robot is not detected
+            return None
     return robot_command
-
-
-def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
-    ans = []
-    for ball in balls:
-        for er in enemy_robots:
-            if dist((er.x, er.y), (ball.x, ball.y)) < 0.2:
-                # Ball is close to this robot
-                ans.append(er)
-    return list(set(ans))
-
 
 def defend(
     pid_oren: PID,
@@ -280,7 +289,7 @@ def defend(
     game: Game,
     is_yellow: bool,
     defender_id: int,
-    env,
+    env: Optional[SSLStandardEnv],
 ) -> RobotCommand:
     # Assume that is_yellow <-> not is_left here # TODO : FIX
     friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
@@ -323,65 +332,11 @@ def defend(
     )
 
     gp = get_goal_centre(is_left=not is_yellow)
-    env.draw_line(
-        [gp, (target_tracking_coord[0], target_tracking_coord[1])],
-        width=5,
-        color="RED" if tracking_ball else "PINK",
-    )
-
-    return cmd
-
-
-def defend_grsim(
-    pid_oren: PID,
-    pid_2d: TwoDPID,
-    game: Game,
-    is_yellow: bool,
-    defender_id: int,
-) -> RobotCommand:
-    """
-    Same as defend but no visualizations and no env input
-    """
-    # Assume that is_yellow <-> not is_left here # TODO : FIX
-    friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
-    shooters_data = find_likely_enemy_shooter(enemy, balls)
-    orientation = None
-    tracking_ball = False
-
-    # if game.in_box(balls[0].x, balls[0].y):
-    #     print("AAAAAAAAAAAAAAAAAAAAAA")
-    #     # return None
-
-    if not shooters_data:
-        target_tracking_coord = balls[0].x, balls[0].y
-        # TODO game.get_ball_velocity() can return (None, None)
-        if (
-            game.get_ball_velocity() is not None
-            and None not in game.get_ball_velocity()
-        ):
-            orientation = velocity_to_orientation(game.get_ball_velocity())
-            tracking_ball = True
-    else:
-        # TODO (deploy more defenders, or find closest shooter?)
-        sd = shooters_data[0]
-        target_tracking_coord = sd.x, sd.y
-        orientation = sd.orientation
-
-    real_def_pos = friendly[defender_id].x, friendly[defender_id].y
-    current_def_parametric = to_defense_parametric(real_def_pos, is_left=not is_yellow)
-    target = align_defenders_grsim(
-        current_def_parametric, target_tracking_coord, orientation, not is_yellow
-    )
-    cmd = go_to_point(
-        pid_oren,
-        pid_2d,
-        friendly[defender_id],
-        defender_id,
-        target,
-        face_ball(real_def_pos, (balls[0].x, balls[0].y)),
-        dribbling=True,
-    )
-
-    gp = get_goal_centre(is_left=not is_yellow)
+    if env:
+        env.draw_line(
+            [gp, (target_tracking_coord[0], target_tracking_coord[1])],
+            width=5,
+            color="RED" if tracking_ball else "PINK",
+        )
 
     return cmd

@@ -3,83 +3,18 @@ import os
 import numpy as np
 import pytest
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import (
-    get_goal_centre,
-    go_to_ball,
-    go_to_point,
-    align_defenders,
-    to_defense_parametric,
-    face_ball,
-    velocity_to_orientation,
-)
-from team_controller.src.controllers import RSimRobotController
+from team_controller.src.controllers import RSimRobotController, RSimController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from robot_control.src.intent import find_likely_enemy_shooter, score_goal
+from robot_control.src.intent import defend, score_goal
+from robot_control.src.utils.shooting_utils import find_best_shot
 from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from team_controller.src.config.settings import TIMESTEP
-from robot_control.src.tests.utils import one_robot_placement, setup_pvp
+from robot_control.src.tests.utils import setup_pvp
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def defend(
-    pid_oren: PID,
-    pid_2d: TwoDPID,
-    game: Game,
-    controller: RSimRobotController,
-    is_yellow: bool,
-    defender_id: int,
-    env,
-):
-    # Assume that is_yellow <-> not is_left here # TODO : FIX
-    friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
-    shooters_data = find_likely_enemy_shooter(enemy, balls)
-    orientation = None
-    tracking_ball = False
-    if not shooters_data:
-        target_tracking_coord = balls[0].x, balls[0].y
-        # TODO game.get_ball_velocity() can return (None, None)
-        if (
-            game.get_ball_velocity() is not None
-            and None not in game.get_ball_velocity()
-        ):
-            orientation = velocity_to_orientation(game.get_ball_velocity())
-            tracking_ball = True
-    else:
-        # TODO (deploy more defenders, or find closest shooter?)
-        sd = shooters_data[0]
-        target_tracking_coord = sd.x, sd.y
-        orientation = sd.orientation
-
-    real_def_pos = friendly[defender_id].x, friendly[defender_id].y
-    current_def_parametric = to_defense_parametric(real_def_pos, is_left=not is_yellow)
-    target = align_defenders(
-        current_def_parametric, target_tracking_coord, orientation, not is_yellow, env
-    )
-    cmd = go_to_point(
-        pid_oren,
-        pid_2d,
-        friendly[defender_id],
-        defender_id,
-        target,
-        face_ball(real_def_pos, (balls[0].x, balls[0].y)),
-        dribbling=True,
-    )
-
-    controller.add_robot_commands(cmd, defender_id)
-
-    controller.send_robot_commands()
-
-    gp = get_goal_centre(is_left=not is_yellow)
-    env.draw_line(
-        [gp, (target_tracking_coord[0], target_tracking_coord[1])],
-        width=5,
-        color="RED" if tracking_ball else "PINK",
-    )
-
 
 def attack(
     pid_oren: PID,
@@ -111,7 +46,7 @@ def test_single_defender(
     defender_id: int, shooter_id: int, defender_is_yellow: bool, headless: bool
 ):
     game = Game()
-
+    
     if defender_is_yellow:
         N_ROBOTS_YELLOW = 3
         N_ROBOTS_BLUE = 6
@@ -124,16 +59,18 @@ def test_single_defender(
         n_robots_yellow=N_ROBOTS_YELLOW,
         render_mode="ansi" if headless else "human",
     )
+    env_controller = RSimController(env)
     env.reset()
 
     env.teleport_ball(2.25, -1)
 
     # Move the other defender out of the way
-    not_defender_id = 2 if defender_id == 1 else 1
-    env.teleport_robot(defender_is_yellow, not_defender_id, 0, 0, 0)
+    for i in range(0, 6):
+        if i != shooter_id:
+            env_controller.set_robot_presence(i, not defender_is_yellow, False)
 
-    pid_oren_y, pid_2d_y = get_rsim_pids(N_ROBOTS_YELLOW)
-    pid_oren_b, pid_2d_b = get_rsim_pids(N_ROBOTS_BLUE)
+    pid_oren_y, pid_2d_y = get_rsim_pids()
+    pid_oren_b, pid_2d_b = get_rsim_pids()
     sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
         env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW
     )
@@ -175,15 +112,17 @@ def test_single_defender(
         if scored:
             any_scored = True
             break
-        defend(
+        cmd = defend(
             pid_oren_d,
             pid_2d_d,
             game,
-            sim_robot_controller_defender,
             defender_is_yellow,
             defender_id,
             env,
         )
+        sim_robot_controller_defender.add_robot_commands(cmd, defender_id)
+        sim_robot_controller_defender.send_robot_commands()
+
 
         if sim_robot_controller_defender.robot_has_ball(
             defender_id

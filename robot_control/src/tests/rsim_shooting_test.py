@@ -38,7 +38,7 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
     env.reset()
     env.teleport_ball(1, 2)
 
-    pid_oren, pid_trans = get_rsim_pids(N_ROBOTS)
+    pid_oren, pid_trans = get_rsim_pids()
 
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game
@@ -68,7 +68,7 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
                     shoot_in_left_goal=is_yellow,
                 )
 
-                if game.is_ball_in_goal(our_side=not is_yellow):
+                if game.is_ball_in_goal(right_goal=not is_yellow):
                     logger.info("Goal Scored at Position: ", game.get_ball_pos())
                     goal_scored = True
                     break
