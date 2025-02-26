@@ -12,9 +12,9 @@ from enum import Enum
 
 class TempObstacleType(Enum):
     NONE = []
-    FIELD = [Field.full_field()]
-    DEFENCE_ZONES = [Field.yellow_defense_area(), Field.blue_defense_area()]
-    ALL = [Field.yellow_defense_area(), Field.blue_defense_area(), Field.full_field()]
+    FIELD = [Field.full_field]
+    DEFENCE_ZONES = [Field.left_defense_area, Field.right_defense_area]
+    ALL = [Field.left_defense_area, Field.right_defense_area, Field.full_field]
 
 class HybridWaypointMotionController:
     """

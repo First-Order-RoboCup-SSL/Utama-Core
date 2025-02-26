@@ -118,28 +118,26 @@ class Field:
     def half_goal_width(cls) -> float:
         return cls._HALF_GOAL_WIDTH
 
-    # TODO: this needs to be replaced
     @ClassProperty
-    def yellow_goal_line(cls) -> LineString:
-        return cls._RIGHT_GOAL_LINE
-
-    @ClassProperty
-    def blue_goal_line(cls) -> LineString:
+    def left_goal_line(cls) -> LineString:
         return cls._LEFT_GOAL_LINE
+    
+    @ClassProperty
+    def right_goal_line(cls) -> LineString:
+        return cls._RIGHT_GOAL_LINE
 
     @ClassProperty
     def center_circle(cls) -> Point:
         return cls._CENTER_CIRCLE
 
-    # TODO: this needs to be replaced
     @ClassProperty
-    def yellow_defense_area(cls) -> Polygon:
-        return cls._RIGHT_DEFENSE_AREA
-
-    @ClassProperty
-    def blue_defense_area(cls) -> Polygon:
+    def left_defense_area(cls) -> Polygon:
         return cls._LEFT_DEFENSE_AREA
-
+    
+    @ClassProperty
+    def right_defense_area(cls) -> Polygon:
+        return cls._RIGHT_DEFENSE_AREA
+    
     @ClassProperty
     def full_field(cls) -> Polygon:
         return cls._FULL_FIELD
