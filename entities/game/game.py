@@ -15,12 +15,9 @@ from entities.referee.referee_command import RefereeCommand
 from entities.referee.stage import Stage
 
 from team_controller.src.config.settings import TIMESTEP
-<<<<<<< HEAD
-=======
 
 # TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
 # TODO: Namespace conflict for robot. We need to resolve this ASAP.
->>>>>>> main
 
 import logging, warnings
 
@@ -40,31 +37,18 @@ class Game:
         num_enemy_robots: int = 6,
     ):
         self._my_team_is_yellow = my_team_is_yellow
-<<<<<<< HEAD
-        self._field = Field()
-=======
         self._field = Field(my_team_is_yellow, my_team_is_right)
->>>>>>> main
 
         self._records: List[FrameData] = []
         self._predicted_next_frame: PredictedFrame = None
 
         self._friendly_robots: List[Robot] = [
-<<<<<<< HEAD
-            Robot(id, is_friendly=True) for id in range(6)
-        ]
-        self._enemy_robots: List[Robot] = [
-            Robot(id, is_friendly=False) for id in range(6)
-        ]
-        self._ball: Ball = Ball()
-=======
             Robot(id, is_friendly=True) for id in range(num_friendly_robots)
         ]
         self._enemy_robots: List[Robot] = [
             Robot(id, is_friendly=False) for id in range(num_enemy_robots)
         ]
         self._ball: Ball = Ball(BallData(0, 0, 0, 1))
->>>>>>> main
 
         self._yellow_score = 0
         self._blue_score = 0
@@ -440,7 +424,9 @@ class Game:
                     averageVelocity[0] += curr_vel[0]
                     averageVelocity[1] += curr_vel[1]
                 elif missing_velocities == WINDOW - 1:
-                    logging.warning(f"No velocity data to calculate acceleration for frame {len(self._records) - j}")
+                    logging.warning(
+                        f"No velocity data to calculate acceleration for frame {len(self._records) - j}"
+                    )
                     return None
                 else:
                     missing_velocities += 1
