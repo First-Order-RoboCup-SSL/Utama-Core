@@ -14,7 +14,7 @@ from entities.game.team_info import TeamInfo
 from entities.referee.referee_command import RefereeCommand
 from entities.referee.stage import Stage
 
-from team_controller.src.config.settings import TIMESTEP
+from config.settings import TIMESTEP
 
 # TODO : ^ I don't like this circular import logic. Wondering if we should store this constant somewhere else
 # TODO: Namespace conflict for robot. We need to resolve this ASAP.

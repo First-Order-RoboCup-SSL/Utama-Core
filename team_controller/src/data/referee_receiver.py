@@ -10,7 +10,7 @@ from entities.data.referee import RefereeData
 from team_controller.src.data.base_receiver import BaseReceiver
 from team_controller.src.data.message_enum import MessageType
 from team_controller.src.utils import network_manager
-from team_controller.src.config.settings import MULTICAST_GROUP_REFEREE, REFEREE_PORT
+from config.settings import MULTICAST_GROUP_REFEREE, REFEREE_PORT
 
 from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Referee
 import logging

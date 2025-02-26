@@ -14,7 +14,7 @@ from motion_planning.src.pid.pid import TwoDPID
 from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
 
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from team_controller.src.config.settings import ROBOT_RADIUS
+from config.settings import ROBOT_RADIUS
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ from entities.data.command import RobotCommand, RobotVelCommand, RobotInfo
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
-from team_controller.src.config.settings import (
+from config.settings import (
     KICK_SPD,
     DRIBBLE_SPD,
     CHIP_ANGLE,

@@ -13,7 +13,7 @@ from robot_control.src.intent import PassBall, defend, score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.grsim_robot_controller import GRSimRobotController
-from team_controller.src.config.settings import TIMESTEP
+from config.settings import TIMESTEP
 from entities.data.command import RobotCommand
 import math
 import random

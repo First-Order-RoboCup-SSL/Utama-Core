@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 from motion_planning.src.pid.pid_abstract import AbstractPID
 import time
 import math
-from team_controller.src.config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL, REAL_MAX_ANGULAR_VEL, REAL_MAX_VEL
+from config.settings import TIMESTEP, MAX_ANGULAR_VEL, MAX_VEL, REAL_MAX_ANGULAR_VEL, REAL_MAX_VEL
 
 # Helper functions to create PID controllers.
 def get_real_pids(n_robots: int):

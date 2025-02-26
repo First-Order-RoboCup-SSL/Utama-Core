@@ -6,7 +6,7 @@ import numpy as np
 from rsoccer_simulator.src.Entities import Frame, Robot, Ball
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from rsoccer_simulator.src.Utils import KDTree
-from team_controller.src.config.settings import (
+from config.settings import (
     TIMESTEP,
     KICK_SPD,
 )
