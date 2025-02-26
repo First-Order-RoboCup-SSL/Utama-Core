@@ -10,7 +10,6 @@ from entities.data.command import RobotCommand
 from entities.data.vision import RobotData
 from robot_control.src.skills import (
     align_defenders,
-    align_defenders_grsim,
     face_ball,
     find_likely_enemy_shooter,
     get_goal_centre,
