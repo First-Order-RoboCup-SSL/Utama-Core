@@ -1,5 +1,4 @@
-from typing import List, Optional, NamedTuple
-from entities.game import game_object
+from typing import List, Optional
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData, PredictedFrame
 from entities.data.referee import RefereeData
