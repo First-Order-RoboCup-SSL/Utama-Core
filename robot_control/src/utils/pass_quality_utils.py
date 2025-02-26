@@ -76,44 +76,6 @@ def interception_chance(
     return chance, closest_point, ball_pos
 
 
-def interception_chance_other(
-    passer, receiver, opponent, robot_speed, ball_v0_magnitude, ball_a_magnitude
-):
-
-    # assert type(passer) != tuple
-    # assert type(receiver) != tuple
-    # robot_speed = np.linalg.norm(robot_velocity)
-    passer_vector = np.array([passer.x, passer.y])
-    receiver_vector = np.array([receiver.x, receiver.y])
-    opp_vector = np.array([opponent.x, opponent.y])
-    passer_to_receiver_vec = receiver_vector - passer_vector
-    pr_unit = passer_to_receiver_vec / np.linalg.norm(passer_to_receiver_vec)
-    ball_v0 = pr_unit * ball_v0_magnitude
-    ball_a = pr_unit * ball_a_magnitude
-
-    passer_to_opp_vec = opp_vector - passer_vector
-    projection = np.dot(passer_to_opp_vec, passer_to_receiver_vec) / np.dot(
-        passer_to_receiver_vec, passer_to_receiver_vec
-    )
-    if projection < 0 or projection > 1:
-        return 0, None, None
-    closest_point = passer_vector + projection * passer_to_receiver_vec
-    ball_distance = np.linalg.norm(closest_point - passer_vector)
-    ball_speed = np.linalg.norm(ball_v0)
-    ball_time_roots = np.roots(
-        [0.5 * np.linalg.norm(ball_a), ball_speed, -ball_distance]
-    )
-    ball_time = (
-        np.max(ball_time_roots[ball_time_roots > 0])
-        if np.any(ball_time_roots > 0)
-        else float("inf")
-    )
-
-    opp_dist_to_pass = np.linalg.norm(closest_point - opp_vector) - ROBOT_RADIUS
-
-    return 1 / opp_dist_to_pass, closest_point, 2.0
-
-
 def find_pass_quality(
     passer,
     receiver,
@@ -156,7 +118,7 @@ def find_pass_quality(
     goal_chance_weight = 0.5
     distance_to_goal_weight = 0.2
 
-    if distance_to_passer >= 0.7 and receiver.x > -3.5:
+    if distance_to_passer >= 0.7:
         pass_quality = (
             1
             - interception_chance_weight * total_interception_chance

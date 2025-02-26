@@ -231,7 +231,7 @@ def score_goal(
                     # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
                     # Because 0.02 as a threshold is meaningless (different at different distances)
                     # TODO: consider also adding a distance from goal threshold
-                    if abs(current_oren - shot_orientation) <= 0.05:
+                    if abs(current_oren - shot_orientation) <= 0.01:
                         logger.info("kicking ball")
                         robot_command = kick_ball()
                     # else, robot has ball, but needs to turn to the right direction
@@ -573,7 +573,7 @@ def defend(
         pid_2d,
         friendly[defender_id],
         defender_id,
-        (target[0], target[1] - 0.09),
+        target,
         face_ball(real_def_pos, (balls[0].x, balls[0].y)),
         dribbling=True,
     )

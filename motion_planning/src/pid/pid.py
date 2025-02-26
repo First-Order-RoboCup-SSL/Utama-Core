@@ -29,17 +29,6 @@ def get_rsim_pids(n_robots: int):
     return pid_oren, pid_trans
 
 
-def get_rsim_defender_pids(n_robots: int):
-    # no clamping for oreintation otherwise the robot becomes unstable
-    pid_oren = PID(
-        TIMESTEP, MAX_ANGULAR_VEL, -MAX_ANGULAR_VEL, 18.5, 0.12, 0, num_robots=6
-    )
-    # speeds faster than 2.3 m/s cause the robot to lose control (due to the physics engine,
-    # rsim becomes wierd there is some sot of limiter on the robots)
-    pid_trans = TwoDPID(TIMESTEP, MAX_VEL, 8.5, 0.025, 0, num_robots=n_robots)
-    return pid_oren, pid_trans
-
-
 class PID:
     """
     A Proportional-Integral-Derivative (PID) controller for managing error corrections over time.
