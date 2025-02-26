@@ -7,7 +7,7 @@ from robot_control.src.skills import (
     mag,
     face_ball,
 )
-from team_controller.src.config.settings import ROBOT_RADIUS
+from config.settings import ROBOT_RADIUS
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game

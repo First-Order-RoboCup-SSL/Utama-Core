@@ -9,7 +9,6 @@ from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from motion_planning.src.planning.controller import TempObstacleType, TimedSwitchController
-from config.settings import ROBOT_RADIUS
 import random
 import logging
 from math import dist
