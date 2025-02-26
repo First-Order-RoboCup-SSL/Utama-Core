@@ -2,12 +2,29 @@
 
 ## Setup Guidelines
 
+### Setup Utama
+
 1. cd to root folder `/Utama` and type `pip install -e .` to install all dependencies.
 2. Note that this also installs all modules with `__init__.py` (so you need to run it again when you add an `__init__.py`)
 
 If you are still struggling with local import errors (ie importing our local modules), you can add `export PYTHONPATH=/path/to/folder/Utama` to your `~/.bashrc`. To do this, run `sudo nano ~/.bashrc` and then add the export line at the bottom of the document. Finally, close and save.
 
-###### Warning: the above workaround is quite hackish and may result in source conflicts if you are working on other projects in the same Linux machine. Be advised.
+> Warning: the above workaround is quite hackish and may result in source conflicts if you are working on other projects in the same Linux machine. Be advised.
+
+### Setup Autoreferee
+
+1. Make sure `grSim` is setup properly and can be called through terminal.
+2. `git clone` from [AutoReferee repo](https://github.com/TIGERs-Mannheim/AutoReferee) in a folder named `/AutoReferee` in root directory.
+3. Change `DIV_A` in `/AutoReferee/config/moduli/moduli.xml` to `DIV_B`.
+
+```xml
+    <globalConfiguration>
+        <environment>ROBOCUP</environment>
+        <geometry>DIV_B</geometry>
+    </globalConfiguration>
+```
+
+4. Get the latest [compiled game controller](https://github.com/RoboCup-SSL/ssl-game-controller/releases/) and rename it to `ssl_game_controller`. Save it in `/ssl-game-controller` directory.
 
 ### Field Guide
 
