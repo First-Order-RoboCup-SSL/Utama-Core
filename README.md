@@ -64,6 +64,11 @@ If you are still struggling with local import errors (ie importing our local mod
      }
    ```
 
+### CI
+In CI we are using:
+ - Pytest to run unit tests throughout the whole project
+ - Ruff Linter to check linting
+
 #### Push and Commit
 
 1. Each team should be working within your own branch of the repository.
