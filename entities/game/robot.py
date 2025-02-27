@@ -20,6 +20,9 @@ class Robot:
     def __bool__(self):
         return self._robot_data is not None
     
+    def __repr__(self):
+        return f"Robot(id={self.id}, x={self.x}, y={self.y}, orientation={self.orientation})"
+    
     @property
     def id(self) -> int:
         return self._id
@@ -97,25 +100,3 @@ class Robot:
             return self._has_ball
         else:
             raise AttributeError("Enemy robots cannot have the 'has_ball' property.")
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO) 
-    
-    robot_data_1 = RobotData(0.5, 0.5, 0.5)
-    robot_data_2 = RobotData(0.2, 0.2, 0.2)
-    
-    ### game robot object ###
-    
-    game_friendly_robot = Robot(0, True, robot_data_1)
-    game_enemy_robot = Robot(1, False, robot_data_2)
-    
-    print(f"Robot 1 coords: {game_friendly_robot.x}, {game_friendly_robot.y}")
-    print(f"Robot 2 coords: {game_enemy_robot.x}, {game_enemy_robot.y}")
-    
-    game_friendly_robot.has_ball = True
-    print(f"Robot 1 has ball: {game_friendly_robot.has_ball}")
-    
-    game_enemy_robot.has_ball = True  # raises an error
-    print(f"Robot 2 has ball: {game_enemy_robot.has_ball}")
-    
-    
