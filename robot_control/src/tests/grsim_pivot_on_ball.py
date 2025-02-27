@@ -3,7 +3,7 @@ import queue
 import time
 import numpy as np
 from team_controller.src.controllers import GRSimRobotController
-from team_controller.src.data import VisionDataReceiver
+from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
 from entities.game import Game
 from config.settings import TIMESTEP
@@ -22,7 +22,7 @@ def test_grsim_pivot_on_ball(shooter_id: int, is_yellow: bool, headless: bool):
     game = Game(False)
 
     message_queue = queue.SimpleQueue()
-    vision_receiver = VisionDataReceiver(message_queue)
+    vision_receiver = VisionReceiver(message_queue)
 
     sim_robot_controller = GRSimRobotController(is_team_yellow=False)
 

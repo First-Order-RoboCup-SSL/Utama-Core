@@ -19,7 +19,7 @@ import math
 import random
 
 from team_controller.src.data.message_enum import MessageType
-from team_controller.src.data.vision_receiver import VisionDataReceiver
+from team_controller.src.data.vision_receiver import VisionReceiver
 
 random.seed(15)
 
@@ -38,7 +38,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
     my_team_is_yellow = game.my_team_is_yellow
     message_queue = queue.SimpleQueue()
 
-    vision_receiver = VisionDataReceiver(message_queue)
+    vision_receiver = VisionReceiver(message_queue)
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
     vision_thread.daemon = True
     vision_thread.start()
@@ -72,7 +72,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
 def attacker_strategy(game: Game, stop_event: threading.Event):
     sim_robot_controller_attacker = GRSimRobotController(game.my_team_is_yellow)
     message_queue = queue.SimpleQueue()
-    vision_receiver = VisionDataReceiver(message_queue)
+    vision_receiver = VisionReceiver(message_queue)
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
     vision_thread.daemon = True
     vision_thread.start()

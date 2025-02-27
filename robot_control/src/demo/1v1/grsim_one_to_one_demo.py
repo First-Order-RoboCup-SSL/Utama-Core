@@ -18,7 +18,7 @@ from team_controller.src.controllers.real.real_robot_controller import (
     RealRobotController,
 )
 from motion_planning.src.pid.pid import PID, get_grsim_pids
-from team_controller.src.data import VisionDataReceiver
+from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
 from robot_control.src.high_level_skills import DribbleToTarget
 from entities.game import Game
@@ -270,7 +270,7 @@ def one_on_one(game: Game, stop_event: threading.Event, friendly_robot_id: int, 
     )
     
     message_queue = queue.SimpleQueue()
-    vision_receiver = VisionDataReceiver(message_queue, n_cameras=4)
+    vision_receiver = VisionReceiver(message_queue, n_cameras=4)
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
     vision_thread.daemon = True
     vision_thread.start()

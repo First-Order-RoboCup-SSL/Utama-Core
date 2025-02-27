@@ -5,17 +5,17 @@ logger = logging.getLogger(__name__)
 
 # TODO: Tests need to be updated.
 
-from team_controller.src.data import VisionDataReceiver
+from team_controller.src.data import VisionReceiver
 
 
-def data_update_listener(receiver: VisionDataReceiver):
+def data_update_listener(receiver: VisionReceiver):
     # Start receiving game data; this will run in a separate thread.
     receiver.pull_game_data()
 
 
 def main():
     # Initialize the VisionDataReceiver
-    receiver = VisionDataReceiver()
+    receiver = VisionReceiver()
 
     # Start the data receiving in a separate thread
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))

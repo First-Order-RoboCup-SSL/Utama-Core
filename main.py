@@ -14,7 +14,7 @@ from team_controller.src.tests.grsim_robot_controller_startup_test import (
     StartUpController,
 )
 
-from team_controller.src.data import VisionDataReceiver, RefereeMessageReceiver
+from team_controller.src.data import VisionReceiver, RefereeMessageReceiver
 from team_controller.src.data.message_enum import MessageType
 import logging
 
@@ -26,7 +26,7 @@ import warnings
 warnings.simplefilter("default", DeprecationWarning)
 
 
-def data_update_listener(receiver: VisionDataReceiver):
+def data_update_listener(receiver: VisionReceiver):
     # Start receiving game data; this will run in a separate thread.
     receiver.pull_game_data()
 
@@ -39,7 +39,7 @@ def main():
     message_queue = queue.SimpleQueue()
 
     referee_receiver = RefereeMessageReceiver(message_queue, debug=False)
-    vision_receiver = VisionDataReceiver(message_queue)
+    vision_receiver = VisionReceiver(message_queue)
     decision_maker = StartUpController(game)
 
     # Start the data receiving in separate threads
@@ -177,7 +177,7 @@ def main1():
     time.sleep(0.2)
 
     message_queue = queue.SimpleQueue()
-    receiver = VisionDataReceiver(message_queue)
+    receiver = VisionReceiver(message_queue)
 
     # Start the data receiving in a separate thread
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))

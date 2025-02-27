@@ -13,7 +13,7 @@ from team_controller.src.controllers.sim.grsim_robot_controller import (
 )
 from config.settings import TIMESTEP
 from motion_planning.src.pid.pid import get_grsim_pids
-from team_controller.src.data import VisionDataReceiver
+from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
 
 # from robot_control.src.high_level_skills import DribbleToTarget
@@ -95,7 +95,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
     sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
     attacker_is_yellow = game.my_team_is_yellow
     message_queue = queue.SimpleQueue()
-    vision_receiver = VisionDataReceiver(message_queue)
+    vision_receiver = VisionReceiver(message_queue)
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
     vision_thread.daemon = True
     vision_thread.start()
@@ -465,7 +465,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
     sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
     my_team_is_yellow = game.my_team_is_yellow
     message_queue = queue.SimpleQueue()
-    vision_receiver = VisionDataReceiver(message_queue)
+    vision_receiver = VisionReceiver(message_queue)
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
     vision_thread.daemon = True
     vision_thread.start()

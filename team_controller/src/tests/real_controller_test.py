@@ -14,11 +14,11 @@ import queue
 import logging
 import threading
 from team_controller.src.data.message_enum import MessageType
-from team_controller.src.data.vision_receiver import VisionDataReceiver
+from team_controller.src.data.vision_receiver import VisionReceiver
 import numpy as np
 
 
-def data_update_listener(receiver: VisionDataReceiver):
+def data_update_listener(receiver: VisionReceiver):
     # Start receiving game data; this will run in a separate thread.
     receiver.pull_game_data()
 
@@ -26,7 +26,7 @@ def data_update_listener(receiver: VisionDataReceiver):
 def rotate_on_ball_with_vision(game: Game, robot_controller: RealRobotController):
     pid_oren, pid_trans = get_real_pids(6)
     message_queue = queue.SimpleQueue()
-    receiver = VisionDataReceiver(message_queue, n_cameras=1)
+    receiver = VisionReceiver(message_queue, n_cameras=1)
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
     data_thread.daemon = True  # Allows the thread to close when the main program exits
     data_thread.start()
@@ -94,7 +94,7 @@ def rotate_on_ball_with_vision(game: Game, robot_controller: RealRobotController
 def get_ball_test_with_vision(game: Game, robot_controller: RealRobotController):
     pid_oren, pid_trans = get_real_pids(6)
     message_queue = queue.SimpleQueue()
-    receiver = VisionDataReceiver(message_queue, n_cameras=1)
+    receiver = VisionReceiver(message_queue, n_cameras=1)
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
     data_thread.daemon = True  # Allows the thread to close when the main program exits
     data_thread.start()

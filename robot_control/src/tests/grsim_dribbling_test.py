@@ -8,7 +8,7 @@ from team_controller.src.controllers.sim.grsim_robot_controller import (
 )
 from config.settings import TIMESTEP
 from motion_planning.src.pid.pid import get_grsim_pids
-from team_controller.src.data import VisionDataReceiver
+from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
 from robot_control.src.high_level_skills import DribbleToTarget
 from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
@@ -19,7 +19,7 @@ def test_grsim_dribbling(dribbler_id: int, is_yellow: bool, headless: bool):
     game = Game()
 
     message_queue = queue.SimpleQueue()
-    vision_receiver = VisionDataReceiver(message_queue)
+    vision_receiver = VisionReceiver(message_queue)
     robot_controller = GRSimRobotController(is_team_yellow=True)
 
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)

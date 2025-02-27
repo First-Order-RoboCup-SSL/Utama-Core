@@ -10,7 +10,7 @@ from vision.vision_processor import VisionProcessor
 logger = logging.getLogger(__name__)
 
 
-class VisionDataReceiver:
+class VisionReceiver:
     """
     Receives protobuf data from SSL Vision over the network, formats into RawData types and passes it over to the
     VisionProcessor.

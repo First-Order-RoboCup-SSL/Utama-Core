@@ -3,7 +3,7 @@ import queue
 from entities.game import Game
 import time
 from team_controller.src.data.message_enum import MessageType
-from team_controller.src.data import VisionDataReceiver
+from team_controller.src.data import VisionReceiver
 
 import time
 import numpy as np
@@ -135,7 +135,7 @@ class StartUpController:
         )
 
 
-def data_update_listener(receiver: VisionDataReceiver):
+def data_update_listener(receiver: VisionReceiver):
     # Start receiving game data; this will run in a separate thread.
     receiver.pull_game_data()
 
@@ -144,7 +144,7 @@ def main():
     game = Game()
 
     message_queue = queue.SimpleQueue()
-    receiver = VisionDataReceiver(message_queue)
+    receiver = VisionReceiver(message_queue)
     decision_maker = StartUpController(game)
 
     # Start the data receiving in a separate thread
