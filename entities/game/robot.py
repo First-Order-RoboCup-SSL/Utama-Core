@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 from entities.data.vision import RobotData
 
@@ -9,16 +9,21 @@ logger = logging.getLogger(__name__)
 
 
 class Robot:
+    __game_update_token = object()
+    
     def __init__(self, robot_id: int, is_friendly: bool, robot_data: Optional[RobotData] = None):
         self._id = robot_id
         self.is_friendly = is_friendly
-        self._robot_data = robot_data
+        self._robot_data = robot_data 
         self._inactive = False
         if is_friendly:
             self._has_ball = False
 
     def __bool__(self):
         return self._robot_data is not None
+    
+    def __repr__(self):
+        return f"Robot(id={self.id}, x={self.x}, y={self.y}, orientation={self.orientation})"
     
     @property
     def id(self) -> int:
@@ -36,9 +41,29 @@ class Robot:
             return None
 
     @robot_data.setter
-    def robot_data(self, robot_data: RobotData):
-        self._robot_data = robot_data
+    def robot_data(self, value):
+        """
+        Private setter for robot_data.
+        Expects a tuple: (robot_data, token).
+        """
+        if not isinstance(value, tuple) or len(value) != 2:
+            raise PermissionError("Direct assignment to robot_data is not allowed. Use the proper update mechanism.")
+        data, token = value
+        if token is not Robot.__game_update_token:
+            raise PermissionError("Only Game is allowed to update robot data.")
+        self._robot_data = data
 
+    @property
+    def coords(self) -> Tuple[float, float]:
+        if self._robot_data is not None:
+            return self._robot_data[:2]
+        elif self.inactive:
+            logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
+            return None
+        else:
+            logger.critical(f" Should not be getting coords of robot_id: {self.id} (None)")
+            return None
+    
     @property
     def x(self) -> float:
         if self._robot_data is not None:
@@ -97,25 +122,11 @@ class Robot:
             return self._has_ball
         else:
             raise AttributeError("Enemy robots cannot have the 'has_ball' property.")
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO) 
-    
-    robot_data_1 = RobotData(0.5, 0.5, 0.5)
-    robot_data_2 = RobotData(0.2, 0.2, 0.2)
-    
-    ### game robot object ###
-    
-    game_friendly_robot = Robot(0, True, robot_data_1)
-    game_enemy_robot = Robot(1, False, robot_data_2)
-    
-    print(f"Robot 1 coords: {game_friendly_robot.x}, {game_friendly_robot.y}")
-    print(f"Robot 2 coords: {game_enemy_robot.x}, {game_enemy_robot.y}")
-    
-    game_friendly_robot.has_ball = True
-    print(f"Robot 1 has ball: {game_friendly_robot.has_ball}")
-    
-    game_enemy_robot.has_ball = True  # raises an error
-    print(f"Robot 2 has ball: {game_enemy_robot.has_ball}")
-    
-    
+        
+    @classmethod
+    def _get_game_update_token(cls):
+        """
+        Returns the token needed to update robot data.
+        By convention, only the Game class should use this.
+        """
+        return cls.__game_update_token
