@@ -20,8 +20,7 @@ class RobotVelCommand(NamedTuple):
     chip: bool
     dribble: bool
 
-
-class RobotInfo(NamedTuple):
+class RobotResponse(NamedTuple):
     has_ball: bool
 # TODO: add kicker charged to robot info
 

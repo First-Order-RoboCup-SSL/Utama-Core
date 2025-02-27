@@ -3,7 +3,7 @@ from typing import Tuple
 from time import sleep
 
 from entities.game import Game
-from entities.data.command import RobotCommand, RobotInfo
+from entities.data.command import RobotCommand, RobotResponse
 from entities.data.vision import BallData, RobotData
 
 from motion_planning.src.pid import PID

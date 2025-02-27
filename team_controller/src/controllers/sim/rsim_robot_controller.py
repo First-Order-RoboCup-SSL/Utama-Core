@@ -2,14 +2,14 @@ from curses.ascii import RS
 from typing import Dict, Union, Optional, Tuple
 from xmlrpc.client import Boolean
 from entities.game import Game
-from entities.data.command import RobotCommand, RobotInfo
+from entities.data.command import RobotCommand, RobotResponse
 from entities.data.vision import FrameData
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
 import numpy as np
 from numpy.typing import NDArray
-from entities.data.command import RobotCommand, RobotInfo
+from entities.data.command import RobotCommand, RobotResponse
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 import logging
 
@@ -38,7 +38,7 @@ class RSimRobotController(AbstractRobotController):
         self._env = env
         self._n_friendly_robots, self._n_enemy_robots = self._get_n_robots()
         self._out_packet = self._empty_command(self.n_friendly_robots)
-        self._robots_info: list[RobotInfo] = [None] * self.n_friendly_robots
+        self._robots_info: list[RobotResponse] = [None] * self.n_friendly_robots
         self._is_pvp = pvp_manager is not None
         self.pvp_manager = pvp_manager
 

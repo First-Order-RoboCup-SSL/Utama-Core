@@ -17,7 +17,7 @@ from config.starting_formation import (
 from global_utils.math_utils import deg_to_rad, rad_to_deg
 
 from entities.data.vision import BallData, RobotData, FrameData
-from entities.data.command import RobotInfo
+from entities.data.command import RobotResponse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -131,7 +131,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         return observation, reward, terminated, truncated, self.reward_shaping_total
 
-    def _frame_to_observations(self) -> Tuple[FrameData, RobotInfo, RobotInfo]:
+    def _frame_to_observations(self) -> Tuple[FrameData, RobotResponse, RobotResponse]:
         """
         return observation data that aligns with grSim
 
@@ -173,7 +173,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
     def _get_robot_observation(self, robot):
         robot_pos = RobotData(robot.x, -robot.y, -float(deg_to_rad(robot.theta)))
-        robot_info = RobotInfo(robot.infrared)
+        robot_info = RobotResponse(robot.infrared)
         return robot_pos, robot_info
 
     def _get_commands(self, actions) -> list[Robot]:

@@ -1,6 +1,6 @@
 import abc
 import warnings
-from entities.data.command import RobotInfo, RobotCommand
+from entities.data.command import RobotResponse, RobotCommand
 from typing import Union, Dict, Optional
 
 

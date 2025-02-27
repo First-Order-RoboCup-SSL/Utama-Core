@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 import time
 
-from entities.data.command import RobotCommand, RobotInfo
+from entities.data.command import RobotCommand, RobotResponse
 from entities.game import Game
 
 from team_controller.src.controllers.common.robot_controller_abstract import (
@@ -44,7 +44,7 @@ class RealRobotController(AbstractRobotController):
         self._rbt_cmd_size = 8  # packet size for one robot
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the packet received from the robots
-        self._robots_info: List[RobotInfo] = [None] * self._n_robots
+        self._robots_info: List[RobotResponse] = [None] * self._n_robots
 
         logger.debug(
             f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}"
@@ -64,9 +64,9 @@ class RealRobotController(AbstractRobotController):
         # TODO: this is only for quali: fix this after quali
         if len(data_in) == 1:
             if data_in[0] & 0b01000000:
-                self._robots_info[1] = RobotInfo(has_ball=True)
+                self._robots_info[1] = RobotResponse(has_ball=True)
             else:
-                self._robots_info[1] = RobotInfo(has_ball=False)
+                self._robots_info[1] = RobotResponse(has_ball=False)
 
         self._out_packet = self._empty_command()  # flush the out_packet
 

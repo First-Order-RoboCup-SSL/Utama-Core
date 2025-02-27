@@ -1,19 +1,19 @@
 import threading
 import queue
 import time
-from team_controller.src.data.message_enum import MessageType
 from typing import List, Optional, Tuple
-from entities.data.vision import BallData, RobotData, FrameData, TeamRobotCoords
-from team_controller.src.data.base_receiver import BaseReceiver
+from entities.data.vision import BallData, RobotData, FrameData
 from team_controller.src.utils import network_manager
 from config.settings import MULTICAST_GROUP, VISION_PORT
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
 import logging
 
+from vision.vision_processor import VisionProcessor
+
 logger = logging.getLogger(__name__)
 
 
-class VisionDataReceiver(BaseReceiver):
+class VisionDataReceiver():
     """
     A class responsible for receiving and managing vision data for robots and the ball in a multi-robot game environment.
     The class interfaces with a network manager to receive packets, which contain positional data for the ball and robots
@@ -26,15 +26,13 @@ class VisionDataReceiver(BaseReceiver):
 
     def __init__(
         self,
-        messsage_queue: queue.SimpleQueue,
+        vision_processor: VisionProcessor,
         ip=MULTICAST_GROUP,
         port=VISION_PORT,
         n_yellow_robots: int = 6,
         n_blue_robots: int = 6,
         n_cameras=4,
     ):
-        super().__init__(messsage_queue)  # Setup the message queue
-
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
         self.time_received = None
         self.ball_pos: List[BallData] = None
@@ -43,6 +41,7 @@ class VisionDataReceiver(BaseReceiver):
         self.camera_frames = [None for i in range(n_cameras)]  # TODO: Use GEOMETRY
         self.frames_recvd = 0
         self.n_cameras = n_cameras
+        self.vision_processor = vision_processor
 
     def _update_data(self, detection: object) -> None:  # SSL_DetectionPacket
         # Update both ball and robot data incrementally.
@@ -68,9 +67,7 @@ class VisionDataReceiver(BaseReceiver):
             # Put the latest game state into the thread-safe queue which will wake up
             # main if it was empty.
             # TODO: we should modify how Game is updated. Instead of appending to the records list, we should really keep any data we don't have updates for.
-            self._message_queue.put_nowait(
-                (MessageType.VISION, self._avg_frames(self.camera_frames))
-            )
+            self.vision_processor.add_new_frame(self._avg_frames(self.camera_frames))
 
     def _avg_robots(self, rs: List[RobotData]) -> Optional[RobotData]:
         if not rs:

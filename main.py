@@ -6,8 +6,8 @@ import math
 from typing import List, Type
 
 
-from entities.data.command import RobotInfo
-from entities.data.vision import PredictedFrame
+from entities.data.command import RobotResponse
+from entities.data.vision import FrameData
 from vision.vision_processor import VisionProcessor
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.tests.grsim_robot_controller_startup_test import (
@@ -72,7 +72,7 @@ def main():
             f"Predicting robot position with {FRAMES_IN_TIME} frames of motion"
         )
 
-        predictions: List[PredictedFrame] = []
+        predictions: List[FrameData] = []
 
         startup_waiter = VisionProcessor()
         while not startup_waiter.is_ready():
@@ -193,12 +193,12 @@ def main1():
 
     ### Creates the made up robot info message ###
     madeup_recieved_message = [
-        RobotInfo(True),
-        RobotInfo(False),
-        RobotInfo(False),
-        RobotInfo(False),
-        RobotInfo(False),
-        RobotInfo(False),
+        RobotResponse(True),
+        RobotResponse(False),
+        RobotResponse(False),
+        RobotResponse(False),
+        RobotResponse(False),
+        RobotResponse(False),
     ]
     message_type = MessageType.ROBOT_INFO
     message_queue.put((message_type, madeup_recieved_message))

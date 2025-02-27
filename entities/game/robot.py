@@ -42,7 +42,7 @@ class Robot:
     @property
     def x(self) -> float:
         if self._robot_data is not None:
-            return self._robot_data[0]
+            return self._robot_data.x
         elif self.inactive:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
@@ -53,7 +53,7 @@ class Robot:
     @property
     def y(self) -> float:
         if self._robot_data is not None:
-            return self._robot_data[1]
+            return self._robot_data.y
         elif self.inactive:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
@@ -64,7 +64,7 @@ class Robot:
     @property
     def orientation(self) -> float:
         if self._robot_data is not None:
-            return self._robot_data[2]
+            return self._robot_data.z
         elif self.inactive:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None

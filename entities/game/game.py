@@ -1,8 +1,9 @@
 from typing import List, Optional
+
 from entities.game.field import Field
-from entities.data.vision import FrameData, RobotData, BallData, PredictedFrame
+from entities.data.vision import FrameData, RobotData, BallData
 from entities.data.referee import RefereeData
-from entities.data.command import RobotInfo
+from entities.data.command import RobotResponse
 
 from entities.game.game_object import Colour, GameObject, Robot
 from entities.game.game_object import Robot as RobotEntity
@@ -28,22 +29,19 @@ class Game:
     def __init__(
         self,
         my_team_is_yellow: bool,
-        my_team_is_right: bool
+        my_team_is_right: bool,
+        start_frame: FrameData
     ):
         self._my_team_is_yellow = my_team_is_yellow
         self._my_team_is_right = my_team_is_right
         self._field = Field(self._my_team_is_right)
 
         self._records: List[FrameData] = []
-        self._predicted_next_frame: PredictedFrame = None
+        self._predicted_next_frame: FrameData = None
 
-        self._friendly_robots: List[Robot] = [
-            Robot(id, is_friendly=True) for id in range(num_friendly_robots)
-        ]
-        self._enemy_robots: List[Robot] = [
-            Robot(id, is_friendly=False) for id in range(num_enemy_robots)
-        ]
-        self._ball: Ball = Ball(BallData(0, 0, 0, 1))
+        self._friendly_robots, self._enemy_robots = self._get_initial_robot_dicts(start_frame)       
+
+        self._ball: Ball = Ball(start_frame.ball)
 
         self._yellow_score = 0
         self._blue_score = 0
@@ -74,7 +72,7 @@ class Game:
         return self._my_team_is_yellow
 
     @property
-    def predicted_next_frame(self) -> PredictedFrame:
+    def predicted_next_frame(self) -> FrameData:
         return self._predicted_next_frame
 
     @property
@@ -117,10 +115,20 @@ class Game:
         else:
             raise ValueError("Invalid frame data.")
 
-    def add_robot_info(self, robots_info: List[RobotInfo]) -> None:
-        for robot_id, robot_info in enumerate(robots_info):
+    def add_robot_reponse(self, robot_responses: List[RobotResponse]) -> None:
+        """Process robot reponse"""
+        for robot_id, robot_info in enumerate(robot_responses):
             self._friendly_robots[robot_id].has_ball = robot_info.has_ball
-            # Extensible with more info (remeber to add the property in robot.py)
+
+    def _get_initial_robot_dicts(self, start_frame: FrameData):
+        if self.my_team_is_yellow:
+            friendly_robots = {id: Robot(id, is_friendly=True) for id in start_frame.yellow_robots}
+            enemy_robots = {id: Robot(id, is_friendly=True) for id in start_frame.blue_robots}
+        else:
+            friendly_robots = {id: Robot(id, is_friendly=True) for id in start_frame.blue_robots}
+            enemy_robots = {id: Robot(id, is_friendly=True) for id in start_frame.yellow_robots}
+
+        return friendly_robots, enemy_robots
 
     def _update_data(self, frame_data: FrameData) -> None:
         if self.my_team_is_yellow:
@@ -143,27 +151,11 @@ class Game:
         """Updates the ball's internal state instead of replacing the object."""
         if ball_data is not None:
             self._ball.ball_data = ball_data  # Ensuring we don't overwrite the Ball instance
-  
-    def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
-        if not self._records:
-            return None
-        record = self._records[-1]
-        warnings.warn(
-            "Use game.friendly_robots/enemy_robots instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return record.yellow_robots if is_yellow else record.blue_robots
-
-    def get_robot_pos(self, is_yellow: bool, robot_id: int) -> RobotData:
-        all = self.get_robots_pos(is_yellow)
-        return None if not all else all[robot_id]
 
     def get_robots_velocity(self, is_yellow: bool) -> List[tuple]:
         if len(self._records) <= 1:
             return None
         if is_yellow:
-            # TODO: potential namespace conflict when robot (robot.py) entity is reintroduced. Think about integrating the two
             return [
                 self.get_object_velocity(RobotEntity(Colour.YELLOW, i))
                 for i in range(
@@ -185,40 +177,8 @@ class Game:
     def get_ball_velocity(self) -> Optional[tuple]:
         return self.get_object_velocity(Ball)
 
-    def get_latest_frame(self) -> Optional[FrameData]:
-        return self._records[-1] if self._records else None
-
-    def get_my_latest_frame(
-        self, my_team_is_yellow: bool
-    ) -> tuple[RobotData, RobotData, BallData]:
-        """
-        FrameData rearranged as Tuple(friendly_robots, enemy_robots, balls) based on provided _my_team_is_yellow field
-        """
-        if not self._records:
-            return None
-        latest_frame = self.get_latest_frame()
-        warnings.warn(
-            "Use game.friendly/enemy.x/y/orentation instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._reorganise_frame_data(latest_frame, my_team_is_yellow)
-
-    def predict_next_frame(self) -> FrameData:
+    def predict_next_frame(self) -> FrameData: # TODO: Change to per object
         return self._predicted_next_frame
-
-    def predict_my_next_frame(
-        self, my_team_is_yellow: bool
-    ) -> tuple[RobotData, RobotData, BallData]:
-        """
-        FrameData rearranged as (friendly_robots, enemy_robots, balls) based on my_team_is_yellow
-        """
-        if self._predicted_next_frame is None:
-            return None
-        warnings.warn(
-            "Use game.predicted_next_frame instead", DeprecationWarning, stacklevel=2
-        )
-        return self._reorganise_frame_data(self._predicted_next_frame)
 
     def predict_frame_after(self, t: float) -> FrameData:
         yellow_pos = [
@@ -240,13 +200,13 @@ class Game:
                 [BallData(ball_pos[0], ball_pos[1], 0, 1)],  # TODO : Support z axis
             )
 
-    def _reorganise_frame(self, frame: FrameData) -> Optional[PredictedFrame]:
+    def _reorganise_frame(self, frame: FrameData) -> Optional[FrameData]:
         if frame:
             ts, yellow_pos, blue_pos, ball_pos = frame
             if self.my_team_is_yellow:
-                return PredictedFrame(ts, yellow_pos, blue_pos, ball_pos)
+                return FrameData(ts, yellow_pos, blue_pos, ball_pos)
             else:
-                return PredictedFrame(ts, blue_pos, yellow_pos, ball_pos)
+                return FrameData(ts, blue_pos, yellow_pos, ball_pos)
         return None
 
     def _reorganise_frame_data(

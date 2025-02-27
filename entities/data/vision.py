@@ -10,6 +10,7 @@ class BallData(NamedTuple):
     confidence: float
 
 class RobotData(NamedTuple):
+    id: int
     x: float
     y: float
     orientation: float
@@ -18,14 +19,4 @@ class FrameData(NamedTuple):
     ts: float
     yellow_robots: List[RobotData]
     blue_robots: List[RobotData]
-    ball: List[BallData]
-
-class TeamRobotCoords(NamedTuple):
-    team_color: str
-    robots: List[RobotData]
-    
-class PredictedFrame(NamedTuple):
-    ts: float
-    friendly_robots: List[RobotData]
-    enemy_robots: List[RobotData]
     ball: List[BallData]

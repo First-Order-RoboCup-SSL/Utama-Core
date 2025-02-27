@@ -1,7 +1,7 @@
 from typing import Tuple, Optional, Dict, List, Union
 import warnings
 
-from entities.data.command import RobotCommand, RobotVelCommand, RobotInfo
+from entities.data.command import RobotCommand, RobotVelCommand, RobotResponse
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -45,7 +45,7 @@ class GRSimRobotController(AbstractRobotController):
         else:
             self.net = network_manager.NetworkManager(address=(address, port[1]))
 
-        self.robots_info: List[RobotInfo] = [None] * 6
+        self.robots_info: List[RobotResponse] = [None] * 6
         self.net_diff_sum = 0
         self.net_diff_total = 0
 
@@ -70,7 +70,7 @@ class GRSimRobotController(AbstractRobotController):
             robots_info.ParseFromString(data)
             for _, robot_info in enumerate(robots_info.feedback):
                 if robot_info.HasField("dribbler_ball_contact") and robot_info.id < 6:
-                    self.robots_info[robot_info.id] = RobotInfo(
+                    self.robots_info[robot_info.id] = RobotResponse(
                         robot_info.dribbler_ball_contact
                     )
                 elif (
