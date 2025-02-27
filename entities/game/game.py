@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Only to be used in this file
 def combine_robot_vision_data(old_robot: Robot, robot_data: RobotData) -> Robot:
     assert old_robot.id == robot_data.id
-    return replace(
+    return replace(old_robot,
         id=robot_data.id,
         x=robot_data.x,
         y=robot_data.y,
