@@ -1,11 +1,13 @@
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 from entities.data.vision import BallData
 
 
 class Ball:
+    __game_update_token = object()
+    
     def __init__(self, ball_data: Optional[BallData] = None):
-        self._ball_data: BallData = ball_data
+        self._ball_data = ball_data
 
     def __bool__(self):
         return self._ball_data is not None
@@ -19,9 +21,24 @@ class Ball:
         return self._ball_data
 
     @ball_data.setter
-    def ball_data(self, value: BallData):
-        self._ball_data = value
+    def ball_data(self, value):
+        """
+        Private setter for ball_data.
+        Expects a tuple: (BallData, token).
+        """
+        if not isinstance(value, tuple) or len(value) != 2:
+            raise PermissionError("Direct assignment to ball_data is not allowed. Use the proper update mechanism.")
+        data, token = value
+        if token is not Ball.__game_update_token:
+            raise PermissionError("Only Game is allowed to update ball data.")
+        # Bypass the property to set the raw value
+        self._ball_data = data
 
+    @property
+    def coords(self) -> Tuple[float, float]:
+        if self._ball_data is not None:
+            return self._ball_data[:2]
+    
     @property
     def x(self) -> float:
         if self._ball_data is None:
