@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import List
 
+# Unit: m
+
 @dataclass
 class RawRobotData:
     id: int
@@ -22,3 +24,4 @@ class RawFrameData:
     yellow_robots: List[RawRobotData]
     blue_robots: List[RawRobotData]
     balls: List[RawBallData]
+    camera_id: int
