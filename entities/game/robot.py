@@ -9,8 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 class Robot:
-    __game_update_token = object()
-    
     def __init__(self, robot_id: int, is_friendly: bool, robot_data: Optional[RobotData] = None):
         self._id = robot_id
         self.is_friendly = is_friendly
@@ -30,33 +28,9 @@ class Robot:
         return self._id
 
     @property
-    def robot_data(self) -> RobotData:
-        if self._robot_data is not None:
-            return self._robot_data
-        elif self.inactive:
-            logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
-            return None
-        else:
-            logger.warning(f" Should not be getting coords of robot_id: {self.id} (None)")
-            return None
-
-    @robot_data.setter
-    def robot_data(self, value):
-        """
-        Private setter for robot_data.
-        Expects a tuple: (robot_data, token).
-        """
-        if not isinstance(value, tuple) or len(value) != 2:
-            raise PermissionError("Direct assignment to robot_data is not allowed. Use the proper update mechanism.")
-        data, token = value
-        if token is not Robot.__game_update_token:
-            raise PermissionError("Only Game is allowed to update robot data.")
-        self._robot_data = data
-
-    @property
     def coords(self) -> Tuple[float, float]:
         if self._robot_data is not None:
-            return self._robot_data[:2]
+            return (self._robot_data.x, self._robot_data.y)
         elif self.inactive:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
@@ -89,7 +63,7 @@ class Robot:
     @property
     def orientation(self) -> float:
         if self._robot_data is not None:
-            return self._robot_data.z
+            return self._robot_data.orientation
         elif self.inactive:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
@@ -116,17 +90,5 @@ class Robot:
         else:
             raise AttributeError("Enemy robots cannot have the 'has_ball' property.")
         
-    @has_ball.getter
-    def has_ball(self) -> bool:
-        if self.is_friendly:
-            return self._has_ball
-        else:
-            raise AttributeError("Enemy robots cannot have the 'has_ball' property.")
-        
-    @classmethod
-    def _get_game_update_token(cls):
-        """
-        Returns the token needed to update robot data.
-        By convention, only the Game class should use this.
-        """
-        return cls.__game_update_token
+    def _update_robot_data(self, value):
+        self._robot_data = value

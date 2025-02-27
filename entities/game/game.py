@@ -138,25 +138,17 @@ class Game:
         self._update_ball(frame_data.ball[0])  # Ensures BallData is correctly assigned
         
     def _update_robots(self, friendly_robot_data: List[RobotData], enemy_robot_data: List[RobotData]) -> None:
-        token = Robot._get_game_update_token()
-
         for robot_id, robot_data in enumerate(friendly_robot_data):
             if robot_data is not None:
-                self._friendly_robots[robot_id].robot_data = (robot_data, token)
+                self._friendly_robots[robot_id]._update_robot_data(robot_data)
 
         for robot_id, robot_data in enumerate(enemy_robot_data):
             if robot_data is not None:
-                self._enemy_robots[robot_id].robot_data = (robot_data, token)
+                self._enemy_robots[robot_id]._update_robot_data(robot_data)
 
     def _update_ball(self, ball_data: BallData) -> None:
-        token = Ball._get_game_update_token()
-        
         if ball_data is not None:
-            self._ball.ball_data = (ball_data, token)  # Ensuring we don't overwrite the Ball instance
-
-    def get_robot_pos(self, is_yellow: bool, robot_id: int) -> RobotData:
-        all = self.get_robots_pos(is_yellow)
-        return None if not all else all[robot_id]
+            self._ball._update_ball_data(ball_data)
 
     def get_robots_velocity(self, is_yellow: bool) -> List[tuple]:
         if len(self._records) <= 1:
