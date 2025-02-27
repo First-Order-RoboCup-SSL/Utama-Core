@@ -12,13 +12,13 @@ class Robot:
     def __init__(self, robot_id: int, is_friendly: bool, robot_data: Optional[RobotData] = None):
         self._id = robot_id
         self.is_friendly = is_friendly
-        self._robot_data = robot_data 
+        self.__robot_data = robot_data 
         self._inactive = False
         if is_friendly:
             self._has_ball = False
 
     def __bool__(self):
-        return self._robot_data is not None
+        return self.__robot_data is not None
     
     def __repr__(self):
         return f"Robot(id={self.id}, x={self.x}, y={self.y}, orientation={self.orientation})"
@@ -29,8 +29,8 @@ class Robot:
 
     @property
     def coords(self) -> Tuple[float, float]:
-        if self._robot_data is not None:
-            return (self._robot_data.x, self._robot_data.y)
+        if self.__robot_data is not None:
+            return (self.__robot_data.x, self.__robot_data.y)
         elif self.inactive:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
@@ -40,8 +40,8 @@ class Robot:
     
     @property
     def x(self) -> float:
-        if self._robot_data is not None:
-            return self._robot_data.x
+        if self.__robot_data is not None:
+            return self.__robot_data.x
         elif self.inactive:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
@@ -51,8 +51,8 @@ class Robot:
 
     @property
     def y(self) -> float:
-        if self._robot_data is not None:
-            return self._robot_data.y
+        if self.__robot_data is not None:
+            return self.__robot_data.y
         elif self.inactive:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
@@ -62,8 +62,8 @@ class Robot:
 
     @property
     def orientation(self) -> float:
-        if self._robot_data is not None:
-            return self._robot_data.orientation
+        if self.__robot_data is not None:
+            return self.__robot_data.orientation
         elif self.inactive:
             logger.critical(f" Should not be getting coords of robot_id: {self.id} (inactive)")
             return None
@@ -90,5 +90,5 @@ class Robot:
         else:
             raise AttributeError("Enemy robots cannot have the 'has_ball' property.")
         
-    def _update_robot_data(self, value):
-        self._robot_data = value
+    def _update_robot_data(self, value: RobotData) -> None:
+        self.__robot_data = value
