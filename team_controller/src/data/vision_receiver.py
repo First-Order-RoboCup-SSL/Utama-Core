@@ -1,7 +1,5 @@
 import time
-from typing import List, Optional, Tuple
-from entities.data.raw_vision import RawBallData, RawRobotData
-from entities.data.vision import BallData, RobotData, RawFrameData
+from entities.data.raw_vision import RawBallData, RawRobotData, RawFrameData
 from team_controller.src.utils import network_manager
 from config.settings import MULTICAST_GROUP, VISION_PORT
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
@@ -14,17 +12,12 @@ logger = logging.getLogger(__name__)
 
 class VisionDataReceiver:
     """
-    Args:
-        ip (str): The IP address for receiving multicast vision data. Defaults to MULTICAST_GROUP.
-        port (int): The port for receiving vision data. Defaults to VISION_PORT.
+    Receives protobuf data from SSL Vision over the network, formats into RawData types and passes it over to the
+    VisionProcessor.
     """
-
-    MAX_ROBOTS_PER_TEAM = 15
 
     def __init__(self, vision_processor: VisionProcessor):
         self.net = network_manager.NetworkManager(address=(MULTICAST_GROUP, VISION_PORT), bind_socket=True)
-        self.ball_pos: List[BallData] = None
-        self.frames_recvd = 0
         self.vision_processor = vision_processor
 
     def pull_game_data(self) -> None:
@@ -50,12 +43,12 @@ class VisionDataReceiver:
             ts=detection_frame.t_capture,
             yellow_robots=[RawRobotData(robot.robot_id, robot.x, robot.y, robot.orientation, robot.confidence) for robot in detection_frame.robots_yellow],
             blue_robots=[RawRobotData(robot.robot_id, robot.x, robot.y, robot.orientation, robot.confidence) for robot in detection_frame.robots_blue],
-            balls=[RawBallData(ball.x, ball.y, ball.z, ball.confidence) for ball in detection_frame.balls]
+            balls=[RawBallData(ball.x, ball.y, ball.z, ball.confidence) for ball in detection_frame.balls],
+            camera_id=detection_frame.camera_id
         )
 
     def _print_frame_info(self, latency: float, detection: object) -> None:
-        t_now = time.time()
-        logger.debug(f"Time Now: {t_now:.3f}s")
+        logger.debug(f"Time Now: {time.time():.3f}s")
         logger.debug(
             f"Camera ID={detection.camera_id} FRAME={detection.frame_number} "
             f"T_CAPTURE={detection.t_capture:.4f}s"
@@ -86,4 +79,3 @@ class VisionDataReceiver:
         logger.debug(
             f"num of yellow robots detected: {num_yellow_robots}, blue robots detected: {num_blue_robots}, num of balls detected: {num_balls} \n"
         )
-
