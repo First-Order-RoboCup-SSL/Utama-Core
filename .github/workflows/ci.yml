@@ -33,9 +33,9 @@ jobs:
       - name: Run tests
         run: |
           if [[ $GITHUB_EVENT_NAME == "push" ]]; then
-            pytest --level full -k "not grsim" --headless --junit-xml=test-results.xml
+            pytest --level full --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
           elif [[ $GITHUB_EVENT_NAME == "pull_request" ]]; then
-            pytest --level quick -k "not grsim" --headless --junit-xml=test-results.xml
+            pytest --level quick --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
           fi
 
       - name: Surface failing tests
