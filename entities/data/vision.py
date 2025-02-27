@@ -1,21 +1,25 @@
-from typing import Tuple, Union, Optional, List, NamedTuple
+from typing import List
+from dataclasses import dataclass
 
 # position data: meters
 # orientation: radians
 
-class BallData(NamedTuple):
+@dataclass
+class BallData:
     x: float
     y: float
     z: float
     confidence: float
 
-class RobotData(NamedTuple):
+@dataclass
+class RobotData:
     id: int
     x: float
     y: float
     orientation: float
 
-class FrameData(NamedTuple):
+@dataclass
+class FrameData:
     ts: float
     yellow_robots: List[RobotData]
     blue_robots: List[RobotData]
