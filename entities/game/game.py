@@ -64,10 +64,10 @@ class Game:
         assert len(start_frame.ball) > 0, "No ball data in start frame, must give ball start position"
         assert len(start_frame.yellow_robots) > 0, "No yellow robot data in start frame, must give yellow robot start positions"
         assert len(start_frame.blue_robots) > 0, "No blue robot data in start frame, must give blue robot start positions"
-        
+
         self._friendly_robots, self._enemy_robots = self._get_initial_robot_dicts(start_frame)       
 
-        self._ball: Ball = self._get_initial_ball(start_frame)
+        self._ball: Ball = self._get_most_confident_ball(start_frame.ball)
 
         self._referee_records = []
 
@@ -126,8 +126,8 @@ class Game:
 
         return friendly_robots, enemy_robots
 
-    def _get_initial_ball(self, start_frame: FrameData) -> Ball:
-        balls_by_confidence = sorted(start_frame.ball, key=lambda ball: ball.confidence, reverse=True)
+    def _get_most_confident_ball(self, balls: List[BallData]) -> Ball:
+        balls_by_confidence = sorted(balls, key=lambda ball: ball.confidence, reverse=True)
         return  Ball(balls_by_confidence[0].x, balls_by_confidence[0].y, balls_by_confidence[0].z)
 
     def _update_data(self, frame_data: FrameData) -> None:
@@ -135,7 +135,7 @@ class Game:
             self._update_robots(frame_data.yellow_robots, frame_data.blue_robots)
         else:
             self._update_robots(frame_data.blue_robots, frame_data.yellow_robots)
-        self._update_ball(frame_data.ball[0]) 
+        self._update_balls(frame_data.ball) 
         
     def _update_robots(self, friendly_robot_data: List[RobotData], enemy_robot_data: List[RobotData]) -> None:
         for robot_data in friendly_robot_data:
@@ -144,8 +144,10 @@ class Game:
         for robot_data in enemy_robot_data:
             self._enemy_robots[robot_data.id] = combine_robot_vision_data(self._enemy_robots[robot_data.id], robot_data)
 
-    def _update_ball(self, ball_data: BallData) -> None:
-        self._ball = ball_from_vision(ball_data)
+    def _update_balls(self, balls_data: List[BallData]) -> None:
+        # Does not update when there is nothing to update
+        if balls_data:
+            self._ball = ball_from_vision(self._get_most_confident_ball(balls_data))
 
 
     def get_robots_velocity(self, is_yellow: bool) -> List[tuple]:
