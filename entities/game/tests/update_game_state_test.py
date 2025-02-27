@@ -1,6 +1,4 @@
 from entities.game.game import Game
-from entities.game.robot import Robot
-from entities.game.ball import Ball
 from entities.data.vision import BallData, FrameData, RobotData
 
 
