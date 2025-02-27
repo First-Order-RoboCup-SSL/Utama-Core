@@ -1,11 +1,10 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict
 
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData
 from entities.data.referee import RefereeData
-from entities.data.command import RobotResponse
 
-from entities.game.game_object import Colour, GameObject, Robot
+from entities.game.game_object import Colour, GameObject
 from entities.game.game_object import Robot as RobotEntity
 from entities.game.robot import Robot
 from entities.game.ball import Ball
@@ -14,12 +13,36 @@ from entities.game.team_info import TeamInfo
 from entities.referee.referee_command import RefereeCommand
 from entities.referee.stage import Stage
 
-from config.settings import TIMESTEP
-
-import logging, warnings
+import logging
 
 logger = logging.getLogger(__name__)
 
+
+# Only to be used in this file
+def combine_robot_vision_data(old_robot: Robot, robot_data: RobotData) -> Robot:
+    assert old_robot.id == robot_data.id
+    return Robot(
+        id=robot_data.id,
+        is_friendly=old_robot.is_friendly,
+        has_ball=old_robot.has_ball,
+        x=robot_data.x,
+        y=robot_data.y,
+        orientation=robot_data.orientation
+    )
+
+# Used at start of the game so assume robot does not have the ball
+def robot_from_vision(robot_data: RobotData, is_friendly: bool) -> Robot:
+    return Robot(
+        id=robot_data.id,
+        is_friendly=is_friendly,
+        has_ball=False,
+        x=robot_data.x,
+        y=robot_data.y,
+        orientation=robot_data.orientation
+    )
+
+def ball_from_vision(ball_data: BallData) -> Ball:
+    return Ball(ball_data.x, ball_data.y, ball_data.z)
 
 class Game:
     """
@@ -37,14 +60,10 @@ class Game:
         self._field = Field(self._my_team_is_right)
 
         self._records: List[FrameData] = []
-        self._predicted_next_frame: FrameData = None
-
         self._friendly_robots, self._enemy_robots = self._get_initial_robot_dicts(start_frame)       
 
         self._ball: Ball = Ball(start_frame.ball)
 
-        self._yellow_score = 0
-        self._blue_score = 0
         self._referee_records = []
 
     @property
@@ -52,28 +71,8 @@ class Game:
         return self._field
 
     @property
-    def current_state(self) -> FrameData:
-        return self._records[-1] if self._records else None
-
-    @property
-    def records(self) -> List[FrameData]:
-        return self._records if self._records else None
-
-    @property
-    def yellow_score(self) -> int:
-        return self._yellow_score
-
-    @property
-    def blue_score(self) -> int:
-        return self._blue_score
-
-    @property
     def my_team_is_yellow(self) -> bool:
         return self._my_team_is_yellow
-
-    @property
-    def predicted_next_frame(self) -> FrameData:
-        return self._predicted_next_frame
 
     @property
     def friendly_robots(self) -> List[Robot]:
@@ -88,7 +87,7 @@ class Game:
         return self._ball
 
     # Put in the field class?
-    def is_ball_in_goal(self, right_goal: bool):
+    def is_ball_in_goal(self, right_goal: bool) -> bool:
         ball_pos = self.ball
         return (
             ball_pos.x < -self.field.half_length
@@ -108,25 +107,17 @@ class Game:
     def add_new_state(self, frame_data: FrameData) -> None:
         if isinstance(frame_data, FrameData):
             self._records.append(frame_data)
-            self._predicted_next_frame = self._reorganise_frame(
-                self.predict_frame_after(TIMESTEP)
-            )
             self._update_data(frame_data)
         else:
             raise ValueError("Invalid frame data.")
 
-    def add_robot_reponse(self, robot_responses: List[RobotResponse]) -> None:
-        """Process robot reponse"""
-        for robot_id, robot_info in enumerate(robot_responses):
-            self._friendly_robots[robot_id].has_ball = robot_info.has_ball
-
-    def _get_initial_robot_dicts(self, start_frame: FrameData):
+    def _get_initial_robot_dicts(self, start_frame: FrameData) -> Tuple[Dict[int, Robot], Dict[int, Robot]]:
         if self.my_team_is_yellow:
-            friendly_robots = {id: Robot(id, is_friendly=True) for id in start_frame.yellow_robots}
-            enemy_robots = {id: Robot(id, is_friendly=True) for id in start_frame.blue_robots}
+            friendly_robots = {rd.id: robot_from_vision(rd, is_friendly=True) for rd in start_frame.yellow_robots}
+            enemy_robots = {rd.id: robot_from_vision(rd, is_friendly=False) for rd in start_frame.blue_robots}
         else:
-            friendly_robots = {id: Robot(id, is_friendly=True) for id in start_frame.blue_robots}
-            enemy_robots = {id: Robot(id, is_friendly=True) for id in start_frame.yellow_robots}
+            friendly_robots = {rd.id: robot_from_vision(rd, is_friendly=True) for rd in start_frame.blue_robots}
+            enemy_robots = {rd.id: robot_from_vision(rd, is_friendly=False) for rd in start_frame.yellow_robots}
 
         return friendly_robots, enemy_robots
 
@@ -135,20 +126,18 @@ class Game:
             self._update_robots(frame_data.yellow_robots, frame_data.blue_robots)
         else:
             self._update_robots(frame_data.blue_robots, frame_data.yellow_robots)
-        self._update_ball(frame_data.ball[0])  # Ensures BallData is correctly assigned
+        self._update_ball(frame_data.ball[0]) 
         
     def _update_robots(self, friendly_robot_data: List[RobotData], enemy_robot_data: List[RobotData]) -> None:
-        for robot_id, robot_data in enumerate(friendly_robot_data):
-            if robot_data is not None:
-                self._friendly_robots[robot_id]._update_robot_data(robot_data)
+        for robot_data in friendly_robot_data:
+            self._friendly_robots[robot_data.id] = combine_robot_vision_data(self._friendly_robots[robot_data.id], robot_data)
 
-        for robot_id, robot_data in enumerate(enemy_robot_data):
-            if robot_data is not None:
-                self._enemy_robots[robot_id]._update_robot_data(robot_data)
+        for robot_data in enemy_robot_data:
+            self._enemy_robots[robot_data.id] = combine_robot_vision_data(self._enemy_robots[robot_data.id], robot_data)
 
     def _update_ball(self, ball_data: BallData) -> None:
-        if ball_data is not None:
-            self._ball._update_ball_data(ball_data)
+        self._ball = ball_from_vision(ball_data)
+
 
     def get_robots_velocity(self, is_yellow: bool) -> List[tuple]:
         if len(self._records) <= 1:
@@ -169,9 +158,6 @@ class Game:
     def get_ball_velocity(self) -> Optional[tuple]:
         return self.get_object_velocity(Ball)
 
-    def predict_next_frame(self) -> FrameData: # TODO: Change to per object
-        return self._predicted_next_frame
-
     def predict_frame_after(self, t: float) -> FrameData:
         yellow_pos = [
             self.predict_object_pos_after(t, RobotEntity(Colour.YELLOW, i))
@@ -191,24 +177,6 @@ class Game:
                 list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
                 [BallData(ball_pos[0], ball_pos[1], 0, 1)],  # TODO : Support z axis
             )
-
-    def _reorganise_frame(self, frame: FrameData) -> Optional[FrameData]:
-        if frame:
-            ts, yellow_pos, blue_pos, ball_pos = frame
-            if self.my_team_is_yellow:
-                return FrameData(ts, yellow_pos, blue_pos, ball_pos)
-            else:
-                return FrameData(ts, blue_pos, yellow_pos, ball_pos)
-        return None
-
-    def _reorganise_frame_data(
-        self, frame_data: FrameData, my_team_is_yellow: bool
-    ) -> tuple[RobotData, RobotData, BallData]:
-        _, yellow_robots, blue_robots, balls = frame_data
-        if my_team_is_yellow:
-            return yellow_robots, blue_robots, balls
-        else:
-            return blue_robots, yellow_robots, balls
 
     ### General Object Position Prediction ###
     def predict_object_pos_after(self, t: float, object: GameObject) -> Optional[tuple]:
@@ -247,7 +215,7 @@ class Game:
             start_y + sy,
         )  # TODO: Doesn't take into account spin / angular vel
 
-    def _calculate_displacement(self, u, a, t):
+    def _calculate_displacement(self, u, a, t) -> float:
         if a == 0:  # Handle zero acceleration case
             return u * t
         else:
