@@ -60,9 +60,14 @@ class Game:
         self._field = Field(self._my_team_is_right)
 
         self._records: List[FrameData] = []
+
+        assert len(start_frame.ball) > 0, "No ball data in start frame, must give ball start position"
+        assert len(start_frame.yellow_robots) > 0, "No yellow robot data in start frame, must give yellow robot start positions"
+        assert len(start_frame.blue_robots) > 0, "No blue robot data in start frame, must give blue robot start positions"
+        
         self._friendly_robots, self._enemy_robots = self._get_initial_robot_dicts(start_frame)       
 
-        self._ball: Ball = Ball(start_frame.ball[0].x, start_frame.ball[0].y, start_frame.ball[0].z)
+        self._ball: Ball = self._get_initial_ball(start_frame)
 
         self._referee_records = []
 
@@ -120,6 +125,10 @@ class Game:
             enemy_robots = {rd.id: robot_from_vision(rd, is_friendly=False) for rd in start_frame.yellow_robots}
 
         return friendly_robots, enemy_robots
+
+    def _get_initial_ball(self, start_frame: FrameData) -> Ball:
+        balls_by_confidence = sorted(start_frame.ball, key=lambda ball: ball.confidence, reverse=True)
+        return  Ball(balls_by_confidence[0].x, balls_by_confidence[0].y, balls_by_confidence[0].z)
 
     def _update_data(self, frame_data: FrameData) -> None:
         if self.my_team_is_yellow:

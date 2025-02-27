@@ -48,7 +48,7 @@ def test_passing_blue_game_initial_frame_is_reflected_in_robots():
 
 
 def test_passing_initial_large_robot_id_is_reflected():
-    game = Game(True, True, start_frame=FrameData(0, [RobotData(12345, 1,2,3)], [], [basic_ball]))
+    game = Game(True, True, start_frame=FrameData(0, [RobotData(12345, 1,2,3)], blue_robot_data, [basic_ball]))
 
     assert len(game.friendly_robots) == 1
     assert game.friendly_robots[12345].x == 1
@@ -57,7 +57,7 @@ def test_passing_initial_large_robot_id_is_reflected():
 
 
 def test_passing_initial_ball_is_reflected():
-    game = Game(True, True, start_frame=FrameData(0, [], [], [BallData(1,2,3,4)]))
+    game = Game(True, True, start_frame=FrameData(0, yellow_robot_data, blue_robot_data, [BallData(1,2,3,4)]))
 
     assert isinstance(game.ball, Ball)
     assert game.ball.x == 1
@@ -67,7 +67,7 @@ def test_passing_initial_ball_is_reflected():
 
 
 def test_initial_highest_confidence_ball_is_taken():
-    game = Game(True, True, start_frame=FrameData(0, [], [], [BallData(1,2,3,4), BallData(10, 20, 30, 40)]))
+    game = Game(True, True, start_frame=FrameData(0, yellow_robot_data, blue_robot_data, [BallData(1,2,3,4), BallData(10, 20, 30, 40)]))
 
     assert game.ball.x == 10
     assert game.ball.y == 20
@@ -80,5 +80,5 @@ if __name__ == "__main__":
     test_passing_blue_game_initial_frame_is_reflected_in_robots
     test_passing_initial_large_robot_id_is_reflected()
     test_passing_initial_ball_is_reflected()
-    # test_initial_highest_confidence_ball_is_taken()
+    test_initial_highest_confidence_ball_is_taken()
     print("All tests passed!")
