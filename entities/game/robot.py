@@ -1,9 +1,9 @@
+from __future__ import annotations
 from typing import Tuple
 from dataclasses import dataclass
 import logging
 
 from entities.data.vision import RobotData
-from __future__ import annotations
 
 logger = logging.getLogger(__name__)
 

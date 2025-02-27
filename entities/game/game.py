@@ -62,7 +62,7 @@ class Game:
         self._records: List[FrameData] = []
         self._friendly_robots, self._enemy_robots = self._get_initial_robot_dicts(start_frame)       
 
-        self._ball: Ball = Ball(start_frame.ball.x, start_frame.ball.y, start_frame.ball.z)
+        self._ball: Ball = Ball(start_frame.ball[0].x, start_frame.ball[0].y, start_frame.ball[0].z)
 
         self._referee_records = []
 
