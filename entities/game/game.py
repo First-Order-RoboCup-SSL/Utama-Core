@@ -1,4 +1,5 @@
 from typing import List, Optional, Tuple, Dict
+from dataclasses import replace
 
 from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData
@@ -21,10 +22,8 @@ logger = logging.getLogger(__name__)
 # Only to be used in this file
 def combine_robot_vision_data(old_robot: Robot, robot_data: RobotData) -> Robot:
     assert old_robot.id == robot_data.id
-    return Robot(
+    return replace(
         id=robot_data.id,
-        is_friendly=old_robot.is_friendly,
-        has_ball=old_robot.has_ball,
         x=robot_data.x,
         y=robot_data.y,
         orientation=robot_data.orientation
