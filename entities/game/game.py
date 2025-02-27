@@ -130,19 +130,21 @@ class Game:
         self._update_ball(frame_data.ball[0])  # Ensures BallData is correctly assigned
         
     def _update_robots(self, friendly_robot_data: List[RobotData], enemy_robot_data: List[RobotData]) -> None:
-        """Updates robot data safely without exposing direct modification."""
+        token = Robot._get_game_update_token()
+
         for robot_id, robot_data in enumerate(friendly_robot_data):
             if robot_data is not None:
-                self._friendly_robots[robot_id].robot_data = robot_data
+                self._friendly_robots[robot_id].robot_data = (robot_data, token)
 
         for robot_id, robot_data in enumerate(enemy_robot_data):
             if robot_data is not None:
-                self._enemy_robots[robot_id].robot_data = robot_data
+                self._enemy_robots[robot_id].robot_data = (robot_data, token)
 
     def _update_ball(self, ball_data: BallData) -> None:
-        """Updates the ball's internal state instead of replacing the object."""
+        token = Ball._get_game_update_token()
+        
         if ball_data is not None:
-            self._ball.ball_data = ball_data  # Ensuring we don't overwrite the Ball instance
+            self._ball.ball_data = (ball_data, token)  # Ensuring we don't overwrite the Ball instance
   
     def get_robots_pos(self, is_yellow: bool) -> List[RobotData]:
         if not self._records:
