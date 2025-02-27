@@ -56,3 +56,11 @@ class Ball:
         if self._ball_data is None:
             return None
         return self._ball_data.z
+    
+    @classmethod
+    def _get_game_update_token(cls):
+        """
+        Returns the token needed to update ball data.
+        By convention, only the Game class should use this.
+        """
+        return cls.__game_update_token
