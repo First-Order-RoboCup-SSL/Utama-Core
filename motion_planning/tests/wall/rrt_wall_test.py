@@ -16,6 +16,7 @@ import random
 import time
 from math import dist
 
+
 def test_pathfinding(headless: bool):
     game = Game()
     N_ROBOTS_YELLOW = 6

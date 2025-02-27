@@ -1,5 +1,5 @@
 from typing import List
-from entities.game.game_object import  Robot as GameRobot
+from entities.game.game_object import Robot as GameRobot
 from motion_planning.src.planning.path_planner import point_to_tuple
 from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.skills import (

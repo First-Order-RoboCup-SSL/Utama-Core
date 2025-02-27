@@ -3,9 +3,7 @@ import unittest
 
 
 class TestKDTree(unittest.TestCase):
-
     def test_kdtree(self):
-
         tree = KDTree()
         tree.insert((2, 6))
         tree.insert((3, 1))
@@ -20,5 +18,5 @@ class TestKDTree(unittest.TestCase):
         assert tree.get_nearest((13, 3))[0] == (13, 3)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

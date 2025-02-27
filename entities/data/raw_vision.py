@@ -3,6 +3,7 @@ from typing import List
 
 # Unit: m
 
+
 @dataclass
 class RawRobotData:
     id: int
@@ -11,12 +12,14 @@ class RawRobotData:
     orientation: float
     confidence: float
 
+
 @dataclass
 class RawBallData:
     x: float
     y: float
     z: float
     confidence: float
+
 
 @dataclass
 class RawFrameData:

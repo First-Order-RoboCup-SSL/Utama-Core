@@ -1,6 +1,11 @@
 import random
 from motion_planning.src.pid.pid import get_rsim_pids
-from robot_control.src.skills import face_ball, go_to_point, goalkeep, find_likely_enemy_shooter
+from robot_control.src.skills import (
+    face_ball,
+    go_to_point,
+    goalkeep,
+    find_likely_enemy_shooter,
+)
 from robot_control.src.tests.utils import setup_pvp
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
@@ -73,7 +78,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
     shoot_in_left_goal = random.random() > 0.5
 
     time.sleep(2)
-    
+
     for iter in range(ITERS):
         # TODO: We should move robot_has_ball within game obj as well
         # This will do for now.
@@ -81,12 +86,16 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
             friendly, enemy, balls = game.get_my_latest_frame(
                 my_team_is_yellow=defender_is_yellow
             )
-            
+
             f = game.predict_next_frame()
             if f:
-                env.draw_point(f.friendly_robots[shooter_id].x, f.friendly_robots[shooter_id].y, color="YELLOW")
+                env.draw_point(
+                    f.friendly_robots[shooter_id].x,
+                    f.friendly_robots[shooter_id].y,
+                    color="YELLOW",
+                )
                 env.draw_point(f.enemy_robots[0].x, f.enemy_robots[0].y, color="BLUE")
-        
+
             attack_cmd = score_goal(
                 game,
                 sim_robot_controller_attacker.robot_has_ball(shooter_id),
@@ -108,7 +117,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 target = game.predict_ball_pos_at_x(4.5 - 0.4)
             else:
                 target = game.predict_ball_pos_at_x(-4.5 + 0.4)
-            
+
             if target and not find_likely_enemy_shooter(enemy, balls):
                 defend_cmd = go_to_point(
                     pid_oren_d,

@@ -27,7 +27,6 @@ def ball_position(t, x0, v0, a):
 def interception_chance(
     passer, receiver, opponent, robot_speed, ball_v0_magnitude, ball_a_magnitude
 ):
-
     # assert type(passer) != tuple
     # assert type(receiver) != tuple
     # robot_speed = np.linalg.norm(robot_velocity)

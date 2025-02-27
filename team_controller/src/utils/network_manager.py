@@ -31,7 +31,6 @@ class NetworkManager:
         """
         # Send a command to the server.
         return network_utils.send_command(self.address, command, is_sim_robot_cmd)
-        
 
     def receive_data(self) -> Optional[bytes]:
         """

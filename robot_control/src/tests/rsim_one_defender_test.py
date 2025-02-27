@@ -16,6 +16,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def attack(
     pid_oren: PID,
     pid_2d: TwoDPID,
@@ -46,7 +47,7 @@ def test_single_defender(
     defender_id: int, shooter_id: int, defender_is_yellow: bool, headless: bool
 ):
     game = Game()
-    
+
     if defender_is_yellow:
         N_ROBOTS_YELLOW = 3
         N_ROBOTS_BLUE = 6
@@ -122,7 +123,6 @@ def test_single_defender(
         )
         sim_robot_controller_defender.add_robot_commands(cmd, defender_id)
         sim_robot_controller_defender.send_robot_commands()
-
 
         if sim_robot_controller_defender.robot_has_ball(
             defender_id

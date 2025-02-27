@@ -48,10 +48,14 @@ if __name__ == "__main__":
                 blue_team_robots_removed = []
                 id = 0
 
-                logger.info(f"Yellow team yellow card times: {yellow_team_yellow_card_times}")
-                logger.info(f"Blue team yellow card times: {blue_team_yellow_card_times}")
+                logger.info(
+                    f"Yellow team yellow card times: {yellow_team_yellow_card_times}"
+                )
+                logger.info(
+                    f"Blue team yellow card times: {blue_team_yellow_card_times}"
+                )
                 if len(yellow_team_yellow_card_times) == 0:
-                    pass # print("!!!!!!!!!")
+                    pass  # print("!!!!!!!!!")
 
                 if len(yellow_team_yellow_card_times) != 0 and len(
                     yellow_team_yellow_card_times

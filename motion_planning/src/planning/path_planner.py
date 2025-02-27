@@ -62,6 +62,7 @@ class RRTPlanner:
     """This class is a stateless planning class and should not be used on its own
     see the controllers class which provide state tracking and waypoint switching for these classes such as TimedSwitchController
     """
+
     # TODO - make these parameters configurable at runtime
     # TODO - Add support for avoiding goal areas - should be easy to use the Field object for this
 
@@ -203,7 +204,7 @@ class RRTPlanner:
         for its in range(max_iterations):
             if its % 250 == 0:
                 logger.debug(
-                    f'RRT info: ITERS: {its} nodes: {len(self.par.keys())}, BEST: {cost_map.get(goal, float("inf"))} EUCLID: {goal.distance(start)}'
+                    f"RRT info: ITERS: {its} nodes: {len(self.par.keys())}, BEST: {cost_map.get(goal, float('inf'))} EUCLID: {goal.distance(start)}"
                 )
             if random.random() < self.EXPLORE_BIAS:
                 rand_point = Point(
@@ -259,11 +260,7 @@ class RRTPlanner:
                     LineString([best_parent, rand_point])
                 ) < self.STOPPING_DISTANCE and cost_map[
                     rand_point
-                ] + rand_point.distance(
-                    goal
-                ) < cost_map.get(
-                    goal, float("inf")
-                ):
+                ] + rand_point.distance(goal) < cost_map.get(goal, float("inf")):
                     self.par[goal] = rand_point
                     cost_map[goal] = cost_map[rand_point] + rand_point.distance(goal)
                     path_found = True
@@ -323,6 +320,7 @@ class DynamicWindowPlanner:
 
 
     """
+
     SIMULATED_TIMESTEP = 0.2  # seconds
     MAX_ACCELERATION = 2  # Measured in ms^2
     DIRECTIONS = [i * 2 * pi / N_DIRECTIONS for i in range(N_DIRECTIONS)]
@@ -436,10 +434,9 @@ class DynamicWindowPlanner:
             Point(segment.coords[1])
         )
         our_velocity_vector = (
-            segment.coords[1][0] - segment.coords[0][0]
-        ) / self.SIMULATED_TIMESTEP, (
-            segment.coords[1][1] - segment.coords[0][1]
-        ) / self.SIMULATED_TIMESTEP
+            (segment.coords[1][0] - segment.coords[0][0]) / self.SIMULATED_TIMESTEP,
+            (segment.coords[1][1] - segment.coords[0][1]) / self.SIMULATED_TIMESTEP,
+        )
         if our_velocity_vector is None:
             our_velocity_vector = (0, 0)
 
@@ -517,6 +514,7 @@ class BisectorPlanner:
     """This class is a stateless planning class and should not be used on its own
     see the controllers class which provide state tracking and waypoint switching for these classes such as TimedSwitchController
     """
+
     OBSTACLE_CLEARANCE = ROBOT_DIAMETER
     ClOSE_LIMIT = 0.5
     SAMPLE_SIZE = 0.10
@@ -578,7 +576,7 @@ class BisectorPlanner:
             temporary_obstacles (List[Polygon]): A list of temporary obstacles represented as Polygon objects.
                 These obstacles represent imaginary and temporary regions to avoid, such as defense areas during play.
                 During setup time and ball placement, the robot may be allowed to enter these areas. For temporary obstacles
-                we assume that entering them is possible but not desirable. 
+                we assume that entering them is possible but not desirable.
         Returns:
             Tuple[float, float]: The next position (x, y) for the robot to move towards the target.
         """
@@ -634,11 +632,14 @@ class BisectorPlanner:
                 if not self._segment_intersects(
                     seg1, obsts
                 ) and not self._segment_intersects(seg2, obsts):
-
                     if self._env is not None:
-
                         self._env.draw_point(*point_to_tuple(p1), color="PINK", width=1)
-                        col = "GREEN" if not intersects_any_polygon(seg1, temporary_obstacles) and not intersects_any_polygon(seg2, temporary_obstacles) else "RED"
+                        col = (
+                            "GREEN"
+                            if not intersects_any_polygon(seg1, temporary_obstacles)
+                            and not intersects_any_polygon(seg2, temporary_obstacles)
+                            else "RED"
+                        )
                         self._env.draw_line(list(seg1.coords), width=1, color=col)
                         self._env.draw_line(list(seg2.coords), width=3, color=col)
                     if not intersects_any_polygon(
@@ -650,7 +651,6 @@ class BisectorPlanner:
                     self._env.draw_line(list(seg1.coords), width=1, color="RED")
                     self._env.draw_line(list(seg2.coords), width=1, color="RED")
 
-
         if got:
             return got
         return point_to_tuple(midpoint)
@@ -658,7 +658,6 @@ class BisectorPlanner:
     def _segment_intersects(
         self, seg: LineString, obstacles: List[Tuple[float, float]]
     ) -> bool:
-
         for o in obstacles:
             if Point((o.x, o.y)).distance(seg) < BisectorPlanner.OBSTACLE_CLEARANCE:
                 return True

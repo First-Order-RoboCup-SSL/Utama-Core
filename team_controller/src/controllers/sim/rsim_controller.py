@@ -70,7 +70,7 @@ class RSimController(AbstractSimController):
         """
         x, y = self._get_teleport_location(
             robot_id, is_team_yellow, should_robot_be_present
-        )   
+        )
         self.teleport_robot(is_team_yellow, robot_id, x, y, 0)
 
     def _get_teleport_location(

@@ -77,7 +77,7 @@ def test_grsim_shooting(shooter_id: int, is_yellow: bool, headless: bool):
             if game.is_ball_in_goal(right_goal=not is_yellow):
                 logger.info(f"Test Passed: Goal scored in {elapsed_time:.2f} seconds.")
                 break
-            
+
         assert True  # Success
 
     except KeyboardInterrupt:

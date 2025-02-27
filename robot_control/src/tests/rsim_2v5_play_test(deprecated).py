@@ -66,7 +66,6 @@ def test_2v5_play(friendly_robot_ids: List[int], is_yellow: bool, headless: bool
 
     try:
         while True:
-
             elapsed_time = time.time() - start_time
             if elapsed_time > MAX_TIME:
                 logger.info("Test Failed: Time limit exceeded.")

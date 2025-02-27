@@ -85,7 +85,7 @@ class RealRobotController(AbstractRobotController):
         Adds a robot command to the out_packet.
 
         Args:
-            robot_id (int): The ID of the robot.    
+            robot_id (int): The ID of the robot.
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
         c_command = self._convert_float_command(robot_id, command)

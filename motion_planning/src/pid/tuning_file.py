@@ -12,12 +12,15 @@ from team_controller.src.controllers import RSimRobotController
 
 N_ROBOTS = 6
 
-def get_rsim_pids_tuned(n_robots: int,
-                        kp_oren: float,
-                        kd_oren: float,
-                        kp_trans: float,
-                        kd_trans: float,
-                        ki_trans: float = 0.0):
+
+def get_rsim_pids_tuned(
+    n_robots: int,
+    kp_oren: float,
+    kd_oren: float,
+    kp_trans: float,
+    kd_trans: float,
+    ki_trans: float = 0.0,
+):
     """
     Create tuned PID controllers for orientation and translation.
 
@@ -55,6 +58,7 @@ def get_rsim_pids_tuned(n_robots: int,
     )
     return pid_oren, PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=2)
 
+
 def calc_errors(robot, ball):
     """
     Calculate translation and orientation errors between a robot and a ball.
@@ -70,28 +74,30 @@ def calc_errors(robot, ball):
     """
     rx, ry, ro = robot
     bx, by = ball
-    
+
     if -1.5 <= ry <= 1.5:
         trans_error = rx
     elif ry > 1.5:
         trans_error = math.dist((rx, ry), (0, 1.5))
     elif ry < -1.5:
         trans_error = math.dist((rx, ry), (0, -1.5))
-        
+
     oren_error = math.atan2(by - ry, bx - rx) - ro
-    
+
     # print(f"Trans error: {trans_error}, Oren error: {oren_error}")s
     return trans_error, oren_error
-        
 
-def run_simulation(kp_oren: float,
-                   kd_oren: float,
-                   kp_trans: float,
-                   kd_trans: float,
-                   ki_trans: float,
-                   robot_to_place: int,
-                   is_yellow: bool,
-                   headless: bool):
+
+def run_simulation(
+    kp_oren: float,
+    kd_oren: float,
+    kp_trans: float,
+    kd_trans: float,
+    ki_trans: float,
+    robot_to_place: int,
+    is_yellow: bool,
+    headless: bool,
+):
     """
     Run a simulation (similar to test_one_robot_placement) and return performance metrics.
 
@@ -106,16 +112,15 @@ def run_simulation(kp_oren: float,
     ITERS = 1500
     TARGET_OREN = math.pi / 2
     game = Game()
-    
+
     ball = game.ball
-    
+
     N_ROBOTS_BLUE = N_ROBOTS
     N_ROBOTS_YELLOW = N_ROBOTS
-    
+
     # Set up simulation environment
     env = SSLStandardEnv(
-        n_robots_blue=N_ROBOTS_BLUE,
-        render_mode="ansi" if headless else "human"
+        n_robots_blue=N_ROBOTS_BLUE, render_mode="ansi" if headless else "human"
     )
     env.reset()
     env.teleport_ball(1, 0)
@@ -128,15 +133,13 @@ def run_simulation(kp_oren: float,
         kd_oren,
         kp_trans,
         kd_trans,
-        ki_trans
+        ki_trans,
     )
 
     sim_robot_controller = RSimRobotController(
-        is_team_yellow=is_yellow,
-        env=env,
-        game_obj=game
+        is_team_yellow=is_yellow, env=env, game_obj=game
     )
-    
+
     # The one_robot_placement routine is assumed to return:
     # (switch, _, _, co, trans_error, oren_error)
     one_step = one_robot_placement(
@@ -167,51 +170,56 @@ def run_simulation(kp_oren: float,
 
     # If insufficient switch events, return high error metrics
     if len(change_iters) < 2:
-        return float('inf'), float('inf'), float('inf')
+        return float("inf"), float("inf"), float("inf")
 
     # Compute travel time variability based on switch events
-    travel_times = [change_iters[i+1] - change_iters[i] for i in range(len(change_iters) - 1)]
+    travel_times = [
+        change_iters[i + 1] - change_iters[i] for i in range(len(change_iters) - 1)
+    ]
     base_travel_time = travel_times[0]
-    raw_variability = np.mean([abs(tt - base_travel_time) / base_travel_time for tt in travel_times])
-    
+    raw_variability = np.mean(
+        [abs(tt - base_travel_time) / base_travel_time for tt in travel_times]
+    )
+
     switch_count = len(change_iters)
     variability = raw_variability * (1.0 / switch_count)
-    
+
     # Compute average errors over all iterations
     avg_trans_error = np.mean(np.abs(trans_errors))
     avg_oren_error = np.mean(np.abs(oren_errors))
 
     return variability, avg_trans_error, avg_oren_error
 
+
 def auto_tune_pid():
     # Define initial search boundaries (ensure all ranges are positive)
     param_ranges = {
-        'kp_oren': (18.0, 23.0),
-        'kd_oren': (0.0, 0.15),  
-        'kp_trans': (0.5, 2.5),
-        'kd_trans': (0.0, 0.005),
-        'ki_trans': (0.0, 0.05),
+        "kp_oren": (18.0, 23.0),
+        "kd_oren": (0.0, 0.15),
+        "kp_trans": (0.5, 2.5),
+        "kd_trans": (0.0, 0.005),
+        "ki_trans": (0.0, 0.05),
     }
 
     # Initialize parameters with mid-range values
     current_params = {
-        'kp_oren': np.mean(param_ranges['kp_oren']),
-        'kd_oren': np.mean(param_ranges['kd_oren']),
-        'kp_trans': np.mean(param_ranges['kp_trans']),
-        'kd_trans': np.mean(param_ranges['kd_trans']),
-        'ki_trans': param_ranges['ki_trans'][0]  # Start with min Ki
+        "kp_oren": np.mean(param_ranges["kp_oren"]),
+        "kd_oren": np.mean(param_ranges["kd_oren"]),
+        "kp_trans": np.mean(param_ranges["kp_trans"]),
+        "kd_trans": np.mean(param_ranges["kd_trans"]),
+        "ki_trans": param_ranges["ki_trans"][0],  # Start with min Ki
     }
 
     # Adaptive step sizes (initial = 25% of parameter range)
     steps = {
-        'kp_oren': (param_ranges['kp_oren'][1] - param_ranges['kp_oren'][0]) * 0.25,
-        'kd_oren': (param_ranges['kd_oren'][1] - param_ranges['kd_oren'][0]) * 0.25,
-        'kp_trans': (param_ranges['kp_trans'][1] - param_ranges['kp_trans'][0]) * 0.25,
-        'kd_trans': (param_ranges['kd_trans'][1] - param_ranges['kd_trans'][0]) * 0.25,
-        'ki_trans': param_ranges['ki_trans'][0] * 0.25
+        "kp_oren": (param_ranges["kp_oren"][1] - param_ranges["kp_oren"][0]) * 0.25,
+        "kd_oren": (param_ranges["kd_oren"][1] - param_ranges["kd_oren"][0]) * 0.25,
+        "kp_trans": (param_ranges["kp_trans"][1] - param_ranges["kp_trans"][0]) * 0.25,
+        "kd_trans": (param_ranges["kd_trans"][1] - param_ranges["kd_trans"][0]) * 0.25,
+        "ki_trans": param_ranges["ki_trans"][0] * 0.25,
     }
 
-    best_score = float('inf')
+    best_score = float("inf")
     best_params = current_params.copy()
     stagnation_counter = 0
     min_step_size = 0.05  # Minimum step size for termination
@@ -225,9 +233,9 @@ def auto_tune_pid():
 
     # Define tuning order groups
     tune_groups = [
-        ['kp_oren', 'kp_trans'],  # First tune all Kp terms
-        ['kd_oren', 'kd_trans'],  # Then tune Kd terms
-        ['ki_trans']              # Finally tune Ki terms
+        ["kp_oren", "kp_trans"],  # First tune all Kp terms
+        ["kd_oren", "kd_trans"],  # Then tune Kd terms
+        ["ki_trans"],  # Finally tune Ki terms
     ]
 
     while True:
@@ -243,15 +251,13 @@ def auto_tune_pid():
 
                 # Positive direction test
                 current_params[param] = np.clip(
-                    original_value + steps[param],
-                    *param_ranges[param]
+                    original_value + steps[param], *param_ranges[param]
                 )
                 score_pos = _evaluate_params(current_params, weights)
 
                 # Negative direction test
                 current_params[param] = np.clip(
-                    original_value - steps[param],
-                    *param_ranges[param]
+                    original_value - steps[param], *param_ranges[param]
                 )
                 score_neg = _evaluate_params(current_params, weights)
 
@@ -259,18 +265,32 @@ def auto_tune_pid():
                 if min(score_pos, score_neg) < best_score:
                     improved = True
                     if score_pos < score_neg:
-                        current_params[param] = np.clip(original_value + steps[param], *param_ranges[param])
-                        steps[param] = min(steps[param] * 1.3, 0.1 * (param_ranges[param][1] - param_ranges[param][0]))
+                        current_params[param] = np.clip(
+                            original_value + steps[param], *param_ranges[param]
+                        )
+                        steps[param] = min(
+                            steps[param] * 1.3,
+                            0.1 * (param_ranges[param][1] - param_ranges[param][0]),
+                        )
                     else:
-                        current_params[param] = np.clip(original_value - steps[param], *param_ranges[param])
-                        steps[param] = min(steps[param] * 1.3, 0.1 * (param_ranges[param][1] - param_ranges[param][0]))
+                        current_params[param] = np.clip(
+                            original_value - steps[param], *param_ranges[param]
+                        )
+                        steps[param] = min(
+                            steps[param] * 1.3,
+                            0.1 * (param_ranges[param][1] - param_ranges[param][0]),
+                        )
                     best_score = min(score_pos, score_neg)
                     best_params = current_params.copy()
-                    res = {key : round(best_params[key], 4) for key in best_params}
-                    print(f"New best score: {best_score:.4f}, step size: {steps[param]:.4f}, best params: {res}\n")
+                    res = {key: round(best_params[key], 4) for key in best_params}
+                    print(
+                        f"New best score: {best_score:.4f}, step size: {steps[param]:.4f}, best params: {res}\n"
+                    )
                     stagnation_counter = 0
                 else:
-                    current_params[param] = np.clip(original_value, *param_ranges[param])
+                    current_params[param] = np.clip(
+                        original_value, *param_ranges[param]
+                    )
                     steps[param] = max(steps[param] * 0.7, min_step_size)
 
         # Update parameter and score history
@@ -284,7 +304,7 @@ def auto_tune_pid():
             for param in param_ranges:
                 old_val = param_history[param][-convergence_window]
                 new_val = param_history[param][-1]
-                
+
                 if old_val == 0:
                     # Use absolute difference if old value is zero
                     change = abs(new_val - old_val)
@@ -292,14 +312,17 @@ def auto_tune_pid():
                     # Use relative change otherwise
                     change = abs(new_val - old_val) / abs(old_val)
                 param_changes.append(change)
-            
+
             max_param_change = max(param_changes)
             score_change = abs(score_history[-1] - score_history[-convergence_window])
-            
+
             if score_history[-convergence_window] != 0:
                 score_change /= abs(score_history[-convergence_window])
-            
-            if score_change < convergence_threshold and max_param_change < convergence_threshold:
+
+            if (
+                score_change < convergence_threshold
+                and max_param_change < convergence_threshold
+            ):
                 print("Convergence achieved")
                 break
         if not improved:
@@ -316,22 +339,35 @@ def auto_tune_pid():
             break
 
     print("\nOptimized parameters:")
-    print(f"Orientation: Kp={best_params['kp_oren']:.3f}, Kd={best_params['kd_oren']:.3f}")
-    print(f"Translation: Kp={best_params['kp_trans']:.3f}, Kd={best_params['kd_trans']:.3f}, Ki={best_params['ki_trans']:.3f}")
+    print(
+        f"Orientation: Kp={best_params['kp_oren']:.3f}, Kd={best_params['kd_oren']:.3f}"
+    )
+    print(
+        f"Translation: Kp={best_params['kp_trans']:.3f}, Kd={best_params['kd_trans']:.3f}, Ki={best_params['ki_trans']:.3f}"
+    )
     print(f"Best score: {best_score:.4f}")
     return best_params
+
 
 def _evaluate_params(params, weights):
     """Helper function to run simulation and calculate score"""
     variability, avg_trans_err, avg_oren_err = run_simulation(
-        params['kp_oren'], params['kd_oren'],
-        params['kp_trans'], params['kd_trans'], params['ki_trans'],
-        robot_to_place=1, is_yellow=False, headless=True
+        params["kp_oren"],
+        params["kd_oren"],
+        params["kp_trans"],
+        params["kd_trans"],
+        params["ki_trans"],
+        robot_to_place=1,
+        is_yellow=False,
+        headless=True,
     )
-    return (weights[0] * variability + 
-            weights[1] * avg_trans_err + 
-            weights[2] * avg_oren_err)
-    
+    return (
+        weights[0] * variability
+        + weights[1] * avg_trans_err
+        + weights[2] * avg_oren_err
+    )
+
+
 if __name__ == "__main__":
     try:
         auto_tune_pid()

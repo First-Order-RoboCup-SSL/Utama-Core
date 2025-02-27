@@ -7,13 +7,14 @@ from entities.data.vision import RobotData
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(frozen=True)
 class Robot:
-    id: int 
+    id: int
     is_friendly: bool
-    has_ball: bool # Friendly and enemy now have this, friendly is from IR sensor, enemy from vision? 
+    has_ball: bool  # Friendly and enemy now have this, friendly is from IR sensor, enemy from vision?
     x: float
-    y: float 
+    y: float
     orientation: float
 
     def coords(self) -> Tuple[float, float]:

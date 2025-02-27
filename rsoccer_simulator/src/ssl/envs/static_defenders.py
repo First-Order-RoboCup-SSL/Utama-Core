@@ -138,9 +138,10 @@ class SSLHWStaticDefendersEnv(SSLBaseEnv):
         v_y = action[1] * self.max_v
         v_theta = action[2] * self.max_w
         # Convert to local
-        v_x, v_y = v_x * np.cos(angle) + v_y * np.sin(angle), -v_x * np.sin(
-            angle
-        ) + v_y * np.cos(angle)
+        v_x, v_y = (
+            v_x * np.cos(angle) + v_y * np.sin(angle),
+            -v_x * np.sin(angle) + v_y * np.cos(angle),
+        )
 
         # clip by max absolute
         v_norm = np.linalg.norm([v_x, v_y])

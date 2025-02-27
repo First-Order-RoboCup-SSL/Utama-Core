@@ -12,7 +12,9 @@ from entities.game import Game
 from robot_control.src.intent import PassBall, defend, score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
-from team_controller.src.controllers.sim.grsim_robot_controller import GRSimRobotController
+from team_controller.src.controllers.sim.grsim_robot_controller import (
+    GRSimRobotController,
+)
 from config.settings import TIMESTEP
 from entities.data.command import RobotCommand
 import math
@@ -27,11 +29,12 @@ MAX_GAME_TIME = 500
 TOTAL_ITERATIONS = 1
 N_ROBOTS_ATTACK = 3
 N_ROBOTS_DEFEND = 2
-    
+
 START_POS = -2
 SPACING_Y = 1.5
 SPACING_X = 1
 SPAWN_BOX_SIZE = 1
+
 
 def defender_strategy(game: Game, stop_event: threading.Event):
     sim_robot_controller_defender = GRSimRobotController(game.my_team_is_yellow)
@@ -57,18 +60,28 @@ def defender_strategy(game: Game, stop_event: threading.Event):
             if message_type == MessageType.VISION:
                 game.add_new_state(message)
 
-                defender_command = defend(pid_oren_defender, pid_2d_defender, game, my_team_is_yellow, 1, None)
-                goalie_command = goalkeep(not my_team_is_yellow, game, 0, pid_oren_defender, pid_2d_defender, my_team_is_yellow, sim_robot_controller_defender.robot_has_ball(0))
+                defender_command = defend(
+                    pid_oren_defender, pid_2d_defender, game, my_team_is_yellow, 1, None
+                )
+                goalie_command = goalkeep(
+                    not my_team_is_yellow,
+                    game,
+                    0,
+                    pid_oren_defender,
+                    pid_2d_defender,
+                    my_team_is_yellow,
+                    sim_robot_controller_defender.robot_has_ball(0),
+                )
                 # # goalie_command = go_to_point(pid_oren_defender, pid_2d_defender, game.get_robot_pos(False, 0), 0, (4.5, 0), False)
                 sim_robot_controller_defender.add_robot_commands(
-                     {1: defender_command,
-                     0: goalie_command})
+                    {1: defender_command, 0: goalie_command}
+                )
                 sim_robot_controller_defender.send_robot_commands()
-        
+
             elif message_type == MessageType.REF:
                 pass
 
-    
+
 def attacker_strategy(game: Game, stop_event: threading.Event):
     sim_robot_controller_attacker = GRSimRobotController(game.my_team_is_yellow)
     message_queue = queue.SimpleQueue()
@@ -79,11 +92,17 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
 
     # Initialize PID controllers
     pid_oren_attacker, pid_2d_attacker = get_grsim_pids(N_ROBOTS_ATTACK)
-    
+
     if game.my_team_is_yellow:
-        target_pos = [(START_POS - (i + 1) % 2 * SPACING_X, SPACING_Y - SPACING_Y * i) for i in range(N_ROBOTS_ATTACK)]
+        target_pos = [
+            (START_POS - (i + 1) % 2 * SPACING_X, SPACING_Y - SPACING_Y * i)
+            for i in range(N_ROBOTS_ATTACK)
+        ]
     else:
-        target_pos = [(-START_POS + (i + 1) % 2 * SPACING_X, SPACING_Y - SPACING_Y * i) for i in range(N_ROBOTS_ATTACK)]
+        target_pos = [
+            (-START_POS + (i + 1) % 2 * SPACING_X, SPACING_Y - SPACING_Y * i)
+            for i in range(N_ROBOTS_ATTACK)
+        ]
 
     pass_task = None
     shooting = False
@@ -95,7 +114,6 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
     while not stop_event.is_set():
         # Process messages from the queue
         if not message_queue.empty():
-        
             (message_type, message) = message_queue.get()
             iter += 1
 
@@ -103,9 +121,9 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                 game.add_new_state(message)
 
             if stage == 0:
-                if iter == 10: # give them chance to spawn in the correct place
+                if iter == 10:  # give them chance to spawn in the correct place
                     stage += 1
-                    
+
             elif stage == 1:
                 closest_robot = None
                 closest_distance = float("inf")
@@ -113,31 +131,56 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                     robot_data = game.get_robot_pos(game.my_team_is_yellow, i)
                     ball = game.get_ball_pos()[0]
 
-                    distance = math.dist((robot_data.x, robot_data.y), (ball.x, ball.y))  
+                    distance = math.dist((robot_data.x, robot_data.y), (ball.x, ball.y))
                     if distance < closest_distance:
                         closest_distance = distance
                         closest_robot = i
-                
+
                 all_in_pos = True
                 for i in range(N_ROBOTS_ATTACK):
                     robot_data = game.get_robot_pos(game.my_team_is_yellow, i)
                     ball = game.get_ball_pos()[0]
 
-                    if i == closest_robot and not sim_robot_controller_attacker.robot_has_ball(i):
-                        sim_robot_controller_attacker.add_robot_commands(go_to_ball(pid_oren_attacker, pid_2d_attacker, robot_data, i, ball), i)
+                    if (
+                        i == closest_robot
+                        and not sim_robot_controller_attacker.robot_has_ball(i)
+                    ):
+                        sim_robot_controller_attacker.add_robot_commands(
+                            go_to_ball(
+                                pid_oren_attacker, pid_2d_attacker, robot_data, i, ball
+                            ),
+                            i,
+                        )
                         possessor = i
                     else:
-                        sim_robot_controller_attacker.add_robot_commands(go_to_point(pid_oren_attacker, pid_2d_attacker, robot_data, i, target_pos[i], math.pi, True), i)
+                        sim_robot_controller_attacker.add_robot_commands(
+                            go_to_point(
+                                pid_oren_attacker,
+                                pid_2d_attacker,
+                                robot_data,
+                                i,
+                                target_pos[i],
+                                math.pi,
+                                True,
+                            ),
+                            i,
+                        )
 
-                    all_in_pos = all_in_pos and math.dist(target_pos[i], (robot_data.x, robot_data.y)) < 0.01
+                    all_in_pos = (
+                        all_in_pos
+                        and math.dist(target_pos[i], (robot_data.x, robot_data.y))
+                        < 0.01
+                    )
                 sim_robot_controller_attacker.send_robot_commands()
 
                 if all_in_pos:
                     stage += 1
-            
+
             elif stage == 2:
                 if not pass_task:
-                    target_goal_line = game.field.enemy_goal_line(game.my_team_is_yellow)
+                    target_goal_line = game.field.enemy_goal_line(
+                        game.my_team_is_yellow
+                    )
                     latest_frame = game.get_my_latest_frame(game.my_team_is_yellow)
                     if latest_frame:
                         friendly_robots, enemy_robots, balls = latest_frame
@@ -147,7 +190,12 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                         goal_y2 = target_goal_line.coords[0][1]
 
                         best_shot, size_of_shot = find_best_shot(
-                            balls[0], enemy_robots, goal_x, goal_y1, goal_y2, game.my_team_is_yellow
+                            balls[0],
+                            enemy_robots,
+                            goal_x,
+                            goal_y1,
+                            goal_y2,
+                            game.my_team_is_yellow,
                         )
 
                         if size_of_shot > 0.41 and passes >= 5:
@@ -167,26 +215,50 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                         game,
                         possessor,
                         next_possessor,
-                        target_coords=game.get_robot_pos(game.my_team_is_yellow, next_possessor),
+                        target_coords=game.get_robot_pos(
+                            game.my_team_is_yellow, next_possessor
+                        ),
                     )
                 # else:
                 if sim_robot_controller_attacker.robot_has_ball(next_possessor):
                     pass_task = None
                     possessor = next_possessor
-                    sim_robot_controller_attacker.add_robot_commands(empty_command(dribbler_on=True), possessor)
-                    sim_robot_controller_attacker.add_robot_commands(empty_command(dribbler_on=True), 0)
+                    sim_robot_controller_attacker.add_robot_commands(
+                        empty_command(dribbler_on=True), possessor
+                    )
+                    sim_robot_controller_attacker.add_robot_commands(
+                        empty_command(dribbler_on=True), 0
+                    )
                     sim_robot_controller_attacker.send_robot_commands()
                 else:
-                    (possessor_cmd, next_possessor_cmd) = pass_task.enact(sim_robot_controller_attacker.robot_has_ball(possessor))
-                    sim_robot_controller_attacker.add_robot_commands(possessor_cmd, possessor)
-                    sim_robot_controller_attacker.add_robot_commands(next_possessor_cmd, next_possessor)
+                    (possessor_cmd, next_possessor_cmd) = pass_task.enact(
+                        sim_robot_controller_attacker.robot_has_ball(possessor)
+                    )
+                    sim_robot_controller_attacker.add_robot_commands(
+                        possessor_cmd, possessor
+                    )
+                    sim_robot_controller_attacker.add_robot_commands(
+                        next_possessor_cmd, next_possessor
+                    )
                     sim_robot_controller_attacker.send_robot_commands()
             elif stage == 3:
-                sim_robot_controller_attacker.add_robot_commands(score_goal(game, sim_robot_controller_attacker.robot_has_ball(possessor), possessor, pid_oren_attacker, pid_2d_attacker, game.my_team_is_yellow, game.my_team_is_yellow), possessor)
-                sim_robot_controller_attacker.send_robot_commands()    
+                sim_robot_controller_attacker.add_robot_commands(
+                    score_goal(
+                        game,
+                        sim_robot_controller_attacker.robot_has_ball(possessor),
+                        possessor,
+                        pid_oren_attacker,
+                        pid_2d_attacker,
+                        game.my_team_is_yellow,
+                        game.my_team_is_yellow,
+                    ),
+                    possessor,
+                )
+                sim_robot_controller_attacker.send_robot_commands()
             elif message_type == MessageType.REF:
                 pass
-    
+
+
 def pvp_manager(headless: bool, attacker_is_yellow: bool):
     """
     A 1v1 scenario with dynamic switching of attacker/defender roles.
@@ -197,12 +269,11 @@ def pvp_manager(headless: bool, attacker_is_yellow: bool):
     env.reset()
 
     env.teleport_ball(random.uniform(-3, 3), random.uniform(-3, 3))
-    
+
     for i in range(N_ROBOTS_ATTACK):
         # print(random.uniform(-SPAWN_BOX_SIZE, SPAWN_BOX_SIZE))
         # env.teleport_robot(attacker_is_yellow, i, target_pos[i][0] + random.uniform(-SPAWN_BOX_SIZE, SPAWN_BOX_SIZE), target_pos[i][1] + random.uniform(-SPAWN_BOX_SIZE, SPAWN_BOX_SIZE))
         env.teleport_robot(attacker_is_yellow, i, 0, -0.3 * (i - 1))
-
 
     for i in range(N_ROBOTS_ATTACK, 6):
         # yellow team

@@ -66,7 +66,6 @@ def main():
     # To debug
     logging.basicConfig(level=logging.DEBUG)
 
-
     try:
         logger.debug(
             f"Predicting robot position with {FRAMES_IN_TIME} frames of motion"
@@ -79,7 +78,7 @@ def main():
             (message_type, message) = message_queue.get()  # Infinite timeout for now
             if message_type == MessageType.VISION:
                 predictions.add_new_State(message)
-        
+
         game = predictions.get_game()
 
         while True:

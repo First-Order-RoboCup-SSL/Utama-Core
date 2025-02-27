@@ -2,7 +2,6 @@ import math
 
 
 def closest_node(values, node1, node2):
-
     if node1 is None:
         return node2, node2.distance2_to(values) if node2 is not None else math.inf
 
@@ -20,7 +19,6 @@ def closest_node(values, node1, node2):
 
 class KDTree:
     class KDTreeNode:
-
         def __init__(self, values, left=None, right=None):
             self.values = values
             self.left = left
@@ -34,17 +32,17 @@ class KDTree:
                     if self.left is None:
                         self.left = KDTree.KDTreeNode(values)
                     else:
-                        self.left.insert(values, depth+1)
+                        self.left.insert(values, depth + 1)
                 else:
                     if self.right is None:
                         self.right = KDTree.KDTreeNode(values)
                     else:
-                        self.right.insert(values, depth+1)
+                        self.right.insert(values, depth + 1)
 
         def distance2_to(self, values):
             d2 = 0
             for i in range(len(values)):
-                d2 += (values[i] - self.values[i])**2
+                d2 += (values[i] - self.values[i]) ** 2
 
             return d2
 
@@ -63,16 +61,18 @@ class KDTree:
                 other_branch = self.right
 
             if next_branch is not None:
-                other, _ = next_branch.get_nearest(values, depth+1)
+                other, _ = next_branch.get_nearest(values, depth + 1)
                 closest, closest_dist2 = closest_node(values, other, self)
             else:
                 closest, closest_dist2 = self, self.distance2_to(values)
 
-            line_dist = values[depth % len(values)] - self.values[depth % len(self.values)]
+            line_dist = (
+                values[depth % len(values)] - self.values[depth % len(self.values)]
+            )
 
             if other_branch is not None:
                 if closest_dist2 >= line_dist**2:
-                    other, _ = other_branch.get_nearest(values, depth+1)
+                    other, _ = other_branch.get_nearest(values, depth + 1)
                     closest, closest_dist2 = closest_node(values, other, closest)
 
             return closest, closest_dist2

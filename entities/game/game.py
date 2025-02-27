@@ -26,8 +26,9 @@ def combine_robot_vision_data(old_robot: Robot, robot_data: RobotData) -> Robot:
         id=robot_data.id,
         x=robot_data.x,
         y=robot_data.y,
-        orientation=robot_data.orientation
+        orientation=robot_data.orientation,
     )
+
 
 # Used at start of the game so assume robot does not have the ball
 def robot_from_vision(robot_data: RobotData, is_friendly: bool) -> Robot:
@@ -37,11 +38,13 @@ def robot_from_vision(robot_data: RobotData, is_friendly: bool) -> Robot:
         has_ball=False,
         x=robot_data.x,
         y=robot_data.y,
-        orientation=robot_data.orientation
+        orientation=robot_data.orientation,
     )
+
 
 def ball_from_vision(ball_data: BallData) -> Ball:
     return Ball(ball_data.x, ball_data.y, ball_data.z)
+
 
 class Game:
     """
@@ -49,10 +52,7 @@ class Game:
     """
 
     def __init__(
-        self,
-        my_team_is_yellow: bool,
-        my_team_is_right: bool,
-        start_frame: FrameData
+        self, my_team_is_yellow: bool, my_team_is_right: bool, start_frame: FrameData
     ):
         self._my_team_is_yellow = my_team_is_yellow
         self._my_team_is_right = my_team_is_right
@@ -60,11 +60,19 @@ class Game:
 
         self._records: List[FrameData] = []
 
-        assert len(start_frame.ball) > 0, "No ball data in start frame, must give ball start position"
-        assert len(start_frame.yellow_robots) > 0, "No yellow robot data in start frame, must give yellow robot start positions"
-        assert len(start_frame.blue_robots) > 0, "No blue robot data in start frame, must give blue robot start positions"
+        assert len(start_frame.ball) > 0, (
+            "No ball data in start frame, must give ball start position"
+        )
+        assert len(start_frame.yellow_robots) > 0, (
+            "No yellow robot data in start frame, must give yellow robot start positions"
+        )
+        assert len(start_frame.blue_robots) > 0, (
+            "No blue robot data in start frame, must give blue robot start positions"
+        )
 
-        self._friendly_robots, self._enemy_robots = self._get_initial_robot_dicts(start_frame)       
+        self._friendly_robots, self._enemy_robots = self._get_initial_robot_dicts(
+            start_frame
+        )
 
         self._ball: Ball = self._get_most_confident_ball(start_frame.ball)
 
@@ -115,39 +123,62 @@ class Game:
         else:
             raise ValueError("Invalid frame data.")
 
-    def _get_initial_robot_dicts(self, start_frame: FrameData) -> Tuple[Dict[int, Robot], Dict[int, Robot]]:
+    def _get_initial_robot_dicts(
+        self, start_frame: FrameData
+    ) -> Tuple[Dict[int, Robot], Dict[int, Robot]]:
         if self.my_team_is_yellow:
-            friendly_robots = {rd.id: robot_from_vision(rd, is_friendly=True) for rd in start_frame.yellow_robots}
-            enemy_robots = {rd.id: robot_from_vision(rd, is_friendly=False) for rd in start_frame.blue_robots}
+            friendly_robots = {
+                rd.id: robot_from_vision(rd, is_friendly=True)
+                for rd in start_frame.yellow_robots
+            }
+            enemy_robots = {
+                rd.id: robot_from_vision(rd, is_friendly=False)
+                for rd in start_frame.blue_robots
+            }
         else:
-            friendly_robots = {rd.id: robot_from_vision(rd, is_friendly=True) for rd in start_frame.blue_robots}
-            enemy_robots = {rd.id: robot_from_vision(rd, is_friendly=False) for rd in start_frame.yellow_robots}
+            friendly_robots = {
+                rd.id: robot_from_vision(rd, is_friendly=True)
+                for rd in start_frame.blue_robots
+            }
+            enemy_robots = {
+                rd.id: robot_from_vision(rd, is_friendly=False)
+                for rd in start_frame.yellow_robots
+            }
 
         return friendly_robots, enemy_robots
 
     def _get_most_confident_ball(self, balls: List[BallData]) -> Ball:
-        balls_by_confidence = sorted(balls, key=lambda ball: ball.confidence, reverse=True)
-        return  Ball(balls_by_confidence[0].x, balls_by_confidence[0].y, balls_by_confidence[0].z)
+        balls_by_confidence = sorted(
+            balls, key=lambda ball: ball.confidence, reverse=True
+        )
+        return Ball(
+            balls_by_confidence[0].x, balls_by_confidence[0].y, balls_by_confidence[0].z
+        )
 
     def _update_data(self, frame_data: FrameData) -> None:
         if self.my_team_is_yellow:
             self._update_robots(frame_data.yellow_robots, frame_data.blue_robots)
         else:
             self._update_robots(frame_data.blue_robots, frame_data.yellow_robots)
-        self._update_balls(frame_data.ball) 
-        
-    def _update_robots(self, friendly_robot_data: List[RobotData], enemy_robot_data: List[RobotData]) -> None:
+        self._update_balls(frame_data.ball)
+
+    def _update_robots(
+        self, friendly_robot_data: List[RobotData], enemy_robot_data: List[RobotData]
+    ) -> None:
         for robot_data in friendly_robot_data:
-            self._friendly_robots[robot_data.id] = combine_robot_vision_data(self._friendly_robots[robot_data.id], robot_data)
+            self._friendly_robots[robot_data.id] = combine_robot_vision_data(
+                self._friendly_robots[robot_data.id], robot_data
+            )
 
         for robot_data in enemy_robot_data:
-            self._enemy_robots[robot_data.id] = combine_robot_vision_data(self._enemy_robots[robot_data.id], robot_data)
+            self._enemy_robots[robot_data.id] = combine_robot_vision_data(
+                self._enemy_robots[robot_data.id], robot_data
+            )
 
     def _update_balls(self, balls_data: List[BallData]) -> None:
         # Does not update when there is nothing to update
         if balls_data:
             self._ball = ball_from_vision(self._get_most_confident_ball(balls_data))
-
 
     def get_robots_velocity(self, is_yellow: bool) -> List[tuple]:
         if len(self._records) <= 1:

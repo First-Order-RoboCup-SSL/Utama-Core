@@ -16,121 +16,188 @@ from google.protobuf import any_pb2 as google_dot_protobuf_dot_any__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(
-  name='ssl_simulation_robot_feedback.proto',
-  package='',
-  syntax='proto2',
-  serialized_options=b'Z6github.com/RoboCup-SSL/ssl-simulation-protocol/pkg/sim',
-  create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n#ssl_simulation_robot_feedback.proto\x1a\x1assl_simulation_error.proto\x1a\x19google/protobuf/any.proto\"`\n\rRobotFeedback\x12\n\n\x02id\x18\x01 \x02(\r\x12\x1d\n\x15\x64ribbler_ball_contact\x18\x02 \x01(\x08\x12$\n\x06\x63ustom\x18\x03 \x01(\x0b\x32\x14.google.protobuf.Any\"Y\n\x14RobotControlResponse\x12\x1f\n\x06\x65rrors\x18\x01 \x03(\x0b\x32\x0f.SimulatorError\x12 \n\x08\x66\x65\x65\x64\x62\x61\x63k\x18\x02 \x03(\x0b\x32\x0e.RobotFeedbackB8Z6github.com/RoboCup-SSL/ssl-simulation-protocol/pkg/sim'
-  ,
-  dependencies=[ssl__simulation__error__pb2.DESCRIPTOR,google_dot_protobuf_dot_any__pb2.DESCRIPTOR,])
-
-
+    name="ssl_simulation_robot_feedback.proto",
+    package="",
+    syntax="proto2",
+    serialized_options=b"Z6github.com/RoboCup-SSL/ssl-simulation-protocol/pkg/sim",
+    create_key=_descriptor._internal_create_key,
+    serialized_pb=b'\n#ssl_simulation_robot_feedback.proto\x1a\x1assl_simulation_error.proto\x1a\x19google/protobuf/any.proto"`\n\rRobotFeedback\x12\n\n\x02id\x18\x01 \x02(\r\x12\x1d\n\x15\x64ribbler_ball_contact\x18\x02 \x01(\x08\x12$\n\x06\x63ustom\x18\x03 \x01(\x0b\x32\x14.google.protobuf.Any"Y\n\x14RobotControlResponse\x12\x1f\n\x06\x65rrors\x18\x01 \x03(\x0b\x32\x0f.SimulatorError\x12 \n\x08\x66\x65\x65\x64\x62\x61\x63k\x18\x02 \x03(\x0b\x32\x0e.RobotFeedbackB8Z6github.com/RoboCup-SSL/ssl-simulation-protocol/pkg/sim',
+    dependencies=[
+        ssl__simulation__error__pb2.DESCRIPTOR,
+        google_dot_protobuf_dot_any__pb2.DESCRIPTOR,
+    ],
+)
 
 
 _ROBOTFEEDBACK = _descriptor.Descriptor(
-  name='RobotFeedback',
-  full_name='RobotFeedback',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='id', full_name='RobotFeedback.id', index=0,
-      number=1, type=13, cpp_type=3, label=2,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='dribbler_ball_contact', full_name='RobotFeedback.dribbler_ball_contact', index=1,
-      number=2, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='custom', full_name='RobotFeedback.custom', index=2,
-      number=3, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto2',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=94,
-  serialized_end=190,
+    name="RobotFeedback",
+    full_name="RobotFeedback",
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name="id",
+            full_name="RobotFeedback.id",
+            index=0,
+            number=1,
+            type=13,
+            cpp_type=3,
+            label=2,
+            has_default_value=False,
+            default_value=0,
+            message_type=None,
+            enum_type=None,
+            containing_type=None,
+            is_extension=False,
+            extension_scope=None,
+            serialized_options=None,
+            file=DESCRIPTOR,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.FieldDescriptor(
+            name="dribbler_ball_contact",
+            full_name="RobotFeedback.dribbler_ball_contact",
+            index=1,
+            number=2,
+            type=8,
+            cpp_type=7,
+            label=1,
+            has_default_value=False,
+            default_value=False,
+            message_type=None,
+            enum_type=None,
+            containing_type=None,
+            is_extension=False,
+            extension_scope=None,
+            serialized_options=None,
+            file=DESCRIPTOR,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.FieldDescriptor(
+            name="custom",
+            full_name="RobotFeedback.custom",
+            index=2,
+            number=3,
+            type=11,
+            cpp_type=10,
+            label=1,
+            has_default_value=False,
+            default_value=None,
+            message_type=None,
+            enum_type=None,
+            containing_type=None,
+            is_extension=False,
+            extension_scope=None,
+            serialized_options=None,
+            file=DESCRIPTOR,
+            create_key=_descriptor._internal_create_key,
+        ),
+    ],
+    extensions=[],
+    nested_types=[],
+    enum_types=[],
+    serialized_options=None,
+    is_extendable=False,
+    syntax="proto2",
+    extension_ranges=[],
+    oneofs=[],
+    serialized_start=94,
+    serialized_end=190,
 )
 
 
 _ROBOTCONTROLRESPONSE = _descriptor.Descriptor(
-  name='RobotControlResponse',
-  full_name='RobotControlResponse',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='errors', full_name='RobotControlResponse.errors', index=0,
-      number=1, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='feedback', full_name='RobotControlResponse.feedback', index=1,
-      number=2, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto2',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=192,
-  serialized_end=281,
+    name="RobotControlResponse",
+    full_name="RobotControlResponse",
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name="errors",
+            full_name="RobotControlResponse.errors",
+            index=0,
+            number=1,
+            type=11,
+            cpp_type=10,
+            label=3,
+            has_default_value=False,
+            default_value=[],
+            message_type=None,
+            enum_type=None,
+            containing_type=None,
+            is_extension=False,
+            extension_scope=None,
+            serialized_options=None,
+            file=DESCRIPTOR,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.FieldDescriptor(
+            name="feedback",
+            full_name="RobotControlResponse.feedback",
+            index=1,
+            number=2,
+            type=11,
+            cpp_type=10,
+            label=3,
+            has_default_value=False,
+            default_value=[],
+            message_type=None,
+            enum_type=None,
+            containing_type=None,
+            is_extension=False,
+            extension_scope=None,
+            serialized_options=None,
+            file=DESCRIPTOR,
+            create_key=_descriptor._internal_create_key,
+        ),
+    ],
+    extensions=[],
+    nested_types=[],
+    enum_types=[],
+    serialized_options=None,
+    is_extendable=False,
+    syntax="proto2",
+    extension_ranges=[],
+    oneofs=[],
+    serialized_start=192,
+    serialized_end=281,
 )
 
-_ROBOTFEEDBACK.fields_by_name['custom'].message_type = google_dot_protobuf_dot_any__pb2._ANY
-_ROBOTCONTROLRESPONSE.fields_by_name['errors'].message_type = ssl__simulation__error__pb2._SIMULATORERROR
-_ROBOTCONTROLRESPONSE.fields_by_name['feedback'].message_type = _ROBOTFEEDBACK
-DESCRIPTOR.message_types_by_name['RobotFeedback'] = _ROBOTFEEDBACK
-DESCRIPTOR.message_types_by_name['RobotControlResponse'] = _ROBOTCONTROLRESPONSE
+_ROBOTFEEDBACK.fields_by_name[
+    "custom"
+].message_type = google_dot_protobuf_dot_any__pb2._ANY
+_ROBOTCONTROLRESPONSE.fields_by_name[
+    "errors"
+].message_type = ssl__simulation__error__pb2._SIMULATORERROR
+_ROBOTCONTROLRESPONSE.fields_by_name["feedback"].message_type = _ROBOTFEEDBACK
+DESCRIPTOR.message_types_by_name["RobotFeedback"] = _ROBOTFEEDBACK
+DESCRIPTOR.message_types_by_name["RobotControlResponse"] = _ROBOTCONTROLRESPONSE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
-RobotFeedback = _reflection.GeneratedProtocolMessageType('RobotFeedback', (_message.Message,), {
-  'DESCRIPTOR' : _ROBOTFEEDBACK,
-  '__module__' : 'ssl_simulation_robot_feedback_pb2'
-  # @@protoc_insertion_point(class_scope:RobotFeedback)
-  })
+RobotFeedback = _reflection.GeneratedProtocolMessageType(
+    "RobotFeedback",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _ROBOTFEEDBACK,
+        "__module__": "ssl_simulation_robot_feedback_pb2",
+        # @@protoc_insertion_point(class_scope:RobotFeedback)
+    },
+)
 _sym_db.RegisterMessage(RobotFeedback)
 
-RobotControlResponse = _reflection.GeneratedProtocolMessageType('RobotControlResponse', (_message.Message,), {
-  'DESCRIPTOR' : _ROBOTCONTROLRESPONSE,
-  '__module__' : 'ssl_simulation_robot_feedback_pb2'
-  # @@protoc_insertion_point(class_scope:RobotControlResponse)
-  })
+RobotControlResponse = _reflection.GeneratedProtocolMessageType(
+    "RobotControlResponse",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _ROBOTCONTROLRESPONSE,
+        "__module__": "ssl_simulation_robot_feedback_pb2",
+        # @@protoc_insertion_point(class_scope:RobotControlResponse)
+    },
+)
 _sym_db.RegisterMessage(RobotControlResponse)
 
 

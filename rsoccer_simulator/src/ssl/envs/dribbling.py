@@ -10,6 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class SSLHWDribblingEnv(SSLBaseEnv):
     """The SSL robot needs navigate a course while keeping the ball
 
@@ -82,7 +83,6 @@ class SSLHWDribblingEnv(SSLBaseEnv):
         return super().reset(seed=seed, options=options)
 
     def _frame_to_observations(self):
-
         observation = []
 
         observation.append(((self.checkpoints_count / 6) * 2) - 1)
@@ -131,9 +131,10 @@ class SSLHWDribblingEnv(SSLBaseEnv):
         v_y = action[1] * self.max_v
         v_theta = action[2] * self.max_w
         # Convert to local
-        v_x, v_y = v_x * np.cos(angle) + v_y * np.sin(angle), -v_x * np.sin(
-            angle
-        ) + v_y * np.cos(angle)
+        v_x, v_y = (
+            v_x * np.cos(angle) + v_y * np.sin(angle),
+            -v_x * np.sin(angle) + v_y * np.cos(angle),
+        )
 
         # clip by max absolute
         v_norm = np.linalg.norm([v_x, v_y])

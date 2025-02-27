@@ -49,7 +49,6 @@ def test_shooting(shooter_id: int, is_yellow: bool, headless: bool):
 
     try:
         while True:
-
             # Check if the time limit has been exceeded
             elapsed_time = time.time() - start_time
             if elapsed_time > MAX_TIME:

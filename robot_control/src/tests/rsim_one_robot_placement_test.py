@@ -17,6 +17,7 @@ import time
 
 N_ROBOTS = 6
 
+
 def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: bool):
     """When the tests are run with pytest, these parameters are filled in
     based on whether we are in full or quick test mode (see conftest.py)"""
@@ -28,7 +29,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
     ITERS = 1200
     TARGET_OREN = math.pi / 2
     game = Game(my_team_is_yellow=is_yellow, my_team_is_right=True)
-    
+
     old_pos = []
 
     N_ROBOTS_BLUE = N_ROBOTS
@@ -38,7 +39,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
         n_robots_blue=N_ROBOTS_BLUE, render_mode="ansi" if headless else "human"
     )
     env.reset()
-    
+
     env_controller = RSimController(env)
 
     # Move the other defender out of the way
@@ -48,13 +49,13 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
         env_controller.set_robot_presence(i, not is_yellow, False)
 
     env.teleport_ball(1, 0)
-    
+
     pid_oren, pid_2d = get_rsim_pids()
 
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game
     )
-    
+
     one_step = one_robot_placement(
         sim_robot_controller,
         is_yellow,
@@ -76,7 +77,13 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
         if old_pos and len(old_pos) > 1:
             for i in range(len(old_pos)):
                 if i != 0:
-                    env.draw_line([(old_pos[i][0], old_pos[i][1]), (old_pos[i-1][0], old_pos[i-1][1])], color="red")
+                    env.draw_line(
+                        [
+                            (old_pos[i][0], old_pos[i][1]),
+                            (old_pos[i - 1][0], old_pos[i - 1][1]),
+                        ],
+                        color="red",
+                    )
         if switch:
             change_iters.append(iter)
             change_orens.append(co)

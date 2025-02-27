@@ -7,6 +7,7 @@ from motion_planning.src.pid import PID
 from motion_planning.src.pid.pid import TwoDPID
 import numpy as np
 
+
 def calculate_robot_velocities(
     game: Game,
     pid_oren: PID,
@@ -33,33 +34,35 @@ def calculate_robot_velocities(
     else:
         global_x = 0
         global_y = 0
-    
+
     forward_vel, left_vel = rotate_vector(global_x, global_y, robot.orientation)
 
     # if forward_vel and left_vel:
-    
+
     #     print(f"Resultant vel: {resultant_vel}")
-        
+
     #     travel_dist = resultant_vel*(1/60)
-        
+
     #     dx = travel_dist * global_x/resultant_vel
     #     dy = travel_dist * global_y/resultant_vel
-    
+
     if target_oren is not None:
-        angular_vel = pid_oren.calculate(target_oren, robot.orientation, robot_id, oren=True, normalize_range=np.pi)
+        angular_vel = pid_oren.calculate(
+            target_oren, robot.orientation, robot_id, oren=True, normalize_range=np.pi
+        )
     else:
         angular_vel = 0
-        
-    #     resultant_vel = np.linalg.norm([global_x, global_y])       
+
+    #     resultant_vel = np.linalg.norm([global_x, global_y])
     #     oren_offset = (angular_vel / 2) * resultant_vel / pid_trans.max_velocity # scales linearly [0, 1]
-        
+
     #     if left_vel > 0:
     #         oren_offset *= -1
     #     elif left_vel < 0:
     #         oren_offset *= 1
     #     else:
     #         oren_offset = 0
-    #     # print(f"Oren offset: {oren_offset}, angular vel: {angular_vel}, resultant vel: {resultant_vel}")  
+    #     # print(f"Oren offset: {oren_offset}, angular vel: {angular_vel}, resultant vel: {resultant_vel}")
     #     angular_vel += oren_offset
     #     # print(f"diff: {oren_offset*60}, New angular vel: {angular_vel}, direction: {left_vel}")
 

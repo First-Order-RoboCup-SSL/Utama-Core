@@ -498,26 +498,12 @@ def defender_strategy(game: Game, stop_event: threading.Event):
             ball_data = balls[0]
 
             sim_robot_controller.add_robot_commands(
-                defend(
-                    pid_oren,
-                    pid_trans,
-                    game,
-                    my_team_is_yellow,
-                    1,
-                    None
-                ),
+                defend(pid_oren, pid_trans, game, my_team_is_yellow, 1, None),
                 1,
             )
 
             sim_robot_controller.add_robot_commands(
-                defend(
-                    pid_oren,
-                    pid_trans,
-                    game,
-                    my_team_is_yellow,
-                    4,
-                    None
-                ),
+                defend(pid_oren, pid_trans, game, my_team_is_yellow, 4, None),
                 4,
             )
 

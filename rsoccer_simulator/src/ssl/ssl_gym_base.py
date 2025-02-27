@@ -1,7 +1,7 @@
 """
 #   Environment Communication Structure
 #    - Father class that creates the structure to communicate with multples setups of enviroment
-#    - To create your wrapper from env to communcation, use inherit from this class! 
+#    - To create your wrapper from env to communcation, use inherit from this class!
 """
 
 import time
@@ -142,9 +142,9 @@ class SSLBaseEnv(gym.Env):
             elif self.render_mode == "rgb_array":
                 self.window_surface = pygame.Surface(self.window_size)
 
-        assert (
-            self.window_surface is not None
-        ), "Something went wrong with pygame. This should never happen."
+        assert self.window_surface is not None, (
+            "Something went wrong with pygame. This should never happen."
+        )
 
         if self.clock is None:
             self.clock = pygame.time.Clock()

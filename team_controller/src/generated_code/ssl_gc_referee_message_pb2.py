@@ -1210,15 +1210,15 @@ _REFEREE.fields_by_name["yellow"].message_type = _REFEREE_TEAMINFO
 _REFEREE.fields_by_name["blue"].message_type = _REFEREE_TEAMINFO
 _REFEREE.fields_by_name["designated_position"].message_type = _REFEREE_POINT
 _REFEREE.fields_by_name["next_command"].enum_type = _REFEREE_COMMAND
-_REFEREE.fields_by_name["game_events"].message_type = (
-    ssl__gc__game__event__pb2._GAMEEVENT
-)
+_REFEREE.fields_by_name[
+    "game_events"
+].message_type = ssl__gc__game__event__pb2._GAMEEVENT
 _REFEREE.fields_by_name["game_event_proposals"].message_type = _GAMEEVENTPROPOSALGROUP
 _REFEREE_STAGE.containing_type = _REFEREE
 _REFEREE_COMMAND.containing_type = _REFEREE
-_GAMEEVENTPROPOSALGROUP.fields_by_name["game_events"].message_type = (
-    ssl__gc__game__event__pb2._GAMEEVENT
-)
+_GAMEEVENTPROPOSALGROUP.fields_by_name[
+    "game_events"
+].message_type = ssl__gc__game__event__pb2._GAMEEVENT
 DESCRIPTOR.message_types_by_name["Referee"] = _REFEREE
 DESCRIPTOR.message_types_by_name["GameEventProposalGroup"] = _GAMEEVENTPROPOSALGROUP
 DESCRIPTOR.enum_types_by_name["MatchType"] = _MATCHTYPE

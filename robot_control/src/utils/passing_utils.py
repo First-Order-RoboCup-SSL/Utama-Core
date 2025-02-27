@@ -22,7 +22,7 @@ def calculate_adjusted_receiver_pos(
     """
 
     def get_ball_movement_line(
-        ball_traj_points: List[Tuple[float, float]]
+        ball_traj_points: List[Tuple[float, float]],
     ) -> Tuple[float, float, float]:
         """
         Returns the line equation ax + by + c = 0 of the ball's movement line

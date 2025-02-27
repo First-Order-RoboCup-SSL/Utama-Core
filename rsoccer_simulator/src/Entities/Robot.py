@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 
+
 @dataclass()
 class Robot:
     yellow: bool = None
@@ -17,7 +18,7 @@ class Robot:
     dribbler: bool = False
     infrared: bool = False
     wheel_speed: bool = False
-    v_wheel0: float = 0 # rad/s
-    v_wheel1: float = 0 # rad/s
-    v_wheel2: float = 0 # rad/s
-    v_wheel3: float = 0 # rad/s
+    v_wheel0: float = 0  # rad/s
+    v_wheel1: float = 0  # rad/s
+    v_wheel2: float = 0  # rad/s
+    v_wheel3: float = 0  # rad/s

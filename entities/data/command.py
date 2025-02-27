@@ -1,5 +1,6 @@
 from typing import NamedTuple
 
+
 # velocities: meters per second
 # angular_vel: radians per second
 class RobotCommand(NamedTuple):
@@ -9,6 +10,7 @@ class RobotCommand(NamedTuple):
     kick: bool
     chip: bool
     dribble: bool
+
 
 # Grsim Inverse Kinematics
 class RobotVelCommand(NamedTuple):
@@ -20,7 +22,9 @@ class RobotVelCommand(NamedTuple):
     chip: bool
     dribble: bool
 
+
 class RobotResponse(NamedTuple):
     has_ball: bool
-# TODO: add kicker charged to robot info
 
+
+# TODO: add kicker charged to robot info

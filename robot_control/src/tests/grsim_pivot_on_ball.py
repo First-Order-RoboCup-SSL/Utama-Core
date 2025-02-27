@@ -49,7 +49,7 @@ def test_grsim_pivot_on_ball(shooter_id: int, is_yellow: bool, headless: bool):
 
             if not sim_robot_controller.robot_has_ball(shooter_id):
                 for i in range(5):
-                    print(game.ball, game.friendly_robots[i].robot_data) 
+                    print(game.ball, game.friendly_robots[i].robot_data)
                 cmd = go_to_ball(
                     pid_oren=pid_oren,
                     pid_trans=pid_trans,
@@ -78,6 +78,6 @@ def test_grsim_pivot_on_ball(shooter_id: int, is_yellow: bool, headless: bool):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
-    
+
     # Run the test and output the result
     test_result = test_grsim_pivot_on_ball(0, False, False)

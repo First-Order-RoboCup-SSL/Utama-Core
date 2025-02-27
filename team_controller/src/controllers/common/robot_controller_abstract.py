@@ -5,7 +5,6 @@ from typing import Union, Dict, Optional
 
 
 class AbstractRobotController:
-
     @abc.abstractmethod
     def send_robot_commands(self) -> None:
         """

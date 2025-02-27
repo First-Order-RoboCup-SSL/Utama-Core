@@ -10,10 +10,14 @@ from robot_control.src.skills import (
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from motion_planning.src.planning.controller import TempObstacleType, TimedSwitchController
+from motion_planning.src.planning.controller import (
+    TempObstacleType,
+    TimedSwitchController,
+)
 from config.settings import ROBOT_RADIUS
 import random
 from math import dist
+
 
 def test_pathfinding(headless: bool, moving: bool):
     game = Game()
@@ -41,7 +45,9 @@ def test_pathfinding(headless: bool, moving: bool):
         is_team_yellow=is_yellow, env=env, game_obj=game
     )
 
-    hybrid = TimedSwitchController(N_ROBOTS_YELLOW, game, ClosestPointExit(), Colour.YELLOW, env)
+    hybrid = TimedSwitchController(
+        N_ROBOTS_YELLOW, game, ClosestPointExit(), Colour.YELLOW, env
+    )
     targets = [(0, 0)] + [
         (random.uniform(-4.5, 4.5), random.uniform(-2.25, 2.25)) for _ in range(1000)
     ]

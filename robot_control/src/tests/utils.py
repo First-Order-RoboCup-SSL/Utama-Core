@@ -77,7 +77,7 @@ def one_robot_placement(
             # Rotate the local forward and left velocities to the global frame
             lf_x, lf_y = rotate_vector(cmd.local_forward_vel, 0, -co)
             ll_x, ll_y = rotate_vector(0, cmd.local_left_vel, -co)
-            
+
             # Draw the local forward vector
             env.draw_line([(cx, cy), (cx + lf_x, cy + lf_y)], color="blue")
 
@@ -89,7 +89,7 @@ def one_robot_placement(
 
             # Draw the global velocity vector
             env.draw_line([(cx, cy), (gx + cx, gy + cy)], color="black", width=2)
-            
+
             controller.add_robot_commands(cmd, team_robot_id)
             controller.send_robot_commands()
             return (switch, cx, cy, co)

@@ -127,7 +127,6 @@ class PassBall:
 
         # if ball has already been kicked and heading towards receiver
         if self.ball_in_flight:
-
             # TODO: add line filtering to calculate the adjusted position
             if ball_data is not None:
                 self.ball_traj_points.append((ball_data.x, ball_data.y))
@@ -160,7 +159,6 @@ class PassBall:
                 )
                 < self.angle_tolerance
             ):
-
                 receiver_cmd = empty_command(dribbler_on=True)
                 receiver_ready = True
                 print("our receivy boy is ready (spoiler: it aint)")
@@ -190,6 +188,7 @@ class PassBall:
 
         return passer_cmd, receiver_cmd
 
+
 # intent on scoring goal
 def score_goal(
     game_obj: Game,
@@ -203,9 +202,7 @@ def score_goal(
     """
     shoot_at_goal_colour should only be used i
     """
-    target_goal_line = game_obj.field.enemy_goal_line(
-        is_yellow
-    )
+    target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
 
     # If no frame data, skip
     if not game_obj.get_latest_frame():
@@ -213,13 +210,13 @@ def score_goal(
 
     if is_yellow is not None:
         if game_obj.my_team_is_yellow != is_yellow:
-            defender_robots = game_obj.friendly_robots # Defenders
-            shooter = game_obj.enemy_robots[shooter_id] # Shooter
+            defender_robots = game_obj.friendly_robots  # Defenders
+            shooter = game_obj.enemy_robots[shooter_id]  # Shooter
         else:
             defender_robots = game_obj.enemy_robots
             shooter = game_obj.friendly_robots[shooter_id]
         ball = game_obj.ball
-    
+
     # According to how game works, we take the most confident ball
 
     goal_x = target_goal_line.coords[0][0]
@@ -229,19 +226,20 @@ def score_goal(
     # calculate best shot from the position of the ball
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
     if defender_robots and shooter and ball:
-        
-        best_shot, _ = find_best_shot(
-            ball, defender_robots, goal_x, goal_y1, goal_y2
-        )
-                
+        best_shot, _ = find_best_shot(ball, defender_robots, goal_x, goal_y1, goal_y2)
+
         # Safe fall-back if no best shot is found
-        if best_shot is None and is_goal_blocked(game_obj, (goal_x, goal_y2 - goal_y1), defender_robots):
+        if best_shot is None and is_goal_blocked(
+            game_obj, (goal_x, goal_y2 - goal_y1), defender_robots
+        ):
             return None
-        elif best_shot is None and not is_goal_blocked(game_obj, (goal_x,  goal_y2 - goal_y1), defender_robots):
+        elif best_shot is None and not is_goal_blocked(
+            game_obj, (goal_x, goal_y2 - goal_y1), defender_robots
+        ):
             best_shot = (goal_y2 + goal_y1) / 2
-                
+
         shot_orientation = np.atan2((best_shot - ball.y), (goal_x - ball.x))
-        
+
         # robot_data: RobotData = (
         #     friendly_robots[shooter_id].robot_data
         #     if shooter_id < len(friendly_robots)
@@ -258,7 +256,11 @@ def score_goal(
                 # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
                 # Because 0.02 as a threshold is meaningless (different at different distances)
                 # TODO: consider also adding a distance from goal threshold
-                if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(game_obj, (goal_x, best_shot), defender_robots):
+                if abs(
+                    current_oren - shot_orientation
+                ) % np.pi <= 0.05 and not is_goal_blocked(
+                    game_obj, (goal_x, best_shot), defender_robots
+                ):
                     logger.info("kicking ball")
                     robot_command = kick_ball()
                 # TODO: Consider also advancing closer to the goal
@@ -281,6 +283,7 @@ def score_goal(
             # TODO: Will stall/skip if ball and robot is not detected
             return None
     return robot_command
+
 
 def defend(
     pid_oren: PID,

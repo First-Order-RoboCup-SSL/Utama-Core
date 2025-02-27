@@ -18,122 +18,195 @@ from . import ssl_simulation_control_pb2 as ssl__simulation__control__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(
-  name='ssl_simulation_synchronous.proto',
-  package='',
-  syntax='proto2',
-  serialized_options=b'Z6github.com/RoboCup-SSL/ssl-simulation-protocol/pkg/sim',
-  create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n ssl_simulation_synchronous.proto\x1a\x1assl_vision_detection.proto\x1a#ssl_simulation_robot_feedback.proto\x1a\"ssl_simulation_robot_control.proto\x1a\x1cssl_simulation_control.proto\"}\n\x15SimulationSyncRequest\x12\x10\n\x08sim_step\x18\x01 \x01(\x02\x12,\n\x11simulator_command\x18\x02 \x01(\x0b\x32\x11.SimulatorCommand\x12$\n\rrobot_control\x18\x03 \x01(\x0b\x32\r.RobotControl\"w\n\x16SimulationSyncResponse\x12&\n\tdetection\x18\x01 \x03(\x0b\x32\x13.SSL_DetectionFrame\x12\x35\n\x16robot_control_response\x18\x02 \x01(\x0b\x32\x15.RobotControlResponseB8Z6github.com/RoboCup-SSL/ssl-simulation-protocol/pkg/sim'
-  ,
-  dependencies=[ssl__vision__detection__pb2.DESCRIPTOR,ssl__simulation__robot__feedback__pb2.DESCRIPTOR,ssl__simulation__robot__control__pb2.DESCRIPTOR,ssl__simulation__control__pb2.DESCRIPTOR,])
-
-
+    name="ssl_simulation_synchronous.proto",
+    package="",
+    syntax="proto2",
+    serialized_options=b"Z6github.com/RoboCup-SSL/ssl-simulation-protocol/pkg/sim",
+    create_key=_descriptor._internal_create_key,
+    serialized_pb=b'\n ssl_simulation_synchronous.proto\x1a\x1assl_vision_detection.proto\x1a#ssl_simulation_robot_feedback.proto\x1a"ssl_simulation_robot_control.proto\x1a\x1cssl_simulation_control.proto"}\n\x15SimulationSyncRequest\x12\x10\n\x08sim_step\x18\x01 \x01(\x02\x12,\n\x11simulator_command\x18\x02 \x01(\x0b\x32\x11.SimulatorCommand\x12$\n\rrobot_control\x18\x03 \x01(\x0b\x32\r.RobotControl"w\n\x16SimulationSyncResponse\x12&\n\tdetection\x18\x01 \x03(\x0b\x32\x13.SSL_DetectionFrame\x12\x35\n\x16robot_control_response\x18\x02 \x01(\x0b\x32\x15.RobotControlResponseB8Z6github.com/RoboCup-SSL/ssl-simulation-protocol/pkg/sim',
+    dependencies=[
+        ssl__vision__detection__pb2.DESCRIPTOR,
+        ssl__simulation__robot__feedback__pb2.DESCRIPTOR,
+        ssl__simulation__robot__control__pb2.DESCRIPTOR,
+        ssl__simulation__control__pb2.DESCRIPTOR,
+    ],
+)
 
 
 _SIMULATIONSYNCREQUEST = _descriptor.Descriptor(
-  name='SimulationSyncRequest',
-  full_name='SimulationSyncRequest',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='sim_step', full_name='SimulationSyncRequest.sim_step', index=0,
-      number=1, type=2, cpp_type=6, label=1,
-      has_default_value=False, default_value=float(0),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='simulator_command', full_name='SimulationSyncRequest.simulator_command', index=1,
-      number=2, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='robot_control', full_name='SimulationSyncRequest.robot_control', index=2,
-      number=3, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto2',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=167,
-  serialized_end=292,
+    name="SimulationSyncRequest",
+    full_name="SimulationSyncRequest",
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name="sim_step",
+            full_name="SimulationSyncRequest.sim_step",
+            index=0,
+            number=1,
+            type=2,
+            cpp_type=6,
+            label=1,
+            has_default_value=False,
+            default_value=float(0),
+            message_type=None,
+            enum_type=None,
+            containing_type=None,
+            is_extension=False,
+            extension_scope=None,
+            serialized_options=None,
+            file=DESCRIPTOR,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.FieldDescriptor(
+            name="simulator_command",
+            full_name="SimulationSyncRequest.simulator_command",
+            index=1,
+            number=2,
+            type=11,
+            cpp_type=10,
+            label=1,
+            has_default_value=False,
+            default_value=None,
+            message_type=None,
+            enum_type=None,
+            containing_type=None,
+            is_extension=False,
+            extension_scope=None,
+            serialized_options=None,
+            file=DESCRIPTOR,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.FieldDescriptor(
+            name="robot_control",
+            full_name="SimulationSyncRequest.robot_control",
+            index=2,
+            number=3,
+            type=11,
+            cpp_type=10,
+            label=1,
+            has_default_value=False,
+            default_value=None,
+            message_type=None,
+            enum_type=None,
+            containing_type=None,
+            is_extension=False,
+            extension_scope=None,
+            serialized_options=None,
+            file=DESCRIPTOR,
+            create_key=_descriptor._internal_create_key,
+        ),
+    ],
+    extensions=[],
+    nested_types=[],
+    enum_types=[],
+    serialized_options=None,
+    is_extendable=False,
+    syntax="proto2",
+    extension_ranges=[],
+    oneofs=[],
+    serialized_start=167,
+    serialized_end=292,
 )
 
 
 _SIMULATIONSYNCRESPONSE = _descriptor.Descriptor(
-  name='SimulationSyncResponse',
-  full_name='SimulationSyncResponse',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='detection', full_name='SimulationSyncResponse.detection', index=0,
-      number=1, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='robot_control_response', full_name='SimulationSyncResponse.robot_control_response', index=1,
-      number=2, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto2',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=294,
-  serialized_end=413,
+    name="SimulationSyncResponse",
+    full_name="SimulationSyncResponse",
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name="detection",
+            full_name="SimulationSyncResponse.detection",
+            index=0,
+            number=1,
+            type=11,
+            cpp_type=10,
+            label=3,
+            has_default_value=False,
+            default_value=[],
+            message_type=None,
+            enum_type=None,
+            containing_type=None,
+            is_extension=False,
+            extension_scope=None,
+            serialized_options=None,
+            file=DESCRIPTOR,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.FieldDescriptor(
+            name="robot_control_response",
+            full_name="SimulationSyncResponse.robot_control_response",
+            index=1,
+            number=2,
+            type=11,
+            cpp_type=10,
+            label=1,
+            has_default_value=False,
+            default_value=None,
+            message_type=None,
+            enum_type=None,
+            containing_type=None,
+            is_extension=False,
+            extension_scope=None,
+            serialized_options=None,
+            file=DESCRIPTOR,
+            create_key=_descriptor._internal_create_key,
+        ),
+    ],
+    extensions=[],
+    nested_types=[],
+    enum_types=[],
+    serialized_options=None,
+    is_extendable=False,
+    syntax="proto2",
+    extension_ranges=[],
+    oneofs=[],
+    serialized_start=294,
+    serialized_end=413,
 )
 
-_SIMULATIONSYNCREQUEST.fields_by_name['simulator_command'].message_type = ssl__simulation__control__pb2._SIMULATORCOMMAND
-_SIMULATIONSYNCREQUEST.fields_by_name['robot_control'].message_type = ssl__simulation__robot__control__pb2._ROBOTCONTROL
-_SIMULATIONSYNCRESPONSE.fields_by_name['detection'].message_type = ssl__vision__detection__pb2._SSL_DETECTIONFRAME
-_SIMULATIONSYNCRESPONSE.fields_by_name['robot_control_response'].message_type = ssl__simulation__robot__feedback__pb2._ROBOTCONTROLRESPONSE
-DESCRIPTOR.message_types_by_name['SimulationSyncRequest'] = _SIMULATIONSYNCREQUEST
-DESCRIPTOR.message_types_by_name['SimulationSyncResponse'] = _SIMULATIONSYNCRESPONSE
+_SIMULATIONSYNCREQUEST.fields_by_name[
+    "simulator_command"
+].message_type = ssl__simulation__control__pb2._SIMULATORCOMMAND
+_SIMULATIONSYNCREQUEST.fields_by_name[
+    "robot_control"
+].message_type = ssl__simulation__robot__control__pb2._ROBOTCONTROL
+_SIMULATIONSYNCRESPONSE.fields_by_name[
+    "detection"
+].message_type = ssl__vision__detection__pb2._SSL_DETECTIONFRAME
+_SIMULATIONSYNCRESPONSE.fields_by_name[
+    "robot_control_response"
+].message_type = ssl__simulation__robot__feedback__pb2._ROBOTCONTROLRESPONSE
+DESCRIPTOR.message_types_by_name["SimulationSyncRequest"] = _SIMULATIONSYNCREQUEST
+DESCRIPTOR.message_types_by_name["SimulationSyncResponse"] = _SIMULATIONSYNCRESPONSE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
-SimulationSyncRequest = _reflection.GeneratedProtocolMessageType('SimulationSyncRequest', (_message.Message,), {
-  'DESCRIPTOR' : _SIMULATIONSYNCREQUEST,
-  '__module__' : 'ssl_simulation_synchronous_pb2'
-  # @@protoc_insertion_point(class_scope:SimulationSyncRequest)
-  })
+SimulationSyncRequest = _reflection.GeneratedProtocolMessageType(
+    "SimulationSyncRequest",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _SIMULATIONSYNCREQUEST,
+        "__module__": "ssl_simulation_synchronous_pb2",
+        # @@protoc_insertion_point(class_scope:SimulationSyncRequest)
+    },
+)
 _sym_db.RegisterMessage(SimulationSyncRequest)
 
-SimulationSyncResponse = _reflection.GeneratedProtocolMessageType('SimulationSyncResponse', (_message.Message,), {
-  'DESCRIPTOR' : _SIMULATIONSYNCRESPONSE,
-  '__module__' : 'ssl_simulation_synchronous_pb2'
-  # @@protoc_insertion_point(class_scope:SimulationSyncResponse)
-  })
+SimulationSyncResponse = _reflection.GeneratedProtocolMessageType(
+    "SimulationSyncResponse",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _SIMULATIONSYNCRESPONSE,
+        "__module__": "ssl_simulation_synchronous_pb2",
+        # @@protoc_insertion_point(class_scope:SimulationSyncResponse)
+    },
+)
 _sym_db.RegisterMessage(SimulationSyncResponse)
 
 

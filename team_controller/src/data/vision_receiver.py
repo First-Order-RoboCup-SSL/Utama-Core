@@ -17,7 +17,9 @@ class VisionReceiver:
     """
 
     def __init__(self, vision_processor: VisionProcessor):
-        self.net = network_manager.NetworkManager(address=(MULTICAST_GROUP, VISION_PORT), bind_socket=True)
+        self.net = network_manager.NetworkManager(
+            address=(MULTICAST_GROUP, VISION_PORT), bind_socket=True
+        )
         self.vision_processor = vision_processor
 
     def pull_game_data(self) -> None:
@@ -32,19 +34,46 @@ class VisionReceiver:
             if data is not None:
                 vision_packet.Clear()
                 vision_packet.ParseFromString(data)
-                self.vision_processor.add_new_frame(self._process_packet(vision_packet.detection))
+                self.vision_processor.add_new_frame(
+                    self._process_packet(vision_packet.detection)
+                )
 
                 # Logging
                 self._count_objects_detected(vision_packet.detection)
                 self._print_frame_info(vision_packet.detection)
 
-    def _process_packet(self, detection_frame: object): # detection_frame = protobuf packet detection
+    def _process_packet(
+        self, detection_frame: object
+    ):  # detection_frame = protobuf packet detection
         return RawFrameData(
             ts=detection_frame.t_capture,
-            yellow_robots=[RawRobotData(robot.robot_id, robot.x / 1000, robot.y / 1000, robot.orientation, robot.confidence) for robot in detection_frame.robots_yellow],
-            blue_robots=[RawRobotData(robot.robot_id, robot.x / 1000, robot.y / 1000, robot.orientation, robot.confidence) for robot in detection_frame.robots_blue],
-            balls=[RawBallData(ball.x / 1000, ball.y / 1000, ball.z / 1000, ball.confidence) for ball in detection_frame.balls],
-            camera_id=detection_frame.camera_id
+            yellow_robots=[
+                RawRobotData(
+                    robot.robot_id,
+                    robot.x / 1000,
+                    robot.y / 1000,
+                    robot.orientation,
+                    robot.confidence,
+                )
+                for robot in detection_frame.robots_yellow
+            ],
+            blue_robots=[
+                RawRobotData(
+                    robot.robot_id,
+                    robot.x / 1000,
+                    robot.y / 1000,
+                    robot.orientation,
+                    robot.confidence,
+                )
+                for robot in detection_frame.robots_blue
+            ],
+            balls=[
+                RawBallData(
+                    ball.x / 1000, ball.y / 1000, ball.z / 1000, ball.confidence
+                )
+                for ball in detection_frame.balls
+            ],
+            camera_id=detection_frame.camera_id,
         )
 
     def _print_frame_info(self, latency: float, detection: object) -> None:
@@ -58,10 +87,7 @@ class VisionReceiver:
             f"SSL-Vision Processing Latency: "
             f"{(detection.t_sent - detection.t_capture) * 1000.0:.3f}ms"
         )
-        logger.debug(
-            f"Our Processing Latency: "
-            f"{latency * 1000.0:.3f}ms"
-        )
+        logger.debug(f"Our Processing Latency: {latency * 1000.0:.3f}ms")
 
     def _count_objects_detected(self, vision_packet_detect):
         num_yellow_robots = 0

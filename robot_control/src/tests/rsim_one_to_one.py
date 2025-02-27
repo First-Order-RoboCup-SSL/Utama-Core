@@ -17,11 +17,15 @@ ITERS = 2000
 
 
 def improved_block_goal_and_attacker(
-    robot, attacker, ball, goal_pos,
-    pid_oren, pid_trans,
+    robot,
+    attacker,
+    ball,
+    goal_pos,
+    pid_oren,
+    pid_trans,
     attacker_has_ball: bool,
     block_ratio: float = 0.3,
-    max_ball_follow_dist: float = 1.0
+    max_ball_follow_dist: float = 1.0,
 ):
     """
     Intelligent defense strategy:
@@ -78,7 +82,11 @@ def improved_block_goal_and_attacker(
     # === IMPORTANT CHANGE HERE ===
     # Instead of passing the Robot object directly to go_to_point(),
     # we pass (x, y, orientation) as a tuple.
-    current_pose = (robot.x, robot.y, robot.orientation if hasattr(robot, "orientation") else 0.0)
+    current_pose = (
+        robot.x,
+        robot.y,
+        robot.orientation if hasattr(robot, "orientation") else 0.0,
+    )
 
     cmd = go_to_point(
         pid_oren,
@@ -86,7 +94,7 @@ def improved_block_goal_and_attacker(
         current_pose,  # (x, y, orientation) tuple
         0,
         (target_x, target_y),
-        face_theta
+        face_theta,
     )
     return cmd
 
@@ -131,7 +139,9 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
             break
 
         # *** DeprecationWarning: we keep using get_my_latest_frame for now ***
-        friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=defender_is_yellow)
+        friendly, enemy, balls = game.get_my_latest_frame(
+            my_team_is_yellow=defender_is_yellow
+        )
         ball = balls[0]
 
         # Robot references
@@ -144,7 +154,7 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
 
         # Who has the ball?
         yellow_has_ball = sim_robot_controller_yellow.robot_has_ball(0)
-        blue_has_ball   = sim_robot_controller_blue.robot_has_ball(0)
+        blue_has_ball = sim_robot_controller_blue.robot_has_ball(0)
 
         # A) If Yellow has ball => Yellow attacks, Blue defends
         if yellow_has_ball and not blue_has_ball:
@@ -155,8 +165,8 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
                 0,
                 pid_oren_y,
                 pid_2d_y,
-                True,   # is_yellow
-                False   # target_left_goal = false => shoot to left (blue side)
+                True,  # is_yellow
+                False,  # target_left_goal = false => shoot to left (blue side)
             )
             sim_robot_controller_yellow.add_robot_commands(cmd_attacker, 0)
             sim_robot_controller_yellow.send_robot_commands()
@@ -164,14 +174,14 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
             # B: Defend
             cmd_defender = improved_block_goal_and_attacker(
                 blue_robot,  # defender
-                yellow_robot,# attacker
+                yellow_robot,  # attacker
                 ball,
                 blue_goal_pos,
                 pid_oren_b,
                 pid_2d_b,
                 attacker_has_ball=True,
                 block_ratio=0.4,
-                max_ball_follow_dist=1.0
+                max_ball_follow_dist=1.0,
             )
             sim_robot_controller_blue.add_robot_commands(cmd_defender, 0)
             sim_robot_controller_blue.send_robot_commands()
@@ -186,7 +196,7 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
                 pid_oren_b,
                 pid_2d_b,
                 False,  # is_blue
-                False   # target_left_goal = false => shoot to right (yellow side)
+                False,  # target_left_goal = false => shoot to right (yellow side)
             )
             sim_robot_controller_blue.add_robot_commands(cmd_attacker, 0)
             sim_robot_controller_blue.send_robot_commands()
@@ -201,7 +211,7 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
                 pid_2d_y,
                 attacker_has_ball=True,
                 block_ratio=0.4,
-                max_ball_follow_dist=1.0
+                max_ball_follow_dist=1.0,
             )
             sim_robot_controller_yellow.add_robot_commands(cmd_defender, 0)
             sim_robot_controller_yellow.send_robot_commands()
@@ -212,7 +222,7 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
             current_pose_yellow = (
                 yellow_robot.x,
                 yellow_robot.y,
-                getattr(yellow_robot, "orientation", 0.0)
+                getattr(yellow_robot, "orientation", 0.0),
             )
             cmd_yellow = go_to_point(
                 pid_oren_y,
@@ -220,7 +230,7 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
                 current_pose_yellow,
                 0,
                 (ball.x, ball.y),
-                face_ball((yellow_robot.x, yellow_robot.y), (ball.x, ball.y))
+                face_ball((yellow_robot.x, yellow_robot.y), (ball.x, ball.y)),
             )
             sim_robot_controller_yellow.add_robot_commands(cmd_yellow, 0)
             sim_robot_controller_yellow.send_robot_commands()
@@ -228,7 +238,7 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
             current_pose_blue = (
                 blue_robot.x,
                 blue_robot.y,
-                getattr(blue_robot, "orientation", 0.0)
+                getattr(blue_robot, "orientation", 0.0),
             )
             cmd_blue = go_to_point(
                 pid_oren_b,
@@ -236,7 +246,7 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
                 current_pose_blue,
                 0,
                 (ball.x, ball.y),
-                face_ball((blue_robot.x, blue_robot.y), (ball.x, ball.y))
+                face_ball((blue_robot.x, blue_robot.y), (ball.x, ball.y)),
             )
             sim_robot_controller_blue.add_robot_commands(cmd_blue, 0)
             sim_robot_controller_blue.send_robot_commands()
@@ -246,7 +256,7 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
             a = f"[Iteration {i}] The attacker scored successfully! Ball pos: {game.get_ball_pos()}"
             logger.info(a)
             goal_scored = True
-        
+
         if game.is_ball_in_goal(right_goal=not defender_is_yellow):
             a = f"[Iteration {i}] The attacker scored successfully! Ball pos: {game.get_ball_pos()}"
             logger.info(a)
@@ -259,13 +269,18 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
             color="BLUE",
         )
         env.draw_line(
-            [(ball.x, ball.y), (yellow_goal_pos if defender_is_yellow else blue_goal_pos)],
+            [
+                (ball.x, ball.y),
+                (yellow_goal_pos if defender_is_yellow else blue_goal_pos),
+            ],
             width=2,
             color="RED",
         )
 
     if not goal_scored:
-        logger.info("No goal was scored! Defender(s) successfully prevented scoring for all iterations.")
+        logger.info(
+            "No goal was scored! Defender(s) successfully prevented scoring for all iterations."
+        )
 
 
 if __name__ == "__main__":

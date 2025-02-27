@@ -121,7 +121,7 @@ class Field:
     @ClassProperty
     def left_goal_line(cls) -> LineString:
         return cls._LEFT_GOAL_LINE
-    
+
     @ClassProperty
     def right_goal_line(cls) -> LineString:
         return cls._RIGHT_GOAL_LINE
@@ -133,11 +133,11 @@ class Field:
     @ClassProperty
     def left_defense_area(cls) -> Polygon:
         return cls._LEFT_DEFENSE_AREA
-    
+
     @ClassProperty
     def right_defense_area(cls) -> Polygon:
         return cls._RIGHT_DEFENSE_AREA
-    
+
     @ClassProperty
     def full_field(cls) -> Polygon:
         return cls._FULL_FIELD

@@ -10,6 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class SSLPassEnduranceEnv(SSLBaseEnv):
     """The SSL robot needs to make a goal with contested possession
 

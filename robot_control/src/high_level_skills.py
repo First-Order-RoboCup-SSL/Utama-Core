@@ -78,8 +78,8 @@ class DribbleToTarget:
                 if self.augment:
                     delta_x = self.game.ball.x - current_x
                     delta_y = self.game.ball.y - current_y
-                    ball_data = BallData(0, 
-                        delta_x * 6 + current_x, delta_y * 6 + current_y, 0
+                    ball_data = BallData(
+                        0, delta_x * 6 + current_x, delta_y * 6 + current_y, 0
                     )
                 return go_to_ball(
                     self.pid_oren,

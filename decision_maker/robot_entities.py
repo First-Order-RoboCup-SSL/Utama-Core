@@ -4,16 +4,17 @@ from decision_maker.role import Attack, Defend, Role
 
 from enum import Enum
 
+
 class RoleType(Enum):
     ATTACK = 1
     DEFEND = 2
 
-class Friendly():
+
+class Friendly:
     def __init__(
         self,
         robot_id: int,
         role_id: Optional[int] = None,
-
     ):
         self._robot_id: int = robot_id
         self._has_ball: bool = False
@@ -60,30 +61,31 @@ class Friendly():
             raise ValueError("agro raiting value must be non-negative")
 
 
-class Enemy():
+class Enemy:
     def __init__(self, robot_id: int):
         self._id = robot_id
         # TODO: add properties like danger raiting etc
-        
+
     @property
     def id(self) -> int:
         return self._id
 
+
 if __name__ == "__main__":
     # inital setup
     friendly = Friendly(0, RoleType.ATTACK)
-    
+
     # atk role demo
     print(friendly.role.possible_actions)
-    
+
     # change aggro rating
     friendly.aggro_rating = 0.5
     print(friendly.aggro_rating)
-    
+
     # change supporting robot ids
     friendly.sprt_rbt_ids = [1, 2, 3, 4, 5, 5, 5]
     print(friendly.sprt_rbt_ids)
-    
+
     # change role
     friendly.role = RoleType.DEFEND
     print(friendly.role.possible_actions)

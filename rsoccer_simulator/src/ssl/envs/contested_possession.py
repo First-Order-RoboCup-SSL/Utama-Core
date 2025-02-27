@@ -88,7 +88,6 @@ class SSLContestedPossessionEnv(SSLBaseEnv):
         return observation, reward, terminated, truncated, self.reward_shaping_total
 
     def _frame_to_observations(self):
-
         observation = []
 
         observation.append(self.norm_pos(self.frame.ball.x))
@@ -137,9 +136,10 @@ class SSLContestedPossessionEnv(SSLBaseEnv):
         v_y = action[1] * self.max_v
         v_theta = action[2] * self.max_w
         # Convert to local
-        v_x, v_y = v_x * np.cos(angle) + v_y * np.sin(angle), -v_x * np.sin(
-            angle
-        ) + v_y * np.cos(angle)
+        v_x, v_y = (
+            v_x * np.cos(angle) + v_y * np.sin(angle),
+            -v_x * np.sin(angle) + v_y * np.cos(angle),
+        )
 
         # clip by max absolute
         v_norm = np.linalg.norm([v_x, v_y])

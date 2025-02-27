@@ -122,7 +122,6 @@ class RSimVSS(RSim):
         yellow_robots_pos,
         time_step_ms,
     ):
-
         return robosim.VSS(
             field_type,
             n_robots_blue,
@@ -183,7 +182,6 @@ class RSimSSL(RSim):
         yellow_robots_pos,
         time_step_ms,
     ):
-
         return robosim.SSL(
             field_type,
             n_robots_blue,

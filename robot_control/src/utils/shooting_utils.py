@@ -6,11 +6,13 @@ from robot_control.src.utils.pass_quality_utils import PointOnField
 from entities.game.game import Game
 from entities.game.robot import Robot
 
+
 # TODO: may change to bounded form from [-pi, pi]
 def angle_to_robot(
     point_x: float, point_y: float, robot_x: float, robot_y: float
 ) -> float:
     return np.arctan((robot_y - point_y) / (robot_x - point_x))
+
 
 def angle_between_points(main_point, point1, point2):
     """
@@ -37,6 +39,7 @@ def angle_between_points(main_point, point1, point2):
     angle_rad = np.arccos(np.clip(dot_product / norm_product, -1.0, 1.0))
     return angle_rad
 
+
 # Calculates the intersection of 2 rays with the goal
 def shadow(
     start_x: float, start_y: float, angle1: float, angle2: float, goal_x: float
@@ -46,6 +49,7 @@ def shadow(
     shadow_start: float = start_y + slope1 * (goal_x - start_x)
     shadow_end: float = start_y + slope2 * (goal_x - start_x)
     return tuple(sorted((shadow_start, shadow_end)))
+
 
 # Filters the shadows to only keep the ones relevant to the shot and merges overlapping shadows
 def filter_and_merge_shadows(
@@ -76,6 +80,7 @@ def filter_and_merge_shadows(
             )
 
     return merged_shadows
+
 
 # Casts a ray along the 2 tangents to each enemy robot, and calls filter_and_merge_shadows
 def ray_casting(
@@ -109,6 +114,7 @@ def ray_casting(
                 )
                 shadows = filter_and_merge_shadows(shadows, goal_y1, goal_y2)
     return shadows
+
 
 # Finds the biggest area of the goal that doesn't have a shadow (the biggest gap) and finds its midpoint for best shot
 # TODO: could add heuristics to prefer shots closer to the goalpost
@@ -202,13 +208,14 @@ def find_best_shot(
         else:
             candidate = (s + e) / 2
             clearance = (e - s) / 2
-        
+
         if clearance > best_clearance:
             best_clearance = clearance
             best_candidate = candidate
             best_gap = interval
-            
+
     return best_candidate, best_gap
+
 
 def find_shot_quality(
     point: Tuple[float, float],
@@ -252,16 +259,19 @@ def find_shot_quality(
     )
     return shot_quality
 
-def is_goal_blocked(game: Game, best_shot: Tuple[float, float], defenders: List[Robot]) -> bool:
+
+def is_goal_blocked(
+    game: Game, best_shot: Tuple[float, float], defenders: List[Robot]
+) -> bool:
     """
     Determines whether the goal is blocked by enemy robots (considering them as circles).
-    
+
     :param game: The game state containing robot and ball positions.
     :return: True if the goal is blocked, False otherwise.
     """
 
     ball_x, ball_y = game.ball.x, game.ball.y
-    
+
     # Define the shooting line from ball position in the shooter's direction
     line_start = np.array([ball_x, ball_y])
     line_end = np.array([best_shot[0], best_shot[1]])  # Use the best shot position
@@ -282,7 +292,7 @@ def is_goal_blocked(game: Game, best_shot: Tuple[float, float], defenders: List[
         if defender:
             robot_pos = np.array([defender.x, defender.y])
             distance = distance_point_to_line(robot_pos, line_start, line_end)
-                        
+
             if distance <= robot_radius:  # Consider robot as a circle
                 return True  # Shot is blocked
 
