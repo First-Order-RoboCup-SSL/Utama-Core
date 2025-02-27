@@ -27,7 +27,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
 
     ITERS = 1200
     TARGET_OREN = math.pi / 2
-    game = Game(my_team_is_yellow=is_yellow)
+    game = Game(my_team_is_yellow=is_yellow, my_team_is_right=True)
     
     old_pos = []
 
