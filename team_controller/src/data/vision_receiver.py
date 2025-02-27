@@ -41,9 +41,9 @@ class VisionDataReceiver:
     def _process_packet(self, detection_frame: object): # detection_frame = protobuf packet detection
         return RawFrameData(
             ts=detection_frame.t_capture,
-            yellow_robots=[RawRobotData(robot.robot_id, robot.x, robot.y, robot.orientation, robot.confidence) for robot in detection_frame.robots_yellow],
-            blue_robots=[RawRobotData(robot.robot_id, robot.x, robot.y, robot.orientation, robot.confidence) for robot in detection_frame.robots_blue],
-            balls=[RawBallData(ball.x, ball.y, ball.z, ball.confidence) for ball in detection_frame.balls],
+            yellow_robots=[RawRobotData(robot.robot_id, robot.x / 1000, robot.y / 1000, robot.orientation, robot.confidence) for robot in detection_frame.robots_yellow],
+            blue_robots=[RawRobotData(robot.robot_id, robot.x / 1000, robot.y / 1000, robot.orientation, robot.confidence) for robot in detection_frame.robots_blue],
+            balls=[RawBallData(ball.x / 1000, ball.y / 1000, ball.z / 1000, ball.confidence) for ball in detection_frame.balls],
             camera_id=detection_frame.camera_id
         )
 
