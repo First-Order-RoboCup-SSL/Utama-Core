@@ -1,0 +1,10 @@
+
+
+from refiners.base_refiner import BaseRefiner
+
+
+class PositionRefiner(BaseRefiner):
+
+    def refine(self, game, data):
+        return game
+
