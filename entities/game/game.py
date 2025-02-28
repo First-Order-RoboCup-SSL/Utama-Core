@@ -5,8 +5,6 @@ from entities.game.field import Field
 from entities.data.vision import FrameData, RobotData, BallData
 from entities.data.referee import RefereeData
 
-from entities.game.game_object import Colour, GameObject
-from entities.game.game_object import Robot as RobotEntity
 from entities.game.robot import Robot
 from entities.game.ball import Ball
 
@@ -52,7 +50,7 @@ class Game:
     """
 
     def __init__(
-        self, my_team_is_yellow: bool, my_team_is_right: bool, start_frame: FrameData
+        self, my_team_is_yellow: bool, my_team_is_right: bool
     ):
         self._my_team_is_yellow = my_team_is_yellow
         self._my_team_is_right = my_team_is_right
@@ -559,14 +557,3 @@ class Game:
         return self.last_command == RefereeCommand.BALL_PLACEMENT_BLUE
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
-    game = Game()
-    print(game.ball.x)
-    print(game.ball.y)
-    print(game.ball.z)
-    game.ball = BallData(1, 2, 3)
-    print(game.ball.x)
-    print(game.ball.y)
-    print(game.ball.z)
