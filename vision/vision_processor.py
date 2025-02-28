@@ -7,7 +7,6 @@ from queue import SimpleQueue
 
 from team_controller.src.data.message_enum import MessageType
 
-# and fixing out of order
 class VisionProcessor:
     """
     Puts processed vision data into queue:
@@ -44,7 +43,7 @@ class VisionProcessor:
         return frame
 
     def add_new_frame(self, frame_data: RawFrameData):
-        if frame_data.ts >= self.camera_views[frame_data.camera_id].ts:
+        if frame_data.camera_id not in self.camera_views or frame_data.ts >= self.camera_views[frame_data.camera_id].ts:
             self.camera_views[frame_data.camera_id] = frame_data
         
         should_create_new_processed_frame = time.time() - self.last_enqueue_time > TIMESTEP and self.is_ready()

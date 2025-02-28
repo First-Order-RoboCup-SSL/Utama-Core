@@ -14,7 +14,7 @@ import queue
 import logging
 import threading
 from team_controller.src.data.message_enum import MessageType
-from team_controller.src.data.vision_receiver import VisionReceiver
+from vision.vision_receiver import VisionReceiver
 import numpy as np
 
 

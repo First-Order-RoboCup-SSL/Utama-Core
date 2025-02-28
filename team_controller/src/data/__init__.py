@@ -1,2 +1,1 @@
-from team_controller.src.data.vision_receiver import VisionReceiver
 from team_controller.src.data.referee_receiver import RefereeMessageReceiver
