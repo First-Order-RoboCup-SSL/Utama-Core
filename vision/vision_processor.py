@@ -5,13 +5,16 @@ from entities.data.raw_vision import RawFrameData
 from entities.data.vision import BallData, FrameData, RobotData
 from queue import SimpleQueue
 
-# Move averaging into here
+from team_controller.src.data.message_enum import MessageType
+
 # and fixing out of order
 class VisionProcessor:
     """
     Puts processed vision data into queue:
         - 60 fps
         - No empty values (all extrapolated)
+        - Fixes out of order packets
+        - Averages multiple cameras
     Only starts when we have enough data
     """
     def __init__(self,
@@ -28,15 +31,17 @@ class VisionProcessor:
         self.camera_views: Dict[int, RawFrameData] = {} 
 
     def is_ready(self) -> bool:
-        # return (len(self.frame.blue_robots) == self.n_expected_robots_blue
-        #        and len(self.frame.yellow_robots) == self.n_expected_robots_yellow 
-        #        and len(self.frame.n_expected_balls) == self.n_expected_balls)
+        frame = self._combine_cameras()
+        return (len(frame.blue_robots) == self.n_expected_robots_blue
+               and len(frame.yellow_robots) == self.n_expected_robots_yellow 
+               and len(frame.n_expected_balls) == self.n_expected_balls)
 
-    def _combine_cameras(self):
+    def _combine_cameras(self) -> FrameData:
         return self._avg_frames([*self.camera_views.values()])
     
-    def _extrapolate():
-        pass
+    def _extrapolate(self, frame: FrameData) -> FrameData:
+        # TODO : Extrapolation
+        return frame
 
     def add_new_frame(self, frame_data: RawFrameData):
         if frame_data.ts >= self.camera_views[frame_data.camera_id].ts:
@@ -45,7 +50,7 @@ class VisionProcessor:
         should_create_new_processed_frame = time.time() - self.last_enqueue_time > TIMESTEP and self.is_ready()
 
         if should_create_new_processed_frame:
-            self.queue.push(self._extrapolate(self._combine_cameras()))
+            self.queue.push((MessageType.VISION, self._extrapolate(self._combine_cameras())))
             self.last_enqueue_time = time.time() 
 
         if frame_data.ts > self.highest_seen_packet.ts:
