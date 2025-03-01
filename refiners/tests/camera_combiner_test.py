@@ -1,14 +1,10 @@
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
-from entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from entities.game.game import Game
 from entities.game.robot import Robot
 from refiners.position import CameraCombiner
 from unittest.mock import MagicMock
 
-
-
 def test_combine_same_robots_produces_same():
-
     mockGame = MagicMock(spec=Game)
     raw_yellow = [RawRobotData(0,-1,-10, 0, 1)]
     raw_blue = [RawRobotData(0, -100,-1000, 0, 1)]
