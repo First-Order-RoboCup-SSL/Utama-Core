@@ -11,6 +11,7 @@ from refiners.referee import RefereeRefiner
 from refiners.velocity import VelocityRefiner
 from team_controller.src.data import RefereeMessageReceiver
 from vision.vision_receiver import VisionReceiver
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class GameGater:
     
     def __init__(self, robot_buffer, vision_buffers, ref_buffer):
         self.robot_buffer = robot_buffer
-        self.vision_buffer = vision_buffers
+        self.vision_buffers = vision_buffers
         self.ref_buffer = ref_buffer
         self.yrs = set()
         self.brs = set()
@@ -60,6 +61,15 @@ def start_threads(vision_receiver, referee_receiver):
     referee_thread.start()
 
 MAX_CAMERAS = 10
+
+
+class PresentFutureGame:
+    def __init__(self, game: Game, friendly_velocity_predictor: Callable[, float]):
+        self.__past_games = []
+
+    def predict_friendly_robot_velocity(self, robot_id):
+        self.__past_games
+
 def main():
     game = Game(my_team_is_yellow=True, num_friendly_robots=6, num_enemy_robots=6)
 
