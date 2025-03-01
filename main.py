@@ -10,7 +10,7 @@ from refiners.position import PositionRefiner
 from refiners.referee import RefereeRefiner
 from refiners.velocity import VelocityRefiner
 from team_controller.src.data import RefereeMessageReceiver
-from vision.vision_receiver import VisionReceiver
+from receivers.vision_receiver import VisionReceiver
 from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
