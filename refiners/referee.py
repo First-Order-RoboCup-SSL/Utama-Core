@@ -8,6 +8,7 @@ class RefereeRefiner(BaseRefiner):
         return game
 
 
+        self._referee_records = []
 
     def add_new_referee_data(self, referee_data: RefereeData) -> None:
         if not self._referee_records:
