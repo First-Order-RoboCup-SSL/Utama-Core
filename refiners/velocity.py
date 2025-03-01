@@ -68,7 +68,7 @@ class VelocityRefiner(BaseRefiner):
         except Exception as e:
             logger.warning(f"Velocity data not available for acceleration calculation; assuming 0 - {e}")
             return zero_vector(twod)
-        return self._calculate_acceleration_from_pairs(pairs)
+        return self._calculate_acceleration_from_pairs(pairs, twod)
 
     def _extract_time_velocity_pairs(self, past_game: PastGame, game: Game, object_lens: UnboundLens):
         time_velocity_pairs = []
@@ -78,6 +78,13 @@ class VelocityRefiner(BaseRefiner):
         return time_velocity_pairs
 
     def _calculate_acceleration_from_pairs(self, time_velocity_pairs: tuple[float, float], twod: bool):
+        """
+        Estimates an object's acceleration:
+            Take average velocity over M values in each of N windows then compute acceleration
+            between adjacent ones and then average these.
+        """
+        total = zero_vector(twod)
+        
         iter = 0
 
         for i in range(VelocityRefiner.ACCELERATION_N_WINDOWS):
@@ -87,14 +94,12 @@ class VelocityRefiner(BaseRefiner):
             windowMiddle = (windowStart + windowEnd) // 2
 
             for j in range(windowStart, windowEnd):
-                object_at_frame_j = time_velocity_pairs[j]                
+                object_at_frame_j = time_velocity_pairs[j - 1]                
                 curr_vel = object_at_frame_j[1]
                 averageVelocity += curr_vel
 
-            total = zero_vector(twod)
 
             averageVelocity /= VelocityRefiner.ACCELERATION_WINDOW_SIZE
-
             if i != 0:
                 dt = (
                     time_velocity_pairs[windowMiddle - VelocityRefiner.ACCELERATION_WINDOW_SIZE][0] # ts
@@ -105,5 +110,4 @@ class VelocityRefiner(BaseRefiner):
                 iter += 1
 
             futureAverageVelocity = averageVelocity
-
         return total / iter

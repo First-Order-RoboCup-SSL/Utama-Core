@@ -77,14 +77,31 @@ def test_extraction_of_time_velocity_pairs():
         time = i
         vx, vy, vz = 1, 1, 1
         past_game.add_game(create_ball_only_game(i, i, i, i, vx, vy, vz))
-        time_velocity_pairs.append((time, vector.obj(vx=vx, vy=vy, vz=vz)))
+        time_velocity_pairs.append((time, vector.obj(x=vx, y=vy, z=vz)))
+    time_velocity_pairs = time_velocity_pairs[::-1]
     game = create_ball_only_game(i + 1, i + 1, i + 1, i + 1)
-    print(velocity_refiner.refine(past_game, game))
-    print(time_velocity_pairs)
+    extracted = velocity_refiner._extract_time_velocity_pairs(past_game, game, lens.ball)
+    assert extracted == time_velocity_pairs[:VelocityRefiner.ACCELERATION_N_WINDOWS * VelocityRefiner.ACCELERATION_WINDOW_SIZE]
 
-# def test_complete_refining_refines_correctly
-# def test_acceleration_calculation_implements_expected_formula
+def test_acceleration_calculation_implements_expected_formula():
+    past_game = PastGame(20)
+    acc = 3.6
 
-if __name__ == "__main__":
-    # test_velocity_calculation_correct_for_ball()
-    test_extraction_of_time_velocity_pairs()
+    ts = 0
+    for i in range(VelocityRefiner.ACCELERATION_N_WINDOWS):
+        for j in range(VelocityRefiner.ACCELERATION_WINDOW_SIZE):
+            if j == 0:
+                noise = 100
+            elif j == 1:
+                noise = -100
+            else:
+                noise = 0
+            past_game.add_game(create_ball_only_game(ts, 0, 0, 0, acc * i + noise, acc * i + noise, acc * i + noise))
+            ts += 1
+
+    game = create_ball_only_game(ts, 0, 0, 0)
+    game = velocity_refiner.refine(past_game, game)
+    
+    assert game.ball.a.x == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)
+    assert game.ball.a.y == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)
+    assert game.ball.a.z == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)
