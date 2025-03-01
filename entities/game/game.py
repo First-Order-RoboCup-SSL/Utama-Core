@@ -2,6 +2,7 @@ from typing import Dict
 import dataclasses
 from dataclasses import dataclass, replace
 
+from entities.game.field import Field
 from entities.game.robot import Robot
 from entities.game.ball import Ball
 
@@ -14,10 +15,13 @@ class Game:
     ts: float
     my_team_is_yellow: bool
     my_team_is_right: bool
-    field: float = dataclasses.field(init=False)
-    friendly_robots: Dict[int, Robot] = dataclasses.field(default={}, init=False)
-    enemy_robots: Dict[int, Robot] = dataclasses.field(default={}, init=False)
-    ball: Ball = dataclasses.field(default=None, init=False)
+    friendly_robots: Dict[int, Robot]
+    enemy_robots: Dict[int, Robot]
+    ball: Ball
+    field: Field = dataclasses.field(init=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, 'field', Field(self.my_team_is_right))
 
     def is_ball_in_goal(self, right_goal: bool) -> bool:
         ball_pos = self.ball
