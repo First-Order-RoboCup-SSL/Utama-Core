@@ -1,7 +1,3 @@
-
-
-
-from unittest.mock import MagicMock
 import vector
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from entities.data.vision import VisionBallData, VisionRobotData
@@ -60,8 +56,8 @@ def rfac(id,is_friendly, x, y) -> Robot:
 def bfac(x, y) -> Ball:
     return Ball(vector.obj(x=x, y=y), vector.obj(x=0, y=0), vector.obj(x=0, y=0))
 
-def test_refine_for_yellow():
-    friendly = {0:rfac(0, True, 0,0)}
+def base_refine(is_yellow: bool):
+    friendly = {0:rfac(0, is_yellow, 0,0)}
     enemy = {}
     raw_yellow = [RawRobotData(0,-1,-10, 0, 1)]
     raw_blue = [RawRobotData(0, -100,-1000, 0, 1)]
@@ -69,15 +65,24 @@ def test_refine_for_yellow():
     raw_vision_data_cam1 = RawVisionData(0,raw_yellow, raw_blue, raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0,raw_yellow, raw_blue, raw_balls, 1)
     p = PositionRefiner()
-    g = Game(0,True, True, friendly, enemy, bfac(0,0))
+    g = Game(0,is_yellow, True, friendly, enemy, bfac(0,0))
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2])
     fr = result.friendly_robots[0]
     er = result.enemy_robots[0]
-    assert fr.p.x == -1
-    assert fr.p.y == -10
 
-    assert er.p.x == -100
-    assert er.p.y == -1000
+    acc_fr, acc_er = raw_yellow[0] if is_yellow else raw_blue[0], raw_blue[0] if is_yellow else raw_yellow[0]
+    assert fr.p.x == acc_fr.x
+    assert fr.p.y == acc_fr.y
+
+    assert er.p.x == acc_er.x
+    assert er.p.y == acc_er.y
+
+
+def test_refine_for_yellow():
+    base_refine(True)
+
+def test_refine_for_blue():
+    base_refine(False)
 
 def test_refine_for_multiple_yellow():
     friendly = {0:rfac(0, True, 0,0)}
@@ -97,25 +102,6 @@ def test_refine_for_multiple_yellow():
         assert fr.orientation == raw_yellow[i].orientation
 
 
-
-def test_refine_for_blue():
-    friendly = {0:rfac(0, False, 0,0)}
-    enemy = {}
-    raw_yellow = [RawRobotData(0,-1,-10, 0, 1)]
-    raw_blue = [RawRobotData(0, -100,-1000, 0, 1)]
-    raw_balls = [RawBallData(0,0,0, 0)]
-    raw_vision_data_cam1 = RawVisionData(0,raw_yellow, raw_blue, raw_balls, 0)
-    raw_vision_data_cam2 = RawVisionData(0,raw_yellow, raw_blue, raw_balls, 1)
-    p = PositionRefiner()
-    g = Game(0,False, True, friendly, enemy, bfac(0,0))
-    result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2])
-    fr = result.friendly_robots[0]
-    er = result.enemy_robots[0]
-    assert fr.p.x == -100
-    assert fr.p.y == -1000
-
-    assert er.p.x == -1
-    assert er.p.y == -10
 
 
 
