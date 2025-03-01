@@ -101,6 +101,23 @@ def test_refine_for_multiple_yellow():
         assert fr.p.y == raw_yellow[i].y
         assert fr.orientation == raw_yellow[i].orientation
 
+def test_refine_nones():
+    friendly = {0:rfac(0, True, 0,0)}
+    raw_yellow = [RawRobotData(0,-1,-10, 0, 1), RawRobotData(1,-2,-20, 0,1)]
+    raw_balls = [RawBallData(0,0,0, 0)]
+    raw_vision_data_cam1 = RawVisionData(0,raw_yellow, [], raw_balls, 0)
+    raw_vision_data_cam2 = RawVisionData(0,raw_yellow, [], raw_balls, 1)
+    p = PositionRefiner()
+    g = Game(0,True, True, friendly, {}, bfac(0,0))
+    result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2, None, None])
+
+    assert len(result.friendly_robots) == 2
+    for i in range(2):
+        fr = result.friendly_robots[i]
+        assert fr.p.x == raw_yellow[i].x
+        assert fr.p.y == raw_yellow[i].y
+        assert fr.orientation == raw_yellow[i].orientation
+
 
 
 
@@ -113,3 +130,4 @@ if __name__ == "__main__":
     test_refine_for_yellow()
     test_refine_for_blue()
     test_refine_for_multiple_yellow()
+    test_refine_nones()

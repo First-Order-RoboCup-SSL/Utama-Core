@@ -5,13 +5,15 @@ import logging
 from config.settings import TIMESTEP
 from entities.game import Game
 from collections import deque
+from receivers.referee_receiver import RefereeMessageReceiver
 from refiners.has_ball import HasBallRefiner
 from refiners.position import PositionRefiner
 from refiners.referee import RefereeRefiner
 from refiners.velocity import VelocityRefiner
-from team_controller.src.data import RefereeMessageReceiver
 from receivers.vision_receiver import VisionReceiver
 from collections.abc import Callable
+
+from run import GameGater
 
 logger = logging.getLogger(__name__)
 
@@ -24,27 +26,6 @@ warnings.simplefilter("default", DeprecationWarning)
 def data_update_listener(receiver: VisionReceiver):
     # Start receiving game data; this will run in a separate thread.
     receiver.pull_game_data()
-
-
-class GameGater:
-    
-    def __init__(self, robot_buffer, vision_buffers, ref_buffer):
-        self.robot_buffer = robot_buffer
-        self.vision_buffers = vision_buffers
-        self.ref_buffer = ref_buffer
-        self.yrs = set()
-        self.brs = set()
-        self.balls = False
-
-    def not_ready(self, exp_yellow: int, exp_blue: int, exp_ball: bool):
-        for vb in self.vision_buffers:
-            if vb:
-                ff = vb.popleft()
-                self.yrs = self.yrs.union({r.robot_id for r in ff.yellow_robots})
-                self.brs = self.brs.union({r.robot_id for r in ff.blue_robots})
-                self.balls = self.balls or bool(ff.balls)
-        
-        return len(self.yrs) < exp_yellow or len(self.brs) < exp_blue or self.balls != exp_ball
 
 
 def start_threads(vision_receiver, referee_receiver):
