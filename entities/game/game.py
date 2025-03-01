@@ -17,28 +17,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# Only to be used in this file
-def combine_robot_vision_data(old_robot: Robot, robot_data: VisionRobotData) -> Robot:
-    assert old_robot.id == robot_data.id
-    return replace(old_robot,
-        id=robot_data.id,
-        x=robot_data.x,
-        y=robot_data.y,
-        orientation=robot_data.orientation,
-    )
-
-
-# Used at start of the game so assume robot does not have the ball
-def robot_from_vision(robot_data: VisionRobotData, is_friendly: bool) -> Robot:
-    return Robot(
-        id=robot_data.id,
-        is_friendly=is_friendly,
-        has_ball=False,
-        x=robot_data.x,
-        y=robot_data.y,
-        orientation=robot_data.orientation,
-    )
-
 
 def ball_from_vision(ball_data: VisionBallData) -> Ball:
     return Ball(ball_data.x, ball_data.y, ball_data.z)
