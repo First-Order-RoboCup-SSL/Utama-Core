@@ -75,6 +75,14 @@ wheels = [
 ]
 
 [[package]]
+name = "lenses"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fb/06/6a7c30c3519181263e1bbf0cbea67ef4a43a64443ee16717c7d760214943/lenses-1.2.0-py3-none-any.whl", hash = "sha256:e03c81e35500e12e1d35504f76c26489c0a4e08b0881e96fc4e8a1b707c53f16", size = 51113 },
+]
+
+[[package]]
 name = "numpy"
 version = "2.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -275,6 +283,7 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "gymnasium" },
+    { name = "lenses" },
     { name = "numpy" },
     { name = "protobuf" },
     { name = "pygame" },
@@ -293,6 +302,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "gymnasium", specifier = "==1.0.0" },
+    { name = "lenses", specifier = ">=1.2.0" },
     { name = "numpy", specifier = "==2.0.2" },
     { name = "protobuf", specifier = "==3.20.2" },
     { name = "pygame", specifier = "==2.6.1" },
