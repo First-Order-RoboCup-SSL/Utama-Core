@@ -8,6 +8,26 @@ from entities.game.robot import Robot
 from refiners.base_refiner import BaseRefiner
 
 class PositionRefiner(BaseRefiner):
+
+    # Primary function for the Refiner interface
+    def refine(self, game: Game, data: List[RawVisionData]):
+        # Can combine previous position from game with new data to produce new position if desired
+        combined_vision_data = CameraCombiner().combine_cameras(game, data)
+
+        new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(game, combined_vision_data.yellow_robots, combined_vision_data.blue_robots)
+        
+        # Same thing here with ball, instead of using most confident, we can look in game to see 
+        # which new vision ball is closest to the game ball and take that 
+        new_ball = PositionRefiner._ball_from_vision(self._get_most_confident_ball(combined_vision_data.balls))
+
+        if game.my_team_is_yellow:
+            new_game = replace(game, friendly_robots=new_yellow_robots, enemy_robots=new_blue_robots, ball=new_ball)
+        else:
+            new_game = replace(game, friendly_robots=new_blue_robots, enemy_robots=new_yellow_robots, ball=new_ball)
+
+        return new_game
+
+    # Static methods
     def _combine_robot_vision_data(old_robot: Robot, robot_data: VisionRobotData) -> Robot:
         assert old_robot.id == robot_data.id
         return replace(old_robot,
@@ -39,7 +59,7 @@ class PositionRefiner(BaseRefiner):
             balls_by_confidence[0].x, balls_by_confidence[0].y, balls_by_confidence[0].z
         )
 
-    def _combine_single_team_positions(self, game_robots:Dict[int, Robot], vision_robots: List[VisionRobotData], friendly: bool) -> Dict[int, Robot]:
+    def _combine_single_team_positions(game_robots:Dict[int, Robot], vision_robots: List[VisionRobotData], friendly: bool) -> Dict[int, Robot]:
         new_game_robots = dict(game_robots)
         for robot in vision_robots:
             if robot.id not in new_game_robots:
@@ -60,28 +80,11 @@ class PositionRefiner(BaseRefiner):
             old_yellow_robots = dict(game.enemy_robots)
             old_blue_robots = dict(game.friendly_robots)
         
-        new_yellow_robots = self._combine_single_team_positions(old_yellow_robots, yellow_vision_robots, friendly=game.my_team_is_yellow)
-        new_blue_robots = self._combine_single_team_positions(old_blue_robots, blue_vision_robots, friendly=not game.my_team_is_yellow)
+        new_yellow_robots = PositionRefiner._combine_single_team_positions(old_yellow_robots, yellow_vision_robots, friendly=game.my_team_is_yellow)
+        new_blue_robots = PositionRefiner._combine_single_team_positions(old_blue_robots, blue_vision_robots, friendly=not game.my_team_is_yellow)
 
         return new_yellow_robots, new_blue_robots
 
-    def refine(self, game: Game, data: List[RawVisionData]):
-        # Can combine previous position from game with new data to produce new position if desired
-        combined_vision_data = CameraCombiner().combine_cameras(game, data)
-
-        new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(game, combined_vision_data.yellow_robots, combined_vision_data.blue_robots)
-        
-        # Same thing here with ball, instead of using most confident, we can look in game to see 
-        # which new vision ball is closest to the game ball and take that 
-        new_ball = PositionRefiner._ball_from_vision(self._get_most_confident_ball(combined_vision_data.balls))
-
-        if game.my_team_is_yellow:
-            new_game = replace(game, friendly_robots=new_yellow_robots, enemy_robots=new_blue_robots, ball=new_ball)
-        else:
-            new_game = replace(game, friendly_robots=new_blue_robots, enemy_robots=new_yellow_robots, ball=new_ball)
-
-        return new_game
-    
 
 class CameraCombiner:
 
@@ -142,6 +145,6 @@ class CameraCombiner:
         avg_blues = list(map(self._avg_robots, blue_captured))
         avg_balls = list(map(self._avg_balls, ball_captured))
 
-        return VisionData(ts, avg_yellows[:-5], avg_blues[:-5], avg_balls[:-10])
+        return VisionData(ts, [avgy for avgy in avg_yellows if avgy is not None], [avgb for avgb in avg_blues if avgb is not None], [b for b in avg_balls if b is not None])
 
 
