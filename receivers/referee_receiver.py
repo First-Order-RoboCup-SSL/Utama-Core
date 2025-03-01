@@ -7,7 +7,6 @@ from entities.referee.referee_command import RefereeCommand
 from entities.referee.stage import Stage
 from entities.game.team_info import TeamInfo
 from entities.data.referee import RefereeData
-from team_controller.src.data.message_enum import MessageType
 from team_controller.src.utils import network_manager
 from config.settings import MULTICAST_GROUP_REFEREE, REFEREE_PORT
 

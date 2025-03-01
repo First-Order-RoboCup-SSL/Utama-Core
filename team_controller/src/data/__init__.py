@@ -1,1 +1,0 @@
-from receivers.referee_receiver import RefereeMessageReceiver
