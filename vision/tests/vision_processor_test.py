@@ -1,4 +1,4 @@
-from entities.data.raw_vision import RawBallData, RawFrameData, RawRobotData
+from entities.data.raw_vision import RawBallData, RawVisionData, RawRobotData
 from vision.vision_processor import VisionProcessor
 from unittest.mock import Mock
 
@@ -11,7 +11,7 @@ def test_not_ready_until_all_expected_received():
     robots = [RawRobotData(id=i, x=2, y=2, orientation=0, confidence=1) for i in range(max(EXPECTED_YELLOW, EXPECTED_BLUE))]
 
     vision_processor = VisionProcessor(EXPECTED_YELLOW, EXPECTED_BLUE, 1, mock)
-    vision_processor.add_new_frame(RawFrameData(
+    vision_processor.add_new_frame(RawVisionData(
         ts=1,
         yellow_robots=[robots[0]],
         blue_robots=[robots[1]],
@@ -19,7 +19,7 @@ def test_not_ready_until_all_expected_received():
         camera_id=0
     ))
     assert not vision_processor.is_ready()
-    vision_processor.add_new_frame(RawFrameData(
+    vision_processor.add_new_frame(RawVisionData(
         ts=2,
         yellow_robots=robots[:EXPECTED_YELLOW],
         blue_robots=robots[:EXPECTED_BLUE],
@@ -27,7 +27,7 @@ def test_not_ready_until_all_expected_received():
         camera_id=0
     ))
     assert not vision_processor.is_ready()
-    vision_processor.add_new_frame(RawFrameData(
+    vision_processor.add_new_frame(RawVisionData(
         ts=2,
         yellow_robots=robots[:EXPECTED_YELLOW],
         blue_robots=robots[:EXPECTED_BLUE],

@@ -3,7 +3,7 @@ import numpy as np
 from typing import List, Optional, Tuple
 
 from entities.data.command import RobotCommand
-from entities.data.vision import BallData, RobotData
+from entities.data.vision import VisionBallData, VisionRobotData
 from entities.game import Game
 from motion_planning.src.pid import PID
 import logging
@@ -437,7 +437,7 @@ def goalkeep(
 
 
 # util function??
-def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
+def find_likely_enemy_shooter(enemy_robots, balls) -> List[VisionRobotData]:
     ans = []
     for ball in balls:
         for er in enemy_robots:
@@ -502,7 +502,7 @@ def goalkeep(
     return cmd
 
 
-def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
+def find_likely_enemy_shooter(enemy_robots, balls) -> List[VisionRobotData]:
     ans = []
     for ball in balls:
         for er in enemy_robots:

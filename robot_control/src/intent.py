@@ -7,7 +7,7 @@ from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from robot_control.src.utils.shooting_utils import find_best_shot, is_goal_blocked
 from entities.game import Game
 from entities.data.command import RobotCommand
-from entities.data.vision import RobotData
+from entities.data.vision import VisionRobotData
 from robot_control.src.skills import (
     align_defenders,
     face_ball,

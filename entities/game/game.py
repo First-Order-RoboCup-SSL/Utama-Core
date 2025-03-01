@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple, Dict
 from dataclasses import replace
 
 from entities.game.field import Field
-from entities.data.vision import FrameData, RobotData, BallData
+from entities.data.vision import VisionData, VisionRobotData, VisionBallData
 from entities.data.referee import RefereeData
 
 from entities.game.robot import Robot
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 # Only to be used in this file
-def combine_robot_vision_data(old_robot: Robot, robot_data: RobotData) -> Robot:
+def combine_robot_vision_data(old_robot: Robot, robot_data: VisionRobotData) -> Robot:
     assert old_robot.id == robot_data.id
     return replace(old_robot,
         id=robot_data.id,
@@ -29,7 +29,7 @@ def combine_robot_vision_data(old_robot: Robot, robot_data: RobotData) -> Robot:
 
 
 # Used at start of the game so assume robot does not have the ball
-def robot_from_vision(robot_data: RobotData, is_friendly: bool) -> Robot:
+def robot_from_vision(robot_data: VisionRobotData, is_friendly: bool) -> Robot:
     return Robot(
         id=robot_data.id,
         is_friendly=is_friendly,
@@ -40,7 +40,7 @@ def robot_from_vision(robot_data: RobotData, is_friendly: bool) -> Robot:
     )
 
 
-def ball_from_vision(ball_data: BallData) -> Ball:
+def ball_from_vision(ball_data: VisionBallData) -> Ball:
     return Ball(ball_data.x, ball_data.y, ball_data.z)
 
 
@@ -56,7 +56,7 @@ class Game:
         self._my_team_is_right = my_team_is_right
         self._field = Field(self._my_team_is_right)
 
-        self._records: List[FrameData] = []
+        self._records: List[VisionData] = []
 
         assert len(start_frame.ball) > 0, (
             "No ball data in start frame, must give ball start position"
@@ -114,15 +114,15 @@ class Game:
             and right_goal
         )
 
-    def add_new_state(self, frame_data: FrameData) -> None:
-        if isinstance(frame_data, FrameData):
+    def add_new_state(self, frame_data: VisionData) -> None:
+        if isinstance(frame_data, VisionData):
             self._records.append(frame_data)
             self._update_data(frame_data)
         else:
             raise ValueError("Invalid frame data.")
 
     def _get_initial_robot_dicts(
-        self, start_frame: FrameData
+        self, start_frame: VisionData
     ) -> Tuple[Dict[int, Robot], Dict[int, Robot]]:
         if self.my_team_is_yellow:
             friendly_robots = {
@@ -145,7 +145,7 @@ class Game:
 
         return friendly_robots, enemy_robots
 
-    def _get_most_confident_ball(self, balls: List[BallData]) -> Ball:
+    def _get_most_confident_ball(self, balls: List[VisionBallData]) -> Ball:
         balls_by_confidence = sorted(
             balls, key=lambda ball: ball.confidence, reverse=True
         )
@@ -153,7 +153,7 @@ class Game:
             balls_by_confidence[0].x, balls_by_confidence[0].y, balls_by_confidence[0].z
         )
 
-    def _update_data(self, frame_data: FrameData) -> None:
+    def _update_data(self, frame_data: VisionData) -> None:
         if self.my_team_is_yellow:
             self._update_robots(frame_data.yellow_robots, frame_data.blue_robots)
         else:
@@ -161,7 +161,7 @@ class Game:
         self._update_balls(frame_data.ball)
 
     def _update_robots(
-        self, friendly_robot_data: List[RobotData], enemy_robot_data: List[RobotData]
+        self, friendly_robot_data: List[VisionRobotData], enemy_robot_data: List[VisionRobotData]
     ) -> None:
         for robot_data in friendly_robot_data:
             self._friendly_robots[robot_data.id] = combine_robot_vision_data(
@@ -173,7 +173,7 @@ class Game:
                 self._enemy_robots[robot_data.id], robot_data
             )
 
-    def _update_balls(self, balls_data: List[BallData]) -> None:
+    def _update_balls(self, balls_data: List[VisionBallData]) -> None:
         # Does not update when there is nothing to update
         if balls_data:
             self._ball = ball_from_vision(self._get_most_confident_ball(balls_data))
@@ -197,7 +197,7 @@ class Game:
     def get_ball_velocity(self) -> Optional[tuple]:
         return self.get_object_velocity(Ball)
 
-    def predict_frame_after(self, t: float) -> FrameData:
+    def predict_frame_after(self, t: float) -> VisionData:
         yellow_pos = [
             self.predict_object_pos_after(t, RobotEntity(Colour.YELLOW, i))
             for i in range(len(self.get_robots_pos(True)))
@@ -210,11 +210,11 @@ class Game:
         if ball_pos is None or None in yellow_pos or None in blue_pos:
             return None
         else:
-            return FrameData(
+            return VisionData(
                 self._records[-1].ts + t,
-                list(map(lambda pos: RobotData(pos[0], pos[1], 0), yellow_pos)),
-                list(map(lambda pos: RobotData(pos[0], pos[1], 0), blue_pos)),
-                [BallData(ball_pos[0], ball_pos[1], 0, 1)],  # TODO : Support z axis
+                list(map(lambda pos: VisionRobotData(pos[0], pos[1], 0), yellow_pos)),
+                list(map(lambda pos: VisionRobotData(pos[0], pos[1], 0), blue_pos)),
+                [VisionBallData(ball_pos[0], ball_pos[1], 0, 1)],  # TODO : Support z axis
             )
 
     ### General Object Position Prediction ###
