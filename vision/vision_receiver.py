@@ -1,5 +1,5 @@
 import time
-from typing import Deque
+from typing import Deque, List
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from team_controller.src.utils import network_manager
 from config.settings import MULTICAST_GROUP, VISION_PORT
@@ -16,11 +16,22 @@ class VisionReceiver:
     VisionProcessor.
     """
 
-    def __init__(self, vision_buffer: Deque[RawVisionData]):
+    def __init__(self, vision_buffers: List[Deque[RawVisionData]]):
         self.net = network_manager.NetworkManager(
             address=(MULTICAST_GROUP, VISION_PORT), bind_socket=True
         )
-        self.vision_buffer = vision_buffer
+        self.vision_buffers = vision_buffers
+    
+
+    def _add_detection_to_buffer(self, detection_frame: object) -> None:
+        # Deal with out of order packets by checking timestamp in the buffer
+        new_raw_vis_data = self._process_packet(detection_frame)
+        if self.vision_buffers[new_raw_vis_data.camera_id]:
+            # Only add this if it is more recent
+            if new_raw_vis_data.ts > self.vision_buffers[new_raw_vis_data.camera_id][0].ts:
+                self.vision_buffers[new_raw_vis_data.camera_id].append(new_raw_vis_data)
+        else:
+            self.vision_buffers[new_raw_vis_data.camera_id].append(new_raw_vis_data)
 
     def pull_game_data(self) -> None:
         """
@@ -34,13 +45,7 @@ class VisionReceiver:
             if data is not None:
                 vision_packet.Clear()
                 vision_packet.ParseFromString(data)
-
-                # Deal with out of order packets by checking timestamp in the buffer
-                new_raw_vis_data = self._process_packet(vision_packet.detection)
-                if self.vision_buffer:
-                    # Only add this if it is more recent
-                    if new_raw_vis_data.ts > self.vision_buffer[0].ts:
-                        self.vision_buffer.append(new_raw_vis_data)
+                self._add_detection_to_buffer(vision_packet.detection)
 
                 # Logging
                 self._count_objects_detected(vision_packet.detection)
