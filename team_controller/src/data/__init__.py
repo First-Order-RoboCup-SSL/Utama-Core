@@ -1,1 +1,1 @@
-from team_controller.src.data.referee_receiver import RefereeMessageReceiver
+from receivers.referee_receiver import RefereeMessageReceiver
