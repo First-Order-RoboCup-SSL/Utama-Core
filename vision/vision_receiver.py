@@ -34,9 +34,13 @@ class VisionReceiver:
             if data is not None:
                 vision_packet.Clear()
                 vision_packet.ParseFromString(data)
-                self.vision_buffer.append(
-                    self._process_packet(vision_packet.detection)
-                )
+
+                # Deal with out of order packets by checking timestamp in the buffer
+                new_raw_vis_data = self._process_packet(vision_packet.detection)
+                if self.vision_buffer:
+                    # Only add this if it is more recent
+                    if new_raw_vis_data.ts > self.vision_buffer[0].ts:
+                        self.vision_buffer.append(new_raw_vis_data)
 
                 # Logging
                 self._count_objects_detected(vision_packet.detection)
