@@ -1,5 +1,5 @@
 from dataclasses import dataclass, replace
-from vision.vision_receiver import VisionReceiver, RawRobotData, RawBallData
+from receivers.vision_receiver import VisionReceiver, RawRobotData, RawBallData
 from collections import deque
 
 @dataclass

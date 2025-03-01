@@ -28,7 +28,7 @@ requires-python = ">=3.9,<3.11"
 
 [tool.setuptools]
 py-modules = []
-packages = ["decision_maker", "entities", "global_utils", "motion_planning", "robot_control", "rsoccer_simulator", "team_controller", "config", "vision", "refiners"]
+packages = ["decision_maker", "entities", "global_utils", "motion_planning", "robot_control", "rsoccer_simulator", "team_controller", "config", "receivers", "refiners"]
 
 [dependency-groups]
 dev = [
