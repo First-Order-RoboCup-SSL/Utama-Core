@@ -1,86 +1,90 @@
-
-
 from dataclasses import replace
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 from entities.data.raw_vision import RawVisionData
 from entities.data.vision import VisionBallData, VisionData, VisionRobotData
+from entities.game.ball import Ball
 from entities.game.game import Game
 from entities.game.robot import Robot
 from refiners.base_refiner import BaseRefiner
 
-# Only to be used in this file
-def combine_robot_vision_data(old_robot: Robot, robot_data: VisionRobotData) -> Robot:
-    assert old_robot.id == robot_data.id
-    return replace(old_robot,
-        id=robot_data.id,
-        x=robot_data.x,
-        y=robot_data.y,
-        orientation=robot_data.orientation,
-    )
+class PositionRefiner(BaseRefiner):
 
+    # Primary function for the Refiner interface
+    def refine(self, game: Game, data: List[RawVisionData]):
+        # Can combine previous position from game with new data to produce new position if desired
+        combined_vision_data = CameraCombiner().combine_cameras(game, data)
 
-# Used at start of the game so assume robot does not have the ball
-def robot_from_vision(robot_data: VisionRobotData, is_friendly: bool) -> Robot:
-    return Robot(
-        id=robot_data.id,
-        is_friendly=is_friendly,
-        has_ball=False,
-        x=robot_data.x,
-        y=robot_data.y,
-        orientation=robot_data.orientation,
-    )
+        new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(game, combined_vision_data.yellow_robots, combined_vision_data.blue_robots)
+        
+        # Same thing here with ball, instead of using most confident, we can look in game to see 
+        # which new vision ball is closest to the game ball and take that 
+        new_ball = PositionRefiner._ball_from_vision(self._get_most_confident_ball(combined_vision_data.balls))
 
+        if game.my_team_is_yellow:
+            new_game = replace(game, friendly_robots=new_yellow_robots, enemy_robots=new_blue_robots, ball=new_ball)
+        else:
+            new_game = replace(game, friendly_robots=new_blue_robots, enemy_robots=new_yellow_robots, ball=new_ball)
 
-    def _get_most_confident_ball(self, balls: List[VisionBallData]) -> Ball:
+        return new_game
+
+    # Static methods
+    def _combine_robot_vision_data(old_robot: Robot, robot_data: VisionRobotData) -> Robot:
+        assert old_robot.id == robot_data.id
+        return replace(old_robot,
+            id=robot_data.id,
+            x=robot_data.x,
+            y=robot_data.y,
+            orientation=robot_data.orientation,
+        )
+
+    # Used at start of the game so assume robot does not have the ball
+    def _robot_from_vision(robot_data: VisionRobotData, is_friendly: bool) -> Robot:
+        return Robot(
+            id=robot_data.id,
+            is_friendly=is_friendly,
+            has_ball=False,
+            x=robot_data.x,
+            y=robot_data.y,
+            orientation=robot_data.orientation,
+        )
+
+    def _ball_from_vision(ball_data: VisionBallData) -> Ball:
+        return Ball(ball_data.x, ball_data.y, ball_data.z)
+
+    def _get_most_confident_ball(balls: List[VisionBallData]) -> Ball:
         balls_by_confidence = sorted(
             balls, key=lambda ball: ball.confidence, reverse=True
         )
         return Ball(
             balls_by_confidence[0].x, balls_by_confidence[0].y, balls_by_confidence[0].z
         )
-    
 
+    def _combine_single_team_positions(game_robots:Dict[int, Robot], vision_robots: List[VisionRobotData], friendly: bool) -> Dict[int, Robot]:
+        new_game_robots = dict(game_robots)
+        for robot in vision_robots:
+            if robot.id not in new_game_robots:
+                # At the start of the game, we haven't seen anything yet, so just create a new robot
+                new_game_robots[robot.id] = PositionRefiner._robot_from_vision(robot, is_friendly=friendly)
+            else:
+                # Otherwise we have old information so we update it
+                new_game_robots[robot.id] = PositionRefiner._combine_robot_vision_data(new_game_robots[robot.id], robot)
 
-    def _update_data(self, frame_data: VisionData) -> None:
-        if self.my_team_is_yellow:
-            self._update_robots(frame_data.yellow_robots, frame_data.blue_robots)
+        return new_game_robots
+
+    def _combine_both_teams_game_vision_positions(self, game: Game, yellow_vision_robots: List[VisionRobotData], blue_vision_robots: List[VisionRobotData]) -> Tuple[Dict[int, Robot], Dict[int, Robot]]:
+        
+        if game.my_team_is_yellow:
+            old_yellow_robots = dict(game.friendly_robots)
+            old_blue_robots = dict(game.enemy_robots)
         else:
-            self._update_robots(frame_data.blue_robots, frame_data.yellow_robots)
-        self._update_balls(frame_data.ball)
+            old_yellow_robots = dict(game.enemy_robots)
+            old_blue_robots = dict(game.friendly_robots)
+        
+        new_yellow_robots = PositionRefiner._combine_single_team_positions(old_yellow_robots, yellow_vision_robots, friendly=game.my_team_is_yellow)
+        new_blue_robots = PositionRefiner._combine_single_team_positions(old_blue_robots, blue_vision_robots, friendly=not game.my_team_is_yellow)
 
-    def _update_robots(
-        self, friendly_robot_data: List[VisionRobotData], enemy_robot_data: List[VisionRobotData]
-    ) -> None:
-        for robot_data in friendly_robot_data:
-            self._friendly_robots[robot_data.id] = combine_robot_vision_data(
-                self._friendly_robots[robot_data.id], robot_data
-            )
+        return new_yellow_robots, new_blue_robots
 
-        for robot_data in enemy_robot_data:
-            self._enemy_robots[robot_data.id] = combine_robot_vision_data(
-                self._enemy_robots[robot_data.id], robot_data
-            )
-
-    def _update_balls(self, balls_data: List[VisionBallData]) -> None:
-        # Does not update when there is nothing to update
-        if balls_data:
-            self._ball = ball_from_vision(self._get_most_confident_ball(balls_data))
-
-def ball_from_vision(ball_data: VisionBallData) -> Ball:
-    return Ball(ball_data.x, ball_data.y, ball_data.z)
-
-
-
-class PositionRefiner(BaseRefiner):
-
-    def refine(self, game: Game, data: List[RawVisionData]):
-        # Can combine previous position from game with new data to produce new position if desired
-
-        processed_vision_data = CameraCombiner().combine_cameras(game, data)
-        # old_game_positions = game.get_old_positions() 
-        game.set_new_positions()
-        return game
-    
 
 class CameraCombiner:
 
@@ -141,6 +145,6 @@ class CameraCombiner:
         avg_blues = list(map(self._avg_robots, blue_captured))
         avg_balls = list(map(self._avg_balls, ball_captured))
 
-        return VisionData(ts, avg_yellows[:-5], avg_blues[:-5], avg_balls[:-10])
+        return VisionData(ts, [avgy for avgy in avg_yellows if avgy is not None], [avgb for avgb in avg_blues if avgb is not None], [b for b in avg_balls if b is not None])
 
 
