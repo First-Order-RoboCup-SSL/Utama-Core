@@ -1,11 +1,12 @@
 from dataclasses import replace
 from typing import Dict, List, Optional, Tuple
-from entities.data.raw_vision import RawVisionData
+from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from entities.game.ball import Ball
 from entities.game.game import Game
 from entities.game.robot import Robot
 from refiners.base_refiner import BaseRefiner
+from collections import defaultdict
 
 class PositionRefiner(BaseRefiner):
 
@@ -88,63 +89,78 @@ class PositionRefiner(BaseRefiner):
 
 class CameraCombiner:
 
-    def combine_cameras(self, game: Game, data: List[RawVisionData]) -> VisionData:
+    BALL_CONFIDENCE_THRESHOLD = 0.1
+    BALL_MERGE_THRESHOLD = 0.05
+    def combine_cameras(self, game: Game, frames: List[RawVisionData]) -> VisionData:
         # Now we have access to the game we can do more sophisticated things
         # Such as ignoring outlier cameras etc
-        return self._avg_frames(data)
+
+        ts = []
+        # maps robot id to list of frames seen for that robot
+        yellow_captured = defaultdict(list)
+        blue_captured = defaultdict(list)
+        balls_captured = defaultdict(list)
+
+        # Each frame is from a different camera
+        for frame_ind, frame in enumerate(frames):
+            for yr in frame.yellow_robots:
+                yellow_captured[yr.id].append(yr)
+            
+            for br in frame.blue_robots:
+                blue_captured[br.id].append(br)
+
+            for b in frame.balls:
+                balls_captured[frame_ind].append(b)
+            ts.append(frame.ts)
+        
+        avg_yellows = list(map(self._avg_robots, yellow_captured.values()))
+        avg_blues = list(map(self._avg_robots, blue_captured.values()))
+        # Current strategy is just to take the most confident ball
+        balls = self._combine_balls_by_proximity(balls_captured)
+
+        return VisionData(sum(ts) / len(ts), avg_yellows, avg_blues, balls)
     
-    def _avg_robots(self, rs: List[VisionRobotData]) -> Optional[VisionRobotData]:
+    def _avg_robots(self, rs: List[RawRobotData]) -> Optional[VisionRobotData]:
+        # All these robots should have the same id
         if not rs:
             return None
-
-        tx, ty, to = 0, 0, 0
+        base_id = rs[0].id
+        tx, ty, to, tc = 0, 0, 0, 0
         for r in rs:
+            assert base_id == r.id
             tx += r.x
             ty += r.y
             to += r.orientation
+            tc += r.confidence
+        
+        return VisionRobotData(base_id, tx / len(rs), ty / len(rs), to / len(rs))
 
-        return VisionRobotData(tx / len(rs), ty / len(rs), to / len(rs))
+    def _combine_balls_by_proximity(self, bs: Dict[int, List[RawBallData]]) -> List[VisionBallData]:        
+        combined_balls: List[VisionBallData] = []
+        for ball_list in bs.values():
+            for b in ball_list:
+                if b.confidence > CameraCombiner.BALL_CONFIDENCE_THRESHOLD:
+                    found = False
+                    for i, cb in enumerate(combined_balls):
+                        if CameraCombiner.ball_merge_predicate(b, cb):
+                            found = True
+                            combined_balls[i] = CameraCombiner.ball_merge(cb, b)
+                            break
+                    
+                    if not found:
+                        # If no ball close enough, must have found a new separate ball
+                        combined_balls.append(b)
+        return combined_balls
 
-    def _avg_balls(self, bs: List[VisionBallData]) -> Optional[VisionBallData]:
-        if not bs:
-            return None
+    def ball_merge_predicate(b1: RawBallData, b2: RawBallData) -> bool:
+        return abs(b1.x - b2.x) + abs(b1.y - b2.y) < CameraCombiner.BALL_MERGE_THRESHOLD
+    
+    def ball_merge(b1: RawBallData, b2: RawBallData) -> RawBallData:
+        nx = (b1.x + b2.x) / 2
+        ny = (b1.y + b2.y) / 2
+        nz = (b1.z + b2.z) / 2
+        nc = max(b1.confidence, b2.confidence)
+        return RawBallData(nx, ny, nz, nc)
 
-        tx, ty, tz = 0, 0, 0
-        for r in bs:
-            tx += r.x
-            ty += r.y
-            tz += r.z
-
-        return VisionBallData(
-            tx / len(bs),
-            ty / len(bs),
-            tz / len(bs),
-            min(map(lambda x: x.confidence, bs)),
-        )
-
-    def _avg_frames(self, frames: List[RawVisionData]) -> VisionData:
-        frames = [*filter(lambda x: x.ball is not None, frames)]
-        ts = 0
-        yellow_captured = [[] for _ in range(11)]
-        blue_captured = [[] for _ in range(11)]
-        ball_captured = [[] for _ in range(11)]
-
-        for frame in frames:
-            for ind, yr in enumerate(frame.yellow_robots):
-                if yr is not None:
-                    yellow_captured[ind].append(yr)
-            for ind, br in enumerate(frame.blue_robots):
-                if br is not None:
-                    blue_captured[ind].append(br)
-            for ind, b in enumerate(frame.ball):
-                if b is not None:
-                    ball_captured[ind].append(b)
-            ts += frame.ts
-
-        avg_yellows = list(map(self._avg_robots, yellow_captured))
-        avg_blues = list(map(self._avg_robots, blue_captured))
-        avg_balls = list(map(self._avg_balls, ball_captured))
-
-        return VisionData(ts, [avgy for avgy in avg_yellows if avgy is not None], [avgb for avgb in avg_blues if avgb is not None], [b for b in avg_balls if b is not None])
 
 
