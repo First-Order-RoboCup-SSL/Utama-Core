@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 import dataclasses
 from dataclasses import dataclass, replace
 
@@ -17,7 +17,7 @@ class Game:
     my_team_is_right: bool
     friendly_robots: Dict[int, Robot]
     enemy_robots: Dict[int, Robot]
-    ball: Ball
+    ball: Optional[Ball]
     field: Field = dataclasses.field(init=False)
 
     def __post_init__(self):
