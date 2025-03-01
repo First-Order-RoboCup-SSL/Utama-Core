@@ -26,4 +26,4 @@ class VisionData:
     ts: float
     yellow_robots: List[VisionRobotData]
     blue_robots: List[VisionRobotData]
-    ball: List[VisionBallData]
+    balls: List[VisionBallData]
