@@ -2,7 +2,7 @@ import time
 import threading
 import logging
 
-from config.settings import TIMESTEP
+from config.settings import MAX_CAMERAS, TIMESTEP
 from entities.game import Game
 from collections import deque
 from receivers.referee_receiver import RefereeMessageReceiver
@@ -41,7 +41,6 @@ def start_threads(vision_receiver, referee_receiver):
     vision_thread.start()
     referee_thread.start()
 
-MAX_CAMERAS = 10
 
 
 class PresentFutureGame:
