@@ -10,7 +10,7 @@ import numpy as np
 from typing import Tuple, Optional, Dict, Union, List
 from global_utils.math_utils import rotate_vector
 from entities.data.command import RobotCommand
-from entities.data.vision import RobotData, BallData
+from entities.data.vision import VisionRobotData, VisionBallData
 from team_controller.src.controllers import GRSimRobotController
 from motion_planning.src.pid.pid import PID
 from config.settings import (
@@ -64,8 +64,8 @@ class StartUpController:
         self,
         robot_id: int,
         target_coords: Union[Tuple[float, float], Tuple[float, float, float]],
-        robots: List[RobotData],
-        balls: List[BallData],
+        robots: List[VisionRobotData],
+        balls: List[VisionBallData],
         face_ball=False,
     ) -> RobotCommand:
         """

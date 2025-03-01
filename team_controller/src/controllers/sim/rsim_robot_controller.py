@@ -3,7 +3,7 @@ from typing import Dict, Union, Optional, Tuple
 from xmlrpc.client import Boolean
 from entities.game import Game
 from entities.data.command import RobotCommand, RobotResponse
-from entities.data.vision import FrameData
+from entities.data.vision import VisionData
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -135,7 +135,7 @@ class RSimRobotController(AbstractRobotController):
         )
         self._out_packet[robot_id] = action
 
-    def _write_to_game_obj(self, new_frame: FrameData) -> None:
+    def _write_to_game_obj(self, new_frame: VisionData) -> None:
         """
         Supersedes the VisionReceiver and queue procedure to write to game obj directly.
 
@@ -272,7 +272,7 @@ class PVPManager:
         self._pending = {"team_blue": None, "team_yellow": None}
 
     # TODO: Inheritance?
-    def _write_to_game_obj(self, new_frame: FrameData) -> None:
+    def _write_to_game_obj(self, new_frame: VisionData) -> None:
         self._game.add_new_state(new_frame)
 
     def reset_env(self):

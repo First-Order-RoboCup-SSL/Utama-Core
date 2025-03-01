@@ -1,19 +1,19 @@
 from entities.game.game import Game
 from entities.game.robot import Robot
 from entities.game.ball import Ball
-from entities.data.vision import BallData, FrameData, RobotData
+from entities.data.vision import VisionBallData, VisionData, VisionRobotData
 
 
-blue_robot_data = [RobotData(i, i, 10 * i, 0) for i in range(6)]
-yellow_robot_data = [RobotData(i, 100 * i, 1000 * i, 0) for i in range(6)]
-basic_ball = BallData(0, 0, 0, 0)
+blue_robot_data = [VisionRobotData(i, i, 10 * i, 0) for i in range(6)]
+yellow_robot_data = [VisionRobotData(i, 100 * i, 1000 * i, 0) for i in range(6)]
+basic_ball = VisionBallData(0, 0, 0, 0)
 
 
 def test_passing_yellow_game_initial_frame_is_reflected_in_robots():
     game = Game(
         True,
         True,
-        start_frame=FrameData(0, yellow_robot_data, blue_robot_data, [basic_ball]),
+        start_frame=VisionData(0, yellow_robot_data, blue_robot_data, [basic_ball]),
     )
 
     assert len(game.friendly_robots) == 6
@@ -44,7 +44,7 @@ def test_passing_blue_game_initial_frame_is_reflected_in_robots():
     game = Game(
         False,
         True,
-        start_frame=FrameData(0, yellow_robot_data, blue_robot_data, [basic_ball]),
+        start_frame=VisionData(0, yellow_robot_data, blue_robot_data, [basic_ball]),
     )
 
     assert len(game.friendly_robots) == 6
@@ -75,8 +75,8 @@ def test_passing_initial_large_robot_id_is_reflected():
     game = Game(
         True,
         True,
-        start_frame=FrameData(
-            0, [RobotData(12345, 1, 2, 3)], blue_robot_data, [basic_ball]
+        start_frame=VisionData(
+            0, [VisionRobotData(12345, 1, 2, 3)], blue_robot_data, [basic_ball]
         ),
     )
 
@@ -90,8 +90,8 @@ def test_passing_initial_ball_is_reflected():
     game = Game(
         True,
         True,
-        start_frame=FrameData(
-            0, yellow_robot_data, blue_robot_data, [BallData(1, 2, 3, 4)]
+        start_frame=VisionData(
+            0, yellow_robot_data, blue_robot_data, [VisionBallData(1, 2, 3, 4)]
         ),
     )
 
@@ -105,11 +105,11 @@ def test_initial_highest_confidence_ball_is_taken():
     game = Game(
         True,
         True,
-        start_frame=FrameData(
+        start_frame=VisionData(
             0,
             yellow_robot_data,
             blue_robot_data,
-            [BallData(1, 2, 3, 4), BallData(10, 20, 30, 40)],
+            [VisionBallData(1, 2, 3, 4), VisionBallData(10, 20, 30, 40)],
         ),
     )
 

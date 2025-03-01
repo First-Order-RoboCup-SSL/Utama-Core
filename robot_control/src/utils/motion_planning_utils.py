@@ -1,6 +1,6 @@
 from typing import Tuple, Union
 from entities.data.command import RobotCommand
-from entities.data.vision import RobotData
+from entities.data.vision import VisionRobotData
 from entities.game import Game
 from global_utils.math_utils import rotate_vector
 from motion_planning.src.pid import PID

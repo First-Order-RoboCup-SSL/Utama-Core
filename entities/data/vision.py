@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class BallData:
+class VisionBallData:
     x: float
     y: float
     z: float
@@ -14,7 +14,7 @@ class BallData:
 
 
 @dataclass
-class RobotData:
+class VisionRobotData:
     id: int
     x: float
     y: float
@@ -22,8 +22,8 @@ class RobotData:
 
 
 @dataclass
-class FrameData:
+class VisionData:
     ts: float
-    yellow_robots: List[RobotData]
-    blue_robots: List[RobotData]
-    ball: List[BallData]
+    yellow_robots: List[VisionRobotData]
+    blue_robots: List[VisionRobotData]
+    ball: List[VisionBallData]

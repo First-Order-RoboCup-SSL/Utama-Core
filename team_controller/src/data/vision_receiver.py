@@ -1,11 +1,11 @@
 import time
-from typing import Deque
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from team_controller.src.utils import network_manager
 from config.settings import MULTICAST_GROUP, VISION_PORT
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
 import logging
 
+from vision.vision_processor import VisionProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -16,11 +16,11 @@ class VisionReceiver:
     VisionProcessor.
     """
 
-    def __init__(self, vision_buffer: Deque[RawVisionData]):
+    def __init__(self, vision_processor: VisionProcessor):
         self.net = network_manager.NetworkManager(
             address=(MULTICAST_GROUP, VISION_PORT), bind_socket=True
         )
-        self.vision_buffer = vision_buffer
+        self.vision_processor = vision_processor
 
     def pull_game_data(self) -> None:
         """
@@ -34,7 +34,7 @@ class VisionReceiver:
             if data is not None:
                 vision_packet.Clear()
                 vision_packet.ParseFromString(data)
-                self.vision_buffer.append(
+                self.vision_processor.add_new_frame(
                     self._process_packet(vision_packet.detection)
                 )
 

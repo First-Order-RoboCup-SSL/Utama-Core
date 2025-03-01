@@ -3,7 +3,7 @@ from typing import Tuple
 from dataclasses import dataclass
 import logging
 
-from entities.data.vision import RobotData
+from entities.data.vision import VisionRobotData
 
 logger = logging.getLogger(__name__)
 

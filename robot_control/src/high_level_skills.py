@@ -4,7 +4,7 @@ from time import sleep
 
 from entities.game import Game
 from entities.data.command import RobotCommand, RobotResponse
-from entities.data.vision import BallData, RobotData
+from entities.data.vision import VisionBallData, VisionRobotData
 
 from motion_planning.src.pid import PID
 from global_utils.math_utils import distance
@@ -78,7 +78,7 @@ class DribbleToTarget:
                 if self.augment:
                     delta_x = self.game.ball.x - current_x
                     delta_y = self.game.ball.y - current_y
-                    ball_data = BallData(
+                    ball_data = VisionBallData(
                         0, delta_x * 6 + current_x, delta_y * 6 + current_y, 0
                     )
                 return go_to_ball(
