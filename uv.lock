@@ -282,6 +282,7 @@ dependencies = [
     { name = "pytest" },
     { name = "rc-robosim" },
     { name = "shapely" },
+    { name = "vector" },
 ]
 
 [package.dev-dependencies]
@@ -299,10 +300,24 @@ requires-dist = [
     { name = "pytest", specifier = "==8.3.4" },
     { name = "rc-robosim", specifier = "==1.2" },
     { name = "shapely", specifier = "==2.0.6" },
+    { name = "vector", specifier = ">=1.6.1" },
 ]
 
 [package.metadata.requires-dev]
 dev = [{ name = "ruff", specifier = ">=0.9.8" }]
+
+[[package]]
+name = "vector"
+version = "1.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f4/00/d1ccfa4cf17703f9f529e2d713c35e71a6aee4384cacaf2205d703a1da67/vector-1.6.1.tar.gz", hash = "sha256:59982d0ce553d35f76c63396b57d7fcf5004deab33270bfdb6e54c65db62d6e4", size = 349100 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e2/55/4f6136553afc543f34052c163795d6da6b757307397586eab356aad38e9d/vector-1.6.1-py3-none-any.whl", hash = "sha256:f91f40972bfe03189c460118518b1325dc3c070f8619b7058d7b1d5621f7a643", size = 177781 },
+]
 
 [[package]]
 name = "zipp"

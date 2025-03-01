@@ -1,14 +1,11 @@
+import vector
 from typing import Tuple
-
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class Ball:
-    x: float
-    y: float
-    z: float
-
-    @property
-    def coords(self) -> Tuple[float, float]:
-        return self.x, self.y
+    p: vector.VectorObject3D
+    v: vector.VectorObject3D
+    a: vector.VectorObject3D
+    

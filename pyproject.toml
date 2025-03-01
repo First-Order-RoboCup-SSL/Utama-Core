@@ -21,7 +21,8 @@ dependencies = [
     "rc-robosim == 1.2",
     "pygame == 2.6.1",
     "pyserial == 3.5",
-    "pytest == 8.3.4"
+    "pytest == 8.3.4",
+    "vector>=1.6.1",
 ]
 requires-python = ">=3.9,<3.11"
 

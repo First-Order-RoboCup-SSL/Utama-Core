@@ -2,8 +2,7 @@ from __future__ import annotations
 from typing import Tuple
 from dataclasses import dataclass
 import logging
-
-from entities.data.vision import VisionRobotData
+import vector
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +11,8 @@ logger = logging.getLogger(__name__)
 class Robot:
     id: int
     is_friendly: bool
-    has_ball: bool  # Friendly and enemy now have this, friendly is from IR sensor, enemy from vision?
-    x: float
-    y: float
+    has_ball: bool            # Friendly and enemy now have this, friendly is from IR sensor, enemy from position
+    p: vector.VectorObject2D
+    v: vector.VectorObject2D
+    a: vector.VectorObject2D
     orientation: float
-
-    def coords(self) -> Tuple[float, float]:
-        return self.x, self.y

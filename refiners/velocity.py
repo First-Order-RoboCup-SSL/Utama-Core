@@ -1,12 +1,82 @@
-
-
+from collections.abc import Callable
+from typing import Union
+from entities.game.ball import Ball
+from entities.game.game import Game
+from entities.game.robot import Robot
 from refiners.base_refiner import BaseRefiner
+from vector import VectorObject2D, Vector
+import logging
 
+logger = logging.getLogger(__name__)
 
 class VelocityRefiner(BaseRefiner):
     
-    def refine(self, game, data):
+    def refine(self, past_game: PastGame, game: Game, data):
+        game.ball.v = self._get_object_v(lambda game: game.ball)
+        game.ball.a = self._get_object_a(lambda frame: past_game.n_frames_ago(frame).ball)
+
         return game
+    
+    def _get_object_v(past_game: PastGame, game: Game, get_object_out_of_game: Callable[int, Union[Robot, Ball]]):
+        previous_game = past_game.n_frames_ago(1)
+        current_game = game
+
+        try:
+            previous_pos = get_object_out_of_game(previous_game).p
+        except:
+            return VectorObject2D(0, 0) # Assume not moving if we can't get the object
+        
+        current_pos = get_object_out_of_game(current_game).p
+
+        previous_time_received = previous_game.ts
+        time_received = current_game.ts
+
+        dt_secs = time_received - previous_time_received
+
+        return (current_pos - previous_pos) / dt_secs
+
+    def _get_object_a(past_game: PastGame, game: Game, get_object_out_of_game: Callable[int, Union[Robot, Ball]]):
+        WINDOW = 5
+        N_WINDOWS = 3
+
+        iter = 0
+        missing_velocities = 0
+
+        if len(self._records) < WINDOW * N_WINDOWS + 1:
+            return None
+
+        for i in range(N_WINDOWS):
+            averageVelocity = VectorObject2D(x=0, y=0)
+            windowStart = 1 + (i * WINDOW)
+            windowEnd = windowStart + WINDOW  # Excluded
+            windowMiddle = (windowStart + windowEnd) // 2
+
+            for j in range(windowStart, windowEnd):
+                try:
+                    object_at_frame_j = get_object_out_of_game(past_game.n_frames_ago(j))
+                except:
+                    logger.warning("No velocity data to calculate acceleration, assuming 0")
+                    return VectorObject2D(x=0, y=0)
+                
+                curr_vel = object_at_frame_j.v 
+                averageVelocity += curr_vel
+
+            total = VectorObject2D(x=0, y=0)
+
+            averageVelocity /= WINDOW
+
+            if i != 0:
+                dt = (
+                    past_game.n_frames_ago(windowMiddle - WINDOW).ts
+                    - past_game.n_frames_ago(windowMiddle).ts
+                )
+                accel = (futureAverageVelocity - averageVelocity) / dt
+                total += accel
+                iter += 1
+
+            futureAverageVelocity = averageVelocity
+
+        return total / iter
 
 
 
@@ -131,90 +201,3 @@ class VelocityRefiner(BaseRefiner):
                 else self._records[frame].blue_robots[object.id]
             )
 
-    def _get_object_velocity_at_frame(
-        self, frame: int, object: GameObject
-    ) -> Optional[tuple]:
-        if frame >= len(self._records) or frame == 0:
-            logger.warning("Cannot provide velocity at a frame that does not exist")
-            return None
-
-        previous_frame = self._records[frame - 1]
-        current_frame = self._records[frame]
-
-        previous_pos = self._get_object_position_at_frame(frame - 1, object)
-        current_pos = self._get_object_position_at_frame(frame, object)
-
-        if current_pos is None or previous_pos is None:
-            logger.warning("No position data to calculate velocity for frame %d", frame)
-            return None
-
-        previous_time_received = previous_frame.ts
-        time_received = current_frame.ts
-
-        if time_received < previous_time_received:
-            logger.warning(
-                "Timestamps out of order for vision data %f should be after %f",
-                time_received,
-                previous_time_received,
-            )
-            return None
-
-        dt_secs = time_received - previous_time_received
-
-        vx = (current_pos.x - previous_pos.x) / dt_secs
-        vy = (current_pos.y - previous_pos.y) / dt_secs
-
-        return (vx, vy)
-
-    def get_object_acceleration(self, object: GameObject) -> Optional[tuple]:
-        totalX = 0
-        totalY = 0
-        WINDOW = 5
-        N_WINDOWS = 3
-        iter = 0
-        missing_velocities = 0
-
-        if len(self._records) < WINDOW * N_WINDOWS + 1:
-            return None
-
-        for i in range(N_WINDOWS):
-            missing_velocities = 0
-            averageVelocity = [0, 0]
-            windowStart = 1 + (i * WINDOW)
-            windowEnd = windowStart + WINDOW  # Excluded
-            windowMiddle = (windowStart + windowEnd) // 2
-
-            for j in range(windowStart, windowEnd):
-                curr_vel = self._get_object_velocity_at_frame(
-                    len(self._records) - j, object
-                )
-                if curr_vel:
-                    averageVelocity[0] += curr_vel[0]
-                    averageVelocity[1] += curr_vel[1]
-                elif missing_velocities == WINDOW - 1:
-                    logging.warning(
-                        f"No velocity data to calculate acceleration for frame {len(self._records) - j}"
-                    )
-                    return None
-                else:
-                    missing_velocities += 1
-
-            averageVelocity[0] /= WINDOW - missing_velocities
-            averageVelocity[1] /= WINDOW - missing_velocities
-
-            if i != 0:
-                dt = (
-                    self._records[-windowMiddle + WINDOW].ts
-                    - self._records[-windowMiddle].ts
-                )
-                accelX = (
-                    futureAverageVelocity[0] - averageVelocity[0]
-                ) / dt  # TODO vec
-                accelY = (futureAverageVelocity[1] - averageVelocity[1]) / dt
-                totalX += accelX
-                totalY += accelY
-                iter += 1
-
-            futureAverageVelocity = tuple(averageVelocity)
-
-        return (totalX / iter, totalY / iter)
