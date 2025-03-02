@@ -1,5 +1,6 @@
 from typing import Tuple, Optional, Dict, List, Union
 import warnings
+import logging
 
 from entities.data.command import RobotCommand, RobotVelCommand, RobotResponse
 from team_controller.src.controllers.common.robot_controller_abstract import (
@@ -11,6 +12,7 @@ from config.settings import (
     CHIP_ANGLE,
     PID_PARAMS,
     LOCAL_HOST,
+    TIMESTEP,
     YELLOW_TEAM_SIM_PORT,
     BLUE_TEAM_SIM_PORT,
 )
@@ -19,12 +21,15 @@ from team_controller.src.utils import network_manager
 from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
     RobotControl,
 )
+
 from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import (
     RobotControlResponse,
     RobotFeedback,
 )
+
 import logging
 import time
+
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +67,18 @@ class GRSimRobotController(AbstractRobotController):
 
         self.net_diff_sum += net_diff
         self.net_diff_total += 1
-        print(
-            "NET DIFF",
-            net_diff,
-            "NET DIFF AVG",
-            self.net_diff_sum / self.net_diff_total,
+
+        average_net_diff = self.net_diff_sum / self.net_diff_total
+        logger.log(logging.WARNING if net_diff > TIMESTEP / 2 else logging.INFO,
+                   "Sending commands to GRSIM took %f",
+                   net_diff)
+        logger.log(
+            logging.WARNING if net_diff > TIMESTEP / 2 else logging.INFO,
+            "GRSIM Command Send Time Avg: %f",
+            average_net_diff
         )
 
+        st = time.time()
         # manages the response packet that is received
         if data:
             robots_info = RobotControlResponse()
@@ -85,7 +95,6 @@ class GRSimRobotController(AbstractRobotController):
                         "Invalid robot info received, robot id >= 6", SyntaxWarning
                     )
         self.out_packet.Clear()
-
     def add_robot_commands(
         self,
         robot_commands: Union[RobotCommand, Dict[int, RobotCommand]],

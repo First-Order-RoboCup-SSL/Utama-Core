@@ -7,6 +7,7 @@ from refiners.position import PositionRefiner
 
 class GameGater:
     
+    @staticmethod
     def wait_until_game_valid(my_team_is_yellow: bool, my_team_is_right:bool, exp_friendly: int, exp_enemy:int, exp_ball: bool, vision_buffers: List[Deque[RawVisionData]], position_refiner: PositionRefiner) -> Game:
         game = Game(0, my_team_is_yellow, my_team_is_right, {}, {}, None)
 
