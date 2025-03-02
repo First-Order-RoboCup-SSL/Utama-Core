@@ -1,16 +1,15 @@
 import numpy as np
 from typing import Tuple
-from time import sleep
 
 from entities.game import Game
-from entities.data.command import RobotCommand, RobotResponse
-from entities.data.vision import VisionBallData, VisionRobotData
+from entities.data.command import RobotCommand
+from entities.data.vision import VisionBallData
 
 from motion_planning.src.pid import PID
 from global_utils.math_utils import distance
 
 from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
-from robot_control.src.skills import go_to_ball, go_to_point
+from robot_control.src.skills import go_to_ball
 
 
 class DribbleToTarget:

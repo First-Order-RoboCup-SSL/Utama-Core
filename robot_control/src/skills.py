@@ -3,13 +3,12 @@ import numpy as np
 from typing import List, Optional, Tuple
 
 from entities.data.command import RobotCommand
-from entities.data.vision import VisionBallData, VisionRobotData
+from entities.data.vision import VisionRobotData
 from entities.game import Game
 from motion_planning.src.pid import PID
 import logging
 
 from math import atan2, dist, sqrt, cos, sin, pi, acos, degrees
-from global_utils.math_utils import normalise_heading, distance
 from motion_planning.src.pid.pid import TwoDPID
 from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
 
