@@ -48,30 +48,28 @@ def main(strategy: Strategy, robot_controller: AbstractRobotController):
     game = Game(my_team_is_yellow=True, num_friendly_robots=6, num_enemy_robots=6)
 
     robot_buffer = deque(maxlen=1) # TODO: Add separate thread to read robot data when we have it
-    vision_buffer = [deque(maxlen=1) for _ in range(MAX_CAMERAS)]
+    vision_buffers = [deque(maxlen=1) for _ in range(MAX_CAMERAS)]
     ref_buffer = deque(maxlen=1)
 
     referee_receiver = RefereeMessageReceiver(ref_buffer, debug=False)
-    vision_receiver = VisionReceiver(vision_buffer)
+    vision_receiver = VisionReceiver(vision_buffers)
     
     start_threads(vision_receiver, referee_receiver)
 
-    gamegater = GameGater(robot_buffer, vision_buffer, ref_buffer)
+    game = GameGater().wait_until_game_valid(True, True, 6,6,True,vision_buffers, position_refiner)
     
     position_refiner = PositionRefiner()
     velocity_refiner = VelocityRefiner()
     # hasball_refiner = HasBallRefiner()
     # referee_refiner = RefereeRefiner()
 
-    while gamegater.not_ready():
-        vision_frames = [buffer.popleft() if buffer else None for buffer in vision_buffer]
-        game = position_refiner.refine(game, vision_frames)
+
     
     present_future_game = PresentFutureGame(game) 
 
     while True:
         start_time = time.time()
-        vision_frames = [buffer.popleft() if buffer else None for buffer in vision_buffer]
+        vision_frames = [buffer.popleft() if buffer else None for buffer in vision_buffers]
         robot_frame = robot_buffer.popleft()
         referee_frame = ref_buffer.popleft()
 
