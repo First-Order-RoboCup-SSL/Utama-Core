@@ -11,8 +11,8 @@ from config.settings import (
     KICK_SPD,
 )
 from config.starting_formation import (
-    BLUE_START_ONE,
-    YELLOW_START_ONE,
+    LEFT_START_ONE,
+    RIGHT_START_ONE,
 )
 from global_utils.math_utils import deg_to_rad, rad_to_deg
 
@@ -112,10 +112,10 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # set starting formation style for
         self.blue_formation = (
-            BLUE_START_ONE if not blue_starting_formation else blue_starting_formation
+            LEFT_START_ONE if not blue_starting_formation else blue_starting_formation
         )
         self.yellow_formation = (
-            YELLOW_START_ONE
+            RIGHT_START_ONE
             if not yellow_starting_formation
             else yellow_starting_formation
         )

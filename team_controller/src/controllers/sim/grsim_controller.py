@@ -1,8 +1,8 @@
 from typing import Tuple
 
 from config.starting_formation import (
-    BLUE_START_ONE,
-    YELLOW_START_ONE,
+    LEFT_START_ONE,
+    RIGHT_START_ONE,
 )
 from team_controller.src.utils import network_manager
 from config.settings import (
@@ -67,9 +67,9 @@ class GRSimController(AbstractSimController):
         return sim_control
 
     def reset(self):
-        for idx, x in enumerate(YELLOW_START_ONE):
+        for idx, x in enumerate(RIGHT_START_ONE):
             self.teleport_robot(True, idx, x[0], x[1], x[2])
-        for idx, x in enumerate(BLUE_START_ONE):
+        for idx, x in enumerate(LEFT_START_ONE):
             self.teleport_robot(False, idx, x[0], x[1], x[2])
         self.teleport_ball(0, 0, 0, 0)
 

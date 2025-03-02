@@ -8,7 +8,7 @@ class PastGame:
         self.games = []
 
     def add_game(self, game: Game):
-        self.games.append(copy.deepcopy(game))
+        self.games.append(game)
         if len(self.games) > self.max_history:
             self.games.pop(0)
 

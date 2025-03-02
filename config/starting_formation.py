@@ -1,7 +1,7 @@
 import numpy as np
 
-# Starting positions for yellow team
-YELLOW_START_ONE = [
+# Starting positions for right team
+RIGHT_START_ONE = [
     (4.2000, 0.0, np.pi),
     (3.4000, -0.2000, np.pi),
     (3.4000, 0.2000, np.pi),
@@ -15,7 +15,8 @@ YELLOW_START_ONE = [
     (2.0000, 2.2500, np.pi),
 ]
 
-BLUE_START_ONE = [
+# Starting positions for left team
+LEFT_START_ONE = [
     (-4.2000, 0.0, 0),
     (-3.4000, 0.2000, 0),
     (-3.4000, -0.2000, 0),
