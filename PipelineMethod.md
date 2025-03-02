@@ -2,8 +2,10 @@
 
 
 ### Problem: 
-When ingesting new data, we may want to combine this new data with our previous knowledge eg, Kalman filter. Currently this requires writing many new functions in the Game object making it bloated.
-
+- When ingesting new data, we may want to combine this new data with our previous knowledge eg, Kalman filter. Currently this requires writing many new functions in the Game object making it bloated.
+- Interface for accessing past, current and future (predictions) is not uniform
+- Uncertainty on strategies which we aim to address with the Behaviour Tree 
+  
 ### System diagram
 ![Dataflow Diagram](assets/images/pipeline.drawio.png)
 ### Solution
