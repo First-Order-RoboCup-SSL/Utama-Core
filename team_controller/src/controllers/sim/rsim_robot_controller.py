@@ -1,9 +1,9 @@
-from curses.ascii import RS
 from typing import Dict, Union, Optional, Tuple
 from xmlrpc.client import Boolean
+from entities.data.raw_vision import RawVisionData
 from entities.game import Game
 from entities.data.command import RobotCommand, RobotResponse
-from entities.data.vision import VisionData
+from refiners.position import PositionRefiner
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -34,7 +34,7 @@ class RSimRobotController(AbstractRobotController):
         pvp_manager=None,  #: Optional[PVPManager] = None, Can't forward declare
     ):
         self._is_team_yellow = is_team_yellow
-        self._game_obj = game_obj
+        self._game = game_obj
         self._env = env
         self._n_friendly_robots, self._n_enemy_robots = self._get_n_robots()
         self._out_packet = self._empty_command(self.n_friendly_robots)
@@ -52,6 +52,7 @@ class RSimRobotController(AbstractRobotController):
             initial_frame = initial_obs[0]
         else:
             initial_frame, _, _ = self._env._frame_to_observations()
+
         self._write_to_game_obj(initial_frame)
 
     def send_robot_commands(self) -> None:
@@ -135,13 +136,13 @@ class RSimRobotController(AbstractRobotController):
         )
         self._out_packet[robot_id] = action
 
-    def _write_to_game_obj(self, new_frame: VisionData) -> None:
+    def _write_to_game_obj(self, new_frame: RawVisionData) -> None:
         """
         Supersedes the VisionReceiver and queue procedure to write to game obj directly.
 
         Done this way, because there's no separate vision receiver for RSim.
         """
-        self._game_obj.add_new_state(new_frame)
+        self._game = PositionRefiner().refine(self._game, [new_frame])
 
     def empty_command(self) -> list[NDArray]:
         return self._empty_command(self.n_friendly_robots)
@@ -186,8 +187,8 @@ class RSimRobotController(AbstractRobotController):
         return self._env
 
     @property
-    def game_obj(self):
-        return self._game_obj
+    def game(self):
+        return self._game
 
     @property
     def debug(self):
@@ -272,8 +273,8 @@ class PVPManager:
         self._pending = {"team_blue": None, "team_yellow": None}
 
     # TODO: Inheritance?
-    def _write_to_game_obj(self, new_frame: VisionData) -> None:
-        self._game.add_new_state(new_frame)
+    def _write_to_game_obj(self, new_frame: RawVisionData) -> None:
+        self._game = PositionRefiner().refine(self._game, [new_frame])
 
     def reset_env(self):
         # if environment was not reset beforehand, reset now

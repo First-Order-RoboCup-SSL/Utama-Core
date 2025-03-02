@@ -16,7 +16,7 @@ from config.starting_formation import (
 )
 from global_utils.math_utils import deg_to_rad, rad_to_deg
 
-from entities.data.vision import VisionBallData, VisionRobotData, VisionData
+from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from entities.data.command import RobotResponse
 import logging
 
@@ -131,7 +131,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         return observation, reward, terminated, truncated, self.reward_shaping_total
 
-    def _frame_to_observations(self) -> Tuple[VisionData, RobotResponse, RobotResponse]:
+    def _frame_to_observations(self) -> Tuple[RawVisionData, RobotResponse, RobotResponse]:
         """
         return observation data that aligns with grSim
 
@@ -141,7 +141,7 @@ class SSLStandardEnv(SSLBaseEnv):
         blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
         """
         # Ball observation shared by all robots
-        ball_obs = VisionBallData(
+        ball_obs = RawBallData(
             self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z, 1.0
         )
 
@@ -165,14 +165,16 @@ class SSLStandardEnv(SSLBaseEnv):
         # Return the complete shared observation
         # note that ball_obs stored in list to standardise with SSLVision
         # As there is sometimes multiple possible positions for the ball
+
+        # Camera id as 0, only one camera for RSim
         return (
-            VisionData(self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs]),
+            RawVisionData(self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs], 0),
             yellow_robots_info,
             blue_robots_info,
         )
 
     def _get_robot_observation(self, robot):
-        robot_pos = VisionRobotData(robot.x, -robot.y, -float(deg_to_rad(robot.theta)))
+        robot_pos = RawRobotData(robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1)
         robot_info = RobotResponse(robot.infrared)
         return robot_pos, robot_info
 

@@ -36,7 +36,6 @@ def one_robot_placement(
     pid_2d: TwoDPID,
     invert: bool,
     team_robot_id: int,
-    game: Game,
     target_oren: float,
     env: SSLStandardEnv,
 ):
@@ -49,13 +48,13 @@ def one_robot_placement(
 
     def one_step():
         """Closure which advances the simulation by one step"""
+        game = controller.game
         nonlocal tx, ty
-
-        latest_frame = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
-        if latest_frame:
-            friendly_robots, enemy_robots, balls = latest_frame
-            bx, by = game.ball.x, game.ball.y
-            cx, cy, co = friendly_robots[team_robot_id]
+        if game.friendly_robots and game.ball is not None:
+            friendly_robots = game.friendly_robots
+            bx, by = game.ball.p.x, game.ball.p.y
+            rp = friendly_robots[team_robot_id].p
+            cx, cy, co = rp.x, rp.y, friendly_robots[team_robot_id].orientation
             error = math.dist((tx, ty), (cx, cy))
 
             switch = error < 0.05
@@ -93,5 +92,7 @@ def one_robot_placement(
             controller.add_robot_commands(cmd, team_robot_id)
             controller.send_robot_commands()
             return (switch, cx, cy, co)
+        return 0,0,0,0
+
 
     return one_step
