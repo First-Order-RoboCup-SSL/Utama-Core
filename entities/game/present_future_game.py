@@ -11,4 +11,4 @@ class PresentFutureGame():
         self.__past.add_game(current)
         current = game
 
-    def predict_...
+    # def predict_/

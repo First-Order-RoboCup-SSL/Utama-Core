@@ -3,19 +3,23 @@ import threading
 import logging
 import warnings
 
+import py_trees
+
 from config.settings import MAX_CAMERAS, TIMESTEP
 from entities.game import Game
 from collections import deque
+from entities.game.present_future_game import PresentFutureGame
 from motion_planning.src.pid.pid import get_grsim_pids
 from receivers.referee_receiver import RefereeMessageReceiver
 from refiners.has_ball import HasBallRefiner
 from refiners.position import PositionRefiner
-from refiners.referee import RefereeRefiner
+# from refiners.referee import RefereeRefiner
 from refiners.velocity import VelocityRefiner
 from receivers.vision_receiver import VisionReceiver
 from collections.abc import Callable
 from run import GameGater
-from strategy.startup_strategy import StartupStrategy
+# from strategy.startup_strategy import StartupStrategy
+from strategy.behaviour_tree_strategy import BehaviourTreeStrategy
 from strategy.strategy import Strategy
 from team_controller.src.controllers.common.robot_controller_abstract import AbstractRobotController
 from team_controller.src.controllers.sim.grsim_robot_controller import GRSimRobotController
@@ -56,14 +60,14 @@ def main(strategy: Strategy, robot_controller: AbstractRobotController):
     
     position_refiner = PositionRefiner()
     velocity_refiner = VelocityRefiner()
-    hasball_refiner = HasBallRefiner()
-    referee_refiner = RefereeRefiner()
+    # hasball_refiner = HasBallRefiner()
+    # referee_refiner = RefereeRefiner()
 
     while gamegater.not_ready():
         vision_frames = [buffer.popleft() if buffer else None for buffer in vision_buffer]
         game = position_refiner.refine(game, vision_frames)
     
-    present_future_game = PresentFutureGame(game, Predictor1, Predictor2...) 
+    present_future_game = PresentFutureGame(game) 
 
     while True:
         start_time = time.time()
@@ -73,8 +77,8 @@ def main(strategy: Strategy, robot_controller: AbstractRobotController):
 
         game = position_refiner.refine(game, vision_frames)
         game = velocity_refiner.refine(game, robot_frame.imu_data)    
-        game = hasball_refiner.refine(game, robot_frame.ir_data)
-        game = referee_refiner.refine(game, referee_frame)
+        # game = hasball_refiner.refine(game, robot_frame.ir_data)
+        # game = referee_refiner.refine(game, referee_frame)
 
         present_future_game.add_new_game(game)
         
@@ -87,6 +91,6 @@ def main(strategy: Strategy, robot_controller: AbstractRobotController):
 
 if __name__ == "__main__":
     sim_robot_controller = GRSimRobotController(is_team_yellow=True)
-    startup_strategy = StartupStrategy(*get_grsim_pids())
-    
-    main(sim_robot_controller)
+    # startup_strategy = StartupStrategy(*get_grsim_pids())
+    bt = py_trees.behaviours.SuccessEveryN("EveryN", 5)
+    main(BehaviourTreeStrategy(sim_robot_controller, bt), sim_robot_controller)

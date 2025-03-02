@@ -24,6 +24,7 @@ dependencies = [
     "pytest == 8.3.4",
     "vector>=1.6.1",
     "lenses>=1.2.0",
+    "py-trees>=2.3.0",
 ]
 requires-python = ">=3.9,<3.11"
 
