@@ -286,3 +286,88 @@ class PVPManager:
 
     def flush(self):
         self._fill_and_send()
+
+
+class PVPManager2:
+    """
+    Manages a player vs player game inside the rsim environment. The two teams run in lockstep in
+    this setup, and so, in order to get results consistent with running just one player,
+    it's important to either alternate the player colours that send commands from the main loop
+    (using an empty command if one team has nothing to do), or call flush() after every command that
+    should be processed on its own (without a corresponding command from the other team).
+    """
+
+    def __init__(
+        self,
+        env: SSLBaseEnv,
+        n_robots_blue: int,
+        n_robots_yellow: int,
+        game: Game,
+        game2: Game,
+    ):
+        self._env = env
+        self.n_robots_blue = n_robots_blue
+        self.n_robots_yellow = n_robots_yellow
+        self._pending = {"team_blue": None, "team_yellow": None}
+        self._game = game
+        self._game2 = game2
+
+    def set_blue_controller(self, blue_player: RSimRobotController):
+        self.blue_player = blue_player
+
+    def set_yellow_controller(self, yellow_player: RSimRobotController):
+        self.yellow_player = yellow_player
+
+    def send_command(self, is_yellow: Boolean, out_packet):
+        colour = "team_yellow" if is_yellow else "team_blue"
+        other_colour = "team_blue" if is_yellow else "team_yellow"
+
+        if self._pending[colour]:
+            self._fill_and_send()
+
+        self._pending[colour] = tuple(out_packet)
+        if self._pending[other_colour]:
+            self._fill_and_send()
+
+    def _empty_command(self, n_robots: int) -> list[NDArray]:
+        return [np.zeros((6,), dtype=float) for _ in range(n_robots)]
+
+    def _fill_and_send(self):
+        for colour in ("team_blue", "team_yellow"):
+            if not self._pending[colour]:
+                self._pending[colour] = tuple(
+                    self._empty_command(
+                        self.n_robots_yellow
+                        if colour == "team_yellow"
+                        else self.n_robots_blue
+                    )
+                )
+
+        observation, reward, terminated, truncated, reward_shaping = self._env.step(
+            self._pending
+        )
+
+        new_frame, yellow_robots_info, blue_robots_info = observation
+        self.blue_player.update_robots_info(blue_robots_info)
+        self.yellow_player.update_robots_info(yellow_robots_info)
+
+        self._write_to_game_obj(new_frame)
+
+        self._pending = {"team_blue": None, "team_yellow": None}
+
+    # TODO: Inheritance?
+    def _write_to_game_obj(self, new_frame: FrameData) -> None:
+        self._game.add_new_state(new_frame)
+        self._game2.add_new_state(new_frame)
+
+    def reset_env(self):
+        # if environment was not reset beforehand, reset now
+        if self._env.frame is None:
+            initial_obs, _ = self._env.reset()
+            initial_frame = initial_obs[0]
+        else:
+            initial_frame, _, _ = self._env._frame_to_observations()
+        self._write_to_game_obj(initial_frame)
+
+    def flush(self):
+        self._fill_and_send()

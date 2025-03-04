@@ -2,6 +2,7 @@ from typing import List, Tuple
 import numpy as np
 import math
 from config.settings import ROBOT_RADIUS
+from entities.game.ball import Ball
 from robot_control.src.utils.pass_quality_utils import PointOnField
 from entities.game.game import Game
 from entities.game.robot import Robot
@@ -95,7 +96,11 @@ def ray_casting(
     goal_multi = (
         -1 if goal_x < 0 else 1
     )  # flips the goalward direction if we are shooting left
-    for enemy in enemy_robots:
+
+    if isinstance(point, Ball):
+        point = point.x, point.y
+
+    for idx, enemy in enemy_robots.items():
         if enemy:
             if goal_multi * enemy.x > goal_multi * point[0]:
                 dist: float = math.dist((point[0], point[1]), (enemy.x, enemy.y))
@@ -288,8 +293,9 @@ def is_goal_blocked(
     robot_radius = ROBOT_RADIUS  # Assume field provides robot radius info
 
     # Check if any enemy robot blocks the shooting path
-    for defender in defenders:
+    for idx, defender in defenders.items():
         if defender:
+            print(defender)
             robot_pos = np.array([defender.x, defender.y])
             distance = distance_point_to_line(robot_pos, line_start, line_end)
 

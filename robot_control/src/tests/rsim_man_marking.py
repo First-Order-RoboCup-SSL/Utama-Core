@@ -1,3 +1,5 @@
+import time
+from entities.data.vision import BallData, FrameData, RobotData
 from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.skills import face_ball, find_likely_enemy_shooter, go_to_point
 from robot_control.src.tests.utils import setup_pvp
@@ -11,10 +13,19 @@ import logging
 import math
 import random
 
+from team_controller.src.controllers.sim.rsim_robot_controller import (
+    PVPManager,
+    PVPManager2,
+)
+
 logger = logging.getLogger(__name__)
 
-ITERS = 500
+ITERS = 5000
 N_ROBOTS = 6
+
+blue_robot_data = [RobotData(i, i, 10 * i, 0) for i in range(6)]
+yellow_robot_data = [RobotData(i, 100 * i, 1000 * i, 0) for i in range(6)]
+basic_ball = BallData(0, 0, 0, 0)
 
 
 def calculate_pass_viability_score(opponent, ball_pos, goal_pos):
@@ -50,7 +61,7 @@ def assign_piggies(friendly_robots, enemy_robots, ball_pos, goal_pos):
     return assignments
 
 
-def man_mark(robot, target, ball_pos, pid_oren, pid_trans):
+def man_mark(game, robot, target, ball_pos, pid_oren, pid_trans):
     # Position with a perpendicular offset to the line between target and ball
     dx = target.x - ball_pos[0]
     dy = target.y - ball_pos[1]
@@ -66,9 +77,10 @@ def man_mark(robot, target, ball_pos, pid_oren, pid_trans):
     target_y = target.y + offset_y
 
     cmd = go_to_point(
+        game,
         pid_oren,
         pid_trans,
-        robot,
+        # robot,
         0,
         (target_x, target_y),
         face_ball((robot.x, robot.y), ball_pos),
@@ -76,16 +88,18 @@ def man_mark(robot, target, ball_pos, pid_oren, pid_trans):
     return cmd
 
 
-def block_goal_and_attacker(robot, attacker, goal_pos, pid_oren, pid_trans):
+def block_goal_and_attacker(game, robot_id, attacker, goal_pos, pid_oren, pid_trans):
     # Position between the goal and the attacker
     target_x = (attacker.x + goal_pos[0]) / 2
     target_y = (attacker.y + goal_pos[1]) / 2
 
+    robot = game.friendly_robots[robot_id]
+
     cmd = go_to_point(
+        game,
         pid_oren,
         pid_trans,
-        robot,
-        0,
+        robot_id,
         (target_x, target_y),
         face_ball((robot.x, robot.y), (attacker.x, attacker.y)),
     )
@@ -93,36 +107,66 @@ def block_goal_and_attacker(robot, attacker, goal_pos, pid_oren, pid_trans):
 
 
 def block_pass_between_attackers(
-    robot, main_attacker, support_attacker, pid_oren, pid_trans
+    game, robot_id, main_attacker_id, support_attacker_id, pid_oren, pid_trans
 ):
     # Position between the main attacker and the support attacker
-    target_x = (main_attacker.x + support_attacker.x) / 2
-    target_y = (main_attacker.y + support_attacker.y) / 2
+    enemy = game.enemy_robots
+    target_x = (enemy[main_attacker_id].x + enemy[support_attacker_id].x) / 2
+    target_y = (enemy[main_attacker_id].y + enemy[support_attacker_id].y) / 2
+
+    robot = game.friendly_robots[robot_id]
 
     cmd = go_to_point(
+        game,
         pid_oren,
         pid_trans,
-        robot,
-        0,
+        robot_id,
         (target_x, target_y),
-        face_ball((robot.x, robot.y), (main_attacker.x, main_attacker.y)),
+        face_ball(
+            (robot.x, robot.y), (enemy[main_attacker_id].x, enemy[main_attacker_id].y)
+        ),
     )
     return cmd
 
 
 def test_man_marking(shooter_id: int, defender_is_yellow: bool, headless: bool):
-    game = Game()
+    """
+    Assumptions:
+    1. Colour, side and role
+        - Yellow team is on the right and attacking left goal.
+        - Blue team is on the left and attacking right goal.
+        - Yellow team is purely attacking while blue team is purely defending.
+        - TODO: consider switching colour / side in real match
 
-    if defender_is_yellow:
-        N_ROBOTS_YELLOW = 3  # Our team: 1 keeper, 2 defenders
-        N_ROBOTS_BLUE = (
-            3  # Opponent team: 1 keeper, 1 main attacker, 1 support attacker
-        )
-    else:
-        N_ROBOTS_BLUE = 3  # Our team: 1 keeper, 2 defenders
-        N_ROBOTS_YELLOW = (
-            3  # Opponent team: 1 keeper, 1 main attacker, 1 support attacker
-        )
+    2. Full Field Game
+        - TODO: Half field implementation
+
+    3. Role
+        - Attacker team: 1 keeper, 1 main attacker, 1 support attacker
+        - Defender team: 1 keeper, 1 main defender, 1 piggy (man marking on support attacker)
+        - The role / messaging system will dynamically adjust the role.
+        - TODO: integrate role system once available
+    """
+
+    yellow_game = Game(
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        start_frame=FrameData(0, yellow_robot_data, blue_robot_data, [basic_ball]),
+    )
+    blue_game = Game(
+        my_team_is_yellow=False,
+        my_team_is_right=False,
+        start_frame=FrameData(0, blue_robot_data, yellow_robot_data, [basic_ball]),
+    )
+
+    N_ROBOTS_YELLOW = 3
+    N_ROBOTS_BLUE = 3
+    VISUALIZE = True
+    # yellow_goal = yellow_game.field.my_goal_target.xy
+    # blue_goal = blue_game.field.my_goal_target
+
+    yellow_goal, blue_goal = (-4.5, 0), (4.5, 0)
+    # Goal protected by yellow team and blue team
 
     env = SSLStandardEnv(
         n_robots_blue=N_ROBOTS_BLUE,
@@ -131,209 +175,262 @@ def test_man_marking(shooter_id: int, defender_is_yellow: bool, headless: bool):
     )
     env.reset()
 
-    import random
-
     env.teleport_ball(random.random(), random.random())
 
-    pid_oren_y, pid_2d_y = get_rsim_pids()
-    pid_oren_b, pid_2d_b = get_rsim_pids()
+    pid_oren_attacker, pid_2d_attacker = get_rsim_pids()
+    pid_oren_defender, pid_2d_defender = get_rsim_pids()
 
-    sim_robot_controller_yellow, sim_robot_controller_blue, pvp_manager = setup_pvp(
-        env, game, N_ROBOTS_BLUE, N_ROBOTS_YELLOW
+    pvp_manager = PVPManager2(
+        env, N_ROBOTS_BLUE, N_ROBOTS_YELLOW, yellow_game, blue_game
     )
+    sim_robot_controller_attacker = RSimRobotController(
+        is_team_yellow=True, env=env, game_obj=yellow_game, pvp_manager=pvp_manager
+    )
+    sim_robot_controller_defender = RSimRobotController(
+        is_team_yellow=False, env=env, game_obj=blue_game, pvp_manager=pvp_manager
+    )
+    pvp_manager.set_yellow_controller(sim_robot_controller_attacker)
+    pvp_manager.set_blue_controller(sim_robot_controller_defender)
+    pvp_manager.reset_env()
+    # sim_robot_controller_defender = RSimRobotController(
+    #     is_team_yellow=True, env=env, game_obj=yellow_game
+    # )
+    # sim_robot_controller_attacker = RSimRobotController(
+    #     is_team_yellow=False, env=env, game_obj=blue_game
+    # )
+    attacker_game, defender_game = yellow_game, blue_game
 
     if defender_is_yellow:
         sim_robot_controller_attacker, sim_robot_controller_defender = (
-            sim_robot_controller_blue,
-            sim_robot_controller_yellow,
+            sim_robot_controller_defender,
+            sim_robot_controller_attacker,
         )
-        pid_oren_a, pid_2d_a, pid_oren_d, pid_2d_d = (
-            pid_oren_b,
-            pid_2d_b,
-            pid_oren_y,
-            pid_2d_y,
-        )
-    else:
-        sim_robot_controller_attacker, sim_robot_controller_defender = (
-            sim_robot_controller_yellow,
-            sim_robot_controller_blue,
-        )
-        pid_oren_a, pid_2d_a, pid_oren_d, pid_2d_d = (
-            pid_oren_y,
-            pid_2d_y,
-            pid_oren_b,
-            pid_2d_b,
-        )
+        attacker_game, defender_game = blue_game, yellow_game
 
-    shoot_in_left_goal = random.random() > 0.5
+    # ROLE DEFINITION
+    goalie_attacker_id = 0
+    main_attacker_id = 1
+    support_attacker_id = 2
+
+    support_offset_x = random.random()
+    support_offset_y = random.random()
+
+    goalie_defender_id = 0
+    main_defender_id = 1
+    support_defender_id = 2
+
     goal_scored = False
 
     for iter in range(ITERS):
         if not goal_scored:
-            friendly, enemy, balls = game.get_my_latest_frame(
-                my_team_is_yellow=defender_is_yellow
-            )
+            friendly = attacker_game.friendly_robots
+            ball = attacker_game.ball
 
-            # Opponent team: Keeper stays near the goal
-            keeper_target = (-4.5, 0) if defender_is_yellow else (4.5, 0)
+            # Attacker team: Keeper stays near the goal
             cmd = go_to_point(
-                pid_oren_a,
-                pid_2d_a,
-                enemy[0],  # Opponent keeper (ID 0)
-                0,
-                keeper_target,
-                face_ball((enemy[0].x, enemy[0].y), game.get_ball_pos()[0]),
+                game=attacker_game,
+                pid_oren=pid_oren_attacker,
+                pid_trans=pid_2d_attacker,
+                robot_id=goalie_attacker_id,
+                target_coords=yellow_goal,
+                target_oren=face_ball(
+                    (friendly[goalie_attacker_id].x, friendly[0].y),
+                    (attacker_game.ball.x, attacker_game.ball.y),
+                ),
             )
-            sim_robot_controller_attacker.add_robot_commands(cmd, 0)
-            # sim_robot_controller_attacker.send_robot_commands()
+            sim_robot_controller_attacker.add_robot_commands(cmd, goalie_attacker_id)
 
-            # Visualize keeper target position and orientation
-            env.draw_line(
-                [(enemy[0].x, enemy[0].y), keeper_target], width=2, color="BLUE"
-            )
-            env.draw_point(keeper_target[0], keeper_target[1], color="BLUE")
-
-            # Opponent team: Main attacker tries to score or pass
-            if sim_robot_controller_attacker.robot_has_ball(
-                1
-            ):  # Main attacker (ID 1) has the ball
-                # Randomly decide to shoot or pass
-                if random.random() < 0.5:  # 50% chance to shoot
+            # Attacker team: Main attacker tries to score or pass
+            if sim_robot_controller_attacker.robot_has_ball(main_attacker_id):
+                # If Main attacker has the ball, he will randomly decide to shoot or pass
+                if random.random() < 0.5:
                     cmd = score_goal(
-                        game,
-                        True,
-                        shooter_id=1,
-                        pid_oren=pid_oren_a,
-                        pid_trans=pid_2d_a,
+                        game_obj=attacker_game,
+                        shooter_has_ball=True,
+                        shooter_id=main_attacker_id,
+                        pid_oren=pid_oren_attacker,
+                        pid_trans=pid_2d_attacker,
                         is_yellow=not defender_is_yellow,
-                        shoot_in_left_goal=shoot_in_left_goal,
                     )
                 else:  # Pass to support attacker
                     cmd = go_to_point(
-                        pid_oren_a,
-                        pid_2d_a,
-                        enemy[1],  # Main attacker (ID 1)
-                        0,
-                        (enemy[2].x, enemy[2].y),  # Pass to support attacker (ID 2)
-                        face_ball((enemy[1].x, enemy[1].y), game.get_ball_pos()[0]),
+                        attacker_game,
+                        pid_oren_attacker,
+                        pid_2d_attacker,
+                        main_attacker_id,
+                        (
+                            friendly[support_attacker_id].x,
+                            friendly[support_attacker_id].y,
+                        ),  # Pass to support attacker (ID 2)
+                        face_ball(
+                            (
+                                friendly[main_attacker_id].x,
+                                friendly[main_attacker_id].y,
+                            ),
+                            (attacker_game.ball.x, attacker_game.ball.y),
+                        ),
                     )
             else:
                 # Main attacker moves toward the ball to gain possession
+                # print(ball)
                 cmd = go_to_point(
-                    pid_oren_a,
-                    pid_2d_a,
-                    enemy[1],  # Main attacker (ID 1)
-                    0,
-                    game.get_ball_pos()[0],
-                    face_ball((enemy[1].x, enemy[1].y), game.get_ball_pos()[0]),
+                    attacker_game,
+                    pid_oren_attacker,
+                    pid_2d_attacker,
+                    main_attacker_id,
+                    (ball.x, ball.y),
+                    face_ball(
+                        (friendly[main_attacker_id].x, friendly[main_attacker_id].y),
+                        (attacker_game.ball.x, attacker_game.ball.y),
+                    ),
                 )
-            sim_robot_controller_attacker.add_robot_commands(cmd, 1)
+            sim_robot_controller_attacker.add_robot_commands(cmd, main_attacker_id)
 
-            # Opponent team: Support attacker positions to receive a pass
-            if not sim_robot_controller_attacker.robot_has_ball(
-                2
-            ):  # Support attacker (ID 2) does not have the ball
+            # Attacker team: Support attacker positions to receive a pass
+            if not sim_robot_controller_attacker.robot_has_ball(support_attacker_id):
+                # If support attacker does not have the ball
                 # Move to a position ahead of the main attacker
                 support_target = (
-                    enemy[1].x + 0.5,  # Slightly ahead of the main attacker
-                    enemy[1].y + 0.5,  # Offset to the side
+                    friendly[main_attacker_id].x + support_offset_x,
+                    friendly[main_attacker_id].y + support_offset_y,
                 )
                 cmd = go_to_point(
-                    pid_oren_a,
-                    pid_2d_a,
-                    enemy[2],  # Support attacker (ID 2)
-                    0,
+                    attacker_game,
+                    pid_oren_attacker,
+                    pid_2d_attacker,
+                    support_attacker_id,
                     support_target,
-                    face_ball((enemy[2].x, enemy[2].y), game.get_ball_pos()[0]),
+                    face_ball(
+                        (
+                            friendly[support_attacker_id].x,
+                            friendly[support_attacker_id].y,
+                        ),
+                        (attacker_game.ball.x, attacker_game.ball.y),
+                    ),
                 )
-                sim_robot_controller_attacker.add_robot_commands(cmd, 2)
+                sim_robot_controller_attacker.add_robot_commands(
+                    cmd, support_attacker_id
+                )
             sim_robot_controller_attacker.send_robot_commands()
 
             # Check if a goal is scored
-            if game.is_ball_in_goal(shoot_in_left_goal):
-                logger.info("Goal Scored at Position: ", game.get_ball_pos())
+            if attacker_game.is_ball_in_goal(right_goal=True):
+                logger.info("Goal Scored at Position: ", attacker_game.ball)
                 goal_scored = True
 
-            # Our team: Keeper stays near the goal
-            keeper_id = 0
-            keeper_target = (4.5, 0) if defender_is_yellow else (-4.5, 0)
+            # Defender team: Goalie stays near the goal
+            friendly = defender_game.friendly_robots
+            ball = defender_game.ball
+
             cmd = go_to_point(
-                pid_oren_d,
-                pid_2d_d,
-                friendly[keeper_id],
-                0,
-                keeper_target,
+                defender_game,
+                pid_oren_defender,
+                pid_2d_defender,
+                goalie_defender_id,
+                blue_goal,
                 face_ball(
-                    (friendly[keeper_id].x, friendly[keeper_id].y),
-                    game.get_ball_pos()[0],
+                    (friendly[goalie_defender_id].x, friendly[goalie_defender_id].y),
+                    (ball.x, ball.y),
                 ),
             )
-            if not find_likely_enemy_shooter(enemy, balls):
+            if not find_likely_enemy_shooter(defender_game.enemy_robots, [ball]):
                 cmd = go_to_point(
-                    pid_oren_d,
-                    pid_2d_d,
-                    friendly[0],
-                    0,
-                    keeper_target,
-                    face_ball((friendly[0].x, friendly[0].y), game.get_ball_pos()[0]),
+                    attacker_game,
+                    pid_oren_defender,
+                    pid_2d_defender,
+                    goalie_defender_id,
+                    blue_goal,
+                    face_ball(
+                        (
+                            defender_game.enemy_robots[main_attacker_id].x,
+                            defender_game.enemy_robots[main_attacker_id].y,
+                        ),
+                        (ball.x, ball.y),
+                    ),
                 )
-                sim_robot_controller_defender.add_robot_commands(cmd, keeper_id)
+            sim_robot_controller_defender.add_robot_commands(cmd, goalie_defender_id)
 
-            # Our team: Main defender focuses on intercepting the main attacker
-            main_defender_id = 1
-            main_attacker = enemy[1]  # Opponent's main attacker (ID 1)
-            goal_pos = (4.5, 0) if defender_is_yellow else (-4.5, 0)
+            # Defender team: Main defender focuses on intercepting the main attacker
             cmd = block_goal_and_attacker(
-                friendly[main_defender_id],
-                main_attacker,
-                goal_pos,
-                pid_oren_d,
-                pid_2d_d,
+                defender_game,
+                # friendly[main_defender_id],
+                main_defender_id,
+                defender_game.enemy_robots[main_attacker_id],
+                blue_goal,
+                pid_oren_defender,
+                pid_2d_defender,
             )
             sim_robot_controller_defender.add_robot_commands(cmd, main_defender_id)
 
-            # Our team: Support defender marks the support attacker
-            support_defender_id = 2
-            support_attacker = enemy[2]  # Opponent's support attacker (ID 2)
+            # Defender team: Support defender marks the support attacker
             cmd = block_pass_between_attackers(
-                friendly[support_defender_id],
-                main_attacker,
-                support_attacker,
-                pid_oren_d,
-                pid_2d_d,
+                defender_game,
+                support_defender_id,
+                main_attacker_id,
+                support_attacker_id,
+                pid_oren_defender,
+                pid_2d_defender,
             )
             sim_robot_controller_defender.add_robot_commands(cmd, support_defender_id)
             sim_robot_controller_defender.send_robot_commands()
 
-            # Visualize main attacker target position and orientation
-            env.draw_line(
-                [(enemy[1].x, enemy[1].y), keeper_target],
-                width=4,
-                color="RED",
-            )
-            # Visualize support attacker target position and orientation
-            env.draw_line(
-                [(enemy[2].x, enemy[2].y), support_target], width=4, color="RED"
-            )
+            if VISUALIZE:
+                # Visualize main attacker target position and orientation
+                env.draw_line(
+                    [
+                        (
+                            attacker_game.friendly_robots[main_attacker_id].x,
+                            attacker_game.friendly_robots[main_attacker_id].y,
+                        ),
+                        yellow_goal,
+                    ],
+                    width=4,
+                    color="RED",
+                )
+                # Visualize support attacker target position and orientation
+                env.draw_line(
+                    [
+                        (
+                            attacker_game.friendly_robots[support_attacker_id].x,
+                            attacker_game.friendly_robots[support_attacker_id].y,
+                        ),
+                        support_target,
+                    ],
+                    width=4,
+                    color="RED",
+                )
 
-            # Visualize main defender target position and orientation
-            env.draw_line(
-                [
-                    (friendly[main_defender_id].x, friendly[main_defender_id].y),
-                    (main_attacker.x, main_attacker.y),
-                ],
-                width=4,
-                color="BLUE",
-            )
-            # Visualize support defender target position and orientation
-            env.draw_line(
-                [
-                    (friendly[support_defender_id].x, friendly[support_defender_id].y),
-                    (support_attacker.x, support_attacker.y),
-                ],
-                width=4,
-                color="BLUE",
-            )
+                # Visualize main defender target position and orientation
+                env.draw_line(
+                    [
+                        (
+                            defender_game.friendly_robots[main_defender_id].x,
+                            defender_game.friendly_robots[main_defender_id].y,
+                        ),
+                        (
+                            attacker_game.friendly_robots[main_attacker_id].x,
+                            attacker_game.friendly_robots[main_attacker_id].y,
+                        ),
+                    ],
+                    width=4,
+                    color="BLUE",
+                )
+                # Visualize support defender target position and orientation
+                env.draw_line(
+                    [
+                        (
+                            defender_game.friendly_robots[support_defender_id].x,
+                            defender_game.friendly_robots[support_defender_id].y,
+                        ),
+                        (
+                            attacker_game.friendly_robots[support_attacker_id].x,
+                            attacker_game.friendly_robots[support_attacker_id].y,
+                        ),
+                    ],
+                    width=4,
+                    color="BLUE",
+                )
+        # print(time.time() - start)
 
     assert not goal_scored
 

@@ -74,9 +74,26 @@ class Field:
             [_HALF_LENGTH, -_HALF_WIDTH],
         ]
     )
+    # Consider the depth of goal area
+    _LEFT_GOAL_TARGET = Point(-_HALF_LENGTH, 0)
+    _RIGHT_GOAL_TARGET = Point(_HALF_LENGTH, 0)
 
     def __init__(self, my_team_is_right: bool):
         self.my_team_is_right = my_team_is_right
+
+    @property
+    def my_goal_target(self) -> Point:
+        if self.my_team_is_right:
+            return self._LEFT_GOAL_TARGET
+        else:
+            return self._RIGHT_GOAL_TARGET
+
+    @property
+    def enemy_goal_target(self) -> Point:
+        if self.my_team_is_right:
+            return self._RIGHT_GOAL_TARGET
+        else:
+            return self._LEFT_GOAL_TARGET
 
     @property
     def my_goal_line(self) -> LineString:

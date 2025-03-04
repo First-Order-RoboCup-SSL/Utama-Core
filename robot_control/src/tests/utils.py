@@ -15,6 +15,10 @@ def setup_pvp(
     env: SSLStandardEnv, game: Game, n_robots_blue: int, n_robots_yellow: int
 ):
     """Factory method to setup PVP in an RSoccer environment"""
+    # Due to the nature of game, we will need to define two game objects for pvp.
+    # Therefore, we do not need a pvp manager, but two controllers initialized using
+    # their own game object.
+    # TODO: Discuss the need of pvp_manager and the implementation of setup_pvp
     pvp_manager = PVPManager(env, n_robots_blue, n_robots_yellow, game)
     sim_robot_controller_yellow = RSimRobotController(
         is_team_yellow=True, env=env, game_obj=game, pvp_manager=pvp_manager

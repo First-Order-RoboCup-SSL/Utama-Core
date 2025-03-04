@@ -202,11 +202,8 @@ def score_goal(
     """
     shoot_at_goal_colour should only be used i
     """
-    target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
-
-    # If no frame data, skip
-    if not game_obj.get_latest_frame():
-        return None
+    # target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
+    target_goal_line = game_obj.field.enemy_goal_line
 
     if is_yellow is not None:
         if game_obj.my_team_is_yellow != is_yellow:
@@ -240,15 +237,8 @@ def score_goal(
 
         shot_orientation = np.atan2((best_shot - ball.y), (goal_x - ball.x))
 
-        # robot_data: RobotData = (
-        #     friendly_robots[shooter_id].robot_data
-        #     if shooter_id < len(friendly_robots)
-        #     else None
-        # )
-
-        # ball_data: BallData = ball.ball_data
-
         if ball is not None and shooter:
+            # TODO: IMO, score_goal should not take care of the case when it has no ball
             if shooter_has_ball:
                 logging.debug("robot has ball")
                 current_oren = shooter.orientation
@@ -265,11 +255,12 @@ def score_goal(
                     robot_command = kick_ball()
                 # TODO: Consider also advancing closer to the goal
                 else:
-                    print("turning on spot")
+                    # print("turning on spot")
                     robot_command = turn_on_spot(
+                        game_obj,
                         pid_oren,
                         pid_trans,
-                        shooter.robot_data,
+                        # shooter.robot_data,
                         shooter_id,
                         shot_orientation,
                         dribbling=True,

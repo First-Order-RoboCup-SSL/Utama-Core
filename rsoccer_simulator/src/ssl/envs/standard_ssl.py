@@ -150,7 +150,7 @@ class SSLStandardEnv(SSLBaseEnv):
         blue_robots_info = []
         for i in range(len(self.frame.robots_blue)):
             robot = self.frame.robots_blue[i]
-            robot_pos, robot_info = self._get_robot_observation(robot)
+            robot_pos, robot_info = self._get_robot_observation(robot, i)
             blue_obs.append(robot_pos)
             blue_robots_info.append(robot_info)
 
@@ -158,7 +158,7 @@ class SSLStandardEnv(SSLBaseEnv):
         yellow_robots_info = []
         for i in range(len(self.frame.robots_yellow)):
             robot = self.frame.robots_yellow[i]
-            robot_pos, robot_info = self._get_robot_observation(robot)
+            robot_pos, robot_info = self._get_robot_observation(robot, i)
             yellow_obs.append(robot_pos)
             yellow_robots_info.append(robot_info)
 
@@ -171,8 +171,8 @@ class SSLStandardEnv(SSLBaseEnv):
             blue_robots_info,
         )
 
-    def _get_robot_observation(self, robot):
-        robot_pos = RobotData(robot.x, -robot.y, -float(deg_to_rad(robot.theta)))
+    def _get_robot_observation(self, robot, idx):
+        robot_pos = RobotData(idx, robot.x, -robot.y, -float(deg_to_rad(robot.theta)))
         robot_info = RobotResponse(robot.infrared)
         return robot_pos, robot_info
 

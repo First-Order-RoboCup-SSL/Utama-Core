@@ -505,7 +505,7 @@ def goalkeep(
 def find_likely_enemy_shooter(enemy_robots, balls) -> List[RobotData]:
     ans = []
     for ball in balls:
-        for er in enemy_robots:
+        for er in enemy_robots.values():
             if dist((er.x, er.y), (ball.x, ball.y)) < 0.2:
                 # Ball is close to this robot
                 ans.append(er)
