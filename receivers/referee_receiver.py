@@ -34,8 +34,6 @@ class RefereeMessageReceiver:
         port=REFEREE_PORT,
         debug=False,
     ):
-        super().__init__(message_queue)
-
         self.net = network_manager.NetworkManager(address=(ip, port), bind_socket=True)
         self.prev_command_counter = -1
         self.command_history = []

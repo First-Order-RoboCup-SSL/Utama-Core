@@ -8,7 +8,7 @@ class PresentFutureGame():
         self.current = current
 
     def add_game(self, game: Game):
-        self.__past.add_game(current)
-        current = game
+        self.__past.add_game(self.current)
+        self.current = game
 
     # def predict_/

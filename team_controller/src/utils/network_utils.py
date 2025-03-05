@@ -80,11 +80,11 @@ def receive_data(sock: socket.socket) -> Optional[bytes]:
         return None
 
 
-send_sock = None
-
-
 def send_command(
-    address: Tuple[str, int], command: object, is_sim_robot_cmd: bool = False
+    send_sock: socket.socket,
+    address: Tuple[str, int],
+    command: object,
+    is_sim_robot_cmd: bool = False
 ) -> Optional[bytes]:
     """
     Sends a command to the specified address over a UDP socket.
@@ -97,18 +97,11 @@ def send_command(
     Returns:
         Optional[bytes]: The data received, or None if no data is received or if an error occurs.
 
-    This function creates a temporary UDP socket, serializes the command, and sends it to the specified address.
     If the command being sent is a RobotControl packet there will be a response packet which will be received.
     Errors during serialization or socket operations are logged, with specific handling if the `SerializeToString`
     method is missing.
     """
-    global send_sock
-
     try:
-        if not send_sock:
-            send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-        start = time.time()
         serialized_command = command.SerializeToString()
         send_sock.sendto(serialized_command, address)
 
@@ -118,7 +111,8 @@ def send_command(
         logger.info("Command sent to %s", address)
 
     except AttributeError:
-        logger.error("Command object has no SerializeToString method")
+        raise AttributeError
+        logger.error("Command object has no SerializeToString method %s", command)
     except socket.error as e:
         logger.error("Socket error when sending command to %s: %s", address, e)
     except Exception as e:

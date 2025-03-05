@@ -16,11 +16,11 @@ class PositionRefiner(BaseRefiner):
     def refine(self, game: Game, data: List[RawVisionData]):
 
         data = [frame for frame in data if frame is not None]
+        
         # If no information just return the original
         if not data:
             return game
         # Can combine previous position from game with new data to produce new position if desired
-        print(data)
         combined_vision_data = CameraCombiner().combine_cameras(game, data)
 
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(game, combined_vision_data.yellow_robots, combined_vision_data.blue_robots)
