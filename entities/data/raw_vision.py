@@ -22,7 +22,7 @@ class RawBallData:
 
 
 @dataclass
-class RawFrameData:
+class RawVisionData:
     ts: float
     yellow_robots: List[RawRobotData]
     blue_robots: List[RawRobotData]

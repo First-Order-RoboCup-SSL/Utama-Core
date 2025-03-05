@@ -1,19 +1,9 @@
-import sys
-import os
-import numpy as np
 import math
-from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import go_to_ball, go_to_point
+from motion_planning.src.pid.pid import get_rsim_pids
 from team_controller.src.controllers import RSimRobotController, RSimController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from robot_control.src.intent import score_goal
-from motion_planning.src.pid import PID
-from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
-from config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement
-import pytest
-import time
 
 N_ROBOTS = 6
 
@@ -28,7 +18,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
 
     ITERS = 1200
     TARGET_OREN = math.pi / 2
-    game = Game(my_team_is_yellow=is_yellow, my_team_is_right=True)
+    game = Game(ts=0,my_team_is_yellow=is_yellow, my_team_is_right=True, friendly_robots={}, enemy_robots={}, ball=None)
 
     old_pos = []
 
@@ -63,7 +53,6 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
         pid_2d,
         False,
         robot_to_place,
-        game,
         TARGET_OREN,
         env,
     )

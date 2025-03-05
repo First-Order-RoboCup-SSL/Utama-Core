@@ -11,7 +11,7 @@ import time
     message_copy.ParseFromString(data)
 TypeError: a bytes-like object is required, not 'NoneType' """
 
-from team_controller.src.data.referee_receiver import RefereeMessageReceiver
+from receivers.referee_receiver import RefereeMessageReceiver
 
 # Example usage:
 if __name__ == "__main__":

@@ -1,5 +1,4 @@
 import numpy as np
-from entities.game.robot import RobotData
 from global_utils.math_utils import distance
 
 ROBOT_RADIUS = 0.09

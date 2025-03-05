@@ -75,6 +75,14 @@ wheels = [
 ]
 
 [[package]]
+name = "lenses"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fb/06/6a7c30c3519181263e1bbf0cbea67ef4a43a64443ee16717c7d760214943/lenses-1.2.0-py3-none-any.whl", hash = "sha256:e03c81e35500e12e1d35504f76c26489c0a4e08b0881e96fc4e8a1b707c53f16", size = 51113 },
+]
+
+[[package]]
 name = "numpy"
 version = "2.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -143,6 +151,40 @@ wheels = [
 ]
 
 [[package]]
+name = "py"
+version = "1.11.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/98/ff/fec109ceb715d2a6b4c4a85a61af3b40c723a961e8828319fbcb15b868dc/py-1.11.0.tar.gz", hash = "sha256:51c75c4126074b472f746a24399ad32f6053d1b34b68d2fa41e558e6f4a98719", size = 207796 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f6/f0/10642828a8dfb741e5f3fbaac830550a518a775c7fff6f04a007259b0548/py-1.11.0-py2.py3-none-any.whl", hash = "sha256:607c53218732647dff4acdfcd50cb62615cedf612e72d1724fb1a0cc6405b378", size = 98708 },
+]
+
+[[package]]
+name = "py-trees"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "py" },
+    { name = "pydot" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4f/b6/1ab21ed427e2508135186de187bba5bba674b77746f0b130b33cbe68e621/py_trees-2.3.0.tar.gz", hash = "sha256:ff36cf3f228589d2efaaaa26eaebb08e1f9f7baa2b06398bc721e953aa45531f", size = 84068 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/1c/9f32299572bce7c1d46ca98425d82f3fe6723a526f05a01b39d491cbfdf6/py_trees-2.3.0-py3-none-any.whl", hash = "sha256:02831face639b15edd5830df76dd59f358358177384543cf17a5e019370bffc2", size = 112918 },
+]
+
+[[package]]
+name = "pydot"
+version = "3.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyparsing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/dd/e0e6a4fb84c22050f6a9701ad9fd6a67ef82faa7ba97b97eb6fdc6b49b34/pydot-3.0.4.tar.gz", hash = "sha256:3ce88b2558f3808b0376f22bfa6c263909e1c3981e2a7b629b65b451eee4a25d", size = 168167 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/5f/1ebfd430df05c4f9e438dd3313c4456eab937d976f6ab8ce81a98f9fb381/pydot-3.0.4-py3-none-any.whl", hash = "sha256:bfa9c3fc0c44ba1d132adce131802d7df00429d1a79cc0346b0a5cd374dbe9c6", size = 35776 },
+]
+
+[[package]]
 name = "pygame"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -165,6 +207,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9a/2f/8458240c8908a550254c80b64f8c03d6d46156664df3515a1331ae730b4e/pygame-2.6.1-pp39-pypy39_pp73-macosx_10_15_x86_64.whl", hash = "sha256:bbb7167c92103a2091366e9af26d4914ba3776666e8677d3c93551353fffa626", size = 12782440 },
     { url = "https://files.pythonhosted.org/packages/b8/a5/ef76a85da2cb7bc6b9fc54b0a56cf75f244c8adcd16bab8d0d9d7398bfed/pygame-2.6.1-pp39-pypy39_pp73-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:17498a2b043bc0e795faedef1b081199c688890200aef34991c1941caa2d2c89", size = 14182026 },
     { url = "https://files.pythonhosted.org/packages/8b/11/5519d3dfc8046822289dbd8ffde407e30ddb56b6f4a78ca39121a545a322/pygame-2.6.1-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7103c60939bbc1e05cfc7ba3f1d2ad3bbf103b7828b82a7166a9ab6f51950146", size = 13869271 },
+]
+
+[[package]]
+name = "pyparsing"
+version = "3.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/1a/3544f4f299a47911c2ab3710f534e52fea62a633c96806995da5d25be4b2/pyparsing-3.2.1.tar.gz", hash = "sha256:61980854fd66de3a90028d679a954d5f2623e83144b5afe5ee86f43d762e5f0a", size = 1067694 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/a7/c8a2d361bf89c0d9577c934ebb7421b25dc84bf3a8e3ac0a40aed9acc547/pyparsing-3.2.1-py3-none-any.whl", hash = "sha256:506ff4f4386c4cec0590ec19e6302d3aedb992fdc02c761e90416f158dacf8e1", size = 107716 },
 ]
 
 [[package]]
@@ -275,13 +326,16 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "gymnasium" },
+    { name = "lenses" },
     { name = "numpy" },
     { name = "protobuf" },
+    { name = "py-trees" },
     { name = "pygame" },
     { name = "pyserial" },
     { name = "pytest" },
     { name = "rc-robosim" },
     { name = "shapely" },
+    { name = "vector" },
 ]
 
 [package.dev-dependencies]
@@ -292,17 +346,33 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "gymnasium", specifier = "==1.0.0" },
+    { name = "lenses", specifier = ">=1.2.0" },
     { name = "numpy", specifier = "==2.0.2" },
     { name = "protobuf", specifier = "==3.20.2" },
+    { name = "py-trees", specifier = ">=2.3.0" },
     { name = "pygame", specifier = "==2.6.1" },
     { name = "pyserial", specifier = "==3.5" },
     { name = "pytest", specifier = "==8.3.4" },
     { name = "rc-robosim", specifier = "==1.2" },
     { name = "shapely", specifier = "==2.0.6" },
+    { name = "vector", specifier = ">=1.6.1" },
 ]
 
 [package.metadata.requires-dev]
 dev = [{ name = "ruff", specifier = ">=0.9.8" }]
+
+[[package]]
+name = "vector"
+version = "1.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f4/00/d1ccfa4cf17703f9f529e2d713c35e71a6aee4384cacaf2205d703a1da67/vector-1.6.1.tar.gz", hash = "sha256:59982d0ce553d35f76c63396b57d7fcf5004deab33270bfdb6e54c65db62d6e4", size = 349100 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e2/55/4f6136553afc543f34052c163795d6da6b757307397586eab356aad38e9d/vector-1.6.1-py3-none-any.whl", hash = "sha256:f91f40972bfe03189c460118518b1325dc3c070f8619b7058d7b1d5621f7a643", size = 177781 },
+]
 
 [[package]]
 name = "zipp"

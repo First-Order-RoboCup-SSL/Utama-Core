@@ -1,4 +1,4 @@
-from entities.data.vision import RobotData, BallData
+from entities.data.vision import VisionRobotData, VisionBallData
 from typing import Tuple, List
 import numpy as np
 
@@ -9,7 +9,7 @@ def calculate_ttr():
 
 
 def calculate_adjusted_receiver_pos(
-    receiver_data: RobotData,
+    receiver_data: VisionRobotData,
     ball_traj_points: List[Tuple[float, float]],
 ) -> Tuple[float, float]:
     """
