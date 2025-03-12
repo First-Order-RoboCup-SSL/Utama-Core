@@ -39,7 +39,6 @@ class RealRobotController(AbstractRobotController):
         is_team_yellow: bool,
         game_obj: Game = None,
         n_robots: int = 6,
-        cmd_to_vision_dict: Dict[int, int] = None,
     ):
         self._is_team_yellow = is_team_yellow
         self._game_obj = game_obj
@@ -51,7 +50,6 @@ class RealRobotController(AbstractRobotController):
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the packet received from the robots
         self._robots_info: List[RobotResponse] = [None] * self._n_robots
-        self._cmd_to_vision_dict = cmd_to_vision_dict
 
         logger.debug(
             f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}"
@@ -175,6 +173,7 @@ class RealRobotController(AbstractRobotController):
         robot_id = robot_id & 0x0F  # 5 bits only
         control_byte |= robot_id << 1
         # set last bit as 1 if its the last command
+        # TODO: this fails on cases wher we are only communicating with one robot and their id is not 0
         if robot_id == self._n_robots - 1:
             control_byte |= 0x01
         packet.append(control_byte)
