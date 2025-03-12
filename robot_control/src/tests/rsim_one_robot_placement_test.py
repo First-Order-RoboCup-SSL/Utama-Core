@@ -45,7 +45,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
     sim_robot_controller = RSimRobotController(
         is_team_yellow=is_yellow, env=env, game_obj=game
     )
-
+    
     one_step = one_robot_placement(
         sim_robot_controller,
         is_yellow,
@@ -53,7 +53,6 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
         pid_2d,
         False,
         robot_to_place,
-        TARGET_OREN,
         env,
     )
 

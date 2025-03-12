@@ -5,12 +5,13 @@ import logging
 
 import warnings
 
+from entities.data.command import RobotCommand
 from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP
 from entities.game import Game
 from collections import deque
 from entities.game.past_game import PastGame
 from entities.game.present_future_game import PresentFutureGame
-from motion_planning.src.pid.pid import get_grsim_pids
+from motion_planning.src.pid.pid import get_grsim_pids, get_real_pids, get_rsim_pids
 from receivers.referee_receiver import RefereeMessageReceiver
 from refiners.has_ball import HasBallRefiner
 from refiners.position import PositionRefiner
@@ -25,9 +26,13 @@ from run import GameGater
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
 from strategy.behaviour_trees.behaviours.dummy_behaviour import DummyBehaviour
 from strategy.startup_strategy import StartupStrategy
+from strategy.one_robot_placement_strategy import RobotPlacmentStrategy
 from strategy.strategy import Strategy
 from team_controller.src.controllers.common.robot_controller_abstract import AbstractRobotController
 from team_controller.src.controllers.sim.grsim_robot_controller import GRSimRobotController
+from team_controller.src.controllers.real.real_robot_controller import RealRobotController
+
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.INFO)
@@ -82,7 +87,7 @@ def main(strategy: Strategy):
         
         game = replace(game, ts=start_time - game_start_time)
         game = position_refiner.refine(game, vision_frames)
-        game = velocity_refiner.refine(past_game, game) # , robot_frame.imu_data)    
+        # game = velocity_refiner.refine(past_game, game) # , robot_frame.imu_data)    
         # game = hasball_refiner.refine(game, robot_frame.ir_data)
         # game = referee_refiner.refine(game, referee_frame)
 
@@ -103,9 +108,18 @@ def main(strategy: Strategy):
         logger.info("Sleeping for %f secs", wait_time)
         time.sleep(wait_time)
 
-if __name__ == "__main__":
+from robot_control.src.skills import empty_command 
 
-    sim_robot_controller = GRSimRobotController(is_team_yellow=True)
-    # bt = DummyBehaviour()
-    # main(BehaviourTreeStrategy(sim_robot_controller, bt), sim_robot_controller)
-    main(StartupStrategy(sim_robot_controller, get_grsim_pids))
+if __name__ == "__main__":
+    try:
+        # sim_robot_controller = GRSimRobotController(is_team_yellow=True)
+        sim_robot_controller = RealRobotController(is_team_yellow=True)
+        # bt = DummyBehaviour()
+        # main(BehaviourTreeStrategy(sim_robot_controller, bt), sim_robot_controller)
+        main(RobotPlacmentStrategy(sim_robot_controller, get_real_pids, 1, False, True))
+        # main(StartupStrategy(sim_robot_controller, get_grsim_pids))
+    except KeyboardInterrupt:
+        print("Exiting...")
+        for i in range(15):
+            sim_robot_controller.add_robot_commands(empty_command(), 1)
+            sim_robot_controller.send_robot_commands()
