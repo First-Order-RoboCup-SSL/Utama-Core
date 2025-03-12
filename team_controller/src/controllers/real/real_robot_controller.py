@@ -174,6 +174,7 @@ class RealRobotController(AbstractRobotController):
         robot_id = robot_id & 0x0F  # 5 bits only
         control_byte |= robot_id << 1
         # set last bit as 1 if its the last command
+        # TODO: this fails on cases wher we are only communicating with one robot and their id is not 0
         if robot_id == self._n_robots - 1:
             control_byte |= 0x01
         packet.append(control_byte)
