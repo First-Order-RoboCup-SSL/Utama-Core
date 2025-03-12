@@ -34,7 +34,7 @@ class RealRobotController(AbstractRobotController):
         n_robots (int): The number of robots in the team. Directly affects output buffer size. Default is 6.
     """
 
-    def __init__(self, is_team_yellow: bool, game_obj: Game= None, n_robots: int = 6):
+    def __init__(self, is_team_yellow: bool, game_obj: Game, n_robots: int = 6):
         self._is_team_yellow = is_team_yellow
         self._game_obj = game_obj
         self._n_robots = n_robots  # determines buffer size
