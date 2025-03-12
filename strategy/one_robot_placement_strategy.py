@@ -40,7 +40,7 @@ class RobotPlacmentStrategy(Strategy):
         
         # env.teleport_ball(1, 0)
 
-        self.ty = 0 if invert else 1
+        self.ty = -1 if invert else -2
         self.tx = -1
         
 
@@ -58,7 +58,10 @@ class RobotPlacmentStrategy(Strategy):
 
             switch = error < 0.05
             if switch:
-                self.ty *= -1
+                if self.ty == -1:
+                    self.ty = -2
+                else:
+                    self.ty = -1
                 self.pid_trans.reset(self.id)
                 self.pid_oren.reset(self.id)
 
@@ -87,7 +90,7 @@ class RobotPlacmentStrategy(Strategy):
 
             # # Draw the global velocity vector
             # self.env.draw_line([(cx, cy), (gx + cx, gy + cy)], color="black", width=2)
-
+            print(cmd)
             self.robot_controller.add_robot_commands(cmd, self.id)
             self.robot_controller.send_robot_commands()
 

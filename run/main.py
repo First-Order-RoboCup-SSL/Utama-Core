@@ -84,7 +84,7 @@ def main(strategy: Strategy):
 
     past_game = PastGame(MAX_GAME_HISTORY)
     game = GameGater.wait_until_game_valid(
-        True, True, 6, 6, True, vision_buffers, position_refiner
+        True, True, 1, 0, True, vision_buffers, position_refiner
     )
 
     # hasball_refiner = HasBallRefiner()
@@ -128,7 +128,7 @@ def main(strategy: Strategy):
 from robot_control.src.skills import empty_command
 
 if __name__ == "__main__":
-    target_robot = 1
+    target_robot = 3
     try:
         # sim_robot_controller = GRSimRobotController(is_team_yellow=True)
         sim_robot_controller = RealRobotController(is_team_yellow=True)

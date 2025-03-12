@@ -74,7 +74,6 @@ class RealRobotController(AbstractRobotController):
                 self._robots_info[1] = RobotResponse(has_ball=True)
             else:
                 self._robots_info[1] = RobotResponse(has_ball=False)
-
         self._out_packet = self._empty_command()  # flush the out_packet
 
     def add_robot_commands(
@@ -181,6 +180,8 @@ class RealRobotController(AbstractRobotController):
         packet.append(control_byte)
         crc = self.compute_crc(packet)
         packet.append(crc)
+        
+        packet_str = " ".join(f"{byte:08b}" for byte in packet)
 
         return packet
 

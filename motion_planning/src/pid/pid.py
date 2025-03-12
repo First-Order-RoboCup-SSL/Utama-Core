@@ -18,16 +18,16 @@ def get_real_pids():
         TIMESTEP,
         REAL_MAX_ANGULAR_VEL,
         -REAL_MAX_ANGULAR_VEL,
-        3,
-        0,
+        0.5,
+        0.075,
         0,
     )
     pid_trans = TwoDPID(
         TIMESTEP,
         REAL_MAX_VEL,
-        3,
-        0.05,
         0,
+        0,
+        0.0,
     )
     return pid_oren, PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=0.05)
 
