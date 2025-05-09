@@ -25,7 +25,7 @@ class AngleSmoother:
 
 class PositionRefiner(BaseRefiner):
     def __init__(self):
-        self.angle_smoother = AngleSmoother(alpha=0.45)
+        self.angle_smoother = AngleSmoother(alpha=0.4)
             
     # Primary function for the Refiner interface
     def refine(self, game: Game, data: List[RawVisionData]):

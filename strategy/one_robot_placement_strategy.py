@@ -52,7 +52,7 @@ class RobotPlacmentStrategy(Strategy):
         if game.friendly_robots and game.ball is not None:
             friendly_robots = game.friendly_robots
             bx, by = game.ball.p.x, game.ball.p.y
-            # TODO: When running main I get this error from time to time:     
+            # TODO: When running main I get this error from time to time, (I am trying to control robot 3):     
             # File "/home/fredh/robocup_ssl/Utama/run/main.py", line 111, in main
             #     strategy.step(present_future_game)
             # File "/home/fredh/robocup_ssl/Utama/strategy/one_robot_placement_strategy.py", line 55, in step

@@ -55,8 +55,8 @@ def get_grsim_pids():
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        18.5,
-        0.075,
+        3,
+        0.015,
         0,
         integral_min=-10,
         integral_max=10,
@@ -70,7 +70,9 @@ def get_grsim_pids():
         integral_min=-5,
         integral_max=5,
     )
-    return pid_oren, PIDAccelerationLimiterWrapper(
+    return PIDAccelerationLimiterWrapper(
+        pid_oren, max_acceleration=50, dt=TIMESTEP
+    ), PIDAccelerationLimiterWrapper(
         pid_trans, max_acceleration=2, dt=TIMESTEP
     )
 
@@ -155,8 +157,6 @@ class PID(AbstractPID[float]):
         target: float,
         current: float,
         robot_id: int,
-        oren: bool = False,
-        normalize_range: Optional[float] = None,
     ) -> float:
         """
         Compute the PID output to move a robot towards a target with delay compensation.
@@ -169,6 +169,7 @@ class PID(AbstractPID[float]):
         error = normalise_heading(raw_error)
         # For very small errors, return zero
         if abs(error) < 0.05:
+            self.prev_times[robot_id] = call_func_time
             return 0.0
 
         # Compute time difference
@@ -216,10 +217,6 @@ class PID(AbstractPID[float]):
         # Combine the PID outputs
         output = Pout + Iout + Dout
 
-        # Optional normalization if needed
-        if normalize_range is not None and normalize_range != 0:
-            output /= normalize_range
-
         # Clamp the output for consistency
         if self.max_output is not None:
             output = min(self.max_output, output)
@@ -227,7 +224,7 @@ class PID(AbstractPID[float]):
             output = max(self.min_output, output)
 
         # Store the error and update the time for the next iteration
-        self.pre_errors[robot_id] = normalise_heading(error)
+        self.pre_errors[robot_id] = error
         self.prev_times[robot_id] = call_func_time
         return output
     
@@ -287,6 +284,7 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         error = math.hypot(dx, dy)
 
         if abs(error) < 3/1000:
+            self.prev_times[robot_id] = call_func_time
             return 0.0
 
         # Compute time difference
