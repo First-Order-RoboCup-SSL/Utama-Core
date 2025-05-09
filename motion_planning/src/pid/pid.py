@@ -146,11 +146,9 @@ class PID(AbstractPID[float]):
         self.integral_min = integral_min
         self.integral_max = integral_max
 
-        self.prev_time = 0
-
+        self.prev_times = {i: 0.0 for i in range(6)}
+        
         self.first_pass = {i: True for i in range(6)}
-
-        self.errors = []
 
     def calculate(
         self,
@@ -170,14 +168,13 @@ class PID(AbstractPID[float]):
         # For angular measurements adjust error
         error = normalise_heading(raw_error)
         # For very small errors, return zero
-        if abs(error) < 0.1:
+        if abs(error) < 0.05:
             return 0.0
 
         # Compute time difference
-        dt = self.dt
-        if self.prev_time != 0:
-            measured_dt = call_func_time - self.prev_time
-            # Use the measured dt if nonzero; otherwise fall back to TIMESTEP.
+        dt = self.dt # Default
+        if self.prev_times[robot_id] != 0:
+            measured_dt = call_func_time - self.prev_times[robot_id]
             dt = measured_dt if measured_dt > 0 else TIMESTEP
 
         # Compute derivative term using the previous stored error
@@ -231,7 +228,7 @@ class PID(AbstractPID[float]):
 
         # Store the error and update the time for the next iteration
         self.pre_errors[robot_id] = normalise_heading(error)
-        self.prev_time = call_func_time
+        self.prev_times[robot_id] = call_func_time
         return output
     
     def reset(self, robot_id: int):
@@ -275,7 +272,7 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         self.integral_min = integral_min
         self.integral_max = integral_max
 
-        self.prev_time = 0
+        self.prev_times = {i: 0.0 for i in range(6)}
 
         self.first_pass = {i: True for i in range(6)}
 
@@ -294,8 +291,8 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
 
         # Compute time difference
         dt = self.dt
-        if self.prev_time != 0:
-            measured_dt = call_func_time - self.prev_time
+        if self.prev_times[robot_id] != 0:
+            measured_dt = call_func_time - self.prev_times[robot_id]
             # Use the measured dt if nonzero; otherwise fall back to TIMESTEP.
             dt = measured_dt if measured_dt > 0 else TIMESTEP
 
@@ -308,9 +305,12 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         
         # --- Delay Compensation (Smith predictor approach) ---
         # Then the predicted error is:
-        predicted_error = error + derivative * self.delay
-        # Optionally, you might replace 'error' with 'predicted_error' in the PID computation.
-        effective_error = predicted_error
+        if self.delay > 0:
+            predicted_error = error + derivative * self.delay
+            # Optionally, you might replace 'error' with 'predicted_error' in the PID computation.
+            effective_error = predicted_error
+        else:
+            effective_error = error
 
         # Proportional term
         Pout = self.Kp * effective_error if self.Kp != 0 else 0.0
@@ -334,7 +334,7 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
 
         # Store the error and update the time for the next iteration
         self.pre_errors[robot_id] = error
-        self.prev_time = call_func_time
+        self.prev_times[robot_id] = call_func_time
 
         if error == 0.0:
             return 0.0, 0.0
