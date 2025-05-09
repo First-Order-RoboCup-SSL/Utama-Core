@@ -4,7 +4,7 @@ import logging
 from typing import Optional, Tuple
 import time
 
-from config.settings import MULTICAST_GROUP, LOCAL_HOST
+from config.settings import MULTICAST_GROUP, LOCAL_HOST, TIMESTEP
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,27 +30,57 @@ def setup_socket(
     This function sets up necessary socket options, binds the socket if required, and joins a multicast group if the
     address is not the local host. Additionally, a 1-second timeout is applied for non-blocking behavior.
     """
+    timeout = TIMESTEP
     try:
+        # Allow address reuse - crucial for servers restarting quickly
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
+        # Set receive buffer size
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8192)
+        actual_buffer_size = sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
+        if actual_buffer_size < 8192:
+             logger.warning(f"OS reduced receive buffer size from {8192} to {actual_buffer_size}")
+        
+        # Bind if requested (necessary for listening)
         if bind_socket:
             sock.bind(address)
+            ip_addr = address[0]
+            if ip_addr and ip_addr != LOCAL_HOST and ip_addr.startswith("224."):
+                try:
+                    group = socket.inet_aton(MULTICAST_GROUP) 
+                    mreq = struct.pack("4sL", group, socket.INADDR_ANY) 
+                    sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+                    logger.info(f"Socket joined multicast group {MULTICAST_GROUP}")
+                except socket.error as e:
+                    logger.fatal(f"Failed to join multicast group {MULTICAST_GROUP}: {e}")
+                    raise 
 
-        if address[0] != LOCAL_HOST:
-            group = socket.inet_aton(MULTICAST_GROUP)
-            mreq = struct.pack("4sL", group, socket.INADDR_ANY)
-            sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
-        # sock.settimeout(0.005)  # Set timeout to 1 frame period (60 FPS)
+        # Set timeout for non-blocking behavior
+        if timeout is not None:
+            if timeout <= 0:
+                logger.warning(f"Timeout value ({timeout}) is not positive. Setting to None (blocking).")
+                sock.settimeout(None)
+            else:
+                sock.settimeout(timeout * 1.1) # To account for network jitter
+                logger.info(f"Socket timeout set to {timeout * 1.1:.4f} seconds.")
+        else:
+            logger.info("Socket configured for blocking operations (no timeout).")
+
+
         logger.info(
-            "Socket setup completed with address %s and bind_socket=%s",
-            address,
-            bind_socket,
+            f"Socket setup complete for address {address} (bind={bind_socket})"
         )
+        return sock
+
     except socket.error as e:
-        logger.error("Socket setup failed for address %s with error: %s", address, e)
-        raise  # Re-raise the exception to handle it further up if needed
-    return sock
+        logger.error(f"Socket setup failed for address {address}: {e}")
+        sock.close() 
+        raise
+    except Exception as e:
+        logger.exception(f"Unexpected error during socket setup for {address}: {e}")
+        sock.close()
+        raise
 
 
 def receive_data(sock: socket.socket) -> Optional[bytes]:
@@ -102,9 +132,17 @@ def send_command(
     method is missing.
     """
     try:
-        serialized_command = command.SerializeToString()
-        send_sock.sendto(serialized_command, address)
+        if hasattr(command, "SerializeToString") and callable(command.SerializeToString):
+             serialized_data = command.SerializeToString()
+        elif isinstance(command, bytes):
+             serialized_data = command # Allow sending raw bytes
+        else:
+             logger.error(f"Command object type {type(command)} cannot be serialized.")
+             raise TypeError("Command must be bytes or have a SerializeToString method.")
+        send_sock.sendto(serialized_data, address)
 
+    
+        # If the command is sent to the simulator, obtain the response
         if is_sim_robot_cmd:
             data = receive_data(send_sock)
             return data

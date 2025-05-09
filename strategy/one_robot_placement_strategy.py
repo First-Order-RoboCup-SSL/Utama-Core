@@ -52,6 +52,12 @@ class RobotPlacmentStrategy(Strategy):
         if game.friendly_robots and game.ball is not None:
             friendly_robots = game.friendly_robots
             bx, by = game.ball.p.x, game.ball.p.y
+            # TODO: When running main I get this error from time to time:     
+            # File "/home/fredh/robocup_ssl/Utama/run/main.py", line 111, in main
+            #     strategy.step(present_future_game)
+            # File "/home/fredh/robocup_ssl/Utama/strategy/one_robot_placement_strategy.py", line 55, in step
+            #     rp = friendly_robots[self.id].p
+            # KeyError: 3
             rp = friendly_robots[self.id].p
             cx, cy, co = rp.x, rp.y, friendly_robots[self.id].orientation
             error = math.dist((self.tx, self.ty), (cx, cy))
@@ -90,7 +96,6 @@ class RobotPlacmentStrategy(Strategy):
 
             # # Draw the global velocity vector
             # self.env.draw_line([(cx, cy), (gx + cx, gy + cy)], color="black", width=2)
-            print(cmd)
             self.robot_controller.add_robot_commands(cmd, self.id)
             self.robot_controller.send_robot_commands()
 

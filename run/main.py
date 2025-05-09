@@ -130,13 +130,13 @@ from robot_control.src.skills import empty_command
 if __name__ == "__main__":
     target_robot = 3
     try:
-        # sim_robot_controller = GRSimRobotController(is_team_yellow=True)
-        sim_robot_controller = RealRobotController(is_team_yellow=True)
+        sim_robot_controller = GRSimRobotController(is_team_yellow=True)
+        # sim_robot_controller = RealRobotController(is_team_yellow=True)
         # bt = DummyBehaviour()
         # main(BehaviourTreeStrategy(sim_robot_controller, bt), sim_robot_controller)
         main(
             RobotPlacmentStrategy(
-                sim_robot_controller, get_real_pids, target_robot, False, True
+                sim_robot_controller, get_grsim_pids, target_robot, False, True
             )
         )
         # main(StartupStrategy(sim_robot_controller, get_grsim_pids))

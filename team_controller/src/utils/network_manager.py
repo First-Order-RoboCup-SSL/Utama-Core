@@ -2,6 +2,10 @@ import socket
 from typing import Tuple, Optional
 from team_controller.src.utils import network_utils
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class NetworkManager:
     """
     Manages network communication via a UDP socket for sending and receiving data.
