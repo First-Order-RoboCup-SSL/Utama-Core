@@ -21,22 +21,28 @@ from refiners.velocity import VelocityRefiner
 from receivers.vision_receiver import VisionReceiver
 from collections.abc import Callable
 from run import GameGater
+
 # from strategy.startup_strategy import StartupStrategy
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
 from strategy.behaviour_trees.behaviours.dummy_behaviour import DummyBehaviour
 from strategy.startup_strategy import StartupStrategy
 from strategy.strategy import Strategy
-from team_controller.src.controllers.common.robot_controller_abstract import AbstractRobotController
-from team_controller.src.controllers.sim.grsim_robot_controller import GRSimRobotController
+from team_controller.src.controllers.common.robot_controller_abstract import (
+    AbstractRobotController,
+)
+from team_controller.src.controllers import RSimRobotController, GRSimController
+
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.INFO)
+
 
 def data_update_listener(receiver: VisionReceiver):
     # Start receiving game data; this will run in a separate thread.
     receiver.pull_game_data()
 
-def start_threads(vision_receiver): #, referee_receiver):
+
+def start_threads(vision_receiver):  # , referee_receiver):
     # Start the data receiving in separate threads
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
     # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
@@ -49,40 +55,48 @@ def start_threads(vision_receiver): #, referee_receiver):
     vision_thread.start()
     # referee_thread.start()
 
-def main(strategy: Strategy):
-    logging.basicConfig(filename='Utama.log', level=logging.INFO, filemode="w")
+
+def run(strategy: Strategy, with_referee: bool = False):
+    logging.basicConfig(filename="Utama.log", level=logging.INFO, filemode="w")
     warnings.simplefilter("default", DeprecationWarning)
-    
-    robot_buffer = deque(maxlen=1) # TODO: Add separate thread to read robot data when we have it
+
+    robot_buffer = deque(
+        maxlen=1
+    )  # TODO: Add separate thread to read robot data when we have it
     vision_buffers = [deque(maxlen=1) for _ in range(MAX_CAMERAS)]
-    ref_buffer = deque(maxlen=1)
+    if with_referee:
+        ref_buffer = deque(maxlen=1)
 
     # referee_receiver = RefereeMessageReceiver(ref_buffer, debug=False)
     vision_receiver = VisionReceiver(vision_buffers)
-    
-    start_threads(vision_receiver)#, referee_receiver)
+
+    start_threads(vision_receiver)  # , referee_receiver)
 
     position_refiner = PositionRefiner()
     velocity_refiner = VelocityRefiner()
 
     past_game = PastGame(MAX_GAME_HISTORY)
-    game = GameGater.wait_until_game_valid(True, True, 6,6,True,vision_buffers, position_refiner)
-    
+    game = GameGater.wait_until_game_valid(
+        True, True, 6, 6, True, vision_buffers, position_refiner
+    )
+
     # hasball_refiner = HasBallRefiner()
     # referee_refiner = RefereeRefiner()
 
-    present_future_game = PresentFutureGame(past_game, game) 
+    present_future_game = PresentFutureGame(past_game, game)
 
     game_start_time = time.time()
     while True:
         start_time = time.time()
-        vision_frames = [buffer.popleft() if buffer else None for buffer in vision_buffers]
+        vision_frames = [
+            buffer.popleft() if buffer else None for buffer in vision_buffers
+        ]
         # robot_frame = robot_buffer.popleft()
         # referee_frame = ref_buffer.popleft()
-        
+
         game = replace(game, ts=start_time - game_start_time)
         game = position_refiner.refine(game, vision_frames)
-        game = velocity_refiner.refine(past_game, game) # , robot_frame.imu_data)    
+        game = velocity_refiner.refine(past_game, game)  # , robot_frame.imu_data)
         # game = hasball_refiner.refine(game, robot_frame.ir_data)
         # game = referee_refiner.refine(game, referee_frame)
 
@@ -91,11 +105,11 @@ def main(strategy: Strategy):
         end_time = time.time()
 
         processing_time = end_time - start_time
-        
+
         logger.log(
             logging.WARNING if processing_time > TIMESTEP else logging.INFO,
             "Game loop took %f secs",
-            processing_time
+            processing_time,
         )
 
         # Sleep to maintain FPS
@@ -103,9 +117,9 @@ def main(strategy: Strategy):
         logger.info("Sleeping for %f secs", wait_time)
         time.sleep(wait_time)
 
-if __name__ == "__main__":
 
-    sim_robot_controller = GRSimRobotController(is_team_yellow=True)
+if __name__ == "__main__":
+    sim_robot_controller = RSimRobotController(is_team_yellow=True)
     # bt = DummyBehaviour()
     # main(BehaviourTreeStrategy(sim_robot_controller, bt), sim_robot_controller)
-    main(StartupStrategy(sim_robot_controller, get_grsim_pids))
+    run(StartupStrategy(sim_robot_controller, get_grsim_pids))
