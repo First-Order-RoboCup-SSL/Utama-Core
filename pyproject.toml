@@ -36,3 +36,8 @@ packages = ["strategy", "entities", "global_utils", "motion_planning", "robot_co
 dev = [
     "ruff>=0.9.8",
 ]
+
+[tool.ruff]
+ignore = [
+    "F401",  # Module imported but unused
+]
