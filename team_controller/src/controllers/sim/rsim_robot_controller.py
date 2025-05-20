@@ -30,11 +30,10 @@ class RSimRobotController(AbstractRobotController):
         self,
         is_team_yellow: bool,
         env: SSLBaseEnv,
-        game_obj: Game,
         pvp_manager=None,  #: Optional[PVPManager] = None, Can't forward declare
     ):
         self._is_team_yellow = is_team_yellow
-        self._game = game_obj
+        self._last_frame = None
         self._env = env
         self._n_friendly_robots, self._n_enemy_robots = self._get_n_robots()
         self._out_packet = self._empty_command(self.n_friendly_robots)
@@ -53,7 +52,7 @@ class RSimRobotController(AbstractRobotController):
         else:
             initial_frame, _, _ = self._env._frame_to_observations()
 
-        self._write_to_game_obj(initial_frame)
+        self._last_frame = initial_frame
 
     def send_robot_commands(self) -> None:
         """
@@ -73,6 +72,8 @@ class RSimRobotController(AbstractRobotController):
                     "team_yellow": tuple(self._empty_command(self.n_enemy_robots)),
                 }
 
+            print(action)
+
             observation, reward, terminated, truncated, reward_shaping = self._env.step(
                 action
             )
@@ -86,7 +87,7 @@ class RSimRobotController(AbstractRobotController):
 
             logger.debug(f"{new_frame} {terminated} {truncated} {reward_shaping}")
 
-            self._write_to_game_obj(new_frame)
+            self._last_frame = new_frame
             # flush out_packet
             self._out_packet = self._empty_command(self.n_friendly_robots)
 
@@ -136,14 +137,6 @@ class RSimRobotController(AbstractRobotController):
         )
         self._out_packet[robot_id] = action
 
-    def _write_to_game_obj(self, new_frame: RawVisionData) -> None:
-        """
-        Supersedes the VisionReceiver and queue procedure to write to game obj directly.
-
-        Done this way, because there's no separate vision receiver for RSim.
-        """
-        self._game = PositionRefiner().refine(self._game, [new_frame])
-
     def empty_command(self) -> list[NDArray]:
         return self._empty_command(self.n_friendly_robots)
 
@@ -183,12 +176,12 @@ class RSimRobotController(AbstractRobotController):
         return self._is_team_yellow
 
     @property
-    def env(self):
-        return self._env
+    def last_frame(self):
+        return self._last_frame
 
     @property
-    def game(self):
-        return self._game
+    def env(self):
+        return self._env
 
     @property
     def debug(self):

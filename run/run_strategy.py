@@ -6,11 +6,10 @@ import logging
 import warnings
 
 from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP
-from entities.game import Game
 from collections import deque
 from entities.game.past_game import PastGame
 from entities.game.present_future_game import PresentFutureGame
-from motion_planning.src.pid.pid import get_grsim_pids
+from motion_planning.src.pid.pid import get_grsim_pids, get_real_pids, get_rsim_pids
 from receivers.referee_receiver import RefereeMessageReceiver
 from refiners.has_ball import HasBallRefiner
 from refiners.position import PositionRefiner
@@ -19,7 +18,6 @@ from refiners.position import PositionRefiner
 # from refiners.referee import RefereeRefiner
 from refiners.velocity import VelocityRefiner
 from receivers.vision_receiver import VisionReceiver
-from collections.abc import Callable
 from run import GameGater
 
 # from strategy.startup_strategy import StartupStrategy
@@ -27,10 +25,13 @@ from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrate
 from strategy.behaviour_trees.behaviours.dummy_behaviour import DummyBehaviour
 from strategy.startup_strategy import StartupStrategy
 from strategy.strategy import Strategy
-from team_controller.src.controllers.common.robot_controller_abstract import (
-    AbstractRobotController,
+from team_controller.src.controllers import (
+    GRSimRobotController,
+    RSimRobotController,
+    RealRobotController,
 )
-from team_controller.src.controllers import RSimRobotController, GRSimController
+
+from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 
 
 logger = logging.getLogger(__name__)
@@ -56,16 +57,59 @@ def start_threads(vision_receiver):  # , referee_receiver):
     # referee_thread.start()
 
 
-def run(strategy: Strategy, with_referee: bool = False):
+def run_strategy(
+    strategy: Strategy,
+    my_team_is_yellow: bool,
+    my_team_is_right: bool,
+    mode: str,
+    exp_friendly: bool,
+    exp_enemy: bool,
+    exp_ball: bool,
+    rsim_env: SSLBaseEnv = None,
+):
+    """
+    Main function to run the robot controller and strategy.
+    Args:
+        strategy (Strategy): The strategy to be used.
+        my_team_is_yellow (bool): Whether the team is yellow.
+        my_team_is_right (bool): Whether the team is on the right side.
+        mode (str): "real", "rsim", "grism"
+        exp_friendly (bool): Expected number of friendly robots.
+        exp_enemy (bool): Expected number of enemy robots.
+        exp_ball (bool): Expected number of balls.
+        rsim_env (SSLBaseEnv, optional): Environment for RSim. Defaults to None.
+    """
     logging.basicConfig(filename="Utama.log", level=logging.INFO, filemode="w")
     warnings.simplefilter("default", DeprecationWarning)
+
+    assert strategy.assert_exp_robots(
+        exp_friendly, exp_enemy
+    )  # ensure the expected number of robots matches
+
+    if mode == "rsim":
+        assert rsim_env is not None, "RSim environment must be provided for RSim mode."
+        robot_controller = RSimRobotController(
+            is_team_yellow=my_team_is_yellow, env=rsim_env
+        )
+        pid_oren, pid_trans = get_rsim_pids()
+        strategy.load_rsim_env(rsim_env)
+    elif mode == "grsim":
+        robot_controller = GRSimRobotController(is_team_yellow=my_team_is_yellow)
+        pid_oren, pid_trans = get_grsim_pids()
+    elif mode == "real":
+        robot_controller = RealRobotController(is_team_yellow=my_team_is_yellow)
+        pid_oren, pid_trans = get_real_pids()
+    else:
+        raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
+
+    strategy.load_robot_controller(robot_controller=robot_controller)
+    strategy.load_pids(pid_oren=pid_oren, pid_trans=pid_trans)
 
     robot_buffer = deque(
         maxlen=1
     )  # TODO: Add separate thread to read robot data when we have it
     vision_buffers = [deque(maxlen=1) for _ in range(MAX_CAMERAS)]
-    if with_referee:
-        ref_buffer = deque(maxlen=1)
+    ref_buffer = deque(maxlen=1)
 
     # referee_receiver = RefereeMessageReceiver(ref_buffer, debug=False)
     vision_receiver = VisionReceiver(vision_buffers)
@@ -77,7 +121,13 @@ def run(strategy: Strategy, with_referee: bool = False):
 
     past_game = PastGame(MAX_GAME_HISTORY)
     game = GameGater.wait_until_game_valid(
-        True, True, 6, 6, True, vision_buffers, position_refiner
+        my_team_is_yellow,
+        my_team_is_right,
+        exp_friendly,
+        exp_enemy,
+        exp_ball,
+        vision_buffers,
+        position_refiner,
     )
 
     # hasball_refiner = HasBallRefiner()
@@ -88,9 +138,12 @@ def run(strategy: Strategy, with_referee: bool = False):
     game_start_time = time.time()
     while True:
         start_time = time.time()
-        vision_frames = [
-            buffer.popleft() if buffer else None for buffer in vision_buffers
-        ]
+        if mode == "rsim":
+            vision_frames = [robot_controller.last_frame]
+        else:
+            vision_frames = [
+                buffer.popleft() if buffer else None for buffer in vision_buffers
+            ]
         # robot_frame = robot_buffer.popleft()
         # referee_frame = ref_buffer.popleft()
 
@@ -119,7 +172,6 @@ def run(strategy: Strategy, with_referee: bool = False):
 
 
 if __name__ == "__main__":
-    sim_robot_controller = RSimRobotController(is_team_yellow=True)
     # bt = DummyBehaviour()
     # main(BehaviourTreeStrategy(sim_robot_controller, bt), sim_robot_controller)
-    run(StartupStrategy(sim_robot_controller, get_grsim_pids))
+    run_strategy(StartupStrategy(), True, True, "grsim", 6, 6, True)
