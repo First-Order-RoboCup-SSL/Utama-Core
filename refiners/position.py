@@ -1,17 +1,32 @@
 from dataclasses import replace
 from typing import Dict, List, Optional, Tuple
 
-import vector
+import vector, math
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from entities.game.ball import Ball
 from entities.game.game import Game
 from entities.game.robot import Robot
 from refiners.base_refiner import BaseRefiner
+from global_utils.math_utils import normalise_heading
 from collections import defaultdict
 
-class PositionRefiner(BaseRefiner):
+class AngleSmoother:
+    def __init__(self, alpha=0.3):
+        self.alpha = alpha  # Smoothing factor for angle
+        self.smoothed_angles = {}  # Stores last smoothed angle for each robot
 
+    def smooth(self, old_angle: float, new_angle: float) -> float:
+        # Compute the shortest angular difference
+        diff = math.atan2(math.sin(new_angle - old_angle), math.cos(new_angle - old_angle))
+        smoothed_angle = old_angle + self.alpha * diff
+
+        return normalise_heading(smoothed_angle)
+
+class PositionRefiner(BaseRefiner):
+    def __init__(self):
+        self.angle_smoother = AngleSmoother(alpha=0.4)
+            
     # Primary function for the Refiner interface
     def refine(self, game: Game, data: List[RawVisionData]):
 
@@ -39,17 +54,21 @@ class PositionRefiner(BaseRefiner):
         return new_game
 
     # Static methods
-    def _combine_robot_vision_data(old_robot: Robot, robot_data: VisionRobotData) -> Robot:
+    @staticmethod
+    def _combine_robot_vision_data(old_robot: Robot, robot_data: VisionRobotData,
+                                   angle_smoother: AngleSmoother) -> Robot:
         assert old_robot.id == robot_data.id
-        # Combine just replaces it for now, in the future could do something more advanced
+        # Smoothing
+        new_orientation = angle_smoother.smooth(old_robot.orientation, robot_data.orientation)
         return replace(old_robot,
             id=robot_data.id,
             p=vector.obj(x=robot_data.x, y=robot_data.y),
-            orientation=robot_data.orientation,
+            orientation=new_orientation,
         )
 
     # Used at start of the game so assume robot does not have the ball
     # Also assume velocity and acceleration are zero
+    @staticmethod
     def _robot_from_vision(robot_data: VisionRobotData, is_friendly: bool) -> Robot:
         return Robot(
             id=robot_data.id,
@@ -61,12 +80,14 @@ class PositionRefiner(BaseRefiner):
             orientation=robot_data.orientation,
         )
 
+    @staticmethod
     def _ball_from_vision(ball_data: VisionBallData) -> Ball:
         zv = vector.obj(x=0, y=0, z=0)
         return Ball(vector.obj(x=ball_data.x, y=ball_data.y, z=ball_data.z),
                     zv,
                     zv)
 
+    @staticmethod
     def _get_most_confident_ball(balls: List[VisionBallData]) -> Ball:
         balls_by_confidence = sorted(
             balls, key=lambda ball: ball.confidence, reverse=True
@@ -75,16 +96,19 @@ class PositionRefiner(BaseRefiner):
             return None
         return PositionRefiner._ball_from_vision(balls_by_confidence[0])
 
-    def _combine_single_team_positions(game_robots:Dict[int, Robot], vision_robots: List[VisionRobotData], friendly: bool) -> Dict[int, Robot]:
+    def _combine_single_team_positions(self, game_robots:Dict[int, Robot], vision_robots: List[VisionRobotData], friendly: bool) -> Dict[int, Robot]:
         new_game_robots = dict(game_robots)
         for robot in vision_robots:
             if robot.id not in new_game_robots:
                 # At the start of the game, we haven't seen anything yet, so just create a new robot
                 new_game_robots[robot.id] = PositionRefiner._robot_from_vision(robot, is_friendly=friendly)
             else:
-                # Otherwise we have old information so we update it
-                new_game_robots[robot.id] = PositionRefiner._combine_robot_vision_data(new_game_robots[robot.id], robot)
-
+                # Update with smoothed data.
+                new_game_robots[robot.id] = PositionRefiner._combine_robot_vision_data(
+                    new_game_robots[robot.id],
+                    robot,
+                    self.angle_smoother
+                )
         return new_game_robots
 
     def _combine_both_teams_game_vision_positions(self, game: Game, yellow_vision_robots: List[VisionRobotData], blue_vision_robots: List[VisionRobotData]) -> Tuple[Dict[int, Robot], Dict[int, Robot]]:
@@ -96,8 +120,8 @@ class PositionRefiner(BaseRefiner):
             old_yellow_robots = dict(game.enemy_robots)
             old_blue_robots = dict(game.friendly_robots)
         
-        new_yellow_robots = PositionRefiner._combine_single_team_positions(old_yellow_robots, yellow_vision_robots, friendly=game.my_team_is_yellow)
-        new_blue_robots = PositionRefiner._combine_single_team_positions(old_blue_robots, blue_vision_robots, friendly=not game.my_team_is_yellow)
+        new_yellow_robots = self._combine_single_team_positions(old_yellow_robots, yellow_vision_robots, friendly=game.my_team_is_yellow)
+        new_blue_robots = self._combine_single_team_positions(old_blue_robots, blue_vision_robots, friendly=not game.my_team_is_yellow)
 
         return new_yellow_robots, new_blue_robots
 

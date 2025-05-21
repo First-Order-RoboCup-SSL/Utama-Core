@@ -34,7 +34,12 @@ class RealRobotController(AbstractRobotController):
         n_robots (int): The number of robots in the team. Directly affects output buffer size. Default is 6.
     """
 
-    def __init__(self, is_team_yellow: bool, game_obj: Game, n_robots: int = 6):
+    def __init__(
+        self,
+        is_team_yellow: bool,
+        game_obj: Game = None,
+        n_robots: int = 6,
+    ):
         self._is_team_yellow = is_team_yellow
         self._game_obj = game_obj
         self._n_robots = n_robots  # determines buffer size
@@ -67,7 +72,6 @@ class RealRobotController(AbstractRobotController):
                 self._robots_info[1] = RobotResponse(has_ball=True)
             else:
                 self._robots_info[1] = RobotResponse(has_ball=False)
-
         self._out_packet = self._empty_command()  # flush the out_packet
 
     def add_robot_commands(
@@ -169,11 +173,14 @@ class RealRobotController(AbstractRobotController):
         robot_id = robot_id & 0x0F  # 5 bits only
         control_byte |= robot_id << 1
         # set last bit as 1 if its the last command
+        # TODO: this fails on cases wher we are only communicating with one robot and their id is not 0
         if robot_id == self._n_robots - 1:
             control_byte |= 0x01
         packet.append(control_byte)
         crc = self.compute_crc(packet)
         packet.append(crc)
+        
+        packet_str = " ".join(f"{byte:08b}" for byte in packet)
 
         return packet
 

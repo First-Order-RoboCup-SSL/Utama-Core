@@ -1,12 +1,14 @@
 from numpy import pi
 
 # interval between frames
-TIMESTEP = 0.0167
+TIMESTEP = 1 / 60
+# interval between sending commands to the robot (ms)
+SENDING_DELAY = 0
 
 # maximum (real and sim) robot settings
-REAL_MAX_VEL = 0.1
+REAL_MAX_VEL = 0.2
 # any slower and the robots become unstable
-REAL_MAX_ANGULAR_VEL = 2
+REAL_MAX_ANGULAR_VEL = 0.5
 
 # maximum (real and sim) robot settings
 MAX_VEL = 2

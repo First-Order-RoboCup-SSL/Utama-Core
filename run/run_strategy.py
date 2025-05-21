@@ -24,6 +24,7 @@ from run import GameGater
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
 from strategy.behaviour_trees.behaviours.dummy_behaviour import DummyBehaviour
 from strategy.startup_strategy import StartupStrategy
+from strategy.one_robot_placement_strategy import RobotPlacementStrategy
 from strategy.strategy import Strategy
 from team_controller.src.controllers import (
     GRSimRobotController,
@@ -32,6 +33,7 @@ from team_controller.src.controllers import (
 )
 
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +44,7 @@ def data_update_listener(receiver: VisionReceiver):
     # Start receiving game data; this will run in a separate thread.
     receiver.pull_game_data()
 
-
+  
 def start_threads(vision_receiver):  # , referee_receiver):
     # Start the data receiving in separate threads
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
@@ -149,7 +151,7 @@ def run_strategy(
 
         game = replace(game, ts=start_time - game_start_time)
         game = position_refiner.refine(game, vision_frames)
-        game = velocity_refiner.refine(past_game, game)  # , robot_frame.imu_data)
+        # game = velocity_refiner.refine(past_game, game)  # , robot_frame.imu_data)
         # game = hasball_refiner.refine(game, robot_frame.ir_data)
         # game = referee_refiner.refine(game, referee_frame)
 
@@ -172,6 +174,10 @@ def run_strategy(
 
 
 if __name__ == "__main__":
-    # bt = DummyBehaviour()
-    # main(BehaviourTreeStrategy(sim_robot_controller, bt), sim_robot_controller)
-    run_strategy(StartupStrategy(), True, True, "grsim", 6, 6, True)
+    try:
+        env = SSLStandardEnv()
+        # bt = DummyBehaviour()
+        # main(BehaviourTreeStrategy(sim_robot_controller, bt), sim_robot_controller)
+        run_strategy(RobotPlacementStrategy(id=3), True, True, "rsim", 6, 6, True, env)
+    except KeyboardInterrupt:
+        print("Exiting...")
