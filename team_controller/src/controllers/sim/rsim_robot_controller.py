@@ -30,7 +30,7 @@ class RSimRobotController(AbstractRobotController):
         self,
         is_team_yellow: bool,
         env: SSLBaseEnv,
-        pvp_manager=None,  #: Optional[PVPManager] = None, Can't forward declare
+        is_pvp,
     ):
         self._is_team_yellow = is_team_yellow
         self._last_frame = None
@@ -38,8 +38,7 @@ class RSimRobotController(AbstractRobotController):
         self._n_friendly_robots, self._n_enemy_robots = self._get_n_robots()
         self._out_packet = self._empty_command(self.n_friendly_robots)
         self._robots_info: list[RobotResponse] = [None] * self.n_friendly_robots
-        self._is_pvp = pvp_manager is not None
-        self.pvp_manager = pvp_manager
+        self._is_pvp = is_pvp
 
         if not self._is_pvp:
             self.reset_env()
@@ -71,8 +70,6 @@ class RSimRobotController(AbstractRobotController):
                     "team_blue": tuple(self._out_packet),
                     "team_yellow": tuple(self._empty_command(self.n_enemy_robots)),
                 }
-
-            print(action)
 
             observation, reward, terminated, truncated, reward_shaping = self._env.step(
                 action
@@ -204,7 +201,7 @@ class RSimRobotController(AbstractRobotController):
         return self._n_enemy_robots
 
 
-class PVPManager:
+class RSimPVPRobotController:
     """
     Manages a player vs player game inside the rsim environment. The two teams run in lockstep in
     this setup, and so, in order to get results consistent with running just one player,
@@ -214,19 +211,19 @@ class PVPManager:
     """
 
     def __init__(
-        self, env: SSLBaseEnv, n_robots_blue: int, n_robots_yellow: int, game: Game
+        self,
+        env: SSLBaseEnv,
+        yellow_controller: RSimRobotController,
+        blue_controller: RSimRobotController,
     ):
         self._env = env
-        self.n_robots_blue = n_robots_blue
-        self.n_robots_yellow = n_robots_yellow
+        self.n_robots_blue = env.n_robots_blue
+        self.n_robots_yellow = env.n_robots_yellow
         self._pending = {"team_blue": None, "team_yellow": None}
-        self._game = game
-
-    def set_blue_controller(self, blue_player: RSimRobotController):
-        self.blue_player = blue_player
-
-    def set_yellow_controller(self, yellow_player: RSimRobotController):
-        self.yellow_player = yellow_player
+        self.last_frame = None
+        self.blue_player = blue_controller
+        self.yellow_player = yellow_controller
+        self.reset_env()
 
     def send_command(self, is_yellow: Boolean, out_packet):
         colour = "team_yellow" if is_yellow else "team_blue"
@@ -261,13 +258,9 @@ class PVPManager:
         self.blue_player.update_robots_info(blue_robots_info)
         self.yellow_player.update_robots_info(yellow_robots_info)
 
-        self._write_to_game_obj(new_frame)
+        self.last_frame = new_frame
 
         self._pending = {"team_blue": None, "team_yellow": None}
-
-    # TODO: Inheritance?
-    def _write_to_game_obj(self, new_frame: RawVisionData) -> None:
-        self._game = PositionRefiner().refine(self._game, [new_frame])
 
     def reset_env(self):
         # if environment was not reset beforehand, reset now
@@ -276,7 +269,7 @@ class PVPManager:
             initial_frame = initial_obs[0]
         else:
             initial_frame, _, _ = self._env._frame_to_observations()
-        self._write_to_game_obj(initial_frame)
+        self.last_frame = initial_frame
 
     def flush(self):
         self._fill_and_send()
