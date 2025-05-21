@@ -30,34 +30,23 @@ class RSimRobotController(AbstractRobotController):
         self,
         is_team_yellow: bool,
         env: SSLBaseEnv,
-        is_pvp,
+        pvp_manager=None,  # RSimPVPRobotController, cannot forward declare
     ):
         self._is_team_yellow = is_team_yellow
-        self._last_frame = None
         self._env = env
         self._n_friendly_robots, self._n_enemy_robots = self._get_n_robots()
         self._out_packet = self._empty_command(self.n_friendly_robots)
         self._robots_info: list[RobotResponse] = [None] * self.n_friendly_robots
-        self._is_pvp = is_pvp
+        self._pvp_manager = pvp_manager
 
-        if not self._is_pvp:
-            self.reset_env()
-
-    def reset_env(self):
-        # if environment was not reset beforehand, reset now
-        if self._env.frame is None:
-            initial_obs, _ = self._env.reset()
-            initial_frame = initial_obs[0]
-        else:
-            initial_frame, _, _ = self._env._frame_to_observations()
-
-        self._last_frame = initial_frame
+        if not self.pvp_manager:
+            self.env.reset()
 
     def send_robot_commands(self) -> None:
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
-        if self.is_pvp:
+        if self.pvp_manager:
             self.pvp_manager.send_command(self.is_team_yellow, self._out_packet)
         else:
             if self.is_team_yellow:
@@ -84,7 +73,6 @@ class RSimRobotController(AbstractRobotController):
 
             logger.debug(f"{new_frame} {terminated} {truncated} {reward_shaping}")
 
-            self._last_frame = new_frame
             # flush out_packet
             self._out_packet = self._empty_command(self.n_friendly_robots)
 
@@ -173,10 +161,6 @@ class RSimRobotController(AbstractRobotController):
         return self._is_team_yellow
 
     @property
-    def last_frame(self):
-        return self._last_frame
-
-    @property
     def env(self):
         return self._env
 
@@ -189,8 +173,8 @@ class RSimRobotController(AbstractRobotController):
         return self._robots_info
 
     @property
-    def is_pvp(self):
-        return self._is_pvp
+    def pvp_manager(self):
+        return self._pvp_manager
 
     @property
     def n_friendly_robots(self):
@@ -201,7 +185,7 @@ class RSimRobotController(AbstractRobotController):
         return self._n_enemy_robots
 
 
-class RSimPVPRobotController:
+class RSimPVPManager:
     """
     Manages a player vs player game inside the rsim environment. The two teams run in lockstep in
     this setup, and so, in order to get results consistent with running just one player,
@@ -210,66 +194,89 @@ class RSimPVPRobotController:
     should be processed on its own (without a corresponding command from the other team).
     """
 
-    def __init__(
-        self,
-        env: SSLBaseEnv,
-        yellow_controller: RSimRobotController,
-        blue_controller: RSimRobotController,
-    ):
+    def __init__(self, env: SSLBaseEnv):
         self._env = env
         self.n_robots_blue = env.n_robots_blue
         self.n_robots_yellow = env.n_robots_yellow
         self._pending = {"team_blue": None, "team_yellow": None}
-        self.last_frame = None
+        self.blue_player = None
+        self.yellow_player = None
+        self._env.reset()
+
+    # TODO: this is clumsy af and it can be removed entirely once we remove robot_has_ball function from robot_controller
+    def load_controllers(
+        self,
+        yellow_controller: RSimRobotController,
+        blue_controller: RSimRobotController,
+    ):
+        """
+        Loads the blue and yellow controllers.
+        """
         self.blue_player = blue_controller
         self.yellow_player = yellow_controller
-        self.reset_env()
 
-    def send_command(self, is_yellow: Boolean, out_packet):
+    def send_command(self, is_yellow: bool, out_packet: list[NDArray]):
+        """
+        Sends the robot commands to the appropriate team (yellow or blue).
+        """
+        assert (
+            self.blue_player is not None and self.yellow_player is not None
+        ), "Blue and yellow players must be set before sending commands."
+
         colour = "team_yellow" if is_yellow else "team_blue"
         other_colour = "team_blue" if is_yellow else "team_yellow"
 
-        if self._pending[colour]:
+        if self._pending[other_colour]:
             self._fill_and_send()
 
         self._pending[colour] = tuple(out_packet)
         if self._pending[other_colour]:
-            self._fill_and_send()
+            observation, reward, terminated, truncated, reward_shaping = self._env.step(
+                self._pending
+            )
+
+            new_frame, yellow_robots_info, blue_robots_info = observation
+            self.blue_player.update_robots_info(blue_robots_info)
+            self.yellow_player.update_robots_info(yellow_robots_info)
+
+            self._pending = {"team_blue": None, "team_yellow": None}
 
     def _empty_command(self, n_robots: int) -> list[NDArray]:
         return [np.zeros((6,), dtype=float) for _ in range(n_robots)]
 
-    def _fill_and_send(self):
-        for colour in ("team_blue", "team_yellow"):
-            if not self._pending[colour]:
-                self._pending[colour] = tuple(
-                    self._empty_command(
-                        self.n_robots_yellow
-                        if colour == "team_yellow"
-                        else self.n_robots_blue
-                    )
-                )
+    # TODO: to debug this
 
-        observation, reward, terminated, truncated, reward_shaping = self._env.step(
-            self._pending
-        )
+    # def send_command(self, is_yellow: Boolean, out_packet):
+    #     colour = "team_yellow" if is_yellow else "team_blue"
+    #     other_colour = "team_blue" if is_yellow else "team_yellow"
 
-        new_frame, yellow_robots_info, blue_robots_info = observation
-        self.blue_player.update_robots_info(blue_robots_info)
-        self.yellow_player.update_robots_info(yellow_robots_info)
+    #     if self._pending[colour]:
+    #         self._fill_and_send()
 
-        self.last_frame = new_frame
+    #     self._pending[colour] = tuple(out_packet)
+    #     if self._pending[other_colour]:
+    #         self._fill_and_send()
 
-        self._pending = {"team_blue": None, "team_yellow": None}
+    # def _fill_and_send(self):
+    #     for colour in ("team_blue", "team_yellow"):
+    #         if not self._pending[colour]:
+    #             self._pending[colour] = tuple(
+    #                 self._empty_command(
+    #                     self.n_robots_yellow
+    #                     if colour == "team_yellow"
+    #                     else self.n_robots_blue
+    #                 )
+    #             )
 
-    def reset_env(self):
-        # if environment was not reset beforehand, reset now
-        if self._env.frame is None:
-            initial_obs, _ = self._env.reset()
-            initial_frame = initial_obs[0]
-        else:
-            initial_frame, _, _ = self._env._frame_to_observations()
-        self.last_frame = initial_frame
+    #     observation, reward, terminated, truncated, reward_shaping = self._env.step(
+    #         self._pending
+    #     )
 
-    def flush(self):
-        self._fill_and_send()
+    #     new_frame, yellow_robots_info, blue_robots_info = observation
+    #     self.blue_player.update_robots_info(blue_robots_info)
+    #     self.yellow_player.update_robots_info(yellow_robots_info)
+
+    #     self._pending = {"team_blue": None, "team_yellow": None}
+
+    # def flush(self):
+    #     self._fill_and_send()

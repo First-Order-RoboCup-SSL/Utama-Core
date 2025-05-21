@@ -2,7 +2,7 @@ from dataclasses import replace
 import time
 import threading
 import logging
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Callable
 import warnings
 
 from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP
@@ -24,20 +24,20 @@ from refiners.position import PositionRefiner
 # from refiners.referee import RefereeRefiner
 from refiners.velocity import VelocityRefiner
 from receivers.vision_receiver import VisionReceiver
-from run import GameGater
+from run import GameGater, AbstractTestManager, TestStatus
 
 # from strategy.startup_strategy import StartupStrategy
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
 from strategy.behaviour_trees.behaviours.dummy_behaviour import DummyBehaviour
 from strategy.startup_strategy import StartupStrategy
 from strategy.one_robot_placement_strategy import RobotPlacementStrategy
-from strategy.strategy import Strategy, StrategyStatus
+from strategy.strategy import Strategy
 from team_controller.src.controllers import (
     GRSimRobotController,
     RSimRobotController,
     RealRobotController,
-    RSimPVPRobotController,
     AbstractRobotController,
+    RSimPVPManager,
 )
 
 from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
@@ -89,7 +89,6 @@ class StrategyRunner:
             self.opp_robot_controller,
             self.pid_oren,
             self.pid_trans,
-            self.rsim_pvp_controller,
         ) = self._load_robot_control_and_pids()
 
         self.position_refiner = PositionRefiner()
@@ -170,36 +169,36 @@ class StrategyRunner:
 
     def _load_robot_control_and_pids(
         self,
-    ) -> Tuple[
-        AbstractRobotController,
-        AbstractRobotController,
-        PID,
-        TwoDPID,
-        Optional[RSimPVPRobotController],
-    ]:
+    ) -> Tuple[AbstractRobotController, AbstractRobotController, PID, TwoDPID]:
         rsim_pvp_controller = None
         if self.mode == "rsim":
-            is_pvp = True if self.opp_strategy else False
+            pvp_manager = None
+            if self.opp_strategy is not None:
+                pvp_manager = RSimPVPManager(self.rsim_env)
             my_robot_controller = RSimRobotController(
-                is_team_yellow=self.my_team_is_yellow, env=self.rsim_env, is_pvp=is_pvp
+                is_team_yellow=self.my_team_is_yellow,
+                env=self.rsim_env,
+                pvp_manager=pvp_manager,
             )
             opp_robot_controller = (
                 RSimRobotController(
                     is_team_yellow=not self.my_team_is_yellow,
                     env=self.rsim_env,
-                    is_pvp=is_pvp,
+                    pvp_manager=pvp_manager,
                 )
                 if self.opp_strategy
                 else None
             )
-            if self.my_team_is_yellow:
-                rsim_pvp_controller = RSimPVPRobotController(
-                    self.rsim_env, my_robot_controller, opp_robot_controller
-                )
-            else:
-                rsim_pvp_controller = RSimPVPRobotController(
-                    self.rsim_env, opp_robot_controller, my_robot_controller
-                )
+            # TODO: this can be removed eventually when we deprecate robot_has_ball in robot_controller
+            if pvp_manager:
+                if self.my_team_is_yellow:
+                    pvp_manager.load_controllers(
+                        my_robot_controller, opp_robot_controller
+                    )
+                else:
+                    pvp_manager.load_controllers(
+                        opp_robot_controller, my_robot_controller
+                    )
             pid_oren, pid_trans = get_rsim_pids()
 
         elif self.mode == "grsim":
@@ -256,11 +255,73 @@ class StrategyRunner:
         present_future_game = PresentFutureGame(past_game, game)
         return past_game, game, present_future_game
 
+    def run_test(
+        self, testManager: AbstractTestManager, episode_timeout: float
+    ) -> bool:
+        passed = True
+        n_episodes = testManager.get_n_episodes()
+        testManager.reset_field()
+        for i in range(n_episodes):
+            start_time = time.time()
+            # for simplicity, we assume rsim is running in real time. May need to change this
+            while True:
+                if (time.time() - start_time) < episode_timeout:
+                    passed = False
+                    self.logger.log(
+                        logging.WARNING,
+                        "Episode %d timed out after %f secs",
+                        i,
+                        episode_timeout,
+                    )
+                    break
+                if self.mode == "rsim":
+                    vision_frames = [self.rsim_env._frame_to_observations()[0]]
+                else:
+                    vision_frames = [
+                        buffer.popleft() if buffer else None
+                        for buffer in self.vision_buffers
+                    ]
+                # robot_frame = robot_buffer.popleft()
+                # referee_frame = ref_buffer.popleft()
+
+                game = replace(self.game, ts=start_time - self.game_start_time)
+                game = self.position_refiner.refine(game, vision_frames)
+                self.game = self.velocity_refiner.refine(
+                    self.past_game, game
+                )  # , robot_frame.imu_data)
+                # game = hasball_refiner.refine(game, robot_frame.ir_data)
+                # game = referee_refiner.refine(game, referee_frame)
+
+                self.present_future_game.add_game(self.game)
+                self.my_strategy.step(self.present_future_game)
+                end_time = time.time()
+                status = testManager.eval_status(game)
+
+                if status == TestStatus.FAILURE:
+                    passed = False
+                    break
+                elif status == TestStatus.SUCCESS:
+                    break
+
+                processing_time = end_time - start_time
+
+                self.logger.log(
+                    logging.WARNING if processing_time > TIMESTEP else logging.INFO,
+                    "Game loop took %f secs",
+                    processing_time,
+                )
+
+                # Sleep to maintain FPS
+                wait_time = max(0, TIMESTEP - (end_time - start_time))
+                self.logger.info("Sleeping for %f secs", wait_time)
+                time.sleep(wait_time)
+        return passed
+
     def run(self):
         while True:
             start_time = time.time()
             if self.mode == "rsim":
-                vision_frames = [self.my_robot_controller.last_frame]
+                vision_frames = [self.rsim_env._frame_to_observations()[0]]
             else:
                 vision_frames = [
                     buffer.popleft() if buffer else None

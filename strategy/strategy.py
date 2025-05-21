@@ -1,5 +1,4 @@
 from abc import abstractmethod, ABC
-from enum import Enum
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 
 from entities.data.command import RobotCommand
@@ -8,13 +7,6 @@ from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
 from motion_planning.src.pid.pid import PID, TwoDPID, get_grsim_pids
-
-
-# output from step function to report progress of strategy
-class StrategyStatus(Enum):
-    TERMINAL_END = 0
-    ITERATION_END = 1
-    RUNNING = 2
 
 
 class Strategy(ABC):
@@ -36,7 +28,7 @@ class Strategy(ABC):
         self.pid_trans = pid_trans
 
     @abstractmethod
-    def step(self, present_future_game: PresentFutureGame) -> StrategyStatus: ...
+    def step(self, present_future_game: PresentFutureGame): ...
 
     @abstractmethod
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
