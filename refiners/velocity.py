@@ -2,7 +2,7 @@ from dataclasses import replace
 from entities.game.game import Game
 from entities.game.robot import Robot
 
-from typing import Dict, List # Added List for type hinting
+from typing import Dict, List, Union # Added List for type hinting
 # Assuming your new PastGame is in entities.game.past_game or accessible
 from entities.game.past_game import PastGame, AttributeType, TeamType, ObjectClass, ObjectKey, get_structured_object_key
 from refiners.base_refiner import BaseRefiner
@@ -13,7 +13,7 @@ import numpy as np # Import NumPy
 
 logger = logging.getLogger(__name__)
 
-def zero_vector(twod: bool) -> VectorObject2D | VectorObject3D: # Added return type hint
+def zero_vector(twod: bool) -> Union[VectorObject2D, VectorObject3D]: # Added return type hint
     return VectorObject2D(x=0, y=0) if twod else VectorObject3D(x=0, y=0, z=0)
 
 class VelocityRefiner(BaseRefiner):
@@ -108,10 +108,10 @@ class VelocityRefiner(BaseRefiner):
     
     def _calculate_object_velocity(self,
         past_game: PastGame,
-        current_pos: VectorObject2D | VectorObject3D,
+        current_pos: Union[VectorObject2D, VectorObject3D],
         object_key: ObjectKey,
         current_ts: float,
-        twod: bool) -> VectorObject2D | VectorObject3D:
+        twod: bool) -> Union[VectorObject2D, VectorObject3D]:
         try:
             past_pos_data = past_game.get_historical_attribute_series(
                 object_key, AttributeType.POSITION, 1
@@ -131,8 +131,8 @@ class VelocityRefiner(BaseRefiner):
         except Exception as e:
             logger.warning(f"Could not calculate velocity for {object_key}, setting to zero: {e}")
             return zero_vector(twod)
-    
-    def _calculate_object_acceleration(self, past_game: PastGame, object_key: ObjectKey, twod: bool) -> VectorObject2D | VectorObject3D:
+
+    def _calculate_object_acceleration(self, past_game: PastGame, object_key: ObjectKey, twod: bool) -> Union[VectorObject2D, VectorObject3D]:
         try:
             pairs = self._extract_time_velocity_pairs(past_game, object_key)
             num_points_needed = self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
@@ -143,7 +143,7 @@ class VelocityRefiner(BaseRefiner):
         
         return self._calculate_acceleration_from_pairs_np(pairs, twod) # Call NumPy version
 
-    def _extract_time_velocity_pairs(self, past_game: PastGame, object_key: ObjectKey) -> List[tuple[float, VectorObject2D | VectorObject3D]]:
+    def _extract_time_velocity_pairs(self, past_game: PastGame, object_key: ObjectKey) -> List[tuple[float, Union[VectorObject2D, VectorObject3D]]]:
         num_points_needed = self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
         
         time_velocity_pairs = past_game.get_historical_attribute_series(
@@ -153,7 +153,7 @@ class VelocityRefiner(BaseRefiner):
         )
         return time_velocity_pairs # type: ignore
 
-    def _calculate_acceleration_from_pairs_np(self, time_velocity_pairs: List[tuple[float, VectorObject2D | VectorObject3D]], twod: bool) -> VectorObject2D | VectorObject3D:
+    def _calculate_acceleration_from_pairs_np(self, time_velocity_pairs: List[tuple[float, Union[VectorObject2D, VectorObject3D]]], twod: bool) -> Union[VectorObject2D, VectorObject3D]:
         """
         Estimates an object's acceleration using NumPy for calculations.
         """

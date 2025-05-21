@@ -2,7 +2,7 @@ from collections import deque
 from entities.game.game import Game # Assuming Game, Robot, Ball types are defined
 from vector import VectorObject2D, VectorObject3D # Or your vector types
 from enum import Enum, auto
-from typing import Tuple, Any # For type hinting ObjectKey
+from typing import Tuple, Any, Union, Optional # For type hinting ObjectKey
 
 # --- Enums for more robust identification ---
 class AttributeType(Enum):
@@ -26,7 +26,7 @@ ObjectKey = Tuple[TeamType, ObjectClass, int]
 
 
 # --- Modified function to get structured object keys ---
-def get_structured_object_key(obj: Any, team: TeamType) -> ObjectKey | None:
+def get_structured_object_key(obj: Any, team: TeamType) -> Optional[ObjectKey]:
     """
     Generates a structured key for game objects.
     `obj` is the game entity (e.g., a robot instance, ball instance).
@@ -49,8 +49,8 @@ class PastGame:
         self.raw_games_history = deque(maxlen=max_history)
 
         # Dictionaries now use ObjectKey as their key type
-        self.historical_positions: dict[ObjectKey, deque[tuple[float, VectorObject2D | VectorObject3D]]] = {}
-        self.historical_velocities: dict[ObjectKey, deque[tuple[float, VectorObject2D | VectorObject3D]]] = {}
+        self.historical_positions: dict[ObjectKey, deque[tuple[float, Union[VectorObject2D, VectorObject3D]]]] = {}
+        self.historical_velocities: dict[ObjectKey, deque[tuple[float, Union[VectorObject2D, VectorObject3D]]]] = {}
         # self.historical_accelerations: dict[ObjectKey, deque[...]] = {} # If you add this
 
     def _ensure_object_history_exists(self, object_key: ObjectKey):
