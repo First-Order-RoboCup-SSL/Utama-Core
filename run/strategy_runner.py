@@ -30,6 +30,7 @@ from run import GameGater
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
 from strategy.behaviour_trees.behaviours.dummy_behaviour import DummyBehaviour
 from strategy.startup_strategy import StartupStrategy
+from strategy.one_robot_placement_strategy import RobotPlacementStrategy
 from strategy.strategy import Strategy, StrategyStatus
 from team_controller.src.controllers import (
     GRSimRobotController,
@@ -298,7 +299,7 @@ if __name__ == "__main__":
     # bt = DummyBehaviour()
     # main(BehaviourTreeStrategy(sim_robot_controller, bt), sim_robot_controller)
     runner = StrategyRunner(
-        strategy=StartupStrategy(),
+        strategy=RobotPlacementStrategy(id=3, env=env),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="grsim",

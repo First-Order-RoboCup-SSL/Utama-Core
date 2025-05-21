@@ -84,8 +84,8 @@ def get_rsim_pids():
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        18.5,
-        0.075,
+        3,
+        0.015,
         0,
         integral_min=-10,
         integral_max=10,
@@ -95,11 +95,13 @@ def get_rsim_pids():
         MAX_VEL,
         1.8,
         0.025,
-        0,
+        0.0,
         integral_min=-5,
         integral_max=5,
     )
-    return pid_oren, PIDAccelerationLimiterWrapper(
+    return PIDAccelerationLimiterWrapper(
+        pid_oren, max_acceleration=50, dt=TIMESTEP
+    ), PIDAccelerationLimiterWrapper(
         pid_trans, max_acceleration=2, dt=TIMESTEP
     )
 

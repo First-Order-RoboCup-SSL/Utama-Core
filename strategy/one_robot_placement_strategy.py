@@ -29,12 +29,11 @@ class RobotPlacementStrategy(Strategy):
         
     # TODO: Maybe we could bundle the pid into another layer on top of the robot controller to combine the 
     # PID for each sim with the corresponding robot controller
-    def __init__(self, id: int, invert: bool = False):
+    def __init__(self, id: int, invert: bool = False, env: SSLStandardEnv = None):
         super().__init__()
-        # self.env = env
-        
+        self.env = env
         self.id = id
-        
+
         self.ty = -1 if invert else -2
         self.tx = -1
         
@@ -76,6 +75,11 @@ class RobotPlacementStrategy(Strategy):
                 (self.tx, self.ty),
                 oren,
             )
+            if self.env:
+                v = game.friendly_robots[self.id].v
+                p = game.friendly_robots[self.id].p
+                self.env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")
+
             # # Rotate the local forward and left velocities to the global frame
             # lf_x, lf_y = rotate_vector(cmd.local_forward_vel, 0, -co)
             # ll_x, ll_y = rotate_vector(0, cmd.local_left_vel, -co)

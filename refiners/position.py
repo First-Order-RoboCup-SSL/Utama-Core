@@ -97,7 +97,7 @@ class PositionRefiner(BaseRefiner):
         return PositionRefiner._ball_from_vision(balls_by_confidence[0])
 
     def _combine_single_team_positions(self, game_robots:Dict[int, Robot], vision_robots: List[VisionRobotData], friendly: bool) -> Dict[int, Robot]:
-        new_game_robots = dict(game_robots)
+        new_game_robots = game_robots.copy()
         for robot in vision_robots:
             if robot.id not in new_game_robots:
                 # At the start of the game, we haven't seen anything yet, so just create a new robot
@@ -114,12 +114,12 @@ class PositionRefiner(BaseRefiner):
     def _combine_both_teams_game_vision_positions(self, game: Game, yellow_vision_robots: List[VisionRobotData], blue_vision_robots: List[VisionRobotData]) -> Tuple[Dict[int, Robot], Dict[int, Robot]]:
         
         if game.my_team_is_yellow:
-            old_yellow_robots = dict(game.friendly_robots)
-            old_blue_robots = dict(game.enemy_robots)
+            old_yellow_robots = game.friendly_robots.copy()
+            old_blue_robots = game.enemy_robots.copy()
         else:
-            old_yellow_robots = dict(game.enemy_robots)
-            old_blue_robots = dict(game.friendly_robots)
-        
+            old_yellow_robots = game.enemy_robots.copy()
+            old_blue_robots = game.friendly_robots.copy()
+
         new_yellow_robots = self._combine_single_team_positions(old_yellow_robots, yellow_vision_robots, friendly=game.my_team_is_yellow)
         new_blue_robots = self._combine_single_team_positions(old_blue_robots, blue_vision_robots, friendly=not game.my_team_is_yellow)
 
