@@ -107,17 +107,17 @@ class StartUpController:
 
         if target_oren != None:
             angular_vel = self.pid_oren.calculate(
-                target_oren, current_oren, robot_id, oren=True
+                target_oren, current_oren, robot_id
             )
         else:
             angular_vel = 0
 
         if target_x != None and target_y != None:
             left_vel = self.pid_trans.calculate(
-                target_y, current_y, robot_id, normalize_range=3
+                target_y, current_y, robot_id
             )
             forward_vel = self.pid_trans.calculate(
-                target_x, current_x, robot_id, normalize_range=4.5
+                target_x, current_x, robot_id
             )
 
             forward_vel, left_vel = rotate_vector(forward_vel, left_vel, current_oren)

@@ -226,6 +226,7 @@ class PID(AbstractPID[float]):
         # Store the error and update the time for the next iteration
         self.pre_errors[robot_id] = error
         self.prev_times[robot_id] = call_func_time
+        # print(f"oren PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
         return output
     
     def reset(self, robot_id: int):
@@ -333,7 +334,8 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         # Store the error and update the time for the next iteration
         self.pre_errors[robot_id] = error
         self.prev_times[robot_id] = call_func_time
-
+        
+        # print(f"x-y PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
         if error == 0.0:
             return 0.0, 0.0
         else:
