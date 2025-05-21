@@ -2,7 +2,7 @@ from dataclasses import replace
 import time
 import threading
 import logging
-from typing import Tuple, Optional, Callable
+from typing import Tuple, Optional
 import warnings
 
 from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP
@@ -170,7 +170,6 @@ class StrategyRunner:
     def _load_robot_control_and_pids(
         self,
     ) -> Tuple[AbstractRobotController, AbstractRobotController, PID, TwoDPID]:
-        rsim_pvp_controller = None
         if self.mode == "rsim":
             pvp_manager = None
             if self.opp_strategy is not None:
