@@ -40,7 +40,7 @@ class VisionReceiver:
         else:
             self.vision_buffers[new_raw_vis_data.camera_id].append(new_raw_vis_data)
 
-    def pull_game_data(self, fps = True) -> None:
+    def pull_game_data(self, fps = False) -> None:
         """
         Continuously receives vision data packets and updates the internal data structures for the game state.
 
