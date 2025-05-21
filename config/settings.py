@@ -33,7 +33,7 @@ BLUE_TEAM_SIM_PORT = 10301
 REFEREE_PORT = 10003
 SIM_CONTROL_PORT = 10300  # IP '127.0.0.1'
 
-MAX_CAMERAS = 10 # Less is fine
+MAX_CAMERAS = 10  # Less is fine
 
 # PID parameters
 PID_PARAMS = {
