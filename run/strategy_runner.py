@@ -233,13 +233,7 @@ class StrategyRunner:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
             self.opp_strategy.load_pids(pid_oren, pid_trans)
 
-        return (
-            my_robot_controller,
-            opp_robot_controller,
-            pid_oren,
-            pid_trans,
-            rsim_pvp_controller,
-        )
+        return my_robot_controller, opp_robot_controller, pid_oren, pid_trans
 
     def _load_game(self):
         past_game = PastGame(MAX_GAME_HISTORY)
@@ -251,6 +245,7 @@ class StrategyRunner:
             self.exp_ball,
             self.vision_buffers,
             self.position_refiner,
+            self.rsim_env,
         )
         present_future_game = PresentFutureGame(past_game, game)
         return past_game, game, present_future_game
