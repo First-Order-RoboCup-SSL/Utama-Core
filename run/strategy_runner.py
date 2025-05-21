@@ -299,10 +299,10 @@ if __name__ == "__main__":
     # bt = DummyBehaviour()
     # main(BehaviourTreeStrategy(sim_robot_controller, bt), sim_robot_controller)
     runner = StrategyRunner(
-        strategy=RobotPlacementStrategy(id=3, env=env),
+        strategy=RobotPlacementStrategy(id=3),
         my_team_is_yellow=True,
         my_team_is_right=True,
-        mode="grsim",
+        mode="rsim",
         exp_friendly=6,
         exp_enemy=6,
         exp_ball=True,

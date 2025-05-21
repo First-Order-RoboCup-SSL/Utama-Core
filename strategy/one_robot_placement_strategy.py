@@ -5,7 +5,7 @@ from entities.data.command import RobotCommand
 from entities.game.present_future_game import PresentFutureGame
 from motion_planning.src.pid.pid import PID, TwoDPID, get_grsim_pids
 from robot_control.src.skills import face_ball, go_to_point
-from robot_control.src.tests.utils import one_robot_placement
+# from robot_control.src.tests.utils import one_robot_placement
 from global_utils.math_utils import rotate_vector
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
