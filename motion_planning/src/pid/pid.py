@@ -16,7 +16,7 @@ from config.settings import (
 
 
 # Helper functions to create PID controllers.
-def get_real_pids(n_robots: int):
+def get_real_pids():
     pid_oren = PID(
         TIMESTEP,
         REAL_MAX_ANGULAR_VEL,
@@ -37,7 +37,7 @@ def get_real_pids(n_robots: int):
     ), PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=0.05)
 
 
-def get_real_pids_goalie(n_robots: int):
+def get_real_pids_goalie():
     pid_oren = PID(
         TIMESTEP,
         REAL_MAX_ANGULAR_VEL,

@@ -20,26 +20,21 @@ logger = logging.getLogger(__name__)
 from team_controller.src.controllers.common.robot_controller_abstract import AbstractRobotController
 
 
-class RobotPlacmentStrategy(Strategy):
+class RobotPlacementStrategy(Strategy):
+    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
+        if n_runtime_friendly >= 1:
+            return True
+        else:
+            return False
+        
     # TODO: Maybe we could bundle the pid into another layer on top of the robot controller to combine the 
     # PID for each sim with the corresponding robot controller
-    def __init__(self, robot_controller: AbstractRobotController, pid_factory: Callable[[], Tuple[PID, TwoDPID]], id: int, invert: bool, is_yellow: bool):
-        super().__init__(robot_controller)
-        self.pid_oren, self.pid_trans = pid_factory()
+    def __init__(self, id: int, invert: bool = False):
+        super().__init__()
         # self.env = env
         
         self.id = id
         
-        # env_controller = RSimController(env)
-        # env.reset()
-        # # Move the other defender out of the way
-        # for i in range(0, 6):
-        #     if self.id != i:
-        #         env_controller.set_robot_presence(i, is_yellow, False)
-        #     env_controller.set_robot_presence(i, not is_yellow, False)
-        
-        # env.teleport_ball(1, 0)
-
         self.ty = -1 if invert else -2
         self.tx = -1
         

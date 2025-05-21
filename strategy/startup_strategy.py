@@ -16,7 +16,6 @@ from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
 
-
 class StartupStrategy(Strategy):
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
         if n_runtime_enemy <= 6 and n_runtime_friendly <= 6:
