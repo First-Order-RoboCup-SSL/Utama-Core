@@ -1,40 +1,43 @@
-import numpy as np
+
 from typing import Optional, Tuple
 from motion_planning.src.pid.pid_abstract import AbstractPID
+from global_utils.math_utils import normalise_heading
 import time
 import math
+import numpy as np
 from config.settings import (
     TIMESTEP,
     MAX_ANGULAR_VEL,
     MAX_VEL,
     REAL_MAX_ANGULAR_VEL,
     REAL_MAX_VEL,
+    SENDING_DELAY
 )
 
 
 # Helper functions to create PID controllers.
-def get_real_pids(n_robots: int):
+def get_real_pids():
     pid_oren = PID(
         TIMESTEP,
         REAL_MAX_ANGULAR_VEL,
         -REAL_MAX_ANGULAR_VEL,
-        1.5,
-        0,
+        0.5,
+        0.075,
         0,
     )
     pid_trans = TwoDPID(
         TIMESTEP,
         REAL_MAX_VEL,
-        3,
-        0.05,
-        0.1,
+        0,
+        0,
+        0.0,
     )
     return PIDAccelerationLimiterWrapper(
         pid_oren, max_acceleration=0.2
     ), PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=0.05)
 
 
-def get_real_pids_goalie(n_robots: int):
+def get_real_pids_goalie():
     pid_oren = PID(
         TIMESTEP,
         REAL_MAX_ANGULAR_VEL,
@@ -54,8 +57,8 @@ def get_grsim_pids():
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        20.5,
-        0.075,
+        3,
+        0.015,
         0,
         integral_min=-10,
         integral_max=10,
@@ -69,7 +72,9 @@ def get_grsim_pids():
         integral_min=-5,
         integral_max=5,
     )
-    return pid_oren, PIDAccelerationLimiterWrapper(
+    return PIDAccelerationLimiterWrapper(
+        pid_oren, max_acceleration=50, dt=TIMESTEP
+    ), PIDAccelerationLimiterWrapper(
         pid_trans, max_acceleration=2, dt=TIMESTEP
     )
 
@@ -79,7 +84,7 @@ def get_rsim_pids():
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        20.5,
+        18.5,
         0.075,
         0,
         integral_min=-10,
@@ -98,10 +103,9 @@ def get_rsim_pids():
         pid_trans, max_acceleration=2, dt=TIMESTEP
     )
 
-
 class PID(AbstractPID[float]):
     """
-    A Proportional-Integral-Derivative (PID) controller for managing error corrections.
+    A PID controller that control the Orientation of the robot
 
     Args:
         dt (float): Time step for each update.
@@ -113,6 +117,7 @@ class PID(AbstractPID[float]):
         num_robots (int): Number of robots (each maintains its own error tracking).
         integral_min (Optional[float]): Minimum allowed integral value.
         integral_max (Optional[float]): Maximum allowed integral value.
+        delay (float): Delay (ms) for the Smith predictor (default is 30).
     """
 
     def __init__(
@@ -129,6 +134,7 @@ class PID(AbstractPID[float]):
         if dt <= 0:
             raise ValueError("dt should be greater than zero")
         self.dt = dt
+        self.delay = SENDING_DELAY/1000  # Convert to seconds
 
         self.max_output = max_output
         self.min_output = min_output
@@ -144,89 +150,87 @@ class PID(AbstractPID[float]):
         self.integral_min = integral_min
         self.integral_max = integral_max
 
-        self.prev_time = 0
-
+        self.prev_times = {i: 0.0 for i in range(6)}
+        
         self.first_pass = {i: True for i in range(6)}
-
-        self.errors = []
 
     def calculate(
         self,
         target: float,
         current: float,
         robot_id: int,
-        oren: bool = False,
-        normalize_range: Optional[float] = None,
     ) -> float:
         """
-        Compute the PID output to move a robot towards a target.
-
-        Args:
-            target (float): Desired value.
-            current (float): Current value.
-            robot_id (int): Unique robot identifier.
-            oren (bool): If True, treats error as an angular difference.
-            normalize_range (Optional[float]): If provided, scales the output.
-
-        Returns:
-            float: Clamped PID output.
+        Compute the PID output to move a robot towards a target with delay compensation.
+        The delay is compensated by predicting the current value using the derivative.
         """
         call_func_time = time.time()
-        error = target - current
+        # Compute the basic (instantaneous) error
+        raw_error = target - current
+        # For angular measurements adjust error
+        error = normalise_heading(raw_error)
+        # For very small errors, return zero
+        if abs(error) < 0.05:
+            self.prev_times[robot_id] = call_func_time
+            return 0.0
 
-        # Adjust error for angular measurements
-        if oren:
-            error = np.arctan2(np.sin(error), np.cos(error))
+        # Compute time difference
+        dt = self.dt # Default
+        if self.prev_times[robot_id] != 0:
+            measured_dt = call_func_time - self.prev_times[robot_id]
+            dt = measured_dt if measured_dt > 0 else TIMESTEP
+
+        # Compute derivative term using the previous stored error
+        if not self.first_pass[robot_id]:
+            derivative = (error - self.pre_errors[robot_id]) / dt
+        else:
+            derivative = 0.0
+            self.first_pass[robot_id] = False
+        
+        # --- Delay Compensation (Smith predictor approach) ---
+        # Predict the "current" value (what it will be after the delay)
+        # Here we assume a simple linear extrapolation: x_predicted = current + derivative * delay
+        if self.delay > 0:
+            predicted_current = current + derivative * self.delay
+            # Then the predicted error is:
+            predicted_error = normalise_heading(target - predicted_current)
+            # Optionally, you might replace 'error' with 'predicted_error' in the PID computation.
+            effective_error = predicted_error
+        else:
+            effective_error = error
 
         # Proportional term
-        Pout = self.Kp * error if self.Kp != 0 else 0.0
+        Pout = self.Kp * effective_error if self.Kp != 0 else 0.0
 
-        # Integral term with anti-windup
+        # Integral term with anti-windup using effective_error
         if self.Ki != 0:
-            self.integrals[robot_id] += error * self.dt
+            self.integrals[robot_id] += effective_error * self.dt
             if self.integral_max is not None:
-                self.integrals[robot_id] = min(
-                    self.integrals[robot_id], self.integral_max
-                )
+                self.integrals[robot_id] = min(self.integrals[robot_id], self.integral_max)
             if self.integral_min is not None:
-                self.integrals[robot_id] = max(
-                    self.integrals[robot_id], self.integral_min
-                )
+                self.integrals[robot_id] = max(self.integrals[robot_id], self.integral_min)
             Iout = self.Ki * self.integrals[robot_id]
         else:
             Iout = 0.0
 
-        # Derivative term
-        if self.Kd != 0 and not self.first_pass[robot_id]:
-            if round(call_func_time - self.prev_time, 4) > 0:
-                dt = round(call_func_time - self.prev_time, 4)
-            else:
-                dt = 0.016
-
-            derivative = (error - self.pre_errors[robot_id]) / dt
-            Dout = self.Kd * derivative
-        else:
-            Dout = 0.0
-            self.first_pass[robot_id] = False
-
+        # Derivative term based on effective error (already computed above)
+        Dout = self.Kd * derivative
+        
+        # Combine the PID outputs
         output = Pout + Iout + Dout
 
-        # Apply optional normalization
-        if normalize_range is not None and normalize_range != 0:
-            output /= normalize_range
-
-        # Consistent output clamping
+        # Clamp the output for consistency
         if self.max_output is not None:
             output = min(self.max_output, output)
         if self.min_output is not None:
             output = max(self.min_output, output)
 
+        # Store the error and update the time for the next iteration
         self.pre_errors[robot_id] = error
-        self.prev_time = time.time()
-        # self.errors.append(error)
-        # print(f"Error: {error}, Avg Error: {np.mean(self.errors)}")
+        self.prev_times[robot_id] = call_func_time
+        # print(f"oren PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
         return output
-
+    
     def reset(self, robot_id: int):
         """Reset the error and integral for the specified robot."""
         self.pre_errors[robot_id] = 0.0
@@ -236,7 +240,7 @@ class PID(AbstractPID[float]):
 
 class TwoDPID(AbstractPID[Tuple[float, float]]):
     """
-    A 2D PID controller that independently controls the X and Y dimensions and scales
+    A 2D PID controller that controls the X and Y dimensions and scales
     the resulting velocity vector to a maximum speed if needed.
     """
 
@@ -253,7 +257,8 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         if dt <= 0:
             raise ValueError("dt should be greater than zero")
         self.dt = dt
-
+        self.delay = SENDING_DELAY/1000  # Delay in seconds
+        
         self.max_velocity = max_velocity
 
         self.Kp = Kp
@@ -267,7 +272,7 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         self.integral_min = integral_min
         self.integral_max = integral_max
 
-        self.prev_time = 0
+        self.prev_times = {i: 0.0 for i in range(6)}
 
         self.first_pass = {i: True for i in range(6)}
 
@@ -281,43 +286,58 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
 
         error = math.hypot(dx, dy)
 
-        # Proportional term
-        Pout = self.Kp * error if self.Kp != 0 else 0.0
+        if abs(error) < 3/1000:
+            self.prev_times[robot_id] = call_func_time
+            return 0.0
 
-        # Integral term with anti-windup
+        # Compute time difference
+        dt = self.dt
+        if self.prev_times[robot_id] != 0:
+            measured_dt = call_func_time - self.prev_times[robot_id]
+            # Use the measured dt if nonzero; otherwise fall back to TIMESTEP.
+            dt = measured_dt if measured_dt > 0 else TIMESTEP
+
+        # Compute derivative term using the previous stored error
+        if not self.first_pass[robot_id]:
+            derivative = (error - self.pre_errors[robot_id]) / dt
+        else:
+            derivative = 0.0
+            self.first_pass[robot_id] = False
+        
+        # --- Delay Compensation (Smith predictor approach) ---
+        # Then the predicted error is:
+        if self.delay > 0:
+            predicted_error = error + derivative * self.delay
+            # Optionally, you might replace 'error' with 'predicted_error' in the PID computation.
+            effective_error = predicted_error
+        else:
+            effective_error = error
+
+        # Proportional term
+        Pout = self.Kp * effective_error if self.Kp != 0 else 0.0
+
+        # Integral term with anti-windup using effective_error
         if self.Ki != 0:
-            self.integrals[robot_id] += error * self.dt
+            self.integrals[robot_id] += effective_error * self.dt
             if self.integral_max is not None:
-                self.integrals[robot_id] = min(
-                    self.integrals[robot_id], self.integral_max
-                )
+                self.integrals[robot_id] = min(self.integrals[robot_id], self.integral_max)
             if self.integral_min is not None:
-                self.integrals[robot_id] = max(
-                    self.integrals[robot_id], self.integral_min
-                )
+                self.integrals[robot_id] = max(self.integrals[robot_id], self.integral_min)
             Iout = self.Ki * self.integrals[robot_id]
         else:
             Iout = 0.0
 
-        # Derivative term
-        if self.Kd != 0 and not self.first_pass[robot_id]:
-            if round(call_func_time - self.prev_time, 4) > 0:
-                dt = round(call_func_time - self.prev_time, 4)
-            else:
-                dt = 0.016
-
-            derivative = (error - self.pre_errors[robot_id]) / dt
-            Dout = self.Kd * derivative
-        else:
-            Dout = 0.0
-            self.first_pass[robot_id] = False
-
+        # Derivative term based on effective error (already computed above)
+        Dout = self.Kd * derivative
+        
+        # Combine the PID outputs
         output = Pout + Iout + Dout
 
+        # Store the error and update the time for the next iteration
         self.pre_errors[robot_id] = error
-        self.prev_time = time.time()
-
-        # Convert output to directional velocities
+        self.prev_times[robot_id] = call_func_time
+        
+        # print(f"x-y PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
         if error == 0.0:
             return 0.0, 0.0
         else:

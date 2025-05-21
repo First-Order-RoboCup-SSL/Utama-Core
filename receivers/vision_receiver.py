@@ -1,11 +1,13 @@
 import time
 from typing import Deque, List
+from entities.data import vision
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from team_controller.src.utils import network_manager
 from config.settings import MULTICAST_GROUP, VISION_PORT
 from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
 import logging
 
+from collections import deque
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG)
@@ -22,7 +24,11 @@ class VisionReceiver:
             address=(MULTICAST_GROUP, VISION_PORT), bind_socket=True
         )
         self.vision_buffers = vision_buffers
-    
+        self.packet_timestamps = deque()
+        self.fps_print_interval = 1  # seconds
+        self.last_fps_print_time = time.time()
+        self.prev_frame_num = 0
+
 
     def _add_detection_to_buffer(self, detection_frame: object) -> None:
         # Deal with out of order packets by checking timestamp in the buffer
@@ -34,7 +40,7 @@ class VisionReceiver:
         else:
             self.vision_buffers[new_raw_vis_data.camera_id].append(new_raw_vis_data)
 
-    def pull_game_data(self) -> None:
+    def pull_game_data(self, fps = False) -> None:
         """
         Continuously receives vision data packets and updates the internal data structures for the game state.
 
@@ -47,12 +53,27 @@ class VisionReceiver:
             if data is not None:
                 vision_packet.Clear()
                 vision_packet.ParseFromString(data)
+                # print(vision_packet.detection)
+                self.prev_frame_num = vision_packet.detection.frame_number
                 self._add_detection_to_buffer(vision_packet.detection)
                 proc_latency = time.time()-recv_time
                 # Logging
-                self._count_objects_detected(vision_packet.detection)
-                self._print_frame_info(proc_latency, vision_packet.detection)
+                # self._count_objects_detected(vision_packet.detection)
+                # self._print_frame_info(proc_latency, vision_packet.detection)
+                
+                if fps:
+                    # --- FPS Tracking ---
+                    self.packet_timestamps.append(recv_time)
+                    # Remove timestamps older than 1 second
+                    while self.packet_timestamps and self.packet_timestamps[0] < recv_time - 1.0:
+                        self.packet_timestamps.popleft()
 
+                    if recv_time - self.last_fps_print_time >= self.fps_print_interval:
+                        fps = len(self.packet_timestamps)
+                        cameras = 4
+                        print(f"Current Vision FPS: {fps/cameras}")
+                        self.last_fps_print_time = recv_time
+    
     def _process_packet(
         self, detection_frame: object
     ):  # detection_frame = protobuf packet detection
