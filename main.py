@@ -1,8 +1,16 @@
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from strategy.startup_strategy import StartupStrategy
-from run import run_strategy
+from strategy.one_robot_placement_strategy import RobotPlacementStrategy
+from run import StrategyRunner
 
 if __name__ == "__main__":
-    env = SSLStandardEnv()
-    run_strategy(StartupStrategy(), True, True, "rsim", 6, 6, True, env)
+    runner = StrategyRunner(
+        strategy=RobotPlacementStrategy(id=4),
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        mode="grsim",
+        exp_friendly=6,
+        exp_enemy=6,
+        exp_ball=True,
+    )
+    runner.run()

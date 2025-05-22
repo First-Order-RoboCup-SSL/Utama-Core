@@ -254,12 +254,12 @@ class StrategyRunner:
     ) -> bool:
         passed = True
         n_episodes = testManager.get_n_episodes()
-        testManager.reset_field()
         for i in range(n_episodes):
-            start_time = time.time()
+            testManager.reset_field()
+            episode_start_time = time.time()
             # for simplicity, we assume rsim is running in real time. May need to change this
             while True:
-                if (time.time() - start_time) < episode_timeout:
+                if (time.time() - episode_start_time) < episode_timeout:
                     passed = False
                     self.logger.log(
                         logging.WARNING,
@@ -268,28 +268,9 @@ class StrategyRunner:
                         episode_timeout,
                     )
                     break
-                if self.mode == "rsim":
-                    vision_frames = [self.rsim_env._frame_to_observations()[0]]
-                else:
-                    vision_frames = [
-                        buffer.popleft() if buffer else None
-                        for buffer in self.vision_buffers
-                    ]
-                # robot_frame = robot_buffer.popleft()
-                # referee_frame = ref_buffer.popleft()
+                self._run_step()
 
-                game = replace(self.game, ts=start_time - self.game_start_time)
-                game = self.position_refiner.refine(game, vision_frames)
-                self.game = self.velocity_refiner.refine(
-                    self.past_game, game
-                )  # , robot_frame.imu_data)
-                # game = hasball_refiner.refine(game, robot_frame.ir_data)
-                # game = referee_refiner.refine(game, referee_frame)
-
-                self.present_future_game.add_game(self.game)
-                self.my_strategy.step(self.present_future_game)
-                end_time = time.time()
-                status = testManager.eval_status(game)
+                status = testManager.eval_status(self.game)
 
                 if status == TestStatus.FAILURE:
                     passed = False
@@ -297,57 +278,47 @@ class StrategyRunner:
                 elif status == TestStatus.SUCCESS:
                     break
 
-                processing_time = end_time - start_time
-
-                self.logger.log(
-                    logging.WARNING if processing_time > TIMESTEP else logging.INFO,
-                    "Game loop took %f secs",
-                    processing_time,
-                )
-
-                # Sleep to maintain FPS
-                wait_time = max(0, TIMESTEP - (end_time - start_time))
-                self.logger.info("Sleeping for %f secs", wait_time)
-                time.sleep(wait_time)
         return passed
 
     def run(self):
         while True:
-            start_time = time.time()
-            if self.mode == "rsim":
-                vision_frames = [self.rsim_env._frame_to_observations()[0]]
-            else:
-                vision_frames = [
-                    buffer.popleft() if buffer else None
-                    for buffer in self.vision_buffers
-                ]
-            # robot_frame = robot_buffer.popleft()
-            # referee_frame = ref_buffer.popleft()
+            self._run_step()
 
-            game = replace(self.game, ts=start_time - self.game_start_time)
-            game = self.position_refiner.refine(game, vision_frames)
-            self.game = self.velocity_refiner.refine(
-                self.past_game, game
-            )  # , robot_frame.imu_data)
-            # game = hasball_refiner.refine(game, robot_frame.ir_data)
-            # game = referee_refiner.refine(game, referee_frame)
+    def _run_step(self):
+        start_time = time.time()
+        if self.mode == "rsim":
+            vision_frames = [self.rsim_env._frame_to_observations()[0]]
+        else:
+            vision_frames = [
+                buffer.popleft() if buffer else None for buffer in self.vision_buffers
+            ]
+        # robot_frame = robot_buffer.popleft()
+        # referee_frame = ref_buffer.popleft()
 
-            self.present_future_game.add_game(self.game)
-            self.my_strategy.step(self.present_future_game)
-            end_time = time.time()
+        game = replace(self.game, ts=start_time - self.game_start_time)
+        game = self.position_refiner.refine(game, vision_frames)
+        self.game = self.velocity_refiner.refine(
+            self.past_game, game
+        )  # , robot_frame.imu_data)
+        # game = hasball_refiner.refine(game, robot_frame.ir_data)
+        # game = referee_refiner.refine(game, referee_frame)
 
-            processing_time = end_time - start_time
+        self.present_future_game.add_game(self.game)
+        self.my_strategy.step(self.present_future_game)
+        end_time = time.time()
 
-            self.logger.log(
-                logging.WARNING if processing_time > TIMESTEP else logging.INFO,
-                "Game loop took %f secs",
-                processing_time,
-            )
+        processing_time = end_time - start_time
 
-            # Sleep to maintain FPS
-            wait_time = max(0, TIMESTEP - (end_time - start_time))
-            self.logger.info("Sleeping for %f secs", wait_time)
-            time.sleep(wait_time)
+        self.logger.log(
+            logging.WARNING if processing_time > TIMESTEP else logging.INFO,
+            "Game loop took %f secs",
+            processing_time,
+        )
+
+        # Sleep to maintain FPS
+        wait_time = max(0, TIMESTEP - (end_time - start_time))
+        self.logger.info("Sleeping for %f secs", wait_time)
+        time.sleep(wait_time)
 
 
 if __name__ == "__main__":

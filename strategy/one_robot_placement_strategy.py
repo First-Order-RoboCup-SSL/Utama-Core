@@ -1,10 +1,10 @@
-
 from typing import Callable, Dict, Tuple
 from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
 from entities.data.command import RobotCommand
 from entities.game.present_future_game import PresentFutureGame
 from motion_planning.src.pid.pid import PID, TwoDPID, get_grsim_pids
 from robot_control.src.skills import face_ball, go_to_point
+
 # from robot_control.src.tests.utils import one_robot_placement
 from global_utils.math_utils import rotate_vector
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
@@ -17,7 +17,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from team_controller.src.controllers.common.robot_controller_abstract import AbstractRobotController
+from team_controller.src.controllers.common.robot_controller_abstract import (
+    AbstractRobotController,
+)
 
 
 class RobotPlacementStrategy(Strategy):
@@ -26,8 +28,8 @@ class RobotPlacementStrategy(Strategy):
             return True
         else:
             return False
-        
-    # TODO: Maybe we could bundle the pid into another layer on top of the robot controller to combine the 
+
+    # TODO: Maybe we could bundle the pid into another layer on top of the robot controller to combine the
     # PID for each sim with the corresponding robot controller
     def __init__(self, id: int, invert: bool = False, env: SSLStandardEnv = None):
         super().__init__()
@@ -36,17 +38,16 @@ class RobotPlacementStrategy(Strategy):
 
         self.ty = -1 if invert else -2
         self.tx = -1
-        
 
     def step(self, present_future_game: PresentFutureGame):
         """Closure which advances the simulation by one step"""
         game = present_future_game.current
         friendly_robots = game.friendly_robots
-        
+
         if game.friendly_robots and game.ball is not None:
             friendly_robots = game.friendly_robots
             bx, by = game.ball.p.x, game.ball.p.y
-            # TODO: When running main I get this error from time to time, (I am trying to control robot 3):     
+            # TODO: When running main I get this error from time to time, (I am trying to control robot 3):
             # File "/home/fredh/robocup_ssl/Utama/run/main.py", line 111, in main
             #     strategy.step(present_future_game)
             # File "/home/fredh/robocup_ssl/Utama/strategy/one_robot_placement_strategy.py", line 55, in step
@@ -97,4 +98,3 @@ class RobotPlacementStrategy(Strategy):
             # self.env.draw_line([(cx, cy), (gx + cx, gy + cy)], color="black", width=2)
             self.robot_controller.add_robot_commands(cmd, self.id)
             self.robot_controller.send_robot_commands()
-
