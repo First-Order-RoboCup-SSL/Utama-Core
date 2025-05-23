@@ -226,9 +226,6 @@ class RSimPVPManager:
         colour = "team_yellow" if is_yellow else "team_blue"
         other_colour = "team_blue" if is_yellow else "team_yellow"
 
-        if self._pending[other_colour]:
-            self._fill_and_send()
-
         self._pending[colour] = tuple(out_packet)
         if self._pending[other_colour]:
             observation, reward, terminated, truncated, reward_shaping = self._env.step(

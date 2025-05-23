@@ -18,14 +18,27 @@ class GameGater:
         exp_ball: bool,
         vision_buffers: List[Deque[RawVisionData]],
         position_refiner: PositionRefiner,
+        is_pvp: bool,
         rsim_env: SSLBaseEnv = None,
     ) -> Game:
-        game = Game(0, my_team_is_yellow, my_team_is_right, {}, {}, None)
+        my_game = Game(0, my_team_is_yellow, my_team_is_right, {}, {}, None)
+
+        if is_pvp:
+            opp_game = Game(
+                0,
+                not my_team_is_yellow,
+                not my_team_is_right,
+                {},
+                {},
+                None,
+            )
+        else:
+            opp_game = None
 
         while (
-            len(game.friendly_robots) < exp_friendly
-            and len(game.enemy_robots) < exp_enemy
-            and (exp_ball and game.ball is None)
+            len(my_game.friendly_robots) < exp_friendly
+            and len(my_game.enemy_robots) < exp_enemy
+            and (exp_ball and my_game.ball is None)
         ):
             if rsim_env:
                 vision_frames = [rsim_env._frame_to_observations()[0]]
@@ -33,7 +46,9 @@ class GameGater:
                 vision_frames = [
                     buffer.popleft() if buffer else None for buffer in vision_buffers
                 ]
-            game = position_refiner.refine(game, vision_frames)
+            my_game = position_refiner.refine(my_game, vision_frames)
+            if is_pvp:
+                opp_game = position_refiner.refine(opp_game, vision_frames)
             time.sleep(0.1)
 
-        return game
+        return my_game, opp_game

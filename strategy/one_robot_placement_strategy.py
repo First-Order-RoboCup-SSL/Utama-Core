@@ -36,8 +36,8 @@ class RobotPlacementStrategy(Strategy):
         self.env = env
         self.id = id
 
-        self.ty = -1 if invert else -2
-        self.tx = -1
+        self.ty = -1
+        self.tx = -1 if invert else 1
 
     def step(self, present_future_game: PresentFutureGame):
         """Closure which advances the simulation by one step"""
@@ -77,6 +77,7 @@ class RobotPlacementStrategy(Strategy):
                 oren,
             )
             if self.env:
+                self.env.draw_point(self.tx, self.ty, color="red")
                 v = game.friendly_robots[self.id].v
                 p = game.friendly_robots[self.id].p
                 self.env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")

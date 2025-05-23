@@ -2,13 +2,14 @@ from dataclasses import replace
 import time
 import threading
 import logging
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 import warnings
+import copy
 
 from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP
 from collections import deque
-from entities.game.past_game import PastGame
-from entities.game.present_future_game import PresentFutureGame
+from entities.game import PastGame, PresentFutureGame, Game
+from entities.data.raw_vision import RawVisionData
 from motion_planning.src.pid.pid import (
     get_grsim_pids,
     get_real_pids,
@@ -66,7 +67,7 @@ class StrategyRunner:
         exp_friendly: int,
         exp_enemy: int,
         exp_ball: bool,
-        opp_strategy: Strategy = None,
+        opp_strategy: Optional[Strategy] = None,
     ):
         self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow
@@ -84,19 +85,23 @@ class StrategyRunner:
         self._assert_exp_robots()
         self.rsim_env = self._load_rsim_env()
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
-        (
-            self.my_robot_controller,
-            self.opp_robot_controller,
-            self.pid_oren,
-            self.pid_trans,
-        ) = self._load_robot_control_and_pids()
+        self._load_robot_control_and_pids()
 
         self.position_refiner = PositionRefiner()
         self.velocity_refiner = VelocityRefiner()
         # self.hasball_refiner = HasBallRefiner()
         # self.referee_refiner = RefereeRefiner()
-        self.past_game, self.game, self.present_future_game = self._load_game()
+        (
+            self.my_past_game,
+            self.my_game,
+            self.my_present_future_game,
+            self.opp_past_game,
+            self.opp_game,
+            self.opp_present_future_game,
+        ) = self._load_game()
         self.game_start_time = time.time()
+
+        self.toggle_opp_first = False  # alternate the order of opp and friendly in run
 
     def data_update_listener(self, receiver: VisionReceiver):
         # Start receiving game data; this will run in a separate thread.
@@ -151,7 +156,8 @@ class StrategyRunner:
         ref_buffer = deque(maxlen=1)
         # referee_receiver = RefereeMessageReceiver(ref_buffer, debug=False)
         vision_receiver = VisionReceiver(vision_buffers)
-        self.start_threads(vision_receiver)  # , referee_receiver)
+        if self.mode != "rsim":
+            self.start_threads(vision_receiver)  # , referee_receiver)
 
         return vision_buffers, ref_buffer
 
@@ -167,9 +173,8 @@ class StrategyRunner:
                 self.exp_enemy, self.exp_friendly
             ), "Expected number of robots at runtime does not match opponent strategy."
 
-    def _load_robot_control_and_pids(
-        self,
-    ) -> Tuple[AbstractRobotController, AbstractRobotController, PID, TwoDPID]:
+    def _load_robot_control_and_pids(self):
+        opp_robot_controller, opp_pid_trans, opp_pid_oren = None, None, None
         if self.mode == "rsim":
             pvp_manager = None
             if self.opp_strategy is not None:
@@ -179,15 +184,15 @@ class StrategyRunner:
                 env=self.rsim_env,
                 pvp_manager=pvp_manager,
             )
-            opp_robot_controller = (
-                RSimRobotController(
+            my_pid_oren, my_pid_trans = get_rsim_pids()
+            if self.opp_strategy:
+                opp_robot_controller = RSimRobotController(
                     is_team_yellow=not self.my_team_is_yellow,
                     env=self.rsim_env,
                     pvp_manager=pvp_manager,
                 )
-                if self.opp_strategy
-                else None
-            )
+                opp_pid_oren, opp_pid_trans = get_rsim_pids()
+
             # TODO: this can be removed eventually when we deprecate robot_has_ball in robot_controller
             if pvp_manager:
                 if self.my_team_is_yellow:
@@ -198,45 +203,41 @@ class StrategyRunner:
                     pvp_manager.load_controllers(
                         opp_robot_controller, my_robot_controller
                     )
-            pid_oren, pid_trans = get_rsim_pids()
 
         elif self.mode == "grsim":
             my_robot_controller = GRSimRobotController(
                 is_team_yellow=self.my_team_is_yellow
             )
-            opp_robot_controller = (
-                GRSimRobotController(is_team_yellow=not self.my_team_is_yellow)
-                if self.opp_strategy
-                else None
-            )
-            pid_oren, pid_trans = get_grsim_pids()
+            my_pid_oren, my_pid_trans = get_grsim_pids()
+            if self.opp_strategy:
+                opp_robot_controller = GRSimRobotController(
+                    is_team_yellow=not self.my_team_is_yellow
+                )
+                opp_pid_oren, opp_pid_trans = get_grsim_pids()
 
         elif self.mode == "real":
             my_robot_controller = RealRobotController(
                 is_team_yellow=self.my_team_is_yellow
             )
+            my_pid_oren, my_pid_trans = get_real_pids()
             # TODO: opponents currently not supported
-            opp_robot_controller = (
-                RealRobotController(is_team_yellow=not self.my_team_is_yellow)
-                if self.opp_strategy
-                else None
-            )
-            pid_oren, pid_trans = get_real_pids()
+            if self.opp_strategy:
+                opp_robot_controller = RealRobotController(
+                    is_team_yellow=not self.my_team_is_yellow
+                )
+                opp_pid_oren, opp_pid_trans = get_real_pids()
 
         else:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
         self.my_strategy.load_robot_controller(my_robot_controller)
-        self.my_strategy.load_pids(pid_oren, pid_trans)
+        self.my_strategy.load_pids(my_pid_oren, my_pid_trans)
         if self.opp_strategy:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
-            self.opp_strategy.load_pids(pid_oren, pid_trans)
-
-        return my_robot_controller, opp_robot_controller, pid_oren, pid_trans
+            self.opp_strategy.load_pids(opp_pid_oren, opp_pid_trans)
 
     def _load_game(self):
-        past_game = PastGame(MAX_GAME_HISTORY)
-        game = GameGater.wait_until_game_valid(
+        my_game, opp_game = GameGater.wait_until_game_valid(
             self.my_team_is_yellow,
             self.my_team_is_right,
             self.exp_friendly,
@@ -244,10 +245,24 @@ class StrategyRunner:
             self.exp_ball,
             self.vision_buffers,
             self.position_refiner,
-            self.rsim_env,
+            is_pvp=self.opp_strategy is not None,
+            rsim_env=self.rsim_env,
         )
-        present_future_game = PresentFutureGame(past_game, game)
-        return past_game, game, present_future_game
+        my_past_game = PastGame(MAX_GAME_HISTORY)
+        my_present_future_game = PresentFutureGame(my_past_game, my_game)
+        if self.opp_strategy:
+            opp_past_game = PastGame(MAX_GAME_HISTORY)
+            opp_present_future_game = PresentFutureGame(opp_past_game, opp_game)
+        else:
+            opp_past_game, opp_present_future_game = None, None
+        return (
+            my_past_game,
+            my_game,
+            my_present_future_game,
+            opp_past_game,
+            opp_game,
+            opp_present_future_game,
+        )
 
     def run_test(
         self, testManager: AbstractTestManager, episode_timeout: float
@@ -270,7 +285,7 @@ class StrategyRunner:
                     break
                 self._run_step()
 
-                status = testManager.eval_status(self.game)
+                status = testManager.eval_status(self.my_game)
 
                 if status == TestStatus.FAILURE:
                     passed = False
@@ -295,16 +310,17 @@ class StrategyRunner:
         # robot_frame = robot_buffer.popleft()
         # referee_frame = ref_buffer.popleft()
 
-        game = replace(self.game, ts=start_time - self.game_start_time)
-        game = self.position_refiner.refine(game, vision_frames)
-        self.game = self.velocity_refiner.refine(
-            self.past_game, game
-        )  # , robot_frame.imu_data)
-        # game = hasball_refiner.refine(game, robot_frame.ir_data)
-        # game = referee_refiner.refine(game, referee_frame)
+        # alternate between opp and friendly playing
+        if self.toggle_opp_first:
+            if self.opp_strategy:
+                self._step_game(start_time, vision_frames, True)
+            self._step_game(start_time, vision_frames, False)
+        else:
+            self._step_game(start_time, vision_frames, False)
+            if self.opp_strategy:
+                self._step_game(start_time, vision_frames, True)
+        self.toggle_opp_first = not self.toggle_opp_first
 
-        self.present_future_game.add_game(self.game)
-        self.my_strategy.step(self.present_future_game)
         end_time = time.time()
 
         processing_time = end_time - start_time
@@ -320,6 +336,38 @@ class StrategyRunner:
         self.logger.info("Sleeping for %f secs", wait_time)
         time.sleep(wait_time)
 
+    def _step_game(
+        self,
+        iter_start_time: float,
+        vision_frames: List[RawVisionData],
+        running_opp: bool,
+    ):
+        """
+        Step the game for the robot controller and strategy.
+        Args:
+            iter_start_time (float): The start time of the iteration.
+            vision_frames (List[RawVisionData]): The vision frames.
+            running_opp (bool): Whether to run the opponent strategy.
+        """
+        if running_opp:
+            game = replace(self.opp_game, ts=iter_start_time - self.game_start_time)
+            game = self.position_refiner.refine(game, vision_frames)
+            self.opp_game = self.velocity_refiner.refine(
+                self.opp_past_game, game
+            )  # , robot_frame.imu_data)
+            # game = hasball_refiner.refine(game, robot_frame.ir_data)
+            # game = referee_refiner.refine(game, referee_frame)
+            self.opp_present_future_game.add_game(game)
+            self.opp_strategy.step(self.opp_present_future_game)
+        else:
+            game = replace(self.my_game, ts=iter_start_time - self.game_start_time)
+            game = self.position_refiner.refine(game, vision_frames)
+            self.my_game = self.velocity_refiner.refine(self.my_past_game, game)
+            # game = hasball_refiner.refine(game, robot_frame.ir_data)
+            # game = referee_refiner.refine(game, referee_frame)
+            self.my_present_future_game.add_game(game)
+            self.my_strategy.step(self.my_present_future_game)
+
 
 if __name__ == "__main__":
     # bt = DummyBehaviour()
@@ -332,5 +380,6 @@ if __name__ == "__main__":
         exp_friendly=6,
         exp_enemy=6,
         exp_ball=True,
+        opp_strategy=RobotPlacementStrategy(id=3, invert=True),
     )
     runner.run()
