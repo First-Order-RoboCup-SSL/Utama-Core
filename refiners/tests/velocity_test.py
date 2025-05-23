@@ -1,10 +1,11 @@
 import vector
+import numpy as np
+from vector import VectorObject3D
 from entities.game.ball import Ball
 from entities.game.game import Game
-from entities.game.past_game import PastGame
+from entities.game.past_game import PastGame, TeamType, get_structured_object_key
 from entities.game.robot import Robot
 from refiners.velocity import VelocityRefiner
-from lenses import lens
 import pytest
 
 velocity_refiner = VelocityRefiner()
@@ -69,19 +70,52 @@ def test_returns_not_moving_if_not_enough_information_for_velocity():
     game = velocity_refiner.refine(past_game, game)
     assert game.ball.v.x == 0
     assert game.ball.v.y == 0
-    
+
+
 def test_extraction_of_time_velocity_pairs():
     past_game = PastGame(20)
-    time_velocity_pairs = []
+    all_added_game_data = [] 
+
     for i in range(20):
-        time = i
-        vx, vy, vz = 1, 1, 1
-        past_game.add_game(create_ball_only_game(i, i, i, i, vx, vy, vz))
-        time_velocity_pairs.append((time, vector.obj(x=vx, y=vy, z=vz)))
-    time_velocity_pairs = time_velocity_pairs[::-1]
-    game = create_ball_only_game(i + 1, i + 1, i + 1, i + 1)
-    extracted = velocity_refiner._extract_time_velocity_pairs(past_game, game, lens.ball)
-    assert extracted == time_velocity_pairs[:VelocityRefiner.ACCELERATION_N_WINDOWS * VelocityRefiner.ACCELERATION_WINDOW_SIZE]
+        time = float(i)
+        vx, vy, vz = 1.0, 1.0, 1.0
+        game_to_add = create_ball_only_game(time, time, time, time, vx, vy, vz)
+        past_game.add_game(game_to_add)
+        all_added_game_data.append((time, vector.obj(x=vx, y=vy, z=vz)))
+
+    points_needed = VelocityRefiner.ACCELERATION_N_WINDOWS * VelocityRefiner.ACCELERATION_WINDOW_SIZE # e.g., 15
+
+    if len(all_added_game_data) >= points_needed:
+        start_index_for_expected = len(all_added_game_data) - points_needed
+        expected_time_velocity_pairs = all_added_game_data[start_index_for_expected:]
+    elif len(all_added_game_data) > 0:
+        expected_time_velocity_pairs = all_added_game_data[:]
+    else:
+        expected_time_velocity_pairs = []
+
+    game_for_extraction_call = create_ball_only_game(0, 0, 0, 0)
+    ball_obj_key = get_structured_object_key(game_for_extraction_call.ball, TeamType.NEUTRAL)
+
+    extracted_ts_np, extracted_vel_np = velocity_refiner._extract_time_velocity_np_arrays(past_game, ball_obj_key, points_needed)
+
+    assert len(extracted_ts_np) == len(extracted_vel_np)
+    
+    reconstructed_extracted_pairs = []
+    if extracted_ts_np.ndim > 0 and extracted_vel_np.ndim > 0:
+        for i in range(len(extracted_ts_np)):
+            ts = extracted_ts_np[i]
+            vel_components = extracted_vel_np[i]
+            vec_obj = VectorObject3D(x=vel_components[0], y=vel_components[1], z=vel_components[2])
+            reconstructed_extracted_pairs.append((ts, vec_obj))
+    
+    assert len(reconstructed_extracted_pairs) == len(expected_time_velocity_pairs), "Number of items mismatch"
+
+    for actual_pair, expected_pair in zip(reconstructed_extracted_pairs, expected_time_velocity_pairs):
+        actual_ts, actual_vel = actual_pair
+        expected_ts, expected_vel = expected_pair
+        
+        assert np.isclose(actual_ts, expected_ts), f"Timestamp mismatch: actual {actual_ts}, expected {expected_ts}"
+        assert actual_vel == expected_vel, f"Velocity mismatch: actual {actual_vel}, expected {expected_vel}"
 
 def test_acceleration_calculation_implements_expected_formula():
     past_game = PastGame(20)

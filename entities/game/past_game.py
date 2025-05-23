@@ -31,9 +31,8 @@ ObjectKey = Tuple[TeamType, ObjectClass, int]
 def get_structured_object_key(obj: Any, team: TeamType) -> Optional[ObjectKey]:
     if isinstance(obj, Robot) and hasattr(obj, 'id') and isinstance(obj.id, int):
         return (team, ObjectClass.ROBOT, obj.id)
-    elif isinstance(obj, Ball): # Assuming Ball is a distinct type
-        # Ball is usually neutral, override team type
-        return (TeamType.NEUTRAL, ObjectClass.BALL, 0) # Using 0 as a common ID for the ball
+    elif isinstance(obj, Ball): 
+        return (TeamType.NEUTRAL, ObjectClass.BALL, 0)
     logger.warning(f"Could not determine ObjectKey for object of type {type(obj)} with team {team}")
     return None
 

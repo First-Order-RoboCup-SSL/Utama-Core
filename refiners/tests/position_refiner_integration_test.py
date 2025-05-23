@@ -36,11 +36,12 @@ def main():
     NUM_FRIENDLY = 1
     NUM_ENEMY = 1
 
-    game = GameGater.wait_until_game_valid(True, True, 1,1,True, vision_buffers, position_refiner)
-    
+    print("Waiting for game to be valid...")
+    game = GameGater.wait_until_game_valid(True, True, 1, 1, True, vision_buffers, position_refiner, False)
+
     prog_start = time.time()
 
-    for _ in range(100000):
+    for _ in range(600):
         frames = []
         for cid, vb in enumerate(vision_buffers):
             if vb:
@@ -52,7 +53,7 @@ def main():
         print(game)
         assert len(game.friendly_robots) == NUM_FRIENDLY
         assert len(game.enemy_robots) == NUM_ENEMY
-        time.sleep(1)
+        time.sleep(0.0167)
 
 if __name__ == "__main__":
     main()

@@ -6,6 +6,8 @@ from entities.game.game import Game
 from entities.game.robot import Robot
 from refiners.position import PositionRefiner
 
+position_refiner = PositionRefiner()
+
 
 def test_combining_single_team_combines_single_robot():
     zv = vector.obj(x=0, y=0)
@@ -13,13 +15,15 @@ def test_combining_single_team_combines_single_robot():
         0: Robot(0, True, False, zv, zv,zv, 0)
     }
     vision_robots = [VisionRobotData(0, 1,2,3)]
-    result = PositionRefiner._combine_single_team_positions(game_robots, vision_robots, friendly=True)
+    result = position_refiner._combine_single_team_positions(game_robots, vision_robots, friendly=True)
 
+    expected_orientation = position_refiner.angle_smoother.smooth(0, 3)
+    
     assert len(result) == 1
     rb = result[0]
     assert rb.p.x == 1
     assert rb.p.y == 2
-    assert rb.orientation == 3
+    assert rb.orientation == expected_orientation
 
 
 def test_combining_with_robot_not_in_game_adds():
@@ -28,7 +32,7 @@ def test_combining_with_robot_not_in_game_adds():
         0: Robot(0, True, False, zv, zv,zv, 0)
     }
     vision_robots = [VisionRobotData(1, 1,2,3)]
-    result = PositionRefiner._combine_single_team_positions(game_robots, vision_robots, friendly=True)
+    result = position_refiner._combine_single_team_positions(game_robots, vision_robots, friendly=True)
 
     assert len(result) == 2
     rb = result[1]
