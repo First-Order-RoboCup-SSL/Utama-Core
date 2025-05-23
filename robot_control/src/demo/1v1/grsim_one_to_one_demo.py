@@ -9,7 +9,6 @@ import sys
 import numpy as np
 
 from entities.game.game_object import Colour
-from entities.game import Game
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.grsim_robot_controller import (
     GRSimRobotController,

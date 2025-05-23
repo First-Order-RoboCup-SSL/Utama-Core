@@ -138,15 +138,7 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
         if goal_scored:
             break
 
-        # *** DeprecationWarning: we keep using get_my_latest_frame for now ***
-        friendly, enemy, balls = game.get_my_latest_frame(
-            my_team_is_yellow=defender_is_yellow
-        )
-        ball = balls[0]
-
-        # Robot references
-        defender_robot = friendly[0]
-        attacker_robot = enemy[0]
+        ball = game.ball
 
         # Also direct access by color
         yellow_robot = game.friendly_robots[0]

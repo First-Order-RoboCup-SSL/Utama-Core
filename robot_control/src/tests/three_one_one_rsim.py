@@ -28,7 +28,8 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
     START_POS = -2
     SPACING_Y = 1.5
     SPACING_X = 1
-    SPAWN_BOX_SIZE = 1
+    # Never used
+    # SPAWN_BOX_SIZE = 1
 
     env = SSLStandardEnv(
         n_robots_blue=N_ROBOTS_BLUE,
@@ -70,7 +71,8 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
     pid_oren_defender, pid_2d_defender = get_rsim_pids()
 
     pass_task = None
-    shooting = False
+    # Never used
+    # shooting = False
     goal_scored = False
 
     stage = 0

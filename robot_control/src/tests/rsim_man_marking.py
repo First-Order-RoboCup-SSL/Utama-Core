@@ -9,7 +9,6 @@ from motion_planning.src.pid import PID
 from config.settings import TIMESTEP
 import logging
 import math
-import random
 
 logger = logging.getLogger(__name__)
 

@@ -1,20 +1,17 @@
 from typing import Callable, Tuple, Optional
-from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
 from entities.data.command import RobotCommand
 from entities.game.present_future_game import PresentFutureGame
-from motion_planning.src.pid.pid import PID, TwoDPID, get_grsim_pids
-from robot_control.src.skills import face_ball, go_to_point
+from robot_control.src.skills import go_to_point
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
 from strategy.strategy import Strategy
 import numpy as np
-import logging
-
-logger = logging.getLogger(__name__)
-
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
+
+import logging
+logger = logging.getLogger(__name__)
 
 class StartupStrategy(Strategy):
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):

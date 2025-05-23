@@ -1,7 +1,9 @@
 from dataclasses import replace
 from typing import Dict, List, Optional, Tuple
 
-import vector, math
+import vector
+import math
+
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from entities.game.ball import Ball

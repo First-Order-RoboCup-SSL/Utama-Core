@@ -17,7 +17,6 @@ from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
 
 # from robot_control.src.high_level_skills import DribbleToTarget
-from entities.game import Game
 
 # Imports from other scripts or modules within the same project
 from robot_control.src.tests.utils import setup_pvp
@@ -81,7 +80,7 @@ def intercept_ball(
             ball_pos[0] + ball_vel[0] * time_to_reach,
             ball_pos[1] + ball_vel[1] * time_to_reach,
         )
-        if ball_vel != None
+        if ball_vel is not None
         else None
     )
 
@@ -103,10 +102,11 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
     # Initialize PID controllers
     pid_oren, pid_trans = get_grsim_pids(ATTACKING_ROBOTS)
 
-    if game.my_team_is_yellow:
-        goal_pos = (4.5, 0)  # Yellow team attacks the blue goal
-    else:
-        goal_pos = (-4.5, 0)  # Blue team attacks the yellow goal
+    # Never Used
+    # if game.my_team_is_yellow:
+    #     goal_pos = (4.5, 0)  # Yellow team attacks the blue goal
+    # else:
+    #     goal_pos = (-4.5, 0)  # Blue team attacks the yellow goal
 
     goal_scored = False
     message = None
@@ -178,7 +178,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                 ball_possessor_id = player2_id
 
             ### CASE 1: No one has the ball and we are not trying a pass - Try to intercept it ###
-            if ball_possessor_id is None and trying_to_pass == False:
+            if ball_possessor_id is None and not trying_to_pass:
                 print("CASEEEEE 1")
                 print("No one has the ball, trying to intercept")
                 best_interceptor = None
@@ -197,7 +197,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                     # Calculate how close the robot is to the intercept position (lower score is better)
                     intercept_score = (
                         distance(robot, intercept_pos)
-                        if intercept_pos != None
+                        if intercept_pos is not None
                         else float("inf")
                     )
 
@@ -226,12 +226,12 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                             intercept_pos,
                             friendly_robots[best_interceptor].orientation,
                         )
-                        if intercept_pos != None
+                        if intercept_pos is not None
                         else empty_command(dribbler_on=True)
                     )
 
                 for rid in friendly_robot_ids:
-                    if rid == best_interceptor or best_interceptor == None:
+                    if rid == best_interceptor or best_interceptor is None:
                         continue
 
                     potential_passer_id = (
@@ -270,7 +270,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                 continue
 
             ### CASE 2: Someone has the ball
-            elif ball_possessor_id is not None and trying_to_pass == False:
+            elif ball_possessor_id is not None and not trying_to_pass:
                 print("CASEEEEE 2")
                 print("We have the ball", ball_possessor_id)
                 possessor_data = friendly_robots[ball_possessor_id]
@@ -401,7 +401,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                     sim_robot_controller.send_robot_commands()
 
             ### CASE 3: We are trying a pass ###
-            elif trying_to_pass == True:
+            elif trying_to_pass:
                 print("CASEEEEE 3")
                 """
                 if pass_task == None:
@@ -473,10 +473,11 @@ def defender_strategy(game: Game, stop_event: threading.Event):
     # Initialize PID controllers
     pid_oren, pid_trans = get_grsim_pids(DEFENDING_ROBOTS)
 
-    if game.my_team_is_yellow:
-        goal_pos = (4.5, 0)
-    else:
-        goal_pos = (-4.5, 0)
+    # Never Used
+    # if game.my_team_is_yellow:
+    #     goal_pos = (4.5, 0)
+    # else:
+    #     goal_pos = (-4.5, 0)
 
     goal_scored = False
 

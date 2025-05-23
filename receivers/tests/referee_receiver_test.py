@@ -2,6 +2,8 @@ import os
 import sys
 import time
 
+from receivers.referee_receiver import RefereeMessageReceiver
+
 """ TODO: Traceback (most recent call last):
   File "/home/fredh/robocup_ssl/Robocup/src/tests/referee_receiver_test.py", line 25, in <module>
     if receiver.check_new_message():
@@ -10,8 +12,6 @@ import time
   File "/home/fredh/robocup_ssl/Robocup/src/data/referee_receiver.py", line 23, in _serialize_relevant_fields
     message_copy.ParseFromString(data)
 TypeError: a bytes-like object is required, not 'NoneType' """
-
-from receivers.referee_receiver import RefereeMessageReceiver
 
 # Example usage:
 if __name__ == "__main__":

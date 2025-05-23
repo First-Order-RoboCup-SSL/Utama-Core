@@ -21,10 +21,12 @@ from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from config.settings import TIMESTEP
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
-import logging
 
-logger = logging.getLogger(__name__)
 from typing import List
+
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 def defend(

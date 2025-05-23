@@ -1,5 +1,4 @@
 from typing import List
-import time
 from entities.game.game_object import Colour, Robot as GameRobot
 
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids

@@ -5,7 +5,6 @@ import time
 from team_controller.src.data.message_enum import MessageType
 from team_controller.src.data import VisionReceiver
 
-import time
 import numpy as np
 from typing import Tuple, Optional, Dict, Union, List
 from global_utils.math_utils import rotate_vector
@@ -90,8 +89,8 @@ def main():
     # referee_thread.daemon = True
     # referee_thread.start()
 
-    start = time.time()
-    frames = 0
+    # start = time.time()
+    # frames = 0
 
     try:
         while True:

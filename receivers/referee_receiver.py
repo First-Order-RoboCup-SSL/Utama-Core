@@ -1,7 +1,7 @@
 import threading
 import time
 import queue
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Deque
 
 from entities.referee.referee_command import RefereeCommand
 from entities.referee.stage import Stage
@@ -11,6 +11,9 @@ from team_controller.src.utils import network_manager
 from config.settings import MULTICAST_GROUP_REFEREE, REFEREE_PORT
 
 from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Referee
+
+from collections import deque
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,7 +32,7 @@ class RefereeMessageReceiver:
 
     def __init__(
         self,
-        message_queue: queue.SimpleQueue,
+        referee_buffer: Deque[RefereeData],
         ip=MULTICAST_GROUP_REFEREE,
         port=REFEREE_PORT,
         debug=False,
@@ -42,7 +45,7 @@ class RefereeMessageReceiver:
         self.time_received = None
         self.lock = threading.Lock()
         self.update_event = threading.Event()
-        self.message_queue = message_queue
+        self.referee_buffer = referee_buffer
 
         # Initialize state variables
         self.stage = None
@@ -194,7 +197,9 @@ class RefereeMessageReceiver:
             ),
         )
 
-        self._message_queue.put_nowait((MessageType.REF, referee_data))
+        # add to referee buffer
+        with self.lock:
+            self.referee_buffer.append(referee_data)
 
     def check_new_command(self) -> bool:
         """
@@ -204,7 +209,7 @@ class RefereeMessageReceiver:
             bool: True if a new command has been received, False otherwise.
         """
         history_length = 5
-
+        data = self.net.receive_data()
         if data:
             self.referee.ParseFromString(data)  # Reuse the same object
             if self.referee.command_counter != self.prev_command_counter:

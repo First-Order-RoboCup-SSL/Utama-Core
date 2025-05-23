@@ -75,7 +75,8 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
         )
 
     goal_scored = False
-    shoot_in_left_goal = random.random() > 0.5
+    # Never Used
+    # shoot_in_left_goal = random.random() > 0.5
 
     time.sleep(2)
 

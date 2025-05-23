@@ -278,12 +278,12 @@ class SSLStandardEnv(SSLBaseEnv):
             done = True
             # if the ball is inside the goal area otherwise it is a ball out from goalie line
             if abs(ball.y) < half_goal_wid:
-                reward_blue = 5
-                reward_yellow = -5
+                # reward_blue = 5
+                # reward_yellow = -5
                 self.reward_shaping_total["blue_team"]["goal"] += 1
                 self.reward_shaping_total["yellow_team"]["conceded_goal"] += 1
             else:
-                reward = 0
+                # reward = 0
                 self.reward_shaping_total["team_blue"]["done_ball_out_right"] += 1
         # elif self.last_frame is not None:
 

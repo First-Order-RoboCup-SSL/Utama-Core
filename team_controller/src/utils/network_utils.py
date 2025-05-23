@@ -5,7 +5,6 @@ from typing import Optional, Tuple
 import time
 
 from config.settings import MULTICAST_GROUP, LOCAL_HOST, TIMESTEP
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +105,7 @@ def receive_data(sock: socket.socket) -> Optional[bytes]:
         logger.error("Socket error occurred while receiving data: %s", e)
         return None
     except Exception as e:
-        logger.exception("Unexpected error receiving data")
+        logger.exception("Unexpected error receiving data: %s", e)
         return None
 
 
@@ -154,4 +153,4 @@ def send_command(
     except socket.error as e:
         logger.error("Socket error when sending command to %s: %s", address, e)
     except Exception as e:
-        logger.exception("Unexpected error sending command")
+        logger.exception("Unexpected error sending command: %s", e)

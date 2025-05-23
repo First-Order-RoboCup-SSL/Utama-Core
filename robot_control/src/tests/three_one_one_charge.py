@@ -156,13 +156,14 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
                 sim_robot_controller_attacker.add_robot_commands(cmd, possessor)
             elif pass_task:  # Passing...
                 if sim_robot_controller_attacker.robot_has_ball(
-                    next_possessor
+                    pass_task.receiver_id
                 ):  # Finished passing... # TODO put this check in a done() method inside passing task
+                    possessor = pass_task.receiver_id
                     pass_task = None
-                    possessor = next_possessor
                     if possessor in (0, 2):
                         dp = -dp
                 else:  # Still passing...
+                    next_possessor = pass_task.receiver_id
                     passer_cmd, receiver_cmd = pass_task.enact(
                         passer_has_ball=sim_robot_controller_attacker.robot_has_ball(
                             possessor
