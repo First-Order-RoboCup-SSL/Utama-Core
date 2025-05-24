@@ -10,30 +10,20 @@ from global_utils.math_utils import rotate_vector
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from team_controller.src.controllers import RSimController
-from strategy.strategy import Strategy
+from strategy.abstract_strategy import AbstractStrategy
 import numpy as np
 import math
 import logging
 
 logger = logging.getLogger(__name__)
 
-from team_controller.src.controllers.common.robot_controller_abstract import (
-    AbstractRobotController,
-)
 
-
-class RobotPlacementStrategy(Strategy):
+class RobotPlacementStrategy(AbstractStrategy):
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if n_runtime_friendly >= 1:
-            return True
-        else:
-            return False
+        return True
 
-    # TODO: Maybe we could bundle the pid into another layer on top of the robot controller to combine the
-    # PID for each sim with the corresponding robot controller
-    def __init__(self, id: int, invert: bool = False, env: SSLStandardEnv = None):
+    def __init__(self, id: int, invert: bool = False):
         super().__init__()
-        self.env = env
         self.id = id
 
         self.ty = -1
@@ -47,12 +37,6 @@ class RobotPlacementStrategy(Strategy):
         if game.friendly_robots and game.ball is not None:
             friendly_robots = game.friendly_robots
             bx, by = game.ball.p.x, game.ball.p.y
-            # TODO: When running main I get this error from time to time, (I am trying to control robot 3):
-            # File "/home/fredh/robocup_ssl/Utama/run/main.py", line 111, in main
-            #     strategy.step(present_future_game)
-            # File "/home/fredh/robocup_ssl/Utama/strategy/one_robot_placement_strategy.py", line 55, in step
-            #     rp = friendly_robots[self.id].p
-            # KeyError: 3
             rp = friendly_robots[self.id].p
             cx, cy, co = rp.x, rp.y, friendly_robots[self.id].orientation
             error = math.dist((self.tx, self.ty), (cx, cy))

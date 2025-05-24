@@ -9,7 +9,7 @@ from team_controller.src.controllers.common.robot_controller_abstract import (
 from motion_planning.src.pid.pid import PID, TwoDPID, get_grsim_pids
 
 
-class Strategy(ABC):
+class AbstractStrategy(ABC):
 
     def __init__(self):
         self.robot_controller: AbstractRobotController = None
@@ -33,7 +33,8 @@ class Strategy(ABC):
     @abstractmethod
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
         """
-        Called on initial run to make sure that the expected robots on runtime
-        match the possible robots in this strategy
+        Called on initial run to make sure that the expected robots on runtime.
+        match the possible robots in this strategy.
+        By default, 1 <= n_robots <= 6 is already asserted, so does not need to be checked here.
         """
         ...

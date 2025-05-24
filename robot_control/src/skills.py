@@ -48,8 +48,8 @@ def go_to_ball(
     dribble_when_near: bool = True,
     dribble_threshold: float = 0.5,
 ) -> RobotCommand:
-    ball = game.ball
-    robot = game.friendly_robots[robot_id]
+    ball = game.ball.p
+    robot = game.friendly_robots[robot_id].p
 
     # TODO: add a optional target_oren flag
     target_oren = np.arctan2(ball.y - robot.y, ball.x - robot.x)
@@ -61,6 +61,7 @@ def go_to_ball(
         distance = np.hypot(ball.y - robot.y, ball.x - robot.x)
         dribbling = distance < dribble_threshold
     return calculate_robot_velocities(
+        game=game,
         pid_oren=pid_oren,
         pid_trans=pid_trans,
         robot_id=robot_id,

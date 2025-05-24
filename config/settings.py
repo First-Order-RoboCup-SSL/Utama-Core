@@ -1,5 +1,7 @@
 from numpy import pi
 
+MAX_ROBOTS = 6
+
 # interval between frames
 TIMESTEP = 1 / 60
 # interval between sending commands to the robot (ms)

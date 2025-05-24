@@ -4,9 +4,8 @@ import threading
 import logging
 from typing import Tuple, Optional, List
 import warnings
-import copy
 
-from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP
+from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP, MAX_ROBOTS
 from collections import deque
 from entities.game import PastGame, PresentFutureGame, Game
 from entities.data.raw_vision import RawVisionData
@@ -14,8 +13,6 @@ from motion_planning.src.pid.pid import (
     get_grsim_pids,
     get_real_pids,
     get_rsim_pids,
-    PID,
-    TwoDPID,
 )
 from receivers.referee_receiver import RefereeMessageReceiver
 from refiners.has_ball import HasBallRefiner
@@ -30,15 +27,17 @@ from run import GameGater, AbstractTestManager, TestStatus
 # from strategy.startup_strategy import StartupStrategy
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
 from strategy.behaviour_trees.behaviours.dummy_behaviour import DummyBehaviour
-from strategy.startup_strategy import StartupStrategy
-from strategy.one_robot_placement_strategy import RobotPlacementStrategy
-from strategy.strategy import Strategy
+from strategy.examples.startup_strategy import StartupStrategy
+from strategy.examples.one_robot_placement_strategy import RobotPlacementStrategy
+from strategy.abstract_strategy import AbstractStrategy
 from team_controller.src.controllers import (
     GRSimRobotController,
     RSimRobotController,
     RealRobotController,
-    AbstractRobotController,
     RSimPVPManager,
+    RSimController,
+    GRSimController,
+    AbstractSimController,
 )
 
 from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
@@ -48,26 +47,26 @@ class StrategyRunner:
     """
     Main class to run the robot controller and strategy.
     Args:
-        strategy (Strategy): The strategy to be used.
+        strategy (AbstractStrategy): The strategy to be used.
         my_team_is_yellow (bool): Whether the team is yellow.
         my_team_is_right (bool): Whether the team is on the right side.
         mode (str): "real", "rsim", "grism"
         exp_friendly (bool): Expected number of friendly robots.
         exp_enemy (bool): Expected number of enemy robots.
         exp_ball (bool): Is ball expected?
-        opp_strategy (Strategy, optional): Opponent strategy for pvp. Defaults to None for single player.
+        opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
     """
 
     def __init__(
         self,
-        strategy: Strategy,
+        strategy: AbstractStrategy,
         my_team_is_yellow: bool,
         my_team_is_right: bool,
         mode: str,
         exp_friendly: int,
         exp_enemy: int,
         exp_ball: bool,
-        opp_strategy: Optional[Strategy] = None,
+        opp_strategy: Optional[AbstractStrategy] = None,
     ):
         self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow
@@ -83,8 +82,8 @@ class StrategyRunner:
         warnings.simplefilter("default", DeprecationWarning)
 
         self._assert_exp_robots()
-        self.rsim_env = self._load_rsim_env()
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
+        self.rsim_env, self.sim_controller = self._load_sim_and_controller()
         self._load_robot_control_and_pids()
 
         self.position_refiner = PositionRefiner()
@@ -120,12 +119,18 @@ class StrategyRunner:
         vision_thread.start()
         # referee_thread.start()
 
-    def _load_rsim_env(self) -> Optional[SSLStandardEnv]:
+    def _load_sim_and_controller(
+        self,
+    ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
         """
-        Load the RSim environment if the mode is "rsim".
+        Mode "rsim": Loads the RSim environment with the expected number of robots and corresponding sim controller.
+        Mode "grsim": Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of robots is met.
+
         Returns:
-            SSLBaseEnv: The RSim environment.
+            SSLBaseEnv: The RSim environment (Otherwise None).
+            AbstractSimController: The simulation controller for the environment (Otherwise None).
         """
+
         if self.mode == "rsim":
             if self.my_team_is_yellow:
                 n_yellow = self.exp_friendly
@@ -143,8 +148,28 @@ class StrategyRunner:
                 self.opp_strategy.load_rsim_env(rsim_env)
             self.my_strategy.load_rsim_env(rsim_env)
 
-            return rsim_env
-        return None
+            return rsim_env, RSimController(env=rsim_env)
+
+        elif self.mode == "grsim":
+            sim_controller = GRSimController()
+            if self.my_team_is_yellow:
+                n_yellow = self.exp_friendly
+                n_blue = self.exp_enemy
+            else:
+                n_yellow = self.exp_enemy
+                n_blue = self.exp_friendly
+            y_to_remove = [i for i in range(n_yellow, MAX_ROBOTS)]
+            b_to_remove = [i for i in range(n_blue, MAX_ROBOTS)]
+            for y in y_to_remove:
+                sim_controller.set_robot_presence(y, True, False)
+            for b in b_to_remove:
+                sim_controller.set_robot_presence(b, False, False)
+            time.wait(1000)
+
+            return None, sim_controller
+
+        else:
+            return None, None
 
     def _setup_vision_and_referee(self) -> Tuple[deque, deque]:
         """
@@ -165,6 +190,15 @@ class StrategyRunner:
         """
         Assert the expected number of robots.
         """
+        assert (
+            self.exp_friendly <= MAX_ROBOTS
+        ), "Expected number of friendly robots is too high."
+        assert (
+            self.exp_enemy <= MAX_ROBOTS
+        ), "Expected number of enemy robots is too high."
+        assert self.exp_friendly >= 1, "Expected number of friendly robots is too low."
+        assert self.exp_enemy >= 1, "Expected number of enemy robots is too low."
+
         assert self.my_strategy.assert_exp_robots(
             self.exp_friendly, self.exp_enemy
         ), "Expected number of robots at runtime does not match my strategy."
@@ -267,14 +301,21 @@ class StrategyRunner:
     def run_test(
         self, testManager: AbstractTestManager, episode_timeout: float
     ) -> bool:
+        if self.sim_controller is None:
+            raise TypeError(
+                f"cannot run test on {self.mode} mode. No sim_controller loaded."
+            )
         passed = True
         n_episodes = testManager.get_n_episodes()
+        testManager.load_strategies(self.my_strategy, self.opp_strategy)
+        # testManager.load_game(self.my_game)
         for i in range(n_episodes):
-            testManager.reset_field()
+            testManager.update_episode_n(i)
+            testManager.reset_field(self.sim_controller, self.my_game)
             episode_start_time = time.time()
             # for simplicity, we assume rsim is running in real time. May need to change this
             while True:
-                if (time.time() - episode_start_time) < episode_timeout:
+                if (time.time() - episode_start_time) > episode_timeout:
                     passed = False
                     self.logger.log(
                         logging.WARNING,
@@ -293,6 +334,7 @@ class StrategyRunner:
                 elif status == TestStatus.SUCCESS:
                     break
 
+        testManager.reset_field(self.sim_controller, self.my_game)
         return passed
 
     def run(self):
