@@ -41,3 +41,6 @@ dev = [
 ignore = [
     "F401",  # Module imported but unused
 ]
+extend-exclude = [
+    "*_pb2.py" # Ignore files matching a pattern
+]

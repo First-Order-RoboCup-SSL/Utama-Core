@@ -180,7 +180,7 @@ class RealRobotController(AbstractRobotController):
         crc = self.compute_crc(packet)
         packet.append(crc)
         
-        packet_str = " ".join(f"{byte:08b}" for byte in packet)
+        # packet_str = " ".join(f"{byte:08b}" for byte in packet)
 
         return packet
 

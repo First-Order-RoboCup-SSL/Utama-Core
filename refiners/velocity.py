@@ -2,18 +2,18 @@ from dataclasses import replace
 from entities.game.game import Game
 from entities.game.robot import Robot
 
-from typing import Dict, List, Union # Added List for type hinting
+from typing import Dict, List, Union, Tuple # Added List for type hinting
 # Assuming your new PastGame is in entities.game.past_game or accessible
 from entities.game.past_game import PastGame, AttributeType, TeamType, ObjectClass, ObjectKey, get_structured_object_key
 from refiners.base_refiner import BaseRefiner
-from vector import VectorObject2D, VectorObject3D # Your custom vector classes
+from vector import VectorObject2D, VectorObject3D
 from lenses import UnboundLens, lens
 import logging
 import numpy as np # Import NumPy
 
 logger = logging.getLogger(__name__)
 
-def zero_vector(twod: bool) -> Union[VectorObject2D, VectorObject3D]: # Added return type hint
+def zero_vector(twod: bool) -> Union[VectorObject2D, VectorObject3D]:
     return VectorObject2D(x=0, y=0) if twod else VectorObject3D(x=0, y=0, z=0)
 
 class VelocityRefiner(BaseRefiner):
@@ -113,125 +113,168 @@ class VelocityRefiner(BaseRefiner):
         current_ts: float,
         twod: bool) -> Union[VectorObject2D, VectorObject3D]:
         try:
-            past_pos_data = past_game.get_historical_attribute_series(
+            timestamps_np, positions_np = past_game.get_historical_attribute_series(
                 object_key, AttributeType.POSITION, 1
             )
-            if not past_pos_data:
-                raise ValueError(f"No historical position for {object_key}.")
+            # logger.debug(f"VELOCITY_CALC: obj_key={object_key}, current_ts={current_ts}, current_pos={current_pos}")
+            # logger.debug(f"VELOCITY_CALC: historical timestamps_np={timestamps_np}, positions_np={positions_np.tolist() if positions_np.size > 0 else 'EMPTY'}")
 
-            previous_time_received, previous_pos = past_pos_data[0]
+            if not timestamps_np.size or not positions_np.size:
+                logger.warning(f"VELOCITY_CALC: No historical position for {object_key}. PastGame returned empty arrays. Setting zero velocity.")
+                return zero_vector(twod)
+
+            # Assign these *after* confirming timestamps_np and positions_np are not empty
+            previous_time_received = timestamps_np[0]
+            previous_pos_np = positions_np[0] # This is a 1D NumPy array [x, y] or [x, y, z]
+
+            # Now calculate dt_secs using the defined previous_time_received
             dt_secs = current_ts - previous_time_received
+            # logger.debug(f"VELOCITY_CALC: obj_key={object_key}, dt_secs={dt_secs}, prev_ts={previous_time_received}, prev_pos_np={previous_pos_np}")
 
             if dt_secs <= 1e-9:
-                logger.warning(f"Object {object_key} velocity dt_secs is too small or zero ({dt_secs}). Using zero velocity.")
+                logger.warning(f"VELOCITY_CALC: Object {object_key} velocity dt_secs is too small or zero ({dt_secs}). Using zero velocity.")
                 return zero_vector(twod)
             
-            # Assuming your VectorObject already supports subtraction and division by scalar
-            return (current_pos - previous_pos) / dt_secs
+            # Convert previous_pos_np back to VectorObject for subtraction
+            if twod:
+                previous_pos = VectorObject2D(x=previous_pos_np[0], y=previous_pos_np[1])
+            else:
+                previous_pos = VectorObject3D(x=previous_pos_np[0], y=previous_pos_np[1], z=previous_pos_np[2])
+            
+            velocity = (current_pos - previous_pos) / dt_secs
+            # logger.debug(f"VELOCITY_CALC: obj_key={object_key}, calculated_v={velocity}")
+            return velocity
+
+        except IndexError: 
+            logger.error(f"VELOCITY_CALC: IndexError for {object_key}. This indicates an issue with historical data structure despite size checks. Setting zero velocity.", exc_info=True)
+            return zero_vector(twod)
         except Exception as e:
-            logger.warning(f"Could not calculate velocity for {object_key}, setting to zero: {e}")
+            logger.error(f"VELOCITY_CALC: Unexpected error calculating velocity for {object_key}, setting to zero: {e}", exc_info=True)
             return zero_vector(twod)
 
     def _calculate_object_acceleration(self, past_game: PastGame, object_key: ObjectKey, twod: bool) -> Union[VectorObject2D, VectorObject3D]:
         try:
-            pairs = self._extract_time_velocity_pairs(past_game, object_key)
             num_points_needed = self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
-            if not pairs or len(pairs) < num_points_needed: # Check against total points needed
-                raise ValueError(f"Not enough velocity pairs for {object_key}. Have {len(pairs)}, need {num_points_needed}")
+            timestamps_np, velocities_np = self._extract_time_velocity_np_arrays(past_game, object_key, num_points_needed)
+
+            if timestamps_np.shape[0] < num_points_needed: # Check if enough points were returned
+                raise ValueError(f"Not enough velocity points from PastGame for {object_key}. Have {timestamps_np.shape[0]}, need {num_points_needed}")
         except Exception as e:
             raise ValueError(f"Velocity data not available for acceleration for {object_key}: {e}") from e
-        
-        return self._calculate_acceleration_from_pairs_np(pairs, twod) # Call NumPy version
 
-    def _extract_time_velocity_pairs(self, past_game: PastGame, object_key: ObjectKey) -> List[tuple[float, Union[VectorObject2D, VectorObject3D]]]:
-        num_points_needed = self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
-        
-        time_velocity_pairs = past_game.get_historical_attribute_series(
+        # Pass NumPy arrays directly
+        return self._calculate_acceleration_from_pairs(timestamps_np, velocities_np, twod)
+    
+    def _extract_time_velocity_np_arrays(self, past_game: PastGame, object_key: ObjectKey, num_points: int) -> Tuple[np.ndarray, np.ndarray]:
+        timestamps_np, velocities_np = past_game.get_historical_attribute_series(
             object_key,
             AttributeType.VELOCITY,
-            num_points_needed
+            num_points
         )
-        return time_velocity_pairs # type: ignore
+        return timestamps_np, velocities_np
 
-    def _calculate_acceleration_from_pairs_np(self, time_velocity_pairs: List[tuple[float, Union[VectorObject2D, VectorObject3D]]], twod: bool) -> Union[VectorObject2D, VectorObject3D]:
+    def _calculate_acceleration_from_pairs(self,
+                                           timestamps_np: np.ndarray,
+                                           velocities_np: np.ndarray, # This is now a 2D NumPy array
+                                           twod: bool) -> Union[VectorObject2D, VectorObject3D]:
         """
-        Estimates an object's acceleration using NumPy for calculations.
+        Estimates an object's acceleration using NumPy arrays as input.
         """
-        min_points_for_one_window = self.ACCELERATION_WINDOW_SIZE
-        if not time_velocity_pairs or len(time_velocity_pairs) < min_points_for_one_window:
-             raise ValueError(f"Not enough data points ({len(time_velocity_pairs)}) for acceleration calculation (need at least {min_points_for_one_window}).")
+        # logger.debug(f"ACCEL_PAIRS_INPUT: timestamps_np shape={timestamps_np.shape}, velocities_np shape={velocities_np.shape}, twod={twod}")
 
-        if self.ACCELERATION_N_WINDOWS == 0:
+        if self.ACCELERATION_N_WINDOWS == 0 or self.ACCELERATION_WINDOW_SIZE == 0:
+            # logger.info("ACCEL_PAIRS: N_WINDOWS or WINDOW_SIZE is 0, returning zero vector.")
             return zero_vector(twod)
 
-        # Convert list of (timestamp, VectorObject) to NumPy arrays
+        # Minimum points needed for the entire calculation based on N_WINDOWS
+        # If N_WINDOWS < 2, we can't form any dv/dt segments with the current logic.
+        if self.ACCELERATION_N_WINDOWS < 2:
+            logger.warning(f"ACCEL_PAIRS: ACCELERATION_N_WINDOWS is {self.ACCELERATION_N_WINDOWS}. "
+                           "Need at least 2 windows to calculate acceleration with current logic. Returning zero.")
+            return zero_vector(twod)
+
+        min_total_points_needed = self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
+
+        if timestamps_np.shape[0] < min_total_points_needed:
+            logger.warning(
+                f"ACCEL_PAIRS: Not enough data points. Have {timestamps_np.shape[0]}, "
+                f"need {min_total_points_needed} for {self.ACCELERATION_N_WINDOWS} windows "
+                f"of size {self.ACCELERATION_WINDOW_SIZE}. Returning zero."
+            )
+            return zero_vector(twod)
+        
+        # Ensure velocities_np also has enough points (should match timestamps_np)
+        if velocities_np.shape[0] < min_total_points_needed:
+            logger.warning(
+                f"ACCEL_PAIRS: Velocities_np has insufficient data points. Have {velocities_np.shape[0]}, "
+                f"need {min_total_points_needed}. Returning zero."
+            )
+            return zero_vector(twod)
+
+
         num_dimensions = 2 if twod else 3
-        timestamps_np = np.array([pair[0] for pair in time_velocity_pairs], dtype=np.float64)
-        
-        velocities_list_of_lists = []
-        if twod:
-            for _, vel_obj in time_velocity_pairs:
-                velocities_list_of_lists.append([vel_obj.x, vel_obj.y])
-        else:
-            for _, vel_obj in time_velocity_pairs:
-                velocities_list_of_lists.append([vel_obj.x, vel_obj.y, vel_obj.z]) # type: ignore
-        velocities_np = np.array(velocities_list_of_lists, dtype=np.float64)
-
-        if velocities_np.shape[0] < self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE:
-            # This check is important if _extract_time_velocity_pairs might return fewer than absolutely required
-            # which it shouldn't if the check in _calculate_object_acceleration is correct.
-            raise ValueError(f"Converted NumPy arrays have insufficient velocity points for all windows for acceleration calculation.")
-
-
-        total_accel_np = np.zeros(num_dimensions, dtype=np.float64)
-        num_accel_calcs = 0
-        
-        prev_window_avg_velocity_np = None
-        prev_window_middle_ts_np = None
-
-        for i in range(self.ACCELERATION_N_WINDOWS):
-            window_start_index = i * self.ACCELERATION_WINDOW_SIZE
-            window_end_index = window_start_index + self.ACCELERATION_WINDOW_SIZE
-            
-            if window_end_index > velocities_np.shape[0]:
-                logger.warning(f"Not enough data points in NumPy array for acceleration window {i}. Skipping.")
-                continue
-
-            current_window_velocities_np = velocities_np[window_start_index:window_end_index]
-            current_window_timestamps_np = timestamps_np[window_start_index:window_end_index]
-
-            if current_window_velocities_np.shape[0] == 0: # Should be caught by above check too
-                continue
-
-            current_window_avg_velocity_np = np.mean(current_window_velocities_np, axis=0)
-            current_window_middle_ts_np = np.mean(current_window_timestamps_np)
-
-            if prev_window_avg_velocity_np is not None and prev_window_middle_ts_np is not None:
-                dt = current_window_middle_ts_np - prev_window_middle_ts_np
-                
-                if dt <= 1e-9:
-                    logger.warning(f"Acceleration dt (NumPy) is too small or zero ({dt}). Skipping this accel calculation.")
-                else:
-                    accel_segment_np = (current_window_avg_velocity_np - prev_window_avg_velocity_np) / dt
-                    total_accel_np += accel_segment_np
-                    num_accel_calcs += 1
-            
-            prev_window_avg_velocity_np = current_window_avg_velocity_np
-            prev_window_middle_ts_np = current_window_middle_ts_np
-
-        if num_accel_calcs == 0:
-            if self.ACCELERATION_N_WINDOWS > 1:
-                logger.warning("No acceleration segments could be calculated (NumPy).")
+        if velocities_np.shape[1] != num_dimensions:
+            logger.error(f"ACCEL_PAIRS: velocities_np has incorrect number of dimensions. "
+                         f"Expected {num_dimensions} (twod={twod}), got {velocities_np.shape[1]}. Returning zero.")
             return zero_vector(twod)
+
+        # Trim excess data if more points were provided than needed for the configured windows.
+        # This should ideally be handled by the caller (_calculate_object_acceleration) ensuring
+        # that `timestamps_np` and `velocities_np` are already correctly sized.
+        # For robustness, we slice here if they are larger than needed.
         
-        final_accel_np = total_accel_np / num_accel_calcs
+        active_timestamps_np = timestamps_np[:min_total_points_needed]
+        active_velocities_np = velocities_np[:min_total_points_needed]
+
+        try:
+            windowed_velocities = active_velocities_np.reshape(
+                self.ACCELERATION_N_WINDOWS, self.ACCELERATION_WINDOW_SIZE, num_dimensions
+            )
+            windowed_timestamps = active_timestamps_np.reshape(
+                self.ACCELERATION_N_WINDOWS, self.ACCELERATION_WINDOW_SIZE
+            )
+        except ValueError as e:
+            logger.error(
+                f"ACCEL_PAIRS: Cannot reshape arrays. "
+                f"active_timestamps_np shape: {active_timestamps_np.shape}, "
+                f"active_velocities_np shape: {active_velocities_np.shape}, "
+                f"N_WINDOWS: {self.ACCELERATION_N_WINDOWS}, WINDOW_SIZE: {self.ACCELERATION_WINDOW_SIZE}. Error: {e}",
+                exc_info=True
+            )
+            return zero_vector(twod)
+
+        avg_velocities_per_window = np.mean(windowed_velocities, axis=1) # Shape: (N_WINDOWS, num_dimensions)
+        middle_ts_per_window = np.mean(windowed_timestamps, axis=1)     # Shape: (N_WINDOWS)
+
+        # Calculate differences between consecutive window averages
+        dv_segments = np.diff(avg_velocities_per_window, axis=0) # Shape: (N_WINDOWS-1, num_dimensions)
+        dt_segments = np.diff(middle_ts_per_window, axis=0)      # Shape: (N_WINDOWS-1)
+
+        # Avoid division by zero or very small dt
+        valid_dt_mask = dt_segments > 1e-9
         
+        if not np.any(valid_dt_mask):
+            logger.warning("ACCEL_PAIRS: All dt for acceleration segments are too small or zero. Returning zero.")
+            return zero_vector(twod)
+
+        # Initialize accelerations_segments with zeros
+        acceleration_segments_np = np.zeros_like(dv_segments)
+
+        # Perform division only where dt is valid
+        # dt_segments needs to be broadcastable: (N_WINDOWS-1,) -> (N_WINDOWS-1, 1) for division
+        acceleration_segments_np[valid_dt_mask] = dv_segments[valid_dt_mask] / dt_segments[valid_dt_mask, np.newaxis]
+        
+        # Average the valid acceleration segments
+        if np.sum(valid_dt_mask) == 0: # Should be caught by np.any above, but as a safeguard
+             logger.warning("ACCEL_PAIRS: No valid dt segments after filtering. Returning zero.")
+             return zero_vector(twod)
+
+        final_accel_np = np.sum(acceleration_segments_np[valid_dt_mask], axis=0) / np.sum(valid_dt_mask)
+        
+        # logger.debug(f"ACCEL_PAIRS_RESULT: final_accel_np={final_accel_np}")
+
         # Convert final NumPy array back to VectorObject
         if twod:
             return VectorObject2D(x=final_accel_np[0], y=final_accel_np[1])
         else:
             return VectorObject3D(x=final_accel_np[0], y=final_accel_np[1], z=final_accel_np[2])
-
-    # Keep the original _calculate_acceleration_from_pairs if needed for comparison or fallback,
-    # otherwise, it can be removed if _calculate_acceleration_from_pairs_np is the definitive version.
-    # For this example, I've renamed the NumPy version and changed the call in _calculate_object_acceleration.

@@ -2,6 +2,11 @@ import os
 import sys
 import time
 
+from team_controller.src.controllers import GRSimController
+from team_controller.src.data import RefereeMessageReceiver
+from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Referee
+import logging
+
 """ TODO: Traceback (most recent call last):
   File "/home/fredh/robocup_ssl/Robocup/src/tests/referee_receiver_test.py", line 25, in <module>
     if receiver.check_new_message():
@@ -12,11 +17,6 @@ import time
 TypeError: a bytes-like object is required, not 'NoneType' """
 
 # TODO: Imcomplete implementation
-from team_controller.src.controllers import GRSimController
-from team_controller.src.data import RefereeMessageReceiver
-from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Referee
-import logging
-
 logger = logging.getLogger(__name__)
 
 # Example usage:

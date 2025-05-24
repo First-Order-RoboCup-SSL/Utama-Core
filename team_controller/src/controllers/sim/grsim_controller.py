@@ -139,7 +139,7 @@ class GRSimController(AbstractSimController):
     def _get_teleport_location(
         self, robot_id: int, is_team_yellow: bool, add: bool
     ) -> Tuple[float, float]:
-        y_coord = REMOVAL_Y_COORD if add else ADD_Y_COORD
+        y_coord = REMOVAL_Y_COORD if not add else ADD_Y_COORD
         x_coord = (
             -TELEPORT_X_COORDS[robot_id]
             if is_team_yellow

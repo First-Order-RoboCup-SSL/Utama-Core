@@ -1,149 +1,171 @@
 from collections import deque
-from entities.game.game import Game  # Assuming Game, Robot, Ball types are defined
-from vector import VectorObject2D, VectorObject3D  # Or your vector types
+from entities.game.game import Game, Robot
+from entities.game.ball import Ball 
+from vector import VectorObject2D, VectorObject3D
 from enum import Enum, auto
-from typing import Tuple, Any, Union, Optional  # For type hinting ObjectKey
+from typing import Tuple, Any, Union, Optional, Dict, List 
+import numpy as np
+from itertools import islice
+import logging
 
+logger = logging.getLogger(__name__)
 
-# --- Enums for more robust identification ---
+# --- Enums (keep as is) ---
 class AttributeType(Enum):
     POSITION = auto()
     VELOCITY = auto()
-    # Add ACCELERATION here if you plan to store it directly in PastGame
-
+    # ACCELERATION = auto() # If you decide to store pre-calculated acceleration
 
 class TeamType(Enum):
     FRIENDLY = auto()
     ENEMY = auto()
-    NEUTRAL = auto()  # For objects like the ball that don't belong to a team
-
+    NEUTRAL = auto()
 
 class ObjectClass(Enum):
     ROBOT = auto()
     BALL = auto()
 
-
-# Define a type alias for our structured object key
-# (TeamType, ObjectClass, instance_id: int)
-# For instance_id: robots will use their `id`, ball might use 0 or a specific constant.
 ObjectKey = Tuple[TeamType, ObjectClass, int]
 
 
-# --- Modified function to get structured object keys ---
 def get_structured_object_key(obj: Any, team: TeamType) -> Optional[ObjectKey]:
-    """
-    Generates a structured key for game objects.
-    `obj` is the game entity (e.g., a robot instance, ball instance).
-    `team` is the TeamType enum member.
-    """
-    if hasattr(obj, "id") and isinstance(obj.id, int):  # For robots
+    if isinstance(obj, Robot) and hasattr(obj, 'id') and isinstance(obj.id, int):
         return (team, ObjectClass.ROBOT, obj.id)
-    # Check if it's the ball (assuming ball object doesn't have 'id' like robots)
-    # This check might need to be more specific based on your actual ball object type
-    elif not hasattr(obj, "id"):  # A simple heuristic for the ball
-        # Assuming only one ball, or use a specific ID if your ball object has one
-        # Using 0 as a placeholder instance_id for the ball.
+    elif isinstance(obj, Ball): 
         return (TeamType.NEUTRAL, ObjectClass.BALL, 0)
+    logger.warning(f"Could not determine ObjectKey for object of type {type(obj)} with team {team}")
     return None
+
+
+# Helper to convert VectorObject to NumPy array
+def _vector_to_numpy(vector: Union[VectorObject2D, VectorObject3D]) -> np.ndarray:
+    if isinstance(vector, VectorObject2D):
+        return np.array([vector.x, vector.y], dtype=np.float64)
+    elif isinstance(vector, VectorObject3D):
+        return np.array([vector.x, vector.y, vector.z], dtype=np.float64)
+    raise TypeError(f"Unsupported vector type for NumPy conversion: {type(vector)}")
 
 
 class PastGame:
     def __init__(self, max_history: int):
         self.max_history = max_history
-        self.raw_games_history = deque(maxlen=max_history)
+        self.raw_games_history: deque[Game] = deque(maxlen=max_history)
 
-        # Dictionaries now use ObjectKey as their key type
-        self.historical_positions: dict[
-            ObjectKey, deque[tuple[float, Union[VectorObject2D, VectorObject3D]]]
+        # Generic historical data storage:
+        # ObjectKey -> AttributeType -> deque[(timestamp: float, value: np.ndarray)]
+        self.historical_data: Dict[
+            ObjectKey, Dict[AttributeType, deque[Tuple[float, np.ndarray]]]
         ] = {}
-        self.historical_velocities: dict[
-            ObjectKey, deque[tuple[float, Union[VectorObject2D, VectorObject3D]]]
-        ] = {}
-        # self.historical_accelerations: dict[ObjectKey, deque[...]] = {} # If you add this
 
-    def _ensure_object_history_exists(self, object_key: ObjectKey):
-        """Ensures deques exist for the given object_key in all relevant history dicts."""
-        if object_key not in self.historical_positions:
-            self.historical_positions[object_key] = deque(maxlen=self.max_history)
-        if object_key not in self.historical_velocities:
-            self.historical_velocities[object_key] = deque(maxlen=self.max_history)
-        # if object_key not in self.historical_accelerations:
-        #     self.historical_accelerations[object_key] = deque(maxlen=self.max_history)
+    def _ensure_attribute_deque_exists(self, object_key: ObjectKey, attribute_type: AttributeType):
+        """Ensures a deque exists for the given object_key and attribute_type."""
+        if object_key not in self.historical_data:
+            self.historical_data[object_key] = {}
+        if attribute_type not in self.historical_data[object_key]:
+            self.historical_data[object_key][attribute_type] = deque(maxlen=self.max_history)
+
+    def _add_attribute_to_history(
+        self,
+        object_key: ObjectKey,
+        attribute_type: AttributeType,
+        timestamp: float,
+        value_vector_obj: Optional[Union[VectorObject2D, VectorObject3D]],
+    ):
+        """Adds a single attribute value (after converting to NumPy) to the history."""
+        if value_vector_obj is None:
+            return # Don't store None values, or decide on a specific handling
+
+        self._ensure_attribute_deque_exists(object_key, attribute_type)
+        try:
+            value_np = _vector_to_numpy(value_vector_obj)
+            self.historical_data[object_key][attribute_type].append((timestamp, value_np))
+        except TypeError as e:
+            logger.error(f"Error converting vector for {object_key}, {attribute_type}: {e}")
+
+
+    def _process_entity_for_history(self, entity: Any, entity_key: ObjectKey, timestamp: float):
+        """Helper to process position and velocity for a given entity."""
+        if not entity_key:
+            return
+
+        if hasattr(entity, "p"):
+            self._add_attribute_to_history(entity_key, AttributeType.POSITION, timestamp, entity.p)
+        if hasattr(entity, "v"):
+            self._add_attribute_to_history(entity_key, AttributeType.VELOCITY, timestamp, entity.v)
+        # If you pre-calculate and store acceleration:
+        # if hasattr(entity, "a"):
+        #     self._add_attribute_to_history(entity_key, AttributeType.ACCELERATION, timestamp, entity.a)
+
 
     def add_game(self, game: Game):
         self.raw_games_history.append(game)
         current_ts = game.ts
 
-        # Extract and store data for the ball
+        # Process Ball
         if game.ball:
-            ball_key = get_structured_object_key(
-                game.ball, TeamType.NEUTRAL
-            )  # Ball is neutral
+            ball_key = get_structured_object_key(game.ball, TeamType.NEUTRAL) # Ball is neutral
             if ball_key:
-                self._ensure_object_history_exists(ball_key)
-                if hasattr(game.ball, "p") and game.ball.p is not None:
-                    self.historical_positions[ball_key].append(
-                        (current_ts, game.ball.p)
-                    )
-                if hasattr(game.ball, "v") and game.ball.v is not None:
-                    self.historical_velocities[ball_key].append(
-                        (current_ts, game.ball.v)
-                    )
+                self._process_entity_for_history(game.ball, ball_key, current_ts)
 
-        # Extract and store data for friendly robots
-        for robot in game.friendly_robots.values():
-            robot_key = get_structured_object_key(robot, TeamType.FRIENDLY)
-            if robot_key:
-                self._ensure_object_history_exists(robot_key)
-                if hasattr(robot, "p") and robot.p is not None:
-                    self.historical_positions[robot_key].append((current_ts, robot.p))
-                if hasattr(robot, "v") and robot.v is not None:
-                    self.historical_velocities[robot_key].append((current_ts, robot.v))
-
-        # Extract and store data for enemy robots
-        for robot in game.enemy_robots.values():
-            robot_key = get_structured_object_key(robot, TeamType.ENEMY)
-            if robot_key:
-                self._ensure_object_history_exists(robot_key)
-                if hasattr(robot, "p") and robot.p is not None:
-                    self.historical_positions[robot_key].append((current_ts, robot.p))
-                if hasattr(robot, "v") and robot.v is not None:
-                    self.historical_velocities[robot_key].append((current_ts, robot.v))
+        # Process Robots (Friendly and Enemy)
+        robot_groups = [
+            (game.friendly_robots, TeamType.FRIENDLY),
+            (game.enemy_robots, TeamType.ENEMY),
+        ]
+        for robots_dict, team_type in robot_groups:
+            for robot_instance in robots_dict.values():
+                robot_key = get_structured_object_key(robot_instance, team_type)
+                if robot_key:
+                    self._process_entity_for_history(robot_instance, robot_key, current_ts)
 
     def get_historical_attribute_series(
         self,
-        object_key: ObjectKey,  # Now takes the structured ObjectKey
-        attribute_key: AttributeType,  # Now takes the AttributeType Enum
+        object_key: ObjectKey,
+        attribute_type: AttributeType,
         num_points: int,
-    ) -> list[tuple[float, Union[VectorObject2D, VectorObject3D]]]:
+    ) -> Tuple[np.ndarray, np.ndarray]: # Returns (timestamps_np, values_np)
         """
-        Retrieves the last num_points of (timestamp, attribute_value) for a given object.
-        Returns data from oldest to newest if available.
+        Retrieves the last num_points of (timestamp, attribute_value_np) for a given object.
+        Returns data as NumPy arrays (timestamps, values), oldest to newest.
+        Returns empty NumPy arrays if no data is available.
         """
-        history_store_for_object = None
+        if num_points <= 0:
+            return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
 
-        if attribute_key == AttributeType.POSITION:
-            history_store_for_object = self.historical_positions.get(object_key)
-        elif attribute_key == AttributeType.VELOCITY:
-            history_store_for_object = self.historical_velocities.get(object_key)
-        # elif attribute_key == AttributeType.ACCELERATION:
-        #     history_store_for_object = self.historical_accelerations.get(object_key)
-        else:
-            # This case should ideally not be reached if type hints are respected,
-            # but good for robustness.
-            raise ValueError(f"Unknown attribute_key: {attribute_key}")
+        object_attributes = self.historical_data.get(object_key)
+        if not object_attributes:
+            # logger.debug(f"No historical data for object_key {object_key}")
+            return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
 
-        if not history_store_for_object:  # Handles both key not found or empty deque
-            # logger.warning(f"No historical {attribute_key.name} for {object_key}")
-            return []
+        history_deque = object_attributes.get(attribute_type)
+        if not history_deque: # Handles both key not found or empty deque
+            # logger.debug(f"No historical {attribute_type.name} for {object_key}")
+            return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
 
-        # Deque stores [oldest, ..., newest]. We want the last num_points.
-        start_index = max(0, len(history_store_for_object) - num_points)
-        return list(history_store_for_object)[start_index:]
+        # Efficiently get the last num_points using islice
+        start_index = max(0, len(history_deque) - num_points)
+        relevant_data_iter = islice(history_deque, start_index, len(history_deque))
 
-    def n_steps_ago(self, n) -> Game:
-        if n <= 0 or n > len(self.raw_games_history):
+        timestamps_list: List[float] = []
+        vector_values_list: List[np.ndarray] = []
+        
+        for ts, vec_np in relevant_data_iter:
+            timestamps_list.append(ts)
+            vector_values_list.append(vec_np)
+
+        if not timestamps_list:
+            return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+
+        timestamps_np = np.array(timestamps_list, dtype=np.float64)
+        # vector_values_list contains a list of small np.ndarrays.
+        # np.array() will create a 2D array if all elements of the list are 1D arrays of the same size.
+        values_np = np.array(vector_values_list)
+        
+        return timestamps_np, values_np
+
+    def n_steps_ago(self, n: int) -> Game:
+        if not (0 < n <= len(self.raw_games_history)):
             raise IndexError(
-                f"Cannot get game {n} steps ago. History size: {len(self.raw_games_history)}"
+                f"Cannot get game {n} steps ago. History size: {len(self.raw_games_history)}, requested: {n}"
             )
         return self.raw_games_history[-n]

@@ -1,8 +1,5 @@
 import numpy as np
 from global_utils.math_utils import distance, normalise_heading
-from robot_control.src.utils.shooting_utils import find_best_shot
-from motion_planning.src.pid.pid import TwoDPID
-from global_utils.math_utils import distance, normalise_heading
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from robot_control.src.utils.shooting_utils import find_best_shot, is_goal_blocked
 from entities.game import Game
@@ -33,11 +30,10 @@ from team_controller.src.controllers.sim.rsim_robot_controller import (
     RSimRobotController,
 )
 
-logger = logging.getLogger(__name__)
-
-
 from robot_control.src.utils.passing_utils import calculate_adjusted_receiver_pos
 
+
+logger = logging.getLogger(__name__)
 
 BALL_V0_MAGNITUDE = 3
 BALL_A_MAGNITUDE = -0.3

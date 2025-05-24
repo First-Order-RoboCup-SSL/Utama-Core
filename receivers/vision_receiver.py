@@ -56,8 +56,9 @@ class VisionReceiver:
                 # print(vision_packet.detection)
                 self.prev_frame_num = vision_packet.detection.frame_number
                 self._add_detection_to_buffer(vision_packet.detection)
-                proc_latency = time.time()-recv_time
+                
                 # Logging
+                # proc_latency = time.time()-recv_time
                 # self._count_objects_detected(vision_packet.detection)
                 # self._print_frame_info(proc_latency, vision_packet.detection)
                 

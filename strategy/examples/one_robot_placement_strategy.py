@@ -1,9 +1,7 @@
 from typing import Callable, Dict, Tuple
 from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
-from entities.data.command import RobotCommand
 from entities.game.present_future_game import PresentFutureGame
-from motion_planning.src.pid.pid import PID, TwoDPID, get_grsim_pids
-from robot_control.src.skills import face_ball, go_to_point
+from robot_control.src.skills import go_to_point
 
 # from robot_control.src.tests.utils import one_robot_placement
 from global_utils.math_utils import rotate_vector
@@ -14,8 +12,6 @@ from strategy.abstract_strategy import AbstractStrategy
 import numpy as np
 import math
 import logging
-
-logger = logging.getLogger(__name__)
 
 
 class RobotPlacementStrategy(AbstractStrategy):
@@ -38,7 +34,7 @@ class RobotPlacementStrategy(AbstractStrategy):
             friendly_robots = game.friendly_robots
             bx, by = game.ball.p.x, game.ball.p.y
             rp = friendly_robots[self.id].p
-            cx, cy, co = rp.x, rp.y, friendly_robots[self.id].orientation
+            cx, cy, _ = rp.x, rp.y, friendly_robots[self.id].orientation
             error = math.dist((self.tx, self.ty), (cx, cy))
 
             switch = error < 0.05

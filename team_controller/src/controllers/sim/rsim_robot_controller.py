@@ -9,7 +9,6 @@ from team_controller.src.controllers.common.robot_controller_abstract import (
 )
 import numpy as np
 from numpy.typing import NDArray
-from entities.data.command import RobotCommand, RobotResponse
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 import logging
 

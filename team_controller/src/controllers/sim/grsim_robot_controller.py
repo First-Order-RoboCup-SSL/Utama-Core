@@ -27,7 +27,6 @@ from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import
     RobotFeedback,
 )
 
-import logging
 import time
 
 
@@ -58,7 +57,7 @@ class GRSimRobotController(AbstractRobotController):
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
-        logger.debug(f"Sending Robot Commands")
+        logger.debug("Sending Robot Commands ...")
 
         net_start = time.time()
         data = self.net.send_command(self.out_packet, is_sim_robot_cmd=True)
@@ -78,7 +77,7 @@ class GRSimRobotController(AbstractRobotController):
             average_net_diff
         )
 
-        st = time.time()
+        # st = time.time()
         # manages the response packet that is received
         if data:
             robots_info = RobotControlResponse()

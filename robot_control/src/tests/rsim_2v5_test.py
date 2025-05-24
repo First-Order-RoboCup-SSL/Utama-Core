@@ -60,7 +60,7 @@ def intercept_ball(
             ball_pos[0] + ball_vel[0] * time_to_reach,
             ball_pos[1] + ball_vel[1] * time_to_reach,
         )
-        if ball_vel != None
+        if ball_vel is not None
         else None
     )
 
@@ -215,7 +215,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                 ball_possessor_id = player2_id
 
             ### CASE 1: No one has the ball - Try to intercept it ###
-            if ball_possessor_id is None and trying_to_pass == False:
+            if ball_possessor_id is None and not trying_to_pass:
                 print("No one has the ball, trying to intercept")
                 best_interceptor = None
                 best_intercept_score = float(
@@ -233,7 +233,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                     # Calculate how close the robot is to the intercept position (lower score is better)
                     intercept_score = (
                         distance(robot, intercept_pos)
-                        if intercept_pos != None
+                        if intercept_pos is not None
                         else float("inf")
                     )
 
@@ -262,12 +262,12 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                             intercept_pos,
                             friendly_robots[best_interceptor].orientation,
                         )
-                        if intercept_pos != None
+                        if intercept_pos is not None
                         else empty_command(dribbler_on=True)
                     )
 
                 for rid in friendly_robot_ids:
-                    if rid == best_interceptor or best_interceptor == None:
+                    if rid == best_interceptor or best_interceptor is None:
                         continue
                     # If a pass is happening, don't override the receiver's movement
                     if trying_to_pass:
@@ -306,7 +306,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                 print("intercepting")
                 sim_robot_controller_attacker.send_robot_commands()
 
-                if sampled_positions != None:
+                if sampled_positions is not None:
                     for sample in sampled_positions:
                         if sample == target_pos:
                             env.draw_point(sample.x, sample.y, "YELLOW", width=4)
@@ -342,7 +342,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                 sim_robot_controller_attacker.add_robot_commands(commands)
                 sim_robot_controller_attacker.send_robot_commands()
 
-                if sampled_positions != None:
+                if sampled_positions is not None:
                     for sample in sampled_positions:
                         if sample == target_pos:
                             env.draw_point(sample.x, sample.y, "BLUE", width=2)
@@ -434,7 +434,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             sim_robot_controller_attacker.add_robot_commands(commands)
             sim_robot_controller_attacker.send_robot_commands()
 
-            if sampled_positions != None:
+            if sampled_positions is not None:
                 for sample in sampled_positions:
                     if sample == target_pos:
                         env.draw_point(sample.x, sample.y, "YELLOW", width=4)

@@ -54,7 +54,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
     message = None
     while not stop_event.is_set():
         # Process messages from the queue
-        start = time.time()
+        # start = time.time()
         if not message_queue.empty():
             (message_type, message) = message_queue.get()
             if message_type == MessageType.VISION:
@@ -105,8 +105,9 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
         ]
 
     pass_task = None
-    shooting = False
-    goal_scored = False
+    # Never used !!!
+    # shooting = False
+    # goal_scored = False
     stage = 0
     passes = 0
     message = None

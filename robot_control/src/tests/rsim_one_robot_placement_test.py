@@ -13,7 +13,8 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
     based on whether we are in full or quick test mode (see conftest.py)"""
 
     TEST_TRAVEL_TIME_THRESH = 0.03
-    TEST_RESULT_OREN_THRESH = 0.10
+    # never used
+    # TEST_RESULT_OREN_THRESH = 0.10
     TEST_EXPECTED_ITERS = 3
 
     ITERS = 1200
@@ -22,11 +23,8 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
 
     old_pos = []
 
-    N_ROBOTS_BLUE = N_ROBOTS
-    N_ROBOTS_YELLOW = N_ROBOTS
-
     env = SSLStandardEnv(
-        n_robots_blue=N_ROBOTS_BLUE, render_mode="ansi" if headless else "human"
+        n_robots_blue=N_ROBOTS, render_mode="ansi" if headless else "human"
     )
     env.reset()
 

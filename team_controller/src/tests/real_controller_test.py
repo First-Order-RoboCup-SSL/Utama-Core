@@ -182,7 +182,7 @@ def test_command(
 ):
     iter = 0
     stop_its = 100
-    start_time = time.time()
+    # start_time = time.time()
     while True:
         if ramp_only and iter > ramp_iters:
             break
@@ -208,7 +208,6 @@ def test_command(
         # print(binary_representation)
         robot_controller.send_robot_commands()
         print(robot_controller.robot_has_ball(robot_id))
-        start_time = time.time()
         time.sleep(0.017)
 
 
@@ -236,8 +235,8 @@ def test_kicker(robot_controller: RealRobotController, robot_id: int, dribbler_o
 
 
 def main():
-    robot_id = 1
-    stop_buffer_off = [0, 0, 0, 0, 0, 0, 0, 0]
+    # robot_id = 1
+    # stop_buffer_off = [0, 0, 0, 0, 0, 0, 0, 0]
 
     game = Game()
     robot_controller = RealRobotController(

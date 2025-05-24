@@ -1,7 +1,6 @@
 from dataclasses import replace
 import time
 import threading
-import logging
 from typing import Tuple, Optional, List
 import warnings
 
@@ -42,6 +41,9 @@ from team_controller.src.controllers import (
 
 from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
+import logging
+logging.basicConfig(level=logging.CRITICAL, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__) # If this is within the class, or define it globally in the module
 
 class StrategyRunner:
     """
