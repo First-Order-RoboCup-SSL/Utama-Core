@@ -17,7 +17,7 @@ from motion_planning.src.pid.pid import (
     TwoDPID,
 )
 from receivers.referee_receiver import RefereeMessageReceiver
-from refiners.has_ball import HasBallRefiner
+from refiners.robot_info import RobotInfoRefiner
 from refiners.position import PositionRefiner
 
 
@@ -91,7 +91,7 @@ class StrategyRunner:
 
         self.position_refiner = PositionRefiner()
         self.velocity_refiner = VelocityRefiner()
-        # self.hasball_refiner = HasBallRefiner()
+        self.robot_info_refiner = RobotInfoRefiner()
         # self.referee_refiner = RefereeRefiner()
         (
             self.my_past_game,
@@ -309,7 +309,6 @@ class StrategyRunner:
             vision_frames = [
                 buffer.popleft() if buffer else None for buffer in self.vision_buffers
             ]
-        # robot_frame = robot_buffer.popleft()
         # referee_frame = ref_buffer.popleft()
 
         # alternate between opp and friendly playing
@@ -352,24 +351,25 @@ class StrategyRunner:
             running_opp (bool): Whether to run the opponent strategy.
         """
         if running_opp:
+            opp_responses = self.opp_strategy.robot_controller.get_robots_responses()
             game = replace(self.opp_game, ts=iter_start_time - self.game_start_time)
             game = self.position_refiner.refine(game, vision_frames)
-            self.opp_game = self.velocity_refiner.refine(
+            game = self.velocity_refiner.refine(
                 self.opp_past_game, game
             )  # , robot_frame.imu_data)
-            # game = hasball_refiner.refine(game, robot_frame.ir_data)
+            self.opp_game = self.robot_info_refiner.refine(game, opp_responses)
             # game = referee_refiner.refine(game, referee_frame)
             self.opp_present_future_game.add_game(game)
             self.opp_strategy.step(self.opp_present_future_game)
         else:
+            my_responses = self.my_strategy.robot_controller.get_robots_responses()
             game = replace(self.my_game, ts=iter_start_time - self.game_start_time)
             game = self.position_refiner.refine(game, vision_frames)
-            self.my_game = self.velocity_refiner.refine(self.my_past_game, game)
-            # game = hasball_refiner.refine(game, robot_frame.ir_data)
+            game = self.velocity_refiner.refine(self.my_past_game, game)
+            self.my_game = self.robot_info_refiner.refine(game, my_responses)
             # game = referee_refiner.refine(game, referee_frame)
             self.my_present_future_game.add_game(game)
             self.my_strategy.step(self.my_present_future_game)
-
 
 if __name__ == "__main__":
     # bt = DummyBehaviour()
@@ -378,7 +378,7 @@ if __name__ == "__main__":
         strategy=RobotPlacementStrategy(id=3),
         my_team_is_yellow=True,
         my_team_is_right=True,
-        mode="rsim",
+        mode="grsim",
         exp_friendly=6,
         exp_enemy=6,
         exp_ball=True,

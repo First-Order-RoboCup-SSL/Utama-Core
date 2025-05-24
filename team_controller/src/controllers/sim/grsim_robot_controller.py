@@ -49,7 +49,8 @@ class GRSimRobotController(AbstractRobotController):
         else:
             self.net = network_manager.NetworkManager(address=(address, port[1]))
 
-        self.robots_info: List[RobotResponse] = [None] * 6
+        self._robots_info: List[RobotResponse] = [RobotResponse(id=i, has_ball=False) for i in range(6)]
+        
         self.net_diff_sum = 0
         self.net_diff_total = 0
 
@@ -67,15 +68,15 @@ class GRSimRobotController(AbstractRobotController):
         self.net_diff_sum += net_diff
         self.net_diff_total += 1
 
-        average_net_diff = self.net_diff_sum / self.net_diff_total
-        logger.log(logging.WARNING if net_diff > TIMESTEP / 2 else logging.INFO,
-                   "Sending commands to GRSIM took %f",
-                   net_diff)
-        logger.log(
-            logging.WARNING if net_diff > TIMESTEP / 2 else logging.INFO,
-            "GRSIM Command Send Time Avg: %f",
-            average_net_diff
-        )
+        # average_net_diff = self.net_diff_sum / self.net_diff_total
+        # logger.log(logging.WARNING if net_diff > TIMESTEP / 2 else logging.INFO,
+        #            "Sending commands to GRSIM took %f",
+        #            net_diff)
+        # logger.log(
+        #     logging.WARNING if net_diff > TIMESTEP / 2 else logging.INFO,
+        #     "GRSIM Command Send Time Avg: %f",
+        #     average_net_diff
+        # )
 
         # st = time.time()
         # manages the response packet that is received
@@ -84,8 +85,9 @@ class GRSimRobotController(AbstractRobotController):
             robots_info.ParseFromString(data)
             for _, robot_info in enumerate(robots_info.feedback):
                 if robot_info.HasField("dribbler_ball_contact") and robot_info.id < 6:
-                    self.robots_info[robot_info.id] = RobotResponse(
-                        robot_info.dribbler_ball_contact
+                    self._robots_info[robot_info.id] = RobotResponse(
+                        id=robot_info.id,
+                        has_ball=robot_info.dribbler_ball_contact
                     )
                 elif (
                     robot_info.HasField("dribbler_ball_contact") and robot_info.id >= 6
@@ -94,6 +96,7 @@ class GRSimRobotController(AbstractRobotController):
                         "Invalid robot info received, robot id >= 6", SyntaxWarning
                     )
         self.out_packet.Clear()
+        
     def add_robot_commands(
         self,
         robot_commands: Union[RobotCommand, Dict[int, RobotCommand]],
@@ -112,6 +115,9 @@ class GRSimRobotController(AbstractRobotController):
         Calls _add_robot_command for each entered command
         """
         super().add_robot_commands(robot_commands, robot_id)
+
+    def get_robots_responses(self) -> Optional[RobotResponse]:
+        return self._robots_info
 
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
         """
@@ -155,21 +161,3 @@ class GRSimRobotController(AbstractRobotController):
         wheel_vel.back_right = command.back_right
         wheel_vel.back_left = command.back_left
 
-    def robot_has_ball(self, robot_id: int) -> bool:
-        """
-        Checks if the specified robot has the ball.
-
-        Args:
-            robot_id (int): The ID of the robot.
-
-        Returns:
-            bool: True if the robot has the ball, False otherwise.
-        """
-        if self.robots_info[robot_id] is None:
-            return False
-
-        if self.robots_info[robot_id].has_ball:
-            logger.debug(f"Robot: {robot_id}: HAS the Ball")
-            return True
-        else:
-            return False

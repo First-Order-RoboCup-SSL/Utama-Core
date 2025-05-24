@@ -175,7 +175,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
     def _get_robot_observation(self, robot):
         robot_pos = RawRobotData(robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1)
-        robot_info = RobotResponse(robot.infrared)
+        robot_info = RobotResponse(robot.id, robot.infrared)
         return robot_pos, robot_info
 
     def _get_commands(self, actions) -> list[Robot]:

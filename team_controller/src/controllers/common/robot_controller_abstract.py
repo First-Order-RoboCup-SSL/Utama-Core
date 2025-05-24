@@ -53,14 +53,8 @@ class AbstractRobotController:
         pass
 
     @abc.abstractmethod
-    def robot_has_ball(self, robot_id: int) -> bool:
+    def get_robots_responses(self) -> Optional[RobotResponse]:
         """
-        Checks if the specified robot has the ball.
-
-        Args:
-            robot_id (int): The ID of the robot.
-
-        Returns:
-            bool: True if the robot has the ball, False otherwise.
+        Returns the robot response from the last sent commands.
         """
         pass

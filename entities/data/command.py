@@ -24,6 +24,7 @@ class RobotVelCommand(NamedTuple):
 
 
 class RobotResponse(NamedTuple):
+    id: int
     has_ball: bool
 
 
