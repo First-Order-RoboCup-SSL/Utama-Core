@@ -17,7 +17,7 @@ class AbstractSimController:
 
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
-        pass
+        ...
 
     @abc.abstractmethod
     def teleport_robot(
@@ -40,11 +40,11 @@ class AbstractSimController:
 
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
-        pass
+        ...
 
     @abc.abstractmethod
     def set_robot_presence(
-        self, robot_id: int, team_colour_is_blue: bool, should_robot_be_present: bool
+        self, is_team_yellow: bool, robot_id: int, should_robot_be_present: bool
     ) -> None:
         """
         Sets a robot's presence on the field by teleporting it to a specific location or removing it from the field.
@@ -56,4 +56,4 @@ class AbstractSimController:
 
         The method calculates a teleport location based on the team and presence status, then sends a command to the simulator.
         """
-        pass
+        ...

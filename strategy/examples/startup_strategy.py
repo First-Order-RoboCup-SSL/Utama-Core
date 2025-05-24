@@ -4,21 +4,20 @@ from entities.data.command import RobotCommand
 from entities.game.present_future_game import PresentFutureGame
 from robot_control.src.skills import go_to_point
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
-from strategy.strategy import Strategy
+from strategy.abstract_strategy import AbstractStrategy
 import numpy as np
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
 
 import logging
+
 logger = logging.getLogger(__name__)
 
-class StartupStrategy(Strategy):
+
+class StartupStrategy(AbstractStrategy):
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if n_runtime_enemy <= 6 and n_runtime_friendly <= 6:
-            return True
-        else:
-            return False
+        return True
 
     def step(self, present_future_game: PresentFutureGame):
         START_FORMATION = (
