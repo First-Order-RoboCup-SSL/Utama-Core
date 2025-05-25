@@ -28,8 +28,8 @@ class AngleSmoother:
 class PositionRefiner(BaseRefiner):
     def __init__(self):
         self.angle_smoother = AngleSmoother(alpha=0.4)
-        self.half_field_length = 9.0  # Example field length, adjust as needed
-        self.half_field_width = 6.0  # Example field width, adjust as needed
+        self.half_field_length = 4.5  # Example field length, adjust as needed
+        self.half_field_width = 3.0  # Example field width, adjust as needed
 
     # Primary function for the Refiner interface
     def refine(self, game: Game, data: List[RawVisionData]):
