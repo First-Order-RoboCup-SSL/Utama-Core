@@ -28,9 +28,14 @@ class AngleSmoother:
 class PositionRefiner(BaseRefiner):
     def __init__(self):
         self.angle_smoother = AngleSmoother(alpha=0.4)
-            
+        self.half_field_length = 9.0  # Example field length, adjust as needed
+        self.half_field_width = 6.0  # Example field width, adjust as needed
+
     # Primary function for the Refiner interface
     def refine(self, game: Game, data: List[RawVisionData]):
+
+        self.half_field_length = game.field.half_length
+        self.half_field_width = game.field.half_width
 
         data = [frame for frame in data if frame is not None]
         
@@ -60,11 +65,18 @@ class PositionRefiner(BaseRefiner):
     def _combine_robot_vision_data(old_robot: Robot, robot_data: VisionRobotData,
                                    angle_smoother: AngleSmoother) -> Robot:
         assert old_robot.id == robot_data.id
+        new_x, new_y = robot_data.x, robot_data.y
+
+        if new_x > PositionRefiner.half_field_length or new_x < -PositionRefiner.half_field_length:
+            new_x = old_robot.p.x  # Keep old x if new x is invalid
+        if new_y > PositionRefiner.half_field_width or new_y < -PositionRefiner.half_field_width:
+            new_y = old_robot.p.y  # Keep old y if new y is invalid
+
         # Smoothing
         new_orientation = angle_smoother.smooth(old_robot.orientation, robot_data.orientation)
         return replace(old_robot,
             id=robot_data.id,
-            p=vector.obj(x=robot_data.x, y=robot_data.y),
+            p=vector.obj(x=new_x, y=new_y),
             orientation=new_orientation,
         )
 
