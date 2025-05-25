@@ -1,4 +1,4 @@
-from typing import Deque, List
+from typing import Deque, List, Tuple
 from entities.data.raw_vision import RawVisionData
 from entities.game.game import Game
 import time
@@ -20,7 +20,21 @@ class GameGater:
         position_refiner: PositionRefiner,
         is_pvp: bool,
         rsim_env: SSLBaseEnv = None,
-    ) -> Game:
+    ) -> Tuple[Game, Game]:
+
+        def _add_frame(my_game: Game, opp_game: Game) -> Tuple[Game, Game]:
+            if rsim_env:
+                vision_frames = [rsim_env._frame_to_observations()[0]]
+            else:
+                vision_frames = [
+                    buffer.popleft() if buffer else None for buffer in vision_buffers
+                ]
+            my_game = position_refiner.refine(my_game, vision_frames)
+            if is_pvp:
+                opp_game = position_refiner.refine(opp_game, vision_frames)
+
+            return my_game, opp_game
+
         my_game = Game(0, my_team_is_yellow, my_team_is_right, {}, {}, None)
 
         if is_pvp:
@@ -40,15 +54,20 @@ class GameGater:
             and len(my_game.enemy_robots) < exp_enemy
             and (exp_ball and my_game.ball is None)
         ):
-            if rsim_env:
-                vision_frames = [rsim_env._frame_to_observations()[0]]
-            else:
-                vision_frames = [
-                    buffer.popleft() if buffer else None for buffer in vision_buffers
-                ]
-            my_game = position_refiner.refine(my_game, vision_frames)
-            if is_pvp:
-                opp_game = position_refiner.refine(opp_game, vision_frames)
+            my_game, opp_game = _add_frame(my_game, opp_game)
             time.sleep(0.1)
 
+        print(my_game.friendly_robots)
+
+        # assert that we don't see more robots than expected
+        if len(my_game.friendly_robots) > exp_friendly:
+            raise ValueError(
+                f"Too many friendly robots: {len(my_game.friendly_robots)} > {exp_friendly}"
+            )
+        if len(my_game.enemy_robots) > exp_enemy:
+            raise ValueError(
+                f"Too many enemy robots: {len(my_game.enemy_robots)} > {exp_enemy}"
+            )
+
+        my_game, opp_game = _add_frame(my_game, opp_game)
         return my_game, opp_game

@@ -42,8 +42,15 @@ from team_controller.src.controllers import (
 from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 import logging
-logging.basicConfig(level=logging.CRITICAL, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__) # If this is within the class, or define it globally in the module
+
+logging.basicConfig(
+    level=logging.CRITICAL,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(
+    __name__
+)  # If this is within the class, or define it globally in the module
+
 
 class StrategyRunner:
     """
@@ -84,8 +91,8 @@ class StrategyRunner:
         warnings.simplefilter("default", DeprecationWarning)
 
         self._assert_exp_robots()
-        self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
         self.rsim_env, self.sim_controller = self._load_sim_and_controller()
+        self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
         self._load_robot_control_and_pids()
 
         self.position_refiner = PositionRefiner()
@@ -166,7 +173,6 @@ class StrategyRunner:
                 sim_controller.set_robot_presence(y, True, False)
             for b in b_to_remove:
                 sim_controller.set_robot_presence(b, False, False)
-            time.wait(1000)
 
             return None, sim_controller
 

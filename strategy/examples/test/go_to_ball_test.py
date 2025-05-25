@@ -3,6 +3,7 @@ from team_controller.src.controllers import AbstractSimController
 from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
 from entities.game.game import Game
 import math
+import time
 
 
 class GoToBallTestManager(AbstractTestManager):
@@ -44,7 +45,7 @@ class GoToBallTestManager(AbstractTestManager):
         else:
             self.y_robots = game.enemy_robots
             self.b_robots = game.friendly_robots
-
+        print(self.y_robots)
         for i in self.b_robots.keys():
             sim_controller.teleport_robot(
                 False, i, ini_blue[i][0], ini_blue[i][1], ini_blue[i][2]
