@@ -57,8 +57,6 @@ class GameGater:
             my_game, opp_game = _add_frame(my_game, opp_game)
             time.sleep(0.1)
 
-        print(my_game.friendly_robots)
-
         # assert that we don't see more robots than expected
         if len(my_game.friendly_robots) > exp_friendly:
             raise ValueError(

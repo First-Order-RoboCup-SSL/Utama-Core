@@ -45,7 +45,6 @@ class GoToBallTestManager(AbstractTestManager):
         else:
             self.y_robots = game.enemy_robots
             self.b_robots = game.friendly_robots
-        print(self.y_robots)
         for i in self.b_robots.keys():
             sim_controller.teleport_robot(
                 False, i, ini_blue[i][0], ini_blue[i][1], ini_blue[i][2]
@@ -68,10 +67,7 @@ class GoToBallTestManager(AbstractTestManager):
         """
         Evaluate the status of the test episode.
         """
-        THRESHOLD = 0.2
-        rb_p = game.friendly_robots[self.my_strategy.target_id].p
-        ball_p = game.ball.p
-        if math.dist((rb_p.x, rb_p.y), (ball_p.x, ball_p.y)) < THRESHOLD:
+        if game.friendly_robots[self.my_strategy.target_id].has_ball:
             return TestStatus.SUCCESS
         return TestStatus.IN_PROGRESS
 

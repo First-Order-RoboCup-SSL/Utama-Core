@@ -30,17 +30,15 @@ class AngleSmoother:
 
 
 class PositionRefiner(BaseRefiner):
+    HALF_FIELD_LENGTH = 4.5
+    HALF_FIELD_WIDTH = 3.0
+
     def __init__(self):
         self.angle_smoother = AngleSmoother(alpha=0.4)
-        self.half_field_length = 4.5  # Example field length, adjust as needed
-        self.half_field_width = 3.0  # Example field width, adjust as needed
+          # Example field width, adjust as needed
 
     # Primary function for the Refiner interface
     def refine(self, game: Game, data: List[RawVisionData]):
-
-        self.half_field_length = game.field.half_length
-        self.half_field_width = game.field.half_width
-
         data = [frame for frame in data if frame is not None]
 
         # If no information just return the original
@@ -87,17 +85,6 @@ class PositionRefiner(BaseRefiner):
     ) -> Robot:
         assert old_robot.id == robot_data.id
         new_x, new_y = robot_data.x, robot_data.y
-
-        if (
-            new_x > PositionRefiner.half_field_length
-            or new_x < -PositionRefiner.half_field_length
-        ):
-            new_x = old_robot.p.x  # Keep old x if new x is invalid
-        if (
-            new_y > PositionRefiner.half_field_width
-            or new_y < -PositionRefiner.half_field_width
-        ):
-            new_y = old_robot.p.y  # Keep old y if new y is invalid
 
         # Smoothing
         new_orientation = angle_smoother.smooth(
@@ -146,6 +133,13 @@ class PositionRefiner(BaseRefiner):
     ) -> Dict[int, Robot]:
         new_game_robots = game_robots.copy()
         for robot in vision_robots:
+            new_x, new_y = robot.x, robot.y
+
+            if new_x > PositionRefiner.HALF_FIELD_LENGTH or new_x < -PositionRefiner.HALF_FIELD_LENGTH:
+                continue  # Ignore robots that are out of bounds in x direction
+            if new_y > PositionRefiner.HALF_FIELD_WIDTH or new_y < -PositionRefiner.HALF_FIELD_WIDTH:
+                continue  # Ignore robots that are out of bounds in y direction
+
             if robot.id not in new_game_robots:
                 # At the start of the game, we haven't seen anything yet, so just create a new robot
                 new_game_robots[robot.id] = PositionRefiner._robot_from_vision(
