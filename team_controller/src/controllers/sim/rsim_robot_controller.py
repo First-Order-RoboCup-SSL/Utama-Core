@@ -28,18 +28,21 @@ class RSimRobotController(AbstractRobotController):
     def __init__(
         self,
         is_team_yellow: bool,
+        n_friendly: int,
         env: SSLBaseEnv,
         pvp_manager=None,  # RSimPVPRobotController, cannot forward declare
     ):
-        self._is_team_yellow = is_team_yellow
+        super().__init__(is_team_yellow, n_friendly)
         self._env = env
-        self._n_friendly_robots, self._n_enemy_robots = self._get_n_robots()
-        self._out_packet = self._empty_command(self.n_friendly_robots)
-        self._robots_info: list[RobotResponse] = [None] * self.n_friendly_robots
+        self._n_enemy = self._get_n_enemy()
+        self._out_packet = self._empty_command(self._n_friendly)
         self._pvp_manager = pvp_manager
 
         if not self.pvp_manager:
             self.env.reset()
+
+    def get_robots_responses(self) -> Optional[RobotResponse]:
+        return self._robots_info
 
     def send_robot_commands(self) -> None:
         """
@@ -50,13 +53,13 @@ class RSimRobotController(AbstractRobotController):
         else:
             if self.is_team_yellow:
                 action = {
-                    "team_blue": tuple(self._empty_command(self.n_enemy_robots)),
+                    "team_blue": tuple(self._empty_command(self.n_enemy)),
                     "team_yellow": tuple(self._out_packet),
                 }
             else:
                 action = {
                     "team_blue": tuple(self._out_packet),
-                    "team_yellow": tuple(self._empty_command(self.n_enemy_robots)),
+                    "team_yellow": tuple(self._empty_command(self.n_enemy)),
                 }
 
             observation, reward, terminated, truncated, reward_shaping = self._env.step(
@@ -73,7 +76,7 @@ class RSimRobotController(AbstractRobotController):
             logger.debug(f"{new_frame} {terminated} {truncated} {reward_shaping}")
 
             # flush out_packet
-            self._out_packet = self._empty_command(self.n_friendly_robots)
+            self._out_packet = self._empty_command(self.n_friendly)
 
     def add_robot_commands(
         self,
@@ -122,38 +125,21 @@ class RSimRobotController(AbstractRobotController):
         self._out_packet[robot_id] = action
 
     def empty_command(self) -> list[NDArray]:
-        return self._empty_command(self.n_friendly_robots)
+        return self._empty_command(self.n_friendly)
 
     # create an empty command array
     def _empty_command(self, n_robots: int) -> list[NDArray]:
         return [np.zeros((6,), dtype=float) for _ in range(n_robots)]
 
-    def robot_has_ball(self, robot_id: int) -> bool:
-        """
-        Checks if the specified robot has the ball.
-
-        Args:
-            robot_id (int): The ID of the robot.
-
-        Returns:
-            bool: True if the robot has the ball, False otherwise.
-        """
-        if self._robots_info[robot_id] is None:
-            return False
-
-        if self._robots_info[robot_id].has_ball:
-            logger.debug(f"Robot: {robot_id} has the Ball")
-            return True
-        else:
-            return False
-
-    def _get_n_robots(self) -> Tuple[int, int]:
+    def _get_n_enemy(self) -> Tuple[int, int]:
         n_yellow = self._env.n_robots_yellow
         n_blue = self._env.n_robots_blue
         if self._is_team_yellow:
-            return n_yellow, n_blue
+            assert n_yellow == self._n_friendly
+            return n_blue
         else:
-            return n_blue, n_yellow
+            assert n_blue == self._n_friendly
+            return n_yellow
 
     @property
     def is_team_yellow(self):
@@ -164,10 +150,6 @@ class RSimRobotController(AbstractRobotController):
         return self._env
 
     @property
-    def debug(self):
-        return self._debug
-
-    @property
     def robots_info(self):
         return self._robots_info
 
@@ -176,12 +158,12 @@ class RSimRobotController(AbstractRobotController):
         return self._pvp_manager
 
     @property
-    def n_friendly_robots(self):
-        return self._n_friendly_robots
+    def n_friendly(self):
+        return self._n_friendly
 
     @property
-    def n_enemy_robots(self):
-        return self._n_enemy_robots
+    def n_enemy(self):
+        return self._n_enemy
 
 
 class RSimPVPManager:
@@ -239,40 +221,3 @@ class RSimPVPManager:
 
     def _empty_command(self, n_robots: int) -> list[NDArray]:
         return [np.zeros((6,), dtype=float) for _ in range(n_robots)]
-
-    # TODO: to debug this
-
-    # def send_command(self, is_yellow: Boolean, out_packet):
-    #     colour = "team_yellow" if is_yellow else "team_blue"
-    #     other_colour = "team_blue" if is_yellow else "team_yellow"
-
-    #     if self._pending[colour]:
-    #         self._fill_and_send()
-
-    #     self._pending[colour] = tuple(out_packet)
-    #     if self._pending[other_colour]:
-    #         self._fill_and_send()
-
-    # def _fill_and_send(self):
-    #     for colour in ("team_blue", "team_yellow"):
-    #         if not self._pending[colour]:
-    #             self._pending[colour] = tuple(
-    #                 self._empty_command(
-    #                     self.n_robots_yellow
-    #                     if colour == "team_yellow"
-    #                     else self.n_robots_blue
-    #                 )
-    #             )
-
-    #     observation, reward, terminated, truncated, reward_shaping = self._env.step(
-    #         self._pending
-    #     )
-
-    #     new_frame, yellow_robots_info, blue_robots_info = observation
-    #     self.blue_player.update_robots_info(blue_robots_info)
-    #     self.yellow_player.update_robots_info(yellow_robots_info)
-
-    #     self._pending = {"team_blue": None, "team_yellow": None}
-
-    # def flush(self):
-    #     self._fill_and_send()

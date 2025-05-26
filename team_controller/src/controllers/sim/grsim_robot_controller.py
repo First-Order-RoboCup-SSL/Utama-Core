@@ -10,11 +10,10 @@ from config.settings import (
     KICK_SPD,
     DRIBBLE_SPD,
     CHIP_ANGLE,
-    PID_PARAMS,
     LOCAL_HOST,
-    TIMESTEP,
     YELLOW_TEAM_SIM_PORT,
     BLUE_TEAM_SIM_PORT,
+    MAX_ROBOTS,
 )
 from team_controller.src.utils import network_manager
 
@@ -37,10 +36,11 @@ class GRSimRobotController(AbstractRobotController):
     def __init__(
         self,
         is_team_yellow: bool,
+        n_friendly: int,
         address=LOCAL_HOST,
         port=(YELLOW_TEAM_SIM_PORT, BLUE_TEAM_SIM_PORT),
     ):
-        self.is_team_yellow = is_team_yellow
+        super().__init__(is_team_yellow, n_friendly)
 
         self.out_packet = RobotControl()
 
@@ -49,8 +49,6 @@ class GRSimRobotController(AbstractRobotController):
         else:
             self.net = network_manager.NetworkManager(address=(address, port[1]))
 
-        self._robots_info: List[RobotResponse] = [RobotResponse(id=i, has_ball=False) for i in range(6)]
-        
         self.net_diff_sum = 0
         self.net_diff_total = 0
 
@@ -84,19 +82,19 @@ class GRSimRobotController(AbstractRobotController):
             robots_info = RobotControlResponse()
             robots_info.ParseFromString(data)
             for _, robot_info in enumerate(robots_info.feedback):
-                if robot_info.HasField("dribbler_ball_contact") and robot_info.id < 6:
-                    self._robots_info[robot_info.id] = RobotResponse(
-                        id=robot_info.id,
-                        has_ball=robot_info.dribbler_ball_contact
-                    )
-                elif (
-                    robot_info.HasField("dribbler_ball_contact") and robot_info.id >= 6
-                ):
-                    warnings.warn(
-                        "Invalid robot info received, robot id >= 6", SyntaxWarning
-                    )
+                if robot_info.HasField("dribbler_ball_contact"):
+                    if robot_info.id >= MAX_ROBOTS:
+                        warnings.warn(
+                            "Invalid robot info received, robot id >= 6", SyntaxWarning
+                        )
+                    elif robot_info.id < self._n_friendly:
+                        self._robots_info[robot_info.id] = RobotResponse(
+                            id=robot_info.id, has_ball=robot_info.dribbler_ball_contact
+                        )
+                    # ignore robot_info for robots that are not expected (ie deactivated since the start of the game)
+
         self.out_packet.Clear()
-        
+
     def add_robot_commands(
         self,
         robot_commands: Union[RobotCommand, Dict[int, RobotCommand]],
@@ -132,7 +130,6 @@ class GRSimRobotController(AbstractRobotController):
         robot.kick_speed = KICK_SPD if (command.kick or command.chip) > 0 else 0
         robot.kick_angle = CHIP_ANGLE if command.chip > 0 else 0
         robot.dribbler_speed = DRIBBLE_SPD if command.dribble > 0 else 0
-        # print(robot)
 
         local_vel = robot.move_command.local_velocity
         local_vel.forward = command.local_forward_vel
@@ -160,4 +157,3 @@ class GRSimRobotController(AbstractRobotController):
         wheel_vel.front_left = command.front_left
         wheel_vel.back_right = command.back_right
         wheel_vel.back_left = command.back_left
-

@@ -5,6 +5,13 @@ from typing import Union, Dict, Optional
 
 
 class AbstractRobotController:
+    def __init__(self, is_team_yellow: bool, n_friendly: int):
+        self._is_team_yellow = is_team_yellow
+        self._n_friendly = n_friendly
+        self._robots_info: list[RobotResponse] = [
+            RobotResponse(id=i, has_ball=False) for i in range(n_friendly)
+        ]
+
     @abc.abstractmethod
     def send_robot_commands(self) -> None:
         """
@@ -50,11 +57,11 @@ class AbstractRobotController:
             robot_id (int): The ID of the robot.
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
-        pass
+        ...
 
     @abc.abstractmethod
     def get_robots_responses(self) -> Optional[RobotResponse]:
         """
         Returns the robot response from the last sent commands.
         """
-        pass
+        return self._robots_info

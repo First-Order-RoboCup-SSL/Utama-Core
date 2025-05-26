@@ -24,12 +24,13 @@ class AngleSmoother:
         diff = np.atan2(np.sin(new_angle - old_angle), np.cos(new_angle - old_angle))
         smoothed_angle = old_angle + self.alpha * diff
 
-        return new_angle
+        return smoothed_angle
 
 
 class PositionRefiner(BaseRefiner):
     HALF_FIELD_LENGTH = 4.5
     HALF_FIELD_WIDTH = 3.0
+    BOUNDS_BUFFER = 1.0
 
     def __init__(self):
         self.angle_smoother = AngleSmoother(alpha=1)
@@ -137,16 +138,10 @@ class PositionRefiner(BaseRefiner):
         for robot in vision_robots:
             new_x, new_y = robot.x, robot.y
 
-            if (
-                new_x > PositionRefiner.HALF_FIELD_LENGTH
-                or new_x < -PositionRefiner.HALF_FIELD_LENGTH
+            if (np.abs(new_x) > self.HALF_FIELD_LENGTH + self.BOUNDS_BUFFER) or (
+                np.abs(new_y) > self.HALF_FIELD_WIDTH + self.BOUNDS_BUFFER
             ):
-                continue  # Ignore robots that are out of bounds in x direction
-            if (
-                new_y > PositionRefiner.HALF_FIELD_WIDTH
-                or new_y < -PositionRefiner.HALF_FIELD_WIDTH
-            ):
-                continue  # Ignore robots that are out of bounds in y direction
+                continue  # Ignore robots that are out of bounds
 
             if robot.id not in new_game_robots:
                 # At the start of the game, we haven't seen anything yet, so just create a new robot

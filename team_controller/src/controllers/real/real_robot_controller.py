@@ -5,7 +5,6 @@ import numpy as np
 import time
 
 from entities.data.command import RobotCommand, RobotResponse
-from entities.game import Game
 
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
@@ -30,26 +29,18 @@ class RealRobotController(AbstractRobotController):
 
     Args:
         is_team_yellow (bool): True if the team is yellow, False if the team is blue.
-        game_obj (Game): The game object storing all game state data.
         n_robots (int): The number of robots in the team. Directly affects output buffer size. Default is 6.
     """
 
-    def __init__(
-        self,
-        is_team_yellow: bool,
-        game_obj: Game = None,
-        n_robots: int = 6,
-    ):
-        self._is_team_yellow = is_team_yellow
-        self._game_obj = game_obj
-        self._n_robots = n_robots  # determines buffer size
+    def __init__(self, is_team_yellow: bool, n_friendly: int):
+        super().__init__(is_team_yellow, n_friendly)
         self._serial = self._init_serial()
 
         self._EMPTY_ID = 30  # id to indicate empty buffer: 1110 in control byte
         self._rbt_cmd_size = 8  # packet size for one robot
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the packet received from the robots
-        self._robots_info: List[RobotResponse] = [None] * self._n_robots
+        self._robots_info: List[RobotResponse] = [None] * self._n_friendly
 
         logger.debug(
             f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}"
@@ -97,30 +88,11 @@ class RealRobotController(AbstractRobotController):
         start_idx = robot_id * self._rbt_cmd_size
         self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = command_buffer
 
-    def robot_has_ball(self, robot_id):
-        """
-        Checks if the specified robot has the ball.
-
-        Args:
-            robot_id (int): The ID of the robot.
-
-        Returns:
-            bool: True if the robot has the ball, False otherwise.
-        """
-        if self._robots_info[robot_id] is None:
-            return False
-
-        if self._robots_info[robot_id].has_ball:
-            logger.debug(f"Robot: {robot_id}: HAS the Ball")
-            return True
-        else:
-            return False
-
     # def _populate_robots_info(self, data_in: bytes) -> None:
     #     """
     #     Populates the robots_info list with the data received from the robots.
     #     """
-    #     for i in range(self._n_robots):
+    #     for i in range(self._n_friendly):
     #         has_ball = False
     #         if data_in[0] & 0b10000000:
     #             has_ball = True
@@ -174,12 +146,12 @@ class RealRobotController(AbstractRobotController):
         control_byte |= robot_id << 1
         # set last bit as 1 if its the last command
         # TODO: this fails on cases wher we are only communicating with one robot and their id is not 0
-        if robot_id == self._n_robots - 1:
+        if robot_id == self._n_friendly - 1:
             control_byte |= 0x01
         packet.append(control_byte)
         crc = self.compute_crc(packet)
         packet.append(crc)
-        
+
         # packet_str = " ".join(f"{byte:08b}" for byte in packet)
 
         return packet
@@ -234,7 +206,7 @@ class RealRobotController(AbstractRobotController):
     def _empty_command(self) -> bytearray:
         empty_buffer = bytearray([0] * 6 + [self._EMPTY_ID] + [0])
         empty_last_buffer = bytearray([0] * 6 + [self._EMPTY_ID + 1] + [0])
-        return empty_buffer * (self._n_robots - 1) + empty_last_buffer
+        return empty_buffer * (self._n_friendly - 1) + empty_last_buffer
 
     def _init_serial(self) -> Serial:
         serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
@@ -261,14 +233,6 @@ class RealRobotController(AbstractRobotController):
         return self._is_team_yellow
 
     @property
-    def game_obj(self) -> Game:
-        return self._game_obj
-
-    @property
-    def n_robots(self) -> int:
-        return self._n_robots
-
-    @property
     def serial(self) -> Serial:
         return self._serial
 
@@ -281,8 +245,8 @@ class RealRobotController(AbstractRobotController):
         return self._out_packet
 
     @property
-    def n_robot(self) -> int:
-        return self._n_robots
+    def n_friendly(self) -> int:
+        return self._n_friendly
 
     @property
     def in_packet_size(self) -> int:
@@ -290,9 +254,7 @@ class RealRobotController(AbstractRobotController):
 
 
 if __name__ == "__main__":
-    robot_controller = RealRobotController(
-        is_team_yellow=True, game_obj=Game(), n_robots=2
-    )
+    robot_controller = RealRobotController(is_team_yellow=True, n_robots=2)
     cmd = RobotCommand(
         local_forward_vel=0.2,
         local_left_vel=0,

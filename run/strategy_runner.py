@@ -167,12 +167,21 @@ class StrategyRunner:
             else:
                 n_yellow = self.exp_enemy
                 n_blue = self.exp_friendly
+
+            # Ensure the expected number of robots is met by teleporting them
             y_to_remove = [i for i in range(n_yellow, MAX_ROBOTS)]
             b_to_remove = [i for i in range(n_blue, MAX_ROBOTS)]
             for y in y_to_remove:
                 sim_controller.set_robot_presence(y, True, False)
             for b in b_to_remove:
                 sim_controller.set_robot_presence(b, False, False)
+
+            y_to_keep = [i for i in range(n_yellow)]
+            b_to_keep = [i for i in range(n_blue)]
+            for y in y_to_keep:
+                sim_controller.set_robot_presence(y, True, True)
+            for b in b_to_keep:
+                sim_controller.set_robot_presence(b, False, True)
 
             return None, sim_controller
 
@@ -223,6 +232,7 @@ class StrategyRunner:
                 pvp_manager = RSimPVPManager(self.rsim_env)
             my_robot_controller = RSimRobotController(
                 is_team_yellow=self.my_team_is_yellow,
+                n_friendly=self.exp_friendly,
                 env=self.rsim_env,
                 pvp_manager=pvp_manager,
             )
@@ -230,6 +240,7 @@ class StrategyRunner:
             if self.opp_strategy:
                 opp_robot_controller = RSimRobotController(
                     is_team_yellow=not self.my_team_is_yellow,
+                    n_friendly=self.exp_enemy,
                     env=self.rsim_env,
                     pvp_manager=pvp_manager,
                 )
@@ -248,24 +259,24 @@ class StrategyRunner:
 
         elif self.mode == "grsim":
             my_robot_controller = GRSimRobotController(
-                is_team_yellow=self.my_team_is_yellow
+                is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
             )
             my_pid_oren, my_pid_trans = get_grsim_pids()
             if self.opp_strategy:
                 opp_robot_controller = GRSimRobotController(
-                    is_team_yellow=not self.my_team_is_yellow
+                    is_team_yellow=not self.my_team_is_yellow, n_friendly=self.exp_enemy
                 )
                 opp_pid_oren, opp_pid_trans = get_grsim_pids()
 
         elif self.mode == "real":
             my_robot_controller = RealRobotController(
-                is_team_yellow=self.my_team_is_yellow
+                is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
             )
             my_pid_oren, my_pid_trans = get_real_pids()
-            # TODO: opponents currently not supported
+            # TODO: currently, two player not supported based on serial and transmission requirements
             if self.opp_strategy:
                 opp_robot_controller = RealRobotController(
-                    is_team_yellow=not self.my_team_is_yellow
+                    is_team_yellow=not self.my_team_is_yellow, n_friendly=self.exp_enemy
                 )
                 opp_pid_oren, opp_pid_trans = get_real_pids()
 
@@ -418,6 +429,7 @@ class StrategyRunner:
             # game = referee_refiner.refine(game, referee_frame)
             self.my_present_future_game.add_game(game)
             self.my_strategy.step(self.my_present_future_game)
+
 
 if __name__ == "__main__":
     # bt = DummyBehaviour()

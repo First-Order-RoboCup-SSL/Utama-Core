@@ -103,7 +103,7 @@ class GRSimController(AbstractSimController):
         self, robot_id: int, is_team_yellow: bool, is_present: bool
     ) -> None:
         """
-        Sets a robot's presence on the field by teleporting it to a specific location or removing it from the field.
+        Sets a robot's presence on the field by teleporting it on and off the field.
 
         Args:
             robot_id (int): The unique ID of the robot.
