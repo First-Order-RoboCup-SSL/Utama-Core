@@ -30,7 +30,6 @@ class GoToBallTestManager(AbstractTestManager):
         Reset position of robots and ball for the next strategy test.
         """
         # Reset all other robots
-        sim_controller.teleport_ball(0, 0)
         yellow_is_right = game.my_team_is_yellow == game.my_team_is_right
         if yellow_is_right:
             ini_yellow = RIGHT_START_ONE
@@ -62,7 +61,10 @@ class GoToBallTestManager(AbstractTestManager):
             ini_pos[0],
             ini_pos[1],
         )
-
+        time.sleep(0.1)
+        
+        sim_controller.teleport_ball(0, 0)
+        
     def eval_status(self, game: Game):
         """
         Evaluate the status of the test episode.

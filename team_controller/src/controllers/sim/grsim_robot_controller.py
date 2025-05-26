@@ -56,15 +56,16 @@ class GRSimRobotController(AbstractRobotController):
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
-        logger.debug("Sending Robot Commands ...")
-
-        net_start = time.time()
+        # logger.debug("Sending Robot Commands ...")
+        
+        # net_start = time.time()
         data = self.net.send_command(self.out_packet, is_sim_robot_cmd=True)
-        net_end = time.time()
-        net_diff = net_end - net_start
+        self.out_packet.Clear()
+        # net_end = time.time()
+        # net_diff = net_end - net_start
 
-        self.net_diff_sum += net_diff
-        self.net_diff_total += 1
+        # self.net_diff_sum += net_diff
+        # self.net_diff_total += 1
 
         # average_net_diff = self.net_diff_sum / self.net_diff_total
         # logger.log(logging.WARNING if net_diff > TIMESTEP / 2 else logging.INFO,
@@ -76,24 +77,9 @@ class GRSimRobotController(AbstractRobotController):
         #     average_net_diff
         # )
 
-        # st = time.time()
         # manages the response packet that is received
         if data:
-            robots_info = RobotControlResponse()
-            robots_info.ParseFromString(data)
-            for _, robot_info in enumerate(robots_info.feedback):
-                if robot_info.HasField("dribbler_ball_contact"):
-                    if robot_info.id >= MAX_ROBOTS:
-                        warnings.warn(
-                            "Invalid robot info received, robot id >= 6", SyntaxWarning
-                        )
-                    elif robot_info.id < self._n_friendly:
-                        self._robots_info[robot_info.id] = RobotResponse(
-                            id=robot_info.id, has_ball=robot_info.dribbler_ball_contact
-                        )
-                    # ignore robot_info for robots that are not expected (ie deactivated since the start of the game)
-
-        self.out_packet.Clear()
+            self._update_robot_info(data)
 
     def add_robot_commands(
         self,
@@ -114,8 +100,38 @@ class GRSimRobotController(AbstractRobotController):
         """
         super().add_robot_commands(robot_commands, robot_id)
 
+    def _update_robot_info(self, data: bytes) -> None:
+        robots_info: List[RobotResponse] = []
+        robots_response = RobotControlResponse()
+        robots_response.ParseFromString(data)
+        for _, robot_info in enumerate(robots_response.feedback):
+            if robot_info.HasField("dribbler_ball_contact") and robot_info.id >= MAX_ROBOTS:
+                warnings.warn(
+                    "Invalid robot info received, robot id >= 6", SyntaxWarning
+                )
+            elif robot_info.id < self._n_friendly:
+                robot_resp = RobotResponse(
+                    id=robot_info.id, has_ball=robot_info.dribbler_ball_contact
+                )
+                robots_info.append(robot_resp)
+            # ignore robot_info for robots that are not expected (ie deactivated since the start of the game)
+        self._robots_info.append(robots_info)
+    
     def get_robots_responses(self) -> Optional[RobotResponse]:
-        return self._robots_info
+        if self._robots_info is None or len(self._robots_info) == 0:
+            for i in range(self._n_friendly):
+                self.add_robot_commands(RobotCommand(0, 0, 0, False, False, False), i)
+            data = self.net.send_command(self.out_packet, is_sim_robot_cmd=True)
+
+            self.out_packet.Clear()
+            
+            if data:
+                self._update_robot_info(data)
+            else:
+                logger.warning("No robot responses received from GRSIM.")
+                return None
+            
+        return self._robots_info.popleft()
 
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
         """
