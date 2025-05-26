@@ -7,12 +7,12 @@ TIMESTEP = 1 / 60
 # interval between sending commands to the robot (ms)
 SENDING_DELAY = 0
 
-# maximum (real and sim) robot settings
+# maximum (real) robot settings
 REAL_MAX_VEL = 0.2
 # any slower and the robots become unstable
 REAL_MAX_ANGULAR_VEL = 0.5
 
-# maximum (real and sim) robot settings
+# maximum (sim) robot settings
 MAX_VEL = 2
 # any slower and the robots become unstable
 MAX_ANGULAR_VEL = 4

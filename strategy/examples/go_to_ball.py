@@ -15,9 +15,7 @@ class GoToBallStrategy(AbstractStrategy):
 
     def step(self, present_future_game: PresentFutureGame):
         game = present_future_game.current
-
         if game.friendly_robots and game.ball is not None:
-            friendly_robots = game.friendly_robots
             cmd = go_to_ball(
                 game,
                 self.pid_oren,
