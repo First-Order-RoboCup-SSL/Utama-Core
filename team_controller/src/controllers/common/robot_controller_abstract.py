@@ -62,8 +62,8 @@ class AbstractRobotController:
         ...
 
     @abc.abstractmethod
-    def get_robots_responses(self) -> Optional[RobotResponse]:
+    def get_robots_responses(self) -> Optional[List[RobotResponse]]:
         """
         Returns the robot response from the last sent commands.
         """
-        return self._robots_info
+        return self._robots_info.popleft() if self._robots_info else None
