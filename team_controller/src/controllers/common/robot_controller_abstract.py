@@ -1,16 +1,18 @@
 import abc
 import warnings
 from entities.data.command import RobotResponse, RobotCommand
-from typing import Union, Dict, Optional
+from typing import Union, Dict, Optional, Deque, List
 
+from collections import deque
 
 class AbstractRobotController:
     def __init__(self, is_team_yellow: bool, n_friendly: int):
         self._is_team_yellow = is_team_yellow
         self._n_friendly = n_friendly
-        self._robots_info: list[RobotResponse] = [
-            RobotResponse(id=i, has_ball=False) for i in range(n_friendly)
-        ]
+        self._robots_info: Deque[List[RobotResponse]] = deque(
+            [],
+            maxlen=1
+        )
 
     @abc.abstractmethod
     def send_robot_commands(self) -> None:
@@ -60,8 +62,8 @@ class AbstractRobotController:
         ...
 
     @abc.abstractmethod
-    def get_robots_responses(self) -> Optional[RobotResponse]:
+    def get_robots_responses(self) -> Optional[List[RobotResponse]]:
         """
         Returns the robot response from the last sent commands.
         """
-        return self._robots_info
+        return self._robots_info.popleft() if self._robots_info else None

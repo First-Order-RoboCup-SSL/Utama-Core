@@ -8,6 +8,7 @@ from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP, MAX_ROBOTS
 from collections import deque
 from entities.game import PastGame, PresentFutureGame, Game
 from entities.data.raw_vision import RawVisionData
+from entities.data.command import RobotCommand
 from motion_planning.src.pid.pid import (
     get_grsim_pids,
     get_real_pids,
@@ -316,6 +317,33 @@ class StrategyRunner:
             opp_game,
             opp_present_future_game,
         )
+        
+    # Reset the game state and robot info in buffer
+    def _reset_game(self):
+        _ = self.my_strategy.robot_controller.get_robots_responses()
+            
+        (
+        self.my_past_game,
+        self.my_game,
+        self.my_present_future_game,
+        self.opp_past_game,
+        self.opp_game,
+        self.opp_present_future_game,
+        ) = self._load_game()
+    
+    def _reset_robots(self):
+        for i in self.my_game.friendly_robots.keys():
+            self.my_strategy.robot_controller.add_robot_commands(
+                RobotCommand(0, 0, 0, 0, 0, 0), i
+            )
+        self.my_strategy.robot_controller.send_robot_commands()
+        
+        if self.opp_strategy and self.opp_game:
+            for i in self.opp_game.friendly_robots.keys():
+                self.opp_strategy.robot_controller.add_robot_commands(
+                    RobotCommand(0, 0, 0, 0, 0, 0), i
+                )
+            self.opp_strategy.robot_controller.send_robot_commands()
 
     def run_test(
         self,
@@ -339,11 +367,14 @@ class StrategyRunner:
             n_episodes = 1
 
         testManager.load_strategies(self.my_strategy, self.opp_strategy)
-        # testManager.load_game(self.my_game)
         for i in range(n_episodes):
             testManager.update_episode_n(i)
+
             if self.sim_controller:
                 testManager.reset_field(self.sim_controller, self.my_game)
+                time.sleep(0.1)  # wait for the field to reset
+                # wait for the field to reset
+            self._reset_game()
             episode_start_time = time.time()
             # for simplicity, we assume rsim is running in real time. May need to change this
             while True:
@@ -357,13 +388,15 @@ class StrategyRunner:
                     )
                     break
                 self._run_step()
-
+                
                 status = testManager.eval_status(self.my_game)
 
                 if status == TestStatus.FAILURE:
                     passed = False
+                    self._reset_robots()
                     break
                 elif status == TestStatus.SUCCESS:
+                    self._reset_robots()
                     break
 
         return passed
