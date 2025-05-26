@@ -8,8 +8,12 @@ version = "1.0.0"
 description = "Imperial RoboCup SSL 25 Software Algorithms Codebase."
 readme = "README.md"
 authors = [
+    { name = "Fred Huang", email = "fred.huang23@imperial.ac.uk" },
     { name = "Joel Ng", email = "zhi-ming.ng22@imperial.ac.uk" },
-    { name = "Fred Huang", email = "fred.huang23@imperial.ac.uk" }
+    { name = "Isaac Yong",  email = "isaac.yong24@imperial.ac.uk" },
+    { name = "Hamish Starling", email = "hamish.starling22@imperial.ac.uk" },
+    { name = "Luke Moran", email = "luke.moran22@imperial.ac.uk" },
+    { name = "Sadig Sadikhzada", email = "sadig.sadikhzada23@imperial.ac.uk" }
 ]
 
 dependencies = [
@@ -37,7 +41,7 @@ dev = [
     "ruff>=0.9.8",
 ]
 
-[tool.ruff]
+[tool.ruff.lint]
 ignore = [
     "F401",  # Module imported but unused
 ]

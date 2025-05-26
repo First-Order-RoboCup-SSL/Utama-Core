@@ -6,23 +6,29 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'Utama'
-copyright = '2025, First Order Robotics'
-author = 'First Order Robotics'
-release = '0.0.1'
+project = "Utama"
+copyright = "2025, First Order Robotics"
+author = "First Order Robotics"
+release = "0.0.1"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = []
 
-templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
-
+templates_path = ["_templates"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'alabaster'
-html_static_path = ['_static']
+html_theme = "alabaster"
+html_static_path = ["_static"]
+
+extensions = [
+    "sphinx.ext.autodoc",
+    # optionally also:
+    "sphinx.ext.napoleon",  # for Google/NumPy-style docstrings
+    "sphinx.ext.viewcode",  # adds links to source code
+]

@@ -28,14 +28,6 @@ entities.game.game module
    :undoc-members:
    :show-inheritance:
 
-entities.game.game\_object module
----------------------------------
-
-.. automodule:: entities.game.game_object
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 entities.game.robot module
 --------------------------
 

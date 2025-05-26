@@ -10,9 +10,8 @@ if __name__ == "__main__":
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="grsim",
-        exp_friendly=1,
-        exp_enemy=1,
+        exp_friendly=3,
+        exp_enemy=3,
         exp_ball=True,
     )
     test = runner.run_test(GoToBallTestManager(), 1000)
-    print(test)

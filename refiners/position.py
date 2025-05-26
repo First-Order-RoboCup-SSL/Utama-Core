@@ -21,9 +21,7 @@ class AngleSmoother:
 
     def smooth(self, old_angle: float, new_angle: float) -> float:
         # Compute the shortest angular difference
-        diff = np.atan2(
-            np.sin(new_angle - old_angle), np.cos(new_angle - old_angle)
-        )
+        diff = np.atan2(np.sin(new_angle - old_angle), np.cos(new_angle - old_angle))
         smoothed_angle = old_angle + self.alpha * diff
 
         return new_angle
@@ -35,7 +33,7 @@ class PositionRefiner(BaseRefiner):
 
     def __init__(self):
         self.angle_smoother = AngleSmoother(alpha=1)
-          # Example field width, adjust as needed
+        # Example field width, adjust as needed
 
     # Primary function for the Refiner interface
     def refine(self, game: Game, data: List[RawVisionData]):
@@ -46,11 +44,11 @@ class PositionRefiner(BaseRefiner):
             return game
         # Can combine previous position from game with new data to produce new position if desired
         combined_vision_data = CameraCombiner().combine_cameras(game, data)
-        
+
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
         #             print(f"robot orientation: {robot.orientation}")
-        
+
         new_yellow_robots, new_blue_robots = (
             self._combine_both_teams_game_vision_positions(
                 game,
@@ -138,10 +136,16 @@ class PositionRefiner(BaseRefiner):
         new_game_robots = game_robots.copy()
         for robot in vision_robots:
             new_x, new_y = robot.x, robot.y
-            
-            if new_x > PositionRefiner.HALF_FIELD_LENGTH or new_x < -PositionRefiner.HALF_FIELD_LENGTH:
+
+            if (
+                new_x > PositionRefiner.HALF_FIELD_LENGTH
+                or new_x < -PositionRefiner.HALF_FIELD_LENGTH
+            ):
                 continue  # Ignore robots that are out of bounds in x direction
-            if new_y > PositionRefiner.HALF_FIELD_WIDTH or new_y < -PositionRefiner.HALF_FIELD_WIDTH:
+            if (
+                new_y > PositionRefiner.HALF_FIELD_WIDTH
+                or new_y < -PositionRefiner.HALF_FIELD_WIDTH
+            ):
                 continue  # Ignore robots that are out of bounds in y direction
 
             if robot.id not in new_game_robots:
@@ -169,7 +173,7 @@ class PositionRefiner(BaseRefiner):
         else:
             old_yellow_robots = game.enemy_robots.copy()
             old_blue_robots = game.friendly_robots.copy()
-        
+
         new_yellow_robots = self._combine_single_team_positions(
             old_yellow_robots, yellow_vision_robots, friendly=game.my_team_is_yellow
         )
@@ -220,7 +224,7 @@ class CameraCombiner:
             return None
         base_id = rs[0].id
         tx, ty, tc = 0, 0, 0
-        
+
         sum_orientation_x_component = 0.0
         sum_orientation_y_component = 0.0
         for r in rs:
