@@ -1,45 +1,46 @@
-# name: Continuous Integration
+name: Continuous Integration
 
-# on:
-#   push:
-#     branches:
-#       - main
-#   pull_request:
-#     branches:
-#       - main
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
-# jobs:
-#   test:
-#     runs-on: ubuntu-latest
+jobs:
+  test:
+    runs-on: ubuntu-latest
 
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v3
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-#       - name: Set up Python
-#         uses: actions/setup-python@v4
-#         with:
-#           python-version: "3.9"
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
 
-#       - name: Install dependencies
-#         run: |
-#           python -m pip install --upgrade pip
-#           python -m pip install -e .
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
 
-#       - name: Run tests
-#         run: |
-#           if [[ $GITHUB_EVENT_NAME == "push" ]]; then
-#             pytest --level full --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
-#           elif [[ $GITHUB_EVENT_NAME == "pull_request" ]]; then
-#             pytest --level quick --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
-#           fi
+      - name: Run tests
+        run: |
+          if [[ $GITHUB_EVENT_NAME == "push" ]]; then
+            pytest test/ --level full --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
+          elif [[ $GITHUB_EVENT_NAME == "pull_request" ]]; then
+            pytest test/ --level quick --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
+          fi
 
-#       - name: Test Report
-#         if: always()
-#         uses: pmeier/pytest-results-action@main
-#         with:
-#           path: test-results.xml
-#           summary: true
-#           display-options: fEX
-#           fail-on-empty: true
-#           title: RSoccer CI Test Results
+
+      - name: Test Report
+        if: always()
+        uses: pmeier/pytest-results-action@main
+        with:
+          path: test-results.xml
+          summary: true
+          display-options: fEX
+          fail-on-empty: true
+          title: RSoccer CI Test Results

@@ -28,6 +28,22 @@ entities.game.game module
    :undoc-members:
    :show-inheritance:
 
+entities.game.past\_game module
+-------------------------------
+
+.. automodule:: entities.game.past_game
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+entities.game.present\_future\_game module
+------------------------------------------
+
+.. automodule:: entities.game.present_future_game
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 entities.game.robot module
 --------------------------
 

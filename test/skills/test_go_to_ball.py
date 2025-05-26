@@ -1,9 +1,8 @@
-from run import AbstractTestManager, TestStatus
+from test.common.abstract_test_manager import AbstractTestManager, TestStatus
 from team_controller.src.controllers import AbstractSimController
 from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
 from entities.game.game import Game
 import math
-import time
 
 
 class GoToBallTestManager(AbstractTestManager):
@@ -14,16 +13,7 @@ class GoToBallTestManager(AbstractTestManager):
     def __init__(self):
         super().__init__()
         self.n_episodes = 10
-        self.ini_pos = self.generate_ini_pos()
-
-    def generate_ini_pos(self, radius=2):
-        positions = []
-        for i in range(self.n_episodes):
-            angle = 2 * math.pi * i / self.n_episodes  # angle in radians
-            x = radius * math.cos(angle)
-            y = radius * math.sin(angle)
-            positions.append((x, y))
-        return positions
+        self.ini_pos = self._generate_ini_pos()
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """
@@ -76,3 +66,52 @@ class GoToBallTestManager(AbstractTestManager):
         Get the number of episodes to run for the test.
         """
         return len(self.ini_pos)
+
+    def _generate_ini_pos(self, radius=2):
+        positions = []
+        for i in range(self.n_episodes):
+            angle = 2 * math.pi * i / self.n_episodes  # angle in radians
+            x = radius * math.cos(angle)
+            y = radius * math.sin(angle)
+            positions.append((x, y))
+        return positions
+
+
+from run import StrategyRunner
+from strategy.skills.go_to_ball import GoToBallStrategy
+
+
+def test_go_to_ball(
+    my_team_is_yellow: bool,
+    my_team_is_right: bool,
+    target_id: int,
+    mode: str = "rsim",
+    headless: bool = False,
+) -> bool:
+    """
+    Called by pytest to run the GoToBall strategy test.
+    """
+    runner = StrategyRunner(
+        strategy=GoToBallStrategy(target_id=target_id),
+        my_team_is_yellow=my_team_is_yellow,
+        my_team_is_right=my_team_is_right,
+        mode=mode,
+        exp_friendly=3,
+        exp_enemy=3,
+        exp_ball=True,
+    )
+    test = runner.run_test(
+        testManager=GoToBallTestManager(), episode_timeout=100, rsim_headless=headless
+    )
+    return test
+
+
+if __name__ == "__main__":
+    # This is just for running the test manually, not needed for pytest
+    test_go_to_ball(
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        target_id=0,
+        mode="rsim",
+        headless=False,
+    )

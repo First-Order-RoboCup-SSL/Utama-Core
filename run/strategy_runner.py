@@ -21,7 +21,8 @@ from refiners.position import PositionRefiner
 # from refiners.referee import RefereeRefiner
 from refiners.velocity import VelocityRefiner
 from receivers.vision_receiver import VisionReceiver
-from run import GameGater, AbstractTestManager, TestStatus
+from run import GameGater
+from test.common.abstract_test_manager import AbstractTestManager, TestStatus
 
 # from strategy.startup_strategy import StartupStrategy
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
@@ -149,8 +150,7 @@ class StrategyRunner:
                 n_blue = self.exp_friendly
 
             rsim_env = SSLStandardEnv(
-                n_robots_yellow=n_yellow,
-                n_robots_blue=n_blue,
+                n_robots_yellow=n_yellow, n_robots_blue=n_blue, render_mode=None
             )
 
             if self.opp_strategy:
@@ -318,10 +318,22 @@ class StrategyRunner:
         )
 
     def run_test(
-        self, testManager: AbstractTestManager, episode_timeout: float
+        self,
+        testManager: AbstractTestManager,
+        episode_timeout: float,
+        rsim_headless: bool = False,
     ) -> bool:
+        """
+        Run a test with the given test manager and episode timeout.
+        Args:
+            testManager (AbstractTestManager): The test manager to run the test.
+            episode_timeout (float): The timeout for each episode in seconds.
+            rsim_headless (bool): Whether to run RSim in headless mode. Defaults to False.
+        """
         passed = True
         n_episodes = testManager.get_n_episodes()
+        if not rsim_headless and self.rsim_env:
+            self.rsim_env.render_mode = "human"
         if self.sim_controller is None:
             warnings.warn("Running test in real, defaulting to 1 episode.")
             n_episodes = 1
@@ -357,6 +369,8 @@ class StrategyRunner:
         return passed
 
     def run(self):
+        if self.rsim_env:
+            self.render_mode = "human"
         while True:
             self._run_step()
 

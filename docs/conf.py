@@ -24,7 +24,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = "alabaster"
-html_static_path = ["_static"]
+# html_static_path = ["_static"]
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -32,3 +32,8 @@ extensions = [
     "sphinx.ext.napoleon",  # for Google/NumPy-style docstrings
     "sphinx.ext.viewcode",  # adds links to source code
 ]
+
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath("../../Utama"))
