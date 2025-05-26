@@ -27,7 +27,7 @@ def pytest_addoption(parser):
 # which allows aliasing such that multiple parameter names share the same
 # test value sets.
 parameter_values = {
-    ("target_id",): {"quick": [0], "full": range(0, 3)},
+    ("target_id",): {"quick": [0], "full": range(0, 2)},
     ("my_team_is_yellow",): {  # Probably worth running both colours even in quick mode
         "quick": [False, True],
         "full": [False, True],

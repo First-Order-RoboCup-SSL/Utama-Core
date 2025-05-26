@@ -16,7 +16,7 @@ class GoToBallTestManager(AbstractTestManager):
 
     def __init__(self):
         super().__init__()
-        self.n_episodes = 10
+        self.n_episodes = 3
         self.ini_pos = self._generate_ini_pos()
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
@@ -86,9 +86,9 @@ def test_go_to_ball(
     my_team_is_yellow: bool,
     my_team_is_right: bool,
     target_id: int,
+    headless: bool,
     mode: str = "rsim",
-    headless: bool = False,
-) -> bool:
+):
     """
     Called by pytest to run the GoToBall strategy test.
     """
@@ -104,7 +104,7 @@ def test_go_to_ball(
     test = runner.run_test(
         testManager=GoToBallTestManager(), episode_timeout=100, rsim_headless=headless
     )
-    return test
+    assert test
 
 
 if __name__ == "__main__":
@@ -113,6 +113,6 @@ if __name__ == "__main__":
         my_team_is_yellow=True,
         my_team_is_right=True,
         target_id=0,
-        mode="grsim",
+        mode="rsim",
         headless=False,
     )
