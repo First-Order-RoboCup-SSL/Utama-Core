@@ -1,4 +1,4 @@
-from typing import Dict, Union, Optional, Tuple
+from typing import Dict, Union, Optional, Tuple, List
 from xmlrpc.client import Boolean
 from entities.data.raw_vision import RawVisionData
 from entities.game import Game
@@ -41,8 +41,8 @@ class RSimRobotController(AbstractRobotController):
         if not self.pvp_manager:
             self.env.reset()
 
-    def get_robots_responses(self) -> Optional[RobotResponse]:
-        return self._robots_info
+    def get_robots_responses(self) -> Optional[List[RobotResponse]]:
+        return self._robots_info.popleft() if self._robots_info else None
 
     def send_robot_commands(self) -> None:
         """
@@ -69,9 +69,9 @@ class RSimRobotController(AbstractRobotController):
             # note that we should not technically be able to view the opponent's robots_info!!
             new_frame, yellow_robots_info, blue_robots_info = observation
             if self.is_team_yellow:
-                self._robots_info = yellow_robots_info
+                self._robots_info.append(yellow_robots_info)
             else:
-                self._robots_info = blue_robots_info
+                self._robots_info.append(blue_robots_info)
 
             logger.debug(f"{new_frame} {terminated} {truncated} {reward_shaping}")
 
