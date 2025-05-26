@@ -320,17 +320,18 @@ class StrategyRunner:
     def run_test(
         self, testManager: AbstractTestManager, episode_timeout: float
     ) -> bool:
-        if self.sim_controller is None:
-            raise TypeError(
-                f"cannot run test on {self.mode} mode. No sim_controller loaded."
-            )
         passed = True
         n_episodes = testManager.get_n_episodes()
+        if self.sim_controller is None:
+            warnings.warn("Running test in real, defaulting to 1 episode.")
+            n_episodes = 1
+
         testManager.load_strategies(self.my_strategy, self.opp_strategy)
         # testManager.load_game(self.my_game)
         for i in range(n_episodes):
             testManager.update_episode_n(i)
-            testManager.reset_field(self.sim_controller, self.my_game)
+            if self.sim_controller:
+                testManager.reset_field(self.sim_controller, self.my_game)
             episode_start_time = time.time()
             # for simplicity, we assume rsim is running in real time. May need to change this
             while True:
@@ -353,7 +354,6 @@ class StrategyRunner:
                 elif status == TestStatus.SUCCESS:
                     break
 
-        testManager.reset_field(self.sim_controller, self.my_game)
         return passed
 
     def run(self):
