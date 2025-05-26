@@ -199,3 +199,5 @@ ssl-game-controller/
 
 
 .vscode
+
+.ruff_cache/

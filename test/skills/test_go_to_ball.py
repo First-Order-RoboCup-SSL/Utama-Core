@@ -3,6 +3,10 @@ from team_controller.src.controllers import AbstractSimController
 from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
 from entities.game.game import Game
 import math
+import time
+
+from run import StrategyRunner
+from strategy.skills.go_to_ball import GoToBallStrategy
 
 
 class GoToBallTestManager(AbstractTestManager):
@@ -51,10 +55,9 @@ class GoToBallTestManager(AbstractTestManager):
             ini_pos[0],
             ini_pos[1],
         )
-        time.sleep(0.1)
-        
+
         sim_controller.teleport_ball(0, 0)
-        
+
     def eval_status(self, game: Game):
         """
         Evaluate the status of the test episode.
@@ -77,10 +80,6 @@ class GoToBallTestManager(AbstractTestManager):
             y = radius * math.sin(angle)
             positions.append((x, y))
         return positions
-
-
-from run import StrategyRunner
-from strategy.skills.go_to_ball import GoToBallStrategy
 
 
 def test_go_to_ball(
@@ -114,6 +113,6 @@ if __name__ == "__main__":
         my_team_is_yellow=True,
         my_team_is_right=True,
         target_id=0,
-        mode="rsim",
+        mode="grsim",
         headless=False,
     )

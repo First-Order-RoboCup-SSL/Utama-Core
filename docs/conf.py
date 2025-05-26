@@ -1,3 +1,6 @@
+import os
+import sys
+
 # Configuration file for the Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
@@ -32,8 +35,5 @@ extensions = [
     "sphinx.ext.napoleon",  # for Google/NumPy-style docstrings
     "sphinx.ext.viewcode",  # adds links to source code
 ]
-
-import os
-import sys
 
 sys.path.insert(0, os.path.abspath("../../Utama"))

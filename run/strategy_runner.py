@@ -317,27 +317,27 @@ class StrategyRunner:
             opp_game,
             opp_present_future_game,
         )
-        
+
     # Reset the game state and robot info in buffer
     def _reset_game(self):
         _ = self.my_strategy.robot_controller.get_robots_responses()
-            
+
         (
-        self.my_past_game,
-        self.my_game,
-        self.my_present_future_game,
-        self.opp_past_game,
-        self.opp_game,
-        self.opp_present_future_game,
+            self.my_past_game,
+            self.my_game,
+            self.my_present_future_game,
+            self.opp_past_game,
+            self.opp_game,
+            self.opp_present_future_game,
         ) = self._load_game()
-    
+
     def _reset_robots(self):
         for i in self.my_game.friendly_robots.keys():
             self.my_strategy.robot_controller.add_robot_commands(
                 RobotCommand(0, 0, 0, 0, 0, 0), i
             )
         self.my_strategy.robot_controller.send_robot_commands()
-        
+
         if self.opp_strategy and self.opp_game:
             for i in self.opp_game.friendly_robots.keys():
                 self.opp_strategy.robot_controller.add_robot_commands(
@@ -388,7 +388,7 @@ class StrategyRunner:
                     )
                     break
                 self._run_step()
-                
+
                 status = testManager.eval_status(self.my_game)
 
                 if status == TestStatus.FAILURE:
