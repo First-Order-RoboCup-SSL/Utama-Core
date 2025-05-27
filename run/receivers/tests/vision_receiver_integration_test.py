@@ -1,12 +1,13 @@
 import threading
 from collections import deque
-from receivers.vision_receiver import VisionReceiver
+from run.receivers.vision_receiver import VisionReceiver
 import time
-import logging 
+import logging
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
 
 def start_threads(vision_receiver):
     # Start the data receiving in separate threads
@@ -34,6 +35,7 @@ def main():
             else:
                 print(f"Camera {cid} has no data at {time.time()-prog_start}")
         time.sleep(1)
+
 
 if __name__ == "__main__":
     main()

@@ -1,4 +1,4 @@
-from refiners.base_refiner import BaseRefiner
+from run.refiners.base_refiner import BaseRefiner
 from entities.data.command import RobotResponse
 from entities.game.game import Game
 from entities.game.robot import Robot
@@ -20,6 +20,5 @@ class RobotInfoRefiner(BaseRefiner):
             if id in friendly_robots:
                 robot = friendly_robots[id]
                 friendly_robots[id] = replace(robot, has_ball=robot_response.has_ball)
-                
-        return replace(game, friendly_robots=friendly_robots)
 
+        return replace(game, friendly_robots=friendly_robots)

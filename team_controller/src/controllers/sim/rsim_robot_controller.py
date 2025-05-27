@@ -1,9 +1,5 @@
 from typing import Dict, Union, Optional, Tuple, List
-from xmlrpc.client import Boolean
-from entities.data.raw_vision import RawVisionData
-from entities.game import Game
 from entities.data.command import RobotCommand, RobotResponse
-from refiners.position import PositionRefiner
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )

@@ -9,7 +9,7 @@ from entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from entities.game.ball import Ball
 from entities.game.game import Game
 from entities.game.robot import Robot
-from refiners.base_refiner import BaseRefiner
+from run.refiners.base_refiner import BaseRefiner
 from global_utils.math_utils import normalise_heading
 from collections import defaultdict
 

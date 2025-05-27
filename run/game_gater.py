@@ -4,7 +4,7 @@ from entities.game.game import Game
 import time
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 
-from refiners.position import PositionRefiner
+from run.refiners import PositionRefiner
 
 
 class GameGater:

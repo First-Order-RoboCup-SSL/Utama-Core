@@ -2,7 +2,7 @@ import os
 import sys
 import time
 
-from receivers.referee_receiver import RefereeMessageReceiver
+from run.receivers.referee_receiver import RefereeMessageReceiver
 
 """ TODO: Traceback (most recent call last):
   File "/home/fredh/robocup_ssl/Robocup/src/tests/referee_receiver_test.py", line 25, in <module>

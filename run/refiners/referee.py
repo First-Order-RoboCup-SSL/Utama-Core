@@ -1,5 +1,4 @@
-
-from refiners.base_refiner import BaseRefiner
+from run.refiners.base_refiner import BaseRefiner
 from entities.referee.referee_command import RefereeCommand
 from entities.referee.stage import Stage
 from entities.game.team_info import TeamInfo
@@ -7,11 +6,11 @@ from entities.data.referee import RefereeData
 
 from typing import Optional
 
+
 class RefereeRefiner(BaseRefiner):
 
     def refine(self, game, data):
         return game
-
 
         self._referee_records = []
 
@@ -183,5 +182,3 @@ class RefereeRefiner(BaseRefiner):
     @property
     def is_ball_placement_blue(self) -> bool:
         return self.last_command == RefereeCommand.BALL_PLACEMENT_BLUE
-
-

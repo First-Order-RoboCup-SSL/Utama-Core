@@ -14,14 +14,13 @@ from motion_planning.src.pid.pid import (
     get_real_pids,
     get_rsim_pids,
 )
-from receivers.referee_receiver import RefereeMessageReceiver
-from refiners.robot_info import RobotInfoRefiner
-from refiners.position import PositionRefiner
-
-
-# from refiners.referee import RefereeRefiner
-from refiners.velocity import VelocityRefiner
-from receivers.vision_receiver import VisionReceiver
+from run.receivers import RefereeMessageReceiver, VisionReceiver
+from run.refiners import (
+    RobotInfoRefiner,
+    PositionRefiner,
+    RefereeRefiner,
+    VelocityRefiner,
+)
 from run import GameGater
 from test.common.abstract_test_manager import AbstractTestManager, TestingStatus
 

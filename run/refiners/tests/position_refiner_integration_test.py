@@ -2,18 +2,17 @@ import threading
 from collections import deque
 from entities.data.raw_vision import RawRobotData, RawVisionData
 from entities.game.game import Game
-from receivers.vision_receiver import VisionReceiver
+from run.receivers.vision_receiver import VisionReceiver
 import time
 import logging
 
-from refiners.position import PositionRefiner
-from run import GameGater 
-
-
+from run.refiners import PositionRefiner
+from run import GameGater
 
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG)
+
 
 def start_threads(vision_receiver):
     # Start the data receiving in separate threads
@@ -37,7 +36,9 @@ def main():
     NUM_ENEMY = 1
 
     print("Waiting for game to be valid...")
-    game = GameGater.wait_until_game_valid(True, True, 1, 1, True, vision_buffers, position_refiner, False)
+    game = GameGater.wait_until_game_valid(
+        True, True, 1, 1, True, vision_buffers, position_refiner, False
+    )
 
     prog_start = time.time()
 
@@ -54,6 +55,7 @@ def main():
         assert len(game.friendly_robots) == NUM_FRIENDLY
         assert len(game.enemy_robots) == NUM_ENEMY
         time.sleep(0.0167)
+
 
 if __name__ == "__main__":
     main()
