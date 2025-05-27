@@ -58,7 +58,9 @@ class GRSimController(AbstractSimController):
         sim_control = self._create_teleport_ball_command(x, y, vx, vy)
         sim_command = self._create_simulator_command(sim_control)
         self.net.send_command(sim_command)
-        time.sleep(0.1)  # Allow some time for the command to be processed
+        time.sleep(0.05)  # Allow some time for the command to be processed
+        self.net.send_command(sim_command)
+        time.sleep(0.05)
 
     def _create_teleport_ball_command(
         self, x: float, y: float, vx: float, vy: float

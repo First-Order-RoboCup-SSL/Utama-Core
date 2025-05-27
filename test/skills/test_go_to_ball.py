@@ -2,6 +2,10 @@ from test.common.abstract_test_manager import AbstractTestManager, TestingStatus
 from team_controller.src.controllers import AbstractSimController
 from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
 from entities.game.game import Game
+from global_utils.mapping_utils import (
+    map_friendly_enemy_to_colors,
+    map_left_right_to_colors,
+)
 import math
 import time
 
@@ -24,25 +28,22 @@ class GoToBallTestManager(AbstractTestManager):
         Reset position of robots and ball for the next strategy test.
         """
         # Reset all other robots
-        yellow_is_right = game.my_team_is_yellow == game.my_team_is_right
-        if yellow_is_right:
-            ini_yellow = RIGHT_START_ONE
-            ini_blue = LEFT_START_ONE
-        else:
-            ini_yellow = LEFT_START_ONE
-            ini_blue = RIGHT_START_ONE
+        ini_yellow, ini_blue = map_left_right_to_colors(
+            game.my_team_is_yellow,
+            game.my_team_is_right,
+            RIGHT_START_ONE,
+            LEFT_START_ONE,
+        )
 
-        if game.my_team_is_yellow:
-            self.y_robots = game.friendly_robots
-            self.b_robots = game.enemy_robots
-        else:
-            self.y_robots = game.enemy_robots
-            self.b_robots = game.friendly_robots
-        for i in self.b_robots.keys():
+        y_robots, b_robots = map_friendly_enemy_to_colors(
+            game.my_team_is_yellow, game.friendly_robots, game.enemy_robots
+        )
+
+        for i in b_robots.keys():
             sim_controller.teleport_robot(
                 False, i, ini_blue[i][0], ini_blue[i][1], ini_blue[i][2]
             )
-        for j in self.y_robots.keys():
+        for j in y_robots.keys():
             sim_controller.teleport_robot(
                 True, j, ini_yellow[j][0], ini_yellow[j][1], ini_yellow[j][2]
             )
@@ -113,6 +114,6 @@ if __name__ == "__main__":
         my_team_is_yellow=True,
         my_team_is_right=True,
         target_id=0,
-        mode="rsim",
+        mode="grsim",
         headless=False,
     )

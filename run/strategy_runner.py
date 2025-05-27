@@ -5,6 +5,7 @@ from typing import Tuple, Optional, List
 import warnings
 
 from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP, MAX_ROBOTS
+from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
 from collections import deque
 from entities.game import PastGame, PresentFutureGame, Game
 from entities.data.raw_vision import RawVisionData
@@ -13,6 +14,10 @@ from motion_planning.src.pid.pid import (
     get_grsim_pids,
     get_real_pids,
     get_rsim_pids,
+)
+from global_utils.mapping_utils import (
+    map_friendly_enemy_to_colors,
+    map_left_right_to_colors,
 )
 from run.receivers import RefereeMessageReceiver, VisionReceiver
 from run.refiners import (
@@ -142,13 +147,9 @@ class StrategyRunner:
         """
 
         if self.mode == "rsim":
-            if self.my_team_is_yellow:
-                n_yellow = self.exp_friendly
-                n_blue = self.exp_enemy
-            else:
-                n_yellow = self.exp_enemy
-                n_blue = self.exp_friendly
-
+            n_yellow, n_blue = map_friendly_enemy_to_colors(
+                self.my_team_is_yellow, self.exp_friendly, self.exp_enemy
+            )
             rsim_env = SSLStandardEnv(
                 n_robots_yellow=n_yellow, n_robots_blue=n_blue, render_mode=None
             )
@@ -160,13 +161,11 @@ class StrategyRunner:
             return rsim_env, RSimController(env=rsim_env)
 
         elif self.mode == "grsim":
+            # can consider baking all of these directly into sim controller
             sim_controller = GRSimController()
-            if self.my_team_is_yellow:
-                n_yellow = self.exp_friendly
-                n_blue = self.exp_enemy
-            else:
-                n_yellow = self.exp_enemy
-                n_blue = self.exp_friendly
+            n_yellow, n_blue = map_friendly_enemy_to_colors(
+                self.my_team_is_yellow, self.exp_friendly, self.exp_enemy
+            )
 
             # Ensure the expected number of robots is met by teleporting them
             y_to_remove = [i for i in range(n_yellow, MAX_ROBOTS)]
@@ -178,10 +177,25 @@ class StrategyRunner:
 
             y_to_keep = [i for i in range(n_yellow)]
             b_to_keep = [i for i in range(n_blue)]
+            yellow_start, blue_start = map_left_right_to_colors(
+                self.my_team_is_yellow,
+                self.my_team_is_right,
+                RIGHT_START_ONE,
+                LEFT_START_ONE,
+            )
             for y in y_to_keep:
                 sim_controller.set_robot_presence(y, True, True)
+                y_start = yellow_start[y]
+                sim_controller.teleport_robot(
+                    True, y, y_start[0], y_start[1], y_start[2]
+                )
             for b in b_to_keep:
                 sim_controller.set_robot_presence(b, False, True)
+                b_start = blue_start[b]
+                sim_controller.teleport_robot(
+                    False, b, b_start[0], b_start[1], b_start[2]
+                )
+            sim_controller.teleport_ball(0, 0)
 
             return None, sim_controller
 
