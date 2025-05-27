@@ -402,7 +402,7 @@ class StrategyRunner:
 
     def run(self):
         if self.rsim_env:
-            self.render_mode = "human"
+            self.rsim_env.render_mode = "human"
         while True:
             self._run_step()
 
