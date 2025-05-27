@@ -438,7 +438,10 @@ class StrategyRunner:
         )
 
         # Sleep to maintain FPS
-        wait_time = max(0, TIMESTEP - (end_time - start_time))
+        if self.mode == "rsim":
+            wait_time = 0
+        else:
+            wait_time = max(0, TIMESTEP - (end_time - start_time))
         self.logger.info("Sleeping for %f secs", wait_time)
         if self.mode != "rsim":
             time.sleep(wait_time)
