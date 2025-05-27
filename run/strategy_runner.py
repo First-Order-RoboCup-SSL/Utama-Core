@@ -23,7 +23,7 @@ from refiners.position import PositionRefiner
 from refiners.velocity import VelocityRefiner
 from receivers.vision_receiver import VisionReceiver
 from run import GameGater
-from test.common.abstract_test_manager import AbstractTestManager, TestStatus
+from test.common.abstract_test_manager import AbstractTestManager, TestingStatus
 
 # from strategy.startup_strategy import StartupStrategy
 from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
@@ -247,7 +247,6 @@ class StrategyRunner:
                 )
                 opp_pid_oren, opp_pid_trans = get_rsim_pids()
 
-            # TODO: this can be removed eventually when we deprecate robot_has_ball in robot_controller
             if pvp_manager:
                 if self.my_team_is_yellow:
                     pvp_manager.load_controllers(
@@ -348,7 +347,7 @@ class StrategyRunner:
     def run_test(
         self,
         testManager: AbstractTestManager,
-        episode_timeout: float,
+        episode_timeout: float = 10.0,
         rsim_headless: bool = False,
     ) -> bool:
         """
@@ -391,11 +390,11 @@ class StrategyRunner:
 
                 status = testManager.eval_status(self.my_game)
 
-                if status == TestStatus.FAILURE:
+                if status == TestingStatus.FAILURE:
                     passed = False
                     self._reset_robots()
                     break
-                elif status == TestStatus.SUCCESS:
+                elif status == TestingStatus.SUCCESS:
                     self._reset_robots()
                     break
 
@@ -441,7 +440,8 @@ class StrategyRunner:
         # Sleep to maintain FPS
         wait_time = max(0, TIMESTEP - (end_time - start_time))
         self.logger.info("Sleeping for %f secs", wait_time)
-        time.sleep(wait_time)
+        if self.mode != "rsim":
+            time.sleep(wait_time)
 
     def _step_game(
         self,

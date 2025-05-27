@@ -5,7 +5,7 @@ from enum import Enum
 from abc import ABC, abstractmethod
 
 
-class TestStatus(Enum):
+class TestingStatus(Enum):
     """
     Enum to represent the status of a test episode.
     """
@@ -46,7 +46,7 @@ class AbstractTestManager(ABC):
         ...
 
     @abstractmethod
-    def eval_status(self, game: Game) -> TestStatus:
+    def eval_status(self, game: Game) -> TestingStatus:
         """
         method is called on each iteration in strategyRunner.run_test
         Evaluate the status of the test episode.

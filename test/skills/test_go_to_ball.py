@@ -1,4 +1,4 @@
-from test.common.abstract_test_manager import AbstractTestManager, TestStatus
+from test.common.abstract_test_manager import AbstractTestManager, TestingStatus
 from team_controller.src.controllers import AbstractSimController
 from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
 from entities.game.game import Game
@@ -63,8 +63,8 @@ class GoToBallTestManager(AbstractTestManager):
         Evaluate the status of the test episode.
         """
         if game.friendly_robots[self.my_strategy.target_id].has_ball:
-            return TestStatus.SUCCESS
-        return TestStatus.IN_PROGRESS
+            return TestingStatus.SUCCESS
+        return TestingStatus.IN_PROGRESS
 
     def get_n_episodes(self):
         """
@@ -102,7 +102,7 @@ def test_go_to_ball(
         exp_ball=True,
     )
     test = runner.run_test(
-        testManager=GoToBallTestManager(), episode_timeout=100, rsim_headless=headless
+        testManager=GoToBallTestManager(), episode_timeout=10, rsim_headless=headless
     )
     assert test
 
