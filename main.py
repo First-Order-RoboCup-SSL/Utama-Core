@@ -6,9 +6,9 @@ if __name__ == "__main__":
         strategy=GoToBallStrategy(target_id=0),
         my_team_is_yellow=True,
         my_team_is_right=True,
-        mode="grsim",
+        mode="rsim",
         exp_friendly=3,
-        exp_enemy=3,
-        exp_ball=True,
+        exp_enemy=2,
+        opp_strategy=GoToBallStrategy(target_id=1),
     )
     test = runner.run()

@@ -15,7 +15,6 @@ class GameGater:
         my_team_is_right: bool,
         exp_friendly: int,
         exp_enemy: int,
-        exp_ball: bool,
         vision_buffers: List[Deque[RawVisionData]],
         position_refiner: PositionRefiner,
         is_pvp: bool,
@@ -51,8 +50,8 @@ class GameGater:
 
         while (
             len(my_game.friendly_robots) < exp_friendly
-            and len(my_game.enemy_robots) < exp_enemy
-            and (exp_ball and my_game.ball is None)
+            or len(my_game.enemy_robots) < exp_enemy
+            or my_game.ball is None
         ):
             my_game, opp_game = _add_frame(my_game, opp_game)
             time.sleep(0.1)

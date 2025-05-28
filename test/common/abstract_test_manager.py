@@ -17,7 +17,8 @@ class TestingStatus(Enum):
 
 class AbstractTestManager(ABC):
     def __init__(self):
-        self.ep_n = 0
+        # change episode_i to current_episode_i
+        self.episode_i = 0
         self.my_strategy: AbstractStrategy = None
         self.opp_strategy: AbstractStrategy = None
 
@@ -31,11 +32,11 @@ class AbstractTestManager(ABC):
         self.my_strategy = my_strategy
         self.opp_strategy = opp_strategy
 
-    def update_episode_n(self, ep_n: int):
+    def update_episode_n(self, episode_i: int):
         """
         method is used to sync test_manager on the iteration number that strategyRunner thinks it is on
         """
-        self.ep_n = ep_n
+        self.episode_i = episode_i
 
     @abstractmethod
     def reset_field(self, sim_controller: AbstractSimController, game: Game):

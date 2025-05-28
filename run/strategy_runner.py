@@ -66,9 +66,8 @@ class StrategyRunner:
         my_team_is_yellow (bool): Whether the team is yellow.
         my_team_is_right (bool): Whether the team is on the right side.
         mode (str): "real", "rsim", "grism"
-        exp_friendly (bool): Expected number of friendly robots.
-        exp_enemy (bool): Expected number of enemy robots.
-        exp_ball (bool): Is ball expected?
+        exp_friendly (int): Expected number of friendly robots.
+        exp_enemy (int): Expected number of enemy robots.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
     """
 
@@ -80,7 +79,6 @@ class StrategyRunner:
         mode: str,
         exp_friendly: int,
         exp_enemy: int,
-        exp_ball: bool,
         opp_strategy: Optional[AbstractStrategy] = None,
     ):
         self.my_strategy = strategy
@@ -89,7 +87,6 @@ class StrategyRunner:
         self.mode = mode
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
-        self.exp_ball = exp_ball
         self.opp_strategy = opp_strategy
         self.logger = logging.getLogger(__name__)
 
@@ -308,7 +305,6 @@ class StrategyRunner:
             self.my_team_is_right,
             self.exp_friendly,
             self.exp_enemy,
-            self.exp_ball,
             self.vision_buffers,
             self.position_refiner,
             is_pvp=self.opp_strategy is not None,
@@ -501,7 +497,6 @@ if __name__ == "__main__":
         mode="grsim",
         exp_friendly=6,
         exp_enemy=6,
-        exp_ball=True,
         opp_strategy=RobotPlacementStrategy(id=3, invert=True),
     )
     runner.run()

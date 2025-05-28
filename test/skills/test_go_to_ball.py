@@ -49,7 +49,7 @@ class GoToBallTestManager(AbstractTestManager):
             )
 
         # set the target robot position
-        ini_pos = self.ini_pos[self.ep_n]
+        ini_pos = self.ini_pos[self.episode_i]
         sim_controller.teleport_robot(
             game.my_team_is_yellow,
             self.my_strategy.target_id,
@@ -100,7 +100,6 @@ def test_go_to_ball(
         mode=mode,
         exp_friendly=3,
         exp_enemy=3,
-        exp_ball=True,
     )
     test = runner.run_test(
         testManager=GoToBallTestManager(), episode_timeout=10, rsim_headless=headless
@@ -114,6 +113,6 @@ if __name__ == "__main__":
         my_team_is_yellow=True,
         my_team_is_right=True,
         target_id=0,
-        mode="grsim",
+        mode="rsim",
         headless=False,
     )

@@ -15,16 +15,15 @@ class GoToBallStrategy(AbstractStrategy):
 
     def step(self, present_future_game: PresentFutureGame):
         game = present_future_game.current
-        if game.friendly_robots and game.ball is not None:
-            cmd = go_to_ball(
-                game,
-                self.pid_oren,
-                self.pid_trans,
-                self.target_id,
-            )
-            self.robot_controller.add_robot_commands(cmd, self.target_id)
-            self.robot_controller.send_robot_commands()
-            if self.env:
-                v = game.friendly_robots[self.target_id].v
-                p = game.friendly_robots[self.target_id].p
-                self.env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")
+        cmd = go_to_ball(
+            game,
+            self.pid_oren,
+            self.pid_trans,
+            self.target_id,
+        )
+        self.robot_controller.add_robot_commands(cmd, self.target_id)
+        self.robot_controller.send_robot_commands()
+        if self.env:
+            v = game.friendly_robots[self.target_id].v
+            p = game.friendly_robots[self.target_id].p
+            self.env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")
