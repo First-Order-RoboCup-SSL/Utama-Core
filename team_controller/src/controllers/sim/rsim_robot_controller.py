@@ -38,7 +38,7 @@ class RSimRobotController(AbstractRobotController):
             self.env.reset()
 
     def get_robots_responses(self) -> Optional[List[RobotResponse]]:
-        return self._robots_info.popleft() if self._robots_info else None
+        return self._robots_info.popleft() if len(self._robots_info) > 0 else None
 
     def send_robot_commands(self) -> None:
         """
@@ -97,7 +97,7 @@ class RSimRobotController(AbstractRobotController):
         """
         Updates robots info to input. Used by PVPManager to update robots info.
         """
-        self._robots_info = robots_info
+        self._robots_info.append(robots_info)
 
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
         """
