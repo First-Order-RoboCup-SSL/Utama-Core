@@ -25,8 +25,8 @@ from robot_control.src.tests.utils import one_robot_placement, setup_pvp
 from typing import List
 
 import logging
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 
 
 def defend(

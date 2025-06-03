@@ -10,6 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(frozen=True)
 class Game:
     ts: float
@@ -21,21 +22,21 @@ class Game:
     field: Field = dataclasses.field(init=False)
 
     def __post_init__(self):
-        object.__setattr__(self, 'field', Field(self.my_team_is_right))
+        object.__setattr__(self, "field", Field(self.my_team_is_right))
 
     def is_ball_in_goal(self, right_goal: bool) -> bool:
         ball_pos = self.ball
         return (
-            ball_pos.x < -self.field.half_length
+            ball_pos.p.x < -self.field.half_length
             and (
-                ball_pos.y < self.field.half_goal_width
-                and ball_pos.y > -self.field.half_goal_width
+                ball_pos.p.y < self.field.half_goal_width
+                and ball_pos.p.y > -self.field.half_goal_width
             )
             and not right_goal
-            or ball_pos.x > self.field.half_length
+            or ball_pos.p.x > self.field.half_length
             and (
-                ball_pos.y < self.field.half_goal_width
-                and ball_pos.y > -self.field.half_goal_width
+                ball_pos.p.y < self.field.half_goal_width
+                and ball_pos.p.y > -self.field.half_goal_width
             )
             and right_goal
         )

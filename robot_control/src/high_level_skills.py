@@ -52,7 +52,6 @@ class DribbleToTarget:
         self.augment = augment
 
     def enact(self, game: Game, pid_oren: PID, pid_trans: PID):
-
         if self.dribbling_cooldown == 0:
             target_coords = get_dribble_target_candidate(
                 game, self.robot_id, safe_distance=1.0

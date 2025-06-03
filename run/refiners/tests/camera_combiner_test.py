@@ -29,7 +29,6 @@ def test_combine_same_robots_produces_same():
 
 
 def test_combine_with_one_camera_empty():
-
     mockGame = MagicMock(spec=Game)
     raw_yellow = [RawRobotData(0, -1, -10, 0, 1)]
     raw_blue = [RawRobotData(0, -100, -1000, 0, 1)]

@@ -196,9 +196,9 @@ class RSimPVPManager:
         """
         Sends the robot commands to the appropriate team (yellow or blue).
         """
-        assert (
-            self.blue_player is not None and self.yellow_player is not None
-        ), "Blue and yellow players must be set before sending commands."
+        assert self.blue_player is not None and self.yellow_player is not None, (
+            "Blue and yellow players must be set before sending commands."
+        )
 
         colour = "team_yellow" if is_yellow else "team_blue"
         other_colour = "team_blue" if is_yellow else "team_yellow"
