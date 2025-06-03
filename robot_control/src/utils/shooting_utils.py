@@ -189,7 +189,7 @@ def find_best_shot(
 
     # If there are no open intervals, no shot is possible.
     if not open_spaces:
-        print("Fully blocked goal, no shot possible.")
+        # print("Fully blocked goal, no shot possible.")
         return None, None
 
     # Evaluate each open interval: choose a candidate shot and compute its "clearance"
@@ -293,10 +293,6 @@ def is_goal_blocked(
         if defender:
             robot_pos = np.array([defender.x, defender.y])
             distance = distance_point_to_line(robot_pos, line_start, line_end)
-            print(robot_pos)
-            print(line_start, line_end)
-            print("Distance:", distance)
-            print("---")
 
             if distance <= robot_radius:  # Consider robot as a circle
                 return True  # Shot is blocked
