@@ -8,12 +8,12 @@
 # from motion_planning.src.pid.pid import PID, TwoDPID
 
 # class GoToStartupTargetIfPresent(robot_id: int):
-#     START_FORMATION = RIGHT_START_ONE if present_future_game.current.my_team_is_right else LEFT_START_ONE 
-     
+#     START_FORMATION = RIGHT_START_ONE if present_future_game.current.my_team_is_right else LEFT_START_ONE
+
 
 # def StartupBehaviour(n_robots: int):
 #     selector = py_trees.composites.Parallel(name="StartupBehaviour")
-    
+
 #     for robot_id, robot_data in enumerate(present_future_game.current.friendly_robots.items()):
 #         target_coords = START_FORMATION[robot_id]
 #             commands[robot_id] = self._calculate_robot_velocities(
@@ -28,10 +28,10 @@
 #         self.pid_trans = pid_trans
 
 #     def done():
-        
+
 
 #     def step(self, present_future_game: PresentFutureGame) -> Dict[int, RobotCommand]:
-        
+
 #         commands = {}
 
 #         return commands
@@ -43,7 +43,7 @@
 #         present_future_game: PresentFutureGame
 #         face_ball=False,
 #     ) -> RobotCommand:
-        
+
 #         ball_p = present_future_game.current.ball.p
 #         current_p = present_future_game.current.friendly_robots[robot_id].p
 #         target_oren=(ball_p - current_p).phi if face_ball else None

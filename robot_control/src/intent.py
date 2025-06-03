@@ -184,6 +184,73 @@ class PassBall:
         return passer_cmd, receiver_cmd
 
 
+def smallest_angle_difference(a, b):
+    diff = (b - a) % (2 * np.pi)
+    if diff > np.pi:
+        diff -= 2 * np.pi
+    return diff
+
+
+def score_goal_atomic(
+    game: Game,
+    shooter_id: int,
+    pid_oren: PID,
+    pid_trans: PID,
+    force_shoot: bool = False,
+) -> RobotCommand:
+    """
+    return a command to shoot or return
+    """
+    target_goal_line = game.field.enemy_goal_line
+
+    defender_robots = [r.p for r in game.enemy_robots.values()]
+    shooter = game.friendly_robots[shooter_id]
+    # According to how game works, we take the most confident ball
+
+    goal_x = target_goal_line.coords[0][0]
+    goal_y1 = target_goal_line.coords[1][1]
+    goal_y2 = target_goal_line.coords[0][1]
+
+    # calculate best shot from the position of the ball
+    # TODO: add sampling function to try to find other angles to shoot from that are more optimal
+    if defender_robots and shooter and game.ball:
+        best_shot, _ = find_best_shot(
+            game.ball.p, defender_robots, goal_x, goal_y1, goal_y2
+        )
+
+        # Safe fall-back if no best shot is found
+        # If there is no best shot, then goal must be blocked.
+        if best_shot is None:
+            if not force_shoot:
+                return None
+            best_shot = (goal_y2 + goal_y1) / 2
+
+        shot_orientation = np.atan2(
+            (best_shot - game.ball.p.y), (goal_x - game.ball.p.x)
+        )
+
+        current_orien = shooter.orientation
+        difference = smallest_angle_difference(current_orien, shot_orientation)
+
+        # not is_goal_blocked(
+        #     game, (goal_x, best_shot), defender_robots
+        # )
+        if abs(difference) <= 0.05:
+            logger.info("kicking ball")
+            robot_command = kick_ball()
+        else:
+            robot_command = turn_on_spot(
+                game=game,
+                pid_oren=pid_oren,
+                pid_trans=pid_trans,
+                robot_id=shooter_id,
+                target_oren=shot_orientation,
+                dribbling=True,
+                pivot_on_ball=True,
+            )
+    return robot_command
+
+
 # intent on scoring goal
 def score_goal(
     game_obj: Game,
@@ -197,7 +264,8 @@ def score_goal(
     """
     shoot_at_goal_colour should only be used i
     """
-    target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
+    # target_goal_line = game_obj.field.enemy_goal_line(is_yellow)
+    target_goal_line = game_obj.field.enemy_goal_line
 
     # If no frame data, skip
     if not game_obj.get_latest_frame():

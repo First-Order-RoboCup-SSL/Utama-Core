@@ -28,7 +28,9 @@ def pytest_addoption(parser):
 # test value sets.
 parameter_values = {
     ("target_id",): {"quick": [0], "full": range(0, 2)},
-    ("my_team_is_yellow",): {  # Probably worth running both colours even in quick mode
+    (
+        "my_team_is_yellow",
+    ): {  # Probably worth running both colours even in quick mode. I agree
         "quick": [False, True],
         "full": [False, True],
     },

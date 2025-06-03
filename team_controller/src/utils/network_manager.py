@@ -6,6 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class NetworkManager:
     """
     Manages network communication via a UDP socket for sending and receiving data.
@@ -33,7 +34,9 @@ class NetworkManager:
         This method relies on a utility function for command transmission.
         """
         # Send a command to the server.
-        return network_utils.send_command(self.sock, self.address, command, is_sim_robot_cmd)
+        return network_utils.send_command(
+            self.sock, self.address, command, is_sim_robot_cmd
+        )
 
     def receive_data(self) -> Optional[bytes]:
         """

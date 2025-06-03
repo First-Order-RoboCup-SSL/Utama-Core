@@ -2,7 +2,7 @@ from entities.game.game import Game
 from entities.game.past_game import PastGame
 
 
-class PresentFutureGame():
+class PresentFutureGame:
     def __init__(self, past: PastGame, current: Game):
         self.__past = past
         self.current = current

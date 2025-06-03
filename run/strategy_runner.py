@@ -218,18 +218,18 @@ class StrategyRunner:
         """
         Assert the expected number of robots.
         """
-        assert (
-            self.exp_friendly <= MAX_ROBOTS
-        ), "Expected number of friendly robots is too high."
-        assert (
-            self.exp_enemy <= MAX_ROBOTS
-        ), "Expected number of enemy robots is too high."
+        assert self.exp_friendly <= MAX_ROBOTS, (
+            "Expected number of friendly robots is too high."
+        )
+        assert self.exp_enemy <= MAX_ROBOTS, (
+            "Expected number of enemy robots is too high."
+        )
         assert self.exp_friendly >= 1, "Expected number of friendly robots is too low."
         assert self.exp_enemy >= 1, "Expected number of enemy robots is too low."
 
-        assert self.my_strategy.assert_exp_robots(
-            self.exp_friendly, self.exp_enemy
-        ), "Expected number of robots at runtime does not match my strategy."
+        assert self.my_strategy.assert_exp_robots(self.exp_friendly, self.exp_enemy), (
+            "Expected number of robots at runtime does not match my strategy."
+        )
         if self.opp_strategy:
             assert self.opp_strategy.assert_exp_robots(
                 self.exp_enemy, self.exp_friendly

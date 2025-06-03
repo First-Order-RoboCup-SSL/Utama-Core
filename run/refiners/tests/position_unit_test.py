@@ -85,8 +85,9 @@ def base_refine(is_yellow: bool):
     fr = result.friendly_robots[0]
     er = result.enemy_robots[0]
 
-    acc_fr, acc_er = raw_yellow[0] if is_yellow else raw_blue[0], (
-        raw_blue[0] if is_yellow else raw_yellow[0]
+    acc_fr, acc_er = (
+        raw_yellow[0] if is_yellow else raw_blue[0],
+        (raw_blue[0] if is_yellow else raw_yellow[0]),
     )
     assert fr.p.x == acc_fr.x
     assert fr.p.y == acc_fr.y

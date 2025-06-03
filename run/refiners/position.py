@@ -161,7 +161,6 @@ class PositionRefiner(BaseRefiner):
         yellow_vision_robots: List[VisionRobotData],
         blue_vision_robots: List[VisionRobotData],
     ) -> Tuple[Dict[int, Robot], Dict[int, Robot]]:
-
         if game.my_team_is_yellow:
             old_yellow_robots = game.friendly_robots.copy()
             old_blue_robots = game.enemy_robots.copy()
@@ -180,7 +179,6 @@ class PositionRefiner(BaseRefiner):
 
 
 class CameraCombiner:
-
     BALL_CONFIDENCE_THRESHOLD = 0.1
     BALL_MERGE_THRESHOLD = 0.05
 

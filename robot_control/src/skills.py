@@ -357,6 +357,7 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
 # TODO : This also really needs to be moved into a class
 previous_targets = []
 
+
 # util function??
 def find_likely_enemy_shooter(enemy_robots, balls) -> List[VisionRobotData]:
     ans = []
@@ -422,6 +423,7 @@ def goalkeep(
         )
     return cmd
 
+
 def man_mark(is_yellow, game: Game, robot_id, target_id, pid_oren, pid_trans):
     robot = game.get_robot_pos(is_yellow, robot_id)
     target = game.get_robot_pos(not is_yellow, target_id)
@@ -449,6 +451,85 @@ def man_mark(is_yellow, game: Game, robot_id, target_id, pid_oren, pid_trans):
         face_ball((robot.x, robot.y), ball_pos),
     )
     return cmd
+
+
+def get_dribble_target_candidate(
+    game: Game,
+    robot_id: int,
+    safe_distance: float = 0.2,
+) -> Tuple[float, float]:
+    """
+    Determines the optimal (x, y) position for the robot to dribble to,
+    avoiding interception by the enemy.
+
+    :param game: The game object containing current state information.
+    :param robot_id: The ID of the robot making the decision.
+    :param goal_pos: The (x, y) position of the goal to score in.
+    :param enemy_robot_pos: The (x, y) position of the enemy robot.
+    :param ball_pos: The (x, y) position of the ball.
+    :param safe_distance: The minimum distance to maintain from the enemy robot.
+    :return: The optimal (x, y) position for the robot to dribble to.
+    """
+    robot = game.friendly_robots[robot_id]  # Assuming the robot is on the yellow team
+
+    target_goal_line = game.field.enemy_goal_line
+    goal_x = target_goal_line.coords[0][0]
+    goal_y = 0
+    # goal_x, goal_y = -4.5 if not game.my_team_is_right else 4.5, 0
+
+    # Calculate the direction vector from the robot to the goal
+    goal_dx = goal_x - robot.p.x
+    goal_dy = goal_y - robot.p.y
+    goal_dist = math.hypot(goal_dx, goal_dy)
+
+    # Calculate the direction vector from the enemy to the robot
+    smallest_enemy_dist = 0
+    enemy_dx = 0
+    enemy_dy = 0
+    for enemy_robot in game.enemy_robots.values():
+        enemy_dx = robot.p.x - enemy_robot.p.x
+        enemy_dy = robot.p.y - enemy_robot.p.y
+        enemy_dist = math.hypot(enemy_dx, enemy_dy)
+        if smallest_enemy_dist == 0 or enemy_dist < smallest_enemy_dist:
+            smallest_enemy_dist = enemy_dist
+            enemy_dx = enemy_dx
+            enemy_dy = enemy_dy
+
+    # If the enemy is too close, adjust the target position to avoid interception
+    if enemy_dist > safe_distance:
+        # Move perpendicular to the enemy-robot line to avoid the enemy
+        perpendicular_dx = -enemy_dy
+        perpendicular_dy = enemy_dx
+        perpendicular_dist = math.hypot(perpendicular_dx, perpendicular_dy)
+
+        # Normalize the perpendicular vector
+        if perpendicular_dist > 0:
+            perpendicular_dx /= perpendicular_dist
+            perpendicular_dy /= perpendicular_dist
+
+        # Move away from the enemy while still progressing towards the goal
+        target_x = robot.p.x + perpendicular_dx + goal_dx * 0.2
+        target_y = robot.p.y + perpendicular_dy + goal_dy * 0.2
+    else:
+        # Move directly towards the goal
+        # Move perpendicular to the enemy-robot line to avoid the enemy
+        perpendicular_dx = -enemy_dy
+        perpendicular_dy = enemy_dx
+        perpendicular_dist = math.hypot(perpendicular_dx, perpendicular_dy)
+
+        # Normalize the perpendicular vector
+        if perpendicular_dist > 0:
+            perpendicular_dx /= perpendicular_dist
+            perpendicular_dy /= perpendicular_dist
+
+        # Move away from the enemy while still progressing towards the goal
+        target_x = robot.p.x + perpendicular_dx * 0.6 + goal_dx * 0.4
+        target_y = robot.p.y + perpendicular_dy * 0.4 + goal_dy * 0.6
+
+    if goal_dist < 2:
+        return None
+    else:
+        return target_x, target_y
 
 
 if __name__ == "__main__":

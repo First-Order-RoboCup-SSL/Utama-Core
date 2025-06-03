@@ -8,7 +8,6 @@ from typing import Optional
 
 
 class RefereeRefiner(BaseRefiner):
-
     def refine(self, game, data):
         return game
 

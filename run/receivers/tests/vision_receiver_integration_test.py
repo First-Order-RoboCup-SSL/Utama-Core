@@ -31,9 +31,9 @@ def main():
     for _ in range(100000):
         for cid, vb in enumerate(vision_buffer):
             if vb:
-                print(f"Camera {cid} has data: {vb[0]} at {time.time()-prog_start}")
+                print(f"Camera {cid} has data: {vb[0]} at {time.time() - prog_start}")
             else:
-                print(f"Camera {cid} has no data at {time.time()-prog_start}")
+                print(f"Camera {cid} has no data at {time.time() - prog_start}")
         time.sleep(1)
 
 

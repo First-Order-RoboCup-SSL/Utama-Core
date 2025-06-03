@@ -8,4 +8,3 @@ class Ball:
     p: vector.VectorObject3D
     v: vector.VectorObject3D
     a: vector.VectorObject3D
-    

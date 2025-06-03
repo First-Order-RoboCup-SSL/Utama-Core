@@ -37,9 +37,7 @@ def calculate_robot_velocities(
     forward_vel, left_vel = rotate_vector(global_x, global_y, robot.orientation)
 
     if target_oren is not None:
-        angular_vel = pid_oren.calculate(
-            target_oren, robot.orientation, robot_id
-        )
+        angular_vel = pid_oren.calculate(target_oren, robot.orientation, robot_id)
     else:
         angular_vel = 0
 

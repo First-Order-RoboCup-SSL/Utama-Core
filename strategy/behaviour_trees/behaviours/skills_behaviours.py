@@ -40,7 +40,7 @@
 
 #     def update(self):
 #         current_position = self.present_future_game.current.friendly_robots[self.robot_id].p
-#         if abs(current_position - self.target_coords) < self.tolerance 
+#         if abs(current_position - self.target_coords) < self.tolerance
 #             return py_trees.common.Status.SUCCESS
 #         else:
 #             return py_trees.common.Status.FAILURE
@@ -57,7 +57,7 @@
 #         variable_value=Nested(),
 #         overwrite=True,
 #     )
-    
+
 #     selector = py_trees.composites.Selector(name="GoToPointBehaviour")
 #     selector.add_child(IsAtPointBehaviour(robot_id, target_coords, target_oren, tolerance))
 #     selector.add_child(StepTowardsPointBehaviour(pid_oren, pid_trans, robot_id, target_coords, target_oren, dribbling))

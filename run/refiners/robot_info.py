@@ -9,7 +9,6 @@ from typing import List, Dict
 
 
 class RobotInfoRefiner(BaseRefiner):
-
     def refine(self, game: Game, robot_responses: List[RobotResponse]):
         if robot_responses is None or len(robot_responses) == 0:
             return game

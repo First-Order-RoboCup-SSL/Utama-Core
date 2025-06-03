@@ -97,16 +97,16 @@ def ray_casting(
     )  # flips the goalward direction if we are shooting left
     for enemy in enemy_robots:
         if enemy:
-            if goal_multi * enemy.x > goal_multi * point[0]:
-                dist: float = math.dist((point[0], point[1]), (enemy.x, enemy.y))
+            if goal_multi * enemy.x > goal_multi * point.x:
+                dist: float = math.dist((point.x, point.y), (enemy.x, enemy.y))
                 angle_to_robot_: float = angle_to_robot(
-                    point[0], point[1], enemy.x, enemy.y
+                    point.y, point.x, enemy.x, enemy.y
                 )
                 alpha: float = np.arcsin(ROBOT_RADIUS / dist)
                 shadows.append(
                     shadow(
-                        point[0],
-                        point[1],
+                        point.x,
+                        point.y,
                         angle_to_robot_ + alpha,
                         angle_to_robot_ - alpha,
                         goal_x,
@@ -189,6 +189,7 @@ def find_best_shot(
 
     # If there are no open intervals, no shot is possible.
     if not open_spaces:
+        # print("Fully blocked goal, no shot possible.")
         return None, None
 
     # Evaluate each open interval: choose a candidate shot and compute its "clearance"
@@ -270,7 +271,7 @@ def is_goal_blocked(
     :return: True if the goal is blocked, False otherwise.
     """
 
-    ball_x, ball_y = game.ball.x, game.ball.y
+    ball_x, ball_y = game.ball.p.x, game.ball.p.y
 
     # Define the shooting line from ball position in the shooter's direction
     line_start = np.array([ball_x, ball_y])

@@ -10,7 +10,6 @@ from motion_planning.src.pid.pid import PID, TwoDPID, get_grsim_pids
 
 
 class AbstractStrategy(ABC):
-
     def __init__(self):
         self.robot_controller: AbstractRobotController = None
         self.env: SSLBaseEnv = None
