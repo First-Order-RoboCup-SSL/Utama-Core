@@ -1,4 +1,4 @@
-**Table of Contents**
+# Table of Contents
 
   * [Link to The Coach AI Tree](#the-coach-tree)
   * [Link to The Generic Player AI Tree](#the-generic-player-tree)
