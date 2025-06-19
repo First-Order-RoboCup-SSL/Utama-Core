@@ -353,10 +353,6 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
     t = lo
     return clamp_to_parametric(t)
 
-
-# TODO : This also really needs to be moved into a class
-previous_targets = []
-
 # util function??
 def find_likely_enemy_shooter(enemy_robots, balls) -> List[VisionRobotData]:
     ans = []

@@ -1,65 +1,72 @@
-### UMMMM YESS, IDK WHATS GOING ON LOL ###
+from typing import Any
+import py_trees
 
-# from typing import Tuple
-# import py_trees
+from robot_control.src.skills import go_to_ball
+from strategy.behaviour_trees.behaviours.robocup_behaviour import RobocupBehaviour
 
-# from motion_planning.src.pid.pid import PID, TwoDPID
-# from robot_control.src.skills import go_to_point
-# from strategy.behaviour_trees.behaviours.robocup_behaviour import RobocupBehaviour
-# from vector import VectorObject2D
+class SetBlackboardVariable(RobocupBehaviour):
+    """A generic behaviour to set a variable on the blackboard."""
+    def __init__(self, name: str, variable_name: str, value: Any):
+        super().__init__(name=name)
+        self.variable_name = variable_name
+        self.value = value
+        self.blackboard.register_key(
+            key=self.variable_name, access=py_trees.common.Access.WRITE
+        )
 
-# class StepTowardsPointBehaviour(RobocupBehaviour):
-#     def __init__(self):
-#         super().__init__(name="StepTowardsPointBehaviour")
-#         self.blackboard.register_key(key="GoToPointBehaviour/robot_id", access=py_trees.common.Access.READ)
-#         self.blackboard.register_key(key="GoToPointBehaviour/target_coords", access=py_trees.common.Access.READ)
-#         self.blackboard.register_key(key="GoToPointBehaviour/target_oren", access=py_trees.common.Access.READ)
-#         self.blackboard.register_key(key="GoToPointBehaviour/dribbling", access=py_trees.common.Access.READ)
+    def update(self) -> py_trees.common.Status:
+        self.blackboard.set(self.variable_name, self.value, overwrite=True)
+        return py_trees.common.Status.SUCCESS
 
-#     def update(self) -> py_trees.common.Status:
-#         command = go_to_point(
-#             self.blackboard.present_future_game.current,
-#             self.blackboard.pid_oren,
-#             self.blackboard.pid_trans,
-#             self.blackboard.GoToPointBehaviour.robot_id,
-#             self.blackboard.GoToPointBehaviour.target_coords,
-#             self.blackboard.GoToPointBehaviour.target_oren,
-#             self.blackboard.GoToPointBehaviour.dribbling
-#         )
+class GoToBallStep(RobocupBehaviour):
+    """A behaviour that executes a single step of the go_to_ball skill."""
+    def __init__(self, name="GoToBallStep"):
+        super().__init__(name=name)
+        self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
-#         self.blackboard.robot_controller.add_robot_commands(command, self.blackboard.robot_id)
-#         return py_trees.common.Status.SUCCESS
+    def update(self) -> py_trees.common.Status:
+        command =       (
+            self.blackboard.present_future_game.current,
+            self.blackboard.pid_oren,
+            self.blackboard.pid_trans,
+            self.blackboard.robot_id,
+        )
+        self.blackboard.robot_controller.add_robot_commands(
+            command, self.blackboard.robot_id
+        )
+        return py_trees.common.Status.RUNNING
 
-# class IsAtPointBehaviour(RobocupBehaviour):
-#     def __init__(self, robot_id: int, target_coords: VectorObject2D, target_oren: float, tolerance: float=0.05):
-#         super().__init__(name="IsAtPointBehaviour")
-#         self.blackboard.register_key(key="GoToPointBehaviour/robot_id", access=py_trees.common.Access.READ)
-#         self.blackboard.register_key(key="GoToPointBehaviour/target_coords", access=py_trees.common.Access.READ)
-#         self.blackboard.register_key(key="GoToPointBehaviour/target_oren", access=py_trees.common.Access.READ)
-#         self.blackboard.register_key(key="GoToPointBehaviour/tolerance", access=py_trees.common.Access.READ)
+class HasBall(RobocupBehaviour):
+    """A condition behaviour that checks if the robot has the ball."""
+    def __init__(self, name="HasBall"):
+        super().__init__(name=name)
+        self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
-#     def update(self):
-#         current_position = self.present_future_game.current.friendly_robots[self.robot_id].p
-#         if abs(current_position - self.target_coords) < self.tolerance 
-#             return py_trees.common.Status.SUCCESS
-#         else:
-#             return py_trees.common.Status.FAILURE
+    def update(self):
+        if self.blackboard.present_future_game.current.friendly_robots[self.blackboard.robot_id].has_ball:
+            return py_trees.common.Status.SUCCESS
+        else:
+            return py_trees.common.Status.FAILURE
 
-# def GoToPointBehaviour(pid_oren: PID, pid_trans: TwoDPID, robot_id: int, target_coords: VectorObject2D, target_oren: float, dribbling: bool = False, tolerance: float=0.05):
-#     blackboard = py_trees.blackboard.Client(name="GoToPointBehaviour")
-
-# robot_id: int, target_coords: Tuple[float, float], target_oren: float, dribbling: bool = False
-
-
-#     set_blackboard_variable = py_trees.behaviours.SetBlackboardVariable(
-#         name="Set Nested",
-#         variable_name="nested",
-#         variable_value=Nested(),
-#         overwrite=True,
-#     )
+# Factory function to create a complete go_to_ball behaviour tree.
+def create_go_to_ball_behaviour(robot_id: int) -> py_trees.behaviour.Behaviour:
+    """Factory function to create a complete go_to_ball behaviour tree."""
     
-#     selector = py_trees.composites.Selector(name="GoToPointBehaviour")
-#     selector.add_child(IsAtPointBehaviour(robot_id, target_coords, target_oren, tolerance))
-#     selector.add_child(StepTowardsPointBehaviour(pid_oren, pid_trans, robot_id, target_coords, target_oren, dribbling))
+    # Root sequence for the whole behaviour
+    root = py_trees.composites.Sequence(name="GoToBall", memory=True)
+    
+    # A child sequence to set the robot_id on the blackboard
+    set_robot_id = SetBlackboardVariable(
+        name="SetTargetRobotID", variable_name="robot_id", value=robot_id
+    )
 
-#     return selector
+    # A selector to decide whether to get the ball or stop
+    has_ball_selector = py_trees.composites.Selector(name="HasBallSelector", memory=False)
+    has_ball_selector.add_child(HasBall())
+    has_ball_selector.add_child(GoToBallStep())
+
+    # Assemble the tree
+    root.add_child(set_robot_id)
+    root.add_child(has_ball_selector)
+    
+    return root

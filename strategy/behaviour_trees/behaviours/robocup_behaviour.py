@@ -7,12 +7,23 @@ from team_controller.src.controllers.common.robot_controller_abstract import Abs
 
 class RobocupBehaviour(py_trees.behaviour.Behaviour):
     def __init__(self, name: str):
-        super().__init__(name=self.__class__.__name__)
-        self.blackboard = self.attach_blackboard_client()
-        self.blackboard.register_key(key="robot_controller", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(key="present_future_game", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(key="pid_trans", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(key="pid_oren", access=py_trees.common.Access.READ)
+        super().__init__(name=name)
+        # Connect to the shared "GlobalConfig" blackboard
+        self.blackboard = py_trees.blackboard.Client(name="GlobalConfig")
+
+        # Register common keys that all behaviours might need to read
+        self.blackboard.register_key(
+            key="present_future_game", access=py_trees.common.Access.READ
+        )
+        self.blackboard.register_key(
+            key="robot_controller", access=py_trees.common.Access.READ
+        )
+        self.blackboard.register_key(
+            key="pid_oren", access=py_trees.common.Access.READ
+        )
+        self.blackboard.register_key(
+            key="pid_trans", access=py_trees.common.Access.READ
+        )
 
     # @property
     # def present_future_game(self) -> PresentFutureGame:
