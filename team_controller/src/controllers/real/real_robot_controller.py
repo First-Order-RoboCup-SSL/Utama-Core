@@ -38,8 +38,6 @@ class RealRobotController(AbstractRobotController):
     def __init__(self, is_team_yellow: bool, n_friendly: int):
         super().__init__(is_team_yellow, n_friendly)
         self._serial = self._init_serial()
-
-        self._EMPTY_ID = 30  # id to indicate empty buffer: 1110 in control byte
         self._rbt_cmd_size = 10  # packet size for one robot
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the feedback packet received from the robots
@@ -60,12 +58,8 @@ class RealRobotController(AbstractRobotController):
         data_in = self._serial.read_all()
         # print(data_in)
 
-        # TODO: this is only for quali: fix this after quali
-        if len(data_in) == 1:
-            if data_in[0] & 0b01000000:
-                self._robots_info[1] = RobotResponse(has_ball=True)
-            else:
-                self._robots_info[1] = RobotResponse(has_ball=False)
+        # TODO: add receiving feedback from the robots
+
         self._out_packet = self._empty_command()  # flush the out_packet
 
     def add_robot_commands(
