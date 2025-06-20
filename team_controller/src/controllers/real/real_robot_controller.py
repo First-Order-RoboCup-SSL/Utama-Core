@@ -22,6 +22,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# NB: A major assumption is that the robot IDs are 0-5 for the friendly team.
+# TODO: fix this assumption in the future, if needed.
+
 
 class RealRobotController(AbstractRobotController):
     """
@@ -37,9 +40,9 @@ class RealRobotController(AbstractRobotController):
         self._serial = self._init_serial()
 
         self._EMPTY_ID = 30  # id to indicate empty buffer: 1110 in control byte
-        self._rbt_cmd_size = 8  # packet size for one robot
+        self._rbt_cmd_size = 10  # packet size for one robot
         self._out_packet = self._empty_command()
-        self._in_packet_size = 1  # size of the packet received from the robots
+        self._in_packet_size = 1  # size of the feedback packet received from the robots
         self._robots_info: List[RobotResponse] = [None] * self._n_friendly
 
         logger.debug(
@@ -86,7 +89,9 @@ class RealRobotController(AbstractRobotController):
         c_command = self._convert_float_command(robot_id, command)
         command_buffer = self._generate_command_buffer(robot_id, c_command)
         start_idx = robot_id * self._rbt_cmd_size
-        self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = command_buffer
+        self._out_packet[start_idx + 1 : start_idx + self._rbt_cmd_size] = (
+            command_buffer  # +1 to account for start frame byte
+        )
 
     # def _populate_robots_info(self, data_in: bytes) -> None:
     #     """
@@ -100,22 +105,6 @@ class RealRobotController(AbstractRobotController):
     #         self._robots_info[i] = info
     #         data_in = data_in << 1  # shift to the next robot's data
 
-    def compute_crc(self, data: bytearray) -> int:
-        """
-        Calculate CRC-8, use 0x07 polynomial.
-        这里的计算对 data 中的每个字节进行处理。
-        """
-        poly = 0x07
-        crc = 0x00
-        for byte in data:
-            crc ^= byte
-            for _ in range(8):
-                if crc & 0x80:
-                    crc = ((crc << 1) ^ poly) & 0xFF
-                else:
-                    crc = (crc << 1) & 0xFF
-        return crc
-
     def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
         """
         Generates the command buffer to be sent to the robot.
@@ -125,32 +114,34 @@ class RealRobotController(AbstractRobotController):
         # Combine first 6 bytes of velocities
         packet = bytearray(
             [
-                (c_command.local_forward_vel >> 8) & 0xFF,
-                c_command.local_forward_vel & 0xFF,
-                (c_command.local_left_vel >> 8) & 0xFF,
-                c_command.local_left_vel & 0xFF,
-                (c_command.angular_vel >> 8) & 0xFF,
-                c_command.angular_vel & 0xFF,
+                robot_id & 0xFF,  # Robot ID
+                (c_command.local_forward_vel >> 8) & 0xFF,  # Forward velocity high byte
+                c_command.local_forward_vel & 0xFF,  # Forward velocity low byte
+                (c_command.local_left_vel >> 8) & 0xFF,  # Left velocity high byte
+                c_command.local_left_vel & 0xFF,  # Left velocity low byte
+                (c_command.angular_vel >> 8) & 0xFF,  # Angular velocity high byte
+                c_command.angular_vel & 0xFF,  # Angular velocity low byte
             ]
         )
 
-        # Create control byte
-        control_byte = 0
+        dribbler_speed = 0
         if c_command.dribble:
-            control_byte |= 0x20  # Bit 5
-        if c_command.chip:
-            control_byte |= 0x40  # Bit 6
+            dribbler_speed = 0xC000  # set bits 15:14 to 11
+            dribbler_speed |= 4095 & 0x3FFF  # set bits 13:0 to 4095
+
+        packet.extend(
+            [
+                (dribbler_speed >> 8) & 0xFF,  # Dribbler high byte
+                dribbler_speed & 0xFF,  # Dribbler low byte
+            ]
+        )
+
+        kicker_byte = 0
         if c_command.kick:
-            control_byte |= 0x80  # Bit 7
-        robot_id = robot_id & 0x0F  # 5 bits only
-        control_byte |= robot_id << 1
-        # set last bit as 1 if its the last command
-        # TODO: this fails on cases wher we are only communicating with one robot and their id is not 0
-        if robot_id == self._n_friendly - 1:
-            control_byte |= 0x01
-        packet.append(control_byte)
-        crc = self.compute_crc(packet)
-        packet.append(crc)
+            kicker_byte |= 0xF0  # upper kicker full power
+        if c_command.chip:
+            kicker_byte |= 0x0F
+        packet.append(kicker_byte)  # Kicker controls  # Frame end
 
         # packet_str = " ".join(f"{byte:08b}" for byte in packet)
 
@@ -204,9 +195,17 @@ class RealRobotController(AbstractRobotController):
         return np.float16(value).view(np.uint16)
 
     def _empty_command(self) -> bytearray:
-        empty_buffer = bytearray([0] * 6 + [self._EMPTY_ID] + [0])
-        empty_last_buffer = bytearray([0] * 6 + [self._EMPTY_ID + 1] + [0])
-        return empty_buffer * (self._n_friendly - 1) + empty_last_buffer
+        if not hasattr(self, "_cached_empty_command"):
+            commands = bytearray()
+            for robot_id in range(self._n_friendly):
+                cmd = bytearray(
+                    [robot_id] + [0] * (self._rbt_cmd_size - 1)
+                )  # empty command for each robot
+                commands += cmd
+            self._cached_empty_command = (
+                bytearray([0xAA]) + commands + bytearray([0x55])
+            )
+        return self._cached_empty_command
 
     def _init_serial(self) -> Serial:
         serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
