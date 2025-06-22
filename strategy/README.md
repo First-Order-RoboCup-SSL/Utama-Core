@@ -1,8 +1,8 @@
 # Table of Contents
-
   * [Link to The Coach AI Tree](#the-coach-tree)
   * [Link to The Generic Player AI Tree](#the-generic-player-tree)
-
+  * [Link to Our Implementation Principles](#our-implementation-principles)
+  * [Link to Base Strategy](#base-strategy)
 
 # Understanding Roles, Tactics, and Plays in Multi-Agent AI
 
@@ -337,3 +337,58 @@ The ball is turned over. On the very next tick, the Coach sets the tactic to `"D
 * **`MidfieldPress (x2)`**: Assigned to the two robots highest up the field. Their job is not to win the ball directly, but to slow down the opponent's advance and prevent easy passes through the midfield.
 
 **Result:** The team instantly becomes compact, focuses on closing down space, and prioritises interception and pressure over maintaining a wide, offensive shape.
+
+# Our Implementation Principles
+
+### General
+We are separating the design into a Coach behaviour tree and a Player Action Map. For simplicity of design, at every moment, we shall only have 1 main play (play as defined above) occuring at once. The rest of the robots will default to a fallback behaviour based on the roles (ie, a midfielder or striker will default to moving to open space if not involved in the play)
+
+After the play has been decided, each robot will be assigned to a specific action that is mapped to an **Action Node** on the Player Action Map. 
+
+**Action Nodes** are `functions` that:
+1. Involves only one robot
+2. Stateless (only able to access global Game State)
+3. Take up as much responsibility as possible from the top-level Coach tree (to prevent overcrowding of the Coach tree)
+
+**Exhaustive List of Action Nodes**
+Pass Ball (from passer)
+Receive Ball
+Go to Ball
+Go to Point (without ball always face the ball)
+Go to Point (with ball)
+Turn On Spot
+Clear Ball
+Shoot Ball
+Stop
+Go To Open Space
+ManMark
+Block (block mouth of possessor until it faces too far from goal, then block line of sight to goal)
+Defend_Goal
+
+### Design Flow
+Each Coach Behaviour Tree we design must follow the following flow:
+1. Game Analysis (based on game state, decide if we should attack or defend or what tactic to employ)
+2. Assign Roles
+3. Run Play and Choose Involved Robots (based on roles and game state)
+4. Evaluate Default Behaviour for the rest of the robots (can just be done in one node)
+
+See below for the base strategy that we will begin with:
+
+# Base Strategy
+```
+GAME ANALYSIS AND ROLE ASSIGNMENT
+is_enemy_closer -> attack or defence
+assign roles to attack and defence (preset)
+
+ATTACK
+[play] has_ball?->
+	Y - Is my goal chance high?
+		Shoot
+		Pass
+	N - Who is closest?: go to ball
+Default -> go to open space, defenders defend
+
+DEFEND
+[play] Who is closest to posessor?: Block
+Default -> Man Mark (and make sure there's no overlap)
+```
