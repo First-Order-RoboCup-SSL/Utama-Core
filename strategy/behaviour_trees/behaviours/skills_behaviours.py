@@ -25,7 +25,7 @@ class GoToBallStep(RobocupBehaviour):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
-        command =       (
+        command = go_to_ball(
             self.blackboard.present_future_game.current,
             self.blackboard.pid_oren,
             self.blackboard.pid_trans,
