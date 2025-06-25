@@ -52,7 +52,7 @@ class GoToBallTestManager(AbstractTestManager):
         ini_pos = self.ini_pos[self.episode_i]
         sim_controller.teleport_robot(
             game.my_team_is_yellow,
-            self.my_strategy.target_id,
+            self.my_strategy.robot_id,
             ini_pos[0],
             ini_pos[1],
         )
@@ -63,7 +63,7 @@ class GoToBallTestManager(AbstractTestManager):
         """
         Evaluate the status of the test episode.
         """
-        if game.friendly_robots[self.my_strategy.target_id].has_ball:
+        if game.friendly_robots[self.my_strategy.robot_id].has_ball:
             return TestingStatus.SUCCESS
         return TestingStatus.IN_PROGRESS
 
@@ -86,7 +86,7 @@ class GoToBallTestManager(AbstractTestManager):
 def test_go_to_ball(
     my_team_is_yellow: bool,
     my_team_is_right: bool,
-    target_id: int,
+    robot_id: int,
     headless: bool,
     mode: str = "rsim",
 ):
@@ -94,7 +94,7 @@ def test_go_to_ball(
     Called by pytest to run the GoToBall strategy test.
     """
     runner = StrategyRunner(
-        strategy=GoToBallStrategy(target_id=target_id),
+        strategy=GoToBallStrategy(robot_id=robot_id),
         my_team_is_yellow=my_team_is_yellow,
         my_team_is_right=my_team_is_right,
         mode=mode,
@@ -112,7 +112,7 @@ if __name__ == "__main__":
     test_go_to_ball(
         my_team_is_yellow=True,
         my_team_is_right=True,
-        target_id=0,
+        robot_id=0,
         mode="rsim",
         headless=False,
     )
