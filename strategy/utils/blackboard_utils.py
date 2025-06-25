@@ -1,6 +1,6 @@
 from typing import Any
 import py_trees
-from strategy.abstract.abstract_behaviour import AbstractBehaviour
+from strategy.common.abstract_behaviour import AbstractBehaviour
 
 
 class SetBlackboardVariable(AbstractBehaviour):

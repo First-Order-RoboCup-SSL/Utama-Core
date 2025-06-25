@@ -1,7 +1,7 @@
-from typing import Any
 import py_trees
-from strategy.abstract import AbstractStrategy, AbstractBehaviour
+from strategy.common import AbstractStrategy, AbstractBehaviour
 from strategy.utils.blackboard_utils import SetBlackboardVariable
+from strategy.utils.selector_utils import HasBall
 from skills.src.go_to_ball import go_to_ball
 
 
@@ -23,22 +23,6 @@ class GoToBallStep(AbstractBehaviour):
             command, self.blackboard.robot_id
         )
         return py_trees.common.Status.RUNNING
-
-
-class HasBall(AbstractBehaviour):
-    """A condition behaviour that checks if the robot has the ball."""
-
-    def __init__(self, name="HasBall"):
-        super().__init__(name=name)
-        self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-
-    def update(self):
-        if self.blackboard.present_future_game.current.friendly_robots[
-            self.blackboard.robot_id
-        ].has_ball:
-            return py_trees.common.Status.SUCCESS
-        else:
-            return py_trees.common.Status.FAILURE
 
 
 class GoToBallStrategy(AbstractStrategy):

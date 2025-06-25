@@ -1,5 +1,5 @@
 from team_controller.src.controllers import AbstractSimController
-from strategy.abstract.abstract_strategy import AbstractStrategy
+from strategy.common.abstract_strategy import AbstractStrategy
 from entities.game import Game
 from enum import Enum
 from abc import ABC, abstractmethod

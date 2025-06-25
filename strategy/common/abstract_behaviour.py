@@ -1,5 +1,7 @@
 import py_trees
 from abc import abstractmethod
+from typing import cast
+from strategy.common.base_blackboard import BaseBlackboard
 
 
 class AbstractBehaviour(py_trees.behaviour.Behaviour):
@@ -10,20 +12,19 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
     def __init__(self, name: str):
         super().__init__(name=name)
         # Connect to the shared "GlobalConfig" blackboard
-        self.blackboard = py_trees.blackboard.Client(name="GlobalConfig")
+        client_bb = py_trees.blackboard.Client(name="GlobalConfig")
 
         # Register common keys that all behaviours might need to read
-        self.blackboard.register_key(
+        client_bb.register_key(
             key="present_future_game", access=py_trees.common.Access.READ
         )
-        self.blackboard.register_key(
+        client_bb.register_key(
             key="robot_controller", access=py_trees.common.Access.READ
         )
-        self.blackboard.register_key(key="pid_oren", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(
-            key="pid_trans", access=py_trees.common.Access.READ
-        )
-        self.blackboard.register_key(key="rsim_env", access=py_trees.common.Access.READ)
+        client_bb.register_key(key="pid_oren", access=py_trees.common.Access.READ)
+        client_bb.register_key(key="pid_trans", access=py_trees.common.Access.READ)
+        client_bb.register_key(key="rsim_env", access=py_trees.common.Access.READ)
+        self.blackboard: BaseBlackboard = cast(BaseBlackboard, client_bb)
 
     @abstractmethod
     def update(self) -> py_trees.common.Status:

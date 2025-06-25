@@ -8,7 +8,6 @@ from motion_planning.src.pid.pid import PID, TwoDPID
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
-from strategy.abstract.abstract_behaviour import AbstractBehaviour
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,7 @@ class AbstractStrategy(ABC):
         self,
     ):
         self.robot_controller = None  # Will be set by StrategyRunner
+        # self.blackboard: BaseBlackboard = cast(BaseBlackboard, self._setup_blackboard())
         self.blackboard = self._setup_blackboard()
         self.behaviour_tree = py_trees.trees.BehaviourTree(self.create_behaviour())
 

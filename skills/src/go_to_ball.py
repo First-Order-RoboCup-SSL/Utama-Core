@@ -18,9 +18,6 @@ def go_to_ball(
 
     target_oren = robot.angle_to(ball)
 
-    # target_x = ball_data.x - ROBOT_RADIUS * np.cos(target_oren)
-    # target_y = ball_data.y - ROBOT_RADIUS * np.sin(target_oren)
-
     if dribble_when_near:
         distance = robot.distance_to(ball)
         dribbling = distance < dribble_threshold

@@ -12,12 +12,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _angle_to_robot(
-    point_x: float, point_y: float, robot_x: float, robot_y: float
-) -> float:
-    return np.arctan2((robot_y - point_y) / (robot_x - point_x))
-
-
 def _angle_between_points(main_point: Vector2D, point1: Vector2D, point2: Vector2D):
     """
     Computes the angle (in radians) between two lines originating from main_point
@@ -31,17 +25,9 @@ def _angle_between_points(main_point: Vector2D, point1: Vector2D, point2: Vector
     Returns:
     float: Angle in degrees between the two lines.
     """
-    v1 = point1.to_array() - main_point.to_array()
-    v2 = point2.to_array() - main_point.to_array()
-
-    dot_product = np.dot(v1, v2)
-    norm_product = np.linalg.norm(v1) * np.linalg.norm(v2)
-
-    if norm_product == 0:
-        return 0  # Avoid division by zero if vectors are degenerate
-
-    angle_rad = np.arccos(np.clip(dot_product / norm_product, -1.0, 1.0))
-    return angle_rad
+    v1 = point1 - main_point
+    v2 = point2 - main_point
+    return v1.angle_between(v2)
 
 
 # Calculates the intersection of 2 rays with the goal
@@ -88,7 +74,7 @@ def _filter_and_merge_shadows(
 
 # Casts a ray along the 2 tangents to each enemy robot, and calls _filter_and_merge_shadows
 def _ray_casting(
-    point: Tuple[float, float],
+    point: Vector2D,
     enemy_robots: List[Robot],
     goal_x: float,
     goal_y1: float,
@@ -103,16 +89,14 @@ def _ray_casting(
         if enemy:
             if goal_multi * enemy.x > goal_multi * point[0]:
                 dist: float = math.dist((point[0], point[1]), (enemy.x, enemy.y))
-                _angle_to_robot_: float = _angle_to_robot(
-                    point[0], point[1], enemy.x, enemy.y
-                )
+                angle_to_robot_ = point.angle_to(enemy.p)
                 alpha: float = np.arcsin(ROBOT_RADIUS / dist)
                 shadows.append(
                     _shadow(
                         point[0],
                         point[1],
-                        _angle_to_robot_ + alpha,
-                        _angle_to_robot_ - alpha,
+                        angle_to_robot_ + alpha,
+                        angle_to_robot_ - alpha,
                         goal_x,
                     )
                 )
@@ -123,12 +107,12 @@ def _ray_casting(
 # Finds the biggest area of the goal that doesn't have a shadow (the biggest gap) and finds its midpoint for best shot
 # TODO: could add heuristics to prefer shots closer to the goalpost
 def _find_best_shot(
-    point: Tuple[float, float],
-    enemy_robots: List[Tuple[float, float]],
+    point: Vector2D,
+    enemy_robots: List[Vector2D],
     goal_x: float,
     goal_y1: float,
     goal_y2: float,
-) -> Tuple[float, Tuple[float, float]]:
+) -> Tuple[float, Vector2D]:
     """
     Determines the best y-coordinate along the goal line (at x = goal_x) to shoot,
     such that the shot is farthest from any enemy robots' shadows.
@@ -321,7 +305,9 @@ def score_goal(
     # calculate best shot from the position of the ball
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
     if defender_robots and shooter and ball:
-        best_shot, _ = _find_best_shot(ball, defender_robots, goal_x, goal_y1, goal_y2)
+        best_shot, _ = _find_best_shot(
+            ball.p, defender_robots, goal_x, goal_y1, goal_y2
+        )
 
         # Safe fall-back if no best shot is found
         if best_shot is None and is_goal_blocked(

@@ -32,7 +32,7 @@ from test.common.abstract_test_manager import AbstractTestManager, TestingStatus
 # from strategy.examples.strategies.one_robot_placement_strategy import (
 #     RobotPlacementStrategy,
 # )
-from strategy.abstract.abstract_strategy import AbstractStrategy
+from strategy.common.abstract_strategy import AbstractStrategy
 from team_controller.src.controllers import (
     GRSimRobotController,
     RSimRobotController,
