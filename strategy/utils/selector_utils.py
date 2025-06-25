@@ -3,7 +3,10 @@ from strategy.common.abstract_behaviour import AbstractBehaviour
 
 
 class HasBall(AbstractBehaviour):
-    """A condition behaviour that checks if the robot has the ball."""
+    """
+    A condition behaviour that checks if the robot has the ball.
+    Requires the robot ID to be set in the blackboard.
+    """
 
     def __init__(self, name="HasBall"):
         super().__init__(name=name)
