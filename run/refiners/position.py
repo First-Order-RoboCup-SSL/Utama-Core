@@ -1,7 +1,6 @@
 from dataclasses import replace
 from typing import Dict, List, Optional, Tuple
-
-import vector
+from entities.data.vector import Vector2D, Vector3D
 import numpy as np
 
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
@@ -96,7 +95,7 @@ class PositionRefiner(BaseRefiner):
         return replace(
             old_robot,
             id=robot_data.id,
-            p=vector.obj(x=new_x, y=new_y),
+            p=Vector2D(x=new_x, y=new_y),
             orientation=new_orientation,
         )
 
@@ -108,16 +107,16 @@ class PositionRefiner(BaseRefiner):
             id=robot_data.id,
             is_friendly=is_friendly,
             has_ball=False,
-            p=vector.obj(x=robot_data.x, y=robot_data.y),
-            v=vector.obj(x=0, y=0),
-            a=vector.obj(x=0, y=0),
+            p=Vector2D(x=robot_data.x, y=robot_data.y),
+            v=Vector2D(x=0, y=0),
+            a=Vector2D(x=0, y=0),
             orientation=robot_data.orientation,
         )
 
     @staticmethod
     def _ball_from_vision(ball_data: VisionBallData) -> Ball:
-        zv = vector.obj(x=0, y=0, z=0)
-        return Ball(vector.obj(x=ball_data.x, y=ball_data.y, z=ball_data.z), zv, zv)
+        zv = Vector3D(x=0, y=0, z=0)
+        return Ball(Vector3D(x=ball_data.x, y=ball_data.y, z=ball_data.z), zv, zv)
 
     @staticmethod
     def _get_most_confident_ball(balls: List[VisionBallData]) -> Ball:

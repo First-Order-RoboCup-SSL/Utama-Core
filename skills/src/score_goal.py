@@ -1,20 +1,24 @@
-from typing import List, Tuple
+from entities.game import Game, Robot
+from entities.data.vector import Vector2D
+from motion_planning.src.pid import PID, TwoDPID
+from config.settings import ROBOT_RADIUS
+from entities.data.command import RobotCommand
+from skills.src.utils.move_utils import move, face_ball, kick, turn_on_spot
 import numpy as np
 import math
-from config.settings import ROBOT_RADIUS
-from robot_control.src.utils.pass_quality_utils import PointOnField
-from entities.game.game import Game
-from entities.game.robot import Robot
+from typing import Tuple, List
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-# TODO: may change to bounded form from [-pi, pi]
-def angle_to_robot(
+def _angle_to_robot(
     point_x: float, point_y: float, robot_x: float, robot_y: float
 ) -> float:
-    return np.arctan((robot_y - point_y) / (robot_x - point_x))
+    return np.arctan2((robot_y - point_y) / (robot_x - point_x))
 
 
-def angle_between_points(main_point, point1, point2):
+def _angle_between_points(main_point: Vector2D, point1: Vector2D, point2: Vector2D):
     """
     Computes the angle (in radians) between two lines originating from main_point
     and passing through point1 and point2.
@@ -27,8 +31,8 @@ def angle_between_points(main_point, point1, point2):
     Returns:
     float: Angle in degrees between the two lines.
     """
-    v1 = np.array([point1.x - main_point.x, point1.y - main_point.y])
-    v2 = np.array([point2.x - main_point.x, point2.y - main_point.y])
+    v1 = point1.to_array() - main_point.to_array()
+    v2 = point2.to_array() - main_point.to_array()
 
     dot_product = np.dot(v1, v2)
     norm_product = np.linalg.norm(v1) * np.linalg.norm(v2)
@@ -41,7 +45,7 @@ def angle_between_points(main_point, point1, point2):
 
 
 # Calculates the intersection of 2 rays with the goal
-def shadow(
+def _shadow(
     start_x: float, start_y: float, angle1: float, angle2: float, goal_x: float
 ) -> Tuple[float, float]:
     slope1: float = np.tan(angle1)
@@ -52,7 +56,7 @@ def shadow(
 
 
 # Filters the shadows to only keep the ones relevant to the shot and merges overlapping shadows
-def filter_and_merge_shadows(
+def _filter_and_merge_shadows(
     shadows: List[Tuple[float, float]], goal_y1: float, goal_y2: float
 ) -> List[Tuple[float, float]]:
     valid_shadows: List[Tuple[float, float]] = []
@@ -82,8 +86,8 @@ def filter_and_merge_shadows(
     return merged_shadows
 
 
-# Casts a ray along the 2 tangents to each enemy robot, and calls filter_and_merge_shadows
-def ray_casting(
+# Casts a ray along the 2 tangents to each enemy robot, and calls _filter_and_merge_shadows
+def _ray_casting(
     point: Tuple[float, float],
     enemy_robots: List[Robot],
     goal_x: float,
@@ -99,26 +103,26 @@ def ray_casting(
         if enemy:
             if goal_multi * enemy.x > goal_multi * point[0]:
                 dist: float = math.dist((point[0], point[1]), (enemy.x, enemy.y))
-                angle_to_robot_: float = angle_to_robot(
+                _angle_to_robot_: float = _angle_to_robot(
                     point[0], point[1], enemy.x, enemy.y
                 )
                 alpha: float = np.arcsin(ROBOT_RADIUS / dist)
                 shadows.append(
-                    shadow(
+                    _shadow(
                         point[0],
                         point[1],
-                        angle_to_robot_ + alpha,
-                        angle_to_robot_ - alpha,
+                        _angle_to_robot_ + alpha,
+                        _angle_to_robot_ - alpha,
                         goal_x,
                     )
                 )
-                shadows = filter_and_merge_shadows(shadows, goal_y1, goal_y2)
+                shadows = _filter_and_merge_shadows(shadows, goal_y1, goal_y2)
     return shadows
 
 
 # Finds the biggest area of the goal that doesn't have a shadow (the biggest gap) and finds its midpoint for best shot
 # TODO: could add heuristics to prefer shots closer to the goalpost
-def find_best_shot(
+def _find_best_shot(
     point: Tuple[float, float],
     enemy_robots: List[Tuple[float, float]],
     goal_x: float,
@@ -143,7 +147,7 @@ def find_best_shot(
         If there is no open space, returns (None, None).
     """
     # Get shadow intervals from enemy robots along the goal line.
-    shadows = ray_casting(
+    shadows = _ray_casting(
         point,
         enemy_robots=enemy_robots,
         goal_x=goal_x,
@@ -218,7 +222,7 @@ def find_best_shot(
 
 
 def find_shot_quality(
-    point: Tuple[float, float],
+    point: Vector2D,
     enemy_robots,
     goal_x: float,
     goal_y1: float,
@@ -227,24 +231,24 @@ def find_shot_quality(
 ) -> float:
     """
     Computes the shot quality based on the open angle to the goal / total angle to the goal.
-    Uses the find_best_shot function to determine the largest open angle.
+    Uses the _find_best_shot function to determine the largest open angle.
     """
 
     # Full angle between the two goalposts
-    full_angle = angle_between_points(
-        point, PointOnField(goal_x, goal_y1), PointOnField(goal_x, goal_y2)
+    full_angle = _angle_between_points(
+        point, Vector2D(goal_x, goal_y1), Vector2D(goal_x, goal_y2)
     )
 
-    # Use find_best_shot to get the largest gap
-    _, largest_gap = find_best_shot(
+    # Use _find_best_shot to get the largest gap
+    _, largest_gap = _find_best_shot(
         point, enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
     )
 
     # Compute the open angle (gap angle)
-    open_angle = angle_between_points(
+    open_angle = _angle_between_points(
         point,
-        PointOnField(goal_x, largest_gap[0]),
-        PointOnField(goal_x, largest_gap[1]),
+        Vector2D(goal_x, largest_gap[0]),
+        Vector2D(goal_x, largest_gap[1]),
     )
 
     distance_to_goal_ratio = (np.absolute(point.x - goal_x)) / np.absolute(2 * goal_x)
@@ -285,15 +289,75 @@ def is_goal_blocked(
         closest_point = line_start + proj * line_vec
         return np.linalg.norm(point - closest_point)
 
-    robot_radius = ROBOT_RADIUS  # Assume field provides robot radius info
-
     # Check if any enemy robot blocks the shooting path
     for defender in defenders:
         if defender:
             robot_pos = np.array([defender.x, defender.y])
             distance = distance_point_to_line(robot_pos, line_start, line_end)
 
-            if distance <= robot_radius:  # Consider robot as a circle
+            if distance <= ROBOT_RADIUS:  # Consider robot as a circle
                 return True  # Shot is blocked
 
     return False  # No robot is blocking
+
+
+def score_goal(
+    game: Game,
+    pid_oren: PID,
+    pid_trans: TwoDPID,
+    shooter_id: int,
+) -> RobotCommand:
+    """
+    Attempts to score a goal by calculating the best shot angle and executing the kick if possible.
+    """
+    target_goal_line = game.field.enemy_goal_line
+    shooter = game.friendly_robots[shooter_id]
+    defender_robots = game.enemy_robots
+    ball = game.ball
+    goal_x = target_goal_line.coords[0][0]
+    goal_y1 = target_goal_line.coords[1][1]
+    goal_y2 = target_goal_line.coords[0][1]
+
+    # calculate best shot from the position of the ball
+    # TODO: add sampling function to try to find other angles to shoot from that are more optimal
+    if defender_robots and shooter and ball:
+        best_shot, _ = _find_best_shot(ball, defender_robots, goal_x, goal_y1, goal_y2)
+
+        # Safe fall-back if no best shot is found
+        if best_shot is None and is_goal_blocked(
+            game, (goal_x, goal_y2 - goal_y1), defender_robots
+        ):
+            return None
+        elif best_shot is None and not is_goal_blocked(
+            game, (goal_x, goal_y2 - goal_y1), defender_robots
+        ):
+            best_shot = (goal_y2 + goal_y1) / 2
+
+        shot_orientation = np.atan2((best_shot - ball.y), (goal_x - ball.x))
+
+    if shooter.has_ball:
+        logging.debug("robot has ball")
+        current_oren = shooter.orientation
+        # if robot has ball and is facing the goal, kick the ball
+        # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
+        # Because 0.02 as a threshold is meaningless (different at different distances)
+        # TODO: consider also adding a distance from goal threshold
+        if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(
+            game, (goal_x, best_shot), defender_robots
+        ):
+            logger.info("kicking ball")
+            robot_command = kick()
+        # TODO: Consider also advancing closer to the goal
+        else:
+            print("turning on spot")
+            robot_command = turn_on_spot(
+                game,
+                pid_oren,
+                pid_trans,
+                shooter_id,
+                shot_orientation,
+                dribbling=True,
+            )
+    else:
+        robot_command = move(game, pid_oren, pid_trans, shooter_id, shooter_id, ball)
+    return robot_command

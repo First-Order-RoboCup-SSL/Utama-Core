@@ -1,6 +1,5 @@
-import vector
 import numpy as np
-from vector import VectorObject3D
+from entities.data.vector import Vector3D, Vector2D
 from entities.game.ball import Ball
 from entities.game.game import Game
 from entities.game.past_game import PastGame, TeamType, get_structured_object_key
@@ -20,7 +19,7 @@ def create_ball_only_game(
         my_team_is_right=True,
         friendly_robots={},
         enemy_robots={},
-        ball=Ball(vector.obj(x=x, y=y, z=z), vector.obj(x=vx, y=vy, z=vz), None),
+        ball=Ball(Vector3D(x=x, y=y, z=z), Vector3D(x=vx, y=vy, z=vz), None),
     )
 
 
@@ -30,7 +29,7 @@ def create_one_robot_only_game(ts: float, x: float, y: float, is_friendly: bool)
             id=1,
             is_friendly=is_friendly,
             has_ball=True,
-            p=vector.obj(x=x, y=y),
+            p=Vector2D(x=x, y=y),
             v=None,
             a=None,
             orientation=0,
@@ -90,7 +89,7 @@ def test_extraction_of_time_velocity_pairs():
         vx, vy, vz = 1.0, 1.0, 1.0
         game_to_add = create_ball_only_game(time, time, time, time, vx, vy, vz)
         past_game.add_game(game_to_add)
-        all_added_game_data.append((time, vector.obj(x=vx, y=vy, z=vz)))
+        all_added_game_data.append((time, Vector3D(x=vx, y=vy, z=vz)))
 
     points_needed = (
         VelocityRefiner.ACCELERATION_N_WINDOWS
@@ -123,7 +122,7 @@ def test_extraction_of_time_velocity_pairs():
         for i in range(len(extracted_ts_np)):
             ts = extracted_ts_np[i]
             vel_components = extracted_vel_np[i]
-            vec_obj = VectorObject3D(
+            vec_obj = Vector3D(
                 x=vel_components[0], y=vel_components[1], z=vel_components[2]
             )
             reconstructed_extracted_pairs.append((ts, vec_obj))

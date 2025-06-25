@@ -29,12 +29,10 @@ from run.refiners import (
 from run import GameGater
 from test.common.abstract_test_manager import AbstractTestManager, TestingStatus
 
-# from strategy.startup_strategy import StartupStrategy
-from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
-from strategy.behaviour_trees.behaviours.dummy_behaviour import DummyBehaviour
-from strategy.examples.startup_strategy import StartupStrategy
-from strategy.examples.one_robot_placement_strategy import RobotPlacementStrategy
-from strategy.abstract_strategy import AbstractStrategy
+# from strategy.examples.strategies.one_robot_placement_strategy import (
+#     RobotPlacementStrategy,
+# )
+from strategy.abstract.abstract_strategy import AbstractStrategy
 from team_controller.src.controllers import (
     GRSimRobotController,
     RSimRobotController,
@@ -487,16 +485,14 @@ class StrategyRunner:
             self.my_strategy.step(self.my_present_future_game)
 
 
-if __name__ == "__main__":
-    # bt = DummyBehaviour()
-    # main(BehaviourTreeStrategy(sim_robot_controller, bt), sim_robot_controller)
-    runner = StrategyRunner(
-        strategy=RobotPlacementStrategy(id=3),
-        my_team_is_yellow=True,
-        my_team_is_right=True,
-        mode="grsim",
-        exp_friendly=6,
-        exp_enemy=6,
-        opp_strategy=RobotPlacementStrategy(id=3, invert=True),
-    )
-    runner.run()
+# if __name__ == "__main__":
+# runner = StrategyRunner(
+#     strategy=RobotPlacementStrategy(id=3),
+#     my_team_is_yellow=True,
+#     my_team_is_right=True,
+#     mode="grsim",
+#     exp_friendly=6,
+#     exp_enemy=6,
+#     opp_strategy=RobotPlacementStrategy(id=3, invert=True),
+# )
+# runner.run()

@@ -3,7 +3,6 @@ from typing import Tuple, Union, Optional, List, Generator
 from shapely import Polygon
 from entities.game import Game
 from entities.game.field import Field
-from entities.game.game_object import Colour, Robot as GameRobot
 from entities.game.robot import Robot
 from math import sin, cos, pi, dist, exp
 import random
@@ -78,7 +77,6 @@ class RRTPlanner:
 
     def __init__(self, game: Game):
         self._game = game
-        self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue
         self.waypoints = []
         self.par = dict()
 
@@ -140,8 +138,8 @@ class RRTPlanner:
                     yield p
 
     def _compress_point(self, point: Point) -> Tuple[int, int]:
-        return int((point.x + Field.HALF_LENGTH) // 1), int(
-            (point.y + Field.HALF_WIDTH) // 1
+        return int((point.x + Field.half_length) // 1), int(
+            (point.y + Field.half_width) // 1
         )
 
     def _add_compressed_point(self, point: Point):
@@ -208,8 +206,8 @@ class RRTPlanner:
                 )
             if random.random() < self.EXPLORE_BIAS:
                 rand_point = Point(
-                    random.uniform(-Field.HALF_LENGTH, Field.HALF_LENGTH),
-                    random.uniform(-Field.HALF_WIDTH, Field.HALF_WIDTH),
+                    random.uniform(-Field.half_length, Field.half_length),
+                    random.uniform(-Field.half_width, Field.half_width),
                 )
             else:
                 rand_point = Point(target[0], target[1])
@@ -260,7 +258,11 @@ class RRTPlanner:
                     LineString([best_parent, rand_point])
                 ) < self.STOPPING_DISTANCE and cost_map[
                     rand_point
-                ] + rand_point.distance(goal) < cost_map.get(goal, float("inf")):
+                ] + rand_point.distance(
+                    goal
+                ) < cost_map.get(
+                    goal, float("inf")
+                ):
                     self.par[goal] = rand_point
                     cost_map[goal] = cost_map[rand_point] + rand_point.distance(goal)
                     path_found = True
@@ -328,7 +330,6 @@ class DynamicWindowPlanner:
 
     def __init__(self, game: Game):
         self._game = game
-        self._friendly_colour = Colour.YELLOW if game.my_team_is_yellow else Colour.Blue
 
     def path_to(
         self,
@@ -347,7 +348,7 @@ class DynamicWindowPlanner:
             Tuple[float, float]: The next waypoint coordinates (x, y) or the target if already reached.
         """
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
-        start_x, start_y = robot.x, robot.y
+        start_x, start_y = robot.p.x, robot.p.y
 
         if dist((start_x, start_y), target) < 1.5 * ROBOT_RADIUS:
             return target, float("inf")
@@ -360,13 +361,7 @@ class DynamicWindowPlanner:
         target: Tuple[float, float],
         temporary_obstacles: List[Polygon],
     ) -> Tuple[Tuple[float, float], float]:
-        velocity = self._game.get_object_velocity(
-            GameRobot(self._friendly_colour, friendly_robot_id)
-        )
-
-        if velocity is None:
-            # If no data, assume it is still :)
-            velocity = 0, 0
+        velocity = self._game.friendly_robots[friendly_robot_id].v
 
         # Calculate the allowed velocities in this frame
         delta_vel = (
@@ -376,7 +371,7 @@ class DynamicWindowPlanner:
         best_score = float("-inf")
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
 
-        start_x, start_y = robot.x, robot.y
+        start_x, start_y = robot.p.x, robot.p.y
         best_move = start_x, start_y
 
         # sf is the scale factor for the velocity - we start with full velocity to prioritise speed
@@ -403,7 +398,7 @@ class DynamicWindowPlanner:
 
         return best_move, best_score
 
-    def _get_obstacles(self, robot_id):
+    def _get_obstacles(self, robot_id: int) -> List[Robot]:
         return (
             self._game.friendly_robots[:robot_id]
             + self._game.friendly_robots[robot_id + 1 :]
@@ -440,9 +435,7 @@ class DynamicWindowPlanner:
         if our_velocity_vector is None:
             our_velocity_vector = (0, 0)
 
-        our_position = self._game.get_robot_pos(
-            self._friendly_colour == Colour.YELLOW, robot_id
-        )
+        our_position = self._game.friendly_robots[robot_id].p
 
         # If we are too close to an obstacle, we should be penalised
         obstacle_factor = 0
@@ -450,21 +443,12 @@ class DynamicWindowPlanner:
         # Factor in obstacle velocity, do some maths to find their closest approach to us
         # and the time at which that happens.
         for r in self._get_obstacles(robot_id):
-            their_velocity_vector = self._game.get_object_velocity(
-                GameRobot(
-                    (
-                        self._friendly_colour
-                        if r.is_friendly
-                        else Colour.invert(self._friendly_colour)
-                    ),
-                    r.id,
-                )
-            )
+            if r.is_friendly:
+                their_velocity_vector = self._game.friendly_robots[r.id].v
+            else:
+                their_velocity_vector = self._game.enemy_robots[r.id].v
 
-            if their_velocity_vector is None:
-                their_velocity_vector = (0, 0)
-
-            their_position = (r.x, r.y)
+            their_position = (r.p.x, r.p.y)
 
             diff_v_x = our_velocity_vector[0] - their_velocity_vector[0]
             diff_p_x = our_position[0] - their_position[0]
@@ -519,18 +503,16 @@ class BisectorPlanner:
     ClOSE_LIMIT = 0.5
     SAMPLE_SIZE = 0.10
 
+    def __init__(self, game, friendly_colour, env):
+        self._game = game
+        self._env = env
+
     def _get_obstacles(self, robot_id):
         return (
             self._game.friendly_robots[:robot_id]
             + self._game.friendly_robots[robot_id + 1 :]
             + self._game.enemy_robots
         )
-
-    def __init__(self, game, friendly_colour, env):
-        self._game = game
-        self._friendly_colour = friendly_colour
-        self._enemy_colour = Colour.invert(friendly_colour)
-        self._env = env
 
     def perpendicular_bisector(self, line: LineString):
         # Ensure the input is a valid LineString
@@ -615,7 +597,7 @@ class BisectorPlanner:
         got = None
         for s in range(
             int(
-                max(Field.HALF_LENGTH * 2, Field.HALF_WIDTH * 2)
+                max(Field.half_length * 2, Field.half_width * 2)
                 / BisectorPlanner.SAMPLE_SIZE
             )
         ):

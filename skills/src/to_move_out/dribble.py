@@ -8,7 +8,7 @@ from entities.data.vision import VisionBallData
 from motion_planning.src.pid import PID
 from global_utils.math_utils import distance
 
-from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
+from robot_control.src.utils.motion_planning_utils import move
 from robot_control.src.skills import go_to_ball
 
 
@@ -89,7 +89,7 @@ class DribbleToTarget:
                 )
             elif self.dribbled_distance < 0.65:
                 target_oren = np.atan2(target_y - current_y, target_x - current_x)
-                return calculate_robot_velocities(
+                return move(
                     self.pid_oren,
                     self.pid_trans,
                     this_robot_data,

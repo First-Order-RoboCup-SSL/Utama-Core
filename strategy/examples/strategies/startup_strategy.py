@@ -2,8 +2,8 @@ from typing import Callable, Tuple, Optional
 from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
 from entities.data.command import RobotCommand
 from entities.game.present_future_game import PresentFutureGame
-from robot_control.src.skills import go_to_point
-from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
+from skills.src.skills import go_to_point
+from strategy.abstract_strategy import BehaviourTreeStrategy
 from strategy.abstract_strategy import AbstractStrategy
 import numpy as np
 from team_controller.src.controllers.common.robot_controller_abstract import (
@@ -28,14 +28,14 @@ class StartupStrategy(AbstractStrategy):
 
         for robot_id, robot_data in present_future_game.current.friendly_robots.items():
             target_coords = START_FORMATION[robot_id]
-            command = self._calculate_robot_velocities(
+            command = self._move(
                 robot_id, target_coords, present_future_game, face_ball=True
             )
             logger.info(command)
             self.robot_controller.add_robot_commands(command, robot_id)
         self.robot_controller.send_robot_commands()
 
-    def _calculate_robot_velocities(
+    def _move(
         self,
         robot_id: int,
         target_coords: Tuple[float, float],

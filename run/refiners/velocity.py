@@ -1,6 +1,6 @@
 from dataclasses import replace
-from entities.game.game import Game
-from entities.game.robot import Robot
+from entities.game import Game, Robot
+from entities.data.vector import Vector2D, Vector3D
 
 from typing import Dict, List, Union, Tuple  # Added List for type hinting
 
@@ -14,7 +14,6 @@ from entities.game.past_game import (
     get_structured_object_key,
 )
 from run.refiners.base_refiner import BaseRefiner
-from vector import VectorObject2D, VectorObject3D
 from lenses import UnboundLens, lens
 import logging
 import numpy as np  # Import NumPy
@@ -22,8 +21,8 @@ import numpy as np  # Import NumPy
 logger = logging.getLogger(__name__)
 
 
-def zero_vector(twod: bool) -> Union[VectorObject2D, VectorObject3D]:
-    return VectorObject2D(x=0, y=0) if twod else VectorObject3D(x=0, y=0, z=0)
+def zero_vector(twod: bool) -> Union[Vector2D, Vector3D]:
+    return Vector2D(0, 0) if twod else Vector3D(0, 0, 0)
 
 
 class VelocityRefiner(BaseRefiner):
@@ -160,11 +159,11 @@ class VelocityRefiner(BaseRefiner):
     def _calculate_object_velocity(
         self,
         past_game: PastGame,
-        current_pos: Union[VectorObject2D, VectorObject3D],
+        current_pos: Union[Vector2D, Vector3D],
         object_key: ObjectKey,
         current_ts: float,
         twod: bool,
-    ) -> Union[VectorObject2D, VectorObject3D]:
+    ) -> Union[Vector2D, Vector3D]:
         try:
             timestamps_np, positions_np = past_game.get_historical_attribute_series(
                 object_key, AttributeType.POSITION, 1
@@ -196,11 +195,9 @@ class VelocityRefiner(BaseRefiner):
 
             # Convert previous_pos_np back to VectorObject for subtraction
             if twod:
-                previous_pos = VectorObject2D(
-                    x=previous_pos_np[0], y=previous_pos_np[1]
-                )
+                previous_pos = Vector2D(previous_pos_np[0], y=previous_pos_np[1])
             else:
-                previous_pos = VectorObject3D(
+                previous_pos = Vector3D(
                     x=previous_pos_np[0], y=previous_pos_np[1], z=previous_pos_np[2]
                 )
 
@@ -223,7 +220,7 @@ class VelocityRefiner(BaseRefiner):
 
     def _calculate_object_acceleration(
         self, past_game: PastGame, object_key: ObjectKey, twod: bool
-    ) -> Union[VectorObject2D, VectorObject3D]:
+    ) -> Union[Vector2D, Vector3D]:
         try:
             num_points_needed = (
                 self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
@@ -261,7 +258,7 @@ class VelocityRefiner(BaseRefiner):
         timestamps_np: np.ndarray,
         velocities_np: np.ndarray,  # This is now a 2D NumPy array
         twod: bool,
-    ) -> Union[VectorObject2D, VectorObject3D]:
+    ) -> Union[Vector2D, Vector3D]:
         """
         Estimates an object's acceleration using NumPy arrays as input.
         """
@@ -383,8 +380,6 @@ class VelocityRefiner(BaseRefiner):
 
         # Convert final NumPy array back to VectorObject
         if twod:
-            return VectorObject2D(x=final_accel_np[0], y=final_accel_np[1])
+            return Vector2D(final_accel_np[0], final_accel_np[1])
         else:
-            return VectorObject3D(
-                x=final_accel_np[0], y=final_accel_np[1], z=final_accel_np[2]
-            )
+            return Vector3D(final_accel_np[0], final_accel_np[1], final_accel_np[2])

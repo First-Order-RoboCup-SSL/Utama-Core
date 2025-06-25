@@ -5,7 +5,7 @@ from robot_control.src.skills import go_to_point
 
 # from robot_control.src.tests.utils import one_robot_placement
 from global_utils.math_utils import rotate_vector
-from strategy.behaviour_trees.behaviour_tree_strategy import BehaviourTreeStrategy
+from strategy.abstract_strategy import BehaviourTreeStrategy
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from team_controller.src.controllers import RSimController
 from strategy.abstract_strategy import AbstractStrategy

@@ -1,4 +1,4 @@
-import vector
+from entities.data.vector import Vector2D, Vector3D
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from entities.data.vision import VisionBallData, VisionRobotData
 from entities.game.ball import Ball
@@ -10,7 +10,7 @@ position_refiner = PositionRefiner()
 
 
 def test_combining_single_team_combines_single_robot():
-    zv = vector.obj(x=0, y=0)
+    zv = Vector2D(x=0, y=0)
     game_robots = {0: Robot(0, True, False, zv, zv, zv, 0)}
     vision_robots = [VisionRobotData(0, 1, 2, 3)]
     result = position_refiner._combine_single_team_positions(
@@ -27,7 +27,7 @@ def test_combining_single_team_combines_single_robot():
 
 
 def test_combining_with_robot_not_in_game_adds():
-    zv = vector.obj(x=0, y=0)
+    zv = Vector2D(x=0, y=0)
     game_robots = {0: Robot(0, True, False, zv, zv, zv, 0)}
     vision_robots = [VisionRobotData(1, 1, 2, 3)]
     result = position_refiner._combine_single_team_positions(
@@ -60,15 +60,15 @@ def rfac(id, is_friendly, x, y) -> Robot:
         id=id,
         is_friendly=is_friendly,
         has_ball=False,
-        p=vector.obj(x=x, y=y),
-        v=vector.obj(x=0, y=0),
-        a=vector.obj(x=0, y=0),
+        p=Vector2D(x=x, y=y),
+        v=Vector2D(x=0, y=0),
+        a=Vector2D(x=0, y=0),
         orientation=0,
     )
 
 
 def bfac(x, y) -> Ball:
-    return Ball(vector.obj(x=x, y=y), vector.obj(x=0, y=0), vector.obj(x=0, y=0))
+    return Ball(Vector2D(x=x, y=y), Vector2D(x=0, y=0), Vector2D(x=0, y=0))
 
 
 def base_refine(is_yellow: bool):

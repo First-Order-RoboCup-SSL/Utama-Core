@@ -55,7 +55,8 @@ class RealRobotController(AbstractRobotController):
         # binary_representation = [f"{byte:08b}" for byte in self.out_packet]
         # print(binary_representation)
         self._serial.write(self.out_packet)
-        data_in = self._serial.read_all()
+        self._serial.read_all()
+        # data_in = self._serial.read_all()
         # print(data_in)
 
         # TODO: add receiving feedback from the robots

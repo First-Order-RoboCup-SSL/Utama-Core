@@ -1,131 +1,9 @@
-import math
-import numpy as np
-from typing import List, Optional, Tuple
-
-from entities.data.command import RobotCommand
-from entities.data.vision import VisionRobotData
-from entities.game import Game
-from motion_planning.src.pid import PID
-import logging
-
-from math import atan2, dist, sqrt, cos, sin, pi, acos, degrees
-from motion_planning.src.pid.pid import TwoDPID
-from robot_control.src.utils.motion_planning_utils import calculate_robot_velocities
-
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from config.settings import ROBOT_RADIUS
-
-logger = logging.getLogger(__name__)
-
-
-def empty_command(dribbler_on: bool = False) -> RobotCommand:
-    return RobotCommand(
-        local_forward_vel=0,
-        local_left_vel=0,
-        angular_vel=0,
-        kick=0,
-        chip=0,
-        dribble=dribbler_on,
-    )
-
-
-def kick_ball() -> RobotCommand:
-    return RobotCommand(
-        local_forward_vel=0,
-        local_left_vel=0,
-        angular_vel=0,
-        kick=1,
-        chip=0,
-        dribble=0,
-    )
-
-
-def go_to_ball(
-    game: Game,
-    pid_oren: PID,
-    pid_trans: TwoDPID,
-    robot_id: int,
-    dribble_when_near: bool = True,
-    dribble_threshold: float = 0.5,
-) -> RobotCommand:
-    ball = game.ball.p
-    robot = game.friendly_robots[robot_id].p
-
-    # TODO: add a optional target_oren flag
-    target_oren = np.arctan2(ball.y - robot.y, ball.x - robot.x)
-
-    # target_x = ball_data.x - ROBOT_RADIUS * np.cos(target_oren)
-    # target_y = ball_data.y - ROBOT_RADIUS * np.sin(target_oren)
-
-    if dribble_when_near:
-        distance = np.hypot(ball.y - robot.y, ball.x - robot.x)
-        dribbling = distance < dribble_threshold
-    return calculate_robot_velocities(
-        game=game,
-        pid_oren=pid_oren,
-        pid_trans=pid_trans,
-        robot_id=robot_id,
-        target_coords=(ball.x, ball.y),  # (target_x, target_y),
-        target_oren=target_oren,
-        dribbling=dribbling,
-    )
-
-
-# util function??
-def face_ball(current: Tuple[float, float], ball: Tuple[float, float]) -> float:
-    return np.arctan2(ball[1] - current[1], ball[0] - current[0])
-
-
-def go_to_point(
-    game: Game,
-    pid_oren: PID,
-    pid_trans: PID,
-    robot_id: int,
-    target_coords: Tuple[float, float],
-    target_oren: float,
-    dribbling: bool = False,
-) -> RobotCommand:
-    return calculate_robot_velocities(
-        game=game,
-        pid_oren=pid_oren,
-        pid_trans=pid_trans,
-        robot_id=robot_id,
-        target_coords=target_coords,
-        target_oren=target_oren,
-        dribbling=dribbling,
-    )
-
-
-def turn_on_spot(
-    game: Game,
-    pid_oren: PID,
-    pid_trans: PID,
-    robot_id: int,
-    target_oren: float,
-    dribbling: bool = False,
-    pivot_on_ball: bool = False,
-) -> RobotCommand:
-    """
-    Turns the robot on the spot to face the target orientation.
-
-    pivot_on_ball: If True, the robot will pivot on the ball, otherwise it will pivot on its own centre.
-    """
-    turn = calculate_robot_velocities(
-        game=game,
-        pid_oren=pid_oren,
-        pid_trans=pid_trans,
-        robot_id=robot_id,
-        target_coords=(None, None),
-        target_oren=target_oren,
-        dribbling=dribbling,
-    )
-
-    if pivot_on_ball:
-        angular_vel = turn.angular_vel
-        local_left_vel = -angular_vel * 1.8 * ROBOT_RADIUS
-        turn = turn._replace(local_left_vel=local_left_vel)
-
-    return turn
+from entities.game import Game
+from entities.data.command import RobotCommand
+from motion_planning.src.pid import PID
+from motion_planning.src.pid.pid import TwoDPID
+from typing import List, Optional, Tuple
 
 
 # util function??
@@ -353,6 +231,7 @@ def to_defense_parametric(p: Tuple[float, float], is_left: bool) -> float:
     t = lo
     return clamp_to_parametric(t)
 
+
 # util function??
 def find_likely_enemy_shooter(enemy_robots, balls) -> List[VisionRobotData]:
     ans = []
@@ -364,88 +243,60 @@ def find_likely_enemy_shooter(enemy_robots, balls) -> List[VisionRobotData]:
     return list(set(ans))
 
 
-def goalkeep(
-    is_left_goal: bool,
-    game: Game,
-    robot_id: int,
+def defend_parameter(
     pid_oren: PID,
-    pid_trans: TwoDPID,
+    pid_2d: TwoDPID,
+    game: Game,
     is_yellow: bool,
-    goalie_has_ball: bool,
-):
-    robot_data = game.get_robot_pos(is_yellow, robot_id)
-    if goalie_has_ball:
-        target_oren = 0 if is_left_goal else math.pi
-        print("TARGET OREN", target_oren)
-        return go_to_point(
-            pid_oren,
-            pid_trans,
-            robot_data,
-            robot_id,
-            ((-4 if is_left_goal else 4), 0),
-            target_oren,
-            True,
-        )
+    defender_id: int,
+    env: Optional[SSLStandardEnv] = None,
+) -> RobotCommand:
+    # Assume that is_yellow <-> not is_left here # TODO : FIX
+    friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
+    shooters_data = find_likely_enemy_shooter(enemy, balls)
+    orientation = None
+    tracking_ball = False
 
-    if is_left_goal:
-        target = game.predict_ball_pos_at_x(-4.5)
+    # if game.in_box(balls[0].x, balls[0].y):
+    #     print("AAAAAAAAAAAAAAAAAAAAAA")
+    #     # return None
+
+    if not shooters_data:
+        target_tracking_coord = balls[0].x, balls[0].y
+        # TODO game.get_ball_velocity() can return (None, None)
+        if (
+            game.get_ball_velocity() is not None
+            and None not in game.get_ball_velocity()
+        ):
+            orientation = velocity_to_orientation(game.get_ball_velocity())
+            tracking_ball = True
     else:
-        target = game.predict_ball_pos_at_x(4.5)
+        # TODO (deploy more defenders, or find closest shooter?)
+        sd = shooters_data[0]
+        target_tracking_coord = sd.x, sd.y
+        orientation = sd.orientation
 
-    if not target or abs(target[1]) > 0.5:
-        target = (-4.5 if is_left_goal else 4.5, 0)
-
-    if target and not find_likely_enemy_shooter(
-        game.get_robots_pos(not is_yellow), [game.ball]
-    ):
-        cmd = go_to_point(
-            pid_oren,
-            pid_trans,
-            robot_data,
-            robot_id,
-            target,
-            face_ball((robot_data.x, robot_data.y), (game.ball.x, game.ball.y)),
-            dribbling=True,
-        )
-    else:  # TODO : Not sure if we actually need this case?
-        cmd = go_to_point(
-            pid_oren,
-            pid_trans,
-            robot_data,
-            0,
-            [None, None],
-            face_ball((robot_data.x, robot_data.y), (game.ball.x, game.ball.y)),
-        )
-    return cmd
-
-def man_mark(is_yellow, game: Game, robot_id, target_id, pid_oren, pid_trans):
-    robot = game.get_robot_pos(is_yellow, robot_id)
-    target = game.get_robot_pos(not is_yellow, target_id)
-    ball_pos = (game.ball.x, game.ball.y)
-    # Position with a perpendicular offset to the line between target and ball
-    dx = target.x - ball_pos[0]
-    dy = target.y - ball_pos[1]
-    norm = math.sqrt(dx**2 + dy**2)
-    dx /= norm
-    dy /= norm
-
-    # Perpendicular offset
-    offset_x = -dy * 0.5
-    offset_y = dx * 0.5
-
-    target_x = target.x + offset_x
-    target_y = target.y + offset_y
-
+    real_def_pos = friendly[defender_id].x, friendly[defender_id].y
+    current_def_parametric = to_defense_parametric(real_def_pos, is_left=not is_yellow)
+    target = align_defenders(
+        current_def_parametric, target_tracking_coord, orientation, not is_yellow, env
+    )
     cmd = go_to_point(
         pid_oren,
-        pid_trans,
-        robot,
-        0,
-        (target_x, target_y),
-        face_ball((robot.x, robot.y), ball_pos),
+        pid_2d,
+        friendly[defender_id],
+        defender_id,
+        target,
+        face_ball(real_def_pos, (balls[0].x, balls[0].y)),
+        dribbling=True,
     )
+
+    gp = get_goal_centre(is_left=not is_yellow)
+    if env:
+        env.draw_line(
+            [gp, (target_tracking_coord[0], target_tracking_coord[1])],
+            width=5,
+            color="RED" if tracking_ball else "PINK",
+        )
+
     return cmd
-
-
-if __name__ == "__main__":
-    logger.debug(f"{to_defense_parametric((3, 2), False)}")
