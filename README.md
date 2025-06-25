@@ -32,6 +32,24 @@
 2. All angular properties will be in radians or radians per second, normalised between [pi, -pi]. A heading of radian 0 indicates a robot facing towards the positive x-axis (ie left to right).
 3. Unless otherwise stated, the coordinate system is aligned such that blue robots are on the left and yellow are on the right.
 
+### Setup SSL Vision for real testing
+
+1. Connect to a external hotspot and connect the vison linux laoptop and you own personal laptop to the same network
+2. Allow Inbound UDP packets to allow packets through the port you set, run this with adim privaleges:
+<pre>
+New-NetFirewallRule -DisplayName "Allow Multicast UDP 10006" -Direction Inbound -Protocol UDP -LocalPort 10006 -Action Allow
+</pre>
+3. paste "%USERPROFILE%" into "Windows + R" then add a .wslconfig file ensure that the file type properties are WSLCONFIG file.
+<pre>
+[wsl2]
+networkingMode=mirrored
+</pre>
+4. restart wsl using --shutdown then check using the cmd:
+<pre>
+sudo tcpdump -i eth1 -n host 224.5.23.2 and udp port 10006
+</pre>
+if you see UDP packets everything is working
+
 ## Guidelines
 
 #### Folder Hierarchy
