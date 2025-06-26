@@ -1,10 +1,11 @@
-from serial import Serial
+from serial import Serial, EIGHTBITS, PARITY_EVEN, STOPBITS_TWO
 from typing import Union, Optional, Dict, List
 import warnings
 import numpy as np
 import time
 
 from entities.data.command import RobotCommand, RobotResponse
+from skills.src.utils.move_utils import empty_command
 
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
@@ -37,7 +38,7 @@ class RealRobotController(AbstractRobotController):
 
     def __init__(self, is_team_yellow: bool, n_friendly: int):
         super().__init__(is_team_yellow, n_friendly)
-        self._serial = self._init_serial()
+        self._serial_port = self._init_serial()
         self._rbt_cmd_size = 10  # packet size for one robot
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the feedback packet received from the robots
@@ -54,8 +55,8 @@ class RealRobotController(AbstractRobotController):
         # print(list(self.out_packet))
         # binary_representation = [f"{byte:08b}" for byte in self.out_packet]
         # print(binary_representation)
-        self._serial.write(self.out_packet)
-        self._serial.read_all()
+        self._serial_port.write(self.out_packet)
+        self._serial_port.read_all()
         # data_in = self._serial.read_all()
         # print(data_in)
 
@@ -109,15 +110,26 @@ class RealRobotController(AbstractRobotController):
         assert robot_id < 6, "Invalid robot_id. Must be between 0 and 5."
 
         # Combine first 6 bytes of velocities
+        # packet = bytearray(
+        #     [
+        #         robot_id & 0xFF,  # Robot ID
+        #         (c_command.local_forward_vel >> 8) & 0xFF,  # Forward velocity high byte
+        #         c_command.local_forward_vel & 0xFF,  # Forward velocity low byte
+        #         (c_command.local_left_vel >> 8) & 0xFF,  # Left velocity high byte
+        #         c_command.local_left_vel & 0xFF,  # Left velocity low byte
+        #         (c_command.angular_vel >> 8) & 0xFF,  # Angular velocity high byte
+        #         c_command.angular_vel & 0xFF,  # Angular velocity low byte
+        #     ]
+        # )
         packet = bytearray(
             [
                 robot_id & 0xFF,  # Robot ID
-                (c_command.local_forward_vel >> 8) & 0xFF,  # Forward velocity high byte
                 c_command.local_forward_vel & 0xFF,  # Forward velocity low byte
-                (c_command.local_left_vel >> 8) & 0xFF,  # Left velocity high byte
+                (c_command.local_forward_vel >> 8) & 0xFF,  # Forward velocity high byte
                 c_command.local_left_vel & 0xFF,  # Left velocity low byte
-                (c_command.angular_vel >> 8) & 0xFF,  # Angular velocity high byte
+                (c_command.local_left_vel >> 8) & 0xFF,  # Left velocity high byte
                 c_command.angular_vel & 0xFF,  # Angular velocity low byte
+                (c_command.angular_vel >> 8) & 0xFF,  # Angular velocity high byte
             ]
         )
 
@@ -205,34 +217,30 @@ class RealRobotController(AbstractRobotController):
         return self._cached_empty_command
 
     def _init_serial(self) -> Serial:
-        serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
-        start_t = time.time()
-        time.sleep(10)
-        # is_ready = False
-        is_ready = True
-        # while time.time() - start_t < MAX_INITIALIZATION_TIME:
-        #     if serial.in_waiting > 0:
-        #         line = serial.readline().decode("utf-8").rstrip()
-        #         if line == AUTH_STR:
-        #             is_ready = True
-        #             break
-        #         else:
-        #             print(line)
-
-        if is_ready:
-            print("Serial port opened!")
-            serial.reset_input_buffer()  # temporary implementation to clear debugging info in input
-        else:
-            raise ConnectionError("Could not connect: Invalid authentication string!")
-        return serial
+        """Establish serial connection."""
+        try:
+            # Open new connection
+            serial_port = Serial(
+                port=PORT,
+                baudrate=BAUD_RATE,
+                bytesize=EIGHTBITS,  # 8 data bits
+                parity=PARITY_EVEN,  # Even parity (makes it 9 bits total)
+                stopbits=STOPBITS_TWO,  # 2 stop bits
+                timeout=0.1,
+            )
+            return serial_port
+        except Exception as e:
+            raise ConnectionError(
+                f"Could not connect to serial port {PORT}: {e}"
+            ) from e
 
     @property
     def is_team_yellow(self) -> bool:
         return self._is_team_yellow
 
     @property
-    def serial(self) -> Serial:
-        return self._serial
+    def serial_port(self) -> Serial:
+        return self._serial_port
 
     @property
     def rbt_cmd_size(self) -> int:
@@ -264,7 +272,10 @@ if __name__ == "__main__":
     for _ in range(15):
         robot_controller.add_robot_commands(cmd, 0)
         robot_controller.send_robot_commands()
-    robot_controller.add_robot_commands(cmd, 0)
+    for _ in range(10):
+        robot_controller.add_robot_commands(empty_command(), 0)
+        robot_controller.send_robot_commands()
+
     print(list(robot_controller.out_packet))
     binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
     print(binary_representation)
