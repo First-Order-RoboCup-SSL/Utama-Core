@@ -83,8 +83,10 @@ class RealRobotController(AbstractRobotController):
         """
         c_command = self._convert_float_command(robot_id, command)
         command_buffer = self._generate_command_buffer(robot_id, c_command)
-        start_idx = robot_id * self._rbt_cmd_size
-        self._out_packet[start_idx + 1 : start_idx + self._rbt_cmd_size] = (
+        start_idx = (
+            robot_id * self._rbt_cmd_size + 1
+        )  # account for the start frame byte
+        self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = (
             command_buffer  # +1 to account for start frame byte
         )
 
@@ -205,15 +207,17 @@ class RealRobotController(AbstractRobotController):
     def _init_serial(self) -> Serial:
         serial = Serial(port=PORT, baudrate=BAUD_RATE, timeout=TIMEOUT)
         start_t = time.time()
-        is_ready = False
-        while time.time() - start_t < MAX_INITIALIZATION_TIME:
-            if serial.in_waiting > 0:
-                line = serial.readline().decode("utf-8").rstrip()
-                if line == AUTH_STR:
-                    is_ready = True
-                    break
-                else:
-                    print(line)
+        time.sleep(10)
+        # is_ready = False
+        is_ready = True
+        # while time.time() - start_t < MAX_INITIALIZATION_TIME:
+        #     if serial.in_waiting > 0:
+        #         line = serial.readline().decode("utf-8").rstrip()
+        #         if line == AUTH_STR:
+        #             is_ready = True
+        #             break
+        #         else:
+        #             print(line)
 
         if is_ready:
             print("Serial port opened!")
@@ -248,7 +252,7 @@ class RealRobotController(AbstractRobotController):
 
 
 if __name__ == "__main__":
-    robot_controller = RealRobotController(is_team_yellow=True, n_robots=2)
+    robot_controller = RealRobotController(is_team_yellow=True, n_friendly=1)
     cmd = RobotCommand(
         local_forward_vel=0.2,
         local_left_vel=0,
@@ -257,6 +261,9 @@ if __name__ == "__main__":
         chip=0,
         dribble=False,
     )
+    for _ in range(15):
+        robot_controller.add_robot_commands(cmd, 0)
+        robot_controller.send_robot_commands()
     robot_controller.add_robot_commands(cmd, 0)
     print(list(robot_controller.out_packet))
     binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
