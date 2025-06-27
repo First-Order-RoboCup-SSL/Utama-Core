@@ -3,14 +3,12 @@ from entities.game import Game, Robot
 from entities.data.vector import Vector2D, Vector3D
 
 from typing import Dict, List, Union, Tuple  # Added List for type hinting
+from entities.data.object import ObjectKey, TeamType, ObjectType
 
 # Assuming your new PastGame is in entities.game.past_game or accessible
 from entities.game.past_game import (
     PastGame,
     AttributeType,
-    TeamType,
-    ObjectClass,
-    ObjectKey,
     get_structured_object_key,
 )
 from run.refiners.base_refiner import BaseRefiner

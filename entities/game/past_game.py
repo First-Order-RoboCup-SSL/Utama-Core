@@ -1,6 +1,7 @@
 from collections import deque
 from entities.game.game import Game, Robot, Ball
 from entities.data.vector import Vector2D, Vector3D
+from entities.data.object import TeamType, ObjectType, ObjectKey
 from enum import Enum, auto
 from typing import Tuple, Any, Union, Optional, Dict, List
 import numpy as np
@@ -17,25 +18,11 @@ class AttributeType(Enum):
     # ACCELERATION = auto() # If you decide to store pre-calculated acceleration
 
 
-class TeamType(Enum):
-    FRIENDLY = auto()
-    ENEMY = auto()
-    NEUTRAL = auto()
-
-
-class ObjectClass(Enum):
-    ROBOT = auto()
-    BALL = auto()
-
-
-ObjectKey = Tuple[TeamType, ObjectClass, int]
-
-
 def get_structured_object_key(obj: Any, team: TeamType) -> Optional[ObjectKey]:
     if isinstance(obj, Robot) and hasattr(obj, "id") and isinstance(obj.id, int):
-        return (team, ObjectClass.ROBOT, obj.id)
+        return ObjectKey(team, ObjectType.ROBOT, obj.id)
     elif isinstance(obj, Ball):
-        return (TeamType.NEUTRAL, ObjectClass.BALL, 0)
+        return ObjectKey(TeamType.NEUTRAL, ObjectType.BALL, 0)
     logger.warning(
         f"Could not determine ObjectKey for object of type {type(obj)} with team {team}"
     )
