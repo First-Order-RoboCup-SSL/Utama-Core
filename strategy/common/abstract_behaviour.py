@@ -24,6 +24,8 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
         client_bb.register_key(key="pid_oren", access=py_trees.common.Access.READ)
         client_bb.register_key(key="pid_trans", access=py_trees.common.Access.READ)
         client_bb.register_key(key="rsim_env", access=py_trees.common.Access.READ)
+        client_bb.register_key(key="cmd_map", access=py_trees.common.Access.WRITE)
+        client_bb.register_key(key="role_map", access=py_trees.common.Access.WRITE)
         self.blackboard: BaseBlackboard = cast(BaseBlackboard, client_bb)
 
     @abstractmethod

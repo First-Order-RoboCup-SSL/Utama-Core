@@ -1,7 +1,7 @@
 import py_trees
 from strategy.common import AbstractStrategy, AbstractBehaviour
 from strategy.utils.blackboard_utils import SetBlackboardVariable
-from strategy.utils.selector_utils import HasBall
+from strategy.utils.selector_utils import SetWhoHasBall
 from skills.src.go_to_ball import go_to_ball
 
 
@@ -19,9 +19,7 @@ class GoToBallStep(AbstractBehaviour):
             self.blackboard.pid_trans,
             self.blackboard.robot_id,
         )
-        self.blackboard.robot_controller.add_robot_commands(
-            command, self.blackboard.robot_id
-        )
+        self.blackboard.cmd_map[self.blackboard.robot_id] = command
         return py_trees.common.Status.RUNNING
 
 
@@ -39,12 +37,13 @@ class GoToBallStrategy(AbstractStrategy):
             return True
         return False
 
-    def create_behaviour(self) -> py_trees.behaviour.Behaviour:
+    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete go_to_ball behaviour tree."""
 
         # Root sequence for the whole behaviour
         root = py_trees.composites.Sequence(name="GoToBall", memory=True)
 
+        # ROLE ASSIGNMENT: Set the robot ID on the blackboard
         # A child sequence to set the robot_id on the blackboard
         set_robot_id = SetBlackboardVariable(
             name="SetTargetRobotID", variable_name="robot_id", value=self.robot_id
@@ -54,7 +53,7 @@ class GoToBallStrategy(AbstractStrategy):
         has_ball_selector = py_trees.composites.Selector(
             name="HasBallSelector", memory=False
         )
-        has_ball_selector.add_child(HasBall())
+        has_ball_selector.add_child(SetWhoHasBall(name="HasBall"))
         has_ball_selector.add_child(GoToBallStep())
 
         # Assemble the tree

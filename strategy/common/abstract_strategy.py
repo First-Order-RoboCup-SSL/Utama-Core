@@ -45,13 +45,14 @@ class AbstractStrategy(ABC):
         """
         ...
 
-    @abstractmethod
-    def execute_default_action(self, game: Game, robot_id: int) -> RobotCommand:
+    def execute_default_action(
+        self, game: Game, role: Role, robot_id: int
+    ) -> RobotCommand:
         """
         Called on each unassigned robot to execute the default action.
         This is used when no specific command is set in the blackboard after the coach tree for this robot.
         """
-        ...
+        pass
 
     ### END OF STRATEGY IMPLEMENTATION ###
 
@@ -83,7 +84,7 @@ class AbstractStrategy(ABC):
             value=self._reset_cmd_map(present_future_game.current.friendly_robots),
         )
         self.behaviour_tree.tick()
-        for robot_id, values in range(self.blackboard.cmd_map.items()):
+        for robot_id, values in self.blackboard.cmd_map.items():
             if values is not None:
                 self.robot_controller.add_robot_commands(values, robot_id)
 
@@ -112,7 +113,7 @@ class AbstractStrategy(ABC):
         """Resets the command map to be set in the blackboard."""
         if not hasattr(self, "_cmd_map_cache"):
             self._cmd_map_cache = {k: None for k in friendly_robots}
-        return self._cmd_map_cache
+        return self._cmd_map_cache.copy()
 
     def _setup_blackboard(self):
         """Sets up the blackboard with the necessary keys for the strategy."""

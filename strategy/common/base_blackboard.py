@@ -5,6 +5,7 @@ from entities.game import PresentFutureGame
 from entities.data.command import RobotCommand
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from typing import Dict, Union
+from strategy.common import Role
 
 
 class BaseBlackboard(py_trees.blackboard.Client):
@@ -31,3 +32,7 @@ class BaseBlackboard(py_trees.blackboard.Client):
     @property
     def cmd_map(self) -> Dict[int, Union[None, RobotCommand]]:
         return self.get("cmd_map")
+
+    @property
+    def role_map(self) -> Dict[int, Role]:
+        return self.get("role_map")
