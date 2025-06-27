@@ -13,8 +13,14 @@ class GoToBallStep(AbstractBehaviour):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
+        game = self.blackboard.present_future_game.current
+        env = self.blackboard.rsim_env
+        if env:
+            v = game.friendly_robots[self.blackboard.robot_id].v
+            p = game.friendly_robots[self.blackboard.robot_id].p
+            env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")
         command = go_to_ball(
-            self.blackboard.present_future_game.current,
+            game,
             self.blackboard.pid_oren,
             self.blackboard.pid_trans,
             self.blackboard.robot_id,
@@ -60,10 +66,3 @@ class GoToBallStrategy(AbstractStrategy):
         root.add_child(has_ball_selector)
 
         return root
-
-
-# TODO: add visualisation of the target point
-# if self.env:
-#     v = game.friendly_robots[self.target_id].v
-#     p = game.friendly_robots[self.target_id].p
-#     self.env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")

@@ -49,11 +49,40 @@ class VectorBase(ABC):
         """
         return np.hypot(other.y - self.y, other.x - self.x)
 
-    def __sub__(self: T, other: T) -> T:
-        return self.__class__.from_array(self._arr - other._arr)  # type: ignore
-
     def to_array(self) -> np.ndarray:
         return self._arr
+
+    def __add__(self: T, other: T) -> T:
+        return self.__class__.from_array(self._arr + other._arr)
+
+    def __sub__(self: T, other: T) -> T:
+        return self.__class__.from_array(self._arr - other._arr)
+
+    def __mul__(self: T, scalar: float) -> T:
+        return self.__class__.from_array(self._arr * scalar)
+
+    def __rmul__(self: T, scalar: float) -> T:
+        return self.__mul__(scalar)
+
+    def __truediv__(self: T, scalar: float) -> T:
+        return self.__class__.from_array(self._arr / scalar)
+
+    def __neg__(self: T) -> T:
+        return self.__class__.from_array(-self._arr)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, VectorBase):
+            return NotImplemented
+        return np.allclose(self._arr, other._arr)
+
+    def __abs__(self) -> float:
+        return self.mag()
+
+    def __getitem__(self, idx: int) -> float:
+        return self._arr[idx]
+
+    def __iter__(self):
+        return iter(self._arr)
 
     @classmethod
     @abstractmethod

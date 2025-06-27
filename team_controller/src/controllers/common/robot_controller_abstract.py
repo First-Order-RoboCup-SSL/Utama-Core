@@ -43,8 +43,8 @@ class AbstractRobotController:
             for robot_id, command in robot_commands.items():
                 self._add_robot_command(command, robot_id)
         else:
-            warnings.warn(
-                "Invalid hyperparamters passed to add_robot_commands", SyntaxWarning
+            raise TypeError(
+                "robot_commands must be a RobotCommand or a dictionary of RobotCommand with robot_id as the key."
             )
 
     @abc.abstractmethod

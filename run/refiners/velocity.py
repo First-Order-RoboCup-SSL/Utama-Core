@@ -164,59 +164,61 @@ class VelocityRefiner(BaseRefiner):
         current_ts: float,
         twod: bool,
     ) -> Union[Vector2D, Vector3D]:
-        try:
-            timestamps_np, positions_np = past_game.get_historical_attribute_series(
-                object_key, AttributeType.POSITION, 1
-            )
-            # logger.debug(f"VELOCITY_CALC: obj_key={object_key}, current_ts={current_ts}, current_pos={current_pos}")
-            # logger.debug(f"VELOCITY_CALC: historical timestamps_np={timestamps_np}, positions_np={positions_np.tolist() if positions_np.size > 0 else 'EMPTY'}")
+        # try:
+        timestamps_np, positions_np = past_game.get_historical_attribute_series(
+            object_key, AttributeType.POSITION, 1
+        )
+        # logger.debug(f"VELOCITY_CALC: obj_key={object_key}, current_ts={current_ts}, current_pos={current_pos}")
+        # logger.debug(f"VELOCITY_CALC: historical timestamps_np={timestamps_np}, positions_np={positions_np.tolist() if positions_np.size > 0 else 'EMPTY'}")
 
-            if not timestamps_np.size or not positions_np.size:
-                logger.warning(
-                    f"VELOCITY_CALC: No historical position for {object_key}. PastGame returned empty arrays. Setting zero velocity."
-                )
-                return zero_vector(twod)
-
-            # Assign these *after* confirming timestamps_np and positions_np are not empty
-            previous_time_received = timestamps_np[0]
-            previous_pos_np = positions_np[
-                0
-            ]  # This is a 1D NumPy array [x, y] or [x, y, z]
-
-            # Now calculate dt_secs using the defined previous_time_received
-            dt_secs = current_ts - previous_time_received
-            # logger.debug(f"VELOCITY_CALC: obj_key={object_key}, dt_secs={dt_secs}, prev_ts={previous_time_received}, prev_pos_np={previous_pos_np}")
-
-            if dt_secs <= 1e-9:
-                logger.warning(
-                    f"VELOCITY_CALC: Object {object_key} velocity dt_secs is too small or zero ({dt_secs}). Using zero velocity."
-                )
-                return zero_vector(twod)
-
-            # Convert previous_pos_np back to VectorObject for subtraction
-            if twod:
-                previous_pos = Vector2D(previous_pos_np[0], y=previous_pos_np[1])
-            else:
-                previous_pos = Vector3D(
-                    x=previous_pos_np[0], y=previous_pos_np[1], z=previous_pos_np[2]
-                )
-
-            velocity = (current_pos - previous_pos) / dt_secs
-            # logger.debug(f"VELOCITY_CALC: obj_key={object_key}, calculated_v={velocity}")
-            return velocity
-
-        except IndexError:
-            logger.error(
-                f"VELOCITY_CALC: IndexError for {object_key}. This indicates an issue with historical data structure despite size checks. Setting zero velocity.",
-                exc_info=True,
+        if not timestamps_np.size or not positions_np.size:
+            logger.warning(
+                f"VELOCITY_CALC: No historical position for {object_key}. PastGame returned empty arrays. Setting zero velocity."
             )
             return zero_vector(twod)
-        except Exception as e:
-            logger.error(
-                f"VELOCITY_CALC: Unexpected error calculating velocity for {object_key}, setting to zero: {e}",
-                exc_info=True,
+
+        # Assign these *after* confirming timestamps_np and positions_np are not empty
+        previous_time_received = timestamps_np[0]
+        previous_pos_np = positions_np[
+            0
+        ]  # This is a 1D NumPy array [x, y] or [x, y, z]
+
+        # Now calculate dt_secs using the defined previous_time_received
+        dt_secs = current_ts - previous_time_received
+        # logger.debug(f"VELOCITY_CALC: obj_key={object_key}, dt_secs={dt_secs}, prev_ts={previous_time_received}, prev_pos_np={previous_pos_np}")
+
+        if dt_secs <= 1e-9:
+            logger.warning(
+                f"VELOCITY_CALC: Object {object_key} velocity dt_secs is too small or zero ({dt_secs}). Using zero velocity."
             )
             return zero_vector(twod)
+
+        # Convert previous_pos_np back to VectorObject for subtraction
+        if twod:
+            previous_pos = Vector2D(previous_pos_np[0], y=previous_pos_np[1])
+        else:
+            previous_pos = Vector3D(
+                x=previous_pos_np[0], y=previous_pos_np[1], z=previous_pos_np[2]
+            )
+
+        velocity = (current_pos - previous_pos) / dt_secs
+        # logger.debug(
+        #     f"VELOCITY_CALC: obj_key={object_key}, calculated_v={velocity}"
+        # )
+        return velocity
+
+    # except IndexError:
+    #     logger.error(
+    #         f"VELOCITY_CALC: IndexError for {object_key}. This indicates an issue with historical data structure despite size checks. Setting zero velocity.",
+    #         exc_info=True,
+    #     )
+    #     return zero_vector(twod)
+    # except Exception as e:
+    #     logger.error(
+    #         f"VELOCITY_CALC: Unexpected error calculating velocity for {object_key}, setting to zero: {e}",
+    #         exc_info=True,
+    #     )
+    #     return zero_vector(twod)
 
     def _calculate_object_acceleration(
         self, past_game: PastGame, object_key: ObjectKey, twod: bool

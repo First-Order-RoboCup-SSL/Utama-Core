@@ -5,6 +5,7 @@ from motion_planning.src.pid.pid import PID, TwoDPID
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
+from skills.src.utils.move_utils import empty_command
 from strategy.common.roles import Role
 from abc import abstractmethod, ABC
 from typing import Dict, Union
@@ -52,7 +53,7 @@ class AbstractStrategy(ABC):
         Called on each unassigned robot to execute the default action.
         This is used when no specific command is set in the blackboard after the coach tree for this robot.
         """
-        pass
+        return empty_command()
 
     ### END OF STRATEGY IMPLEMENTATION ###
 
