@@ -80,7 +80,7 @@ def base_refine(is_yellow: bool):
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, raw_blue, raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, raw_blue, raw_balls, 1)
     p = PositionRefiner()
-    g = Game(0, is_yellow, True, friendly, enemy, bfac(0, 0))
+    g = Game(0, is_yellow, True, friendly, enemy, bfac(0, 0), None)
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2])
     fr = result.friendly_robots[0]
     er = result.enemy_robots[0]
@@ -110,7 +110,7 @@ def test_refine_for_multiple_yellow():
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, [], raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, [], raw_balls, 1)
     p = PositionRefiner()
-    g = Game(0, True, True, friendly, {}, bfac(0, 0))
+    g = Game(0, True, True, friendly, {}, bfac(0, 0), None)
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2])
 
     assert len(result.friendly_robots) == 2
@@ -128,7 +128,7 @@ def test_refine_nones():
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, [], raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, [], raw_balls, 1)
     p = PositionRefiner()
-    g = Game(0, True, True, friendly, {}, bfac(0, 0))
+    g = Game(0, True, True, friendly, {}, bfac(0, 0), None)
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2, None, None])
 
     assert len(result.friendly_robots) == 2

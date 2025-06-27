@@ -1,10 +1,10 @@
 from typing import Dict, Optional
 import dataclasses
 from dataclasses import dataclass, replace
-
 from entities.game.field import Field
 from entities.game.robot import Robot
 from entities.game.ball import Ball
+from entities.data.object import ObjectKey
 
 import logging
 
@@ -20,6 +20,7 @@ class Game:
     enemy_robots: Dict[int, Robot]
     ball: Optional[Ball]
     field: Field = dataclasses.field(init=False)
+    robot_with_ball: Optional[ObjectKey]
 
     def __post_init__(self):
         object.__setattr__(self, "field", Field(self.my_team_is_right))

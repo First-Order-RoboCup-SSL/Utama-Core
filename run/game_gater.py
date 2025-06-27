@@ -34,16 +34,11 @@ class GameGater:
 
             return my_game, opp_game
 
-        my_game = Game(0, my_team_is_yellow, my_team_is_right, {}, {}, None)
+        my_game = Game(0, my_team_is_yellow, my_team_is_right, {}, {}, None, None)
 
         if is_pvp:
             opp_game = Game(
-                0,
-                not my_team_is_yellow,
-                not my_team_is_right,
-                {},
-                {},
-                None,
+                0, not my_team_is_yellow, not my_team_is_right, {}, {}, None, None
             )
         else:
             opp_game = None
