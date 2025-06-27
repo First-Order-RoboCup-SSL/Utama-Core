@@ -49,9 +49,6 @@ class VectorBase(ABC):
         """
         return np.hypot(other.y - self.y, other.x - self.x)
 
-    def to_array(self):
-        return self._arr
-
     def __sub__(self: T, other: T) -> T:
         return self.__class__.from_array(self._arr - other._arr)  # type: ignore
 

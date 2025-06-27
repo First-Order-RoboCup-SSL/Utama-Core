@@ -27,3 +27,22 @@ class SetWhoHasBall(AbstractBehaviour):
                 return py_trees.common.Status.SUCCESS
         self.blackboard.set(name="HasBallRobotID", value=-1)
         return py_trees.common.Status.FAILURE
+
+
+class HasBall(AbstractBehaviour):
+    """
+    A condition behaviour that checks if the robot has the ball.
+    Requires `robot_id` to be set in the blackboard.
+    """
+
+    def __init__(self, name="HasBall"):
+        super().__init__(name=name)
+        self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
+
+    def update(self):
+        if self.blackboard.present_future_game.current.friendly_robots[
+            self.blackboard.robot_id
+        ].has_ball:
+            return py_trees.common.Status.SUCCESS
+        else:
+            return py_trees.common.Status.FAILURE
