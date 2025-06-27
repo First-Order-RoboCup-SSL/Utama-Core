@@ -16,8 +16,6 @@ from config.settings import (
     BAUD_RATE,
     PORT,
     TIMEOUT,
-    AUTH_STR,
-    MAX_INITIALIZATION_TIME,
 )
 import logging
 
