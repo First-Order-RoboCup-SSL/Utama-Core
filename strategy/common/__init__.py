@@ -1,4 +1,4 @@
-from strategy.common.abstract_behaviour import AbstractBehaviour
-from strategy.common.abstract_strategy import AbstractStrategy
 from strategy.common.base_blackboard import BaseBlackboard
 from strategy.common.roles import Role
+from strategy.common.abstract_behaviour import AbstractBehaviour
+from strategy.common.abstract_strategy import AbstractStrategy
