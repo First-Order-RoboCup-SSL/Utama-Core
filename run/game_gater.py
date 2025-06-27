@@ -43,13 +43,15 @@ class GameGater:
         else:
             opp_game = None
 
+        my_game, opp_game = _add_frame(my_game, opp_game)
+
         while (
             len(my_game.friendly_robots) < exp_friendly
             or len(my_game.enemy_robots) < exp_enemy
             or my_game.ball is None
         ):
+            time.sleep(0.05)
             my_game, opp_game = _add_frame(my_game, opp_game)
-            time.sleep(0.1)
 
         # assert that we don't see more robots than expected
         if len(my_game.friendly_robots) > exp_friendly:
@@ -61,5 +63,4 @@ class GameGater:
                 f"Too many enemy robots: {len(my_game.enemy_robots)} > {exp_enemy}"
             )
 
-        my_game, opp_game = _add_frame(my_game, opp_game)
         return my_game, opp_game

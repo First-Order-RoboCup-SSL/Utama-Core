@@ -5,9 +5,7 @@ import numpy as np
 
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from entities.data.vision import VisionBallData, VisionData, VisionRobotData
-from entities.game.ball import Ball
-from entities.game.game import Game
-from entities.game.robot import Robot
+from entities.game import Ball, Robot, Game
 from run.refiners.base_refiner import BaseRefiner
 from global_utils.math_utils import normalise_heading
 from collections import defaultdict
