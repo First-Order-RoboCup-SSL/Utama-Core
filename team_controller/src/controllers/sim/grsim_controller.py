@@ -1,7 +1,7 @@
 from typing import Tuple
 import time
 
-from config.starting_formation import (
+from config.defaults import (
     LEFT_START_ONE,
     RIGHT_START_ONE,
 )

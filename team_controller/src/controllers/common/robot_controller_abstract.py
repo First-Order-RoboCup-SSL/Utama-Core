@@ -5,20 +5,17 @@ from typing import Union, Dict, Optional, Deque, List
 
 from collections import deque
 
+
 class AbstractRobotController:
     def __init__(self, is_team_yellow: bool, n_friendly: int):
         self._is_team_yellow = is_team_yellow
         self._n_friendly = n_friendly
-        self._robots_info: Deque[List[RobotResponse]] = deque(
-            [],
-            maxlen=1
-        )
+        self._robots_info: Deque[List[RobotResponse]] = deque([], maxlen=1)
 
     @abc.abstractmethod
     def send_robot_commands(self) -> None:
         """
         sends the robot commands to the appropriate team (yellow or blue).
-        # TODO: Consider changing output to integer value for closed loop feedback from robots
         """
         pass
 

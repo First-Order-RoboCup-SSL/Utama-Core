@@ -10,7 +10,7 @@ from config.settings import (
     TIMESTEP,
     KICK_SPD,
 )
-from config.starting_formation import (
+from config.defaults import (
     LEFT_START_ONE,
     RIGHT_START_ONE,
 )
@@ -131,7 +131,9 @@ class SSLStandardEnv(SSLBaseEnv):
 
         return observation, reward, terminated, truncated, self.reward_shaping_total
 
-    def _frame_to_observations(self) -> Tuple[RawVisionData, RobotResponse, RobotResponse]:
+    def _frame_to_observations(
+        self,
+    ) -> Tuple[RawVisionData, RobotResponse, RobotResponse]:
         """
         return observation data that aligns with grSim
 
@@ -168,13 +170,17 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Camera id as 0, only one camera for RSim
         return (
-            RawVisionData(self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs], 0),
+            RawVisionData(
+                self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs], 0
+            ),
             yellow_robots_info,
             blue_robots_info,
         )
 
     def _get_robot_observation(self, robot):
-        robot_pos = RawRobotData(robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1)
+        robot_pos = RawRobotData(
+            robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1
+        )
         robot_info = RobotResponse(robot.id, robot.infrared)
         return robot_pos, robot_info
 

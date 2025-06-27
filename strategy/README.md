@@ -381,11 +381,15 @@ is_enemy_closer -> attack or defence
 assign roles to attack and defence (preset)
 
 ATTACK
-[play] has_ball?->
-	Y - Is my goal chance high?
-		Shoot
-		Pass
-	N - Who is closest?: go to ball
+ball_in_flight (passing) ->
+    Y - receive_ball
+    N - do_we_have_ball? -> (set robot_id closest to ball)
+        Y - Is my goal chance high?
+            Y - Shoot
+            N - Pass (kick_ball_at_angle to receiver, get receiver to turn_to_receive parallel)
+                (set receiver_id in global blackboard for next tick to know who receives ball)
+        N - Who is closest?: go to ball
+        
 Default -> go to open space, defenders defend
 
 DEFEND

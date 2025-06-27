@@ -15,7 +15,7 @@ from motion_planning.src.pid.pid import PID
 from config.settings import (
     PID_PARAMS,
 )
-from config.starting_formation import RIGHT_START_ONE
+from config.defaults import RIGHT_START_ONE
 from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
     RobotControl,
 )

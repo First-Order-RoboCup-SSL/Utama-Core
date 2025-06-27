@@ -2,7 +2,9 @@ import py_trees
 from team_controller.src.controllers import AbstractRobotController
 from motion_planning.src.pid import PID, TwoDPID
 from entities.game import PresentFutureGame
+from entities.data.command import RobotCommand
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
+from typing import Dict, Union
 
 
 class BaseBlackboard(py_trees.blackboard.Client):
@@ -25,3 +27,7 @@ class BaseBlackboard(py_trees.blackboard.Client):
     @property
     def rsim_env(self) -> SSLBaseEnv:
         return self.get("rsim_env")
+
+    @property
+    def cmd_map(self) -> Dict[int, Union[None, RobotCommand]]:
+        return self.get("cmd_map")

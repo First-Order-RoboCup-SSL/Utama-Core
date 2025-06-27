@@ -1,5 +1,5 @@
 from typing import Callable, Dict, Tuple
-from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
+from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
 from entities.game.present_future_game import PresentFutureGame
 from robot_control.src.skills import go_to_point
 

@@ -5,7 +5,7 @@ from typing import Tuple, Optional, List
 import warnings
 
 from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP, MAX_ROBOTS
-from config.starting_formation import LEFT_START_ONE, RIGHT_START_ONE
+from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
 from collections import deque
 from entities.game import PastGame, PresentFutureGame, Game
 from entities.data.raw_vision import RawVisionData
