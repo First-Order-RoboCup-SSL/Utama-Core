@@ -1,7 +1,7 @@
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from entities.game import Game, Robot
 from entities.data.command import RobotCommand
-from motion_planning.src.pid.pid import PID, TwoDPID
+from motion_planning.src.motion_controller import MotionController
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -70,12 +70,11 @@ class AbstractStrategy(ABC):
         self.robot_controller = robot_controller
         self.blackboard.set(name="robot_controller", value=robot_controller)
 
-    def load_pids(self, pid_oren: PID, pid_trans: TwoDPID):
+    def load_motion_controller(self, motion_controller: MotionController):
         """
-        Called by StrategyRunner: Load the PIDs for orientation and translation control into the blackboard.
+        Called by StrategyRunner: Load the Motion Controller into the blackboard.
         """
-        self.blackboard.set(name="pid_oren", value=pid_oren)
-        self.blackboard.set(name="pid_trans", value=pid_trans)
+        self.blackboard.set(name="motion_controller", value=motion_controller)
 
     def step(self, game: Game):
         start_time = time.time()
@@ -121,8 +120,9 @@ class AbstractStrategy(ABC):
             key="robot_controller", access=py_trees.common.Access.WRITE
         )
         blackboard.register_key(key="game", access=py_trees.common.Access.WRITE)
-        blackboard.register_key(key="pid_oren", access=py_trees.common.Access.WRITE)
-        blackboard.register_key(key="pid_trans", access=py_trees.common.Access.WRITE)
+        blackboard.register_key(
+            key="motion_controller", access=py_trees.common.Access.WRITE
+        )
         blackboard.register_key(key="rsim_env", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="cmd_map", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="role_map", access=py_trees.common.Access.WRITE)

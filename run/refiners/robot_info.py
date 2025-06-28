@@ -15,7 +15,6 @@ from typing import List, Dict
 class RobotInfoRefiner(BaseRefiner):
 
     def refine(self, game_frame: GameFrame, robot_responses: List[RobotResponse]):
-        robot_with_ball = None
         if robot_responses is None or len(robot_responses) == 0:
             return game_frame
 

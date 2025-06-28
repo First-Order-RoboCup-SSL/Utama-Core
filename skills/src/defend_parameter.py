@@ -1,8 +1,7 @@
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from entities.data.command import RobotCommand
-from motion_planning.src.pid import PID
-from motion_planning.src.pid.pid import TwoDPID
+from motion_planning.src.motion_controller import MotionController
 from typing import List, Optional, Tuple
 
 
@@ -244,9 +243,8 @@ def find_likely_enemy_shooter(enemy_robots, balls) -> List[VisionRobotData]:
 
 
 def defend_parameter(
-    pid_oren: PID,
-    pid_2d: TwoDPID,
     game: Game,
+    motion_controller: MotionController,
     is_yellow: bool,
     defender_id: int,
     env: Optional[SSLStandardEnv] = None,
@@ -282,8 +280,7 @@ def defend_parameter(
         current_def_parametric, target_tracking_coord, orientation, not is_yellow, env
     )
     cmd = go_to_point(
-        pid_oren,
-        pid_2d,
+        motion_controller,
         friendly[defender_id],
         defender_id,
         target,

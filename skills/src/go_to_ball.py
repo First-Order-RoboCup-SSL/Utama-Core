@@ -1,5 +1,5 @@
 from entities.game import Game
-from motion_planning.src.pid import PID, TwoDPID
+from motion_planning.src.motion_controller import MotionController
 from entities.data.command import RobotCommand
 from skills.src.utils.move_utils import move
 import numpy as np
@@ -7,8 +7,7 @@ import numpy as np
 
 def go_to_ball(
     game: Game,
-    pid_oren: PID,
-    pid_trans: TwoDPID,
+    motion_controller: MotionController,
     robot_id: int,
     dribble_when_near: bool = True,
     dribble_threshold: float = 0.5,
@@ -24,8 +23,7 @@ def go_to_ball(
 
     return move(
         game=game,
-        pid_oren=pid_oren,
-        pid_trans=pid_trans,
+        motion_controller=motion_controller,
         robot_id=robot_id,
         target_coords=ball,  # (target_x, target_y),
         target_oren=target_oren,

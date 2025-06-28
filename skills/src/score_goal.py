@@ -1,6 +1,6 @@
 from entities.game import Game, Robot
 from entities.data.vector import Vector2D
-from motion_planning.src.pid import PID, TwoDPID
+from motion_planning.src.motion_controller import MotionController
 from config.settings import ROBOT_RADIUS
 from entities.data.command import RobotCommand
 from skills.src.utils.move_utils import move, face_ball, kick, turn_on_spot
@@ -287,8 +287,7 @@ def is_goal_blocked(
 
 def score_goal(
     game: Game,
-    pid_oren: PID,
-    pid_trans: TwoDPID,
+    motion_controller: MotionController,
     shooter_id: int,
 ) -> RobotCommand:
     """
@@ -338,12 +337,11 @@ def score_goal(
             print("turning on spot")
             robot_command = turn_on_spot(
                 game,
-                pid_oren,
-                pid_trans,
+                motion_controller,
                 shooter_id,
                 shot_orientation,
                 dribbling=True,
             )
     else:
-        robot_command = move(game, pid_oren, pid_trans, shooter_id, shooter_id, ball)
+        robot_command = move(game, motion_controller, shooter_id, shooter_id, ball)
     return robot_command

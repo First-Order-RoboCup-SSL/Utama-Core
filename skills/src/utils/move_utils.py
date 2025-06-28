@@ -4,15 +4,13 @@ from entities.data.vector import Vector2D
 from entities.game import Game
 from config.settings import ROBOT_RADIUS
 from global_utils.math_utils import rotate_vector
-from motion_planning.src.pid import PID
-from motion_planning.src.pid.pid import TwoDPID
+from motion_planning.src.motion_controller import MotionController
 import numpy as np
 
 
 def move(
     game: Game,
-    pid_oren: PID,
-    pid_trans: TwoDPID,
+    motion_controller: MotionController,
     robot_id: int,
     target_coords: Vector2D,
     target_oren: float,
@@ -21,6 +19,8 @@ def move(
     """
     calculate the robot command to move towards a target point with a specified orientation.
     """
+    pid_trans = motion_controller.pid_trans
+    pid_oren = motion_controller.pid_oren
 
     robot = game.friendly_robots[robot_id]
 
@@ -60,8 +60,7 @@ def face_ball(current: Tuple[float, float], ball: Tuple[float, float]) -> float:
 
 def turn_on_spot(
     game: Game,
-    pid_oren: PID,
-    pid_trans: PID,
+    motion_controller: MotionController,
     robot_id: int,
     target_oren: float,
     dribbling: bool = False,
@@ -75,8 +74,7 @@ def turn_on_spot(
 
     turn = move(
         game=game,
-        pid_oren=pid_oren,
-        pid_trans=pid_trans,
+        motion_controller=motion_controller,
         robot_id=robot_id,
         target_coords=game.friendly_robots[robot_id].p,
         target_oren=target_oren,

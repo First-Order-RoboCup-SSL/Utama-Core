@@ -1,6 +1,6 @@
 import py_trees
 from team_controller.src.controllers import AbstractRobotController
-from motion_planning.src.pid import PID, TwoDPID
+from motion_planning.src.motion_controller import MotionController
 from entities.game import Game
 from entities.data.command import RobotCommand
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
@@ -18,12 +18,8 @@ class BaseBlackboard(py_trees.blackboard.Client):
         return self.get("robot_controller")
 
     @property
-    def pid_oren(self) -> PID:
-        return self.get("pid_oren")
-
-    @property
-    def pid_trans(self) -> TwoDPID:
-        return self.get("pid_trans")
+    def motion_controller(self) -> MotionController:
+        return self.get("motion_controller")
 
     @property
     def rsim_env(self) -> SSLBaseEnv:

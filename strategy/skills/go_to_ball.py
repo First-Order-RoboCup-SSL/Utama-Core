@@ -21,8 +21,7 @@ class GoToBallStep(AbstractBehaviour):
             env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")
         command = go_to_ball(
             game,
-            self.blackboard.pid_oren,
-            self.blackboard.pid_trans,
+            self.blackboard.motion_controller,
             self.blackboard.robot_id,
         )
         self.blackboard.cmd_map[self.blackboard.robot_id] = command

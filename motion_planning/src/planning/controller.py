@@ -69,7 +69,7 @@ class TimedSwitchController:
         Returns:
             Tuple[float, float]: The next coordinates (x, y) in the path to the target.
         """
-        robot_position = self._game.friendly_robots[robot_id]
+        robot_position = self._game.friendly_robots[robot_id].p
 
         if self._exit_points[robot_id] is None:
             required_exit_point = self._exit_strategy.get_exit_point(

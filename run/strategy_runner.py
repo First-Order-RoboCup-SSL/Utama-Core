@@ -10,11 +10,8 @@ from collections import deque
 from entities.game import GameHistory, Game
 from entities.data.raw_vision import RawVisionData
 from entities.data.command import RobotCommand
-from motion_planning.src.pid.pid import (
-    get_grsim_pids,
-    get_real_pids,
-    get_rsim_pids,
-)
+from motion_planning.src.motion_controller import MotionController
+
 from global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
@@ -233,18 +230,18 @@ class StrategyRunner:
             ), "Expected number of robots at runtime does not match opponent strategy."
 
     def _load_robot_control_and_pids(self):
-        opp_robot_controller, opp_pid_trans, opp_pid_oren = None, None, None
         if self.mode == "rsim":
             pvp_manager = None
-            if self.opp_strategy is not None:
+            if self.opp_strategy:
                 pvp_manager = RSimPVPManager(self.rsim_env)
+
             my_robot_controller = RSimRobotController(
                 is_team_yellow=self.my_team_is_yellow,
                 n_friendly=self.exp_friendly,
                 env=self.rsim_env,
                 pvp_manager=pvp_manager,
             )
-            my_pid_oren, my_pid_trans = get_rsim_pids()
+
             if self.opp_strategy:
                 opp_robot_controller = RSimRobotController(
                     is_team_yellow=not self.my_team_is_yellow,
@@ -252,9 +249,6 @@ class StrategyRunner:
                     env=self.rsim_env,
                     pvp_manager=pvp_manager,
                 )
-                opp_pid_oren, opp_pid_trans = get_rsim_pids()
-
-            if pvp_manager:
                 if self.my_team_is_yellow:
                     pvp_manager.load_controllers(
                         my_robot_controller, opp_robot_controller
@@ -268,33 +262,28 @@ class StrategyRunner:
             my_robot_controller = GRSimRobotController(
                 is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
             )
-            my_pid_oren, my_pid_trans = get_grsim_pids()
             if self.opp_strategy:
                 opp_robot_controller = GRSimRobotController(
                     is_team_yellow=not self.my_team_is_yellow, n_friendly=self.exp_enemy
                 )
-                opp_pid_oren, opp_pid_trans = get_grsim_pids()
 
         elif self.mode == "real":
             my_robot_controller = RealRobotController(
                 is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
             )
-            my_pid_oren, my_pid_trans = get_real_pids()
-            # TODO: currently, two player not supported based on serial and transmission requirements
             if self.opp_strategy:
                 opp_robot_controller = RealRobotController(
                     is_team_yellow=not self.my_team_is_yellow, n_friendly=self.exp_enemy
                 )
-                opp_pid_oren, opp_pid_trans = get_real_pids()
 
         else:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
         self.my_strategy.load_robot_controller(my_robot_controller)
-        self.my_strategy.load_pids(my_pid_oren, my_pid_trans)
+        self.my_strategy.load_motion_controller(MotionController(self.mode))
         if self.opp_strategy:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
-            self.opp_strategy.load_pids(opp_pid_oren, opp_pid_trans)
+            self.opp_strategy.load_motion_controller(MotionController(self.mode))
 
     def _load_game(self):
         my_current_game_frame, opp_current_game_frame = GameGater.wait_until_game_valid(

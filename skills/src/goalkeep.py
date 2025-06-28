@@ -1,5 +1,5 @@
 from entities.game import Game
-from motion_planning.src.pid import PID, TwoDPID
+from motion_planning.src.motion_controller import MotionController
 from typing import Tuple
 from entities.data.command import RobotCommand
 from skills.src.go_to_point import go_to_point
@@ -7,8 +7,7 @@ from skills.src.go_to_point import go_to_point
 
 def goalkeep(
     game: Game,
-    pid_oren: PID,
-    pid_trans: TwoDPID,
+    motion_controller: MotionController,
     robot_id: int,
 ):
     robot_data = game.get_robot_pos(is_yellow, robot_id)
