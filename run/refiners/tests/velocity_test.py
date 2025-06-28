@@ -1,8 +1,8 @@
 import numpy as np
 from entities.data.vector import Vector3D, Vector2D
 from entities.game.ball import Ball
-from entities.game.game import Game
-from entities.game.past_game import PastGame, TeamType, get_structured_object_key
+from entities.game.game_frame import GameFrame
+from entities.game.game_history import GameHistory, TeamType, get_structured_object_key
 from entities.game.robot import Robot
 from run.refiners import VelocityRefiner
 import pytest
@@ -13,7 +13,7 @@ velocity_refiner = VelocityRefiner()
 def create_ball_only_game(
     ts: float, x: float, y: float, z: float, vx: float = 1, vy: float = 1, vz: float = 1
 ):
-    return Game(
+    return GameFrame(
         ts=ts,
         my_team_is_yellow=True,
         my_team_is_right=True,
@@ -35,7 +35,7 @@ def create_one_robot_only_game(ts: float, x: float, y: float, is_friendly: bool)
             orientation=0,
         )
     }
-    return Game(
+    return GameFrame(
         ts=ts,
         my_team_is_yellow=True,
         my_team_is_right=True,
@@ -46,13 +46,13 @@ def create_one_robot_only_game(ts: float, x: float, y: float, is_friendly: bool)
 
 
 def test_velocity_calculation_correct_for_ball():
-    past_game = PastGame(10)
-    past_game.add_game(create_ball_only_game(2, 10, 20, 30))
+    game_history = GameHistory(10)
+    game_history.add_game(create_ball_only_game(2, 10, 20, 30))
 
     game = create_ball_only_game(5, 19, 32, 33)
     velocity_refiner = VelocityRefiner()
 
-    game = velocity_refiner.refine(past_game, game)
+    game = velocity_refiner.refine(game_history, game)
 
     assert game.ball.v.x == 3
     assert game.ball.v.y == 4
@@ -61,10 +61,10 @@ def test_velocity_calculation_correct_for_ball():
 
 @pytest.mark.parametrize("is_friendly", [True, False])
 def test_velocity_calculation_correct_for_one_robot(is_friendly):
-    past_game = PastGame(10)
-    past_game.add_game(create_one_robot_only_game(4, 15, 30, is_friendly))
+    game_history = GameHistory(10)
+    game_history.add_game(create_one_robot_only_game(4, 15, 30, is_friendly))
     game = create_one_robot_only_game(10, 15, 3, is_friendly)
-    game = velocity_refiner.refine(past_game, game)
+    game = velocity_refiner.refine(game_history, game)
 
     target_robot = game.enemy_robots[1] if not is_friendly else game.friendly_robots[1]
 
@@ -73,22 +73,22 @@ def test_velocity_calculation_correct_for_one_robot(is_friendly):
 
 
 def test_returns_not_moving_if_not_enough_information_for_velocity():
-    past_game = PastGame(10)
+    game_history = GameHistory(10)
     game = create_ball_only_game(1, 1, 1, 1)
-    game = velocity_refiner.refine(past_game, game)
+    game = velocity_refiner.refine(game_history, game)
     assert game.ball.v.x == 0
     assert game.ball.v.y == 0
 
 
 def test_extraction_of_time_velocity_pairs():
-    past_game = PastGame(20)
+    game_history = GameHistory(20)
     all_added_game_data = []
 
     for i in range(20):
         time = float(i)
         vx, vy, vz = 1.0, 1.0, 1.0
         game_to_add = create_ball_only_game(time, time, time, time, vx, vy, vz)
-        past_game.add_game(game_to_add)
+        game_history.add_game(game_to_add)
         all_added_game_data.append((time, Vector3D(x=vx, y=vy, z=vz)))
 
     points_needed = (
@@ -111,7 +111,7 @@ def test_extraction_of_time_velocity_pairs():
 
     extracted_ts_np, extracted_vel_np = (
         velocity_refiner._extract_time_velocity_np_arrays(
-            past_game, ball_obj_key, points_needed
+            game_history, ball_obj_key, points_needed
         )
     )
 
@@ -146,7 +146,7 @@ def test_extraction_of_time_velocity_pairs():
 
 
 def test_acceleration_calculation_implements_expected_formula():
-    past_game = PastGame(20)
+    game_history = GameHistory(20)
     acc = 3.6
 
     ts = 0
@@ -158,7 +158,7 @@ def test_acceleration_calculation_implements_expected_formula():
                 noise = -100
             else:
                 noise = 0
-            past_game.add_game(
+            game_history.add_game(
                 create_ball_only_game(
                     ts, 0, 0, 0, acc * i + noise, acc * i + noise, acc * i + noise
                 )
@@ -166,7 +166,7 @@ def test_acceleration_calculation_implements_expected_formula():
             ts += 1
 
     game = create_ball_only_game(ts, 0, 0, 0)
-    game = velocity_refiner.refine(past_game, game)
+    game = velocity_refiner.refine(game_history, game)
 
     assert game.ball.a.x == pytest.approx(
         acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE

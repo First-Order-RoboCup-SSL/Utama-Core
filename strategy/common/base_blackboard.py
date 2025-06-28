@@ -1,7 +1,7 @@
 import py_trees
 from team_controller.src.controllers import AbstractRobotController
 from motion_planning.src.pid import PID, TwoDPID
-from entities.game import PresentFutureGame
+from entities.game import Game
 from entities.data.command import RobotCommand
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from typing import Dict, Union
@@ -10,8 +10,8 @@ from strategy.common import Role
 
 class BaseBlackboard(py_trees.blackboard.Client):
     @property
-    def present_future_game(self) -> PresentFutureGame:
-        return self.get("present_future_game")
+    def game(self) -> Game:
+        return self.get("game")
 
     @property
     def robot_controller(self) -> AbstractRobotController:

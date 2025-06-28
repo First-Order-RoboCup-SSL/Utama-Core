@@ -1,7 +1,7 @@
 from typing import List, Tuple
 
 from shapely import Polygon
-from entities.game.game import Game
+from entities.game.game_frame import GameFrame
 from entities.game.robot import Robot
 from motion_planning.src.planning.exit_strategies import ExitStrategy
 from motion_planning.src.planning.path_planner import (
@@ -33,7 +33,7 @@ class TimedSwitchController:
     def __init__(
         self,
         num_robots: int,
-        game: Game,
+        game: GameFrame,
         exit_strategy: ExitStrategy,
         friendly_colour,
         env,

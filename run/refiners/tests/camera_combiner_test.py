@@ -1,12 +1,12 @@
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
-from entities.game.game import Game
+from entities.game.game_frame import GameFrame
 from entities.game.robot import Robot
-from run.refiners import CameraCombiner
+from run.refiners.position import CameraCombiner
 from unittest.mock import MagicMock
 
 
 def test_combine_same_robots_produces_same():
-    mockGame = MagicMock(spec=Game)
+    mockGame = MagicMock(spec=GameFrame)
     raw_yellow = [RawRobotData(0, -1, -10, 0, 1)]
     raw_blue = [RawRobotData(0, -100, -1000, 0, 1)]
     raw_balls = [RawBallData(0, 0, 0, 0)]
@@ -30,7 +30,7 @@ def test_combine_same_robots_produces_same():
 
 def test_combine_with_one_camera_empty():
 
-    mockGame = MagicMock(spec=Game)
+    mockGame = MagicMock(spec=GameFrame)
     raw_yellow = [RawRobotData(0, -1, -10, 0, 1)]
     raw_blue = [RawRobotData(0, -100, -1000, 0, 1)]
     raw_balls = [RawBallData(0, 0, 0, 0)]
@@ -81,7 +81,7 @@ def test_combine_filters_removing_one_low_confidence_correctly():
 
 
 def test_combine_with_both_camera_empty_gives_empty():
-    mockGame = MagicMock(spec=Game)
+    mockGame = MagicMock(spec=GameFrame)
     raw_vision_data_cam2 = RawVisionData(0, [], [], [], 1)
     raw_vision_data_cam1 = RawVisionData(0, [], [], [], 0)
     combined_data = CameraCombiner().combine_cameras(

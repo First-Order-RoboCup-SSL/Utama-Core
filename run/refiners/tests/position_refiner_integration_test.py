@@ -1,7 +1,5 @@
 import threading
 from collections import deque
-from entities.data.raw_vision import RawRobotData, RawVisionData
-from entities.game.game import Game
 from run.receivers.vision_receiver import VisionReceiver
 import time
 import logging

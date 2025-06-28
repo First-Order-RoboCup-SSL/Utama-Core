@@ -15,9 +15,7 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
         client_bb = py_trees.blackboard.Client(name="GlobalConfig")
 
         # Register common keys that all behaviours might need to read
-        client_bb.register_key(
-            key="present_future_game", access=py_trees.common.Access.READ
-        )
+        client_bb.register_key(key="game", access=py_trees.common.Access.READ)
         client_bb.register_key(
             key="robot_controller", access=py_trees.common.Access.READ
         )

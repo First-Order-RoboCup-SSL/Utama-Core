@@ -1,7 +1,7 @@
 from test.common.abstract_test_manager import AbstractTestManager, TestingStatus
 from team_controller.src.controllers import AbstractSimController
 from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
-from entities.game.game import Game
+from entities.game import Game
 from global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,

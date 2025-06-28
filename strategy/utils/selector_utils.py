@@ -13,7 +13,7 @@ class HasBall(AbstractBehaviour):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self):
-        if self.blackboard.present_future_game.current.friendly_robots[
+        if self.blackboard.game.current.friendly_robots[
             self.blackboard.robot_id
         ].has_ball:
             return py_trees.common.Status.SUCCESS

@@ -13,7 +13,7 @@ class GoToBallStep(AbstractBehaviour):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
-        game = self.blackboard.present_future_game.current
+        game = self.blackboard.game.current
         env = self.blackboard.rsim_env
         if env:
             v = game.friendly_robots[self.blackboard.robot_id].v

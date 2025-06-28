@@ -1,5 +1,5 @@
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
-from entities.game import PresentFutureGame, Robot, Game
+from entities.game import Game, Robot
 from entities.data.command import RobotCommand
 from motion_planning.src.pid.pid import PID, TwoDPID
 from team_controller.src.controllers.common.robot_controller_abstract import (
@@ -77,12 +77,12 @@ class AbstractStrategy(ABC):
         self.blackboard.set(name="pid_oren", value=pid_oren)
         self.blackboard.set(name="pid_trans", value=pid_trans)
 
-    def step(self, present_future_game: PresentFutureGame):
+    def step(self, game: Game):
         start_time = time.time()
-        self.blackboard.set(name="present_future_game", value=present_future_game)
+        self.blackboard.set(name="game", value=game)
         self.blackboard.set(
             name="cmd_map",
-            value=self._reset_cmd_map(present_future_game.current.friendly_robots),
+            value=self._reset_cmd_map(game.friendly_robots),
         )
         self.behaviour_tree.tick()
         for robot_id, values in self.blackboard.cmd_map.items():
@@ -95,9 +95,7 @@ class AbstractStrategy(ABC):
                     role = Role.UNASSIGNED
                 else:
                     role = self.blackboard.role_map[robot_id]
-                cmd = self.execute_default_action(
-                    present_future_game.current, role, robot_id
-                )
+                cmd = self.execute_default_action(game, role, robot_id)
                 self.robot_controller.add_robot_commands(cmd, robot_id)
         self.robot_controller.send_robot_commands()
 
@@ -122,9 +120,7 @@ class AbstractStrategy(ABC):
         blackboard.register_key(
             key="robot_controller", access=py_trees.common.Access.WRITE
         )
-        blackboard.register_key(
-            key="present_future_game", access=py_trees.common.Access.WRITE
-        )
+        blackboard.register_key(key="game", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="pid_oren", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="pid_trans", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="rsim_env", access=py_trees.common.Access.WRITE)

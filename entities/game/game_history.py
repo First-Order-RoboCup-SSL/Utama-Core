@@ -1,5 +1,5 @@
 from collections import deque
-from entities.game.game import Game, Robot, Ball
+from entities.game.game_frame import GameFrame, Robot, Ball
 from entities.data.vector import Vector2D, Vector3D
 from entities.data.object import TeamType, ObjectType, ObjectKey
 from enum import Enum, auto
@@ -38,10 +38,10 @@ def _vector_to_numpy(vector: Union[Vector2D, Vector3D]) -> np.ndarray:
     raise TypeError(f"Unsupported vector type for NumPy conversion: {type(vector)}")
 
 
-class PastGame:
+class GameHistory:
     def __init__(self, max_history: int):
         self.max_history = max_history
-        self.raw_games_history: deque[Game] = deque(maxlen=max_history)
+        self.raw_games_history: deque[GameFrame] = deque(maxlen=max_history)
 
         # Generic historical data storage:
         # ObjectKey -> AttributeType -> deque[(timestamp: float, value: np.ndarray)]
@@ -101,7 +101,7 @@ class PastGame:
         # if hasattr(entity, "a"):
         #     self._add_attribute_to_history(entity_key, AttributeType.ACCELERATION, timestamp, entity.a)
 
-    def add_game(self, game: Game):
+    def add_game(self, game: GameFrame):
         self.raw_games_history.append(game)
         current_ts = game.ts
 
@@ -171,7 +171,7 @@ class PastGame:
 
         return timestamps_np, values_np
 
-    def n_steps_ago(self, n: int) -> Game:
+    def n_steps_ago(self, n: int) -> GameFrame:
         if not (0 < n <= len(self.raw_games_history)):
             raise IndexError(
                 f"Cannot get game {n} steps ago. History size: {len(self.raw_games_history)}, requested: {n}"

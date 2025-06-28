@@ -5,9 +5,9 @@ from entities.data.vector import Vector2D, Vector3D
 from typing import Dict, List, Union, Tuple  # Added List for type hinting
 from entities.data.object import ObjectKey, TeamType, ObjectType
 
-# Assuming your new PastGame is in entities.game.past_game or accessible
-from entities.game.past_game import (
-    PastGame,
+# Assuming your new GameHistory is in entities.game.game_history or accessible
+from entities.game.game_history import (
+    GameHistory,
     AttributeType,
     get_structured_object_key,
 )
@@ -27,16 +27,16 @@ class VelocityRefiner(BaseRefiner):
     ACCELERATION_WINDOW_SIZE = 5
     ACCELERATION_N_WINDOWS = 3
 
-    def refine(self, past_game: PastGame, game: Game) -> Game:
+    def refine(self, game_history: GameHistory, game: Game) -> Game:
         current_game_ts = game.ts
 
         # Process Ball (Keep this commented if you want to focus on robots first)
         if game.ball:  # Ensure ball processing is guarded
-            game = self._refine_ball_kinematics(past_game, game, current_game_ts)
+            game = self._refine_ball_kinematics(game_history, game, current_game_ts)
 
         # Process Friendly Robots
         game = self._refine_robot_group(
-            past_game,
+            game_history,
             game,
             current_game_ts,
             game.friendly_robots,
@@ -47,7 +47,7 @@ class VelocityRefiner(BaseRefiner):
 
         # Process Enemy Robots
         game = self._refine_robot_group(
-            past_game,
+            game_history,
             game,
             current_game_ts,
             game.enemy_robots,
@@ -59,7 +59,7 @@ class VelocityRefiner(BaseRefiner):
 
     def _refine_robot_group(
         self,
-        past_game: PastGame,
+        game_history: GameHistory,
         game_state: Game,
         current_ts: float,
         robots_to_process_dict: Dict[int, Robot],
@@ -97,18 +97,18 @@ class VelocityRefiner(BaseRefiner):
                 continue
 
             new_v = self._calculate_object_velocity(
-                past_game, robot_instance.p, robot_obj_key, current_ts, twod
+                game_history, robot_instance.p, robot_obj_key, current_ts, twod
             )
 
             new_a = zero_vector(twod)  # Default to zero
-            try:
-                new_a = self._calculate_object_acceleration(
-                    past_game, robot_obj_key, twod
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Could not calculate acceleration for {team_type.name} robot {robot_id} (key: {robot_obj_key}), setting to zero: {e}"
-                )
+            # try:
+            new_a = self._calculate_object_acceleration(
+                game_history, robot_obj_key, twod
+            )
+            # except Exception as e:
+            #     logger.warning(
+            #         f"Could not calculate acceleration for {team_type.name} robot {robot_id} (key: {robot_obj_key}), setting to zero: {e}"
+            #     )
 
             updated_robot = robot_instance & lens.v.set(new_v) & lens.a.set(new_a)
             updated_robots_dict[robot_id] = updated_robot
@@ -116,7 +116,7 @@ class VelocityRefiner(BaseRefiner):
         return game_state & group_lens.set(updated_robots_dict)
 
     def _refine_ball_kinematics(
-        self, past_game: PastGame, game_state: Game, current_ts: float
+        self, game_history: GameHistory, game_state: Game, current_ts: float
     ) -> Game:
         if not game_state.ball:
             return game_state
@@ -137,14 +137,14 @@ class VelocityRefiner(BaseRefiner):
             return game_state
 
         new_ball_v = self._calculate_object_velocity(
-            past_game, game_state.ball.p, ball_obj_key, current_ts, twod=False
+            game_history, game_state.ball.p, ball_obj_key, current_ts, twod=False
         )
         game_state &= lens.ball.v.set(new_ball_v)
 
         new_ball_a = zero_vector(twod=False)  # Default to zero
         try:
             new_ball_a = self._calculate_object_acceleration(
-                past_game, ball_obj_key, twod=False
+                game_history, ball_obj_key, twod=False
             )
         except Exception as e:
             logger.warning(
@@ -156,22 +156,22 @@ class VelocityRefiner(BaseRefiner):
 
     def _calculate_object_velocity(
         self,
-        past_game: PastGame,
+        game_history: GameHistory,
         current_pos: Union[Vector2D, Vector3D],
         object_key: ObjectKey,
         current_ts: float,
         twod: bool,
     ) -> Union[Vector2D, Vector3D]:
         # try:
-        timestamps_np, positions_np = past_game.get_historical_attribute_series(
+        timestamps_np, positions_np = game_history.get_historical_attribute_series(
             object_key, AttributeType.POSITION, 1
         )
         # logger.debug(f"VELOCITY_CALC: obj_key={object_key}, current_ts={current_ts}, current_pos={current_pos}")
         # logger.debug(f"VELOCITY_CALC: historical timestamps_np={timestamps_np}, positions_np={positions_np.tolist() if positions_np.size > 0 else 'EMPTY'}")
 
         if not timestamps_np.size or not positions_np.size:
-            logger.warning(
-                f"VELOCITY_CALC: No historical position for {object_key}. PastGame returned empty arrays. Setting zero velocity."
+            logger.debug(
+                f"VELOCITY_CALC: No historical position for {object_key}. GameHistory returned empty arrays. Setting zero velocity."
             )
             return zero_vector(twod)
 
@@ -219,22 +219,23 @@ class VelocityRefiner(BaseRefiner):
     #     return zero_vector(twod)
 
     def _calculate_object_acceleration(
-        self, past_game: PastGame, object_key: ObjectKey, twod: bool
+        self, game_history: GameHistory, object_key: ObjectKey, twod: bool
     ) -> Union[Vector2D, Vector3D]:
         try:
             num_points_needed = (
                 self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
             )
             timestamps_np, velocities_np = self._extract_time_velocity_np_arrays(
-                past_game, object_key, num_points_needed
+                game_history, object_key, num_points_needed
             )
 
             if (
                 timestamps_np.shape[0] < num_points_needed
             ):  # Check if enough points were returned
-                raise ValueError(
-                    f"Not enough velocity points from PastGame for {object_key}. Have {timestamps_np.shape[0]}, need {num_points_needed}"
+                logger.debug(
+                    f"Not enough velocity points from GameHistory for {object_key}. Have {timestamps_np.shape[0]}, need {num_points_needed}"
                 )
+                return zero_vector(twod)
         except Exception as e:
             raise ValueError(
                 f"Velocity data not available for acceleration for {object_key}: {e}"
@@ -246,9 +247,9 @@ class VelocityRefiner(BaseRefiner):
         )
 
     def _extract_time_velocity_np_arrays(
-        self, past_game: PastGame, object_key: ObjectKey, num_points: int
+        self, game_history: GameHistory, object_key: ObjectKey, num_points: int
     ) -> Tuple[np.ndarray, np.ndarray]:
-        timestamps_np, velocities_np = past_game.get_historical_attribute_series(
+        timestamps_np, velocities_np = game_history.get_historical_attribute_series(
             object_key, AttributeType.VELOCITY, num_points
         )
         return timestamps_np, velocities_np

@@ -2,9 +2,9 @@
 
 
 ### Problem: 
-- When ingesting new data, we may want to combine this new data with our previous knowledge eg, Kalman filter. Currently this requires writing many new functions in the Game object making it bloated.
+- When ingesting new data, we may want to combine this new data with our previous knowledge eg, Kalman filter. Currently this requires writing many new functions in the GameFrame object making it bloated.
 - Interface for accessing past, current and future (predictions) is not uniform
-- Uncertainty on strategies which we aim to address with the Behaviour Tree 
+- Uncertainty on strategies which we aim to address with the Behaviour Tree
   
 ### System diagram
 ![Dataflow Diagram](assets/images/pipeline_new.drawio.png)
@@ -23,18 +23,18 @@ We think this method resolves all of the concerns:
 Estop - Done by a field in game
 Current Vel cacls - Done by a field in game 
 Prediction - handled by predictors
-Game gating - See diagram
+GameFrame gating - See diagram
 Concurrency - deque is thread safe
 
 ### Key system points
 - Main loop is now a fixed frequency
-- Game is immutable
+- GameFrame is immutable
 - Separation of receivers (network) and refiners allow easier testing 
 - Formalisation of Past, Present, Future games
-- Strategies use PresentFutureGame which allows access to known parameters (robot positions etc),
+- Strategies use GameTimeline which allows access to known parameters (robot positions etc),
 -  Future game exposes predictions, which are customisable via the Predictions interface.
    -  Allows multiple methods of prediction for the same property, eg velocity from previous velocity, or previous positions
--  Past Game stores historical records, but is hidden from public interface of strategy
+-  GameHistory stores historical records, but is hidden from public interface of strategy
    -  Motive: You use the past to predict things, so you should write a predictor
    -  Predictors have access to the past data to make predictions
 

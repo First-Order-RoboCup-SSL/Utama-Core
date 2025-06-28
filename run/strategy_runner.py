@@ -7,7 +7,7 @@ import warnings
 from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP, MAX_ROBOTS
 from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
 from collections import deque
-from entities.game import PastGame, PresentFutureGame, Game
+from entities.game import GameHistory, Game
 from entities.data.raw_vision import RawVisionData
 from entities.data.command import RobotCommand
 from motion_planning.src.pid.pid import (
@@ -48,7 +48,9 @@ from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 import logging
 
 logging.basicConfig(
-    level=logging.CRITICAL,
+    filename="Utama.log",
+    level=logging.INFO,
+    filemode="w",
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(
@@ -88,9 +90,6 @@ class StrategyRunner:
         self.opp_strategy = opp_strategy
         self.logger = logging.getLogger(__name__)
 
-        logging.basicConfig(filename="Utama.log", level=logging.INFO, filemode="w")
-        warnings.simplefilter("default", DeprecationWarning)
-
         self._assert_exp_robots()
         self.rsim_env, self.sim_controller = self._load_sim_and_controller()
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
@@ -101,12 +100,12 @@ class StrategyRunner:
         self.robot_info_refiner = RobotInfoRefiner()
         # self.referee_refiner = RefereeRefiner()
         (
-            self.my_past_game,
+            self.my_game_history,
+            self.my_current_game_frame,
             self.my_game,
-            self.my_present_future_game,
-            self.opp_past_game,
+            self.opp_game_history,
+            self.opp_current_game_frame,
             self.opp_game,
-            self.opp_present_future_game,
         ) = self._load_game()
         self.game_start_time = time.time()
 
@@ -298,7 +297,7 @@ class StrategyRunner:
             self.opp_strategy.load_pids(opp_pid_oren, opp_pid_trans)
 
     def _load_game(self):
-        my_game, opp_game = GameGater.wait_until_game_valid(
+        my_current_game_frame, opp_current_game_frame = GameGater.wait_until_game_valid(
             self.my_team_is_yellow,
             self.my_team_is_right,
             self.exp_friendly,
@@ -308,20 +307,20 @@ class StrategyRunner:
             is_pvp=self.opp_strategy is not None,
             rsim_env=self.rsim_env,
         )
-        my_past_game = PastGame(MAX_GAME_HISTORY)
-        my_present_future_game = PresentFutureGame(my_past_game, my_game)
+        my_game_history = GameHistory(MAX_GAME_HISTORY)
+        my_game = Game(my_game_history, my_current_game_frame)
         if self.opp_strategy:
-            opp_past_game = PastGame(MAX_GAME_HISTORY)
-            opp_present_future_game = PresentFutureGame(opp_past_game, opp_game)
+            opp_game_history = GameHistory(MAX_GAME_HISTORY)
+            opp_game = Game(opp_game_history, opp_current_game_frame)
         else:
-            opp_past_game, opp_present_future_game = None, None
+            opp_game_history, opp_game = None, None
         return (
-            my_past_game,
+            my_game_history,
+            my_current_game_frame,
             my_game,
-            my_present_future_game,
-            opp_past_game,
+            opp_game_history,
+            opp_current_game_frame,
             opp_game,
-            opp_present_future_game,
         )
 
     # Reset the game state and robot info in buffer
@@ -329,23 +328,23 @@ class StrategyRunner:
         _ = self.my_strategy.robot_controller.get_robots_responses()
 
         (
-            self.my_past_game,
+            self.my_game_history,
+            self.my_current_game_frame,
             self.my_game,
-            self.my_present_future_game,
-            self.opp_past_game,
+            self.opp_game_history,
+            self.opp_current_game_frame,
             self.opp_game,
-            self.opp_present_future_game,
         ) = self._load_game()
 
     def _reset_robots(self):
-        for i in self.my_game.friendly_robots.keys():
+        for i in self.my_current_game_frame.friendly_robots.keys():
             self.my_strategy.robot_controller.add_robot_commands(
                 RobotCommand(0, 0, 0, 0, 0, 0), i
             )
         self.my_strategy.robot_controller.send_robot_commands()
 
-        if self.opp_strategy and self.opp_game:
-            for i in self.opp_game.friendly_robots.keys():
+        if self.opp_strategy and self.opp_current_game_frame:
+            for i in self.opp_current_game_frame.friendly_robots.keys():
                 self.opp_strategy.robot_controller.add_robot_commands(
                     RobotCommand(0, 0, 0, 0, 0, 0), i
                 )
@@ -377,7 +376,7 @@ class StrategyRunner:
             testManager.update_episode_n(i)
 
             if self.sim_controller:
-                testManager.reset_field(self.sim_controller, self.my_game)
+                testManager.reset_field(self.sim_controller, self.my_current_game_frame)
                 time.sleep(0.1)  # wait for the field to reset
                 # wait for the field to reset
             self._reset_game()
@@ -395,7 +394,7 @@ class StrategyRunner:
                     break
                 self._run_step()
 
-                status = testManager.eval_status(self.my_game)
+                status = testManager.eval_status(self.my_current_game_frame)
 
                 if status == TestingStatus.FAILURE:
                     passed = False
@@ -465,24 +464,32 @@ class StrategyRunner:
         """
         if running_opp:
             opp_responses = self.opp_strategy.robot_controller.get_robots_responses()
-            game = replace(self.opp_game, ts=iter_start_time - self.game_start_time)
+            game = replace(
+                self.opp_current_game_frame, ts=iter_start_time - self.game_start_time
+            )
             game = self.position_refiner.refine(game, vision_frames)
             game = self.velocity_refiner.refine(
-                self.opp_past_game, game
+                self.opp_game_history, game
             )  # , robot_frame.imu_data)
-            self.opp_game = self.robot_info_refiner.refine(game, opp_responses)
+            self.opp_current_game_frame = self.robot_info_refiner.refine(
+                game, opp_responses
+            )
             # game = referee_refiner.refine(game, referee_frame)
-            self.opp_present_future_game.add_game(game)
-            self.opp_strategy.step(self.opp_present_future_game)
+            self.opp_game.add_game(game)
+            self.opp_strategy.step(self.opp_game)
         else:
             my_responses = self.my_strategy.robot_controller.get_robots_responses()
-            game = replace(self.my_game, ts=iter_start_time - self.game_start_time)
+            game = replace(
+                self.my_current_game_frame, ts=iter_start_time - self.game_start_time
+            )
             game = self.position_refiner.refine(game, vision_frames)
-            game = self.velocity_refiner.refine(self.my_past_game, game)
-            self.my_game = self.robot_info_refiner.refine(game, my_responses)
+            game = self.velocity_refiner.refine(self.my_game_history, game)
+            self.my_current_game_frame = self.robot_info_refiner.refine(
+                game, my_responses
+            )
             # game = referee_refiner.refine(game, referee_frame)
-            self.my_present_future_game.add_game(game)
-            self.my_strategy.step(self.my_present_future_game)
+            self.my_game.add_game(game)
+            self.my_strategy.step(self.my_game)
 
 
 # if __name__ == "__main__":

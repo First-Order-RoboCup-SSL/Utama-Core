@@ -1,43 +1,49 @@
-from typing import Dict, Optional
-import dataclasses
-from dataclasses import dataclass, replace
-from entities.game.field import Field
-from entities.game.robot import Robot
-from entities.game.ball import Ball
-from entities.data.object import ObjectKey
-
-import logging
-
-logger = logging.getLogger(__name__)
+from entities.game.game_frame import GameFrame
+from entities.game.game_history import GameHistory
+from entities.game.current_game_frame import CurrentGameFrame
 
 
-@dataclass(frozen=True)
 class Game:
-    ts: float
-    my_team_is_yellow: bool
-    my_team_is_right: bool
-    friendly_robots: Dict[int, Robot]
-    enemy_robots: Dict[int, Robot]
-    ball: Optional[Ball]
-    field: Field = dataclasses.field(init=False)
-    robot_with_ball: Optional[ObjectKey]
+    def __init__(self, past: GameHistory, current: GameFrame):
+        self.__past = past
+        self._current_game_standard_frame = current
+        self.current = CurrentGameFrame(current)
 
-    def __post_init__(self):
-        object.__setattr__(self, "field", Field(self.my_team_is_right))
+    def add_game(self, game_frame: GameFrame):
+        self.__past.add_game(self._current_game_standard_frame)
+        self._current_game_standard_frame = game_frame
+        self.current = CurrentGameFrame(game_frame)
 
-    def is_ball_in_goal(self, right_goal: bool) -> bool:
-        ball_pos = self.ball
-        return (
-            ball_pos.x < -self.field.half_length
-            and (
-                ball_pos.y < self.field.half_goal_width
-                and ball_pos.y > -self.field.half_goal_width
-            )
-            and not right_goal
-            or ball_pos.x > self.field.half_length
-            and (
-                ball_pos.y < self.field.half_goal_width
-                and ball_pos.y > -self.field.half_goal_width
-            )
-            and right_goal
-        )
+    # def predict_/
+
+    @property
+    def my_team_is_yellow(self) -> bool:
+        return self.current.my_team_is_yellow
+
+    @property
+    def my_team_is_right(self) -> bool:
+        return self.current.my_team_is_right
+
+    @property
+    def friendly_robots(self):
+        return self.current.friendly_robots
+
+    @property
+    def enemy_robots(self):
+        return self.current.enemy_robots
+
+    @property
+    def ball(self):
+        return self.current.ball
+
+    @property
+    def field(self):
+        return self.current.field
+
+    @property
+    def robot_with_ball(self):
+        return self.current.robot_with_ball
+
+    @property
+    def proximity_lookup(self):
+        return self.current.proximity_lookup

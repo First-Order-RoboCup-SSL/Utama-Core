@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def start_threads(vision_receiver):
+def start_threads(vision_receiver: VisionReceiver):
     # Start the data receiving in separate threads
     vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
 

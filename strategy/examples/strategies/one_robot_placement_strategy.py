@@ -1,6 +1,6 @@
 from typing import Callable, Dict, Tuple
 from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
-from entities.game.present_future_game import PresentFutureGame
+from entities.game import Game
 from robot_control.src.skills import go_to_point
 
 # from robot_control.src.tests.utils import one_robot_placement
@@ -25,9 +25,8 @@ class RobotPlacementStrategy(AbstractStrategy):
         self.ty = -1
         self.tx = -1 if invert else 1
 
-    def step(self, present_future_game: PresentFutureGame):
+    def step(self, game: Game):
         """Closure which advances the simulation by one step"""
-        game = present_future_game.current
         friendly_robots = game.friendly_robots
 
         if game.friendly_robots and game.ball is not None:
