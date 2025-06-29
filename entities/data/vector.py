@@ -20,6 +20,16 @@ class VectorBase(ABC):
     def mag(self) -> float:
         return np.linalg.norm(self._arr)
 
+    def norm(self: T) -> T:
+        """
+        Normalize the vector to unit length.
+        Returns a zero vector if the magnitude is too small.
+        """
+        magnitude = self.mag()
+        if magnitude < 1e-8:
+            return self.__class__.from_array(np.zeros_like(self._arr))
+        return self.__class__.from_array(self._arr / magnitude)
+
     def angle_between(self, other: T) -> float:
         """
         2D: Calculate the angle between this vector and another vector in radians.

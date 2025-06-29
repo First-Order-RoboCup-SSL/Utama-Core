@@ -6,6 +6,7 @@ from config.settings import ROBOT_RADIUS
 from global_utils.math_utils import rotate_vector
 from motion_planning.src.motion_controller import MotionController
 import numpy as np
+import time
 
 
 def move(
@@ -19,7 +20,7 @@ def move(
     """
     calculate the robot command to move towards a target point with a specified orientation.
     """
-    pid_trans = motion_controller.pid_trans
+    # pid_trans = motion_controller.pid_trans
     pid_oren = motion_controller.pid_oren
 
     robot = game.friendly_robots[robot_id]
@@ -27,14 +28,18 @@ def move(
     target_x, target_y = target_coords.x, target_coords.y
 
     if target_x is not None and target_y is not None:
-        global_x, global_y = pid_trans.calculate(
-            (target_x, target_y), (robot.p.x, robot.p.y), robot_id
+        (global_x, global_y), _ = motion_controller.path_to(
+            game=game,
+            robot_id=robot_id,
+            target=target_coords,
         )
     else:
         global_x = 0
         global_y = 0
 
     forward_vel, left_vel = rotate_vector(global_x, global_y, robot.orientation)
+    print(forward_vel, left_vel, global_x, global_y, robot.orientation)
+    # time.sleep(1)
 
     if target_oren is not None:
         angular_vel = pid_oren.calculate(target_oren, robot.orientation, robot_id)
@@ -45,6 +50,7 @@ def move(
         local_forward_vel=forward_vel,
         local_left_vel=left_vel,
         angular_vel=angular_vel,
+        # angular_vel=0,
         kick=0,
         chip=0,
         dribble=1 if dribbling else 0,

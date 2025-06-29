@@ -31,11 +31,12 @@ class DynamicWindowPlanner:
     MAX_ACCELERATION = 2  # Measured in ms^2
     DIRECTIONS = [i * 2 * np.pi / N_DIRECTIONS for i in range(N_DIRECTIONS)]
 
-    def __init__(self, game: Game):
-        self._game = game
+    def __init__(self):
+        self._game = None
 
     def path_to(
         self,
+        game: Game,
         friendly_robot_id: int,
         target: Tuple[float, float],
         temporary_obstacles: List[LineString] = [],
@@ -50,10 +51,11 @@ class DynamicWindowPlanner:
         Returns:
             Tuple[float, float]: The next waypoint coordinates (x, y) or the target if already reached.
         """
+        self._game = game
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
         start_x, start_y = robot.p.x, robot.p.y
 
-        if dist((start_x, start_y), target) < 1.5 * ROBOT_RADIUS:
+        if dist((start_x, start_y), target) < 1.1 * ROBOT_RADIUS:
             return target, float("inf")
 
         return self.local_planning(friendly_robot_id, target, temporary_obstacles)
@@ -75,6 +77,7 @@ class DynamicWindowPlanner:
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
 
         start_x, start_y = robot.p.x, robot.p.y
+
         best_move = start_x, start_y
 
         # sf is the scale factor for the velocity - we start with full velocity to prioritise speed
@@ -98,18 +101,24 @@ class DynamicWindowPlanner:
                     best_move = segment.coords[1]
 
             sf /= 4
+        dist_to_target = dist((start_x, start_y), target)
+        slowdown_scale = min(1.0, dist_to_target / 3)
         best_vel = (
-            (segment.coords[1][0] - start_x) / DynamicWindowPlanner.SIMULATED_TIMESTEP,
-            -(segment.coords[1][1] - start_y) / DynamicWindowPlanner.SIMULATED_TIMESTEP,
+            (best_move[0] - start_x)
+            / DynamicWindowPlanner.SIMULATED_TIMESTEP
+            * slowdown_scale,
+            (best_move[1] - start_y)
+            / DynamicWindowPlanner.SIMULATED_TIMESTEP
+            * slowdown_scale,
         )
         return best_vel, best_score
 
     def _get_obstacles(self, robot_id: int) -> List[Robot]:
-        return (
-            self._game.friendly_robots[:robot_id]
-            + self._game.friendly_robots[robot_id + 1 :]
-            + self._game.enemy_robots
-        )
+        return [
+            robot
+            for robot in self._game.friendly_robots.values()
+            if robot.id != robot_id
+        ] + [robot for robot in self._game.enemy_robots.values()]
 
     def obstacle_penalty_function(self, x):
         return exp(-8 * (x - 0.22))
