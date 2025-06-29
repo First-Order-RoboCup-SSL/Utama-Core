@@ -9,7 +9,7 @@ from robot_control.src.skills import (
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from motion_planning.src.planning.path_planner import BisectorPlanner
+from motion_planning.src.planning.path_planner_ref import BisectorPlanner
 import random
 from math import dist
 
@@ -109,9 +109,11 @@ def calculate_wall_posns(
     return [
         (
             robot_id,
-            (x + spread_factor * (2 * ROBOT_RADIUS) * posn_number, y)
-            if horizontal
-            else (x, y + spread_factor * (2 * ROBOT_RADIUS) * posn_number),
+            (
+                (x + spread_factor * (2 * ROBOT_RADIUS) * posn_number, y)
+                if horizontal
+                else (x, y + spread_factor * (2 * ROBOT_RADIUS) * posn_number)
+            ),
         )
         for (posn_number, robot_id) in zip(range(6), set(range(6)) - set(safe_robots))
     ]

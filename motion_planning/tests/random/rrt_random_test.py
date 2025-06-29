@@ -1,6 +1,6 @@
 from typing import List
 from entities.game.game_object import Robot as GameRobot
-from motion_planning.src.planning.path_planner import point_to_tuple
+from motion_planning.src.planning.path_planner_ref import point_to_tuple
 from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.skills import (
     go_to_point,
@@ -10,7 +10,7 @@ from robot_control.src.skills import (
 from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from motion_planning.src.planning.path_planner import RRTPlanner
+from motion_planning.src.planning.path_planner_ref import RRTPlanner
 import random
 import logging
 import time

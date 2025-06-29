@@ -10,7 +10,7 @@ from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from config.settings import TIMESTEP
-from motion_planning.src.planning.path_planner import DynamicWindowPlanner
+from motion_planning.src.planning.path_planner_ref import DynamicWindowPlanner
 from math import dist
 import random
 import logging

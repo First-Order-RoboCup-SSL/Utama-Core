@@ -4,7 +4,7 @@ from shapely import Polygon
 from entities.game.game_frame import GameFrame
 from entities.game.robot import Robot
 from motion_planning.src.planning.exit_strategies import ExitStrategy
-from motion_planning.src.planning.path_planner import (
+from motion_planning.src.planning.path_planner_ref import (
     BisectorPlanner,
     RRTPlanner,
     DynamicWindowPlanner,
