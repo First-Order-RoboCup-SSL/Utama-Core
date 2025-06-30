@@ -66,39 +66,32 @@ class ProximityLookup:
         np.fill_diagonal(dist_matrix, np.inf)  # Exclude self-comparison
         return dist_matrix
 
-    def closest_to_ball(
-        self, team_type: Optional[TeamType] = None
+    def _closest_to_index(
+        self,
+        source_index: int,
+        team_type_filter: Optional[TeamType] = None,
     ) -> Tuple[Optional[ObjectKey], float]:
         """
-        Find the closest robot to the ball.
-        :param team_type: Optional team type to filter results.
-        :return: Tuple of the closest ObjectKey and its distance to the ball.
-        If no robots are found, returns (None, np.inf).
+        Generalized helper to find the closest object to a given index, filtered by team type.
         """
         if self.proximity_matrix is None:
-            warnings.warn("Proximity matrix is empty, cannot find closest to ball.")
+            warnings.warn("Proximity matrix is empty, cannot compute closest object.")
             return (None, np.inf)
 
-        if self.object_keys[-1].object_type != ObjectType.BALL:
-            warnings.warn(
-                "Invalid closest_to_ball query: cannot find ball in proximity lookup."
-            )
-            return (None, np.inf)
-        ball_index = len(self.object_keys) - 1  # Last in order
-        distances = self.proximity_matrix[ball_index]
+        distances = self.proximity_matrix[source_index]
 
         # Determine slice based on team
-        if team_type == TeamType.FRIENDLY:
+        if team_type_filter == TeamType.FRIENDLY:
             if self.friendly_end_idx == 0:
                 return (None, np.inf)
             sub_distances = distances[: self.friendly_end_idx]
             offset = 0
-        elif team_type == TeamType.ENEMY:
+        elif team_type_filter == TeamType.ENEMY:
             if self.enemy_end_idx == self.friendly_end_idx:
                 return (None, np.inf)
             sub_distances = distances[self.friendly_end_idx : self.enemy_end_idx]
             offset = self.friendly_end_idx
-        else:  # all robots
+        else:
             if self.enemy_end_idx == 0:
                 return (None, np.inf)
             sub_distances = distances[: self.enemy_end_idx]
@@ -107,4 +100,27 @@ class ProximityLookup:
         closest_relative_index = np.argmin(sub_distances)
         closest_absolute_index = offset + closest_relative_index
         closest_distance = sub_distances[closest_relative_index]
+
         return self.object_keys[closest_absolute_index], closest_distance
+
+    def closest_to_ball(
+        self, team_type_filter: Optional[TeamType] = None
+    ) -> Tuple[Optional[ObjectKey], float]:
+        if self.object_keys[-1].object_type != ObjectType.BALL:
+            warnings.warn(
+                "Invalid closest_to_ball query: cannot find ball in proximity lookup."
+            )
+            return (None, np.inf)
+
+        ball_index = len(self.object_keys) - 1
+        return self._closest_to_index(ball_index, team_type_filter)
+
+    def closest_to_robot(
+        self, robot_key: ObjectKey, team_type_filter: Optional[TeamType] = None
+    ) -> Tuple[Optional[ObjectKey], float]:
+        if robot_key not in self.key_index_map:
+            warnings.warn(f"Robot {robot_key} not found in proximity lookup.")
+            return (None, np.inf)
+
+        robot_index = self.key_index_map[robot_key]
+        return self._closest_to_index(robot_index, team_type_filter)
