@@ -190,10 +190,10 @@ def _find_best_shot(
         s, e = interval
         # If the interval touches a goal boundary, the best candidate is that boundary.
         if s == goal_y1:
-            candidate = s - 0.2 * (s + e) / 2
+            candidate = s + 0.2 * abs(s + e) / 2
             clearance = e - s  # Full gap length is clearance.
         elif e == goal_y2:
-            candidate = e + 0.2 * (s + e) / 2
+            candidate = e - 0.2 * abs(s + e) / 2
             clearance = e - s
         else:
             candidate = (s + e) / 2
@@ -321,7 +321,9 @@ def score_goal(
         ):
             best_shot = (goal_y2 + goal_y1) / 2
 
-        shot_orientation = np.atan2((best_shot - ball.p.y), (goal_x - ball.p.x))
+        shot_orientation = (np.atan2((best_shot - ball.p.y), (goal_x - ball.p.x))) % (
+            2 * np.pi
+        )
 
         if env is not None:
             line_points = [
@@ -336,19 +338,22 @@ def score_goal(
 
     if shooter.has_ball:
         logging.debug("robot has ball")
-        current_oren = shooter.orientation
+        current_oren = shooter.orientation % (2 * np.pi)
         # if robot has ball and is facing the goal, kick the ball
         # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
         # Because 0.02 as a threshold is meaningless (different at different distances)
         # TODO: consider also adding a distance from goal threshold
-        if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(
+        if abs(current_oren - shot_orientation) * abs(
+            goal_x - shooter.p.x
+        ) <= 0.3 and not is_goal_blocked(
             game, (goal_x, best_shot), list(defender_robots.values())
         ):
             logger.info("kicking ball")
             robot_command = kick()
         # TODO: Consider also advancing closer to the goal
         else:
-            print("turning on spot")
+            # print("turning on spot to " + str(shot_orientation))
+            # print("right now at " + str(current_oren))
             robot_command = turn_on_spot(
                 game,
                 motion_controller,

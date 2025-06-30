@@ -113,6 +113,6 @@ if __name__ == "__main__":
         my_team_is_yellow=True,
         my_team_is_right=True,
         robot_id=0,
-        mode="grsim",
+        mode="rsim",
         headless=False,
     )
