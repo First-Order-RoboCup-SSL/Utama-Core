@@ -1,46 +1,59 @@
+from skills.src.utils.move_utils import face_ball
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from motion_planning.src.motion_controller import MotionController
-from typing import Tuple
-from entities.data.command import RobotCommand
+from typing import Optional, Tuple
 from skills.src.go_to_point import go_to_point
+from skills.src.utils.move_utils import move
+from skills.src.utils.defense_utils import find_likely_enemy_shooter
+from run.predictors.position import predict_ball_pos_at_x
+from entities.data.vector import Vector2D
 
+import numpy as np
 
 def goalkeep(
     game: Game,
     motion_controller: MotionController,
     robot_id: int,
+    env: Optional[SSLStandardEnv] = None,
 ):
-    robot_data = game.get_robot_pos(is_yellow, robot_id)
-    if goalie_has_ball:
-        target_oren = 0 if is_left_goal else math.pi
-        print("TARGET OREN", target_oren)
-        return go_to_point(
-            pid_oren,
-            pid_trans,
-            robot_data,
+    goalie_obj = game.friendly_robots[robot_id]
+    if goalie_obj.has_ball:
+        target_oren = np.pi if game.my_team_is_right else 0
+        return move(
+            game,
+            motion_controller,
             robot_id,
-            ((-4 if is_left_goal else 4), 0),
+            Vector2D((4 if game.my_team_is_right else -4), 0),
             target_oren,
             True,
         )
 
-    if is_left_goal:
-        target = game.predict_ball_pos_at_x(-4.5)
+    if game.my_team_is_right:
+        target = predict_ball_pos_at_x(game, 4.5)
     else:
-        target = game.predict_ball_pos_at_x(4.5)
+        target = predict_ball_pos_at_x(game, -4.5)
 
+    
     if not target or abs(target[1]) > 0.5:
-        target = (-4.5 if is_left_goal else 4.5, 0)
+        target = Vector2D(4.5 if game.my_team_is_right else -4.5, 0)
 
-    target and not find_likely_enemy_shooter(
-        game.get_robots_pos(not is_yellow), [game.ball]
-    ):
+    shooters_data = find_likely_enemy_shooter(game.enemy_robots, game.ball)
+
+    if target:
         cmd = go_to_point(
             game,
-            pid_oren,
-            pid_trans,
+            motion_controller,
             robot_id,
             target,
             dribbling=True,
+        )
+    else:
+        cmd = move(
+            game,
+            motion_controller,
+            robot_id,
+            Vector2D(None, None),  # No specific target
+            face_ball(game.friendly_robots[robot_id].p, game.ball.p),
         )
     return cmd

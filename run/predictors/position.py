@@ -1,3 +1,7 @@
+from entities.game import Game
+from typing import Optional
+from entities.data.vector import Vector2D
+
 ### Incomplete Code Snippet ###
 
 #     def predict_frame_after(self, t: float) -> VisionData:
@@ -71,20 +75,20 @@
 #             )
 #             return displacement
 
-#     def predict_ball_pos_at_x(self, x: float) -> Optional[tuple]:
-#         vel = self.get_ball_velocity()
+def predict_ball_pos_at_x(game: Game, x: float) -> Optional[tuple]:
+    vel = game.ball.v.to_2d()
 
-#         if not vel or not vel[0] or not vel[0]:
-#             return None
+    if not vel or not vel[0] or not vel[1]:
+        return None
 
-#         ux, uy = vel
-#         pos = self.get_ball_pos()[0]
-#         bx = pos.x
-#         by = pos.y
+    ux, uy = vel
+    pos = game.ball.p
+    bx = pos.x
+    by = pos.y
 
-#         if uy == 0:
-#             return (bx, by)
+    if uy == 0:
+        return (bx, by)
 
-#         t = (x - bx) / ux
-#         y = by + uy * t
-#         return (x, y)
+    t = (x - bx) / ux
+    y = by + uy * t
+    return Vector2D(x, y)

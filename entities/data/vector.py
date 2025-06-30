@@ -7,7 +7,11 @@ T = TypeVar("T", bound="VectorBase")
 
 class VectorBase(ABC):
     def __init__(self, *coords):
-        self._arr = np.array(coords)
+        # allow for VectorBase(1, 2) or VectorBase((1, 2)) or VectorBase([1, 2])
+        if len(coords) == 1 and isinstance(coords[0], (tuple, list, np.ndarray)):
+            self._arr = np.array(coords[0])
+        else:
+            self._arr = np.array(coords)
 
     @property
     def x(self):
@@ -19,6 +23,16 @@ class VectorBase(ABC):
 
     def mag(self) -> float:
         return np.linalg.norm(self._arr)
+
+    def norm(self: T) -> T:
+        """
+        Normalize the vector to unit length.
+        Returns a zero vector if the magnitude is too small.
+        """
+        magnitude = self.mag()
+        if magnitude < 1e-8:
+            return self.__class__.from_array(np.zeros_like(self._arr))
+        return self.__class__.from_array(self._arr / magnitude)
 
     def angle_between(self, other: T) -> float:
         """
@@ -47,7 +61,10 @@ class VectorBase(ABC):
         """
         2D: Calculate the distance to another vector.
         """
-        return np.hypot(other.y - self.y, other.x - self.x)
+        if isinstance(other, Vector2D):
+            return np.hypot(other.y - self.y, other.x - self.x)
+        else:
+            return np.hypot(other[1] - self.y, other[0] - self.x)
 
     def to_array(self) -> np.ndarray:
         return self._arr
