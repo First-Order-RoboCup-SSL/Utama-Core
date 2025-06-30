@@ -53,7 +53,7 @@ class AbstractStrategy(ABC):
         Called on each unassigned robot to execute the default action.
         This is used when no specific command is set in the blackboard after the coach tree for this robot.
         """
-        return empty_command()
+        return empty_command(True)
 
     ### END OF STRATEGY IMPLEMENTATION ###
 

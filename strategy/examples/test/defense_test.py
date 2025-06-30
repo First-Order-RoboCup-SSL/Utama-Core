@@ -73,9 +73,9 @@ class DefendStrategy(AbstractStrategy):
         elif role == Role.GOALKEEPER:
             return goalkeep(game, self.blackboard.motion_controller, robot_id)
         elif role == Role.STRIKER:
-            return empty_command()
+            return empty_command(True)
         else:
-            return empty_command()
+            return empty_command(True)
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete go_to_ball behaviour tree."""
