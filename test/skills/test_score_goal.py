@@ -111,7 +111,7 @@ if __name__ == "__main__":
     # This is just for running the test manually, not needed for pytest
     test_score_goal(
         my_team_is_yellow=True,
-        my_team_is_right=True,
+        my_team_is_right=False,
         robot_id=0,
         mode="rsim",
         headless=False,

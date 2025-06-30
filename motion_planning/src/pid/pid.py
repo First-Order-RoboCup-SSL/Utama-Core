@@ -168,7 +168,7 @@ class PID(AbstractPID[float]):
         # For angular measurements adjust error
         error = normalise_heading(raw_error)
         # For very small errors, return zero
-        if abs(error) < 0.05:
+        if abs(error) < 0.01:
             self.prev_times[robot_id] = call_func_time
             return 0.0
 

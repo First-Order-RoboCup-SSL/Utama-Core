@@ -345,7 +345,7 @@ def score_goal(
         # TODO: consider also adding a distance from goal threshold
         if abs(current_oren - shot_orientation) * abs(
             goal_x - shooter.p.x
-        ) <= 0.3 and not is_goal_blocked(
+        ) <= 0.05 and not is_goal_blocked(
             game, (goal_x, best_shot), list(defender_robots.values())
         ):
             logger.info("kicking ball")
