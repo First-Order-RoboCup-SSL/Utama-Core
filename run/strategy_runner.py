@@ -137,6 +137,11 @@ class StrategyRunner:
             AbstractSimController: The simulation controller for the environment (Otherwise None).
         """
 
+        # Temporary placeholder values when not running rsim
+        if self.opp_strategy:
+            self.opp_strategy.load_rsim_env(None)
+        self.my_strategy.load_rsim_env(None)
+        
         if self.mode == "rsim":
             n_yellow, n_blue = map_friendly_enemy_to_colors(
                 self.my_team_is_yellow, self.exp_friendly, self.exp_enemy
@@ -424,13 +429,13 @@ class StrategyRunner:
 
         end_time = time.time()
 
-        processing_time = end_time - start_time
+        # processing_time = end_time - start_time
 
-        self.logger.log(
-            logging.WARNING if processing_time > TIMESTEP else logging.INFO,
-            "Game loop took %f secs",
-            processing_time,
-        )
+        # self.logger.log(
+        #     logging.WARNING if processing_time > TIMESTEP else logging.INFO,
+        #     "Game loop took %f secs",
+        #     processing_time,
+        # )
 
         # Sleep to maintain FPS
         wait_time = max(0, TIMESTEP - (end_time - start_time))

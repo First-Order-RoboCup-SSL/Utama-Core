@@ -117,11 +117,11 @@ class AbstractStrategy(ABC):
         """Sets up the blackboard with the necessary keys for the strategy."""
         blackboard = py_trees.blackboard.Client(name="GlobalConfig")
         blackboard.register_key(
-            key="robot_controller", access=py_trees.common.Access.WRITE
+            key="robot_controller", access=py_trees.common.Access.WRITE, required=True
         )
-        blackboard.register_key(key="game", access=py_trees.common.Access.WRITE)
+        blackboard.register_key(key="game", access=py_trees.common.Access.WRITE, required=True)
         blackboard.register_key(
-            key="motion_controller", access=py_trees.common.Access.WRITE
+            key="motion_controller", access=py_trees.common.Access.WRITE, required=True
         )
         blackboard.register_key(key="rsim_env", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="cmd_map", access=py_trees.common.Access.WRITE)

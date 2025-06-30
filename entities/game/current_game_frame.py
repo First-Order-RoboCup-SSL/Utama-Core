@@ -29,7 +29,6 @@ class CurrentGameFrame(GameFrame):
         # TODO: This assumes that only one robot can have the ball at a time.
         for robot in game.friendly_robots.values():
             if robot.has_ball:
-                print(robot)
                 return ObjectKey(TeamType.FRIENDLY, ObjectType.ROBOT, robot.id)
         for robot in game.enemy_robots.values():
             if robot.has_ball:

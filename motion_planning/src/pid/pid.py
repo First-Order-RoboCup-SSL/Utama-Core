@@ -290,7 +290,7 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
 
         if abs(error) < 3/1000:
             self.prev_times[robot_id] = call_func_time
-            return 0.0
+            return 0.0, 0.0
 
         # Compute time difference
         dt = self.dt

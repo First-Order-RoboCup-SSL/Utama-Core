@@ -47,7 +47,10 @@ class VectorBase(ABC):
         """
         2D: Calculate the distance to another vector.
         """
-        return np.hypot(other.y - self.y, other.x - self.x)
+        if isinstance(other, Vector2D):
+            return np.hypot(other.y - self.y, other.x - self.x)
+        else:
+            return np.hypot(other[1] - self.y, other[0] - self.x)
 
     def to_array(self) -> np.ndarray:
         return self._arr
