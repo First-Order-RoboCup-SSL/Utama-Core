@@ -14,7 +14,7 @@ if __name__ == "__main__":
         my_team_is_right=True,
         mode="grsim",
         exp_friendly=3,
-        exp_enemy=3,
+        exp_enemy=1,
     )
 
     # Run the simulation

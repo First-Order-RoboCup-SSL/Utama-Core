@@ -32,12 +32,12 @@ def defend_parameter(
             ball.v is not None
             and None not in ball.v
         ):
-            orientation = velocity_to_orientation(ball.v)
+            orientation = velocity_to_orientation(ball.v.to_2d())
             tracking_ball = True
     else:
         # TODO (deploy more defenders, or find closest shooter?)
         sd = shooters_data[0]
-        target_tracking_coord = Vector2D(sd.x, sd.y)
+        target_tracking_coord = Vector2D(sd.p.x, sd.p.y)
         orientation = sd.orientation
 
     real_def_pos = game.friendly_robots[defender_id].p

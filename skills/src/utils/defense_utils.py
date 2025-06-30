@@ -20,16 +20,16 @@ def align_defenders(
     Calculates the next point on the defense area that the robots should go to
     defender_position is in terms of t on the parametric curve.
     """
-
-    NO_MOVE_THRES = 1
+        
+    NO_MOVE_THRES = 1.5
 
     # Start by getting the current position of the defenders
     defender_pos = calculate_defense_area(game, defender_parametric_pos)
 
     # logger.debug(f"DEFENDER {dx} {dy}")
     goal_centre_x = game.field.my_goal_line.coords[0][0]
-
-    if attacker_orientation is None:
+    
+    if attacker_orientation is None or attacker_orientation == 0:
         # In case there is no ball velocity or attackers, use centre of goal
         predicted_goal_position = Vector2D(goal_centre_x, 0)
     else:
@@ -48,10 +48,6 @@ def align_defenders(
         )
         env.draw_line([predicted_goal_position, defender_pos], width=1, color="yellow")
 
-    # Calculate the cross product relative to the predicted position of the goal
-    
-    
-    if env:
         poly = []
         for t in range(round(1000 * np.pi / 2), round(1000 * 3 * np.pi / 2) + 1):
             poly.append(calculate_defense_area(game, clamp_to_parametric(t / 1000)))
@@ -88,7 +84,10 @@ def calculate_defense_area(game: Game, t: float) -> Vector2D:
 
     https://www.desmos.com/calculator/nmaf7rpmnw
     """
-    assert np.pi / 2 <= t <= 3 * np.pi / 2, t
+    MIN_T = np.pi / 2
+    MAX_T = 3 * np.pi / 2
+
+    t = max(MIN_T, min(t, MAX_T))
     
     cos_t = np.cos(t)
     sin_t = np.sin(t)
@@ -160,13 +159,14 @@ def to_defense_parametric(game: Game, p: Vector2D) -> float:
     t = lo
     return clamp_to_parametric(t)
 
-def find_likely_enemy_shooter(enemy_robots: Dict[int, Robot], ball: Ball) -> List[Vector2D]:
-    ans = []
-    for er in enemy_robots.values():
-        if np.linalg.norm(er.p - ball.p.to_2d()) < 0.2:
-            # Ball is close to this robot
-            ans.append(er.p)
-    return list(set(ans))
+def find_likely_enemy_shooter(enemy_robots: Dict[int, Robot], ball: Ball) -> List[Robot]:
+    unique_shooters: Dict[int, Robot] = {}
+
+    for robot_id, robot in enemy_robots.items():
+        if np.linalg.norm(robot.p - ball.p.to_2d()) < 0.2:
+            unique_shooters[robot_id] = robot
+
+    return list(unique_shooters.values())
 
 def step_curve(t: float, direction: int):
     STEP_SIZE = 0.0872665 * 2
@@ -203,7 +203,7 @@ def ang_between(v1: Vector2D, v2: Vector2D) -> float:
 
 def velocity_to_orientation(p: Tuple[float, float]) -> float:
     # Takes a velocity and converts to orientation in radians identical to robot orientation
-    res = np.atan2(p[1], p[0])
+    res = np.atan2(round(p[1], 3), round(p[0], 3))
     if res < 0:
         res += 2 * np.pi
     return res
