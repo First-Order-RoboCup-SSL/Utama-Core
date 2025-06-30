@@ -3,7 +3,9 @@ from entities.data.vector import Vector2D
 from motion_planning.src.motion_controller import MotionController
 from config.settings import ROBOT_RADIUS
 from entities.data.command import RobotCommand
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from skills.src.utils.move_utils import move, face_ball, kick, turn_on_spot
+from skills.src.go_to_ball import go_to_ball
 import numpy as np
 import math
 from typing import Tuple, List
@@ -87,8 +89,8 @@ def _ray_casting(
     )  # flips the goalward direction if we are shooting left
     for enemy in enemy_robots:
         if enemy:
-            if goal_multi * enemy.x > goal_multi * point[0]:
-                dist: float = math.dist((point[0], point[1]), (enemy.x, enemy.y))
+            if goal_multi * enemy.p.x > goal_multi * point[0]:
+                dist: float = math.dist((point[0], point[1]), (enemy.p.x, enemy.p.y))
                 angle_to_robot_ = point.angle_to(enemy.p)
                 alpha: float = np.arcsin(ROBOT_RADIUS / dist)
                 shadows.append(
@@ -188,10 +190,10 @@ def _find_best_shot(
         s, e = interval
         # If the interval touches a goal boundary, the best candidate is that boundary.
         if s == goal_y1:
-            candidate = s
+            candidate = s - 0.2 * (s + e) / 2
             clearance = e - s  # Full gap length is clearance.
         elif e == goal_y2:
-            candidate = e
+            candidate = e + 0.2 * (s + e) / 2
             clearance = e - s
         else:
             candidate = (s + e) / 2
@@ -258,7 +260,7 @@ def is_goal_blocked(
     :return: True if the goal is blocked, False otherwise.
     """
 
-    ball_x, ball_y = game.ball.x, game.ball.y
+    ball_x, ball_y = game.ball.p.x, game.ball.p.y
 
     # Define the shooting line from ball position in the shooter's direction
     line_start = np.array([ball_x, ball_y])
@@ -276,7 +278,7 @@ def is_goal_blocked(
     # Check if any enemy robot blocks the shooting path
     for defender in defenders:
         if defender:
-            robot_pos = np.array([defender.x, defender.y])
+            robot_pos = np.array([defender.p.x, defender.p.y])
             distance = distance_point_to_line(robot_pos, line_start, line_end)
 
             if distance <= ROBOT_RADIUS:  # Consider robot as a circle
@@ -289,6 +291,7 @@ def score_goal(
     game: Game,
     motion_controller: MotionController,
     shooter_id: int,
+    env: SSLStandardEnv = None,
 ) -> RobotCommand:
     """
     Attempts to score a goal by calculating the best shot angle and executing the kick if possible.
@@ -305,7 +308,7 @@ def score_goal(
     # TODO: add sampling function to try to find other angles to shoot from that are more optimal
     if defender_robots and shooter and ball:
         best_shot, _ = _find_best_shot(
-            ball.p, defender_robots, goal_x, goal_y1, goal_y2
+            ball.p, list(defender_robots.values()), goal_x, goal_y1, goal_y2
         )
 
         # Safe fall-back if no best shot is found
@@ -318,7 +321,18 @@ def score_goal(
         ):
             best_shot = (goal_y2 + goal_y1) / 2
 
-        shot_orientation = np.atan2((best_shot - ball.y), (goal_x - ball.x))
+        shot_orientation = np.atan2((best_shot - ball.p.y), (goal_x - ball.p.x))
+
+        if env is not None:
+            line_points = [
+                (shooter.p.x, shooter.p.y),
+                (
+                    goal_x,
+                    shooter.p.y + np.tan(shot_orientation) * (goal_x - shooter.p.x),
+                ),
+            ]
+            env.draw_line(line_points)
+            env.draw_point(goal_x, best_shot, color="red")
 
     if shooter.has_ball:
         logging.debug("robot has ball")
@@ -328,7 +342,7 @@ def score_goal(
         # Because 0.02 as a threshold is meaningless (different at different distances)
         # TODO: consider also adding a distance from goal threshold
         if abs(current_oren - shot_orientation) % np.pi <= 0.05 and not is_goal_blocked(
-            game, (goal_x, best_shot), defender_robots
+            game, (goal_x, best_shot), list(defender_robots.values())
         ):
             logger.info("kicking ball")
             robot_command = kick()
@@ -343,5 +357,6 @@ def score_goal(
                 dribbling=True,
             )
     else:
-        robot_command = move(game, motion_controller, shooter_id, shooter_id, ball)
+        # robot_command = move(game, motion_controller, shooter_id, shooter_id, ball)
+        robot_command = go_to_ball(game, motion_controller, shooter_id)
     return robot_command

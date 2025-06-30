@@ -1,4 +1,3 @@
-
 from typing import Optional, Tuple
 from motion_planning.src.pid.pid_abstract import AbstractPID
 from global_utils.math_utils import normalise_heading
@@ -11,7 +10,7 @@ from config.settings import (
     MAX_VEL,
     REAL_MAX_ANGULAR_VEL,
     REAL_MAX_VEL,
-    SENDING_DELAY
+    SENDING_DELAY,
 )
 
 
@@ -74,9 +73,7 @@ def get_grsim_pids():
     )
     return PIDAccelerationLimiterWrapper(
         pid_oren, max_acceleration=50, dt=TIMESTEP
-    ), PIDAccelerationLimiterWrapper(
-        pid_trans, max_acceleration=2, dt=TIMESTEP
-    )
+    ), PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=2, dt=TIMESTEP)
 
 
 def get_rsim_pids():
@@ -101,9 +98,8 @@ def get_rsim_pids():
     )
     return PIDAccelerationLimiterWrapper(
         pid_oren, max_acceleration=50, dt=TIMESTEP
-    ), PIDAccelerationLimiterWrapper(
-        pid_trans, max_acceleration=2, dt=TIMESTEP
-    )
+    ), PIDAccelerationLimiterWrapper(pid_trans, max_acceleration=2, dt=TIMESTEP)
+
 
 class PID(AbstractPID[float]):
     """
@@ -136,7 +132,7 @@ class PID(AbstractPID[float]):
         if dt <= 0:
             raise ValueError("dt should be greater than zero")
         self.dt = dt
-        self.delay = SENDING_DELAY/1000  # Convert to seconds
+        self.delay = SENDING_DELAY / 1000  # Convert to seconds
 
         self.max_output = max_output
         self.min_output = min_output
@@ -153,7 +149,7 @@ class PID(AbstractPID[float]):
         self.integral_max = integral_max
 
         self.prev_times = {i: 0.0 for i in range(6)}
-        
+
         self.first_pass = {i: True for i in range(6)}
 
     def calculate(
@@ -177,7 +173,7 @@ class PID(AbstractPID[float]):
             return 0.0
 
         # Compute time difference
-        dt = self.dt # Default
+        dt = self.dt  # Default
         if self.prev_times[robot_id] != 0:
             measured_dt = call_func_time - self.prev_times[robot_id]
             dt = measured_dt if measured_dt > 0 else TIMESTEP
@@ -188,7 +184,7 @@ class PID(AbstractPID[float]):
         else:
             derivative = 0.0
             self.first_pass[robot_id] = False
-        
+
         # --- Delay Compensation (Smith predictor approach) ---
         # Predict the "current" value (what it will be after the delay)
         # Here we assume a simple linear extrapolation: x_predicted = current + derivative * delay
@@ -208,16 +204,20 @@ class PID(AbstractPID[float]):
         if self.Ki != 0:
             self.integrals[robot_id] += effective_error * self.dt
             if self.integral_max is not None:
-                self.integrals[robot_id] = min(self.integrals[robot_id], self.integral_max)
+                self.integrals[robot_id] = min(
+                    self.integrals[robot_id], self.integral_max
+                )
             if self.integral_min is not None:
-                self.integrals[robot_id] = max(self.integrals[robot_id], self.integral_min)
+                self.integrals[robot_id] = max(
+                    self.integrals[robot_id], self.integral_min
+                )
             Iout = self.Ki * self.integrals[robot_id]
         else:
             Iout = 0.0
 
         # Derivative term based on effective error (already computed above)
         Dout = self.Kd * derivative
-        
+
         # Combine the PID outputs
         output = Pout + Iout + Dout
 
@@ -232,7 +232,7 @@ class PID(AbstractPID[float]):
         self.prev_times[robot_id] = call_func_time
         # print(f"oren PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
         return output
-    
+
     def reset(self, robot_id: int):
         """Reset the error and integral for the specified robot."""
         self.pre_errors[robot_id] = 0.0
@@ -259,8 +259,8 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         if dt <= 0:
             raise ValueError("dt should be greater than zero")
         self.dt = dt
-        self.delay = SENDING_DELAY/1000  # Delay in seconds
-        
+        self.delay = SENDING_DELAY / 1000  # Delay in seconds
+
         self.max_velocity = max_velocity
 
         self.Kp = Kp
@@ -288,9 +288,9 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
 
         error = math.hypot(dx, dy)
 
-        if abs(error) < 3/1000:
+        if abs(error) < 3 / 1000:
             self.prev_times[robot_id] = call_func_time
-            return 0.0
+            return 0.0, 0.0
 
         # Compute time difference
         dt = self.dt
@@ -305,7 +305,7 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         else:
             derivative = 0.0
             self.first_pass[robot_id] = False
-        
+
         # --- Delay Compensation (Smith predictor approach) ---
         # Then the predicted error is:
         if self.delay > 0:
@@ -322,23 +322,27 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
         if self.Ki != 0:
             self.integrals[robot_id] += effective_error * self.dt
             if self.integral_max is not None:
-                self.integrals[robot_id] = min(self.integrals[robot_id], self.integral_max)
+                self.integrals[robot_id] = min(
+                    self.integrals[robot_id], self.integral_max
+                )
             if self.integral_min is not None:
-                self.integrals[robot_id] = max(self.integrals[robot_id], self.integral_min)
+                self.integrals[robot_id] = max(
+                    self.integrals[robot_id], self.integral_min
+                )
             Iout = self.Ki * self.integrals[robot_id]
         else:
             Iout = 0.0
 
         # Derivative term based on effective error (already computed above)
         Dout = self.Kd * derivative
-        
+
         # Combine the PID outputs
         output = Pout + Iout + Dout
 
         # Store the error and update the time for the next iteration
         self.pre_errors[robot_id] = error
         self.prev_times[robot_id] = call_func_time
-        
+
         # print(f"x-y PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
         if error == 0.0:
             return 0.0, 0.0
@@ -408,6 +412,7 @@ class PIDAccelerationLimiterWrapper:
             else:
                 scale = dv_allowed / norm_diff
                 limited_result = (last_val[0] + dx * scale, last_val[1] + dy * scale)
+                # assert isinstance(limited_result, float)
         else:
             raise NotImplementedError(f"Unsupported output type: {type(result)}")
 

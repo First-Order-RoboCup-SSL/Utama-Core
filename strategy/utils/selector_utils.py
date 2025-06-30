@@ -19,3 +19,20 @@ class HasBall(AbstractBehaviour):
             return py_trees.common.Status.SUCCESS
         else:
             return py_trees.common.Status.FAILURE
+
+
+class GoalScored(AbstractBehaviour):
+    """
+    A condition behaviour that checks if a goal has been scored.
+    Requires `robot_id` to be set in the blackboard prior.
+    """
+
+    def __init__(self, name="GoalScored"):
+        super().__init__(name=name)
+        self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
+
+    def update(self):
+        if abs(self.blackboard.game.current.ball.p.x) > 4.5:
+            return py_trees.common.Status.SUCCESS
+        else:
+            return py_trees.common.Status.FAILURE
