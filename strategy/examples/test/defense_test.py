@@ -30,7 +30,6 @@ class GoToBallStep(AbstractBehaviour):
             self.blackboard.motion_controller,
             self.blackboard.robot_id,
         )
-        print(f"GoToBallStep command {self.blackboard.robot_id}: {command}")
         self.blackboard.cmd_map[self.blackboard.robot_id] = command
         return py_trees.common.Status.RUNNING
     

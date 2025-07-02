@@ -9,20 +9,18 @@ class HasBall(AbstractBehaviour):
     Requires `robot_id` to be set in the blackboard prior.
     """
 
-    def __init__(self, name="HasBall", remap_to: Dict[str, str] = None, opp_strategy: bool = False):
-        super().__init__(name=name)
-        self.remap_to = remap_to
-        self.unique_key = (
-            "Opponent" if opp_strategy else "My"
-        )
+    def __init__(self, name="HasBall", opp_strategy: bool = False):
+        super().__init__(name=name, opp_strategy=opp_strategy)
 
     def setup(self, **kwargs):
         super().setup(**kwargs)
+        
+        self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self):
-        print(f"Checking if robot {self.blackboard.get('robot_id')} has the ball")
+        # print(f"Checking if robot {self.blackboard.robot_id} has the ball")
         if self.blackboard.game.current.friendly_robots[
-            self.blackboard.get("robot_id")
+            self.blackboard.robot_id
         ].has_ball:
             return py_trees.common.Status.SUCCESS
         else:

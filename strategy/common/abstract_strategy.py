@@ -30,8 +30,7 @@ class AbstractStrategy(ABC):
         
         self.blackboard = self._setup_blackboard()
         
-        self.behaviour_tree = py_trees.trees.BehaviourTree(self.create_behaviour_tree())
-        self.behaviour_tree.blackboard_client = self.blackboard        
+        self.behaviour_tree = py_trees.trees.BehaviourTree(self.create_behaviour_tree())    
 
     ### START OF FUNCTIONS TO BE IMPLEMENTED BY YOUR STRATEGY ###
 
@@ -70,8 +69,8 @@ class AbstractStrategy(ABC):
         """
         Called by StrategyRunner: Load the RSim environment into the blackboard.
         """
-        self.blackboard.set(self.unique_key + "/rsim_env", env, overwrite=True)
-        self.blackboard.register_key(key=self.unique_key + "/rsim_env", access=py_trees.common.Access.READ)
+        self.blackboard.set("rsim_env", env, overwrite=True)
+        self.blackboard.register_key(key="rsim_env", access=py_trees.common.Access.READ)
 
     def load_robot_controller(self, robot_controller: AbstractRobotController):
         """
@@ -83,9 +82,9 @@ class AbstractStrategy(ABC):
         """
         Called by StrategyRunner: Load the Motion Controller into the blackboard.
         """
-        self.blackboard.set(self.unique_key + "/motion_controller", motion_controller, overwrite=True)
+        self.blackboard.set("motion_controller", motion_controller, overwrite=True)
         self.blackboard.register_key(
-            key=self.unique_key + "/motion_controller", access=py_trees.common.Access.READ
+            key="motion_controller", access=py_trees.common.Access.READ
         )
 
     def setup_tree(self):
@@ -125,7 +124,7 @@ class AbstractStrategy(ABC):
     def _setup_blackboard(self) -> BaseBlackboard:
         """Sets up the blackboard with the necessary keys for the strategy."""
 
-        blackboard = py_trees.blackboard.Client(name="GlobalBlackboard")
+        blackboard = py_trees.blackboard.Client(name="GlobalBlackboard", namespace=self.unique_key)
         blackboard.register_key(key="game", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="cmd_map", access=py_trees.common.Access.WRITE)
 
@@ -133,8 +132,8 @@ class AbstractStrategy(ABC):
         blackboard.register_key(key="role_map", access=py_trees.common.Access.WRITE)
         blackboard.role_map = {}
 
-        blackboard.register_key(key=self.unique_key + "/rsim_env", access=py_trees.common.Access.WRITE)
-        blackboard.register_key(key=self.unique_key + "/motion_controller", access=py_trees.common.Access.WRITE)
+        blackboard.register_key(key="rsim_env", access=py_trees.common.Access.WRITE)
+        blackboard.register_key(key="motion_controller", access=py_trees.common.Access.WRITE)
 
         blackboard: BaseBlackboard = cast(BaseBlackboard, blackboard)
         return blackboard
