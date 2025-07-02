@@ -30,6 +30,7 @@ class GoToBallStep(AbstractBehaviour):
             self.blackboard.motion_controller,
             self.blackboard.robot_id,
         )
+        print(f"GoToBallStep command {self.blackboard.robot_id}: {command}")
         self.blackboard.cmd_map[self.blackboard.robot_id] = command
         return py_trees.common.Status.RUNNING
     
@@ -48,13 +49,13 @@ class SetRoles(AbstractBehaviour):
         return py_trees.common.Status.SUCCESS
 
 class DefendStrategy(AbstractStrategy):
-    def __init__(self, robot_id: int):
+    def __init__(self, robot_id: int, opp_strategy: bool = False):
         """
         Initializes the DefendStrategy with a specific robot ID.
-        :param robot_id: The ID of the robot this strategy will control.
+        :param robot_id: The ID of the robot this strategy will control to go to ball.
         """
         self.robot_id = robot_id
-        super().__init__()
+        super().__init__(opp_strategy=opp_strategy)
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
         if 1 <= n_runtime_friendly <= 3 and 1 <= n_runtime_enemy <= 3:

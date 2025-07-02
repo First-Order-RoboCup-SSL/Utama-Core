@@ -145,11 +145,11 @@ def send_command(
         if is_sim_robot_cmd:
             data = receive_data(send_sock)
             return data
-        logger.info("Command sent to %s", address)
+        # logger.info("Command sent to %s", address)
 
     except AttributeError:
-        raise AttributeError
         logger.error("Command object has no SerializeToString method %s", command)
+        raise AttributeError
     except socket.error as e:
         logger.error("Socket error when sending command to %s: %s", address, e)
     except Exception as e:

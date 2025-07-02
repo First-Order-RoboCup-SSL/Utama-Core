@@ -46,7 +46,7 @@ import logging
 
 logging.basicConfig(
     filename="Utama.log",
-    level=logging.INFO,
+    level=logging.CRITICAL,
     filemode="w",
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
@@ -96,6 +96,11 @@ class StrategyRunner:
         self.velocity_refiner = VelocityRefiner()
         self.robot_info_refiner = RobotInfoRefiner()
         # self.referee_refiner = RefereeRefiner()
+        
+        self.my_strategy.setup_tree()
+        if self.opp_strategy:
+            self.opp_strategy.setup_tree()
+        
         (
             self.my_game_history,
             self.my_current_game_frame,
@@ -105,7 +110,7 @@ class StrategyRunner:
             self.opp_game,
         ) = self._load_game()
         self.game_start_time = time.time()
-
+            
         self.toggle_opp_first = False  # alternate the order of opp and friendly in run
 
     def data_update_listener(self, receiver: VisionReceiver):
