@@ -12,14 +12,17 @@ class HasBall(AbstractBehaviour):
     def __init__(self, name="HasBall", remap_to: Dict[str, str] = None, opp_strategy: bool = False):
         super().__init__(name=name)
         self.remap_to = remap_to
+        self.unique_key = (
+            "Opponent" if opp_strategy else "My"
+        )
 
     def setup(self, **kwargs):
         super().setup(**kwargs)
 
     def update(self):
-        print(f"Checking if robot {self.blackboard.get(self.remap_to['robot_id'])} has the ball")
+        print(f"Checking if robot {self.blackboard.get('robot_id')} has the ball")
         if self.blackboard.game.current.friendly_robots[
-            self.blackboard.get(self.remap_to["robot_id"])
+            self.blackboard.get("robot_id")
         ].has_ball:
             return py_trees.common.Status.SUCCESS
         else:

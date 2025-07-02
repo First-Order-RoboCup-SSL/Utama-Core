@@ -35,9 +35,9 @@ class GoToBallStep(AbstractBehaviour):
         command = go_to_ball(
             game,
             self.blackboard.get(self.unique_key + "/motion_controller"),
-            self.blackboard.get(self.remap_to["robot_id"]),  # Use remapped robot_id
+            self.blackboard.get("robot_id"),  # Use remapped robot_id
         )
-        self.blackboard.cmd_map[self.blackboard.get(self.remap_to["robot_id"])] = command
+        self.blackboard.cmd_map[self.blackboard.get("robot_id")] = command
         return py_trees.common.Status.RUNNING
 
 
@@ -65,8 +65,8 @@ class GoToBallStrategy(AbstractStrategy):
             name="GoToBallSelector",
             memory=False,
             children=[
-                HasBall(remap_to={"robot_id": unique_key + "/go_to_ball/robot_id"}, opp_strategy=self.opp_strategy),
-                GoToBallStep(remap_to={"robot_id": unique_key + "/go_to_ball/robot_id"}, opp_strategy=self.opp_strategy),
+                HasBall(remap_to={"robot_id": "/go_to_ball/robot_id"}, opp_strategy=self.opp_strategy),
+                GoToBallStep(remap_to={"robot_id": "/go_to_ball/robot_id"}, opp_strategy=self.opp_strategy),
             ],
         )
 
@@ -79,7 +79,8 @@ class GoToBallStrategy(AbstractStrategy):
                     name="SetRobotID",
                     variable_name="robot_id", # Use a general name
                     value=self.robot_id,
-                    remap_to={"robot_id": unique_key + "/go_to_ball/robot_id"}
+                    remap_to={"robot_id": "/go_to_ball/robot_id"},
+                    opp_strategy=self.opp_strategy
                 ),
                 go_to_ball_logic, # Run the main logic after setup
             ],
