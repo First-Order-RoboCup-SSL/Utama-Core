@@ -26,6 +26,6 @@ class SetBlackboardVariable(AbstractBehaviour):
         """
         Called every tick. Now it can safely write to the blackboard.
         """
+        # print(f"Setting {self.variable_name} to {self.value} on the blackboard.")
         self.blackboard.set(self.variable_name, self.value, overwrite=True)
-        print(self.blackboard.robot_id)
         return py_trees.common.Status.SUCCESS

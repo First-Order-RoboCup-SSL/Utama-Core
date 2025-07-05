@@ -24,7 +24,7 @@ class OrenAtTargetThreshold(AbstractBehaviour):
         
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
         self.blackboard.register_key(key="best_shot", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.READ)
 
     def initialise(self):
         self.goal_x = self.blackboard.game.field.enemy_goal_line.coords[0][0]
@@ -32,19 +32,17 @@ class OrenAtTargetThreshold(AbstractBehaviour):
     def update(self):
         ball = self.blackboard.game.current.ball
         shooter = self.blackboard.game.current.friendly_robots[self.blackboard.robot_id]
-        shot_orientation = np.atan2((self.blackboard.best_shot - ball.p.y), (self.goal_x - ball.p.x)) % (2 * np.pi)
-        
-        self.blackboard.set("target_orientation", shot_orientation, overwrite=True)
+        shot_orientation = self.blackboard.get("target_orientation")
         
         threshold = abs(shooter.orientation - shot_orientation) * abs(
             self.goal_x - shooter.p.x
         )
 
         if threshold <= 0.02:
-            print(f"Robot {self.blackboard.robot_id} is oriented correctly towards the goal.")
+            # print(f"Robot {self.blackboard.robot_id} is oriented correctly towards the goal.")
             return py_trees.common.Status.SUCCESS
         else:
-            print(f"Robot {self.blackboard.robot_id} is NOT oriented correctly towards the goal threshold {threshold}. {shooter.orientation} vs {shot_orientation}")
+            # print(f"Robot {self.blackboard.robot_id} is NOT oriented correctly towards the goal threshold {threshold}. {shooter.orientation} vs {shot_orientation}")
             return py_trees.common.Status.FAILURE
 
 class GoalBlocked(AbstractBehaviour):
@@ -71,10 +69,10 @@ class GoalBlocked(AbstractBehaviour):
         self.best_shot = self.blackboard.get("best_shot")
         
         if self.is_goal_blocked():
-            print(f"Goal is blocked by enemy robots. Best shot position: {self.best_shot}")
+            # print(f"Goal is blocked by enemy robots. Best shot position: {self.best_shot}")
             return py_trees.common.Status.SUCCESS
         else:
-            print(f"Goal is not blocked. Best shot position: {self.best_shot}")
+            # print(f"Goal is not blocked. Best shot position: {self.best_shot}")
             return py_trees.common.Status.FAILURE
 
     def is_goal_blocked(self) -> bool:
@@ -90,7 +88,7 @@ class GoalBlocked(AbstractBehaviour):
 
         # Define the shooting line from ball position in the shooter's direction
         line_start = np.array([ball_x, ball_y])
-        print(f"Best shot position: {self.best_shot}")
+        # print(f"Best shot position: {self.best_shot}")
         line_end = np.array([self.goal_x, self.best_shot])  # Use the best shot position
 
         # Helper function: shortest distance from a point to a line segment
@@ -127,6 +125,7 @@ class ShouldScoreGoal(AbstractBehaviour):
         
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
         self.blackboard.register_key(key="best_shot", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.WRITE)
 
     def initialise(self):
         self.target_goal_line = self.blackboard.game.field.enemy_goal_line
@@ -142,10 +141,10 @@ class ShouldScoreGoal(AbstractBehaviour):
         
         shot_quality = self.find_shot_quality()
         if shot_quality:
-            print(f"Shot quality SUCCESS: {shot_quality}")
+            # print(f"Shot quality SUCCESS: {shot_quality}")
             return py_trees.common.Status.SUCCESS
         else:
-            print(f"Shot quality FAILURE: {shot_quality}")
+            # print(f"Shot quality FAILURE: {shot_quality}")
             return py_trees.common.Status.FAILURE
     
     def find_shot_quality(
@@ -165,10 +164,18 @@ class ShouldScoreGoal(AbstractBehaviour):
         best_shot, largest_gap = _find_best_shot(
             self.shooter.p, list(self.enemy_robots.values()), self.goal_x, self.goal_y1, self.goal_y2
         )
-
-        self.blackboard.set(
+       
+        if best_shot is not None:
+            self.blackboard.set(
             "best_shot", best_shot, overwrite=True
-        )
+            )
+            shot_orientation = np.arctan2(
+                (best_shot - self.shooter.p.y), (self.goal_x - self.shooter.p.x)
+            )
+            self.blackboard.set("target_orientation", shot_orientation, overwrite=True)  
+        else:
+            print("No valid shot found.")
+            return 0.0
         
         # Compute the open angle (gap angle)
         open_angle = angle_between_points(

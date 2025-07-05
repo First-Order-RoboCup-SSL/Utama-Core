@@ -56,8 +56,8 @@ def get_grsim_pids():
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        3,
-        0.015,
+        4.5,
+        0.02,
         0,
         integral_min=-10,
         integral_max=10,
@@ -81,8 +81,8 @@ def get_rsim_pids():
         TIMESTEP,
         MAX_ANGULAR_VEL,
         -MAX_ANGULAR_VEL,
-        3,
-        0.015,
+        4.5,
+        0.02,
         0,
         integral_min=-10,
         integral_max=10,
@@ -168,7 +168,7 @@ class PID(AbstractPID[float]):
         # For angular measurements adjust error
         error = normalise_heading(raw_error)
         # For very small errors, return zero
-        if abs(error) < 0.01:
+        if abs(error) < 0.001:
             self.prev_times[robot_id] = call_func_time
             return 0.0
 

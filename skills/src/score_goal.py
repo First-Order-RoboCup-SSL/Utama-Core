@@ -6,31 +6,13 @@ from entities.data.command import RobotCommand
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from skills.src.utils.move_utils import move, face_ball, kick, turn_on_spot
 from skills.src.go_to_ball import go_to_ball
+from global_utils.math_utils import angle_between_points as _angle_between_points
 import numpy as np
 import math
 from typing import Tuple, List
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _angle_between_points(main_point: Vector2D, point1: Vector2D, point2: Vector2D):
-    """
-    Computes the angle (in radians) between two lines originating from main_point
-    and passing through point1 and point2.
-
-    Parameters:
-    main_point (tuple): The common point (x, y).
-    point1 (tuple): First point (x, y).
-    point2 (tuple): Second point (x, y).
-
-    Returns:
-    float: Angle in degrees between the two lines.
-    """
-    v1 = point1 - main_point
-    v2 = point2 - main_point
-    return v1.angle_between(v2)
-
 
 # Calculates the intersection of 2 rays with the goal
 def _shadow(
@@ -213,7 +195,6 @@ def find_shot_quality(
     goal_x: float,
     goal_y1: float,
     goal_y2: float,
-    shoot_in_left_goal,
 ) -> float:
     """
     Computes the shot quality based on the open angle to the goal / total angle to the goal.
@@ -227,7 +208,7 @@ def find_shot_quality(
 
     # Use _find_best_shot to get the largest gap
     _, largest_gap = _find_best_shot(
-        point, enemy_robots, goal_x, goal_y1, goal_y2, shoot_in_left_goal
+        point, enemy_robots, goal_x, goal_y1, goal_y2
     )
 
     # Compute the open angle (gap angle)

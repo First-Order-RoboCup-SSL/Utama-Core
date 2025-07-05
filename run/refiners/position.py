@@ -86,15 +86,16 @@ class PositionRefiner(BaseRefiner):
         assert old_robot.id == robot_data.id
         new_x, new_y = robot_data.x, robot_data.y
 
-        # Smoothing
-        new_orientation = angle_smoother.smooth(
-            old_robot.orientation, robot_data.orientation
-        )
+        # Needs fixing the bounds are off oren becoming -3.9rad
+        # # Smoothing
+        # new_orientation = angle_smoother.smooth(
+        #     old_robot.orientation, robot_data.orientation
+        # )
         return replace(
             old_robot,
             id=robot_data.id,
             p=Vector2D(x=new_x, y=new_y),
-            orientation=new_orientation,
+            orientation=robot_data.orientation,
         )
 
     # Used at start of the game so assume robot does not have the ball

@@ -9,7 +9,7 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
     An abstract base class for all behaviours in the strategy.
     """
 
-    def __init__(self, name: str, opp_strategy: bool = False):
+    def __init__(self, name: str, opp_strategy: bool):
         super(AbstractBehaviour, self).__init__(name)
         self.unique_key = (
             "Opponent" if opp_strategy else "My"
@@ -39,11 +39,25 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
         )
         self.blackboard.register_key(
             key="role_map",
-            access=py_trees.common.Access.WRITE,
+            access=py_trees.common.Access.READ,
+        )
+        self.blackboard.register_key(
+            key="tactic",
+            access=py_trees.common.Access.READ,
         )
 
+    def initialise(self) -> None:
+        """
+        configures and resets the behaviour ready for (repeated) execution
+        Initialisation here is about getting things ready for immediate execution of a task. Some examples:
+        - Initialising/resetting/clearing variables
+        - Starting timers
+        - Just-in-time discovery and establishment of middleware connections
+        - Sending a goal to start a controller running elsewhere on the system
+        """
+        ...
 
-    @abstractmethod
+    
     def update(self) -> py_trees.common.Status:
         """
         This method should be overridden by subclasses to implement the behaviour's logic.

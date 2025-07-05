@@ -410,6 +410,8 @@ class StrategyRunner:
             self.rsim_env.render_mode = "human"
         while True:
             self._run_step()
+            # terminal next line print
+            # print("\r")
 
     def _run_step(self):
         start_time = time.time()

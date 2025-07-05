@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Tuple
 
+from entities.data.vector import Vector2D
 
 def rotate_vector(
     vx_global: float, vy_global: float, theta: float
@@ -63,3 +64,20 @@ def distance(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
     Calculate the Euclidean distance between two points in 2D space using the Pythagorean theorem.
     """
     return np.hypot(point2[0] - point1[0], point2[1] - point1[1])
+
+def angle_between_points(main_point: Vector2D, point1: Vector2D, point2: Vector2D):
+    """
+    Computes the angle (in radians) between two lines originating from main_point
+    and passing through point1 and point2.
+
+    Parameters:
+    main_point (tuple): The common point (x, y).
+    point1 (tuple): First point (x, y).
+    point2 (tuple): Second point (x, y).
+
+    Returns:
+    float: Angle in degrees between the two lines.
+    """
+    v1 = point1 - main_point
+    v2 = point2 - main_point
+    return v1.angle_between(v2)

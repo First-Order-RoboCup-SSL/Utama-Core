@@ -1,3 +1,4 @@
+import numpy as np
 import py_trees
 from strategy.common.abstract_behaviour import AbstractBehaviour
 
@@ -33,8 +34,12 @@ class GoalScored(AbstractBehaviour):
     Requires `robot_id` to be set in the blackboard prior.
     """
 
-    def __init__(self, name="GoalScored"):
-        super().__init__(name=name)
+    def __init__(self, name="GoalScored", opp_strategy: bool = False):
+        super().__init__(name=name, opp_strategy=opp_strategy)
+
+    def setup(self, **kwargs):
+        super().setup(**kwargs)
+        
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self):
