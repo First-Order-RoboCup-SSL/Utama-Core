@@ -11,13 +11,13 @@ if __name__ == "__main__":
 
     # Set up the runner
     runner = StrategyRunner(
-        strategy=GoToBallStrategy(0),
+        strategy=DemoStrategy(0),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",
         exp_friendly=3,
         exp_enemy=3,
-        opp_strategy=GoToBallStrategy(0, opp_strategy=True),
+        opp_strategy=ScoreGoalStrategy(0, opp_strategy=True),
     )
 
     # Run the simulation

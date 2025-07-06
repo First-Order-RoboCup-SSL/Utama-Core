@@ -4,8 +4,7 @@ from py_trees.decorators import Inverter
 from strategy.common import AbstractStrategy, AbstractBehaviour
 from strategy.utils.blackboard_utils import SetBlackboardVariable
 from strategy.utils.selector_utils import GoalScored
-from strategy.utils.atk_utils import OrenAtTargetThreshold, GoalBlocked, ShouldScoreGoal
-from strategy.utils.action_nodes import TurnOnSpotStep, KickStep
+from strategy.utils.atk_utils import ShouldScoreGoal
 from strategy.skills.go_to_ball import GoToBallStrategy
 from strategy.skills.score_goal import ScoreGoalStrategy
 from strategy.skills.block_attacker import BlockAttackerStep

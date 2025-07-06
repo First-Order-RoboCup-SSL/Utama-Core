@@ -4,8 +4,9 @@ from py_trees.decorators import Inverter
 from strategy.common import AbstractStrategy, AbstractBehaviour
 from strategy.utils.blackboard_utils import SetBlackboardVariable
 from strategy.utils.selector_utils import GoalScored
-from strategy.utils.atk_utils import OrenAtTargetThreshold, GoalBlocked
+from strategy.utils.atk_utils import OrenAtTargetThreshold, GoalBlocked, ShouldScoreGoal
 from strategy.utils.action_nodes import TurnOnSpotStep, KickStep
+from strategy.skills.go_to_ball import GoToBallStrategy
 
 from skills.src.score_goal import score_goal
 
@@ -69,7 +70,17 @@ class ScoreGoalStrategy(AbstractStrategy):
             name="GoalDScoredSelector", memory=False
         )
         goal_scored_selector.add_child(GoalScored(opp_strategy=self.opp_strategy))
-        goal_scored_selector.add_child(ScoreGoalStep(opp_strategy=self.opp_strategy))
+        
+        # 1. A sequence for the main robot action: get the ball, then turn/aim/shoot.
+        get_ball_and_shoot = Sequence(name="GetBallAndShoot", memory=False)
+        go_to_ball_branch = GoToBallStrategy(self.robot_id, self.opp_strategy).create_module()
+        score_goal = self.create_module()
+        get_ball_and_shoot.add_children([
+            go_to_ball_branch,
+            ShouldScoreGoal(name="ShouldScoreGoal?", opp_strategy=self.opp_strategy),
+            score_goal
+        ])
+        goal_scored_selector.add_child(get_ball_and_shoot)
 
         # Assemble the tree
         root.add_child(set_robot_id)
@@ -81,6 +92,12 @@ class ScoreGoalStrategy(AbstractStrategy):
         """
         Create a module for this strategy.
         This is used to create a module that can be used in other strategies.
+        
+        **Blackboard Interaction:**
+            Reads:
+                - `robot_id` (int): The ID of the robot that will perform the score goal action.
+                - `best_shot` (float): The y-coordinate of the optimal shot target on the goal line. typically from the `ShouldScoreGoal` node.
+                - `target_orientation` (float): The desired orientation angle in radians. typically from the `ShouldScoreGoal` node. 
         """
         # 1. A sequence that attempts to kick only if all conditions are perfect.
         # It needs to be re-evaluated every tick, so memory=False.
@@ -93,10 +110,10 @@ class ScoreGoalStrategy(AbstractStrategy):
 
         # 2. A selector that decides whether to kick (if ready) or to turn and aim.
         # This is the core "aim and shoot" logic.
-        score_goal = Selector(name="AimAndShoot", memory=False)
-        score_goal.add_children([
+        aim_and_shoot = Selector(name="AimAndShoot", memory=False)
+        aim_and_shoot.add_children([
             attempt_kick,
             TurnOnSpotStep(name="TurnToAim", opp_strategy=self.opp_strategy)
         ])
-        
-        return score_goal
+
+        return aim_and_shoot
