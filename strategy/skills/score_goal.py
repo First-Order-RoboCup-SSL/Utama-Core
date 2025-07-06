@@ -8,8 +8,8 @@ from skills.src.score_goal import score_goal
 class ScoreGoalStep(AbstractBehaviour):
     """A behaviour that executes a single step of the score_goal skill."""
 
-    def __init__(self, name="GoToBallStep"):
-        super().__init__(name=name)
+    def __init__(self, name="GoToBallStep", opp_strategy: bool = False):
+        super().__init__(name=name, opp_strategy=opp_strategy)
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
@@ -36,13 +36,13 @@ class ScoreGoalStep(AbstractBehaviour):
 
 
 class ScoreGoalStrategy(AbstractStrategy):
-    def __init__(self, robot_id: int):
+    def __init__(self, robot_id: int, opp_strategy: bool = False):
         """
         Initializes the ScoreGoalStrategy with a specific robot ID.
         :param robot_id: The ID of the robot this strategy will control.
         """
         self.robot_id = robot_id
-        super().__init__()
+        super().__init__(opp_strategy=opp_strategy)
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
         if 1 <= n_runtime_friendly <= 3 and 1 <= n_runtime_enemy <= 3:
@@ -64,8 +64,8 @@ class ScoreGoalStrategy(AbstractStrategy):
         goal_scored_selector = py_trees.composites.Selector(
             name="GoalDScoredSelector", memory=False
         )
-        goal_scored_selector.add_child(GoalScored())
-        goal_scored_selector.add_child(ScoreGoalStep())
+        goal_scored_selector.add_child(GoalScored(opp_strategy=self.opp_strategy))
+        goal_scored_selector.add_child(ScoreGoalStep(opp_strategy=self.opp_strategy))
 
         # Assemble the tree
         root.add_child(set_robot_id)
