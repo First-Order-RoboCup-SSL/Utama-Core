@@ -131,7 +131,8 @@ class AbstractStrategy(ABC):
         
         blackboard.register_key(key="role_map", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="tactic", access=py_trees.common.Access.WRITE)
-
+        blackboard.role_map = {}
+        
         blackboard.register_key(key="rsim_env", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="motion_controller", access=py_trees.common.Access.WRITE)
 
