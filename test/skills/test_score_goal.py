@@ -98,7 +98,7 @@ def test_score_goal(
         my_team_is_yellow=my_team_is_yellow,
         my_team_is_right=my_team_is_right,
         mode=mode,
-        exp_friendly=1,
+        exp_friendly=2,
         exp_enemy=2,
     )
     test = runner.run_test(
