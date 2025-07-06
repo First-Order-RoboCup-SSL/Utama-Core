@@ -16,10 +16,10 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
         )
         self.blackboard: BaseBlackboard = self.attach_blackboard_client(name="GlobalBlackboard", namespace=self.unique_key)
 
-    def setup(self, **kwargs):
+    def setup(self):
         """
         This method is called once by the tree before the first tick.
-        We get the tree from the kwargs and grab its blackboard.
+        We setup the common blackboard keys to all behaviours.
         """
         self.blackboard.register_key(
             key="game",

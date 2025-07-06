@@ -8,8 +8,8 @@ class BlockAttackerStep(AbstractBehaviour):
     def __init__(self, name="BlockAttackerStep", opp_strategy: bool = False):
         super().__init__(name=name, opp_strategy=opp_strategy)
 
-    def setup(self, **kwargs):
-        super().setup(**kwargs)
+    def setup(self):
+        super().setup()
 
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 

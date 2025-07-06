@@ -1,9 +1,13 @@
 import py_trees
+from py_trees.composites import Sequence, Selector
+from py_trees.decorators import Inverter
 from strategy.common import AbstractStrategy, AbstractBehaviour
 from strategy.utils.blackboard_utils import SetBlackboardVariable
 from strategy.utils.selector_utils import GoalScored
-from skills.src.score_goal import score_goal
+from strategy.utils.atk_utils import OrenAtTargetThreshold, GoalBlocked
+from strategy.utils.action_nodes import TurnOnSpotStep, KickStep
 
+from skills.src.score_goal import score_goal
 
 class ScoreGoalStep(AbstractBehaviour):
     """A behaviour that executes a single step of the score_goal skill."""
@@ -53,15 +57,15 @@ class ScoreGoalStrategy(AbstractStrategy):
         """Factory function to create a complete score_goal behaviour tree."""
 
         # Root sequence for the whole behaviour
-        root = py_trees.composites.Sequence(name="ScoreGoal", memory=True)
+        root = Sequence(name="ScoreGoal", memory=True)
 
         # A child sequence to set the robot_id on the blackboard
         set_robot_id = SetBlackboardVariable(
-            name="SetTargetRobotID", variable_name="robot_id", value=self.robot_id
+            name="SetTargetRobotID", variable_name="robot_id", value=self.robot_id, opp_strategy=self.opp_strategy
         )
 
         # A selector to decide whether to get the ball or stop
-        goal_scored_selector = py_trees.composites.Selector(
+        goal_scored_selector = Selector(
             name="GoalDScoredSelector", memory=False
         )
         goal_scored_selector.add_child(GoalScored(opp_strategy=self.opp_strategy))
@@ -72,3 +76,27 @@ class ScoreGoalStrategy(AbstractStrategy):
         root.add_child(goal_scored_selector)
 
         return root
+    
+    def create_module(self) -> py_trees.behaviour.Behaviour:
+        """
+        Create a module for this strategy.
+        This is used to create a module that can be used in other strategies.
+        """
+        # 1. A sequence that attempts to kick only if all conditions are perfect.
+        # It needs to be re-evaluated every tick, so memory=False.
+        attempt_kick = Sequence(name="AttemptKick", memory=False)
+        attempt_kick.add_children([
+            Inverter(name="IsGoalNotBlocked?", child=GoalBlocked(name="IsGoalBlocked?", opp_strategy=self.opp_strategy)),
+            OrenAtTargetThreshold(name="IsAimed?", opp_strategy=self.opp_strategy),
+            KickStep(name="Kick!", opp_strategy=self.opp_strategy)
+        ])
+
+        # 2. A selector that decides whether to kick (if ready) or to turn and aim.
+        # This is the core "aim and shoot" logic.
+        score_goal = Selector(name="AimAndShoot", memory=False)
+        score_goal.add_children([
+            attempt_kick,
+            TurnOnSpotStep(name="TurnToAim", opp_strategy=self.opp_strategy)
+        ])
+        
+        return score_goal

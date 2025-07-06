@@ -12,15 +12,28 @@ import numpy as np
 
 class OrenAtTargetThreshold(AbstractBehaviour):
     """
-    A condition behaviour that checks if the robot's orientation is within a threshold of the target orientation.
-    Requires `robot_id` to be set in the blackboard prior.
+    Checks if the robot is oriented towards a target with a dynamic threshold.
+
+    This behavior is a condition that succeeds if the robot's current
+    orientation is sufficiently close to the target orientation. The acceptable
+    error margin decreases as the robot gets closer to the goal, ensuring
+    higher precision is required before taking a shot.
+    
+    **Blackboard Interaction:
+        Reads:
+            - `robot_id` (int): The ID of the robot to check.
+            - `target_orientation` (float): The desired orientation angle in radians. typically from the `ShouldScoreGoal` node.
+
+    **Returns:**
+        - `py_trees.common.Status.SUCCESS`: If the orientation is within the threshold.
+        - `py_trees.common.Status.FAILURE`: Otherwise.
     """
 
     def __init__(self, name="OrientationAtTarget", opp_strategy: bool = False):
         super().__init__(name=name, opp_strategy=opp_strategy)
 
-    def setup(self, **kwargs):
-        super().setup(**kwargs)
+    def setup(self):
+        super().setup()
         
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
         self.blackboard.register_key(key="best_shot", access=py_trees.common.Access.READ)
@@ -47,15 +60,27 @@ class OrenAtTargetThreshold(AbstractBehaviour):
 
 class GoalBlocked(AbstractBehaviour):
     """
-    A condition behaviour that checks if the robot has the ball.
-    Requires `robot_id` to be set in the blackboard prior.
+    Checks if the calculated best shot path to the goal is blocked by an opponent.
+
+    This behavior is a condition that simulates a line from the ball to the
+    best shot position on the goal line. It then checks if any enemy robot
+    is intersecting this path.
+
+    **Blackboard Interaction:**
+        Reads:
+            - `robot_id` (int): The ID of the shooting robot (for context). Set through the `SetBlackboardVariable` node.
+            - `best_shot` (float): The y-coordinate of the optimal shot target on the goal line. typically from the `ShouldScoreGoal` node.
+
+    **Returns:**
+        - `py_trees.common.Status.SUCCESS`: If the path is blocked by an opponent.
+        - `py_trees.common.Status.FAILURE`: If the path is clear.
     """
 
     def __init__(self, name="GoalBlocked", opp_strategy: bool = False):
         super().__init__(name=name, opp_strategy=opp_strategy)
 
-    def setup(self, **kwargs):
-        super().setup(**kwargs)
+    def setup(self):
+        super().setup()
         
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
         self.blackboard.register_key(key="best_shot", access=py_trees.common.Access.READ)
@@ -113,15 +138,34 @@ class GoalBlocked(AbstractBehaviour):
 
 class ShouldScoreGoal(AbstractBehaviour):
     """
-    A condition behaviour that checks if a goal has been scored.
-    Requires `robot_id` to be set in the blackboard prior.
+        Evaluates if a viable shot on goal exists and calculates its quality.
+
+        This behavior analyzes the field to find the best possible shot by identifying
+        the largest open angle to the enemy goal line, considering opponent positions.
+        It calculates a "shot quality" metric based on the size of the open angle
+        and the robot's distance to the goal.
+
+        If a viable shot is found, it writes the optimal target y-coordinate and
+        the target orientation to the blackboard for other behaviors to use.
+
+        **Blackboard Interaction:**
+            Reads:
+                - `robot_id` (int): The ID of the potential shooting robot. Set with the `SetBlackboardVariable` node.
+            Writes:
+                - `best_shot` (float): The optimal y-coordinate on the goal line for the shot.
+                - `target_orientation` (float): The orientation (in radians) required to make the shot. 
+                
+        **Returns:**
+            - py_trees.common.Status.SUCCESS: If the calculated shot quality is > 0. **(Temporarily set to 0 for testing)**
+            - py_trees.common.Status.FAILURE: If no valid shot is found or the quality is 0.
     """
+
 
     def __init__(self, name="ShouldScoreGoal", opp_strategy: bool = False):
         super().__init__(name=name, opp_strategy=opp_strategy)
 
-    def setup(self, **kwargs):
-        super().setup(**kwargs)
+    def setup(self):
+        super().setup()
         
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
         self.blackboard.register_key(key="best_shot", access=py_trees.common.Access.WRITE)

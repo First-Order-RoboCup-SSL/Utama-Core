@@ -88,7 +88,7 @@ class AbstractStrategy(ABC):
         )
 
     def setup_tree(self):
-        self.behaviour_tree.setup(tree = self.behaviour_tree)
+        self.behaviour_tree.setup()
     
     def step(self, game: Game):
         # start_time = time.time()
