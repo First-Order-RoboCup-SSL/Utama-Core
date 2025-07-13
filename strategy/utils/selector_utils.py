@@ -1,6 +1,7 @@
 import py_trees
 from strategy.common.abstract_behaviour import AbstractBehaviour
 
+
 class HasBall(AbstractBehaviour):
     """
     Checks if the specified robot currently has possession of the ball.
@@ -18,12 +19,7 @@ class HasBall(AbstractBehaviour):
         - `py_trees.common.Status.FAILURE`: Otherwise.
     """
 
-    def __init__(self, name="HasBall", opp_strategy: bool = False):
-        super().__init__(name=name, opp_strategy=opp_strategy)
-
-    def setup(self):
-        super().setup()
-        
+    def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self):
@@ -49,9 +45,6 @@ class GoalScored(AbstractBehaviour):
         - `py_trees.common.Status.FAILURE`: Otherwise.
     """
 
-    def __init__(self, name="GoalScored", opp_strategy: bool = False):
-        super().__init__(name=name, opp_strategy=opp_strategy)
-        
     def update(self):
         if abs(self.blackboard.game.current.ball.p.x) > 4.5:
             return py_trees.common.Status.SUCCESS

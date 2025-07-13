@@ -1,23 +1,24 @@
 import py_trees
-from strategy.common import AbstractStrategy, AbstractBehaviour
+from strategy.common import AbstractBehaviour
 from skills.src.block import block_attacker
 from entities.data.object import TeamType
 
+
 class BlockAttackerStep(AbstractBehaviour):
-    """A behaviour that executes a single step of the block_attacker skill."""
-    def __init__(self, name="BlockAttackerStep", opp_strategy: bool = False):
-        super().__init__(name=name, opp_strategy=opp_strategy)
+    """
+    A behaviour that executes a single step of the block_attacker skill.
 
-    def setup(self):
-        super().setup()
+    Expects a "robot_id" key in the blackboard to identify which robot to control.
+    """
 
+    def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
         # print(f"Executing BlockAttackerStep for robot {self.blackboard.robot_id}")
         game = self.blackboard.game.current
         enemy, _ = game.proximity_lookup.closest_to_ball(TeamType.ENEMY)
-        
+
         command = block_attacker(
             game,
             self.blackboard.motion_controller,

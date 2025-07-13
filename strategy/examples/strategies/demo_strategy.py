@@ -16,18 +16,16 @@ from skills.src.goalkeep import goalkeep
 from skills.src.utils.move_utils import empty_command
 from entities.game import Game
 
+
 class SetRoles(AbstractBehaviour):
     """A behaviour that sets the roles of the robots."""
 
-    def __init__(self, name="SetRoles", opp_strategy: bool = False):
-        super().__init__(name=name, opp_strategy=opp_strategy)
-
-    def setup(self):
-        super().setup()
-        
+    def setup_(self):
         # Register the role_map key in the blackboard
-        self.blackboard.register_key(key="role_map", access=py_trees.common.Access.WRITE)
-    
+        self.blackboard.register_key(
+            key="role_map", access=py_trees.common.Access.WRITE
+        )
+
     def update(self) -> py_trees.common.Status:
         self.blackboard.role_map = {
             0: Role.STRIKER,
@@ -36,18 +34,14 @@ class SetRoles(AbstractBehaviour):
         }
         return py_trees.common.Status.SUCCESS
 
+
 class SetTactics(AbstractBehaviour):
     """A behaviour that sets the tactics of the robots."""
 
-    def __init__(self, name="SetTactics", opp_strategy: bool = False):
-        super().__init__(name=name, opp_strategy=opp_strategy)
-
-    def setup(self):
-        super().setup()
-        
+    def setup_(self):
         # Register the tactic key in the blackboard
         self.blackboard.register_key(key="tactic", access=py_trees.common.Access.WRITE)
-    
+
     def update(self) -> py_trees.common.Status:
         game = self.blackboard.game.current
         team, _ = game.proximity_lookup.closest_to_ball()
@@ -59,12 +53,13 @@ class SetTactics(AbstractBehaviour):
 
         return py_trees.common.Status.SUCCESS
 
+
 class ScoreGoalPlay(AbstractBehaviour):
     """A behaviour that decides whether to play as attacker or defender based on the game state."""
 
-    def __init__(self, name="ScoreGoalPlay?", opp_strategy: bool = False):
-        super().__init__(name=name, opp_strategy=opp_strategy)
-        
+    def __init__(self, name: str = "ScoreGoalPlay?"):
+        super().__init__(name=name)
+
     def update(self) -> py_trees.common.Status:
         tactic = self.blackboard.get("tactic")
         # I am skipping the play deciding logic for now but eventually it will check if we should be running a specific attacking or defending play.
@@ -74,12 +69,13 @@ class ScoreGoalPlay(AbstractBehaviour):
         else:
             return py_trees.common.Status.FAILURE
 
+
 class BlockAttackerPlay(AbstractBehaviour):
     """A behaviour that blocks the attacker play."""
 
-    def __init__(self, name="BlockAttackerPlay?", opp_strategy: bool = False):
-        super().__init__(name=name, opp_strategy=opp_strategy)
-        
+    def __init__(self, name="BlockAttackerPlay?"):
+        super().__init__(name=name)
+
     def update(self) -> py_trees.common.Status:
         tactic = self.blackboard.get("tactic")
         # I am skipping the play deciding logic for now but eventually it will check if we should be running a specific attacking or defending play.
@@ -88,23 +84,22 @@ class BlockAttackerPlay(AbstractBehaviour):
         else:
             return py_trees.common.Status.FAILURE
 
+
 class DemoStrategy(AbstractStrategy):
-    def __init__(self, robot_id: int, opp_strategy: bool = False):
+    def __init__(self, robot_id: int):
         """
         Initializes the DemoStrategy with a specific robot ID.
         :param robot_id: The ID of the robot this strategy will control.
         """
         self.robot_id = robot_id
-        super().__init__(opp_strategy=opp_strategy)
+        super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
         if 1 <= n_runtime_friendly <= 3 and 1 <= n_runtime_enemy <= 3:
             return True
         return False
 
-    def execute_default_action(
-        self, game: Game, role: Role, robot_id: int
-    ):
+    def execute_default_action(self, game: Game, role: Role, robot_id: int):
         """
         Called by StrategyRunner: Execute the default action for the robot.
         This is used when no specific command is set in the blackboard after the coach tree for this robot.
@@ -117,66 +112,71 @@ class DemoStrategy(AbstractStrategy):
             return empty_command(True)
         else:
             return empty_command(True)
-    
+
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete score_goal behaviour tree."""
 
         # 1. A sequence for the main robot action: get the ball, then turn/aim/shoot.
         get_ball_and_shoot = Sequence(name="GetBallAndShoot", memory=False)
-        go_to_ball_branch = GoToBallStrategy(self.robot_id, self.opp_strategy).create_module()
-        score_goal_branch = ScoreGoalStrategy(self.robot_id, self.opp_strategy).create_module()
-        get_ball_and_shoot.add_children([
-            go_to_ball_branch,
-            ShouldScoreGoal(name="ShouldScoreGoal?", opp_strategy=self.opp_strategy),
-            score_goal_branch
-        ])
+        go_to_ball_branch = GoToBallStrategy(self.robot_id).create_module()
+        score_goal_branch = ScoreGoalStrategy(self.robot_id).create_module()
+        get_ball_and_shoot.add_children(
+            [
+                go_to_ball_branch,
+                ShouldScoreGoal(name="ShouldScoreGoal?"),
+                score_goal_branch,
+            ]
+        )
 
         # 2. A top-level selector that stops the robot if a goal has been scored.
         # This prevents the robot from acting unnecessarily.
         goal_scored_selector = Selector(name="StopIfGoalScored", memory=False)
-        goal_scored_selector.add_children([
-            GoalScored(name="IsGoalScored?", opp_strategy=self.opp_strategy),
-            get_ball_and_shoot
-        ])
+        goal_scored_selector.add_children(
+            [
+                GoalScored(name="IsGoalScored?"),
+                get_ball_and_shoot,
+            ]
+        )
 
         # 3. The root of the tree, which initializes and then runs the main logic.
         attacking = Sequence(name="ScoreGoal", memory=False)
         set_atk_id = SetBlackboardVariable(
-                name="SetTargetRobotID", variable_name="robot_id", value=self.robot_id, opp_strategy=self.opp_strategy
-            )
-        attacking.add_children([
-            ScoreGoalPlay(name="ScoreGoalPlay?", opp_strategy=self.opp_strategy),
-            set_atk_id,
-            goal_scored_selector
-        ])
-        
+            name="SetTargetRobotID",
+            variable_name="robot_id",
+            value=self.robot_id,
+        )
+        attacking.add_children(
+            [
+                ScoreGoalPlay(name="ScoreGoalPlay?"),
+                set_atk_id,
+                goal_scored_selector,
+            ]
+        )
+
         defending = Sequence(name="Block", memory=False)
         set_def_id = SetBlackboardVariable(
-                name="SetTargetRobotID", variable_name="robot_id", value=self.robot_id, opp_strategy=self.opp_strategy
-            )
-        defending.add_children([
-            BlockAttackerPlay(name="BlockAttackerPlay?", opp_strategy=self.opp_strategy),
-            set_def_id,
-            BlockAttackerStep(name="BlockAttackerStep", opp_strategy=self.opp_strategy),
-        ])
-        
+            name="SetTargetRobotID",
+            variable_name="robot_id",
+            value=self.robot_id,
+        )
+        defending.add_children(
+            [
+                BlockAttackerPlay(name="BlockAttackerPlay?"),
+                set_def_id,
+                BlockAttackerStep(name="BlockAttackerStep"),
+            ]
+        )
+
         play_selector = Selector(name="PlayDecider", memory=False)
-        play_selector.add_children([
-            attacking,
-            defending,
-        ])
+        play_selector.add_children(
+            [
+                attacking,
+                defending,
+            ]
+        )
 
         # Create the root of the behaviour tree
         coach_root = py_trees.composites.Sequence(name="CoachRoot", memory=False)
-
-        # Create the SetRoles behaviour
-        set_roles = SetRoles(opp_strategy=self.opp_strategy)
-        set_tactics = SetTactics(opp_strategy=self.opp_strategy)
-
-        coach_root.add_children([
-            set_roles,
-            set_tactics,
-            play_selector
-        ])
+        coach_root.add_children([SetRoles(), SetTactics(), play_selector])
 
         return coach_root

@@ -7,14 +7,15 @@ from strategy.utils.action_nodes import GoToBallStep
 
 from typing import Dict
 
+
 class GoToBallStrategy(AbstractStrategy):
-    def __init__(self, robot_id: int, opp_strategy: bool = False):
+    def __init__(self, robot_id: int):
         """
         Initializes the GoToBallStrategy with a specific robot ID.
         :param robot_id: The ID of the robot this strategy will control.
         """
         self.robot_id = robot_id
-        super().__init__(opp_strategy=opp_strategy)
+        super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
         if 1 <= n_runtime_friendly <= 3 and 1 <= n_runtime_enemy <= 3:
@@ -29,38 +30,37 @@ class GoToBallStrategy(AbstractStrategy):
             name="GoToBallSelector",
             memory=False,
             children=[
-                HasBall(opp_strategy=self.opp_strategy),
-                GoToBallStep(opp_strategy=self.opp_strategy),
+                HasBall(),
+                GoToBallStep(),
             ],
         )
 
         # Root of the tree that sets up the blackboard first
         root = Sequence(
             name="GoToBallModule",
-            memory=True, # Use memory to ensure setup runs only once
+            memory=True,  # Use memory to ensure setup runs only once
             children=[
                 SetBlackboardVariable(
                     name="SetRobotID",
-                    variable_name="robot_id", # Use a general name
+                    variable_name="robot_id",  # Use a general name
                     value=self.robot_id,
-                    opp_strategy=self.opp_strategy
                 ),
-                go_to_ball_logic, # Run the main logic after setup
+                go_to_ball_logic,  # Run the main logic after setup
             ],
         )
 
         return root
-    
+
     def create_module(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete go_to_ball behaviour tree."""
-        
+
         # Main logic for the robot
         go_to_ball_logic = Selector(
             name="GoToBallSelector",
             memory=False,
             children=[
-                HasBall(opp_strategy=self.opp_strategy),
-                GoToBallStep(opp_strategy=self.opp_strategy),
+                HasBall(),
+                GoToBallStep(),
             ],
         )
 

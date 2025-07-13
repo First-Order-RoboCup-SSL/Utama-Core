@@ -87,6 +87,10 @@ class StrategyRunner:
         self.opp_strategy = opp_strategy
         self.logger = logging.getLogger(__name__)
 
+        self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
+        if self.opp_strategy:
+            self.opp_strategy.setup_behaviour_tree(is_opp_strat=True)
+
         self._assert_exp_robots()
         self.rsim_env, self.sim_controller = self._load_sim_and_controller()
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
@@ -96,11 +100,6 @@ class StrategyRunner:
         self.velocity_refiner = VelocityRefiner()
         self.robot_info_refiner = RobotInfoRefiner()
         # self.referee_refiner = RefereeRefiner()
-        
-        self.my_strategy.setup_tree()
-        if self.opp_strategy:
-            self.opp_strategy.setup_tree()
-        
         (
             self.my_game_history,
             self.my_current_game_frame,
@@ -110,7 +109,7 @@ class StrategyRunner:
             self.opp_game,
         ) = self._load_game()
         self.game_start_time = time.time()
-            
+
         self.toggle_opp_first = False  # alternate the order of opp and friendly in run
 
     def data_update_listener(self, receiver: VisionReceiver):
@@ -146,7 +145,7 @@ class StrategyRunner:
         if self.opp_strategy:
             self.opp_strategy.load_rsim_env(None)
         self.my_strategy.load_rsim_env(None)
-        
+
         if self.mode == "rsim":
             n_yellow, n_blue = map_friendly_enemy_to_colors(
                 self.my_team_is_yellow, self.exp_friendly, self.exp_enemy

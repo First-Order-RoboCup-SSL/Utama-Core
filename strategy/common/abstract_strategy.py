@@ -5,6 +5,7 @@ from motion_planning.src.motion_controller import MotionController
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
+from config.settings import BLACKBOARD_NAMESPACE_MAP
 from skills.src.utils.move_utils import empty_command
 from strategy.common.roles import Role
 from strategy.common.abstract_behaviour import AbstractBehaviour
@@ -20,17 +21,13 @@ logger = logging.getLogger(__name__)
 
 
 class AbstractStrategy(ABC):
-    def __init__(self, opp_strategy: bool = False):
-        self.opp_strategy = opp_strategy
-        self.unique_key = (
-            "Opponent" if opp_strategy else "My"
-        )
-        
-        self.robot_controller = None  # Will be set by StrategyRunner
-        
-        self.blackboard = self._setup_blackboard()
-        
-        self.behaviour_tree = py_trees.trees.BehaviourTree(self.create_behaviour_tree())    
+    def __init__(self):
+        self.behaviour_tree = py_trees.trees.BehaviourTree(self.create_behaviour_tree())
+
+        ### These attributes are set by the StrategyRunner before the strategy is run. ###
+        self.robot_controller: AbstractRobotController = None
+        self.is_opp_strategy: bool = None
+        self.blackboard: BaseBlackboard = None
 
     ### START OF FUNCTIONS TO BE IMPLEMENTED BY YOUR STRATEGY ###
 
@@ -87,17 +84,21 @@ class AbstractStrategy(ABC):
             key="motion_controller", access=py_trees.common.Access.READ
         )
 
-    def setup_tree(self):
-        self.behaviour_tree.setup()
-    
+    def setup_behaviour_tree(self, is_opp_strat: bool):
+        """
+        Must be called before strategy can be run.
+        Setups the tree and blackboard based on if is_opp_strat
+        """
+        self.blackboard = self._setup_blackboard(is_opp_strat)
+        self.behaviour_tree.setup(is_opp_strat=is_opp_strat)
+
     def step(self, game: Game):
         # start_time = time.time()
         self.blackboard.game = game
-        self.blackboard.register_key(key="game", access=py_trees.common.Access.READ)
         self.blackboard.cmd_map = {robot_id: None for robot_id in game.friendly_robots}
-                
+
         self.behaviour_tree.tick()
-        
+
         for robot_id, values in self.blackboard.cmd_map.items():
             if values is not None:
                 self.robot_controller.add_robot_commands(values, robot_id)
@@ -111,9 +112,7 @@ class AbstractStrategy(ABC):
                 cmd = self.execute_default_action(game, role, robot_id)
                 self.robot_controller.add_robot_commands(cmd, robot_id)
         self.robot_controller.send_robot_commands()
-        
-        self.blackboard.register_key(key="game", access=py_trees.common.Access.WRITE)
-        
+
         # end_time = time.time()
         # logger.info(
         #     "Behaviour Tree %s executed in %f secs",
@@ -121,20 +120,23 @@ class AbstractStrategy(ABC):
         #     end_time - start_time,
         # )
 
-    def _setup_blackboard(self) -> BaseBlackboard:
+    def _setup_blackboard(self, is_opp_strat: bool) -> BaseBlackboard:
         """Sets up the blackboard with the necessary keys for the strategy."""
 
-        blackboard = py_trees.blackboard.Client(name="GlobalBlackboard", namespace=self.unique_key)
+        blackboard = py_trees.blackboard.Client(
+            name="GlobalBlackboard", namespace=BLACKBOARD_NAMESPACE_MAP[is_opp_strat]
+        )
         blackboard.register_key(key="game", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="cmd_map", access=py_trees.common.Access.WRITE)
 
-        
         blackboard.register_key(key="role_map", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="tactic", access=py_trees.common.Access.WRITE)
         blackboard.role_map = {}
-        
+
         blackboard.register_key(key="rsim_env", access=py_trees.common.Access.WRITE)
-        blackboard.register_key(key="motion_controller", access=py_trees.common.Access.WRITE)
+        blackboard.register_key(
+            key="motion_controller", access=py_trees.common.Access.WRITE
+        )
 
         blackboard: BaseBlackboard = cast(BaseBlackboard, blackboard)
         return blackboard

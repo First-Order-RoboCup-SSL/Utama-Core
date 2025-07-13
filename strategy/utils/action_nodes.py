@@ -20,14 +20,12 @@ class TurnOnSpotStep(AbstractBehaviour):
     Returns:
         py_trees.common.Status.RUNNING: On every tick to continue the action.
     """
-    def __init__(self, name="TurnOnSpotStep", opp_strategy: bool = False):
-        super().__init__(name=name, opp_strategy=opp_strategy)
 
-    def setup(self):
-        super().setup()
-
+    def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.READ)
+        self.blackboard.register_key(
+            key="target_orientation", access=py_trees.common.Access.READ
+        )
 
     def update(self) -> py_trees.common.Status:
         # print(f"Executing TurnOnSpotStep for robot {self.blackboard.robot_id}, target orientation: {self.blackboard.target_orientation}")
@@ -45,6 +43,7 @@ class TurnOnSpotStep(AbstractBehaviour):
         self.blackboard.cmd_map[self.blackboard.robot_id] = command
         return py_trees.common.Status.RUNNING
 
+
 class KickStep(AbstractBehaviour):
     """
     Executes a single, instantaneous kick command for a specified robot.
@@ -60,14 +59,12 @@ class KickStep(AbstractBehaviour):
     **Returns:**
         - `py_trees.common.Status.SUCCESS`: Immediately after issuing the command.
     """
-    def __init__(self, name="KickStep", opp_strategy: bool = False):
-        super().__init__(name=name, opp_strategy=opp_strategy)
 
-    def setup(self):
-        super().setup()
-
+    def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.READ)
+        self.blackboard.register_key(
+            key="target_orientation", access=py_trees.common.Access.READ
+        )
 
     def update(self) -> py_trees.common.Status:
         # print(f"Executing KickStep for robot {self.blackboard.robot_id}")
@@ -77,7 +74,8 @@ class KickStep(AbstractBehaviour):
         command = kick()
         self.blackboard.cmd_map[self.blackboard.robot_id] = command
         return py_trees.common.Status.SUCCESS
-    
+
+
 class GoToBallStep(AbstractBehaviour):
     """
     Executes a command step to move a robot towards the ball.
@@ -94,12 +92,8 @@ class GoToBallStep(AbstractBehaviour):
     **Returns:**
         - `py_trees.common.Status.RUNNING`: On every tick to continue the movement.
     """
-    def __init__(self, name="GoToBallStep", opp_strategy: bool = False):
-        super().__init__(name=name, opp_strategy=opp_strategy)
 
-    def setup(self):
-        super().setup()
-
+    def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
@@ -110,7 +104,7 @@ class GoToBallStep(AbstractBehaviour):
             v = game.friendly_robots[self.blackboard.robot_id].v
             p = game.friendly_robots[self.blackboard.robot_id].p
             env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")
-            
+
         command = go_to_ball(
             game,
             self.blackboard.motion_controller,
