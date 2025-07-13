@@ -21,7 +21,7 @@ class ScoreGoalStep(AbstractBehaviour):
     def update(self) -> py_trees.common.Status:
         game = self.blackboard.game.current
 
-        try:
+        if self.blackboard.rsim_env is not None:
             env = self.blackboard.rsim_env
             v = game.friendly_robots[self.blackboard.robot_id].v
             p = game.friendly_robots[self.blackboard.robot_id].p
@@ -30,7 +30,7 @@ class ScoreGoalStep(AbstractBehaviour):
             command = score_goal(
                 game, self.blackboard.motion_controller, self.blackboard.robot_id, env
             )
-        except:
+        else:
             command = score_goal(
                 game,
                 self.blackboard.motion_controller,

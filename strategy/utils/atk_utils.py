@@ -43,7 +43,6 @@ class OrenAtTargetThreshold(AbstractBehaviour):
         self.goal_x = self.blackboard.game.field.enemy_goal_line.coords[0][0]
 
     def update(self):
-        ball = self.blackboard.game.current.ball
         shooter = self.blackboard.game.current.friendly_robots[self.blackboard.robot_id]
         shot_orientation = self.blackboard.get("target_orientation")
 
