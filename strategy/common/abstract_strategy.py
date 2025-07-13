@@ -26,7 +26,6 @@ class AbstractStrategy(ABC):
 
         ### These attributes are set by the StrategyRunner before the strategy is run. ###
         self.robot_controller: AbstractRobotController = None
-        self.is_opp_strategy: bool = None
         self.blackboard: BaseBlackboard = None
 
     ### START OF FUNCTIONS TO BE IMPLEMENTED BY YOUR STRATEGY ###
