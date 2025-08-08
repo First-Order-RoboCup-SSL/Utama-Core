@@ -112,10 +112,12 @@ class PID(AbstractPID[float]):
         Kp (float): Proportional gain.
         Kd (float): Derivative gain.
         Ki (float): Integral gain.
-        num_robots (int): Number of robots (each maintains its own error tracking).
         integral_min (Optional[float]): Minimum allowed integral value.
         integral_max (Optional[float]): Maximum allowed integral value.
-        delay (float): Delay (ms) for the Smith predictor (default is 30).
+
+    Note:
+        The delay used by the Smith predictor is internally set using the
+        :data:`SENDING_DELAY` configuration value.
     """
 
     def __init__(
