@@ -21,7 +21,7 @@ def defend_parameter(
     defender_id: int,
     env: Optional[SSLStandardEnv] = None,
 ) -> RobotCommand:
-    friendly, enemy, ball = game.friendly_robots, game.enemy_robots, game.ball
+    _, enemy, ball = game.friendly_robots, game.enemy_robots, game.ball
     shooters_data = find_likely_enemy_shooter(enemy, ball)
     orientation = None
     tracking_ball = False

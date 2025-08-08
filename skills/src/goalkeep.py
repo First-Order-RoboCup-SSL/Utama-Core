@@ -38,7 +38,7 @@ def goalkeep(
     if not target or abs(target[1]) > 0.5:
         target = Vector2D(4.5 if game.my_team_is_right else -4.5, 0)
 
-    shooters_data = find_likely_enemy_shooter(game.enemy_robots, game.ball)
+    # shooters_data = find_likely_enemy_shooter(game.enemy_robots, game.ball)
 
     if target:
         cmd = go_to_point(

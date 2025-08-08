@@ -4,17 +4,18 @@ from typing import Tuple
 from entities.data.command import RobotCommand
 from skills.src.utils.move_utils import move, face_ball
 
+import numpy as np
 
 def man_mark(
     game: Game, motion_controller: MotionController, robot_id: int, target_id: int
 ):
-    robot = game.get_robot_pos(is_yellow, robot_id)
-    target = game.get_robot_pos(not is_yellow, target_id)
+    robot = game.friendly_robots[robot_id]
+    target = game.enemy_robots[target_id]
     ball_pos = (game.ball.x, game.ball.y)
     # Position with a perpendicular offset to the line between target and ball
-    dx = target.x - ball_pos[0]
-    dy = target.y - ball_pos[1]
-    norm = math.sqrt(dx**2 + dy**2)
+    dx = target.p.x - ball_pos[0]
+    dy = target.p.y - ball_pos[1]
+    norm = np.sqrt(dx**2 + dy**2)
     dx /= norm
     dy /= norm
 
@@ -22,14 +23,13 @@ def man_mark(
     offset_x = -dy * 0.5
     offset_y = dx * 0.5
 
-    target_x = target.x + offset_x
-    target_y = target.y + offset_y
+    target_x = target.p.x + offset_x
+    target_y = target.p.y + offset_y
 
-    cmd = go_to_point(
-        pid_oren,
-        pid_trans,
+    cmd = move(
+        game,
+        motion_controller,
         robot,
-        0,
         (target_x, target_y),
         face_ball((robot.x, robot.y), ball_pos),
     )
