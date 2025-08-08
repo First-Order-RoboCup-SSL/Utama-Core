@@ -39,17 +39,27 @@ class ProximityLookup:
         enemy_robots: Optional[Dict[int, Robot]],
         ball: Optional[Ball],
     ) -> Tuple[List[ObjectKey], np.ndarray]:
-        object_keys = []
-        point_array = []
-        for robot in friendly_robots.values():
-            object_keys.append(ObjectKey(TeamType.FRIENDLY, ObjectType.ROBOT, robot.id))
-            point_array.append(robot.p.to_array())
-        for robot in enemy_robots.values():
-            object_keys.append(ObjectKey(TeamType.ENEMY, ObjectType.ROBOT, robot.id))
-            point_array.append(robot.p.to_array())
+        object_keys: List[ObjectKey] = []
+        point_array: List[np.ndarray] = []
+
+        if friendly_robots:
+            for robot in friendly_robots.values():
+                object_keys.append(
+                    ObjectKey(TeamType.FRIENDLY, ObjectType.ROBOT, robot.id)
+                )
+                point_array.append(robot.p.to_array())
+
+        if enemy_robots:
+            for robot in enemy_robots.values():
+                object_keys.append(
+                    ObjectKey(TeamType.ENEMY, ObjectType.ROBOT, robot.id)
+                )
+                point_array.append(robot.p.to_array())
+
         if ball:
             object_keys.append(ObjectKey(TeamType.NEUTRAL, ObjectType.BALL, 0))
             point_array.append(ball.p.to_2d().to_array())
+
         return object_keys, np.array(point_array)
 
     def _build_proximity_matrix(self, point_array: np.ndarray) -> np.ndarray:
@@ -106,7 +116,7 @@ class ProximityLookup:
     def closest_to_ball(
         self, team_type_filter: Optional[TeamType] = None
     ) -> Tuple[Optional[ObjectKey], float]:
-        if self.object_keys[-1].object_type != ObjectType.BALL:
+        if not self.object_keys or self.object_keys[-1].object_type != ObjectType.BALL:
             warnings.warn(
                 "Invalid closest_to_ball query: cannot find ball in proximity lookup."
             )
