@@ -10,6 +10,14 @@ class RobotCommand(NamedTuple):
     kick: bool
     chip: bool
     dribble: bool
+    
+class RobotPacketCommand(NamedTuple):
+    local_forward_vel: int
+    local_left_vel: int
+    angular_vel: int
+    kick: bool
+    chip: bool
+    dribble: bool
 
 
 # Grsim Inverse Kinematics
