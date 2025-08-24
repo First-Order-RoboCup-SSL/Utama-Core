@@ -20,6 +20,10 @@ jobs:
         with:
           run-install: false
 
+      - name: Install dependencies
+        run: |
+          pixi run pip install -e .
+
       - name: Run tests
         run: |
           if [[ $GITHUB_EVENT_NAME == "push" ]]; then
