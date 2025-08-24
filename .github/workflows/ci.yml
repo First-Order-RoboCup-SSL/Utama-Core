@@ -21,7 +21,8 @@ jobs:
           run-install: false
 
       - name: install dependencies
-        uses: pixi install
+        run: | 
+          pixi install
 
       - name: Run tests
         run: |
