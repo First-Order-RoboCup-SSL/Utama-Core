@@ -44,10 +44,10 @@ def main():
         frames = []
         for cid, vb in enumerate(vision_buffers):
             if vb:
-                print(f"Camera {cid} has data: {vb[0]} at {time.time()-prog_start}")
+                print(f"Camera {cid} has data: {vb[0]} at {time.time() - prog_start}")
                 frames.append(vb.popleft())
             else:
-                print(f"Camera {cid} has no data at {time.time()-prog_start}")
+                print(f"Camera {cid} has no data at {time.time() - prog_start}")
         game = position_refiner.refine(game, frames)
         print(game)
         assert len(game.friendly_robots) == NUM_FRIENDLY

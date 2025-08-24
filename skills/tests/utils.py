@@ -91,7 +91,6 @@ def one_robot_placement(
             controller.add_robot_commands(cmd, team_robot_id)
             controller.send_robot_commands()
             return (switch, cx, cy, co)
-        return 0,0,0,0
-
+        return 0, 0, 0, 0
 
     return one_step

@@ -14,6 +14,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 # Calculates the intersection of 2 rays with the goal
 def _shadow(
     start_x: float, start_y: float, angle1: float, angle2: float, goal_x: float
@@ -207,9 +208,7 @@ def find_shot_quality(
     )
 
     # Use _find_best_shot to get the largest gap
-    _, largest_gap = _find_best_shot(
-        point, enemy_robots, goal_x, goal_y1, goal_y2
-    )
+    _, largest_gap = _find_best_shot(point, enemy_robots, goal_x, goal_y1, goal_y2)
 
     # Compute the open angle (gap angle)
     open_angle = _angle_between_points(

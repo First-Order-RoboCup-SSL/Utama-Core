@@ -12,7 +12,6 @@ def go_to_point(
     target_coords: Tuple[float, float],
     dribbling: bool = False,
 ) -> RobotCommand:
-
     return move(
         game=game,
         motion_controller=motion_controller,

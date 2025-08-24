@@ -26,7 +26,6 @@ from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import
 )
 
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +54,7 @@ class GRSimRobotController(AbstractRobotController):
         Sends the robot commands to the appropriate team (yellow or blue).
         """
         # logger.debug("Sending Robot Commands ...")
-        
+
         # net_start = time.time()
         data = self.net.send_command(self.out_packet, is_sim_robot_cmd=True)
         self.out_packet.Clear()
@@ -103,7 +102,10 @@ class GRSimRobotController(AbstractRobotController):
         robots_response = RobotControlResponse()
         robots_response.ParseFromString(data)
         for _, robot_info in enumerate(robots_response.feedback):
-            if robot_info.HasField("dribbler_ball_contact") and robot_info.id >= MAX_ROBOTS:
+            if (
+                robot_info.HasField("dribbler_ball_contact")
+                and robot_info.id >= MAX_ROBOTS
+            ):
                 warnings.warn(
                     "Invalid robot info received, robot id >= 6", SyntaxWarning
                 )
@@ -114,7 +116,7 @@ class GRSimRobotController(AbstractRobotController):
                 robots_info.append(robot_resp)
             # ignore robot_info for robots that are not expected (ie deactivated since the start of the game)
         self._robots_info.append(robots_info)
-    
+
     def get_robots_responses(self) -> Optional[RobotResponse]:
         if self._robots_info is None or len(self._robots_info) == 0:
             for i in range(self._n_friendly):
@@ -122,13 +124,13 @@ class GRSimRobotController(AbstractRobotController):
             data = self.net.send_command(self.out_packet, is_sim_robot_cmd=True)
 
             self.out_packet.Clear()
-            
+
             if data:
                 self._update_robot_info(data)
             else:
                 logger.warning("No robot responses received from GRSIM.")
                 return None
-            
+
         return self._robots_info.popleft()
 
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:

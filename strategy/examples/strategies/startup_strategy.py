@@ -33,7 +33,6 @@ class StartupStrategy(AbstractStrategy):
         game: Game,
         face_ball=False,
     ) -> RobotCommand:
-
         ball_p = game.current.ball.p
         current_p = game.current.friendly_robots[robot_id].p
         target_oren = (ball_p.like(current_p) - current_p).phi if face_ball else None

@@ -5,6 +5,7 @@ from entities.game.game import Game
 from skills.src.utils.move_utils import move
 import math
 
+
 def block_attacker(
     game: Game,
     motion_controller: MotionController,
@@ -65,7 +66,7 @@ def block_attacker(
     cmd = move(
         game=game,
         motion_controller=motion_controller,
-        robot_id= friendly_robot_id,
+        robot_id=friendly_robot_id,
         target_coords=Vector2D(target_x, target_y),
         target_oren=face_theta,
     )

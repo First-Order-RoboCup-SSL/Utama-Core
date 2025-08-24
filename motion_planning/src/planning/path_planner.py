@@ -258,11 +258,7 @@ class RRTPlanner:
                     LineString([best_parent, rand_point])
                 ) < self.STOPPING_DISTANCE and cost_map[
                     rand_point
-                ] + rand_point.distance(
-                    goal
-                ) < cost_map.get(
-                    goal, float("inf")
-                ):
+                ] + rand_point.distance(goal) < cost_map.get(goal, float("inf")):
                     self.par[goal] = rand_point
                     cost_map[goal] = cost_map[rand_point] + rand_point.distance(goal)
                     path_found = True

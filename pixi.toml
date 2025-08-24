@@ -33,6 +33,8 @@ numpy = "<=2.0.2"
 lint = "ruff check ."
 test = "pytest test/"
 main = "python -m main"
+precommit = "pre-commit run --all-files"
+precommit-install = "pre-commit install"
 
 [environments]
 robosim = { features = ["robosim"], no-default-feature = true }

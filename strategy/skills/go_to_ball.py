@@ -6,7 +6,6 @@ from strategy.utils.selector_utils import HasBall
 from strategy.utils.action_nodes import GoToBallStep
 
 
-
 class GoToBallStrategy(AbstractStrategy):
     def __init__(self, robot_id: int):
         """

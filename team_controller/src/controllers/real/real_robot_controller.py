@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # TODO: fix this assumption in the future, if needed.
 UINT16_MAX = 65535
 
+
 class RealRobotController(AbstractRobotController):
     """
     Robot Controller for Real Robots.
@@ -100,7 +101,9 @@ class RealRobotController(AbstractRobotController):
     #         self._robots_info[i] = info
     #         data_in = data_in << 1  # shift to the next robot's data
 
-    def _generate_command_buffer(self, robot_id: int, c_command: RobotPacketCommand) -> bytes:
+    def _generate_command_buffer(
+        self, robot_id: int, c_command: RobotPacketCommand
+    ) -> bytes:
         """
         Generates the command buffer to be sent to the robot.
         """
@@ -153,7 +156,9 @@ class RealRobotController(AbstractRobotController):
 
         return packet
 
-    def _convert_uint16_command(self, robot_id, command: RobotCommand) -> RobotPacketCommand:
+    def _convert_uint16_command(
+        self, robot_id, command: RobotCommand
+    ) -> RobotPacketCommand:
         """
         Prepares the float values in the command to be formatted to binary in the buffer.
 
@@ -182,10 +187,10 @@ class RealRobotController(AbstractRobotController):
                 f"Local left velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
             )
             local_left_vel = MAX_VEL if command.local_left_vel > 0 else -MAX_VEL
-            
-        local_forward_vel=self._encode_signed_to_u16(local_forward_vel, MAX_VEL)
-        local_left_vel=self._encode_signed_to_u16(local_left_vel, MAX_VEL)
-        angular_vel=self._encode_signed_to_u16(angular_vel, MAX_ANGULAR_VEL)
+
+        local_forward_vel = self._encode_signed_to_u16(local_forward_vel, MAX_VEL)
+        local_left_vel = self._encode_signed_to_u16(local_left_vel, MAX_VEL)
+        angular_vel = self._encode_signed_to_u16(angular_vel, MAX_ANGULAR_VEL)
 
         command = RobotPacketCommand(
             local_forward_vel=self._uint16_rep(local_forward_vel),
@@ -249,7 +254,7 @@ class RealRobotController(AbstractRobotController):
         if not np.isfinite(val):
             return 0.0
         return val
-    
+
     def _encode_signed_to_u16(self, vel: float, max_abs: float) -> int:
         """Saturating, midpoint-symmetric mapping from [-max_abs, +max_abs] → [0..65535].
 
@@ -269,7 +274,6 @@ class RealRobotController(AbstractRobotController):
             return UINT16_MAX
         return int(code)
 
-    
     def _uint16_rep(self, value: int) -> np.uint16:
         """
         Converts an int to uint16 for transmission.

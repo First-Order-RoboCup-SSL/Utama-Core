@@ -4,6 +4,7 @@ from skills.src.utils.move_utils import move, face_ball
 
 import numpy as np
 
+
 def man_mark(
     game: Game, motion_controller: MotionController, robot_id: int, target_id: int
 ):

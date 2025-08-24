@@ -109,9 +109,11 @@ def calculate_wall_posns(
     return [
         (
             robot_id,
-            (x + spread_factor * (2 * ROBOT_RADIUS) * posn_number, y)
-            if horizontal
-            else (x, y + spread_factor * (2 * ROBOT_RADIUS) * posn_number),
+            (
+                (x + spread_factor * (2 * ROBOT_RADIUS) * posn_number, y)
+                if horizontal
+                else (x, y + spread_factor * (2 * ROBOT_RADIUS) * posn_number)
+            ),
         )
         for (posn_number, robot_id) in zip(range(6), set(range(6)) - set(safe_robots))
     ]

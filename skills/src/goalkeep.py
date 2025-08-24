@@ -10,6 +10,7 @@ from entities.data.vector import Vector2D
 
 import numpy as np
 
+
 def goalkeep(
     game: Game,
     motion_controller: MotionController,
@@ -33,7 +34,6 @@ def goalkeep(
     else:
         target = predict_ball_pos_at_x(game, -4.5)
 
-    
     if not target or abs(target[1]) > 0.5:
         target = Vector2D(4.5 if game.my_team_is_right else -4.5, 0)
 

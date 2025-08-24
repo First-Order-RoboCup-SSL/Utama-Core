@@ -8,7 +8,6 @@ from run.refiners import PositionRefiner
 
 
 class GameGater:
-
     @staticmethod
     def wait_until_game_valid(
         my_team_is_yellow: bool,
@@ -20,7 +19,6 @@ class GameGater:
         is_pvp: bool,
         rsim_env: SSLBaseEnv = None,
     ) -> Tuple[GameFrame, GameFrame]:
-
         def _add_frame(
             my_game_frame: GameFrame, opp_game_frame: GameFrame
         ) -> Tuple[GameFrame, GameFrame]:

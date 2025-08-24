@@ -75,6 +75,7 @@ from entities.data.vector import Vector2D
 #             )
 #             return displacement
 
+
 def predict_ball_pos_at_x(game: Game, x: float) -> Optional[tuple]:
     vel = game.ball.v.to_2d()
 

@@ -7,6 +7,7 @@ import numpy as np
 
 EPS = 1e-5
 
+
 def align_defenders(
     game: Game,
     defender_parametric_pos: float,
@@ -18,7 +19,7 @@ def align_defenders(
     Calculates the next point on the defense area that the robots should go to
     defender_position is in terms of t on the parametric curve.
     """
-        
+
     NO_MOVE_THRES = 1.5
 
     # Start by getting the current position of the defenders
@@ -26,7 +27,7 @@ def align_defenders(
 
     # logger.debug(f"DEFENDER {dx} {dy}")
     goal_centre_x = game.field.my_goal_line.coords[0][0]
-    
+
     if attacker_orientation is None or attacker_orientation == 0:
         # In case there is no ball velocity or attackers, use centre of goal
         predicted_goal_position = Vector2D(goal_centre_x, 0)
@@ -34,9 +35,7 @@ def align_defenders(
         predicted_goal_position = Vector2D(
             goal_centre_x,
             clamp_to_goal_width(
-                predict_goal_y_location(
-                    game, attacker_position, attacker_orientation
-                )
+                predict_goal_y_location(game, attacker_position, attacker_orientation)
             ),
         )
 
@@ -50,7 +49,7 @@ def align_defenders(
         for t in range(round(1000 * np.pi / 2), round(1000 * 3 * np.pi / 2) + 1):
             poly.append(calculate_defense_area(game, clamp_to_parametric(t / 1000)))
         env.draw_polygon(poly, width=3)
-    
+
     goal_to_defender = defender_pos - predicted_goal_position
     goal_to_attacker = attacker_position - predicted_goal_position
 
@@ -70,6 +69,7 @@ def align_defenders(
     else:
         return calculate_defense_area(game, defender_parametric_pos)
 
+
 def calculate_defense_area(game: Game, t: float) -> Vector2D:
     """
     Defenders' path around the goal in the form of a rounded rectangle
@@ -86,10 +86,10 @@ def calculate_defense_area(game: Game, t: float) -> Vector2D:
     MAX_T = 3 * np.pi / 2
 
     t = max(MIN_T, min(t, MAX_T))
-    
+
     cos_t = np.cos(t)
     sin_t = np.sin(t)
-    
+
     a, r = 1.1, 2.1
     rp = Vector2D(
         a * ((1 - r) * (abs(cos_t) * cos_t) + r * cos_t),
@@ -98,7 +98,7 @@ def calculate_defense_area(game: Game, t: float) -> Vector2D:
 
     # This slows everything down sooo much that everything breaks (ask Fred if still confused)
     # goal_centre_x, _ = game.field.my_goal_line.coords[0]
-    
+
     if game.my_team_is_right:
         goal_centre_x = 4.5
     else:
@@ -106,14 +106,13 @@ def calculate_defense_area(game: Game, t: float) -> Vector2D:
 
     return make_relative_to_goal_centre(goal_centre_x, rp)
 
-def make_relative_to_goal_centre(
-    goal_centre_x: float,
-    p: Vector2D
-) -> Vector2D:
+
+def make_relative_to_goal_centre(goal_centre_x: float, p: Vector2D) -> Vector2D:
     if goal_centre_x < 0:  # Left goal
         return Vector2D(goal_centre_x - p.x, p.y)
     else:
         return Vector2D(goal_centre_x + p.x, p.y)
+
 
 def predict_goal_y_location(
     game: Game, shooter_position: Vector2D, orientation: float
@@ -124,6 +123,7 @@ def predict_goal_y_location(
         return float("inf")
     t = (gx - shooter_position[0]) / dx
     return shooter_position[1] + t * dy
+
 
 def to_defense_parametric(game: Game, p: Vector2D) -> float:
     """
@@ -148,7 +148,7 @@ def to_defense_parametric(game: Game, p: Vector2D) -> float:
 
         dist1 = p.distance_to(pred1)
         dist2 = p.distance_to(pred2)
-        
+
         if dist1 < dist2:
             hi = mi2
         else:
@@ -157,7 +157,10 @@ def to_defense_parametric(game: Game, p: Vector2D) -> float:
     t = lo
     return clamp_to_parametric(t)
 
-def find_likely_enemy_shooter(enemy_robots: Dict[int, Robot], ball: Ball) -> List[Robot]:
+
+def find_likely_enemy_shooter(
+    enemy_robots: Dict[int, Robot], ball: Ball
+) -> List[Robot]:
     unique_shooters: Dict[int, Robot] = {}
 
     for robot_id, robot in enemy_robots.items():
@@ -166,20 +169,24 @@ def find_likely_enemy_shooter(enemy_robots: Dict[int, Robot], ball: Ball) -> Lis
 
     return list(unique_shooters.values())
 
+
 def step_curve(t: float, direction: int):
     STEP_SIZE = 0.0872665 * 2
     if direction == 0:
         return t
     return direction * STEP_SIZE + t
 
+
 def clamp_to_goal_width(y: float) -> float:
     return max(min(y, 0.5), -0.5)
+
 
 def clamp_to_parametric(t: float) -> float:
     # parametric is between pi /2 and 3pi / 2
     return min(3 * np.pi / 2, max(t, np.pi / 2))
 
-def ccw(v1:Vector2D, v2:Vector2D) -> int:
+
+def ccw(v1: Vector2D, v2: Vector2D) -> int:
     # 1 if v1 is c-cw of v2, -1 if v1 is cw of v2, 0 if colinear
     mag = np.cross(v1, v2)
     if abs(mag) < EPS:
@@ -188,6 +195,7 @@ def ccw(v1:Vector2D, v2:Vector2D) -> int:
         return 1
     else:
         return -1
+
 
 # Repeated I will remove
 def ang_between(v1: Vector2D, v2: Vector2D) -> float:
@@ -199,6 +207,7 @@ def ang_between(v1: Vector2D, v2: Vector2D) -> float:
     assert -1 <= res <= 1, f"{v1} {v2} {res}"
 
     return np.arccos(res)
+
 
 def velocity_to_orientation(p: Tuple[float, float]) -> float:
     # Takes a velocity and converts to orientation in radians identical to robot orientation

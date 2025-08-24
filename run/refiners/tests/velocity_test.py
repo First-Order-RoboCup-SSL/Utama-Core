@@ -127,9 +127,9 @@ def test_extraction_of_time_velocity_pairs():
             )
             reconstructed_extracted_pairs.append((ts, vec_obj))
 
-    assert len(reconstructed_extracted_pairs) == len(
-        expected_time_velocity_pairs
-    ), "Number of items mismatch"
+    assert len(reconstructed_extracted_pairs) == len(expected_time_velocity_pairs), (
+        "Number of items mismatch"
+    )
 
     for actual_pair, expected_pair in zip(
         reconstructed_extracted_pairs, expected_time_velocity_pairs
@@ -137,12 +137,12 @@ def test_extraction_of_time_velocity_pairs():
         actual_ts, actual_vel = actual_pair
         expected_ts, expected_vel = expected_pair
 
-        assert np.isclose(
-            actual_ts, expected_ts
-        ), f"Timestamp mismatch: actual {actual_ts}, expected {expected_ts}"
-        assert (
-            actual_vel == expected_vel
-        ), f"Velocity mismatch: actual {actual_vel}, expected {expected_vel}"
+        assert np.isclose(actual_ts, expected_ts), (
+            f"Timestamp mismatch: actual {actual_ts}, expected {expected_ts}"
+        )
+        assert actual_vel == expected_vel, (
+            f"Velocity mismatch: actual {actual_vel}, expected {expected_vel}"
+        )
 
 
 def test_acceleration_calculation_implements_expected_formula():

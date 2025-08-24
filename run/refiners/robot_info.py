@@ -12,7 +12,6 @@ from typing import List
 
 
 class RobotInfoRefiner(BaseRefiner):
-
     def refine(self, game_frame: GameFrame, robot_responses: List[RobotResponse]):
         if robot_responses is None or len(robot_responses) == 0:
             return game_frame

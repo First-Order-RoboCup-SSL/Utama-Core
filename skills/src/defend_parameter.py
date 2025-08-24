@@ -13,6 +13,7 @@ from skills.src.utils.defense_utils import (
 )
 from entities.data.vector import Vector2D
 
+
 def defend_parameter(
     game: Game,
     motion_controller: MotionController,
@@ -26,10 +27,7 @@ def defend_parameter(
 
     if not shooters_data:
         target_tracking_coord = ball.p.to_2d()
-        if (
-            ball.v is not None
-            and None not in ball.v
-        ):
+        if ball.v is not None and None not in ball.v:
             orientation = velocity_to_orientation(ball.v.to_2d())
             tracking_ball = True
     else:
@@ -41,11 +39,7 @@ def defend_parameter(
     real_def_pos = game.friendly_robots[defender_id].p
     current_def_parametric = to_defense_parametric(game, real_def_pos)
     target = align_defenders(
-        game,
-        current_def_parametric,
-        target_tracking_coord,
-        orientation,
-        env
+        game, current_def_parametric, target_tracking_coord, orientation, env
     )
     cmd = go_to_point(
         game,
