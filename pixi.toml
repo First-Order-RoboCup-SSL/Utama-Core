@@ -38,7 +38,7 @@ rc-robosim = "<2"
 numpy = "<=2.0.2"
 
 [tasks]
-lint = "ruff check . --ignore F401,E402 --fix"
+lint = "ruff check ."
 test = "pytest test/"
 main = "python -m main"
 

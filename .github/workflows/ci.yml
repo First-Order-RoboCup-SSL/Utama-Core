@@ -19,16 +19,12 @@ jobs:
         with:
           run-install: true
 
-      - name: Install dependencies
-        run: |
-          pixi shell
-
       - name: Run tests
         run: |
           if [[ $GITHUB_EVENT_NAME == "push" ]]; then
-            pytest test/ --level full --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
+            pixi run --env default -- pytest test/ --level full --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
           elif [[ $GITHUB_EVENT_NAME == "pull_request" ]]; then
-            pytest test/ --level quick --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
+            pixi run --env default -- pytest test/ --level quick --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
           fi
 
 
