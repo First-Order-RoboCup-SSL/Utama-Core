@@ -1,13 +1,10 @@
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import go_to_ball, go_to_point, goalkeep
-from robot_control.src.tests.utils import one_robot_placement, setup_pvp
-from team_controller.src.controllers import RSimRobotController
+from robot_control.src.skills import go_to_point, goalkeep
+from robot_control.src.tests.utils import setup_pvp
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from robot_control.src.intent import PassBall, defend, score_goal
 from motion_planning.src.pid import PID
-from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
-from config.settings import TIMESTEP
 from entities.data.command import RobotCommand
 import math
 

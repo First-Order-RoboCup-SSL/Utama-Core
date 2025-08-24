@@ -3,7 +3,6 @@ from motion_planning.src.pid.pid_abstract import AbstractPID
 from global_utils.math_utils import normalise_heading
 import time
 import math
-import numpy as np
 from config.settings import (
     TIMESTEP,
     MAX_ANGULAR_VEL,

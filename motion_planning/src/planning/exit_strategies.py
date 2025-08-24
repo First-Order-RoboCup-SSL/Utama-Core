@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 from typing import Tuple, Optional, List
 
 from shapely import Polygon, Point
-from shapely.ops import nearest_points
 
 
 class ExitStrategy(ABC):

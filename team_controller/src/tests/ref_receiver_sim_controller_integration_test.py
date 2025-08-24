@@ -1,5 +1,3 @@
-import os
-import sys
 import time
 
 from team_controller.src.controllers import GRSimController

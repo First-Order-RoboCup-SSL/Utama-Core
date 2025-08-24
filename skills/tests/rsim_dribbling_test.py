@@ -1,4 +1,3 @@
-import random
 from team_controller.src.controllers.sim.rsim_robot_controller import (
     RSimRobotController,
 )

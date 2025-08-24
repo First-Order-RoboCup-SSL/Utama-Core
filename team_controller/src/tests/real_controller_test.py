@@ -1,7 +1,5 @@
-from calendar import c
 from motion_planning.src.pid.pid import get_real_pids
 from robot_control.src.skills import (
-    go_to_point,
     go_to_ball,
     turn_on_spot,
     empty_command,
@@ -11,7 +9,6 @@ from entities.game import Game
 from entities.data.command import RobotCommand
 import time
 import queue
-import logging
 import threading
 from team_controller.src.data.message_enum import MessageType
 from vision.vision_receiver import VisionReceiver

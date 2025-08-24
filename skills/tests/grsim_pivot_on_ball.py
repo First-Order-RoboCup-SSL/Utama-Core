@@ -6,7 +6,6 @@ from team_controller.src.controllers import GRSimRobotController
 from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
 from entities.game import Game
-from config.settings import TIMESTEP
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from robot_control.src.skills import turn_on_spot, go_to_ball
 from motion_planning.src.pid.pid import get_grsim_pids

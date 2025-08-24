@@ -1,9 +1,8 @@
-import numpy as np
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from entities.data.command import RobotCommand
 from motion_planning.src.motion_controller import MotionController
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from skills.src.go_to_point import go_to_point
 from skills.src.utils.defense_utils import (
@@ -12,7 +11,6 @@ from skills.src.utils.defense_utils import (
     to_defense_parametric,
     velocity_to_orientation,
 )
-from skills.src.utils.move_utils import face_ball
 from entities.data.vector import Vector2D
 
 def defend_parameter(

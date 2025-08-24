@@ -1,12 +1,12 @@
 import py_trees
-from strategy.common.tactics import Tactic
+from config.tactics import Tactic
 from team_controller.src.controllers import AbstractRobotController
 from motion_planning.src.motion_controller import MotionController
 from entities.game import Game
 from entities.data.command import RobotCommand
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from typing import Dict, Union
-from strategy.common import Role
+from config.roles import Role
 
 
 class BaseBlackboard(py_trees.blackboard.Client):
@@ -33,7 +33,7 @@ class BaseBlackboard(py_trees.blackboard.Client):
     @property
     def role_map(self) -> Dict[int, Role]:
         return self.get("role_map")
-    
+
     @property
     def tactic(self) -> Tactic:
         return self.get("tactic")

@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Tuple
 from entities.data.command import RobotCommand
 from entities.data.vector import Vector2D
 from entities.game import Game

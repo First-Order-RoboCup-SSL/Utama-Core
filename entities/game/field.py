@@ -1,4 +1,3 @@
-import numpy as np
 from shapely import Polygon, LineString
 from shapely.geometry import Point
 

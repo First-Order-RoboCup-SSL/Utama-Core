@@ -1,4 +1,4 @@
-from typing import Tuple, Optional, Dict, List, Union
+from typing import Optional, Dict, List, Union
 import warnings
 import logging
 
@@ -23,10 +23,8 @@ from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import 
 
 from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import (
     RobotControlResponse,
-    RobotFeedback,
 )
 
-import time
 
 
 logger = logging.getLogger(__name__)

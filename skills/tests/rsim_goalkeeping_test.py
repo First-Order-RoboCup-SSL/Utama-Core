@@ -1,18 +1,13 @@
-import random
 from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.skills import (
     face_ball,
     go_to_point,
-    goalkeep,
     find_likely_enemy_shooter,
 )
 from robot_control.src.tests.utils import setup_pvp
-from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from robot_control.src.intent import score_goal
-from motion_planning.src.pid import PID
-from config.settings import TIMESTEP
 import logging
 import time
 

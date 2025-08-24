@@ -3,8 +3,6 @@ from skills.src.score_goal import _find_best_shot
 from entities.data.vector import Vector2D
 from strategy.common.abstract_behaviour import AbstractBehaviour
 from global_utils.math_utils import angle_between_points
-from entities.game import Game, Robot, Ball
-from typing import List, Tuple
 
 from config.settings import ROBOT_RADIUS
 

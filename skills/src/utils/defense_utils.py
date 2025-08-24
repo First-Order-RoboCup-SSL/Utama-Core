@@ -1,8 +1,6 @@
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game, Robot, Ball
 from entities.data.vector import Vector2D
-from entities.data.command import RobotCommand
-from motion_planning.src.motion_controller import MotionController
 from typing import List, Optional, Tuple, Dict
 
 import numpy as np

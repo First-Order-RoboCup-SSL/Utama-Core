@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Optional, Union, Dict, Tuple
+from typing import List, Optional, Dict, Tuple
 from entities.data.object import ObjectKey, TeamType, ObjectType
 from entities.game.robot import Robot
 from entities.game.ball import Ball

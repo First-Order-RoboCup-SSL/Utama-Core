@@ -16,11 +16,10 @@ from global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
 )
-from run.receivers import RefereeMessageReceiver, VisionReceiver
+from run.receivers import VisionReceiver
 from run.refiners import (
     RobotInfoRefiner,
     PositionRefiner,
-    RefereeRefiner,
     VelocityRefiner,
 )
 from run import GameGater

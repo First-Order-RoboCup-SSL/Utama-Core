@@ -1,8 +1,10 @@
 import numpy as np
-import robosim
 
 from typing import Dict, List
 from rsoccer_simulator.src.Entities import Frame, FrameVSS, FrameSSL, Field
+from rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
+    RSimSubprocessWrapper,
+)
 
 
 class RSim:
@@ -16,17 +18,10 @@ class RSim:
         self.n_robots_blue = n_robots_blue
         self.n_robots_yellow = n_robots_yellow
 
-        # Positions needed just to initialize the simulator
-        ball_pos = [0, 0, 0, 0]
-        blue_robots_pos = [[-0.2 * i, 0, 0] for i in range(1, n_robots_blue + 1)]
-        yellow_robots_pos = [[0.2 * i, 0, 0] for i in range(1, n_robots_yellow + 1)]
         self.simulator = self._init_simulator(
             field_type=field_type,
             n_robots_blue=n_robots_blue,
             n_robots_yellow=n_robots_yellow,
-            ball_pos=ball_pos,
-            blue_robots_pos=blue_robots_pos,
-            yellow_robots_pos=yellow_robots_pos,
             time_step_ms=time_step_ms,
         )
         self.field = self.get_field_params()
@@ -117,19 +112,14 @@ class RSimVSS(RSim):
         field_type,
         n_robots_blue,
         n_robots_yellow,
-        ball_pos,
-        blue_robots_pos,
-        yellow_robots_pos,
         time_step_ms,
     ):
-        return robosim.VSS(
-            field_type,
-            n_robots_blue,
-            n_robots_yellow,
-            time_step_ms,
-            ball_pos,
-            blue_robots_pos,
-            yellow_robots_pos,
+        return RSimSubprocessWrapper(
+            sim_type="VSS",
+            n_blue=n_robots_blue,
+            n_yellow=n_robots_yellow,
+            field_type=field_type,
+            time_step_ms=time_step_ms,
         )
 
 
@@ -177,17 +167,12 @@ class RSimSSL(RSim):
         field_type,
         n_robots_blue,
         n_robots_yellow,
-        ball_pos,
-        blue_robots_pos,
-        yellow_robots_pos,
         time_step_ms,
     ):
-        return robosim.SSL(
-            field_type,
-            n_robots_blue,
-            n_robots_yellow,
-            time_step_ms,
-            ball_pos,
-            blue_robots_pos,
-            yellow_robots_pos,
+        return RSimSubprocessWrapper(
+            sim_type="SSL",
+            n_blue=n_robots_blue,
+            n_yellow=n_robots_yellow,
+            field_type=field_type,
+            time_step_ms=time_step_ms,
         )

@@ -1,6 +1,5 @@
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from entities.game.game_frame import GameFrame
-from entities.game.robot import Robot
 from run.refiners.position import CameraCombiner
 from unittest.mock import MagicMock
 

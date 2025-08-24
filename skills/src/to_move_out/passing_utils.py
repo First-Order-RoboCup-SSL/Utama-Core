@@ -1,4 +1,4 @@
-from entities.data.vision import VisionRobotData, VisionBallData
+from entities.data.vision import VisionRobotData
 from typing import Tuple, List
 import numpy as np
 

@@ -11,7 +11,6 @@ from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.grsim_robot_controller import (
     GRSimRobotController,
 )
-from config.settings import TIMESTEP
 from motion_planning.src.pid.pid import get_grsim_pids
 from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
@@ -19,8 +18,6 @@ from team_controller.src.data.message_enum import MessageType
 # from robot_control.src.high_level_skills import DribbleToTarget
 
 # Imports from other scripts or modules within the same project
-from robot_control.src.tests.utils import setup_pvp
-from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.skills import (
     go_to_point,
     go_to_ball,

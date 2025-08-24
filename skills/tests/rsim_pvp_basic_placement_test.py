@@ -1,13 +1,7 @@
-from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import go_to_ball, go_to_point
+from motion_planning.src.pid.pid import get_rsim_pids
 from robot_control.src.tests.utils import one_robot_placement, setup_pvp
-from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
-from robot_control.src.intent import score_goal
-from motion_planning.src.pid import PID
-from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
-from config.settings import TIMESTEP
 import math
 
 TEST_EXPECTED_ITERS = 2

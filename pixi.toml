@@ -1,0 +1,48 @@
+[workspace]
+name = "Utama"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+version = "1.0.0"
+description = "Imperial RoboCup SSL 25 Software Algorithms Codebase."
+readme = "README.md"
+authors = [
+    "Fred Huang <fred.huang23@imperial.ac.uk>",
+    "Joel Ng <zhi-ming.ng22@imperial.ac.uk>",
+    "Isaac Yong <isaac.yong24@imperial.ac.uk>",
+    "Hamish Starling <hamish.starling22@imperial.ac.uk>",
+    "Luke Moran <luke.moran22@imperial.ac.uk>",
+    "Sadig Sadikhzada <sadig.sadikhzada23@imperial.ac.uk>",
+    "Li Han <han.li124@imperial.ac.uk>"
+]
+
+[pypi-dependencies]
+lenses = ">=1.2.0"
+py-trees = ">=2.3.0"
+
+[dependencies]  # shared deps
+python = "3.11.*"
+numpy = "==2.0.2"
+pygame = "==2.6.1"
+protobuf = "==3.20.2"
+shapely = "==2.0.6"
+gymnasium = "==1.0.0"
+pyserial = "==3.5"
+pytest = "==8.3.4"
+ruff = ">=0.9.8"
+
+[feature.robosim.dependencies]
+python = "3.10.*"
+
+[feature.robosim.pypi-dependencies]
+rc-robosim = "<2"
+numpy = "<=2.0.2"
+
+[tasks]
+lint = "ruff check . --ignore F401,E402 --fix"
+test = "pytest test/"
+main = "python -m main"
+
+[environments]
+robosim = { features = ["robosim"], no-default-feature = true }
+
+

@@ -1,9 +1,7 @@
 import numpy as np
-import pytest
 from entities.game.proximity_lookup import ProximityLookup
 from entities.game.robot import Robot
-from entities.game.ball import Ball
-from entities.data.vector import Vector2D, Vector3D
+from entities.data.vector import Vector2D
 
 
 def test_proximity_lookup_handles_none_inputs():

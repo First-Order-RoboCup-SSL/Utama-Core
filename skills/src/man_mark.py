@@ -1,7 +1,5 @@
 from entities.game import Game
 from motion_planning.src.motion_controller import MotionController
-from typing import Tuple
-from entities.data.command import RobotCommand
 from skills.src.utils.move_utils import move, face_ball
 
 import numpy as np

@@ -1,11 +1,10 @@
 import py_trees
 from py_trees.composites import Sequence, Selector
-from strategy.common import AbstractStrategy, AbstractBehaviour
+from strategy.common import AbstractStrategy
 from strategy.utils.blackboard_utils import SetBlackboardVariable
 from strategy.utils.selector_utils import HasBall
 from strategy.utils.action_nodes import GoToBallStep
 
-from typing import Dict
 
 
 class GoToBallStrategy(AbstractStrategy):

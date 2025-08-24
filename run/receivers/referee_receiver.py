@@ -1,6 +1,5 @@
 import threading
 import time
-import queue
 from typing import Tuple, Optional, List, Deque
 
 from entities.referee.referee_command import RefereeCommand
@@ -12,7 +11,6 @@ from config.settings import MULTICAST_GROUP_REFEREE, REFEREE_PORT
 
 from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Referee
 
-from collections import deque
 
 import logging
 

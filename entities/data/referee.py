@@ -1,6 +1,4 @@
-from collections import namedtuple
 from typing import NamedTuple, Optional, Tuple
-from enum import Enum
 
 from entities.game.team_info import TeamInfo
 from entities.referee.referee_command import RefereeCommand

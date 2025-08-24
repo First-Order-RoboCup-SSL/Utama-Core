@@ -1,9 +1,8 @@
-from dataclasses import replace
 from entities.game import Game, Robot
 from entities.data.vector import Vector2D, Vector3D
 
-from typing import Dict, List, Union, Tuple  # Added List for type hinting
-from entities.data.object import ObjectKey, TeamType, ObjectType
+from typing import Dict, Union, Tuple  # Added List for type hinting
+from entities.data.object import ObjectKey, TeamType
 
 # Assuming your new GameHistory is in entities.game.game_history or accessible
 from entities.game.game_history import (

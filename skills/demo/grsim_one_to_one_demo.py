@@ -4,11 +4,9 @@ import math
 import threading
 import queue
 import time
-from typing import Optional, Tuple
+from typing import Tuple
 import sys
-import numpy as np
 
-from entities.game.game_object import Colour
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.grsim_robot_controller import (
     GRSimRobotController,
@@ -16,7 +14,7 @@ from team_controller.src.controllers.sim.grsim_robot_controller import (
 from team_controller.src.controllers.real.real_robot_controller import (
     RealRobotController,
 )
-from motion_planning.src.pid.pid import PID, get_grsim_pids
+from motion_planning.src.pid.pid import get_grsim_pids
 from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
 from robot_control.src.high_level_skills import DribbleToTarget
@@ -24,11 +22,8 @@ from entities.game import Game
 from entities.data.command import RobotCommand
 
 # Imports from other scripts or modules within the same project
-from robot_control.src.tests.utils import setup_pvp
-from motion_planning.src.pid.pid import get_rsim_pids
 
 from robot_control.src.skills import (
-    face_ball,
     go_to_ball,
     go_to_point,
     velocity_to_orientation,

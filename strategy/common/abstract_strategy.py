@@ -1,5 +1,5 @@
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
-from entities.game import Game, Robot
+from entities.game import Game
 from entities.data.command import RobotCommand
 from motion_planning.src.motion_controller import MotionController
 from team_controller.src.controllers.common.robot_controller_abstract import (
@@ -7,12 +7,9 @@ from team_controller.src.controllers.common.robot_controller_abstract import (
 )
 from config.settings import BLACKBOARD_NAMESPACE_MAP
 from skills.src.utils.move_utils import empty_command
-from strategy.common.roles import Role
-from strategy.common.abstract_behaviour import AbstractBehaviour
+from config.roles import Role
 from abc import abstractmethod, ABC
-from typing import Dict, Union
 import logging
-import time
 import py_trees
 from strategy.common.base_blackboard import BaseBlackboard
 from typing import cast

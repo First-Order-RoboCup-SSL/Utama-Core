@@ -1,10 +1,9 @@
 import py_trees
-from entities.game import Game, Robot
-from entities.data.command import RobotCommand
+from entities.game import Game
 from strategy.common import AbstractStrategy, AbstractBehaviour
 from strategy.utils.blackboard_utils import SetBlackboardVariable
 from strategy.utils.selector_utils import HasBall
-from strategy.common.roles import Role
+from config.roles import Role
 from skills.src.go_to_ball import go_to_ball
 from skills.src.defend_parameter import defend_parameter
 from skills.src.goalkeep import goalkeep
@@ -32,7 +31,8 @@ class GoToBallStep(AbstractBehaviour):
         )
         self.blackboard.cmd_map[self.blackboard.robot_id] = command
         return py_trees.common.Status.RUNNING
-    
+
+
 class SetRoles(AbstractBehaviour):
     """A behaviour that sets the roles of the robots."""
 
@@ -46,6 +46,7 @@ class SetRoles(AbstractBehaviour):
             2: Role.GOALKEEPER,
         }
         return py_trees.common.Status.SUCCESS
+
 
 class DefendStrategy(AbstractStrategy):
     def __init__(self, robot_id: int, opp_strategy: bool = False):
@@ -61,9 +62,7 @@ class DefendStrategy(AbstractStrategy):
             return True
         return False
 
-    def execute_default_action(
-        self, game: Game, role: Role, robot_id: int
-    ):
+    def execute_default_action(self, game: Game, role: Role, robot_id: int):
         """
         Called by StrategyRunner: Execute the default action for the robot.
         This is used when no specific command is set in the blackboard after the coach tree for this robot.
@@ -85,7 +84,7 @@ class DefendStrategy(AbstractStrategy):
 
         # Create the SetRoles behaviour
         set_roles = SetRoles()
-        
+
         # Root sequence for the whole behaviour
         go_to_ball = py_trees.composites.Sequence(name="GoToBall", memory=True)
 
@@ -104,7 +103,7 @@ class DefendStrategy(AbstractStrategy):
         # Assemble the tree
         go_to_ball.add_child(set_robot_id)
         go_to_ball.add_child(has_ball_selector)
-        
+
         root.add_child(set_roles)
         root.add_child(go_to_ball)
 

@@ -7,7 +7,6 @@ from global_utils.mapping_utils import (
     map_left_right_to_colors,
 )
 import math
-import time
 
 from run import StrategyRunner
 from strategy.skills.score_goal import ScoreGoalStrategy

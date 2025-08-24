@@ -1,11 +1,9 @@
 from typing import Dict, Optional
 import dataclasses
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from entities.game.field import Field
 from entities.game.robot import Robot
 from entities.game.ball import Ball
-from entities.game.proximity_lookup import ProximityLookup
-import numpy as np
 
 
 import logging

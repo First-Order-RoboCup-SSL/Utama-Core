@@ -1,6 +1,5 @@
 import py_trees
 from py_trees.composites import Sequence, Selector
-from py_trees.decorators import Inverter
 from strategy.common import AbstractStrategy, AbstractBehaviour
 from strategy.utils.blackboard_utils import SetBlackboardVariable
 from strategy.utils.selector_utils import GoalScored
@@ -9,8 +8,8 @@ from strategy.skills.go_to_ball import GoToBallStrategy
 from strategy.skills.score_goal import ScoreGoalStrategy
 from strategy.skills.block_attacker import BlockAttackerStep
 from entities.data.object import TeamType
-from strategy.common.roles import Role
-from strategy.common.tactics import Tactic
+from config.roles import Role
+from config.tactics import Tactic
 from skills.src.defend_parameter import defend_parameter
 from skills.src.goalkeep import goalkeep
 from skills.src.utils.move_utils import empty_command

@@ -1,4 +1,3 @@
-import numpy as np
 from typing import Dict
 from rsoccer_simulator.src.Entities.Ball import Ball
 from rsoccer_simulator.src.Entities.Robot import Robot

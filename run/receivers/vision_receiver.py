@@ -1,6 +1,5 @@
 import time
 from typing import Deque, List
-from entities.data import vision
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from team_controller.src.utils import network_manager
 from config.settings import MULTICAST_GROUP, VISION_PORT

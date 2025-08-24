@@ -1,17 +1,13 @@
 import logging
-import random
 import threading
 import queue
-from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.grsim_robot_controller import (
     GRSimRobotController,
 )
-from config.settings import TIMESTEP
 from motion_planning.src.pid.pid import get_grsim_pids
 from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
 from robot_control.src.high_level_skills import DribbleToTarget
-from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from entities.game import Game
 
 

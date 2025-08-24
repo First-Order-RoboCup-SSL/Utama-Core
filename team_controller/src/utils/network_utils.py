@@ -2,7 +2,6 @@ import socket
 import struct
 import logging
 from typing import Optional, Tuple
-import time
 
 from config.settings import MULTICAST_GROUP, LOCAL_HOST, TIMESTEP
 

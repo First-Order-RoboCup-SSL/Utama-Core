@@ -1,5 +1,3 @@
-from strategy.skills.go_to_ball import GoToBallStrategy
-from strategy.test.defense_test import DefendStrategy
 from strategy.skills.score_goal import ScoreGoalStrategy
 from strategy.examples.strategies.demo_strategy import DemoStrategy
 

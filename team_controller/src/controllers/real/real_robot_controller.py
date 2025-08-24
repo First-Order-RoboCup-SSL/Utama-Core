@@ -2,10 +2,8 @@ from serial import Serial, EIGHTBITS, PARITY_EVEN, STOPBITS_TWO
 from typing import Union, Optional, Dict, List
 import warnings
 import numpy as np
-import time
 
 from entities.data.command import RobotCommand, RobotResponse, RobotPacketCommand
-from skills.src.utils.move_utils import empty_command
 
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,

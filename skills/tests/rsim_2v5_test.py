@@ -1,4 +1,3 @@
-import time
 import numpy as np
 import logging
 
@@ -10,7 +9,6 @@ from robot_control.src.skills import (
     go_to_point,
     goalkeep,
     empty_command,
-    man_mark,
 )
 from robot_control.src.tests.utils import setup_pvp
 from robot_control.src.utils.pass_quality_utils import (

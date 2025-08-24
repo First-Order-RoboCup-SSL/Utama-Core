@@ -1,16 +1,9 @@
-import sys
-import os
-import numpy as np
-import pytest
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from team_controller.src.controllers import RSimRobotController, RSimController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from entities.game import Game
 from robot_control.src.intent import defend, score_goal
-from robot_control.src.utils.shooting_utils import find_best_shot
 from motion_planning.src.pid import PID
-from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
-from config.settings import TIMESTEP
 from robot_control.src.tests.utils import setup_pvp
 import logging
 

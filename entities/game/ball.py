@@ -1,5 +1,4 @@
 from entities.data.vector import Vector3D
-from typing import Tuple
 from dataclasses import dataclass
 
 

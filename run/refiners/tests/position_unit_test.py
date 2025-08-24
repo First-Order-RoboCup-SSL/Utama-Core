@@ -1,4 +1,4 @@
-from entities.data.vector import Vector2D, Vector3D
+from entities.data.vector import Vector2D
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from entities.data.vision import VisionBallData, VisionRobotData
 from entities.game.ball import Ball

@@ -200,4 +200,6 @@ ssl-game-controller/
 
 .vscode
 
-.ruff_cache/
+.ruff_cache/# pixi environments
+.pixi/*
+!.pixi/config.toml

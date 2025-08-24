@@ -1,14 +1,9 @@
-from typing import Callable, Tuple, Optional
+from typing import Tuple
 from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
 from entities.data.command import RobotCommand
 from entities.game import Game
 from skills.src.skills import go_to_point
-from strategy.abstract_strategy import BehaviourTreeStrategy
 from strategy.abstract_strategy import AbstractStrategy
-import numpy as np
-from team_controller.src.controllers.common.robot_controller_abstract import (
-    AbstractRobotController,
-)
 
 import logging
 

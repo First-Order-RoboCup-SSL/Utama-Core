@@ -4,7 +4,7 @@ from motion_planning.src.motion_controller import MotionController
 from config.settings import ROBOT_RADIUS
 from entities.data.command import RobotCommand
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from skills.src.utils.move_utils import move, face_ball, kick, turn_on_spot
+from skills.src.utils.move_utils import kick, turn_on_spot
 from skills.src.go_to_ball import go_to_ball
 from global_utils.math_utils import angle_between_points as _angle_between_points
 import numpy as np

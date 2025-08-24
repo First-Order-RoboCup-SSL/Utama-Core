@@ -1,11 +1,10 @@
 import math
 import numpy as np
 from motion_planning.src.pid.pid import TwoDPID
-from robot_control.src.skills import go_to_ball, go_to_point
+from robot_control.src.skills import go_to_point
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from team_controller.src.controllers import RSimRobotController
 from entities.game import Game
-from robot_control.src.intent import score_goal
 from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
 from global_utils.math_utils import rotate_vector

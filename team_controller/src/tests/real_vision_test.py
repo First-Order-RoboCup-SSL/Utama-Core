@@ -1,24 +1,9 @@
 import threading
 import queue
 from entities.game import Game
-import time
 from team_controller.src.data.message_enum import MessageType
 from team_controller.src.data import VisionReceiver
 
-import numpy as np
-from typing import Tuple, Optional, Dict, Union, List
-from global_utils.math_utils import rotate_vector
-from entities.data.command import RobotCommand
-from entities.data.vision import VisionRobotData, VisionBallData
-from team_controller.src.controllers import GRSimRobotController
-from motion_planning.src.pid.pid import PID
-from config.settings import (
-    PID_PARAMS,
-)
-from config.defaults import RIGHT_START_ONE
-from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
-    RobotControl,
-)
 import logging
 
 logger = logging.getLogger(__name__)
