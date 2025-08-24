@@ -1948,7 +1948,7 @@ packages:
 - pypi: ./
   name: utama
   version: 1.0.0
-  sha256: afe97e8ab285888f17a37975984f039a3e25469d91c947258431060acadbb5eb
+  sha256: e3a4010913ca33ec814a48abde7bc5e19d2a8246e9bd2200361f2472d96574be
   requires_python: '>=3.11'
   editable: true
 - conda: https://conda.anaconda.org/conda-forge/linux-64/wayland-1.24.0-h3e06ad9_0.conda
