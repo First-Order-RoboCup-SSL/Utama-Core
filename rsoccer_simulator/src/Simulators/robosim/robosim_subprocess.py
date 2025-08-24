@@ -7,7 +7,6 @@ import sys
 import json
 import numpy as np
 import robosim
-from rsoccer_simulator.src.Entities import FrameVSS, FrameSSL, Field
 
 
 # Example: simple wrapper class
