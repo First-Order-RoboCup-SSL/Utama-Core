@@ -3,19 +3,9 @@ name = "Utama"
 channels = ["conda-forge"]
 platforms = ["linux-64"]
 version = "1.0.0"
-description = "Imperial RoboCup SSL 25 Software Algorithms Codebase."
-readme = "README.md"
-authors = [
-    "Fred Huang <fred.huang23@imperial.ac.uk>",
-    "Joel Ng <zhi-ming.ng22@imperial.ac.uk>",
-    "Isaac Yong <isaac.yong24@imperial.ac.uk>",
-    "Hamish Starling <hamish.starling22@imperial.ac.uk>",
-    "Luke Moran <luke.moran22@imperial.ac.uk>",
-    "Sadig Sadikhzada <sadig.sadikhzada23@imperial.ac.uk>",
-    "Li Han <han.li124@imperial.ac.uk>"
-]
 
 [pypi-dependencies]
+Utama = { path = ".", editable = true }
 lenses = ">=1.2.0"
 py-trees = ">=2.3.0"
 

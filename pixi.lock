@@ -154,6 +154,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/39/1c/9f32299572bce7c1d46ca98425d82f3fe6723a526f05a01b39d491cbfdf6/py_trees-2.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7e/32/a7125fb28c4261a627f999d5fb4afff25b523800faed2c30979949d6facd/pydot-4.0.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/e7/df2285f3d08fee213f2d041540fa4fc9ca6c2d44cf36d3a035bf2a8d2bcc/pyparsing-3.2.3-py3-none-any.whl
+      - pypi: ./
   robosim:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -1944,6 +1945,12 @@ packages:
   purls: []
   size: 122968
   timestamp: 1742727099393
+- pypi: ./
+  name: utama
+  version: 1.0.0
+  sha256: afe97e8ab285888f17a37975984f039a3e25469d91c947258431060acadbb5eb
+  requires_python: '>=3.11'
+  editable: true
 - conda: https://conda.anaconda.org/conda-forge/linux-64/wayland-1.24.0-h3e06ad9_0.conda
   sha256: ba673427dcd480cfa9bbc262fd04a9b1ad2ed59a159bd8f7e750d4c52282f34c
   md5: 0f2ca7906bf166247d1d760c3422cb8a
