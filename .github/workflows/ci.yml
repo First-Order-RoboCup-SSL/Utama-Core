@@ -22,9 +22,9 @@ jobs:
       - name: Run tests
         run: |
           if [[ $GITHUB_EVENT_NAME == "push" ]]; then
-            pixi run --env default -- pytest test/ --level full --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
+            pixi run -- pytest test/ --level full --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
           elif [[ $GITHUB_EVENT_NAME == "pull_request" ]]; then
-            pixi run --env default -- pytest test/ --level quick --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
+            pixi run -- pytest test/ --level quick --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
           fi
 
 
