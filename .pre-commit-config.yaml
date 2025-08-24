@@ -1,0 +1,7 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.8 # Use the same version as in your pixi/requirements
+    hooks:
+      - id: ruff
+        args: [--fix]   # auto-fix lint issues
+      - id: ruff-format
