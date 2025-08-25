@@ -93,37 +93,39 @@ class ScoreGoalStrategy(AbstractStrategy):
 
     def create_module(self) -> py_trees.behaviour.Behaviour:
         """
-        Create a module for this strategy.
-        This is used to create a module that can be used in other strategies.
-
+        Aim first; once aimed, check goal-blocked.
+        If blocked at that moment -> whole module FAILS.
+        If clear -> kick.
+        
         **Blackboard Interaction:**
-            Reads:
-                - `robot_id` (int): The ID of the robot that will perform the score goal action.
-                - `best_shot` (float): The y-coordinate of the optimal shot target on the goal line. typically from the `ShouldScoreGoal` node.
-                - `target_orientation` (float): The desired orientation angle in radians. typically from the `ShouldScoreGoal` node.
+        Reads:
+            - `robot_id` (int): The ID of the robot that will perform the score goal action.
+            - `best_shot` (float): The y-coordinate of the optimal shot target on the goal line. typically from the `ShouldScoreGoal` node.
+            - `target_orientation` (float): The desired orientation angle in radians. typically from the `ShouldScoreGoal` node.
+
         """
-        # 1. A sequence that attempts to kick only if all conditions are perfect.
-        # It needs to be re-evaluated every tick, so memory=False.
-        attempt_kick = Sequence(name="AttemptKick", memory=False)
-        attempt_kick.add_children(
-            [
-                Inverter(
-                    name="IsGoalNotBlocked?",
-                    child=GoalBlocked(name="IsGoalBlocked?"),
-                ),
-                OrenAtTargetThreshold(name="IsAimed?"),
-                KickStep(name="Kick!"),
-            ]
+
+        # 1) Aim until aligned: condition-first selector pattern
+        aim_until_aligned = py_trees.composites.Selector(name="AimUntilAligned", memory=False)
+        aim_until_aligned.add_children([
+            OrenAtTargetThreshold(name="IsAimed?"),   # SUCCESS only when within tolerance
+            TurnOnSpotStep(name="TurnToAim"),         # return RUNNING while turning; never SUCCESS
+        ])
+
+        # 2) Guard right before the kick: invert GoalBlocked so blocked => FAILURE
+        goal_clear_guard = py_trees.decorators.Inverter(
+            name="FailIfGoalBlockedNow",
+            child=GoalBlocked(name="IsGoalBlocked?")
         )
 
-        # 2. A selector that decides whether to kick (if ready) or to turn and aim.
-        # This is the core "aim and shoot" logic.
-        aim_and_shoot = Selector(name="AimAndShoot", memory=False)
-        aim_and_shoot.add_children(
-            [
-                attempt_kick,
-                TurnOnSpotStep(name="TurnToAim"),
-            ]
-        )
+        # 3) Kick
+        kick = KickStep(name="Kick!")
 
-        return aim_and_shoot
+        # Root: once aiming succeeds, check guard; if blocked now -> FAIL; else kick.
+        root = py_trees.composites.Sequence(name="ShootModule", memory=False)
+        root.add_children([
+            aim_until_aligned,   # RUNNING until aimed; SUCCESS when aimed
+            goal_clear_guard,    # if blocked now -> FAILURE (whole module fails)
+            kick,                # executes only if goal is currently clear
+        ])
+        return root

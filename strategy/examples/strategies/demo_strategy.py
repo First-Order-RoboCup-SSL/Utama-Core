@@ -117,29 +117,38 @@ class DemoStrategy(AbstractStrategy):
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete score_goal behaviour tree."""
 
-        # 1. A sequence for the main robot action: get the ball, then turn/aim/shoot.
-        go_to_ball_branch = GoToBallStrategy(self.robot_id).create_module()
+        # 1. A sequence for the main robot action: acquire the ball, then score or dribble.
         score_goal_branch = ScoreGoalStrategy(self.robot_id).create_module()
         dribble_branch = DribbleStrategy(self.robot_id).create_module()
-        
-        scroe_goal = Sequence(name="GetBallAndShoot", memory=True)
-        scroe_goal.add_children(
-            [
-                go_to_ball_branch,
-                ShouldScoreGoal(name="ShouldScoreGoal?"),
-                score_goal_branch,
-            ]
+
+        acquire_then_play = Sequence(
+            name="AcquireThenPlay",
+            memory=True,
+            children=[
+                GoToBallStrategy(self.robot_id).create_module(),
+                Selector(
+                    name="ScoreOrDribble",
+                    memory=False,
+                    children=[
+                        Sequence(
+                            name="ScoreGoalSequence",
+                            memory=True,
+                            children=[
+                                ShouldScoreGoal(name="ShouldScoreGoal?"),
+                                score_goal_branch,
+                            ]
+                        ),
+                        dribble_branch,
+                    ],
+                ),
+            ],
         )
 
         # 2. A top-level selector that stops the robot if a goal has been scored.
         # This prevents the robot from acting unnecessarily.
         goal_scored_selector = Selector(name="StopIfGoalScored", memory=True)
         goal_scored_selector.add_children(
-            [
-                GoalScored(name="IsGoalScored?"),
-                scroe_goal,
-                dribble_branch,
-            ]
+            [GoalScored(name="IsGoalScored?"), acquire_then_play]
         )
 
         # 3. The root of the tree, which initializes and then runs the main logic.

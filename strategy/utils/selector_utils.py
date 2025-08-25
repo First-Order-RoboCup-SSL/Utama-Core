@@ -89,7 +89,7 @@ class GoalScored(AbstractBehaviour):
             return py_trees.common.Status.FAILURE
 
 
-class AtDribbleToTarget(AbstractBehaviour):
+class AtDribbleTarget(AbstractBehaviour):
     """
     Checks if the controlled robot is within a tolerance of a target point.
 
@@ -116,10 +116,10 @@ class AtDribbleToTarget(AbstractBehaviour):
     
     def _dribble_to_target_decision_maker(
         self,
-        safe_distance: float = 0.5,
-        wall_margin: float = 0.35,
+        safe_distance: float = 0.7,
+        wall_margin: float = 0.4,
         wall_influence: float = 1.2,
-        corner_push_gain: float = 0.9,
+        corner_push_gain: float = 0.8,
         step_size: float = 0.6,
     ) -> Vector2D:
         """
@@ -263,9 +263,35 @@ class AtDribbleToTarget(AbstractBehaviour):
 
         # --- Stop condition near goal (keep your original behavior)
         goal_dist = np.hypot(goal_x - rx, goal_y - ry)
-        if goal_dist < 2.0:
-            return None
+        if goal_dist < 1.7:
+            # Two candidates: recenter vs backtrack
+            center_dir = nrm(vec(0, 0) - rpos)     # toward field center (y -> 0)
+            back_dir   = -g_dir                    # away from goal to create space
 
+            cand_center = clamp_to_field(rpos + center_dir * step_size)
+            cand_back   = clamp_to_field(rpos + back_dir   * step_size)
+
+            def min_wall_distance(p):
+                x, y = p
+                return min(
+                    (x + FIELD_HALF_X),
+                    (FIELD_HALF_X - x),
+                    (y + FIELD_HALF_Y),
+                    (FIELD_HALF_Y - y),
+                )
+
+            def enemy_clearance(p):
+                if nearest_enemy is None:
+                    return 5.0  # generous default if no enemy seen
+                ex, ey = nearest_enemy.p.x, nearest_enemy.p.y
+                return float(np.linalg.norm(p - vec(ex, ey)))
+
+            def score(p):
+                # Prefer options that increase wall margin and distance from the nearest enemy
+                return 0.7 * min_wall_distance(p) + 0.3 * enemy_clearance(p)
+
+            target = cand_center if score(cand_center) >= score(cand_back) else cand_back
+            return Vector2D(float(target[0]), float(target[1]))
         return Vector2D(float(target[0]), float(target[1]))
 
         

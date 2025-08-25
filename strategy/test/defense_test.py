@@ -23,9 +23,8 @@ class SetRoles(AbstractBehaviour):
 
     def update(self) -> py_trees.common.Status:
         self.blackboard.role_map = {
-            0: Role.STRIKER,
-            1: Role.DEFENDER,
-            2: Role.GOALKEEPER,
+            0: Role.DEFENDER,
+            1: Role.GOALKEEPER,
         }
         return py_trees.common.Status.SUCCESS
 
@@ -39,7 +38,7 @@ class DefendStrategy(AbstractStrategy):
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if 1 <= n_runtime_friendly <= 3 and 1 <= n_runtime_enemy <= 3:
+        if 1 <= n_runtime_friendly <= 2:
             return True
         return False
 
