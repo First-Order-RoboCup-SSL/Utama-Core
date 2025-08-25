@@ -71,6 +71,7 @@ if you see UDP packets everything is working
 7. `entities`: store classes for building field, robot, data entities etc. [**this folder should not be importing from any other folder**]
 8. `rsoccer_simulator`: Lightweight rSoccer simulator for testing [**import this folder for testing**]
 9. [TODO] `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rSoccer sim [**imports from rsoccer**]
+9. [TODO] `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rSoccer sim [**imports from rsoccer**]
 
 #### Code Writing
 
@@ -96,7 +97,13 @@ In CI we are using:
 #### Push and Commit
 
 1. Each team should be working within your own branch of the repository. Do not push to main branch on your own.
-2. Ensure that you have run `pixi run precommit-install` at least once. This ensure that the pre-commit steps are always done to clean up your code.
+2. Ensure that you have run `pixi run precommit-install` at least once. This ensure that the pre-commit steps are run on each commit to clean up your code.
+3. If you are getting a `bash: warning: setlocale: LC_ALL: cannot change locale (en_US.UTF-8)` popup on commit, run:
+```bash
+echo 'export LC_ALL=C' >> ~/.bashrc
+echo 'export LANG=C' >> ~/.bashrc
+source ~/.bashrc
+```
 
 ## Milestones
 
