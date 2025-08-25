@@ -1,6 +1,7 @@
-from typing import TypeVar, Type
-import numpy as np
 from abc import ABC, abstractmethod
+from typing import Type, TypeVar
+
+import numpy as np
 
 T = TypeVar("T", bound="VectorBase")
 

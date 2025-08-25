@@ -1,4 +1,3 @@
-[lint]
 ignore = [
     "F401",  # Module imported but unused
     "E402",  # Module level import not at top of file

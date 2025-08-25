@@ -1,7 +1,14 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.8 # Use the same version as in your pixi/requirements
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.0.261  # replace with latest stable version
     hooks:
       - id: ruff
-        args: [--fix]   # auto-fix lint issues
-      - id: ruff-format
+        args: ["--fix"]  # auto-fix issues like formatting, unused imports
+        additional_dependencies: []
+        files: \.py$
+  - repo: https://github.com/pre-commit/mirrors-isort
+    rev: v5.10.1  # replace with latest stable version
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]  # optional, use your formatting style
+        files: \.py$
