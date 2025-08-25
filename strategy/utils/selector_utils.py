@@ -89,7 +89,7 @@ class GoalScored(AbstractBehaviour):
             return py_trees.common.Status.FAILURE
 
 
-class AtTarget(AbstractBehaviour):
+class AtDribbleToTarget(AbstractBehaviour):
     """
     Checks if the controlled robot is within a tolerance of a target point.
 
