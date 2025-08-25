@@ -19,7 +19,6 @@ authors = [
 
 dependencies = [
     "numpy == 2.0.2",
-    "pygame == 2.6.1",
     "protobuf == 3.20.2",
     "shapely == 2.0.6",
     "gymnasium == 1.0.0",

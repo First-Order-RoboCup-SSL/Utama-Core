@@ -10,11 +10,11 @@ from strategy.skills.go_to_ball import GoToBallStrategy
 
 from skills.src.score_goal import score_goal
 
-
+# Alternative option to using the ScoreGoalStrategy.create_module
 class ScoreGoalStep(AbstractBehaviour):
     """A behaviour that executes a single step of the score_goal skill."""
 
-    def __init__(self, name="GoToBallStep", opp_strategy: bool = False):
+    def __init__(self, name="ScoreGoalStep", opp_strategy: bool = False):
         super().__init__(name=name, opp_strategy=opp_strategy)
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
