@@ -32,7 +32,7 @@ class TurnOnSpotStep(AbstractBehaviour):
         self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
-        # print(f"Executing TurnOnSpotStep for robot {self.blackboard.robot_id}, target orientation: {self.blackboard.target_orientation}")
+        print(f"Executing TurnOnSpotStep for robot {self.blackboard.robot_id}, target orientation: {self.blackboard.target_orientation}")
         game = self.blackboard.game.current
         env = self.blackboard.rsim_env
         if env:
@@ -97,7 +97,7 @@ class GoToBallStep(AbstractBehaviour):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
-        # print(f"Executing GoToBallStep for robot {self.blackboard.robot_id}")
+        print(f"Executing GoToBallStep for robot {self.blackboard.robot_id}")
         game = self.blackboard.game.current
         env = self.blackboard.rsim_env
         if env:
@@ -177,6 +177,9 @@ class DribbleMoveStep(AbstractBehaviour):
         game = bb.game.current
         target = bb.target_coords
         robot = game.friendly_robots[bb.robot_id]
+        
+        print(f"Executing DribbleMoveStep for robot {self.blackboard.robot_id}, target{target}")
+        
         dribble = True if dribbled_dist <= self.limit * self.stop_dribble_ratio else False
         current_point = Vector2D(robot.p.x, robot.p.y)
         if target is None:

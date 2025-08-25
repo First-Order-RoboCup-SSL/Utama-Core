@@ -3,7 +3,7 @@ from py_trees.composites import Sequence, Selector
 from py_trees.decorators import Inverter, SuccessIsRunning
 from strategy.common import AbstractStrategy
 from strategy.utils.blackboard_utils import SetBlackboardVariable
-from strategy.utils.selector_utils import HasBall, AtDribbleToTarget, DribbledEnough
+from strategy.utils.selector_utils import HasBall, AtDribbleTarget, DribbledEnough
 from strategy.utils.action_nodes import (
     GoToBallStep,
     DribbleMoveStep,
@@ -27,7 +27,7 @@ class DribbleStrategy(AbstractStrategy):
         at_target = Sequence(
                 name="AtDribbleToTarget",
                 memory=False,
-                children=[AtDribbleToTarget(self.tolerance)]
+                children=[AtDribbleTarget(self.tolerance)]
             )
 
         # Distinct 'not has ball' checks for each parent that needs one
@@ -94,7 +94,7 @@ class DribbleStrategy(AbstractStrategy):
                     memory=False,
                     children=[HasBall(), with_ball]
                 ),
-                without_ball,  # go fetch it
+                # without_ball,  # go fetch it
             ],
         )
 
@@ -116,11 +116,4 @@ class DribbleStrategy(AbstractStrategy):
         return root
 
     def create_module(self) -> py_trees.behaviour.Behaviour:
-        dribble_logic = Sequence(
-            name="DribbleModule",
-            memory=True,
-            children=[
-                self._dribble_logic(),
-            ],
-        )
-        return dribble_logic
+        return self._dribble_logic()

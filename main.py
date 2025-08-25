@@ -15,7 +15,7 @@ if __name__ == "__main__":
         mode="grsim",
         exp_friendly=3,
         exp_enemy=3,
-        opp_strategy=DefendStrategy(robot_id=0),
+        opp_strategy=DemoStrategy(robot_id=0),
     )
 
     # Run the simulation
