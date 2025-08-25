@@ -161,8 +161,8 @@ class ShouldScoreGoal(AbstractBehaviour):
         self.ball = self.blackboard.game.ball
 
         shot_quality = self._find_shot_quality()
-        if shot_quality:
-            # print(f"Shot quality SUCCESS: {shot_quality}")
+        if shot_quality > 0.5:
+            print(f"Shot quality SUCCESS: {shot_quality}")
             return py_trees.common.Status.SUCCESS
         else:
             # print(f"Shot quality FAILURE: {shot_quality}")

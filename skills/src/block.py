@@ -13,7 +13,7 @@ def block_attacker(
     friendly_robot_id: int,
     enemy_robot_id: int,
     attacker_has_ball: bool,
-    block_ratio: float = 0.1,
+    block_ratio: float = 0.35,
     max_ball_follow_dist: float = 1.0,
 ) -> RobotCommand:
     """

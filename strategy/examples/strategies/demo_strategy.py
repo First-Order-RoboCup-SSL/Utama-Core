@@ -1,4 +1,14 @@
 import py_trees
+from py_trees.composites import Sequence, Selector
+from py_trees.decorators import Inverter
+from strategy.common import AbstractStrategy, AbstractBehaviour
+from strategy.utils.blackboard_utils import SetBlackboardVariable
+from strategy.utils.selector_utils import GoalScored
+from strategy.utils.atk_utils import ShouldScoreGoal
+from strategy.skills.go_to_ball import GoToBallStrategy
+from strategy.skills.score_goal import ScoreGoalStrategy
+from strategy.skills.dribble import DribbleStrategy
+from strategy.skills.block_attacker import BlockAttackerStep
 from py_trees.composites import Selector, Sequence
 
 from config.roles import Role
@@ -115,9 +125,11 @@ class DemoStrategy(AbstractStrategy):
         """Factory function to create a complete score_goal behaviour tree."""
 
         # 1. A sequence for the main robot action: get the ball, then turn/aim/shoot.
-        get_ball_and_shoot = Sequence(name="GetBallAndShoot", memory=False)
         go_to_ball_branch = GoToBallStrategy(self.robot_id).create_module()
         score_goal_branch = ScoreGoalStrategy(self.robot_id).create_module()
+        dribble_branch = DribbleStrategy(self.robot_id).create_module()
+        
+        get_ball_and_shoot = Sequence(name="GetBallAndShoot", memory=True)
         get_ball_and_shoot.add_children(
             [
                 go_to_ball_branch,
@@ -133,6 +145,7 @@ class DemoStrategy(AbstractStrategy):
             [
                 GoalScored(name="IsGoalScored?"),
                 get_ball_and_shoot,
+                dribble_branch,
             ]
         )
 
