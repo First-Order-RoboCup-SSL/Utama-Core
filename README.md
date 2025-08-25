@@ -15,7 +15,7 @@
 1. `pixi run main` runs main.py
 2. `pixi run lint` runs the ruff checker.
 3. `pixi run test` runs the pytest over the `test/` folder
-4. `pixi run precommit` runs the precommit steps before you commit and push (mainly just ruff linting). To install precommit, run `pixi run precommit-install`.
+4. `pixi run precommit-install` downloads the precommit hook to ensure that your code is formatted correctly when you commit and push.
 
 ### Setup Autoreferee
 
@@ -62,16 +62,15 @@ if you see UDP packets everything is working
 
 #### Folder Hierarchy
 
-1. `decision_maker`: higher level control from above roles to plays and tactics [**No other folder should be importing from this folder**]
-2. `robot_control`: lower level control for individual robots spanning skills to roles [**utility folder for decision_maker**]
-3. `motion_planning`: control algorithms for movement and path planning [**utility folder for robot_control and other folders**]
-4. `team_controller`: interacing with vision (including processing) and robots [**No other folder should be importing from this folder**]
-5. `vision_processing`: data processing for vision related data [**utility folder for team_controller**]
-6. `global_utils`: store utility functions that can be shared across all folders [**this folder should not be importing from any other folder**]
-7. `entities`: store classes for building field, robot, data entities etc. [**this folder should not be importing from any other folder**]
-8. `rsoccer_simulator`: Lightweight rSoccer simulator for testing [**import this folder for testing**]
-9. [TODO] `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rSoccer sim [**imports from rsoccer**]
-9. [TODO] `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rSoccer sim [**imports from rsoccer**]
+1. `strategy`: higher level control from above roles to plays and tactics in decision-tree like abstraction
+2. `skills`: lowest level of control for individual robots
+3. `motion_planning`: control algorithms for movement and path planning
+4. `team_controller`: interfacing with vision (including processing) and robots
+5. `run`: The logic for main running loop, including refiners and predictors
+6. `global_utils`: store utility functions that can be shared across all folders
+7. `entities`: store classes for building field, robot, data entities etc.
+8. `rsoccer_simulator`: Lightweight rSoccer simulator for testing
+9. [TODO] `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rsoccer sim
 
 #### Code Writing
 
