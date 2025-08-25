@@ -129,8 +129,8 @@ class DemoStrategy(AbstractStrategy):
         score_goal_branch = ScoreGoalStrategy(self.robot_id).create_module()
         dribble_branch = DribbleStrategy(self.robot_id).create_module()
         
-        get_ball_and_shoot = Sequence(name="GetBallAndShoot", memory=True)
-        get_ball_and_shoot.add_children(
+        scroe_goal = Sequence(name="GetBallAndShoot", memory=True)
+        scroe_goal.add_children(
             [
                 go_to_ball_branch,
                 ShouldScoreGoal(name="ShouldScoreGoal?"),
@@ -140,11 +140,11 @@ class DemoStrategy(AbstractStrategy):
 
         # 2. A top-level selector that stops the robot if a goal has been scored.
         # This prevents the robot from acting unnecessarily.
-        goal_scored_selector = Selector(name="StopIfGoalScored", memory=False)
+        goal_scored_selector = Selector(name="StopIfGoalScored", memory=True)
         goal_scored_selector.add_children(
             [
                 GoalScored(name="IsGoalScored?"),
-                get_ball_and_shoot,
+                scroe_goal,
                 dribble_branch,
             ]
         )

@@ -3,7 +3,7 @@ from py_trees.composites import Sequence, Selector
 from py_trees.decorators import Inverter, SuccessIsRunning
 from strategy.common import AbstractStrategy
 from strategy.utils.blackboard_utils import SetBlackboardVariable
-from strategy.utils.selector_utils import HasBall, AtTarget, DribbledEnough
+from strategy.utils.selector_utils import HasBall, AtDribbleToTarget, DribbledEnough
 from strategy.utils.action_nodes import (
     GoToBallStep,
     DribbleMoveStep,
@@ -25,9 +25,9 @@ class DribbleStrategy(AbstractStrategy):
     
     def _dribble_logic(self) -> py_trees.behaviour.Behaviour:
         at_target = Sequence(
-                name="AtTarget",
+                name="AtDribbleToTarget",
                 memory=False,
-                children=[AtTarget(self.tolerance)]
+                children=[AtDribbleToTarget(self.tolerance)]
             )
 
         # Distinct 'not has ball' checks for each parent that needs one
@@ -43,7 +43,7 @@ class DribbleStrategy(AbstractStrategy):
         # Keep stopping until the visual check says the ball has left.
         wait_for_release = Selector(
             name="WaitForBallLeave",
-            memory=True,
+            memory=False,
             children=[
                 # Immediately succeed once the ball is visually gone.
                 not_has_ball_wait,
