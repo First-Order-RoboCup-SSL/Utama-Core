@@ -12,3 +12,5 @@ exclude = [
 
 # Enable auto-fix for fixable errors
 fixable = ["E"]  # Fix all fixable E codes (like E402)
+
+line-length = 120

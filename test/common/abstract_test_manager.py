@@ -1,14 +1,17 @@
-from team_controller.src.controllers import AbstractSimController
-from strategy.common.abstract_strategy import AbstractStrategy
-from entities.game import Game
-from enum import Enum
 from abc import ABC, abstractmethod
+from enum import Enum
+
+from entities.game import Game
+from strategy.common.abstract_strategy import AbstractStrategy
+from team_controller.src.controllers import AbstractSimController
 
 
 class TestingStatus(Enum):
     """
     Enum to represent the status of a test episode.
     """
+
+    __test__ = False  # To prevent pytest from trying to collect this as a test case
 
     SUCCESS = 0
     FAILURE = 1
