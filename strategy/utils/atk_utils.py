@@ -158,8 +158,8 @@ class ShouldScoreGoal(AbstractBehaviour):
         self.target_goal_line = self.blackboard.game.field.enemy_goal_line
 
         self.goal_x = self.target_goal_line.coords[0][0]
-        self.goal_y1 = self.target_goal_line.coords[1][1] - 0.05 # slightly inside the posts (+ve y-coord)
-        self.goal_y2 = self.target_goal_line.coords[0][1] - 0.05 # -ve y-coord
+        self.goal_y1 = self.target_goal_line.coords[1][1] - 0.05 # slightly inside the posts (-ve y-coord)
+        self.goal_y2 = self.target_goal_line.coords[0][1] - 0.05 # +ve y-coord
 
     def update(self):
         self.shooter = self.blackboard.game.friendly_robots[self.blackboard.robot_id]
