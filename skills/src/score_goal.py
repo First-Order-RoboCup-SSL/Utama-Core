@@ -32,13 +32,13 @@ def _filter_and_merge_shadows(
     valid_shadows: List[Tuple[float, float]] = []
 
     for start, end in shadows:
-        if start > goal_y1 and start < goal_y2:
-            if end > goal_y2:
-                end = goal_y2
-            valid_shadows.append((start, end))
-        elif end > goal_y1 and end < goal_y2:
+        if start <= goal_y1 and end >= goal_y2:
+            valid_shadows.append((goal_y1, goal_y2))
+        elif start <= goal_y2 and end >= goal_y1:
             if start < goal_y1:
                 start = goal_y1
+            if end > goal_y2:
+                end = goal_y2
             valid_shadows.append((start, end))
 
     valid_shadows.sort()
@@ -73,8 +73,11 @@ def _ray_casting(
         if enemy:
             if goal_multi * enemy.p.x > goal_multi * point[0]:
                 dist: float = math.dist((point[0], point[1]), (enemy.p.x, enemy.p.y))
+                if dist <= ROBOT_RADIUS:
+                    continue
                 angle_to_robot_ = point.angle_to(enemy.p)
-                alpha: float = np.arcsin(ROBOT_RADIUS / dist)
+                ratio: float = min(1.0, ROBOT_RADIUS / dist)
+                alpha: float = np.arcsin(ratio)
                 shadows.append(
                     _shadow(
                         point[0],
@@ -170,23 +173,25 @@ def _find_best_shot(
     best_clearance = -1
     for interval in open_spaces:
         s, e = interval
-        # If the interval touches a goal boundary, the best candidate is that boundary.
+        gap_length = e - s
+        # If the interval touches a goal boundary, offset slightly inside the gap
+        # using the actual gap length. Otherwise, shoot through the midpoint.
         if s == goal_y1:
-            candidate = s + 0.2 * abs(s + e) / 2
-            clearance = e - s  # Full gap length is clearance.
+            candidate = s + 0.2 * gap_length
+            clearance = gap_length
         elif e == goal_y2:
-            candidate = e - 0.2 * abs(s + e) / 2
-            clearance = e - s
+            candidate = e - 0.2 * gap_length
+            clearance = gap_length
         else:
             candidate = (s + e) / 2
-            clearance = (e - s) / 2
+            clearance = gap_length / 2
 
         if clearance > best_clearance:
             best_clearance = clearance
             best_candidate = candidate
             best_gap = interval
 
-    best_candidate = max(goal_y2, min(best_candidate, goal_y1))
+    best_candidate = max(goal_y1, min(best_candidate, goal_y2))
 
     return best_candidate, best_gap
 
@@ -213,6 +218,9 @@ def find_shot_quality(
         point, enemy_robots, goal_x, goal_y1, goal_y2
     )
 
+    if largest_gap is None:
+        return 0.0
+    
     # Compute the open angle (gap angle)
     open_angle = _angle_between_points(
         point,
