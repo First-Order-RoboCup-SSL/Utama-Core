@@ -30,32 +30,32 @@ class OrenAtTargetThreshold(AbstractBehaviour):
         - `py_trees.common.Status.FAILURE`: Otherwise.
     """
 
+    def __init__(self, name="IsAimed?", tol_deg=2.0):
+        super().__init__(name=name)
+        self.tol = np.radians(tol_deg)  # fixed tolerance in radians
+
     def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(
-            key="best_shot", access=py_trees.common.Access.READ
-        )
-        self.blackboard.register_key(
-            key="target_orientation", access=py_trees.common.Access.READ
-        )
+        self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.READ)
 
-    def initialise(self):
-        self.goal_x = self.blackboard.game.field.enemy_goal_line.coords[0][0]
+    @staticmethod
+    def _angle_error(a, b):
+        """
+        Smallest signed difference a - b, wrapped to [-pi, pi].
+        """
+        d = a - b
+        # robust wrap using atan2(sin, cos)
+        return np.atan2(np.sin(d), np.cos(d))
 
     def update(self):
-        shooter = self.blackboard.game.current.friendly_robots[self.blackboard.robot_id]
-        shot_orientation = self.blackboard.get("target_orientation")
+        bb = self.blackboard
+        shooter = bb.game.current.friendly_robots[bb.robot_id]
+        target_heading = bb.get("target_orientation")
+        current_heading = shooter.orientation
 
-        threshold = abs(shooter.orientation - shot_orientation) * abs(
-            self.goal_x - shooter.p.x
-        )
-
-        if threshold <= 0.02:
-            # print(f"Robot {self.blackboard.robot_id} is oriented correctly towards the goal.")
-            return py_trees.common.Status.SUCCESS
-        else:
-            # print(f"Robot {self.blackboard.robot_id} is NOT oriented correctly towards the goal threshold {threshold}. {shooter.orientation} vs {shot_orientation}")
-            return py_trees.common.Status.FAILURE
+        err = abs(self._angle_error(target_heading, current_heading))
+        return py_trees.common.Status.SUCCESS if err <= self.tol else py_trees.common.Status.FAILURE
+            
 
 
 class GoalBlocked(AbstractBehaviour):
@@ -99,7 +99,6 @@ class GoalBlocked(AbstractBehaviour):
 
     def _is_goal_blocked(self) -> bool:
         """
-        Determines whether the goal is blocked by enemy robots (considering them as circles).
         Determines whether the goal is blocked by enemy robots (considering them as circles).
 
         :param game: The game state containing robot and ball positions.
@@ -171,8 +170,8 @@ class ShouldScoreGoal(AbstractBehaviour):
         self.target_goal_line = self.blackboard.game.field.enemy_goal_line
 
         self.goal_x = self.target_goal_line.coords[0][0]
-        self.goal_y1 = self.target_goal_line.coords[1][1]
-        self.goal_y2 = self.target_goal_line.coords[0][1]
+        self.goal_y1 = self.target_goal_line.coords[1][1] - 0.05 # slightly inside the posts (+ve y-coord)
+        self.goal_y2 = self.target_goal_line.coords[0][1] - 0.05 # -ve y-coord
 
     def update(self):
         self.shooter = self.blackboard.game.friendly_robots[self.blackboard.robot_id]
@@ -184,7 +183,7 @@ class ShouldScoreGoal(AbstractBehaviour):
             print(f"Shot quality SUCCESS: {shot_quality}")
             return py_trees.common.Status.SUCCESS
         else:
-            # print(f"Shot quality FAILURE: {shot_quality}")
+            print(f"Shot quality FAILURE: {shot_quality}")
             return py_trees.common.Status.FAILURE
 
     def _find_shot_quality(

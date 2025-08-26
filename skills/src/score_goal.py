@@ -186,6 +186,8 @@ def _find_best_shot(
             best_candidate = candidate
             best_gap = interval
 
+    best_candidate = max(goal_y2, min(best_candidate, goal_y1))
+
     return best_candidate, best_gap
 
 

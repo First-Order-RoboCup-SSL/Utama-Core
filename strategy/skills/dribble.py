@@ -79,7 +79,7 @@ class DribbleStrategy(AbstractStrategy):
             name="GetBallSeq",
             memory=True,
             children=[
-                not_has_ball_get,   # we don't have the ball (visually)
+                not_has_ball_get,   # we don't have the ball
                 GoToBallStep(),
             ]
         )
@@ -88,13 +88,13 @@ class DribbleStrategy(AbstractStrategy):
             name="DribbleSelector",
             memory=False,
             children=[
-                at_target,  # we're done
+                at_target,
                 Sequence(
                     name="HasBallSeq",
                     memory=False,
                     children=[HasBall(), with_ball]
                 ),
-                # without_ball,  # go fetch it
+                without_ball,
             ],
         )
 
