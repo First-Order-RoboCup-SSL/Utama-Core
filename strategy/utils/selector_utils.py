@@ -151,8 +151,6 @@ class AtDribbleTarget(AbstractBehaviour):
         corner_push_gain: float = 0.8,
         step_size: float = 0.6,
     ) -> Vector2D:
-        import numpy as np
-
         game = self.blackboard.game.current
         robot = game.friendly_robots[self.blackboard.robot_id]
 
@@ -246,11 +244,17 @@ class AtDribbleTarget(AbstractBehaviour):
             rep = np.zeros(2)
             d_left, d_right, d_bottom, d_top = wall_distances(p)
 
-            def push(mag, dir_vec): return (1.0 / (mag*mag + 1e-6)) * dir_vec
-            if d_left   < wall_influence: rep += push(max(d_left, 0.05),  vec(+1,  0))
-            if d_right  < wall_influence: rep += push(max(d_right, 0.05), vec(-1,  0))
-            if d_bottom < wall_influence: rep += push(max(d_bottom, 0.05),vec( 0, +1))
-            if d_top    < wall_influence: rep += push(max(d_top, 0.05),   vec( 0, -1))
+            def push(mag, dir_vec):
+                return (1.0 / (mag * mag + 1e-6)) * dir_vec
+
+            if d_left < wall_influence:
+                rep += push(max(d_left, 0.05), vec(+1, 0))
+            if d_right < wall_influence:
+                rep += push(max(d_right, 0.05), vec(-1, 0))
+            if d_bottom < wall_influence:
+                rep += push(max(d_bottom, 0.05), vec(0, +1))
+            if d_top < wall_influence:
+                rep += push(max(d_top, 0.05), vec(0, -1))
 
             near_vert = (d_left < wall_influence) or (d_right < wall_influence)
             near_horz = (d_bottom < wall_influence) or (d_top < wall_influence)
@@ -286,10 +290,14 @@ class AtDribbleTarget(AbstractBehaviour):
         at_right_margin  = rpos[0] >= ( FIELD_HALF_X - wall_margin - eps)
         at_bottom_margin = rpos[1] <= (-FIELD_HALF_Y + wall_margin + eps)
         at_top_margin    = rpos[1] >= ( FIELD_HALF_Y - wall_margin - eps)
-        if at_left_margin   and desired_dir[0] < 0.0: desired_dir[0] = 0.0
-        if at_right_margin  and desired_dir[0] > 0.0: desired_dir[0] = 0.0
-        if at_bottom_margin and desired_dir[1] < 0.0: desired_dir[1] = 0.0
-        if at_top_margin    and desired_dir[1] > 0.0: desired_dir[1] = 0.0
+        if at_left_margin and desired_dir[0] < 0.0:
+            desired_dir[0] = 0.0
+        if at_right_margin and desired_dir[0] > 0.0:
+            desired_dir[0] = 0.0
+        if at_bottom_margin and desired_dir[1] < 0.0:
+            desired_dir[1] = 0.0
+        if at_top_margin and desired_dir[1] > 0.0:
+            desired_dir[1] = 0.0
 
         move_dir = nrm(desired_dir)
         if self.prev_move_dir is not None:
@@ -300,9 +308,11 @@ class AtDribbleTarget(AbstractBehaviour):
 
         # nudges away from pockets
         near_top_or_bottom = (FIELD_HALF_Y - abs(proposed[1])) < (wall_margin + 0.05)
-        if near_top_or_bottom: proposed[1] *= 0.7
+        if near_top_or_bottom:
+            proposed[1] *= 0.7
         near_left_or_right = (FIELD_HALF_X - abs(proposed[0])) < (wall_margin + 0.05)
-        if near_top_or_bottom and near_left_or_right: proposed *= 0.6
+        if near_top_or_bottom and near_left_or_right:
+            proposed *= 0.6
 
         # --------- stagnation & target hysteresis ---------
         # ---------- scoring helpers ----------
@@ -335,9 +345,10 @@ class AtDribbleTarget(AbstractBehaviour):
         proposed_score = score(proposed)
 
         # ---------- stagnation detection ----------
-        dist_to_proposed = float(np.linalg.norm(proposed - rpos))
-        same_as_prev = (self.prev_target is not None and
-                        float(np.linalg.norm(proposed - np.array(self.prev_target))) < 0.05)
+        same_as_prev = (
+            self.prev_target is not None
+            and float(np.linalg.norm(proposed - np.array(self.prev_target))) < 0.05
+        )
         progressed = (self.prev_target_dist is None) or \
                     (float(np.linalg.norm(np.array(self.prev_target) - rpos)) < self.prev_target_dist - 1e-3)
         self.stuck_ticks = (self.stuck_ticks + 1) if (not progressed or same_as_prev) else 0
@@ -408,10 +419,13 @@ class AtDribbleTarget(AbstractBehaviour):
                 x, y = p
                 return min((x + FIELD_HALF_X), (FIELD_HALF_X - x), (y + FIELD_HALF_Y), (FIELD_HALF_Y - y))
             def enemy_clearance(p):
-                if nearest_enemy is None: return 5.0
+                if nearest_enemy is None:
+                    return 5.0
                 ex, ey = nearest_enemy.p.x, nearest_enemy.p.y
                 return float(np.linalg.norm(p - vec(ex, ey)))
-            def score(p): return 0.7 * min_wall_distance(p) + 0.3 * enemy_clearance(p)
+
+            def score(p):
+                return 0.7 * min_wall_distance(p) + 0.3 * enemy_clearance(p)
 
             target_np = cand_center if score(cand_center) >= score(cand_back) else cand_back
 

@@ -72,12 +72,14 @@ class DefendStrategy(AbstractStrategy):
 
         # Create the SetRoles behaviour
         set_roles = SetRoles()
+        
+        # # Root sequence for the whole behaviour
+        # go_to_ball = py_trees.composites.Sequence(name="GoToBall", memory=True)
 
-        # Root sequence for the whole behaviour
-        go_to_ball = py_trees.composites.Sequence(name="GoToBall", memory=True)
-
-        # A child sequence to set the robot_id on the blackboard
-        set_robot_id = SetBlackboardVariable(name="SetTargetRobotID", variable_name="robot_id", value=self.robot_id)
+        # # A child sequence to set the robot_id on the blackboard
+        # set_robot_id = SetBlackboardVariable(
+        #     name="SetTargetRobotID", variable_name="robot_id", value=self.robot_id
+        # )
 
         # A selector to decide whether to get the ball or stop
         has_ball_selector = py_trees.composites.Selector(name="HasBallSelector", memory=False)
