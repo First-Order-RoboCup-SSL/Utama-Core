@@ -1,7 +1,8 @@
 import time
 from typing import Tuple
 
-from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
+import config.defaults as cfg
+from team_controller.src.utils import network_manager
 from config.settings import (
     ADD_Y_COORD,
     LOCAL_HOST,
@@ -19,7 +20,11 @@ from team_controller.src.generated_code.ssl_simulation_control_pb2 import (
     TeleportBall,
     TeleportRobot,
 )
-from team_controller.src.utils import network_manager
+from team_controller.src.generated_code.ssl_gc_common_pb2 import RobotId, Team
+
+from team_controller.src.controllers import (
+    AbstractSimController,
+)
 
 
 class GRSimController(AbstractSimController):
@@ -62,9 +67,9 @@ class GRSimController(AbstractSimController):
         return sim_control
 
     def reset(self):
-        for idx, x in enumerate(RIGHT_START_ONE):
+        for idx, x in enumerate(cfg.RIGHT_START_ONE):
             self.teleport_robot(True, idx, x[0], x[1], x[2])
-        for idx, x in enumerate(LEFT_START_ONE):
+        for idx, x in enumerate(cfg.LEFT_START_ONE):
             self.teleport_robot(False, idx, x[0], x[1], x[2])
         self.teleport_ball(0, 0, 0, 0)
 
