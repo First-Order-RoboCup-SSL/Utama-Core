@@ -20,7 +20,7 @@ class Field:
 
     _HALF_LENGTH = 4.5  # x value
     _HALF_WIDTH = 3  # y value
-    _HALF_GOAL_WIDTH = 0.5
+    _HALF_GOAL_WIDTH = 0.5 - 0.01 # slightly inside the posts (goal post thickness)
     _HALF_DEFENSE_AREA_LENGTH = 0.5
     _HALF_DEFENSE_AREA_WIDTH = 1
     _RIGHT_GOAL_LINE = LineString(

@@ -5,6 +5,8 @@ from strategy.common.abstract_behaviour import AbstractBehaviour
 from entities.game import Game
 from entities.data.vector import Vector2D
 
+from config.settings import ROBOT_RADIUS
+
 
 class HasBall(AbstractBehaviour):
     """
@@ -23,9 +25,9 @@ class HasBall(AbstractBehaviour):
         - `py_trees.common.Status.FAILURE`: Otherwise.
     """
         
-    def __init__(self, visual: bool = False, ball_capture_dist: float = 0.15):
+    def __init__(self, visual: bool = False, ball_capture_dist: float = 0.05):
         self.visual = visual
-        self.ball_capture_dist = float(ball_capture_dist)
+        self.ball_capture_dist = float(ball_capture_dist) + ROBOT_RADIUS
         super().__init__()
 
     def setup_(self):
@@ -151,7 +153,7 @@ class AtDribbleTarget(AbstractBehaviour):
         wall_margin: float = 0.4,
         wall_influence: float = 1.2,
         corner_push_gain: float = 0.8,
-        step_size: float = 0.6,
+        step_size: float = 0.85,
     ) -> Vector2D:
         game = self.blackboard.game.current
         robot = game.friendly_robots[self.blackboard.robot_id]

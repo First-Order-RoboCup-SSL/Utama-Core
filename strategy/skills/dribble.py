@@ -37,7 +37,7 @@ class DribbleStrategy(AbstractStrategy):
         )
         not_has_ball_get = Inverter(
             name="NotHasBall?ForGet",
-            child=HasBall(),
+            child=HasBall(visual=True),
         )
 
         # Keep stopping until the visual check says the ball has left.
