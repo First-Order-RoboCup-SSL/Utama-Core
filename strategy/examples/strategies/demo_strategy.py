@@ -139,7 +139,7 @@ class DemoStrategy(AbstractStrategy):
                     children=[
                         Sequence(
                             name="ScoreGoalSequence",
-                            memory=True,
+                            memory=False,
                             children=[
                                 ShouldScoreGoal(name="ShouldScoreGoal?"),
                                 score_goal_branch,
