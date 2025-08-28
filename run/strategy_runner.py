@@ -11,6 +11,7 @@ from entities.game import GameHistory, Game
 from entities.data.raw_vision import RawVisionData
 from entities.data.command import RobotCommand
 from motion_planning.src.motion_controller import MotionController
+from replay.replay_writer import ReplayWriter, ReplayWriterConfig
 
 from global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
@@ -65,6 +66,7 @@ class StrategyRunner:
         exp_friendly (int): Expected number of friendly robots.
         exp_enemy (int): Expected number of enemy robots.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
+        replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
     """
 
     def __init__(
@@ -76,6 +78,7 @@ class StrategyRunner:
         exp_friendly: int,
         exp_enemy: int,
         opp_strategy: Optional[AbstractStrategy] = None,
+        replay_writer_config: Optional[ReplayWriterConfig] = None,
     ):
         self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow
@@ -84,6 +87,9 @@ class StrategyRunner:
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
         self.opp_strategy = opp_strategy
+        self.replay_writer = (
+            ReplayWriter(replay_writer_config) if replay_writer_config else None
+        )
         self.logger = logging.getLogger(__name__)
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
@@ -220,18 +226,18 @@ class StrategyRunner:
         """
         Assert the expected number of robots.
         """
-        assert self.exp_friendly <= MAX_ROBOTS, (
-            "Expected number of friendly robots is too high."
-        )
-        assert self.exp_enemy <= MAX_ROBOTS, (
-            "Expected number of enemy robots is too high."
-        )
+        assert (
+            self.exp_friendly <= MAX_ROBOTS
+        ), "Expected number of friendly robots is too high."
+        assert (
+            self.exp_enemy <= MAX_ROBOTS
+        ), "Expected number of enemy robots is too high."
         assert self.exp_friendly >= 1, "Expected number of friendly robots is too low."
         assert self.exp_enemy >= 1, "Expected number of enemy robots is too low."
 
-        assert self.my_strategy.assert_exp_robots(self.exp_friendly, self.exp_enemy), (
-            "Expected number of robots at runtime does not match my strategy."
-        )
+        assert self.my_strategy.assert_exp_robots(
+            self.exp_friendly, self.exp_enemy
+        ), "Expected number of robots at runtime does not match my strategy."
         if self.opp_strategy:
             assert self.opp_strategy.assert_exp_robots(
                 self.exp_enemy, self.exp_friendly
@@ -406,10 +412,14 @@ class StrategyRunner:
     def run(self):
         if self.rsim_env:
             self.rsim_env.render_mode = "human"
-        while True:
-            self._run_step()
-            # terminal next line print
-            # print("\r")
+        try:
+            while True:
+                self._run_step()
+        except KeyboardInterrupt:
+            self.logger.info("Terminating...")
+        finally:
+            if self.replay_writer:
+                self.replay_writer.close()
 
     def _run_step(self):
         start_time = time.time()
