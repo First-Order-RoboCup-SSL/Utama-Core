@@ -1,37 +1,39 @@
 import logging
-from dataclasses import dataclass
 import pickle
-from typing import IO, Optional
+import warnings
+from dataclasses import dataclass
+from itertools import count
+
+from config.settings import REPLAY_BASE_PATH
+from entities.game.game import Game
 
 
 @dataclass(kw_only=True)
 class ReplayWriterConfig:
-    """
-    Configuration settings for initializing a ReplayWriter.
+    """Configuration settings for initializing a ReplayWriter.
 
     Attributes:
         replay_name (str): The name of the replay file or session to be written.
         is_my_perspective (bool, optional): Whether to record the replay from
             the user's perspective or opponent's. Defaults to True.
+        overwrite_existing (bool, optional): Whether to overwrite existing replay with same name. Defaults to False.
     """
 
     replay_name: str
     is_my_perspective: bool = True
+    overwrite_existing: bool = False
 
 
-class ReplayWriter:
-    def __init__(self, replay_writer_config: ReplayWriterConfig):
-        self.replay_name = replay_writer_config.replay_name
-        self.is_my_perspective = replay_writer_config.is_my_perspective
-        self.logger = logging.getLogger(__name__)
+def write_replay(replay_configs: ReplayWriterConfig, game_to_write: Game):
+    replay_path = REPLAY_BASE_PATH / f"{replay_configs.replay_name}.pkl"
 
-        self.logger.info(f"Replay recording enabled. Saving to {replay_name}")
-        self.replay_file: Optional[IO] = None
+    if not replay_configs.overwrite_existing and replay_path.exists():
+        for i in count(1):
+            candidate = REPLAY_BASE_PATH / f"{replay_configs.replay_name}_{i}.pkl"
+            if not candidate.exists():
+                replay_path = candidate
+                warnings.warn(f"Replay file already exists. Saving as {replay_path.name}")
+                break
 
-    def write_frame(self):
-        pass``
-
-    def close(self):
-        if self.replay_file:
-            self.replay_file.close()
-        self.logger.info(f"Replay saved to {self.replay_name}")
+    with open(replay_path, "wb") as f:
+        pickle.dump(game_to_write, f)

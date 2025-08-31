@@ -1,6 +1,7 @@
 ignore = [
     "F401",  # Module imported but unused
     "E402",  # Module level import not at top of file
+    "E501",  # Line too long error
 ]
 
 # Optionally, exclude certain files or directories
@@ -12,5 +13,3 @@ exclude = [
 
 # Enable auto-fix for fixable errors
 fixable = ["E"]  # Fix all fixable E codes (like E402)
-
-line-length = 120
