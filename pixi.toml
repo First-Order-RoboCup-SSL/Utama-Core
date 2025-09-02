@@ -33,6 +33,7 @@ numpy = "<=2.0.2"
 lint = "ruff check ."
 test = "pytest test/"
 main = "python -m main"
+replay = "python -m replay.replay_reader"
 precommit-install = "pre-commit install && pixi run pre-commit install --hook-type pre-commit"
 precommit-uninstall = "pre-commit uninstall"
 
