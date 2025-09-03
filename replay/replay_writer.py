@@ -3,9 +3,11 @@ import pickle
 import warnings
 from dataclasses import dataclass
 from itertools import count
+from typing import IO, Optional
 
 from config.settings import REPLAY_BASE_PATH
-from entities.game.game import Game
+from entities.game import GameFrame
+from replay.entities import ReplayMetadata
 
 
 @dataclass(kw_only=True)
@@ -24,16 +26,56 @@ class ReplayWriterConfig:
     overwrite_existing: bool = False
 
 
-def write_replay(replay_configs: ReplayWriterConfig, game_to_write: Game):
-    replay_path = REPLAY_BASE_PATH / f"{replay_configs.replay_name}.pkl"
+class ReplayWriter:
+    def __init__(
+        self,
+        replay_configs: ReplayWriterConfig,
+        my_team_is_yellow: bool,
+        exp_friendly: int,
+        exp_enemy: int,
+    ):
+        self.logger = logging.getLogger(__name__)
+        self.replay_configs = replay_configs
+        self.file: Optional[IO] = self.create_file(
+            replay_configs=replay_configs,
+            replay_metadata=ReplayMetadata(
+                my_team_is_yellow=my_team_is_yellow,
+                exp_friendly=exp_friendly,
+                exp_enemy=exp_enemy,
+            ),
+        )
 
-    if not replay_configs.overwrite_existing and replay_path.exists():
-        for i in count(1):
-            candidate = REPLAY_BASE_PATH / f"{replay_configs.replay_name}_{i}.pkl"
-            if not candidate.exists():
-                replay_path = candidate
-                warnings.warn(f"Replay file already exists. Saving as {replay_path.name}")
-                break
+    def create_file(self, replay_configs: ReplayWriterConfig, replay_metadata: ReplayMetadata):
+        replay_path = REPLAY_BASE_PATH / f"{replay_configs.replay_name}.pkl"
+        if replay_path.exists():
+            if replay_configs.overwrite_existing:
+                open(replay_path, "wb").close()  # clear content
 
-    with open(replay_path, "wb") as f:
-        pickle.dump(game_to_write, f)
+            else:
+                for i in count(1):
+                    candidate = REPLAY_BASE_PATH / f"{replay_configs.replay_name}_{i}.pkl"
+                    if not candidate.exists():
+                        replay_path = candidate
+                        warnings.warn(f"Replay file already exists. Saving as {replay_path.name}")
+                        break
+
+        file = open(replay_path, "ab")
+        pickle.dump(replay_metadata, file)
+        file.flush()
+        return file
+
+    def write_frame(self, frame: GameFrame):
+        """Write a single game frame to the replay file."""
+        if not self.file:
+            self.logger.error("Replay file is not initialized.")
+            return
+        pickle.dump(frame, self.file)
+        self.file.flush()
+
+    def close(self):
+        """Close the replay file."""
+        if self.file:
+            self.file.close()
+            self.file = None
+        else:
+            self.logger.error("Replay file is not initialized.")

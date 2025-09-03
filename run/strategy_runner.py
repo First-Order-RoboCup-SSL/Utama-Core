@@ -17,7 +17,7 @@ from global_utils.mapping_utils import (
     map_left_right_to_colors,
 )
 from motion_planning.src.motion_controller import MotionController
-from replay.replay_writer import ReplayWriterConfig, write_replay
+from replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from run import GameGater
 from run.receivers import VisionReceiver
@@ -79,7 +79,11 @@ class StrategyRunner:
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
         self.opp_strategy = opp_strategy
-        self.replay_writer_config = replay_writer_config
+        self.replay_writer = (
+            ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
+            if replay_writer_config
+            else None
+        )
         self.logger = logging.getLogger(__name__)
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
@@ -376,7 +380,8 @@ class StrategyRunner:
         except KeyboardInterrupt:
             self.logger.info("Terminating...")
         finally:
-            self._write_replay()
+            if self.replay_writer:
+                self.replay_writer.close()
 
         return passed
 
@@ -389,17 +394,8 @@ class StrategyRunner:
         except KeyboardInterrupt:
             self.logger.info("Terminating...")
         finally:
-            self._write_replay()
-
-    def _write_replay(self):
-        if self.replay_writer_config is None:
-            return
-
-        if self.replay_writer_config.is_my_perspective:
-            game_to_write = self.my_game
-        else:
-            game_to_write = self.opp_game
-        write_replay(self.replay_writer_config, game_to_write)
+            if self.replay_writer:
+                self.replay_writer.close()
 
     def _run_step(self):
         start_time = time.time()
@@ -468,8 +464,13 @@ class StrategyRunner:
         # Store updated game frame
         if running_opp:
             self.opp_current_game_frame = new_game_frame
+            # write frame to replay buffer
+            if self.replay_writer and not self.replay_writer.replay_configs.is_my_perspective:
+                self.replay_writer.write_frame(new_game_frame)
         else:
             self.my_current_game_frame = new_game_frame
+            if self.replay_writer and self.replay_writer.replay_configs.is_my_perspective:
+                self.replay_writer.write_frame(new_game_frame)
 
         game.add_game(new_game_frame)
         strategy.step(game)
