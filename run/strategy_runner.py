@@ -464,13 +464,12 @@ class StrategyRunner:
         # Store updated game frame
         if running_opp:
             self.opp_current_game_frame = new_game_frame
-            # write frame to replay buffer
-            if self.replay_writer and not self.replay_writer.replay_configs.is_my_perspective:
-                self.replay_writer.write_frame(new_game_frame)
         else:
             self.my_current_game_frame = new_game_frame
-            if self.replay_writer and self.replay_writer.replay_configs.is_my_perspective:
-                self.replay_writer.write_frame(new_game_frame)
+
+        # write to replay
+        if self.replay_writer and (running_opp != self.replay_writer.replay_configs.is_my_perspective):
+            self.replay_writer.write_frame(new_game_frame)
 
         game.add_game(new_game_frame)
         strategy.step(game)
