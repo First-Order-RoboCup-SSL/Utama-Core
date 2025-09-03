@@ -63,8 +63,13 @@ class ReplayWriter:
                         break
 
         file = open(replay_path, "ab")
-        pickle.dump(replay_metadata, file)
-        file.flush()
+        try:
+            pickle.dump(replay_metadata, file)
+            file.flush()
+        except Exception as e:
+            self.logger.error(f"Failed to write replay metadata to file {replay_path}: {e}")
+            file.close()
+            return None
         return file
 
     def write_frame(self, frame: GameFrame):
