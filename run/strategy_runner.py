@@ -139,12 +139,6 @@ class StrategyRunner:
             SSLBaseEnv: The RSim environment (Otherwise None).
             AbstractSimController: The simulation controller for the environment (Otherwise None).
         """
-
-        # Temporary placeholder values when not running rsim
-        if self.opp_strategy:
-            self.opp_strategy.load_rsim_env(None)
-        self.my_strategy.load_rsim_env(None)
-
         if self.mode == "rsim":
             n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
             rsim_env = SSLStandardEnv(n_robots_yellow=n_yellow, n_robots_blue=n_blue, render_mode=None)
@@ -438,7 +432,13 @@ class StrategyRunner:
         vision_frames: List[RawVisionData],
         running_opp: bool,
     ):
-        """Step the game for the robot controller and strategy."""
+        """Step the game for the robot controller and strategy.
+
+        Args:
+            iter_start_time (float): The start time of the iteration.
+            vision_frames (List[RawVisionData]): The vision frames.
+            running_opp (bool): Whether to run the opponent strategy.
+        """
         # Select which side to step
         if running_opp:
             strategy = self.opp_strategy

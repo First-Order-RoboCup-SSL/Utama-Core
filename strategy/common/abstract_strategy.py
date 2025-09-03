@@ -128,6 +128,7 @@ class AbstractStrategy(ABC):
         blackboard.role_map = {}
 
         blackboard.register_key(key="rsim_env", access=py_trees.common.Access.WRITE)
+        blackboard.rsim_env = None  # set to None by default
         blackboard.register_key(key="motion_controller", access=py_trees.common.Access.WRITE)
 
         blackboard: BaseBlackboard = cast(BaseBlackboard, blackboard)
