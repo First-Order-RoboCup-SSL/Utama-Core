@@ -47,6 +47,9 @@ class ReplayWriter:
 
     def create_file(self, replay_configs: ReplayWriterConfig, replay_metadata: ReplayMetadata):
         replay_path = REPLAY_BASE_PATH / f"{replay_configs.replay_name}.pkl"
+
+        replay_path.parent.mkdir(parents=True, exist_ok=True)
+
         if replay_path.exists():
             if replay_configs.overwrite_existing:
                 open(replay_path, "wb").close()  # clear content
