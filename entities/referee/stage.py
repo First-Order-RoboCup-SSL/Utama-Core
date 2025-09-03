@@ -2,9 +2,7 @@ from enum import Enum
 
 
 class Stage(Enum):
-    """
-    Enum representing a game stage.
-    """
+    """Enum representing a game stage."""
 
     NORMAL_FIRST_HALF_PRE = 0
     NORMAL_FIRST_HALF = 1

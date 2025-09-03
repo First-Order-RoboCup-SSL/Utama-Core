@@ -1,6 +1,6 @@
+from entities.game.current_game_frame import CurrentGameFrame
 from entities.game.game_frame import GameFrame
 from entities.game.game_history import GameHistory
-from entities.game.current_game_frame import CurrentGameFrame
 
 
 class Game:

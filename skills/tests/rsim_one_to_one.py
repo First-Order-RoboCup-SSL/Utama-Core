@@ -1,15 +1,16 @@
 import logging
-import random
 import math
+import random
 
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
+from robot_control.src.intent import score_goal
+from robot_control.src.skills import face_ball, go_to_point
 
 # Imports from other scripts or modules within the same project
 from robot_control.src.tests.utils import setup_pvp
+
+from entities.game import Game
 from motion_planning.src.pid.pid import get_rsim_pids
-from robot_control.src.skills import face_ball, go_to_point
-from robot_control.src.intent import score_goal
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +101,8 @@ def improved_block_goal_and_attacker(
 
 
 def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
-    """
-    A 1v1 scenario with dynamic switching of attacker/defender roles:
+    """A 1v1 scenario with dynamic switching of attacker/defender roles:
+
     - If a team picks up the ball, it becomes the attacker.
     - The other team defends.
     """
@@ -270,9 +271,7 @@ def test_ultimate_one_on_one(defender_is_yellow: bool, headless: bool):
         )
 
     if not goal_scored:
-        logger.info(
-            "No goal was scored! Defender(s) successfully prevented scoring for all iterations."
-        )
+        logger.info("No goal was scored! Defender(s) successfully prevented scoring for all iterations.")
 
 
 if __name__ == "__main__":

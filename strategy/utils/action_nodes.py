@@ -1,12 +1,12 @@
 import py_trees
-from skills.src.utils.move_utils import turn_on_spot, kick
+
 from skills.src.go_to_ball import go_to_ball
+from skills.src.utils.move_utils import kick, turn_on_spot
 from strategy.common import AbstractBehaviour
 
 
 class TurnOnSpotStep(AbstractBehaviour):
-    """
-    Executes a single command step to turn a robot on the spot.
+    """Executes a single command step to turn a robot on the spot.
 
     This behavior is an action that calls the `turn_on_spot` skill to generate
     a command for the specified robot. It writes this command to the blackboard
@@ -23,9 +23,7 @@ class TurnOnSpotStep(AbstractBehaviour):
 
     def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(
-            key="target_orientation", access=py_trees.common.Access.READ
-        )
+        self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
         # print(f"Executing TurnOnSpotStep for robot {self.blackboard.robot_id}, target orientation: {self.blackboard.target_orientation}")
@@ -45,8 +43,7 @@ class TurnOnSpotStep(AbstractBehaviour):
 
 
 class KickStep(AbstractBehaviour):
-    """
-    Executes a single, instantaneous kick command for a specified robot.
+    """Executes a single, instantaneous kick command for a specified robot.
 
     This behavior is an action that issues a kick command. As kicking is
     considered an immediate action, this behavior generates the command,
@@ -62,9 +59,7 @@ class KickStep(AbstractBehaviour):
 
     def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(
-            key="target_orientation", access=py_trees.common.Access.READ
-        )
+        self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
         # print(f"Executing KickStep for robot {self.blackboard.robot_id}")
@@ -77,8 +72,7 @@ class KickStep(AbstractBehaviour):
 
 
 class GoToBallStep(AbstractBehaviour):
-    """
-    Executes a command step to move a robot towards the ball.
+    """Executes a command step to move a robot towards the ball.
 
     This behavior is an action that calls the `go_to_ball` skill to generate
     a movement command. It writes this command to the blackboard and

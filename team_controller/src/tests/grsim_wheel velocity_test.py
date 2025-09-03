@@ -1,17 +1,18 @@
-import threading
+import logging
 import queue
-from entities.game import Game
-from team_controller.src.data.message_enum import MessageType
-from team_controller.src.data import VisionReceiver
+import threading
+from typing import List
 
 import numpy as np
-from typing import List
+
 from entities.data.command import RobotVelCommand
+from entities.game import Game
 from team_controller.src.controllers import GRSimRobotController
+from team_controller.src.data import VisionReceiver
+from team_controller.src.data.message_enum import MessageType
 from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
     RobotControl,
 )
-import logging
 
 logger = logging.getLogger(__name__)
 sim_robot_controller = GRSimRobotController(is_team_yellow=True)
@@ -22,9 +23,7 @@ def inverse_kinematics(
     left_vel: float,
     angular_vel: float,
 ) -> List[float]:
-    """
-    Calculate the wheel velocities for a robot given the desired forward, left, and angular velocities.
-    """
+    """Calculate the wheel velocities for a robot given the desired forward, left, and angular velocities."""
     # Example usage
     wheel_angles = [
         np.deg2rad(57.3),

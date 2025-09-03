@@ -1,27 +1,23 @@
-import time
-from typing import Deque, List
-from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
-from team_controller.src.utils import network_manager
-from config.settings import MULTICAST_GROUP, VISION_PORT
-from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
 import logging
-
+import time
 from collections import deque
+from typing import Deque, List
+
+from config.settings import MULTICAST_GROUP, VISION_PORT
+from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
+from team_controller.src.generated_code.ssl_vision_wrapper_pb2 import SSL_WrapperPacket
+from team_controller.src.utils import network_manager
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG)
 
 
 class VisionReceiver:
-    """
-    Receives protobuf data from SSL Vision over the network, formats into RawData types and passes it over to the
-    VisionProcessor.
-    """
+    """Receives protobuf data from SSL Vision over the network, formats into RawData types and passes it over to the
+    VisionProcessor."""
 
     def __init__(self, vision_buffers: List[Deque[RawVisionData]]):
-        self.net = network_manager.NetworkManager(
-            address=(MULTICAST_GROUP, VISION_PORT), bind_socket=True
-        )
+        self.net = network_manager.NetworkManager(address=(MULTICAST_GROUP, VISION_PORT), bind_socket=True)
         self.vision_buffers = vision_buffers
         self.packet_timestamps = deque()
         self.fps_print_interval = 1  # seconds
@@ -33,17 +29,13 @@ class VisionReceiver:
         new_raw_vis_data = self._process_packet(detection_frame)
         if self.vision_buffers[new_raw_vis_data.camera_id]:
             # Only add this if it is more recent
-            if (
-                new_raw_vis_data.ts
-                > self.vision_buffers[new_raw_vis_data.camera_id][0].ts
-            ):
+            if new_raw_vis_data.ts > self.vision_buffers[new_raw_vis_data.camera_id][0].ts:
                 self.vision_buffers[new_raw_vis_data.camera_id].append(new_raw_vis_data)
         else:
             self.vision_buffers[new_raw_vis_data.camera_id].append(new_raw_vis_data)
 
     def pull_game_data(self, fps=False) -> None:
-        """
-        Continuously receives vision data packets and updates the internal data structures for the game state.
+        """Continuously receives vision data packets and updates the internal data structures for the game state.
 
         This method runs indefinitely and should be started in a separate thread.
         """
@@ -67,10 +59,7 @@ class VisionReceiver:
                     # --- FPS Tracking ---
                     self.packet_timestamps.append(recv_time)
                     # Remove timestamps older than 1 second
-                    while (
-                        self.packet_timestamps
-                        and self.packet_timestamps[0] < recv_time - 1.0
-                    ):
+                    while self.packet_timestamps and self.packet_timestamps[0] < recv_time - 1.0:
                         self.packet_timestamps.popleft()
 
                     if recv_time - self.last_fps_print_time >= self.fps_print_interval:
@@ -79,9 +68,7 @@ class VisionReceiver:
                         print(f"Current Vision FPS: {fps / cameras}")
                         self.last_fps_print_time = recv_time
 
-    def _process_packet(
-        self, detection_frame: object
-    ):  # detection_frame = protobuf packet detection
+    def _process_packet(self, detection_frame: object):  # detection_frame = protobuf packet detection
         return RawVisionData(
             ts=detection_frame.t_capture,
             yellow_robots=[
@@ -105,9 +92,7 @@ class VisionReceiver:
                 for robot in detection_frame.robots_blue
             ],
             balls=[
-                RawBallData(
-                    ball.x / 1000, ball.y / 1000, ball.z / 1000, ball.confidence
-                )
+                RawBallData(ball.x / 1000, ball.y / 1000, ball.z / 1000, ball.confidence)
                 for ball in detection_frame.balls
             ],
             camera_id=detection_frame.camera_id,
@@ -120,10 +105,7 @@ class VisionReceiver:
             f"T_CAPTURE={detection.t_capture:.4f}s"
             f" T_SENT={detection.t_sent:.4f}s"
         )
-        logger.debug(
-            f"SSL-Vision Processing Latency: "
-            f"{(detection.t_sent - detection.t_capture) * 1000.0:.3f}ms"
-        )
+        logger.debug(f"SSL-Vision Processing Latency: " f"{(detection.t_sent - detection.t_capture) * 1000.0:.3f}ms")
         logger.debug(f"Our Processing Latency: {latency * 1000.0:.3f}ms")
 
     def _count_objects_detected(self, vision_packet_detect):

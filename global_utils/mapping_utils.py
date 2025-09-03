@@ -3,11 +3,8 @@ from typing import Tuple, TypeVar
 T = TypeVar("T")  # generic type variable
 
 
-def map_friendly_enemy_to_colors(
-    my_team_is_yellow: bool, friendly_item: T, enemy_item: T
-) -> Tuple[T, T]:
-    """
-    Map friendly and enemy items to their respective colors based on my team color.
+def map_friendly_enemy_to_colors(my_team_is_yellow: bool, friendly_item: T, enemy_item: T) -> Tuple[T, T]:
+    """Map friendly and enemy items to their respective colors based on my team color.
 
     Args:
         my_team_is_yellow (bool): True if the team is yellow, False if blue.
@@ -26,11 +23,8 @@ def map_friendly_enemy_to_colors(
     return yellow_item, blue_item
 
 
-def map_left_right_to_colors(
-    my_team_is_yellow: bool, my_team_is_right: bool, right_item: T, left_item: T
-):
-    """
-    Map left and right items to their respective colors based on my team color and position.
+def map_left_right_to_colors(my_team_is_yellow: bool, my_team_is_right: bool, right_item: T, left_item: T):
+    """Map left and right items to their respective colors based on my team color and position.
 
     Args:
         my_team_is_yellow (bool): True if the team is yellow, False if blue.

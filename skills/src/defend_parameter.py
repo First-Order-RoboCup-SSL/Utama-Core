@@ -1,9 +1,10 @@
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from entities.data.command import RobotCommand
-from motion_planning.src.motion_controller import MotionController
 from typing import Optional
 
+from entities.data.command import RobotCommand
+from entities.data.vector import Vector2D
+from entities.game import Game
+from motion_planning.src.motion_controller import MotionController
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from skills.src.go_to_point import go_to_point
 from skills.src.utils.defense_utils import (
     align_defenders,
@@ -11,7 +12,6 @@ from skills.src.utils.defense_utils import (
     to_defense_parametric,
     velocity_to_orientation,
 )
-from entities.data.vector import Vector2D
 
 
 def defend_parameter(
@@ -38,9 +38,7 @@ def defend_parameter(
 
     real_def_pos = game.friendly_robots[defender_id].p
     current_def_parametric = to_defense_parametric(game, real_def_pos)
-    target = align_defenders(
-        game, current_def_parametric, target_tracking_coord, orientation, env
-    )
+    target = align_defenders(game, current_def_parametric, target_tracking_coord, orientation, env)
     cmd = go_to_point(
         game,
         motion_controller,

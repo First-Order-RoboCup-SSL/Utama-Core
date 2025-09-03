@@ -1,19 +1,20 @@
 import py_trees
-from py_trees.composites import Sequence, Selector
-from strategy.common import AbstractStrategy, AbstractBehaviour
-from strategy.utils.blackboard_utils import SetBlackboardVariable
-from strategy.utils.selector_utils import GoalScored
-from strategy.utils.atk_utils import ShouldScoreGoal
-from strategy.skills.go_to_ball import GoToBallStrategy
-from strategy.skills.score_goal import ScoreGoalStrategy
-from strategy.skills.block_attacker import BlockAttackerStep
-from entities.data.object import TeamType
+from py_trees.composites import Selector, Sequence
+
 from config.roles import Role
 from config.tactics import Tactic
+from entities.data.object import TeamType
+from entities.game import Game
 from skills.src.defend_parameter import defend_parameter
 from skills.src.goalkeep import goalkeep
 from skills.src.utils.move_utils import empty_command
-from entities.game import Game
+from strategy.common import AbstractBehaviour, AbstractStrategy
+from strategy.skills.block_attacker import BlockAttackerStep
+from strategy.skills.go_to_ball import GoToBallStrategy
+from strategy.skills.score_goal import ScoreGoalStrategy
+from strategy.utils.atk_utils import ShouldScoreGoal
+from strategy.utils.blackboard_utils import SetBlackboardVariable
+from strategy.utils.selector_utils import GoalScored
 
 
 class SetRoles(AbstractBehaviour):
@@ -21,9 +22,7 @@ class SetRoles(AbstractBehaviour):
 
     def setup_(self):
         # Register the role_map key in the blackboard
-        self.blackboard.register_key(
-            key="role_map", access=py_trees.common.Access.WRITE
-        )
+        self.blackboard.register_key(key="role_map", access=py_trees.common.Access.WRITE)
 
     def update(self) -> py_trees.common.Status:
         self.blackboard.role_map = {
@@ -86,8 +85,8 @@ class BlockAttackerPlay(AbstractBehaviour):
 
 class DemoStrategy(AbstractStrategy):
     def __init__(self, robot_id: int):
-        """
-        Initializes the DemoStrategy with a specific robot ID.
+        """Initializes the DemoStrategy with a specific robot ID.
+
         :param robot_id: The ID of the robot this strategy will control.
         """
         self.robot_id = robot_id

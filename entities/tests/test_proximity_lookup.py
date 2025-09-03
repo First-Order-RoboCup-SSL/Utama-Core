@@ -1,7 +1,8 @@
 import numpy as np
+
+from entities.data.vector import Vector2D
 from entities.game.proximity_lookup import ProximityLookup
 from entities.game.robot import Robot
-from entities.data.vector import Vector2D
 
 
 def test_proximity_lookup_handles_none_inputs():

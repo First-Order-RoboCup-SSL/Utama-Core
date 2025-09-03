@@ -1,37 +1,39 @@
 import logging
-import random
-import numpy as np
-import threading
 import queue
+import random
+import threading
 import time
 from typing import Tuple
 
+import numpy as np
+from robot_control.src.intent import PassBall, defend, score_goal
+
+# Imports from other scripts or modules within the same project
+from robot_control.src.skills import (
+    empty_command,
+    go_to_ball,
+    go_to_point,
+    goalkeep,
+    man_mark,
+)
+from robot_control.src.utils.pass_quality_utils import (
+    find_best_receiver_position,
+    find_pass_quality,
+)
+from robot_control.src.utils.shooting_utils import find_shot_quality
+
 from entities.game import Game
+from global_utils.math_utils import distance
+from motion_planning.src.pid.pid import get_grsim_pids
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.grsim_robot_controller import (
     GRSimRobotController,
 )
-from motion_planning.src.pid.pid import get_grsim_pids
 from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
 
 # from robot_control.src.high_level_skills import DribbleToTarget
 
-# Imports from other scripts or modules within the same project
-from robot_control.src.skills import (
-    go_to_point,
-    go_to_ball,
-    empty_command,
-    goalkeep,
-    man_mark,
-)
-from robot_control.src.intent import defend, score_goal, PassBall
-from global_utils.math_utils import distance
-from robot_control.src.utils.pass_quality_utils import (
-    find_pass_quality,
-    find_best_receiver_position,
-)
-from robot_control.src.utils.shooting_utils import find_shot_quality
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +51,7 @@ BALL_A_MAGNITUDE = -0.3
 
 
 def ball_out_of_bounds(ball_x: float, ball_y: float) -> bool:
-    """
-    Check if the ball is out of bounds.
-    """
+    """Check if the ball is out of bounds."""
     return abs(ball_x) > 4.5 or abs(ball_y) > 3
 
 
@@ -61,8 +61,8 @@ def intercept_ball(
     ball_vel: Tuple[float, float],
     robot_speed: float,
 ) -> Tuple[float, float]:
-    """
-    Simple function to calculate intercept position for a robot.
+    """Simple function to calculate intercept position for a robot.
+
     Assumes the ball is moving in a straight line, and we find the point where the receiver should go.
     """
     # Calculate the time it will take for the robot to reach the ball (simplified)
@@ -85,9 +85,7 @@ def intercept_ball(
 
 
 def attacker_strategy(game: Game, stop_event: threading.Event):
-    """
-    Worker function for the attacking strategy.
-    """
+    """Worker function for the attacking strategy."""
     sim_robot_controller = GRSimRobotController(game.my_team_is_yellow)
     attacker_is_yellow = game.my_team_is_yellow
     message_queue = queue.SimpleQueue()
@@ -152,9 +150,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
 
             friendly_robots, enemy_robots, balls = latest_frame
 
-            enemy_velocities = game.get_robots_velocity(attacker_is_yellow) or [
-                (0.0, 0.0)
-            ] * len(enemy_robots)
+            enemy_velocities = game.get_robots_velocity(attacker_is_yellow) or [(0.0, 0.0)] * len(enemy_robots)
 
             if enemy_velocities is None or all(v is None for v in enemy_velocities):
                 enemy_velocities = [(0.0, 0.0)] * len(enemy_robots)
@@ -179,9 +175,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                 print("CASEEEEE 1")
                 print("No one has the ball, trying to intercept")
                 best_interceptor = None
-                best_intercept_score = float(
-                    "inf"
-                )  # Lower is better (closer to ball path)
+                best_intercept_score = float("inf")  # Lower is better (closer to ball path)
                 for rid in friendly_robot_ids:
                     ball_pos = ball_data.x, ball_data.y
                     robot = friendly_robots[rid]
@@ -192,11 +186,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                     )  # Use appropriate robot speed
 
                     # Calculate how close the robot is to the intercept position (lower score is better)
-                    intercept_score = (
-                        distance(robot, intercept_pos)
-                        if intercept_pos is not None
-                        else float("inf")
-                    )
+                    intercept_score = distance(robot, intercept_pos) if intercept_pos is not None else float("inf")
 
                     if intercept_score < best_intercept_score:
                         best_interceptor = rid
@@ -231,14 +221,10 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                     if rid == best_interceptor or best_interceptor is None:
                         continue
 
-                    potential_passer_id = (
-                        rid + 1 if rid + 1 <= len(friendly_robots) - 1 else rid - 1
-                    )
+                    potential_passer_id = rid + 1 if rid + 1 <= len(friendly_robots) - 1 else rid - 1
                     target_pos, sampled_positions, _ = find_best_receiver_position(
                         friendly_robots[rid],
-                        friendly_robots[
-                            potential_passer_id
-                        ],  # PointOnField(ball_pos[0], ball_pos[1]),
+                        friendly_robots[potential_passer_id],  # PointOnField(ball_pos[0], ball_pos[1]),
                         enemy_robots,
                         enemy_speeds,
                         BALL_V0_MAGNITUDE,
@@ -321,10 +307,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                         best_pass_quality = pq
                         best_receiver_id = rid
 
-                if (
-                    best_receiver_id is not None
-                    and best_pass_quality > PASS_QUALITY_THRESHOLD
-                ) and pass_task is None:
+                if (best_receiver_id is not None and best_pass_quality > PASS_QUALITY_THRESHOLD) and pass_task is None:
                     print("made the passing thingy")
                     pass_task = PassBall(
                         pid_oren,
@@ -338,10 +321,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                         ),
                     )
 
-                if (
-                    best_receiver_id is not None
-                    and best_pass_quality > PASS_QUALITY_THRESHOLD
-                ):
+                if best_receiver_id is not None and best_pass_quality > PASS_QUALITY_THRESHOLD:
                     print(
                         "trying to execute a pass with quality ",
                         best_pass_quality,
@@ -360,9 +340,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                         print("pass finished")
                         trying_to_pass = False
                 else:
-                    commands[ball_possessor_id] = empty_command(
-                        dribbler_on=True
-                    )  # Wait for a better pass
+                    commands[ball_possessor_id] = empty_command(dribbler_on=True)  # Wait for a better pass
 
                 # Move non-possessing robots to good positions
                 for rid in friendly_robot_ids:
@@ -400,20 +378,10 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
             ### CASE 3: We are trying a pass ###
             elif trying_to_pass:
                 print("CASEEEEE 3")
-                """
-                if pass_task == None:
-                    print(made the ta)
-                    pass_task = PassBall(
-                        pid_oren,
-                        pid_trans,
-                        game,
-                        ball_possessor_id,
-                        best_receiver_id,
-                        (
-                            friendly_robots[best_receiver_id].x,
-                            friendly_robots[best_receiver_id].y,
-                        ),
-                    )
+                """If pass_task == None: print(made the ta) pass_task = PassBall( pid_oren, pid_trans, game,
+                ball_possessor_id, best_receiver_id, ( friendly_robots[best_receiver_id].x,
+
+                friendly_robots[best_receiver_id].y,     ), )
                 """
                 print(passer, best_receiver_id)
                 if best_receiver_id is None:
@@ -438,9 +406,7 @@ def attacker_strategy(game: Game, stop_event: threading.Event):
                         passer = None
                         pass_task = None
                 else:
-                    commands[passer] = empty_command(
-                        dribbler_on=True
-                    )  # Wait for a better pass
+                    commands[passer] = empty_command(dribbler_on=True)  # Wait for a better pass
 
                 sim_robot_controller.add_robot_commands(commands)
                 sim_robot_controller.send_robot_commands()
@@ -555,9 +521,7 @@ def defender_strategy(game: Game, stop_event: threading.Event):
 
 
 def pvp_manager(headless: bool):
-    """
-    A 1v1 scenario with dynamic switching of attacker/defender roles.
-    """
+    """A 1v1 scenario with dynamic switching of attacker/defender roles."""
     # Initialize Game and environment
     env = GRSimController()
 

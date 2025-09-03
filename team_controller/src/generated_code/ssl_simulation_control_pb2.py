@@ -16,7 +16,6 @@ from . import ssl_gc_common_pb2 as ssl__gc__common__pb2
 from . import ssl_simulation_config_pb2 as ssl__simulation__config__pb2
 from . import ssl_simulation_error_pb2 as ssl__simulation__error__pb2
 
-
 DESCRIPTOR = _descriptor.FileDescriptor(
     name="ssl_simulation_control.proto",
     package="",
@@ -563,12 +562,8 @@ _TELEPORTROBOT.fields_by_name["id"].message_type = ssl__gc__common__pb2._ROBOTID
 _SIMULATORCONTROL.fields_by_name["teleport_ball"].message_type = _TELEPORTBALL
 _SIMULATORCONTROL.fields_by_name["teleport_robot"].message_type = _TELEPORTROBOT
 _SIMULATORCOMMAND.fields_by_name["control"].message_type = _SIMULATORCONTROL
-_SIMULATORCOMMAND.fields_by_name[
-    "config"
-].message_type = ssl__simulation__config__pb2._SIMULATORCONFIG
-_SIMULATORRESPONSE.fields_by_name[
-    "errors"
-].message_type = ssl__simulation__error__pb2._SIMULATORERROR
+_SIMULATORCOMMAND.fields_by_name["config"].message_type = ssl__simulation__config__pb2._SIMULATORCONFIG
+_SIMULATORRESPONSE.fields_by_name["errors"].message_type = ssl__simulation__error__pb2._SIMULATORERROR
 DESCRIPTOR.message_types_by_name["TeleportBall"] = _TELEPORTBALL
 DESCRIPTOR.message_types_by_name["TeleportRobot"] = _TELEPORTROBOT
 DESCRIPTOR.message_types_by_name["SimulatorControl"] = _SIMULATORCONTROL

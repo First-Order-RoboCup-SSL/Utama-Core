@@ -1,21 +1,19 @@
+import math
 from test.common.abstract_test_manager import AbstractTestManager, TestingStatus
-from team_controller.src.controllers import AbstractSimController
+
 from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
 from entities.game import Game
 from global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
 )
-import math
-
 from run import StrategyRunner
 from strategy.skills.go_to_ball import GoToBallStrategy
+from team_controller.src.controllers import AbstractSimController
 
 
 class GoToBallTestManager(AbstractTestManager):
-    """
-    Test manager for the GoToBall strategy.
-    """
+    """Test manager for the GoToBall strategy."""
 
     def __init__(self):
         super().__init__()
@@ -23,9 +21,7 @@ class GoToBallTestManager(AbstractTestManager):
         self.ini_pos = self._generate_ini_pos()
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
-        """
-        Reset position of robots and ball for the next strategy test.
-        """
+        """Reset position of robots and ball for the next strategy test."""
         # Reset all other robots
         ini_yellow, ini_blue = map_left_right_to_colors(
             game.my_team_is_yellow,
@@ -39,13 +35,9 @@ class GoToBallTestManager(AbstractTestManager):
         )
 
         for i in b_robots.keys():
-            sim_controller.teleport_robot(
-                False, i, ini_blue[i][0], ini_blue[i][1], ini_blue[i][2]
-            )
+            sim_controller.teleport_robot(False, i, ini_blue[i][0], ini_blue[i][1], ini_blue[i][2])
         for j in y_robots.keys():
-            sim_controller.teleport_robot(
-                True, j, ini_yellow[j][0], ini_yellow[j][1], ini_yellow[j][2]
-            )
+            sim_controller.teleport_robot(True, j, ini_yellow[j][0], ini_yellow[j][1], ini_yellow[j][2])
 
         # set the target robot position
         ini_pos = self.ini_pos[self.episode_i]
@@ -59,17 +51,13 @@ class GoToBallTestManager(AbstractTestManager):
         sim_controller.teleport_ball(0, 0)
 
     def eval_status(self, game: Game):
-        """
-        Evaluate the status of the test episode.
-        """
+        """Evaluate the status of the test episode."""
         if game.friendly_robots[self.my_strategy.robot_id].has_ball:
             return TestingStatus.SUCCESS
         return TestingStatus.IN_PROGRESS
 
     def get_n_episodes(self):
-        """
-        Get the number of episodes to run for the test.
-        """
+        """Get the number of episodes to run for the test."""
         return len(self.ini_pos)
 
     def _generate_ini_pos(self, radius=2):
@@ -89,9 +77,7 @@ def test_go_to_ball(
     headless: bool,
     mode: str = "rsim",
 ):
-    """
-    Called by pytest to run the GoToBall strategy test.
-    """
+    """Called by pytest to run the GoToBall strategy test."""
     runner = StrategyRunner(
         strategy=GoToBallStrategy(robot_id=robot_id),
         my_team_is_yellow=my_team_is_yellow,
@@ -100,9 +86,7 @@ def test_go_to_ball(
         exp_friendly=3,
         exp_enemy=3,
     )
-    test = runner.run_test(
-        testManager=GoToBallTestManager(), episode_timeout=10, rsim_headless=headless
-    )
+    test = runner.run_test(testManager=GoToBallTestManager(), episode_timeout=10, rsim_headless=headless)
     assert test
 
 

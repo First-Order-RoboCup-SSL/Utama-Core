@@ -1,13 +1,13 @@
+from enum import Enum
 from typing import Tuple
 
+from entities.game.field import Field
 from entities.game.game_frame import GameFrame
 from motion_planning.src.planning.exit_strategies import ExitStrategy
 from motion_planning.src.planning.path_planner import (
     BisectorPlanner,
     DynamicWindowPlanner,
 )
-from entities.game.field import Field
-from enum import Enum
 
 
 class TempObstacleType(Enum):
@@ -18,9 +18,8 @@ class TempObstacleType(Enum):
 
 
 class TimedSwitchController:
-    """Takes two planners, one run per frame and one run per N frames,
-    idea is that the slower planner gives more accurate global guidance
-    """
+    """Takes two planners, one run per frame and one run per N frames, idea is that the slower planner gives more
+    accurate global guidance."""
 
     DEFAULT_RUN = 60  # SLow planner is invoked once every DEFAULT_RUN frames
 
@@ -51,9 +50,8 @@ class TimedSwitchController:
         robot_id: int,
         temporary_obstacles_enum: TempObstacleType,
     ) -> Tuple[float, float]:
-        """
-        Computes the path to the given target for the specified robot, considering temporary obstacles such as defence zones, field or None
-
+        """Computes the path to the given target for the specified robot, considering temporary obstacles such as
+        defence zones, field or None.
 
         Args:
             target (Tuple[float, float]): The target coordinates (x, y) to which the robot should navigate.

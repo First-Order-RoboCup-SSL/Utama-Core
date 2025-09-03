@@ -1,5 +1,6 @@
 import numpy as np
 import pygame
+
 from rsoccer_simulator.src.Render.utils import COLORS, TAG_ID_COLORS
 
 
@@ -22,18 +23,14 @@ class RenderSim2DRobot(RenderRobot):
     size = 10
     vision_size = 2
 
-    def __init__(
-        self, x, y, direction, vision_direction, vision_openning, scale, team_color
-    ):
+    def __init__(self, x, y, direction, vision_direction, vision_openning, scale, team_color):
         super().__init__(x, y, direction, scale, team_color=team_color)
         self.vision_direction = vision_direction
         self.vision_openning = vision_openning
 
     def draw(self, screen):
         pygame.draw.circle(screen, self.team_color, (self.x, self.y), self.size)
-        pygame.draw.circle(
-            screen, COLORS["ROBOT_BLACK"], (self.x, self.y), self.size, 1
-        )
+        pygame.draw.circle(screen, COLORS["ROBOT_BLACK"], (self.x, self.y), self.size, 1)
         pygame.draw.line(
             screen,
             COLORS["BLACK"],
@@ -54,23 +51,15 @@ class RenderSim2DRobot(RenderRobot):
                 ),
                 (
                     self.x
-                    + self.size
-                    * self.vision_size
-                    * np.cos(np.deg2rad(self.vision_direction + self.vision_openning)),
+                    + self.size * self.vision_size * np.cos(np.deg2rad(self.vision_direction + self.vision_openning)),
                     self.y
-                    + self.size
-                    * self.vision_size
-                    * np.sin(np.deg2rad(self.vision_direction + self.vision_openning)),
+                    + self.size * self.vision_size * np.sin(np.deg2rad(self.vision_direction + self.vision_openning)),
                 ),
                 (
                     self.x
-                    + self.size
-                    * self.vision_size
-                    * np.cos(np.deg2rad(self.vision_direction - self.vision_openning)),
+                    + self.size * self.vision_size * np.cos(np.deg2rad(self.vision_direction - self.vision_openning)),
                     self.y
-                    + self.size
-                    * self.vision_size
-                    * np.sin(np.deg2rad(self.vision_direction - self.vision_openning)),
+                    + self.size * self.vision_size * np.sin(np.deg2rad(self.vision_direction - self.vision_openning)),
                 ),
             ],
             1,
@@ -87,9 +76,7 @@ class RenderVSSRobot(RenderRobot):
         self.id_color = tag_id_colors[id]
 
     def draw_robot(self, screen):
-        rotated_surface = pygame.Surface(
-            (self.size * 2, self.size * 2), pygame.SRCALPHA
-        )
+        rotated_surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
 
         pygame.draw.rect(
             rotated_surface,
@@ -159,13 +146,9 @@ class RenderSSLRobot(RenderRobot):
         self.draw_direction(screen)
 
     def draw_robot(self, screen):
-        rotated_surface = pygame.Surface(
-            (self.size * 2, self.size * 2), pygame.SRCALPHA
-        )
+        rotated_surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
 
-        pygame.draw.circle(
-            rotated_surface, COLORS["ROBOT_BLACK"], (self.size, self.size), self.size
-        )
+        pygame.draw.circle(rotated_surface, COLORS["ROBOT_BLACK"], (self.size, self.size), self.size)
         self.draw_team_tag(rotated_surface)
         self.draw_id_tag(rotated_surface)
 
@@ -191,9 +174,7 @@ class RenderSSLRobot(RenderRobot):
         translations *= self.scale
         tags_position = translations + np.array([self.size, self.size])
         for i, tag_position in enumerate(tags_position):
-            pygame.draw.circle(
-                surface, self.id_color[i], tag_position.astype(int), tag_radius
-            )
+            pygame.draw.circle(surface, self.id_color[i], tag_position.astype(int), tag_radius)
 
     def draw_direction(self, screen):
         pygame.draw.line(

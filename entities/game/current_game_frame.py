@@ -1,8 +1,9 @@
 from dataclasses import dataclass, field
+from typing import Optional
+
+from entities.data.object import ObjectKey, ObjectType, TeamType
 from entities.game.game_frame import GameFrame
 from entities.game.proximity_lookup import ProximityLookup
-from entities.data.object import ObjectKey, ObjectType, TeamType
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -22,8 +23,8 @@ class CurrentGameFrame(GameFrame):
         object.__setattr__(self, "proximity_lookup", self._init_proximity_lookup(game))
 
     def _set_robot_with_ball(self, game: GameFrame) -> ObjectKey:
-        """
-        Initialize the robot_with_ball attribute based on the current state of the game.
+        """Initialize the robot_with_ball attribute based on the current state of the game.
+
         If no robot has the ball, return None.
         """
         # TODO: This assumes that only one robot can have the ball at a time.
@@ -36,10 +37,10 @@ class CurrentGameFrame(GameFrame):
         return None
 
     def _init_proximity_lookup(self, game: GameFrame) -> ProximityLookup:
-        """
-        Initialize the proximity map for the game.
-        The proximity map contains the positions of all robots and the ball.
-        It is used to lookup distances between objects in the game.
+        """Initialize the proximity map for the game.
+
+        The proximity map contains the positions of all robots and the ball. It is used to lookup distances between
+        objects in the game.
         """
         return ProximityLookup(
             friendly_robots=game.friendly_robots,

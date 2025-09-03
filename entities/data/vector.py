@@ -26,8 +26,8 @@ class VectorBase(ABC):
         return np.linalg.norm(self._arr)
 
     def norm(self: T) -> T:
-        """
-        Normalize the vector to unit length.
+        """Normalize the vector to unit length.
+
         Returns a zero vector if the magnitude is too small.
         """
         magnitude = self.mag()
@@ -40,9 +40,7 @@ class VectorBase(ABC):
         2D: Calculate the angle between this vector and another vector in radians.
         """
         if self._arr.shape != other._arr.shape:
-            raise ValueError(
-                "Cannot calculate angle between vectors of different dimensions"
-            )
+            raise ValueError("Cannot calculate angle between vectors of different dimensions")
         dot_product = np.dot(self._arr, other._arr)
         mag_self = self.mag()
         mag_other = other.mag()

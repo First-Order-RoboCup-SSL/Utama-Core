@@ -1,5 +1,5 @@
-"""
-#   Environment Communication Structure
+"""#   Environment Communication Structure
+
 #    - Father class that creates the structure to communicate with multples setups of enviroment
 #    - To create your wrapper from env to communcation, use inherit from this class!
 """
@@ -10,21 +10,20 @@ import gymnasium as gym
 import numpy as np
 import pygame
 
-from rsoccer_simulator.src.Entities import Field, Frame, Robot, Ball
+from global_utils.math_utils import rad_to_deg
+from rsoccer_simulator.src.Entities import Ball, Field, Frame, Robot
 from rsoccer_simulator.src.Render import (
     COLORS,
     RenderBall,
-    SSLRenderField,
     RenderSSLRobot,
+    SSLRenderField,
 )
 from rsoccer_simulator.src.Render.overlay import (
-    RenderOverlay,
     OverlayObject,
     OverlayType,
+    RenderOverlay,
 )
 from rsoccer_simulator.src.Simulators.rsim import RSimSSL
-
-from global_utils.math_utils import rad_to_deg
 
 
 class SSLBaseEnv(gym.Env):
@@ -60,9 +59,7 @@ class SSLBaseEnv(gym.Env):
         # Get field dimensions
         self.field_type: int = field_type
         self.field: Field = self.rsim.get_field_params()
-        self.max_pos = max(
-            self.field.width / 2, (self.field.length / 2) + self.field.penalty_length
-        )
+        self.max_pos = max(self.field.width / 2, (self.field.length / 2) + self.field.penalty_length)
         max_wheel_rad_s = (self.field.rbt_motor_max_rpm / 60) * 2 * np.pi
         self.max_v = max_wheel_rad_s * self.field.rbt_wheel_radius
         # 0.04 = robot radius (0.09) + wheel thicknees (0.005)
@@ -117,9 +114,7 @@ class SSLBaseEnv(gym.Env):
         return obs, {}
 
     def render(self) -> None:
-        """
-        Renders the game depending on
-        ball's and players' positions.
+        """Renders the game depending on ball's and players' positions.
 
         Parameters
         ----------
@@ -128,7 +123,6 @@ class SSLBaseEnv(gym.Env):
         Returns
         -------
         None
-
         """
 
         if self.window_surface is None:
@@ -141,9 +135,7 @@ class SSLBaseEnv(gym.Env):
             elif self.render_mode == "rgb_array":
                 self.window_surface = pygame.Surface(self.window_size)
 
-        assert self.window_surface is not None, (
-            "Something went wrong with pygame. This should never happen."
-        )
+        assert self.window_surface is not None, "Something went wrong with pygame. This should never happen."
 
         if self.clock is None:
             self.clock = pygame.time.Clock()
@@ -153,9 +145,7 @@ class SSLBaseEnv(gym.Env):
             pygame.display.update()
             self.clock.tick(self.metadata["render_fps"])
         elif self.render_mode == "rgb_array":
-            return np.transpose(
-                np.array(pygame.surfarray.pixels3d(self.window_surface)), axes=(1, 0, 2)
-            )
+            return np.transpose(np.array(pygame.surfarray.pixels3d(self.window_surface)), axes=(1, 0, 2))
 
     def close(self):
         if self.window_surface is not None:
@@ -166,8 +156,7 @@ class SSLBaseEnv(gym.Env):
     ### CUSTOM FUNCTIONS WE ADDED ###
 
     def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0):
-        """
-        teleport ball to new position in meters
+        """Teleport ball to new position in meters.
 
         Note: this does not create a new frame, but mutates the current frame
         """
@@ -183,8 +172,7 @@ class SSLBaseEnv(gym.Env):
         y: float,
         theta: float = None,
     ):
-        """
-        teleport robot to new position in meters, radians
+        """Teleport robot to new position in meters, radians.
 
         Note: this does not create a new frame, but mutates the current frame
         """
@@ -205,8 +193,7 @@ class SSLBaseEnv(gym.Env):
         self.rsim.reset(self.frame)
 
     def draw_point(self, x: float, y: float, color: str = "RED", width: float = 1):
-        """
-        Draws a point as an overlay.
+        """Draws a point as an overlay.
 
         Parameters:
         -----------
@@ -226,11 +213,8 @@ class SSLBaseEnv(gym.Env):
         )
         self.overlay.append(point_data)
 
-    def draw_line(
-        self, points: list[tuple[float, float]], color: str = "RED", width: float = 1
-    ):
-        """
-        Draws a line as an overlay using the first and last point in a list of points.
+    def draw_line(self, points: list[tuple[float, float]], color: str = "RED", width: float = 1):
+        """Draws a line as an overlay using the first and last point in a list of points.
 
         Parameters:
         -----------
@@ -245,16 +229,11 @@ class SSLBaseEnv(gym.Env):
         transformed_points = []
         for point in points:
             transformed_points.append(self._pos_transform(point[0], -point[1]))
-        line_data = OverlayObject(
-            type=OverlayType.LINE, color=color, points=transformed_points, width=width
-        )
+        line_data = OverlayObject(type=OverlayType.LINE, color=color, points=transformed_points, width=width)
         self.overlay.append(line_data)
 
-    def draw_polygon(
-        self, points: list[tuple[float, float]], color: str = "RED", width: float = 1
-    ):
-        """
-        Draws a polygon as an overlay using a list of points.
+    def draw_polygon(self, points: list[tuple[float, float]], color: str = "RED", width: float = 1):
+        """Draws a polygon as an overlay using a list of points.
 
         Parameters:
         -----------
@@ -328,19 +307,19 @@ class SSLBaseEnv(gym.Env):
         )
 
     def _get_commands(self, action):
-        """returns a list of commands of type List[Robot] from type action_space action"""
+        """Returns a list of commands of type List[Robot] from type action_space action."""
         raise NotImplementedError
 
     def _frame_to_observations(self):
-        """returns a type observation_space observation from a type List[Robot] state"""
+        """Returns a type observation_space observation from a type List[Robot] state."""
         raise NotImplementedError
 
     def _calculate_reward_and_done(self):
-        """returns reward value and done flag from type List[Robot] state"""
+        """Returns reward value and done flag from type List[Robot] state."""
         raise NotImplementedError
 
     def _get_initial_positions_frame(self) -> Frame:
-        """returns frame with robots initial positions"""
+        """Returns frame with robots initial positions."""
         raise NotImplementedError
 
     def norm_pos(self, pos):

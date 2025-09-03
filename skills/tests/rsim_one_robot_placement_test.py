@@ -1,16 +1,18 @@
 import math
-from motion_planning.src.pid.pid import get_rsim_pids
-from team_controller.src.controllers import RSimRobotController, RSimController
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
+
 from robot_control.src.tests.utils import one_robot_placement
+
+from entities.game import Game
+from motion_planning.src.pid.pid import get_rsim_pids
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+from team_controller.src.controllers import RSimController, RSimRobotController
 
 N_ROBOTS = 6
 
 
 def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: bool):
-    """When the tests are run with pytest, these parameters are filled in
-    based on whether we are in full or quick test mode (see conftest.py)"""
+    """When the tests are run with pytest, these parameters are filled in based on whether we are in full or quick test
+    mode (see conftest.py)"""
 
     TEST_TRAVEL_TIME_THRESH = 0.03
     # never used
@@ -30,9 +32,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
 
     old_pos = []
 
-    env = SSLStandardEnv(
-        n_robots_blue=N_ROBOTS, render_mode="ansi" if headless else "human"
-    )
+    env = SSLStandardEnv(n_robots_blue=N_ROBOTS, render_mode="ansi" if headless else "human")
     env.reset()
 
     env_controller = RSimController(env)
@@ -47,9 +47,7 @@ def test_one_robot_placement(robot_to_place: int, is_yellow: bool, headless: boo
 
     pid_oren, pid_2d = get_rsim_pids()
 
-    sim_robot_controller = RSimRobotController(
-        is_team_yellow=is_yellow, env=env, game_obj=game
-    )
+    sim_robot_controller = RSimRobotController(is_team_yellow=is_yellow, env=env, game_obj=game)
 
     one_step = one_robot_placement(
         sim_robot_controller,

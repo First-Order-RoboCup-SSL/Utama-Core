@@ -2,9 +2,7 @@ from enum import Enum
 
 
 class RefereeCommand(Enum):
-    """
-    Enum representing a referee command.
-    """
+    """Enum representing a referee command."""
 
     HALT = 0
     STOP = 1
@@ -28,8 +26,6 @@ class RefereeCommand(Enum):
     @staticmethod
     def from_id(command_id: int):
         for command in RefereeCommand:
-            if (
-                command.value == command_id
-            ):  # Check the enum's value (which is the command_id)
+            if command.value == command_id:  # Check the enum's value (which is the command_id)
                 return command
         raise ValueError(f"Invalid referee command ID: {command_id}")

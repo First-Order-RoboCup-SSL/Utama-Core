@@ -1,5 +1,5 @@
-from entities.data.vector import Vector2D
 from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
+from entities.data.vector import Vector2D
 from entities.data.vision import VisionBallData, VisionRobotData
 from entities.game.ball import Ball
 from entities.game.game_frame import GameFrame
@@ -13,9 +13,7 @@ def test_combining_single_team_combines_single_robot():
     zv = Vector2D(x=0, y=0)
     game_robots = {0: Robot(0, True, False, zv, zv, zv, 0)}
     vision_robots = [VisionRobotData(0, 1, 2, 3)]
-    result = position_refiner._combine_single_team_positions(
-        game_robots, vision_robots, friendly=True
-    )
+    result = position_refiner._combine_single_team_positions(game_robots, vision_robots, friendly=True)
 
     expected_orientation = position_refiner.angle_smoother.smooth(0, 3)
 
@@ -30,9 +28,7 @@ def test_combining_with_robot_not_in_game_adds():
     zv = Vector2D(x=0, y=0)
     game_robots = {0: Robot(0, True, False, zv, zv, zv, 0)}
     vision_robots = [VisionRobotData(1, 1, 2, 3)]
-    result = position_refiner._combine_single_team_positions(
-        game_robots, vision_robots, friendly=True
-    )
+    result = position_refiner._combine_single_team_positions(game_robots, vision_robots, friendly=True)
 
     assert len(result) == 2
     rb = result[1]

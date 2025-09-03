@@ -1,15 +1,16 @@
 import py_trees
-from py_trees.composites import Sequence, Selector
+from py_trees.composites import Selector, Sequence
+
 from strategy.common import AbstractStrategy
+from strategy.utils.action_nodes import GoToBallStep
 from strategy.utils.blackboard_utils import SetBlackboardVariable
 from strategy.utils.selector_utils import HasBall
-from strategy.utils.action_nodes import GoToBallStep
 
 
 class GoToBallStrategy(AbstractStrategy):
     def __init__(self, robot_id: int):
-        """
-        Initializes the GoToBallStrategy with a specific robot ID.
+        """Initializes the GoToBallStrategy with a specific robot ID.
+
         :param robot_id: The ID of the robot this strategy will control.
         """
         self.robot_id = robot_id

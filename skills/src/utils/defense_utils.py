@@ -1,9 +1,10 @@
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game, Robot, Ball
-from entities.data.vector import Vector2D
-from typing import List, Optional, Tuple, Dict
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+
+from entities.data.vector import Vector2D
+from entities.game import Ball, Game, Robot
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 EPS = 1e-5
 
@@ -15,10 +16,8 @@ def align_defenders(
     attacker_orientation: Optional[float],
     env: Optional[SSLStandardEnv],
 ) -> Tuple[float, float]:
-    """
-    Calculates the next point on the defense area that the robots should go to
-    defender_position is in terms of t on the parametric curve.
-    """
+    """Calculates the next point on the defense area that the robots should go to defender_position is in terms of t on
+    the parametric curve."""
 
     NO_MOVE_THRES = 1.5
 
@@ -34,15 +33,11 @@ def align_defenders(
     else:
         predicted_goal_position = Vector2D(
             goal_centre_x,
-            clamp_to_goal_width(
-                predict_goal_y_location(game, attacker_position, attacker_orientation)
-            ),
+            clamp_to_goal_width(predict_goal_y_location(game, attacker_position, attacker_orientation)),
         )
 
     if env:
-        env.draw_line(
-            [predicted_goal_position, attacker_position], width=1, color="green"
-        )
+        env.draw_line([predicted_goal_position, attacker_position], width=1, color="green")
         env.draw_line([predicted_goal_position, defender_pos], width=1, color="yellow")
 
         poly = []
@@ -71,8 +66,8 @@ def align_defenders(
 
 
 def calculate_defense_area(game: Game, t: float) -> Vector2D:
-    """
-    Defenders' path around the goal in the form of a rounded rectangle
+    """Defenders' path around the goal in the form of a rounded rectangle.
+
     around the penalty box. Ensures defenders don't go inside the box and stay
     right on the edge. This edge of the penalty box is theirs - attackers are
     not allowed this close to the box.
@@ -114,9 +109,7 @@ def make_relative_to_goal_centre(goal_centre_x: float, p: Vector2D) -> Vector2D:
         return Vector2D(goal_centre_x + p.x, p.y)
 
 
-def predict_goal_y_location(
-    game: Game, shooter_position: Vector2D, orientation: float
-) -> float:
+def predict_goal_y_location(game: Game, shooter_position: Vector2D, orientation: float) -> float:
     dx, dy = np.cos(orientation), np.sin(orientation)
     gx, _ = game.field.my_goal_line.coords[0]
     if dx == 0:
@@ -126,10 +119,8 @@ def predict_goal_y_location(
 
 
 def to_defense_parametric(game: Game, p: Vector2D) -> float:
-    """
-    Given a point p on the defenders' parametric curve (as defined by calculate_defense_area), returns the parameter value t
-    which would give rise to this point.
-    """
+    """Given a point p on the defenders' parametric curve (as defined by calculate_defense_area), returns the parameter
+    value t which would give rise to this point."""
 
     # Ternary search the paramater, minimising the Euclidean distance between
     # the point corresponding to the predicted t and the actual point. We
@@ -158,9 +149,7 @@ def to_defense_parametric(game: Game, p: Vector2D) -> float:
     return clamp_to_parametric(t)
 
 
-def find_likely_enemy_shooter(
-    enemy_robots: Dict[int, Robot], ball: Ball
-) -> List[Robot]:
+def find_likely_enemy_shooter(enemy_robots: Dict[int, Robot], ball: Ball) -> List[Robot]:
     unique_shooters: Dict[int, Robot] = {}
 
     for robot_id, robot in enemy_robots.items():

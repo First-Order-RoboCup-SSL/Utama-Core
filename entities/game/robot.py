@@ -1,6 +1,8 @@
 from __future__ import annotations
-from dataclasses import dataclass
+
 import logging
+from dataclasses import dataclass
+
 from entities.data.vector import Vector2D
 
 logger = logging.getLogger(__name__)

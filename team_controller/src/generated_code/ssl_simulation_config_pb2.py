@@ -12,10 +12,10 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-from . import ssl_gc_common_pb2 as ssl__gc__common__pb2
-from . import ssl_vision_geometry_pb2 as ssl__vision__geometry__pb2
 from google.protobuf import any_pb2 as google_dot_protobuf_dot_any__pb2
 
+from . import ssl_gc_common_pb2 as ssl__gc__common__pb2
+from . import ssl_vision_geometry_pb2 as ssl__vision__geometry__pb2
 
 DESCRIPTOR = _descriptor.FileDescriptor(
     name="ssl_simulation_config.proto",
@@ -619,15 +619,9 @@ _SIMULATORCONFIG = _descriptor.Descriptor(
 _ROBOTSPECS.fields_by_name["id"].message_type = ssl__gc__common__pb2._ROBOTID
 _ROBOTSPECS.fields_by_name["limits"].message_type = _ROBOTLIMITS
 _ROBOTSPECS.fields_by_name["wheel_angles"].message_type = _ROBOTWHEELANGLES
-_ROBOTSPECS.fields_by_name[
-    "custom"
-].message_type = google_dot_protobuf_dot_any__pb2._ANY
-_REALISMCONFIG.fields_by_name[
-    "custom"
-].message_type = google_dot_protobuf_dot_any__pb2._ANY
-_SIMULATORCONFIG.fields_by_name[
-    "geometry"
-].message_type = ssl__vision__geometry__pb2._SSL_GEOMETRYDATA
+_ROBOTSPECS.fields_by_name["custom"].message_type = google_dot_protobuf_dot_any__pb2._ANY
+_REALISMCONFIG.fields_by_name["custom"].message_type = google_dot_protobuf_dot_any__pb2._ANY
+_SIMULATORCONFIG.fields_by_name["geometry"].message_type = ssl__vision__geometry__pb2._SSL_GEOMETRYDATA
 _SIMULATORCONFIG.fields_by_name["robot_specs"].message_type = _ROBOTSPECS
 _SIMULATORCONFIG.fields_by_name["realism_config"].message_type = _REALISMCONFIG
 DESCRIPTOR.message_types_by_name["RobotLimits"] = _ROBOTLIMITS

@@ -15,7 +15,6 @@ _sym_db = _symbol_database.Default()
 from . import ssl_vision_detection_pb2 as ssl__vision__detection__pb2
 from . import ssl_vision_geometry_pb2 as ssl__vision__geometry__pb2
 
-
 DESCRIPTOR = _descriptor.FileDescriptor(
     name="ssl_vision_wrapper.proto",
     package="",
@@ -89,12 +88,8 @@ _SSL_WRAPPERPACKET = _descriptor.Descriptor(
     serialized_end=179,
 )
 
-_SSL_WRAPPERPACKET.fields_by_name[
-    "detection"
-].message_type = ssl__vision__detection__pb2._SSL_DETECTIONFRAME
-_SSL_WRAPPERPACKET.fields_by_name[
-    "geometry"
-].message_type = ssl__vision__geometry__pb2._SSL_GEOMETRYDATA
+_SSL_WRAPPERPACKET.fields_by_name["detection"].message_type = ssl__vision__detection__pb2._SSL_DETECTIONFRAME
+_SSL_WRAPPERPACKET.fields_by_name["geometry"].message_type = ssl__vision__geometry__pb2._SSL_GEOMETRYDATA
 DESCRIPTOR.message_types_by_name["SSL_WrapperPacket"] = _SSL_WRAPPERPACKET
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 

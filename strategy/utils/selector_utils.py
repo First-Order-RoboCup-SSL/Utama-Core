@@ -1,10 +1,10 @@
 import py_trees
+
 from strategy.common.abstract_behaviour import AbstractBehaviour
 
 
 class HasBall(AbstractBehaviour):
-    """
-    Checks if the specified robot currently has possession of the ball.
+    """Checks if the specified robot currently has possession of the ball.
 
     This behavior is a condition that reads the `has_ball` attribute of a
     robot from the game state. It's used to verify if a robot has
@@ -24,17 +24,14 @@ class HasBall(AbstractBehaviour):
 
     def update(self):
         # print(f"Checking if robot {self.blackboard.robot_id} has the ball")
-        if self.blackboard.game.current.friendly_robots[
-            self.blackboard.robot_id
-        ].has_ball:
+        if self.blackboard.game.current.friendly_robots[self.blackboard.robot_id].has_ball:
             return py_trees.common.Status.SUCCESS
         else:
             return py_trees.common.Status.FAILURE
 
 
 class GoalScored(AbstractBehaviour):
-    """
-    Checks if a goal has been scored by either team.
+    """Checks if a goal has been scored by either team.
 
     This behavior is a condition that checks if the ball has crossed either
     side of the pitch by examining its x-coordinate. It provides a simple

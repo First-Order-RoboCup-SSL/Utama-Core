@@ -1,7 +1,6 @@
-from strategy.skills.score_goal import ScoreGoalStrategy
-from strategy.examples.strategies.demo_strategy import DemoStrategy
-
 from run import StrategyRunner
+from strategy.examples.strategies.demo_strategy import DemoStrategy
+from strategy.skills.score_goal import ScoreGoalStrategy
 
 if __name__ == "__main__":
     # The robot we want to control

@@ -1,30 +1,27 @@
-from typing import Optional, Dict, List, Union
-import warnings
 import logging
+import warnings
+from typing import Dict, List, Optional, Union
 
-from entities.data.command import RobotCommand, RobotVelCommand, RobotResponse
+from config.settings import (
+    BLUE_TEAM_SIM_PORT,
+    CHIP_ANGLE,
+    DRIBBLE_SPD,
+    KICK_SPD,
+    LOCAL_HOST,
+    MAX_ROBOTS,
+    YELLOW_TEAM_SIM_PORT,
+)
+from entities.data.command import RobotCommand, RobotResponse, RobotVelCommand
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
-from config.settings import (
-    KICK_SPD,
-    DRIBBLE_SPD,
-    CHIP_ANGLE,
-    LOCAL_HOST,
-    YELLOW_TEAM_SIM_PORT,
-    BLUE_TEAM_SIM_PORT,
-    MAX_ROBOTS,
-)
-from team_controller.src.utils import network_manager
-
 from team_controller.src.generated_code.ssl_simulation_robot_control_pb2 import (
     RobotControl,
 )
-
 from team_controller.src.generated_code.ssl_simulation_robot_feedback_pb2 import (
     RobotControlResponse,
 )
-
+from team_controller.src.utils import network_manager
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +47,7 @@ class GRSimRobotController(AbstractRobotController):
         self.net_diff_total = 0
 
     def send_robot_commands(self) -> None:
-        """
-        Sends the robot commands to the appropriate team (yellow or blue).
-        """
+        """Sends the robot commands to the appropriate team (yellow or blue)."""
         # logger.debug("Sending Robot Commands ...")
 
         # net_start = time.time()
@@ -83,8 +78,7 @@ class GRSimRobotController(AbstractRobotController):
         robot_commands: Union[RobotCommand, Dict[int, RobotCommand]],
         robot_id: Optional[int] = None,
     ) -> None:
-        """
-        Adds robot commands to the out_packet.
+        """Adds robot commands to the out_packet.
 
         Args:
             robot_commands (Union[RobotCommand, Dict[int, RobotCommand]]): A single RobotCommand or a dictionary of RobotCommand with robot_id as the key.
@@ -102,17 +96,10 @@ class GRSimRobotController(AbstractRobotController):
         robots_response = RobotControlResponse()
         robots_response.ParseFromString(data)
         for _, robot_info in enumerate(robots_response.feedback):
-            if (
-                robot_info.HasField("dribbler_ball_contact")
-                and robot_info.id >= MAX_ROBOTS
-            ):
-                warnings.warn(
-                    "Invalid robot info received, robot id >= 6", SyntaxWarning
-                )
+            if robot_info.HasField("dribbler_ball_contact") and robot_info.id >= MAX_ROBOTS:
+                warnings.warn("Invalid robot info received, robot id >= 6", SyntaxWarning)
             elif robot_info.id < self._n_friendly:
-                robot_resp = RobotResponse(
-                    id=robot_info.id, has_ball=robot_info.dribbler_ball_contact
-                )
+                robot_resp = RobotResponse(id=robot_info.id, has_ball=robot_info.dribbler_ball_contact)
                 robots_info.append(robot_resp)
             # ignore robot_info for robots that are not expected (ie deactivated since the start of the game)
         self._robots_info.append(robots_info)
@@ -134,8 +121,7 @@ class GRSimRobotController(AbstractRobotController):
         return self._robots_info.popleft()
 
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
-        """
-        Adds a robot command to the out_packet.
+        """Adds a robot command to the out_packet.
 
         Args:
             robot_id (int): The ID of the robot.
@@ -152,11 +138,8 @@ class GRSimRobotController(AbstractRobotController):
         local_vel.left = command.local_left_vel
         local_vel.angular = command.angular_vel
 
-    def _add_robot_wheel_vel_command(
-        self, command: RobotVelCommand, robot_id: int
-    ) -> None:
-        """
-        Adds a robot command to the out_packet.
+    def _add_robot_wheel_vel_command(self, command: RobotVelCommand, robot_id: int) -> None:
+        """Adds a robot command to the out_packet.
 
         Args:
             robot_id (int): The ID of the robot.

@@ -1,20 +1,17 @@
-from typing import List
-from entities.game.game_object import Robot as GameRobot
-from motion_planning.src.planning.path_planner import point_to_tuple
-from motion_planning.src.pid.pid import get_rsim_pids
-from robot_control.src.skills import (
-    go_to_point,
-    mag,
-    face_ball,
-)
-from team_controller.src.controllers import RSimRobotController
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from motion_planning.src.planning.path_planner import RRTPlanner
-import random
 import logging
+import random
 import time
 from math import dist
+from typing import List
+
+from robot_control.src.skills import face_ball, go_to_point, mag
+
+from entities.game import Game
+from entities.game.game_object import Robot as GameRobot
+from motion_planning.src.pid.pid import get_rsim_pids
+from motion_planning.src.planning.path_planner import RRTPlanner, point_to_tuple
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+from team_controller.src.controllers import RSimRobotController
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -42,14 +39,10 @@ def test_pathfinding(headless: bool):
     is_yellow = True
     pid_oren, pid_2d = get_rsim_pids(N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
 
-    sim_robot_controller = RSimRobotController(
-        is_team_yellow=is_yellow, env=env, game_obj=game
-    )
+    sim_robot_controller = RSimRobotController(is_team_yellow=is_yellow, env=env, game_obj=game)
 
     planner = RRTPlanner(game)
-    targets = [(-4.5, 3)] + [
-        (random.uniform(-4.5, 4.5), random.uniform(-3, 3)) for _ in range(1000)
-    ]
+    targets = [(-4.5, 3)] + [(random.uniform(-4.5, 4.5), random.uniform(-3, 3)) for _ in range(1000)]
     target = targets.pop(0)
 
     randomly_spawn_robots(env, True, [])
@@ -69,14 +62,10 @@ def test_pathfinding(headless: bool):
             waypoints = planner.path_to(mover_id, target)
 
         if waypoints:
-            if dist((r.x, r.y), waypoints[0]) < 0.4 and (
-                velocity is None or mag(velocity) < 0.5
-            ):
+            if dist((r.x, r.y), waypoints[0]) < 0.4 and (velocity is None or mag(velocity) < 0.5):
                 waypoints.pop(0)
 
-        if dist((r.x, r.y), target) < 0.05 and (
-            velocity is None or mag(velocity) < 0.2
-        ):
+        if dist((r.x, r.y), target) < 0.05 and (velocity is None or mag(velocity) < 0.2):
             print("REACHED")
             target = targets.pop(0)
             start = time.time()
@@ -123,9 +112,7 @@ def test_pathfinding(headless: bool):
         sim_robot_controller.send_robot_commands()
 
 
-def randomly_spawn_robots(
-    env: SSLStandardEnv, is_team_yellow: bool, safe_robots: List[int]
-):
+def randomly_spawn_robots(env: SSLStandardEnv, is_team_yellow: bool, safe_robots: List[int]):
     for i in range(6):
         if i not in safe_robots:
             env.teleport_robot(

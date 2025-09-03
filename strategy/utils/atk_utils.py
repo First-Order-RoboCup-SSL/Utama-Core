@@ -1,17 +1,15 @@
+import numpy as np
 import py_trees
-from skills.src.score_goal import _find_best_shot
-from entities.data.vector import Vector2D
-from strategy.common.abstract_behaviour import AbstractBehaviour
-from global_utils.math_utils import angle_between_points
 
 from config.settings import ROBOT_RADIUS
-
-import numpy as np
+from entities.data.vector import Vector2D
+from global_utils.math_utils import angle_between_points
+from skills.src.score_goal import _find_best_shot
+from strategy.common.abstract_behaviour import AbstractBehaviour
 
 
 class OrenAtTargetThreshold(AbstractBehaviour):
-    """
-    Checks if the robot is oriented towards a target with a dynamic threshold.
+    """Checks if the robot is oriented towards a target with a dynamic threshold.
 
     This behavior is a condition that succeeds if the robot's current
     orientation is sufficiently close to the target orientation. The acceptable
@@ -30,12 +28,8 @@ class OrenAtTargetThreshold(AbstractBehaviour):
 
     def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(
-            key="best_shot", access=py_trees.common.Access.READ
-        )
-        self.blackboard.register_key(
-            key="target_orientation", access=py_trees.common.Access.READ
-        )
+        self.blackboard.register_key(key="best_shot", access=py_trees.common.Access.READ)
+        self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.READ)
 
     def initialise(self):
         self.goal_x = self.blackboard.game.field.enemy_goal_line.coords[0][0]
@@ -44,9 +38,7 @@ class OrenAtTargetThreshold(AbstractBehaviour):
         shooter = self.blackboard.game.current.friendly_robots[self.blackboard.robot_id]
         shot_orientation = self.blackboard.get("target_orientation")
 
-        threshold = abs(shooter.orientation - shot_orientation) * abs(
-            self.goal_x - shooter.p.x
-        )
+        threshold = abs(shooter.orientation - shot_orientation) * abs(self.goal_x - shooter.p.x)
 
         if threshold <= 0.02:
             # print(f"Robot {self.blackboard.robot_id} is oriented correctly towards the goal.")
@@ -57,8 +49,7 @@ class OrenAtTargetThreshold(AbstractBehaviour):
 
 
 class GoalBlocked(AbstractBehaviour):
-    """
-    Checks if the calculated best shot path to the goal is blocked by an opponent.
+    """Checks if the calculated best shot path to the goal is blocked by an opponent.
 
     This behavior is a condition that simulates a line from the ball to the
     best shot position on the goal line. It then checks if any enemy robot
@@ -76,9 +67,7 @@ class GoalBlocked(AbstractBehaviour):
 
     def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(
-            key="best_shot", access=py_trees.common.Access.READ
-        )
+        self.blackboard.register_key(key="best_shot", access=py_trees.common.Access.READ)
 
     def initialise(self):
         self.goal_x = self.blackboard.game.field.enemy_goal_line.coords[0][0]
@@ -96,9 +85,8 @@ class GoalBlocked(AbstractBehaviour):
             return py_trees.common.Status.FAILURE
 
     def _is_goal_blocked(self) -> bool:
-        """
-        Determines whether the goal is blocked by enemy robots (considering them as circles).
-        Determines whether the goal is blocked by enemy robots (considering them as circles).
+        """Determines whether the goal is blocked by enemy robots (considering them as circles). Determines whether the
+        goal is blocked by enemy robots (considering them as circles).
 
         :param game: The game state containing robot and ball positions.
         :return: True if the goal is blocked, False otherwise.
@@ -133,8 +121,7 @@ class GoalBlocked(AbstractBehaviour):
 
 
 class ShouldScoreGoal(AbstractBehaviour):
-    """
-    Evaluates if a viable shot on goal exists and calculates its quality.
+    """Evaluates if a viable shot on goal exists and calculates its quality.
 
     This behavior analyzes the field to find the best possible shot by identifying
     the largest open angle to the enemy goal line, considering opponent positions.
@@ -158,12 +145,8 @@ class ShouldScoreGoal(AbstractBehaviour):
 
     def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(
-            key="best_shot", access=py_trees.common.Access.WRITE
-        )
-        self.blackboard.register_key(
-            key="target_orientation", access=py_trees.common.Access.WRITE
-        )
+        self.blackboard.register_key(key="best_shot", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.WRITE)
 
     def initialise(self):
         self.target_goal_line = self.blackboard.game.field.enemy_goal_line
@@ -188,8 +171,8 @@ class ShouldScoreGoal(AbstractBehaviour):
     def _find_shot_quality(
         self,
     ) -> float:
-        """
-        Computes the shot quality based on the open angle to the goal / total angle to the goal.
+        """Computes the shot quality based on the open angle to the goal / total angle to the goal.
+
         Uses the _find_best_shot function to determine the largest open angle.
         """
 
@@ -211,9 +194,7 @@ class ShouldScoreGoal(AbstractBehaviour):
 
         if best_shot is not None:
             self.blackboard.set("best_shot", best_shot, overwrite=True)
-            shot_orientation = np.arctan2(
-                (best_shot - self.shooter.p.y), (self.goal_x - self.shooter.p.x)
-            )
+            shot_orientation = np.arctan2((best_shot - self.shooter.p.y), (self.goal_x - self.shooter.p.x))
             self.blackboard.set("target_orientation", shot_orientation, overwrite=True)
         else:
             print("No valid shot found.")
@@ -226,16 +207,12 @@ class ShouldScoreGoal(AbstractBehaviour):
             Vector2D(self.goal_x, largest_gap[1]),
         )
 
-        distance_to_goal_ratio = (
-            np.absolute(self.shooter.p.x - self.goal_x)
-        ) / np.absolute(2 * self.goal_x)
+        distance_to_goal_ratio = (np.absolute(self.shooter.p.x - self.goal_x)) / np.absolute(2 * self.goal_x)
 
         distance_to_goal_weight = 0.4
 
         # Normalize shot quality
         shot_quality = (
-            open_angle / full_angle - distance_to_goal_weight * distance_to_goal_ratio
-            if full_angle > 0
-            else 0
+            open_angle / full_angle - distance_to_goal_weight * distance_to_goal_ratio if full_angle > 0 else 0
         )
         return shot_quality

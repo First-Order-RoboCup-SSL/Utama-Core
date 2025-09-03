@@ -1,19 +1,20 @@
-from typing import Dict, Union, Optional, Tuple, List
+import logging
+from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
+from numpy.typing import NDArray
+
 from entities.data.command import RobotCommand, RobotResponse
+from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
-import numpy as np
-from numpy.typing import NDArray
-from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
-import logging
 
 logger = logging.getLogger(__name__)
 
 
 class RSimRobotController(AbstractRobotController):
-    """
-    Robot Controller (and Vision Receiver) for RSim.
+    """Robot Controller (and Vision Receiver) for RSim.
 
     pvp_manager:
     if not None, two controllers are playing against each other. Else, play against static
@@ -41,9 +42,7 @@ class RSimRobotController(AbstractRobotController):
         return self._robots_info.popleft() if len(self._robots_info) > 0 else None
 
     def send_robot_commands(self) -> None:
-        """
-        Sends the robot commands to the appropriate team (yellow or blue).
-        """
+        """Sends the robot commands to the appropriate team (yellow or blue)."""
         if self.pvp_manager:
             self.pvp_manager.send_command(self.is_team_yellow, self._out_packet)
         else:
@@ -58,9 +57,7 @@ class RSimRobotController(AbstractRobotController):
                     "team_yellow": tuple(self._empty_command(self.n_enemy)),
                 }
 
-            observation, reward, terminated, truncated, reward_shaping = self._env.step(
-                action
-            )
+            observation, reward, terminated, truncated, reward_shaping = self._env.step(action)
 
             # note that we should not technically be able to view the opponent's robots_info!!
             new_frame, yellow_robots_info, blue_robots_info = observation
@@ -79,8 +76,7 @@ class RSimRobotController(AbstractRobotController):
         robot_commands: Union[RobotCommand, Dict[int, RobotCommand]],
         robot_id: Optional[int] = None,
     ) -> None:
-        """
-        Adds robot commands to the out_packet.
+        """Adds robot commands to the out_packet.
 
         Args:
             robot_commands (Union[RobotCommand, Dict[int, RobotCommand]]): A single RobotCommand or a dictionary of RobotCommand with robot_id as the key.
@@ -94,14 +90,14 @@ class RSimRobotController(AbstractRobotController):
         super().add_robot_commands(robot_commands, robot_id)
 
     def update_robots_info(self, robots_info):
-        """
-        Updates robots info to input. Used by PVPManager to update robots info.
+        """Updates robots info to input.
+
+        Used by PVPManager to update robots info.
         """
         self._robots_info.append(robots_info)
 
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
-        """
-        Adds a robot command to the out_packet.
+        """Adds a robot command to the out_packet.
 
         Args:
             robot_id (int): The ID of the robot.
@@ -163,12 +159,12 @@ class RSimRobotController(AbstractRobotController):
 
 
 class RSimPVPManager:
-    """
-    Manages a player vs player game inside the rsim environment. The two teams run in lockstep in
-    this setup, and so, in order to get results consistent with running just one player,
-    it's important to either alternate the player colours that send commands from the main loop
-    (using an empty command if one team has nothing to do), or call flush() after every command that
-    should be processed on its own (without a corresponding command from the other team).
+    """Manages a player vs player game inside the rsim environment.
+
+    The two teams run in lockstep in this setup, and so, in order to get results consistent with running just one
+    player, it's important to either alternate the player colours that send commands from the main loop (using an empty
+    command if one team has nothing to do), or call flush() after every command that should be processed on its own
+    (without a corresponding command from the other team).
     """
 
     def __init__(self, env: SSLBaseEnv):
@@ -186,28 +182,22 @@ class RSimPVPManager:
         yellow_controller: RSimRobotController,
         blue_controller: RSimRobotController,
     ):
-        """
-        Loads the blue and yellow controllers.
-        """
+        """Loads the blue and yellow controllers."""
         self.blue_player = blue_controller
         self.yellow_player = yellow_controller
 
     def send_command(self, is_yellow: bool, out_packet: list[NDArray]):
-        """
-        Sends the robot commands to the appropriate team (yellow or blue).
-        """
-        assert self.blue_player is not None and self.yellow_player is not None, (
-            "Blue and yellow players must be set before sending commands."
-        )
+        """Sends the robot commands to the appropriate team (yellow or blue)."""
+        assert (
+            self.blue_player is not None and self.yellow_player is not None
+        ), "Blue and yellow players must be set before sending commands."
 
         colour = "team_yellow" if is_yellow else "team_blue"
         other_colour = "team_blue" if is_yellow else "team_yellow"
 
         self._pending[colour] = tuple(out_packet)
         if self._pending[other_colour]:
-            observation, reward, terminated, truncated, reward_shaping = self._env.step(
-                self._pending
-            )
+            observation, reward, terminated, truncated, reward_shaping = self._env.step(self._pending)
 
             new_frame, yellow_robots_info, blue_robots_info = observation
             self.blue_player.update_robots_info(blue_robots_info)

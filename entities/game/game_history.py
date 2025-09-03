@@ -1,12 +1,14 @@
-from collections import deque
-from entities.game.game_frame import GameFrame, Robot, Ball
-from entities.data.vector import Vector2D, Vector3D
-from entities.data.object import TeamType, ObjectType, ObjectKey
-from enum import Enum, auto
-from typing import Tuple, Any, Union, Optional, Dict, List
-import numpy as np
-from itertools import islice
 import logging
+from collections import deque
+from enum import Enum, auto
+from itertools import islice
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+
+from entities.data.object import ObjectKey, ObjectType, TeamType
+from entities.data.vector import Vector2D, Vector3D
+from entities.game.game_frame import Ball, GameFrame, Robot
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +25,7 @@ def get_structured_object_key(obj: Any, team: TeamType) -> Optional[ObjectKey]:
         return ObjectKey(team, ObjectType.ROBOT, obj.id)
     elif isinstance(obj, Ball):
         return ObjectKey(TeamType.NEUTRAL, ObjectType.BALL, 0)
-    logger.warning(
-        f"Could not determine ObjectKey for object of type {type(obj)} with team {team}"
-    )
+    logger.warning(f"Could not determine ObjectKey for object of type {type(obj)} with team {team}")
     return None
 
 
@@ -45,20 +45,14 @@ class GameHistory:
 
         # Generic historical data storage:
         # ObjectKey -> AttributeType -> deque[(timestamp: float, value: np.ndarray)]
-        self.historical_data: Dict[
-            ObjectKey, Dict[AttributeType, deque[Tuple[float, np.ndarray]]]
-        ] = {}
+        self.historical_data: Dict[ObjectKey, Dict[AttributeType, deque[Tuple[float, np.ndarray]]]] = {}
 
-    def _ensure_attribute_deque_exists(
-        self, object_key: ObjectKey, attribute_type: AttributeType
-    ):
+    def _ensure_attribute_deque_exists(self, object_key: ObjectKey, attribute_type: AttributeType):
         """Ensures a deque exists for the given object_key and attribute_type."""
         if object_key not in self.historical_data:
             self.historical_data[object_key] = {}
         if attribute_type not in self.historical_data[object_key]:
-            self.historical_data[object_key][attribute_type] = deque(
-                maxlen=self.max_history
-            )
+            self.historical_data[object_key][attribute_type] = deque(maxlen=self.max_history)
 
     def _add_attribute_to_history(
         self,
@@ -74,29 +68,19 @@ class GameHistory:
         self._ensure_attribute_deque_exists(object_key, attribute_type)
         try:
             value_np = _vector_to_numpy(value_vector_obj)
-            self.historical_data[object_key][attribute_type].append(
-                (timestamp, value_np)
-            )
+            self.historical_data[object_key][attribute_type].append((timestamp, value_np))
         except TypeError as e:
-            logger.error(
-                f"Error converting vector for {object_key}, {attribute_type}: {e}"
-            )
+            logger.error(f"Error converting vector for {object_key}, {attribute_type}: {e}")
 
-    def _process_entity_for_history(
-        self, entity: Any, entity_key: ObjectKey, timestamp: float
-    ):
+    def _process_entity_for_history(self, entity: Any, entity_key: ObjectKey, timestamp: float):
         """Helper to process position and velocity for a given entity."""
         if not entity_key:
             return
 
         if hasattr(entity, "p"):
-            self._add_attribute_to_history(
-                entity_key, AttributeType.POSITION, timestamp, entity.p
-            )
+            self._add_attribute_to_history(entity_key, AttributeType.POSITION, timestamp, entity.p)
         if hasattr(entity, "v"):
-            self._add_attribute_to_history(
-                entity_key, AttributeType.VELOCITY, timestamp, entity.v
-            )
+            self._add_attribute_to_history(entity_key, AttributeType.VELOCITY, timestamp, entity.v)
         # If you pre-calculate and store acceleration:
         # if hasattr(entity, "a"):
         #     self._add_attribute_to_history(entity_key, AttributeType.ACCELERATION, timestamp, entity.a)
@@ -107,9 +91,7 @@ class GameHistory:
 
         # Process Ball
         if game.ball:
-            ball_key = get_structured_object_key(
-                game.ball, TeamType.NEUTRAL
-            )  # Ball is neutral
+            ball_key = get_structured_object_key(game.ball, TeamType.NEUTRAL)  # Ball is neutral
             if ball_key:
                 self._process_entity_for_history(game.ball, ball_key, current_ts)
 
@@ -122,9 +104,7 @@ class GameHistory:
             for robot_instance in robots_dict.values():
                 robot_key = get_structured_object_key(robot_instance, team_type)
                 if robot_key:
-                    self._process_entity_for_history(
-                        robot_instance, robot_key, current_ts
-                    )
+                    self._process_entity_for_history(robot_instance, robot_key, current_ts)
 
     def get_historical_attribute_series(
         self,
@@ -132,10 +112,10 @@ class GameHistory:
         attribute_type: AttributeType,
         num_points: int,
     ) -> Tuple[np.ndarray, np.ndarray]:  # Returns (timestamps_np, values_np)
-        """
-        Retrieves the last num_points of (timestamp, attribute_value_np) for a given object.
-        Returns data as NumPy arrays (timestamps, values), oldest to newest.
-        Returns empty NumPy arrays if no data is available.
+        """Retrieves the last num_points of (timestamp, attribute_value_np) for a given object.
+
+        Returns data as NumPy arrays (timestamps, values), oldest to newest. Returns empty NumPy arrays if no data is
+        available.
         """
         if num_points <= 0:
             return np.array([], dtype=np.float64), np.array([], dtype=np.float64)

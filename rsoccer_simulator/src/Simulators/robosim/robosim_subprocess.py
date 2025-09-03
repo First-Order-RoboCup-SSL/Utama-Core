@@ -1,10 +1,11 @@
-"""
-This script runs inside Python 3.10 (rc-robosim environment).
+"""This script runs inside Python 3.10 (rc-robosim environment).
+
 It receives JSON commands via stdin and returns simulator state via stdout.
 """
 
-import sys
 import json
+import sys
+
 import numpy as np
 import robosim
 
@@ -70,9 +71,7 @@ def main():
     parser.add_argument("--time_step_ms", type=int, required=True)
     args = parser.parse_args()
 
-    sim = SubprocessRSim(
-        args.sim_type, args.n_blue, args.n_yellow, args.field_type, args.time_step_ms
-    )
+    sim = SubprocessRSim(args.sim_type, args.n_blue, args.n_yellow, args.field_type, args.time_step_ms)
 
     try:
         for line in sys.stdin:
@@ -85,9 +84,7 @@ def main():
                     print(json.dumps({"state": state}))
                 elif "reset" in cmd:
                     r = cmd["reset"]
-                    sim.reset(
-                        r["ball_pos"], r["blue_robots_pos"], r["yellow_robots_pos"]
-                    )
+                    sim.reset(r["ball_pos"], r["blue_robots_pos"], r["yellow_robots_pos"])
                     print(json.dumps({"ack": True}))
                 elif "get_field_params" in cmd:
                     fp = sim.get_field_params()

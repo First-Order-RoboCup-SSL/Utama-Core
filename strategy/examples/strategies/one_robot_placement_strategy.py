@@ -1,10 +1,12 @@
-from entities.game import Game
+import math
+
+import numpy as np
 from robot_control.src.skills import go_to_point
+
+from entities.game import Game
 
 # from robot_control.src.tests.utils import one_robot_placement
 from strategy.abstract_strategy import AbstractStrategy
-import numpy as np
-import math
 
 
 class RobotPlacementStrategy(AbstractStrategy):
@@ -19,7 +21,7 @@ class RobotPlacementStrategy(AbstractStrategy):
         self.tx = -1 if invert else 1
 
     def step(self, game: Game):
-        """Closure which advances the simulation by one step"""
+        """Closure which advances the simulation by one step."""
         friendly_robots = game.friendly_robots
 
         if game.friendly_robots and game.ball is not None:

@@ -1,13 +1,13 @@
+from typing import Any, Optional, final
+
 import py_trees
-from typing import Optional, final, Any
+
 from config.settings import BLACKBOARD_NAMESPACE_MAP
 from strategy.common.base_blackboard import BaseBlackboard
 
 
 class AbstractBehaviour(py_trees.behaviour.Behaviour):
-    """
-    An abstract base class for all behaviours in the strategy.
-    """
+    """An abstract base class for all behaviours in the strategy."""
 
     def __init__(self, name: Optional[str] = None):
         if name is None:
@@ -17,15 +17,14 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
     ### START OF FUNCTIONS TO BE IMPLEMENTED BY YOUR STRATEGY ###
 
     def setup_(self):
-        """
-        This method is called at the end of setup(), before the first tree tick.
+        """This method is called at the end of setup(), before the first tree tick.
+
         For adding additional blackboard keys or other setup tasks.
         """
 
     def initialise(self) -> None:
-        """
-        configures and resets the behaviour ready for (repeated) execution
-        Initialisation is called on the first tick that the node is called.
+        """Configures and resets the behaviour ready for (repeated) execution Initialisation is called on the first tick
+        that the node is called.
 
         Some examples:
         - Initialising/resetting/clearing variables
@@ -36,8 +35,8 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
         ...
 
     def update(self) -> py_trees.common.Status:
-        """
-        This method should be overridden by subclasses to implement the behaviour's logic.
+        """This method should be overridden by subclasses to implement the behaviour's logic.
+
         It should return a status indicating the outcome of the behaviour.
         """
         ...
@@ -46,8 +45,8 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
 
     @final
     def setup(self, **kwargs: Any) -> None:
-        """
-        This method is called once by the tree before the first tick.
+        """This method is called once by the tree before the first tick.
+
         We setup the common blackboard keys to all behaviours.
         """
         is_opp_strategy = kwargs.get("is_opp_strat", False)
@@ -84,6 +83,4 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         if "setup" in cls.__dict__:
-            raise TypeError(
-                f"{cls.__name__} must not override 'setup'. Override 'setup_' instead."
-            )
+            raise TypeError(f"{cls.__name__} must not override 'setup'. Override 'setup_' instead.")

@@ -1,14 +1,14 @@
 import py_trees
-from py_trees.composites import Sequence, Selector
+from py_trees.composites import Selector, Sequence
 from py_trees.decorators import Inverter
-from strategy.common import AbstractStrategy, AbstractBehaviour
-from strategy.utils.blackboard_utils import SetBlackboardVariable
-from strategy.utils.selector_utils import GoalScored
-from strategy.utils.atk_utils import OrenAtTargetThreshold, GoalBlocked, ShouldScoreGoal
-from strategy.utils.action_nodes import TurnOnSpotStep, KickStep
-from strategy.skills.go_to_ball import GoToBallStrategy
 
 from skills.src.score_goal import score_goal
+from strategy.common import AbstractBehaviour, AbstractStrategy
+from strategy.skills.go_to_ball import GoToBallStrategy
+from strategy.utils.action_nodes import KickStep, TurnOnSpotStep
+from strategy.utils.atk_utils import GoalBlocked, OrenAtTargetThreshold, ShouldScoreGoal
+from strategy.utils.blackboard_utils import SetBlackboardVariable
+from strategy.utils.selector_utils import GoalScored
 
 
 class ScoreGoalStep(AbstractBehaviour):
@@ -27,9 +27,7 @@ class ScoreGoalStep(AbstractBehaviour):
             p = game.friendly_robots[self.blackboard.robot_id].p
             env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")
 
-            command = score_goal(
-                game, self.blackboard.motion_controller, self.blackboard.robot_id, env
-            )
+            command = score_goal(game, self.blackboard.motion_controller, self.blackboard.robot_id, env)
         else:
             command = score_goal(
                 game,
@@ -43,8 +41,8 @@ class ScoreGoalStep(AbstractBehaviour):
 
 class ScoreGoalStrategy(AbstractStrategy):
     def __init__(self, robot_id: int):
-        """
-        Initializes the ScoreGoalStrategy with a specific robot ID.
+        """Initializes the ScoreGoalStrategy with a specific robot ID.
+
         :param robot_id: The ID of the robot this strategy will control.
         """
         self.robot_id = robot_id
@@ -92,9 +90,7 @@ class ScoreGoalStrategy(AbstractStrategy):
         return root
 
     def create_module(self) -> py_trees.behaviour.Behaviour:
-        """
-        Create a module for this strategy.
-        This is used to create a module that can be used in other strategies.
+        """Create a module for this strategy. This is used to create a module that can be used in other strategies.
 
         **Blackboard Interaction:**
             Reads:

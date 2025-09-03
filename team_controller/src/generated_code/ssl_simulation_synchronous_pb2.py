@@ -12,11 +12,10 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-from . import ssl_vision_detection_pb2 as ssl__vision__detection__pb2
-from . import ssl_simulation_robot_feedback_pb2 as ssl__simulation__robot__feedback__pb2
-from . import ssl_simulation_robot_control_pb2 as ssl__simulation__robot__control__pb2
 from . import ssl_simulation_control_pb2 as ssl__simulation__control__pb2
-
+from . import ssl_simulation_robot_control_pb2 as ssl__simulation__robot__control__pb2
+from . import ssl_simulation_robot_feedback_pb2 as ssl__simulation__robot__feedback__pb2
+from . import ssl_vision_detection_pb2 as ssl__vision__detection__pb2
 
 DESCRIPTOR = _descriptor.FileDescriptor(
     name="ssl_simulation_synchronous.proto",
@@ -172,18 +171,14 @@ _SIMULATIONSYNCRESPONSE = _descriptor.Descriptor(
     serialized_end=413,
 )
 
-_SIMULATIONSYNCREQUEST.fields_by_name[
-    "simulator_command"
-].message_type = ssl__simulation__control__pb2._SIMULATORCOMMAND
-_SIMULATIONSYNCREQUEST.fields_by_name[
-    "robot_control"
-].message_type = ssl__simulation__robot__control__pb2._ROBOTCONTROL
-_SIMULATIONSYNCRESPONSE.fields_by_name[
-    "detection"
-].message_type = ssl__vision__detection__pb2._SSL_DETECTIONFRAME
-_SIMULATIONSYNCRESPONSE.fields_by_name[
-    "robot_control_response"
-].message_type = ssl__simulation__robot__feedback__pb2._ROBOTCONTROLRESPONSE
+_SIMULATIONSYNCREQUEST.fields_by_name["simulator_command"].message_type = (
+    ssl__simulation__control__pb2._SIMULATORCOMMAND
+)
+_SIMULATIONSYNCREQUEST.fields_by_name["robot_control"].message_type = ssl__simulation__robot__control__pb2._ROBOTCONTROL
+_SIMULATIONSYNCRESPONSE.fields_by_name["detection"].message_type = ssl__vision__detection__pb2._SSL_DETECTIONFRAME
+_SIMULATIONSYNCRESPONSE.fields_by_name["robot_control_response"].message_type = (
+    ssl__simulation__robot__feedback__pb2._ROBOTCONTROLRESPONSE
+)
 DESCRIPTOR.message_types_by_name["SimulationSyncRequest"] = _SIMULATIONSYNCREQUEST
 DESCRIPTOR.message_types_by_name["SimulationSyncResponse"] = _SIMULATIONSYNCRESPONSE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)

@@ -1,15 +1,13 @@
-from motion_planning.src.pid.pid import get_rsim_pids
-from robot_control.src.skills import (
-    face_ball,
-    go_to_point,
-    find_likely_enemy_shooter,
-)
-from robot_control.src.tests.utils import setup_pvp
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from robot_control.src.intent import score_goal
 import logging
 import time
+
+from robot_control.src.intent import score_goal
+from robot_control.src.skills import face_ball, find_likely_enemy_shooter, go_to_point
+from robot_control.src.tests.utils import setup_pvp
+
+from entities.game import Game
+from motion_planning.src.pid.pid import get_rsim_pids
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +17,8 @@ N_ROBOTS = 6
 
 
 def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
-    """When the tests are run with pytest, these parameters are filled in
-    based on whether we are in full or quick test mode (see conftest.py)"""
+    """When the tests are run with pytest, these parameters are filled in based on whether we are in full or quick test
+    mode (see conftest.py)"""
     game = Game()
 
     if defender_is_yellow:
@@ -79,9 +77,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
         # TODO: We should move robot_has_ball within game obj as well
         # This will do for now.
         if not goal_scored:
-            friendly, enemy, balls = game.get_my_latest_frame(
-                my_team_is_yellow=defender_is_yellow
-            )
+            friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=defender_is_yellow)
 
             f = game.predict_next_frame()
             if f:
@@ -121,9 +117,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                     friendly[0],
                     0,
                     target,
-                    face_ball(
-                        (friendly[0].x, friendly[0].y), (game.ball.x, game.ball.y)
-                    ),
+                    face_ball((friendly[0].x, friendly[0].y), (game.ball.x, game.ball.y)),
                     dribbling=True,
                 )
                 sim_robot_controller_defender.add_robot_commands(defend_cmd, 0)
@@ -135,9 +129,7 @@ def test_shooting(shooter_id: int, defender_is_yellow: bool, headless: bool):
                     friendly[0],
                     0,
                     [None, None],
-                    face_ball(
-                        (friendly[0].x, friendly[0].y), (game.ball.x, game.ball.y)
-                    ),
+                    face_ball((friendly[0].x, friendly[0].y), (game.ball.x, game.ball.y)),
                 )
                 sim_robot_controller_defender.add_robot_commands(defend_cmd, 0)
                 sim_robot_controller_defender.send_robot_commands()

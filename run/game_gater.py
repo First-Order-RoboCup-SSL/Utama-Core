@@ -1,9 +1,9 @@
+import time
 from typing import Deque, List, Tuple
+
 from entities.data.raw_vision import RawVisionData
 from entities.game.game_frame import GameFrame
-import time
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
-
 from run.refiners import PositionRefiner
 
 
@@ -19,15 +19,11 @@ class GameGater:
         is_pvp: bool,
         rsim_env: SSLBaseEnv = None,
     ) -> Tuple[GameFrame, GameFrame]:
-        def _add_frame(
-            my_game_frame: GameFrame, opp_game_frame: GameFrame
-        ) -> Tuple[GameFrame, GameFrame]:
+        def _add_frame(my_game_frame: GameFrame, opp_game_frame: GameFrame) -> Tuple[GameFrame, GameFrame]:
             if rsim_env:
                 vision_frames = [rsim_env._frame_to_observations()[0]]
             else:
-                vision_frames = [
-                    buffer.popleft() if buffer else None for buffer in vision_buffers
-                ]
+                vision_frames = [buffer.popleft() if buffer else None for buffer in vision_buffers]
             my_game_frame = position_refiner.refine(my_game_frame, vision_frames)
             if is_pvp:
                 opp_game_frame = position_refiner.refine(opp_game_frame, vision_frames)
@@ -37,9 +33,7 @@ class GameGater:
         my_game_frame = GameFrame(0, my_team_is_yellow, my_team_is_right, {}, {}, None)
 
         if is_pvp:
-            opp_game_frame = GameFrame(
-                0, not my_team_is_yellow, not my_team_is_right, {}, {}, None
-            )
+            opp_game_frame = GameFrame(0, not my_team_is_yellow, not my_team_is_right, {}, {}, None)
         else:
             opp_game_frame = None
 
@@ -55,12 +49,8 @@ class GameGater:
 
         # assert that we don't see more robots than expected
         if len(my_game_frame.friendly_robots) > exp_friendly:
-            raise ValueError(
-                f"Too many friendly robots: {len(my_game_frame.friendly_robots)} > {exp_friendly}"
-            )
+            raise ValueError(f"Too many friendly robots: {len(my_game_frame.friendly_robots)} > {exp_friendly}")
         if len(my_game_frame.enemy_robots) > exp_enemy:
-            raise ValueError(
-                f"Too many enemy robots: {len(my_game_frame.enemy_robots)} > {exp_enemy}"
-            )
+            raise ValueError(f"Too many enemy robots: {len(my_game_frame.enemy_robots)} > {exp_enemy}")
 
         return my_game_frame, opp_game_frame

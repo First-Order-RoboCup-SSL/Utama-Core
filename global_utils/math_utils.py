@@ -1,14 +1,12 @@
-import numpy as np
 from typing import Tuple
+
+import numpy as np
 
 from entities.data.vector import Vector2D
 
 
-def rotate_vector(
-    vx_global: float, vy_global: float, theta: float
-) -> Tuple[float, float]:
-    """
-    Rotates a 2D vector from global coordinates to local coordinates based on a given angle.
+def rotate_vector(vx_global: float, vy_global: float, theta: float) -> Tuple[float, float]:
+    """Rotates a 2D vector from global coordinates to local coordinates based on a given angle.
 
     Args:
         vx_global (float): The x-component of the vector in the global coordinate system.
@@ -28,8 +26,7 @@ def rotate_vector(
 
 
 def normalise_heading(angle):
-    """
-    Normalize an angle to the range [-π, π] radians, where 0 faces along positive x-axis.
+    """Normalize an angle to the range [-π, π] radians, where 0 faces along positive x-axis.
 
     Parameters
     ----------
@@ -45,32 +42,25 @@ def normalise_heading(angle):
 
 
 def deg_to_rad(degrees: float):
-    """
-    Convert degrees to radians, then normalise to range [-π, π]
-    """
+    """Convert degrees to radians, then normalise to range [-π, π]"""
     radians = np.deg2rad(degrees)
     return normalise_heading(radians)
 
 
 def rad_to_deg(radians: float):
-    """
-    Convert radians to degrees, then normalise to range [0, 360]
-    """
+    """Convert radians to degrees, then normalise to range [0, 360]"""
     degrees = np.rad2deg(radians)
     return degrees % 360
 
 
 def distance(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
-    """
-    Calculate the Euclidean distance between two points in 2D space using the Pythagorean theorem.
-    """
+    """Calculate the Euclidean distance between two points in 2D space using the Pythagorean theorem."""
     return np.hypot(point2[0] - point1[0], point2[1] - point1[1])
 
 
 def angle_between_points(main_point: Vector2D, point1: Vector2D, point2: Vector2D):
-    """
-    Computes the angle (in radians) between two lines originating from main_point
-    and passing through point1 and point2.
+    """Computes the angle (in radians) between two lines originating from main_point and passing through point1 and
+    point2.
 
     Parameters:
     main_point (tuple): The common point (x, y).

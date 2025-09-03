@@ -1,12 +1,11 @@
-import threading
-from collections import deque
-from run.receivers.vision_receiver import VisionReceiver
-import time
 import logging
+import threading
+import time
+from collections import deque
 
-from run.refiners import PositionRefiner
 from run import GameGater
-
+from run.receivers.vision_receiver import VisionReceiver
+from run.refiners import PositionRefiner
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG)
@@ -34,9 +33,7 @@ def main():
     NUM_ENEMY = 1
 
     print("Waiting for game to be valid...")
-    game = GameGater.wait_until_game_valid(
-        True, True, 1, 1, True, vision_buffers, position_refiner, False
-    )
+    game = GameGater.wait_until_game_valid(True, True, 1, 1, True, vision_buffers, position_refiner, False)
 
     prog_start = time.time()
 

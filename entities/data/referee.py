@@ -48,6 +48,5 @@ class RefereeData(NamedTuple):
             and self.designated_position == other.designated_position
             and self.blue_team_on_positive_half == other.blue_team_on_positive_half
             and self.next_command == other.next_command
-            and self.current_action_time_remaining
-            == other.current_action_time_remaining
+            and self.current_action_time_remaining == other.current_action_time_remaining
         )
