@@ -1,5 +1,5 @@
-from typing import NamedTuple
 from enum import Enum, auto
+from typing import NamedTuple
 
 
 class TeamType(Enum):

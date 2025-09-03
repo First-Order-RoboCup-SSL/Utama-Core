@@ -1,6 +1,6 @@
+from entities.data.command import RobotCommand
 from entities.game import Game
 from motion_planning.src.motion_controller import MotionController
-from entities.data.command import RobotCommand
 from skills.src.utils.move_utils import move
 
 

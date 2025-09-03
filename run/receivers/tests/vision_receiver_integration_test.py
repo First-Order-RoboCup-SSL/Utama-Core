@@ -1,9 +1,9 @@
-import threading
-from collections import deque
-from run.receivers.vision_receiver import VisionReceiver
-import time
 import logging
+import threading
+import time
+from collections import deque
 
+from run.receivers.vision_receiver import VisionReceiver
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

@@ -1,20 +1,19 @@
-from entities.game.game_object import Colour, Robot as GameRobot
-from motion_planning.src.pid.pid import get_rsim_pids
-from robot_control.src.skills import (
-    go_to_point,
-    mag,
-    face_ball,
-)
-from team_controller.src.controllers import RSimRobotController
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+import logging
+import random
+from math import dist
+
+from robot_control.src.skills import face_ball, go_to_point, mag
+
 from entities.game import Game
+from entities.game.game_object import Colour
+from entities.game.game_object import Robot as GameRobot
+from motion_planning.src.pid.pid import get_rsim_pids
 from motion_planning.src.planning.controller import (
     TempObstacleType,
     TimedSwitchController,
 )
-import random
-import logging
-from math import dist
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+from team_controller.src.controllers import RSimRobotController
 
 logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.DEBUG)
@@ -39,9 +38,7 @@ def test_pathfinding(headless: bool):
     is_yellow = True
     pid_oren, pid_2d = get_rsim_pids(N_ROBOTS_YELLOW if is_yellow else N_ROBOTS_BLUE)
 
-    sim_robot_controller = RSimRobotController(
-        is_team_yellow=is_yellow, env=env, game_obj=game
-    )
+    sim_robot_controller = RSimRobotController(is_team_yellow=is_yellow, env=env, game_obj=game)
 
     hybrid = TimedSwitchController(N_ROBOTS_YELLOW, game, Colour.YELLOW, env)
     target = (4, -2.5)
@@ -59,15 +56,11 @@ def test_pathfinding(headless: bool):
         r = friendly_robots[mover_id]
         velocity = game.get_object_velocity(GameRobot(True, mover_id))
 
-        next_stop = hybrid.path_to(
-            target, mover_id, temporary_obstacles_enum=TempObstacleType.FIELD
-        )
+        next_stop = hybrid.path_to(target, mover_id, temporary_obstacles_enum=TempObstacleType.FIELD)
 
         env.draw_point(target[0], target[1], width=10, color="GREEN")
 
-        if dist((r.x, r.y), target) < 0.05 and (
-            velocity is None or mag(velocity) < 0.2
-        ):
+        if dist((r.x, r.y), target) < 0.05 and (velocity is None or mag(velocity) < 0.2):
             print("REACHED")
             break
 

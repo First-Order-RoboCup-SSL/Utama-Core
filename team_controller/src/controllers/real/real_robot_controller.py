@@ -1,21 +1,15 @@
-from serial import Serial, EIGHTBITS, PARITY_EVEN, STOPBITS_TWO
-from typing import Union, Optional, Dict, List
+import logging
 import warnings
+from typing import Dict, List, Optional, Union
+
 import numpy as np
+from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 
-from entities.data.command import RobotCommand, RobotResponse, RobotPacketCommand
-
+from config.settings import BAUD_RATE, MAX_ANGULAR_VEL, MAX_VEL, PORT, TIMEOUT
+from entities.data.command import RobotCommand, RobotPacketCommand, RobotResponse
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
-from config.settings import (
-    MAX_ANGULAR_VEL,
-    MAX_VEL,
-    BAUD_RATE,
-    PORT,
-    TIMEOUT,
-)
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +19,7 @@ UINT16_MAX = 65535
 
 
 class RealRobotController(AbstractRobotController):
-    """
-    Robot Controller for Real Robots.
+    """Robot Controller for Real Robots.
 
     Args:
         is_team_yellow (bool): True if the team is yellow, False if the team is blue.
@@ -41,14 +34,10 @@ class RealRobotController(AbstractRobotController):
         self._in_packet_size = 1  # size of the feedback packet received from the robots
         self._robots_info: List[RobotResponse] = [None] * self._n_friendly
 
-        logger.debug(
-            f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}"
-        )
+        logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
 
     def send_robot_commands(self) -> None:
-        """
-        Sends the robot commands to the appropriate team (yellow or blue).
-        """
+        """Sends the robot commands to the appropriate team (yellow or blue)."""
         # print(list(self.out_packet))
         # binary_representation = [f"{byte:08b}" for byte in self.out_packet]
         # print(binary_representation)
@@ -66,14 +55,11 @@ class RealRobotController(AbstractRobotController):
         robot_commands: Union[RobotCommand, Dict[int, RobotCommand]],
         robot_id: Optional[int] = None,
     ) -> None:
-        """
-        Adds robot commands to the packet to be sent to the robot.
-        """
+        """Adds robot commands to the packet to be sent to the robot."""
         super().add_robot_commands(robot_commands, robot_id)
 
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
-        """
-        Adds a robot command to the out_packet.
+        """Adds a robot command to the out_packet.
 
         Args:
             robot_id (int): The ID of the robot.
@@ -82,9 +68,7 @@ class RealRobotController(AbstractRobotController):
         c_command = self._convert_uint16_command(robot_id, command)
         command_buffer = self._generate_command_buffer(robot_id, c_command)
         print(command_buffer)
-        start_idx = (
-            robot_id * self._rbt_cmd_size + 1
-        )  # account for the start frame byte
+        start_idx = robot_id * self._rbt_cmd_size + 1  # account for the start frame byte
         self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = (
             command_buffer  # +1 to account for start frame byte
         )
@@ -101,12 +85,8 @@ class RealRobotController(AbstractRobotController):
     #         self._robots_info[i] = info
     #         data_in = data_in << 1  # shift to the next robot's data
 
-    def _generate_command_buffer(
-        self, robot_id: int, c_command: RobotPacketCommand
-    ) -> bytes:
-        """
-        Generates the command buffer to be sent to the robot.
-        """
+    def _generate_command_buffer(self, robot_id: int, c_command: RobotPacketCommand) -> bytes:
+        """Generates the command buffer to be sent to the robot."""
         assert robot_id < 6, "Invalid robot_id. Must be between 0 and 5."
 
         # Combine first 6 bytes of velocities
@@ -156,11 +136,8 @@ class RealRobotController(AbstractRobotController):
 
         return packet
 
-    def _convert_uint16_command(
-        self, robot_id, command: RobotCommand
-    ) -> RobotPacketCommand:
-        """
-        Prepares the float values in the command to be formatted to binary in the buffer.
+    def _convert_uint16_command(self, robot_id, command: RobotCommand) -> RobotPacketCommand:
+        """Prepares the float values in the command to be formatted to binary in the buffer.
 
         Also converts angular velocity to degrees per second.
         """
@@ -173,9 +150,7 @@ class RealRobotController(AbstractRobotController):
             warnings.warn(
                 f"Angular velocity for robot {robot_id} is greater than the maximum angular velocity. Clipping to {MAX_ANGULAR_VEL}."
             )
-            angular_vel = (
-                MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
-            )
+            angular_vel = MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
         if abs(command.local_forward_vel) > MAX_VEL:
             warnings.warn(
                 f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
@@ -203,8 +178,7 @@ class RealRobotController(AbstractRobotController):
         return command
 
     def _convert_float_command(self, robot_id, command: RobotCommand) -> RobotCommand:
-        """
-        Prepares the float values in the command to be formatted to binary in the buffer.
+        """Prepares the float values in the command to be formatted to binary in the buffer.
 
         Also converts angular velocity to degrees per second.
         """
@@ -217,9 +191,7 @@ class RealRobotController(AbstractRobotController):
             warnings.warn(
                 f"Angular velocity for robot {robot_id} is greater than the maximum angular velocity. Clipping to {MAX_ANGULAR_VEL}."
             )
-            angular_vel = (
-                MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
-            )
+            angular_vel = MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
         # TODO put back to max_vel
         if abs(command.local_forward_vel) > 0.8:
             warnings.warn(
@@ -244,9 +216,7 @@ class RealRobotController(AbstractRobotController):
         return command
 
     def _float16_rep(self, value: float) -> np.uint16:
-        """
-        Converts a float, flattens it to float 16 and represented as uint16 value for transmission.
-        """
+        """Converts a float, flattens it to float 16 and represented as uint16 value for transmission."""
         return np.float16(value).view(np.uint16)
 
     def _sanitise_float(self, val: float) -> float:
@@ -275,22 +245,16 @@ class RealRobotController(AbstractRobotController):
         return int(code)
 
     def _uint16_rep(self, value: int) -> np.uint16:
-        """
-        Converts an int to uint16 for transmission.
-        """
+        """Converts an int to uint16 for transmission."""
         return np.uint16(value).view(np.uint16)
 
     def _empty_command(self) -> bytearray:
         if not hasattr(self, "_cached_empty_command"):
             commands = bytearray()
             for robot_id in range(self._n_friendly):
-                cmd = bytearray(
-                    [robot_id] + [0] * (self._rbt_cmd_size - 1)
-                )  # empty command for each robot
+                cmd = bytearray([robot_id] + [0] * (self._rbt_cmd_size - 1))  # empty command for each robot
                 commands += cmd
-            self._cached_empty_command = (
-                bytearray([0xAA]) + commands + bytearray([0x55])
-            )
+            self._cached_empty_command = bytearray([0xAA]) + commands + bytearray([0x55])
         return self._cached_empty_command
 
     def _init_serial(self) -> Serial:
@@ -307,9 +271,7 @@ class RealRobotController(AbstractRobotController):
             )
             return serial_port
         except Exception as e:
-            raise ConnectionError(
-                f"Could not connect to serial port {PORT}: {e}"
-            ) from e
+            raise ConnectionError(f"Could not connect to serial port {PORT}: {e}") from e
 
     @property
     def is_team_yellow(self) -> bool:

@@ -1,12 +1,10 @@
-from run.refiners.base_refiner import BaseRefiner
-from entities.data.command import RobotResponse
-from entities.game.game_frame import GameFrame
 import warnings
-
 from dataclasses import replace
-
 from typing import List
 
+from entities.data.command import RobotResponse
+from entities.game.game_frame import GameFrame
+from run.refiners.base_refiner import BaseRefiner
 
 # TODO: current doesn't handle has_ball for enemy robots. In future, implement using vision data
 
@@ -23,8 +21,6 @@ class RobotInfoRefiner(BaseRefiner):
                 robot = friendly_robots[id]
                 friendly_robots[id] = replace(robot, has_ball=robot_response.has_ball)
             else:
-                warnings.warn(
-                    f"Robot ID {id} in robot responses not found in friendly robots. "
-                )
+                warnings.warn(f"Robot ID {id} in robot responses not found in friendly robots. ")
         new_game = replace(game_frame, friendly_robots=friendly_robots)
         return new_game

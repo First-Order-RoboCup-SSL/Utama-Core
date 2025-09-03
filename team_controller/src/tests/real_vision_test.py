@@ -1,10 +1,10 @@
-import threading
-import queue
-from entities.game import Game
-from team_controller.src.data.message_enum import MessageType
-from team_controller.src.data import VisionReceiver
-
 import logging
+import queue
+import threading
+
+from entities.game import Game
+from team_controller.src.data import VisionReceiver
+from team_controller.src.data.message_enum import MessageType
 
 logger = logging.getLogger(__name__)
 # TODO: This needs to be moved out of team_controller soon

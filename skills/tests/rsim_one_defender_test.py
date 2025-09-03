@@ -1,11 +1,13 @@
-from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from team_controller.src.controllers import RSimRobotController, RSimController
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from robot_control.src.intent import defend, score_goal
-from motion_planning.src.pid import PID
-from robot_control.src.tests.utils import setup_pvp
 import logging
+
+from robot_control.src.intent import defend, score_goal
+from robot_control.src.tests.utils import setup_pvp
+
+from entities.game import Game
+from motion_planning.src.pid import PID
+from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+from team_controller.src.controllers import RSimController, RSimRobotController
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +38,7 @@ def attack(
     return False
 
 
-def test_single_defender(
-    defender_id: int, shooter_id: int, defender_is_yellow: bool, headless: bool
-):
+def test_single_defender(defender_id: int, shooter_id: int, defender_is_yellow: bool, headless: bool):
     game = Game()
 
     if defender_is_yellow:
@@ -117,14 +117,9 @@ def test_single_defender(
         sim_robot_controller_defender.add_robot_commands(cmd, defender_id)
         sim_robot_controller_defender.send_robot_commands()
 
-        if sim_robot_controller_defender.robot_has_ball(
-            defender_id
-        ):  # Sim ends when the defender gets the ball
+        if sim_robot_controller_defender.robot_has_ball(defender_id):  # Sim ends when the defender gets the ball
             break
-        defender_gets_ball = (
-            defender_gets_ball
-            or sim_robot_controller_attacker.robot_has_ball(shooter_id)
-        )
+        defender_gets_ball = defender_gets_ball or sim_robot_controller_attacker.robot_has_ball(shooter_id)
 
     assert not any_scored
     assert defender_gets_ball

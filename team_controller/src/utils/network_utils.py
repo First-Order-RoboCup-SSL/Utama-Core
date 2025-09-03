@@ -1,18 +1,15 @@
+import logging
 import socket
 import struct
-import logging
 from typing import Optional, Tuple
 
-from config.settings import MULTICAST_GROUP, LOCAL_HOST, TIMESTEP
+from config.settings import LOCAL_HOST, MULTICAST_GROUP, TIMESTEP
 
 logger = logging.getLogger(__name__)
 
 
-def setup_socket(
-    sock: socket.socket, address: Tuple[str, int], bind_socket: bool = False
-) -> socket.socket:
-    """
-    Configures a UDP socket with specified options, including multicast group settings if applicable.
+def setup_socket(sock: socket.socket, address: Tuple[str, int], bind_socket: bool = False) -> socket.socket:
+    """Configures a UDP socket with specified options, including multicast group settings if applicable.
 
     Args:
         sock (socket.socket): The socket to configure.
@@ -37,9 +34,7 @@ def setup_socket(
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8192)
         actual_buffer_size = sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
         if actual_buffer_size < 8192:
-            logger.warning(
-                f"OS reduced receive buffer size from {8192} to {actual_buffer_size}"
-            )
+            logger.warning(f"OS reduced receive buffer size from {8192} to {actual_buffer_size}")
 
         # Bind if requested (necessary for listening)
         if bind_socket:
@@ -52,17 +47,13 @@ def setup_socket(
                     sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
                     logger.info(f"Socket joined multicast group {MULTICAST_GROUP}")
                 except socket.error as e:
-                    logger.fatal(
-                        f"Failed to join multicast group {MULTICAST_GROUP}: {e}"
-                    )
+                    logger.fatal(f"Failed to join multicast group {MULTICAST_GROUP}: {e}")
                     raise
 
         # Set timeout for non-blocking behavior
         if timeout is not None:
             if timeout <= 0:
-                logger.warning(
-                    f"Timeout value ({timeout}) is not positive. Setting to None (blocking)."
-                )
+                logger.warning(f"Timeout value ({timeout}) is not positive. Setting to None (blocking).")
                 sock.settimeout(None)
             else:
                 sock.settimeout(timeout * 1.1)  # To account for network jitter
@@ -84,8 +75,7 @@ def setup_socket(
 
 
 def receive_data(sock: socket.socket) -> Optional[bytes]:
-    """
-    Receives data from the socket.
+    """Receives data from the socket.
 
     Args:
         sock (socket.socket): The socket from which to receive data.
@@ -116,8 +106,7 @@ def send_command(
     command: object,
     is_sim_robot_cmd: bool = False,
 ) -> Optional[bytes]:
-    """
-    Sends a command to the specified address over a UDP socket.
+    """Sends a command to the specified address over a UDP socket.
 
     Args:
         address (Tuple[str, int]): The destination IP address and port.
@@ -132,9 +121,7 @@ def send_command(
     method is missing.
     """
     try:
-        if hasattr(command, "SerializeToString") and callable(
-            command.SerializeToString
-        ):
+        if hasattr(command, "SerializeToString") and callable(command.SerializeToString):
             serialized_data = command.SerializeToString()
         elif isinstance(command, bytes):
             serialized_data = command  # Allow sending raw bytes

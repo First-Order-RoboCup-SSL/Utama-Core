@@ -1,6 +1,7 @@
-from dataclasses import dataclass, replace
-from run.receivers.vision_receiver import VisionReceiver, RawRobotData, RawBallData
 from collections import deque
+from dataclasses import dataclass, replace
+
+from run.receivers.vision_receiver import RawBallData, RawRobotData, VisionReceiver
 
 
 @dataclass
@@ -33,9 +34,7 @@ class MockBallData:
 MOCK_DETECTION1 = MockDetection(
     t_capture=1,
     t_sent=1,
-    robots_yellow=[
-        MockRobotData(1000, 2000, 3000, 4000, 5000)
-    ],  # units here are mm from the cameras
+    robots_yellow=[MockRobotData(1000, 2000, 3000, 4000, 5000)],  # units here are mm from the cameras
     robots_blue=[MockRobotData(100, 200, 300, 400, 500)],
     balls=[MockBallData(10, 20, 30, 40)],
     camera_id=0,
@@ -43,9 +42,7 @@ MOCK_DETECTION1 = MockDetection(
 MOCK_DETECTION2 = MockDetection(
     t_capture=2,
     t_sent=1,
-    robots_yellow=[
-        MockRobotData(10000, 20000, 30000, 40000, 50000)
-    ],  # units here are mm from the cameras
+    robots_yellow=[MockRobotData(10000, 20000, 30000, 40000, 50000)],  # units here are mm from the cameras
     robots_blue=[],
     balls=[],
     camera_id=0,
@@ -108,9 +105,7 @@ def test_multiple_cameras_put_frames_to_buffer():
     for buffer_id in range(4):
         assert len(vision_buffer[buffer_id]) == 1
         assert vision_buffer[buffer_id][0].camera_id == buffer_id
-        assert vision_buffer[buffer_id][0] == v._process_packet(
-            camera_detections[buffer_id]
-        )
+        assert vision_buffer[buffer_id][0] == v._process_packet(camera_detections[buffer_id])
 
 
 if __name__ == "__main__":

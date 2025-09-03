@@ -1,19 +1,19 @@
 import math
+
 import numpy as np
-from motion_planning.src.pid.pid import TwoDPID
 from robot_control.src.skills import go_to_point
+
+from entities.game import Game
+from global_utils.math_utils import rotate_vector
+from motion_planning.src.pid import PID
+from motion_planning.src.pid.pid import TwoDPID
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from team_controller.src.controllers import RSimRobotController
-from entities.game import Game
-from motion_planning.src.pid import PID
 from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
-from global_utils.math_utils import rotate_vector
 
 
-def setup_pvp(
-    env: SSLStandardEnv, game: Game, n_robots_blue: int, n_robots_yellow: int
-):
-    """Factory method to setup PVP in an RSoccer environment"""
+def setup_pvp(env: SSLStandardEnv, game: Game, n_robots_blue: int, n_robots_yellow: int):
+    """Factory method to setup PVP in an RSoccer environment."""
     pvp_manager = PVPManager(env, n_robots_blue, n_robots_yellow, game)
     sim_robot_controller_yellow = RSimRobotController(
         is_team_yellow=True, env=env, game_obj=game, pvp_manager=pvp_manager
@@ -38,15 +38,18 @@ def one_robot_placement(
     target_oren: float,
     env: SSLStandardEnv,
 ):
-    """Implements the one robot placmement test where the robot first goes to (0, 1.5) and points upwards, then
-    goes to (0, -1.5) and points downwards and repeats. This is done by returning a closure which can be called
-    to advance the simulation by one step, making the robot do the next step."""
+    """Implements the one robot placmement test where the robot first goes to (0, 1.5) and points upwards, then goes to
+    (0, -1.5) and points downwards and repeats.
+
+    This is done by returning a closure which can be called to advance the simulation by one step, making the robot do
+    the next step.
+    """
 
     ty = -1.5 if invert else 1.5
     tx = 0
 
     def one_step():
-        """Closure which advances the simulation by one step"""
+        """Closure which advances the simulation by one step."""
         game = controller.game
         nonlocal tx, ty
         if game.friendly_robots and game.ball is not None:

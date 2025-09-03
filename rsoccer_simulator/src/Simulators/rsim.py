@@ -1,7 +1,8 @@
+from typing import Dict, List
+
 import numpy as np
 
-from typing import Dict, List
-from rsoccer_simulator.src.Entities import Frame, FrameVSS, FrameSSL, Field
+from rsoccer_simulator.src.Entities import Field, Frame, FrameSSL, FrameVSS
 from rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
     RSimSubprocessWrapper,
 )
@@ -86,9 +87,7 @@ class RSim:
 
 class RSimVSS(RSim):
     def send_commands(self, commands):
-        sim_commands = np.zeros(
-            (self.n_robots_blue + self.n_robots_yellow, 2), dtype=np.float64
-        )
+        sim_commands = np.zeros((self.n_robots_blue + self.n_robots_yellow, 2), dtype=np.float64)
 
         for cmd in commands:
             if cmd.yellow:
@@ -125,9 +124,7 @@ class RSimVSS(RSim):
 
 class RSimSSL(RSim):
     def send_commands(self, commands):
-        sim_cmds = np.zeros(
-            (self.n_robots_blue + self.n_robots_yellow, 8), dtype=np.float64
-        )
+        sim_cmds = np.zeros((self.n_robots_blue + self.n_robots_yellow, 8), dtype=np.float64)
 
         for cmd in commands:
             if cmd.yellow:

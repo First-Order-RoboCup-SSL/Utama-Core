@@ -19,9 +19,7 @@ class MotionController:
         elif mode == "real":
             return get_real_pids()
         else:
-            raise ValueError(
-                f"Unknown mode: {mode}. Choose from 'rsim', 'grsim', or 'real'."
-            )
+            raise ValueError(f"Unknown mode: {mode}. Choose from 'rsim', 'grsim', or 'real'.")
 
     @property
     def pid_oren(self) -> PID:

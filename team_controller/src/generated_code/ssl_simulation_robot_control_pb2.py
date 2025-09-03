@@ -527,24 +527,12 @@ _ROBOTCOMMAND.fields_by_name["move_command"].message_type = _ROBOTMOVECOMMAND
 _ROBOTMOVECOMMAND.fields_by_name["wheel_velocity"].message_type = _MOVEWHEELVELOCITY
 _ROBOTMOVECOMMAND.fields_by_name["local_velocity"].message_type = _MOVELOCALVELOCITY
 _ROBOTMOVECOMMAND.fields_by_name["global_velocity"].message_type = _MOVEGLOBALVELOCITY
-_ROBOTMOVECOMMAND.oneofs_by_name["command"].fields.append(
-    _ROBOTMOVECOMMAND.fields_by_name["wheel_velocity"]
-)
-_ROBOTMOVECOMMAND.fields_by_name[
-    "wheel_velocity"
-].containing_oneof = _ROBOTMOVECOMMAND.oneofs_by_name["command"]
-_ROBOTMOVECOMMAND.oneofs_by_name["command"].fields.append(
-    _ROBOTMOVECOMMAND.fields_by_name["local_velocity"]
-)
-_ROBOTMOVECOMMAND.fields_by_name[
-    "local_velocity"
-].containing_oneof = _ROBOTMOVECOMMAND.oneofs_by_name["command"]
-_ROBOTMOVECOMMAND.oneofs_by_name["command"].fields.append(
-    _ROBOTMOVECOMMAND.fields_by_name["global_velocity"]
-)
-_ROBOTMOVECOMMAND.fields_by_name[
-    "global_velocity"
-].containing_oneof = _ROBOTMOVECOMMAND.oneofs_by_name["command"]
+_ROBOTMOVECOMMAND.oneofs_by_name["command"].fields.append(_ROBOTMOVECOMMAND.fields_by_name["wheel_velocity"])
+_ROBOTMOVECOMMAND.fields_by_name["wheel_velocity"].containing_oneof = _ROBOTMOVECOMMAND.oneofs_by_name["command"]
+_ROBOTMOVECOMMAND.oneofs_by_name["command"].fields.append(_ROBOTMOVECOMMAND.fields_by_name["local_velocity"])
+_ROBOTMOVECOMMAND.fields_by_name["local_velocity"].containing_oneof = _ROBOTMOVECOMMAND.oneofs_by_name["command"]
+_ROBOTMOVECOMMAND.oneofs_by_name["command"].fields.append(_ROBOTMOVECOMMAND.fields_by_name["global_velocity"])
+_ROBOTMOVECOMMAND.fields_by_name["global_velocity"].containing_oneof = _ROBOTMOVECOMMAND.oneofs_by_name["command"]
 _ROBOTCONTROL.fields_by_name["robot_commands"].message_type = _ROBOTCOMMAND
 DESCRIPTOR.message_types_by_name["RobotCommand"] = _ROBOTCOMMAND
 DESCRIPTOR.message_types_by_name["RobotMoveCommand"] = _ROBOTMOVECOMMAND

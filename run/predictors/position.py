@@ -1,6 +1,7 @@
-from entities.game import Game
 from typing import Optional
+
 from entities.data.vector import Vector2D
+from entities.game import Game
 
 ### Incomplete Code Snippet ###
 

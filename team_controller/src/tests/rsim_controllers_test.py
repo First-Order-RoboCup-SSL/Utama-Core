@@ -1,9 +1,9 @@
-from team_controller.src.controllers import RSimRobotController, RSimController
+import logging
+
 from entities.data.command import RobotCommand
 from entities.game import Game
-
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-import logging
+from team_controller.src.controllers import RSimController, RSimRobotController
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +29,7 @@ for i in range(10000):
         logger.info("Ball has been teleported!")
     if i == 152:
         # RSimController gives you the ability to teleport robots directly
-        game_controller.teleport_robot(
-            is_team_yellow=True, robot_id=3, x=1.2, y=-2, theta=-1.5
-        )
+        game_controller.teleport_robot(is_team_yellow=True, robot_id=3, x=1.2, y=-2, theta=-1.5)
         logger.info("Robot 3 (yellow) has been teleported!")
 
     # send robot commands after adding them

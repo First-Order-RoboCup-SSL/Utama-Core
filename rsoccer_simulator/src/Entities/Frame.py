@@ -1,4 +1,5 @@
 from typing import Dict
+
 from rsoccer_simulator.src.Entities.Ball import Ball
 from rsoccer_simulator.src.Entities.Robot import Robot
 
@@ -15,7 +16,7 @@ class Frame:
 
 class FrameVSS(Frame):
     def parse(self, state, n_blues=3, n_yellows=3):
-        """It parses the state received from grSim in a common state for environment"""
+        """It parses the state received from grSim in a common state for environment."""
         self.ball.x = state[0]
         self.ball.y = state[1]
         self.ball.z = state[2]
@@ -50,7 +51,7 @@ class FrameVSS(Frame):
 
 class FrameSSL(Frame):
     def parse(self, state, n_blues=3, n_yellows=3):
-        """It parses the state received from grSim in a common state for environment"""
+        """It parses the state received from grSim in a common state for environment."""
         self.ball.x = state[0]
         self.ball.y = state[1]
         self.ball.z = state[2]

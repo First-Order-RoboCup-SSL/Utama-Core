@@ -1,11 +1,11 @@
+import logging
 from typing import Tuple
+
 from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
 from entities.data.command import RobotCommand
 from entities.game import Game
 from skills.src.skills import go_to_point
 from strategy.abstract_strategy import AbstractStrategy
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +15,7 @@ class StartupStrategy(AbstractStrategy):
         return True
 
     def step(self, game: Game):
-        START_FORMATION = (
-            RIGHT_START_ONE if game.current.my_team_is_right else LEFT_START_ONE
-        )
+        START_FORMATION = RIGHT_START_ONE if game.current.my_team_is_right else LEFT_START_ONE
 
         for robot_id, robot_data in game.current.friendly_robots.items():
             target_coords = START_FORMATION[robot_id]

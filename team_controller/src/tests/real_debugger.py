@@ -1,8 +1,9 @@
+import threading
+import time
 import tkinter as tk
 from tkinter import ttk
+
 import numpy as np
-import time
-import threading
 import serial
 import serial.tools.list_ports
 
@@ -66,14 +67,10 @@ class RobotControlGUI:
                 baudrate=115200,  # Adjust to match Arduino's baud rate
                 timeout=0.1,
             )
-            self.serial_status_label.config(
-                text=f"Connected to {port}", foreground="green"
-            )
+            self.serial_status_label.config(text=f"Connected to {port}", foreground="green")
             return True
         except Exception as e:
-            self.serial_status_label.config(
-                text=f"Connection failed: {str(e)}", foreground="red"
-            )
+            self.serial_status_label.config(text=f"Connection failed: {str(e)}", foreground="red")
             return False
 
     def setup_gui(self):
@@ -88,32 +85,22 @@ class RobotControlGUI:
         # Port Selection Dropdown
         ttk.Label(serial_frame, text="Select Port:").grid(row=0, column=0, padx=5)
         self.port_var = tk.StringVar()
-        port_dropdown = ttk.Combobox(
-            serial_frame, textvariable=self.port_var, values=self.serial_ports, width=20
-        )
+        port_dropdown = ttk.Combobox(serial_frame, textvariable=self.port_var, values=self.serial_ports, width=20)
         port_dropdown.grid(row=0, column=1, padx=5)
 
         # Connect Button
-        connect_btn = ttk.Button(
-            serial_frame, text="Connect", command=self.connect_to_selected_port
-        )
+        connect_btn = ttk.Button(serial_frame, text="Connect", command=self.connect_to_selected_port)
         connect_btn.grid(row=0, column=2, padx=5)
 
         # Serial Status Label
-        self.serial_status_label = ttk.Label(
-            serial_frame, text="No port selected", foreground="red"
-        )
+        self.serial_status_label = ttk.Label(serial_frame, text="No port selected", foreground="red")
         self.serial_status_label.grid(row=1, column=0, columnspan=3, padx=5)
 
         # Arduino Response Display
-        response_frame = ttk.LabelFrame(
-            main_frame, text="Arduino Response", padding="5"
-        )
+        response_frame = ttk.LabelFrame(main_frame, text="Arduino Response", padding="5")
         response_frame.grid(row=1, column=0, columnspan=2, pady=5, sticky=(tk.W, tk.E))
 
-        self.response_text = tk.Text(
-            response_frame, height=5, width=50, state="disabled"
-        )
+        self.response_text = tk.Text(response_frame, height=5, width=50, state="disabled")
         self.response_text.grid(row=0, column=0, padx=5, pady=5)
 
         # Velocity display
@@ -122,16 +109,12 @@ class RobotControlGUI:
 
         self.vel_labels = {}
         for i, (name, _) in enumerate(self.velocities.items()):
-            ttk.Label(vel_frame, text=f"{name.capitalize()}:").grid(
-                row=0, column=i * 2, padx=5
-            )
+            ttk.Label(vel_frame, text=f"{name.capitalize()}:").grid(row=0, column=i * 2, padx=5)
             self.vel_labels[name] = ttk.Label(vel_frame, text="0.00")
             self.vel_labels[name].grid(row=0, column=i * 2 + 1, padx=5)
 
         # Special Switches Frame
-        switches_frame = ttk.LabelFrame(
-            main_frame, text="Special Controls", padding="5"
-        )
+        switches_frame = ttk.LabelFrame(main_frame, text="Special Controls", padding="5")
         switches_frame.grid(row=3, column=0, columnspan=2, pady=5, sticky=(tk.W, tk.E))
 
         # Kicker and Dribbler Switches
@@ -141,17 +124,13 @@ class RobotControlGUI:
             ("Dribbler", "dribbler"),
         ]
         for i, (label, var_name) in enumerate(switch_labels):
-            ttk.Checkbutton(
-                switches_frame, text=label, variable=self.switches[var_name]
-            ).grid(row=i, column=0, padx=5, pady=2, sticky=tk.W)
+            ttk.Checkbutton(switches_frame, text=label, variable=self.switches[var_name]).grid(
+                row=i, column=0, padx=5, pady=2, sticky=tk.W
+            )
 
         # Robot ID Selector
-        ttk.Label(switches_frame, text="Robot ID:").grid(
-            row=3, column=0, padx=5, pady=2, sticky=tk.W
-        )
-        robot_id_spinbox = ttk.Spinbox(
-            switches_frame, from_=0, to=31, textvariable=self.robot_id, width=5
-        )
+        ttk.Label(switches_frame, text="Robot ID:").grid(row=3, column=0, padx=5, pady=2, sticky=tk.W)
+        robot_id_spinbox = ttk.Spinbox(switches_frame, from_=0, to=31, textvariable=self.robot_id, width=5)
         robot_id_spinbox.grid(row=3, column=1, padx=5, pady=2, sticky=tk.W)
 
         # Instructions
@@ -212,8 +191,8 @@ class RobotControlGUI:
         self.root.after(20, self.update_velocities)
 
     def compute_crc(self, data: bytearray) -> int:
-        """
-        Calculate CRC-8, use 0x07 polynomial.
+        """Calculate CRC-8, use 0x07 polynomial.
+
         这里的计算对 data 中的每个字节进行处理。
         """
         poly = 0x07
@@ -228,8 +207,7 @@ class RobotControlGUI:
         return crc
 
     def create_packet(self):
-        """
-        Create data packet to send to robot.
+        """Create data packet to send to robot.
 
         Bytes:
           0-1:  Local Forward Velocity (float16)

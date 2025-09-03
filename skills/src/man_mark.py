@@ -1,13 +1,11 @@
-from entities.game import Game
-from motion_planning.src.motion_controller import MotionController
-from skills.src.utils.move_utils import move, face_ball
-
 import numpy as np
 
+from entities.game import Game
+from motion_planning.src.motion_controller import MotionController
+from skills.src.utils.move_utils import face_ball, move
 
-def man_mark(
-    game: Game, motion_controller: MotionController, robot_id: int, target_id: int
-):
+
+def man_mark(game: Game, motion_controller: MotionController, robot_id: int, target_id: int):
     robot = game.friendly_robots[robot_id]
     target = game.enemy_robots[target_id]
     ball_pos = (game.ball.x, game.ball.y)

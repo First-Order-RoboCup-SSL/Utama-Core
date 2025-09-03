@@ -1,18 +1,20 @@
-from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
-from entities.game import Game
+import logging
+from abc import ABC, abstractmethod
+from typing import cast
+
+import py_trees
+
+from config.roles import Role
+from config.settings import BLACKBOARD_NAMESPACE_MAP
 from entities.data.command import RobotCommand
+from entities.game import Game
 from motion_planning.src.motion_controller import MotionController
+from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
+from skills.src.utils.move_utils import empty_command
+from strategy.common.base_blackboard import BaseBlackboard
 from team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
-from config.settings import BLACKBOARD_NAMESPACE_MAP
-from skills.src.utils.move_utils import empty_command
-from config.roles import Role
-from abc import abstractmethod, ABC
-import logging
-import py_trees
-from strategy.common.base_blackboard import BaseBlackboard
-from typing import cast
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +31,8 @@ class AbstractStrategy(ABC):
 
     @abstractmethod
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        """
-        Create the behaviour tree for this strategy.
+        """Create the behaviour tree for this strategy.
+
         This method should return a py_trees tree that defines the behaviour of the strategy.
         Behaviour trees must follow the following structure:
         1. **Game Analysis and Role Assignment**: Analyse game state and assign roles via `role_map`.
@@ -40,18 +42,16 @@ class AbstractStrategy(ABC):
 
     @abstractmethod
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        """
-        Called on initial run to make sure that the expected robots on runtime.
-        match the possible robots in this strategy.
-        By default, 1 <= n_robots <= 6 is already asserted, so does not need to be checked here.
+        """Called on initial run to make sure that the expected robots on runtime.
+
+        match the possible robots in this strategy. By default, 1 <= n_robots <= 6 is already asserted, so does not need
+        to be checked here.
         """
         ...
 
-    def execute_default_action(
-        self, game: Game, role: Role, robot_id: int
-    ) -> RobotCommand:
-        """
-        Called on each unassigned robot to execute the default action.
+    def execute_default_action(self, game: Game, role: Role, robot_id: int) -> RobotCommand:
+        """Called on each unassigned robot to execute the default action.
+
         This is used when no specific command is set in the blackboard after the coach tree for this robot.
         """
         return empty_command(True)
@@ -76,13 +76,11 @@ class AbstractStrategy(ABC):
         Called by StrategyRunner: Load the Motion Controller into the blackboard.
         """
         self.blackboard.set("motion_controller", motion_controller, overwrite=True)
-        self.blackboard.register_key(
-            key="motion_controller", access=py_trees.common.Access.READ
-        )
+        self.blackboard.register_key(key="motion_controller", access=py_trees.common.Access.READ)
 
     def setup_behaviour_tree(self, is_opp_strat: bool):
-        """
-        Must be called before strategy can be run.
+        """Must be called before strategy can be run.
+
         Setups the tree and blackboard based on if is_opp_strat
         """
         self.blackboard = self._setup_blackboard(is_opp_strat)
@@ -130,9 +128,7 @@ class AbstractStrategy(ABC):
         blackboard.role_map = {}
 
         blackboard.register_key(key="rsim_env", access=py_trees.common.Access.WRITE)
-        blackboard.register_key(
-            key="motion_controller", access=py_trees.common.Access.WRITE
-        )
+        blackboard.register_key(key="motion_controller", access=py_trees.common.Access.WRITE)
 
         blackboard: BaseBlackboard = cast(BaseBlackboard, blackboard)
         return blackboard

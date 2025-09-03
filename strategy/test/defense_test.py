@@ -1,13 +1,14 @@
 import py_trees
-from entities.game import Game
-from strategy.common import AbstractStrategy, AbstractBehaviour
-from strategy.utils.blackboard_utils import SetBlackboardVariable
-from strategy.utils.selector_utils import HasBall
+
 from config.roles import Role
-from skills.src.go_to_ball import go_to_ball
+from entities.game import Game
 from skills.src.defend_parameter import defend_parameter
+from skills.src.go_to_ball import go_to_ball
 from skills.src.goalkeep import goalkeep
 from skills.src.utils.move_utils import empty_command
+from strategy.common import AbstractBehaviour, AbstractStrategy
+from strategy.utils.blackboard_utils import SetBlackboardVariable
+from strategy.utils.selector_utils import HasBall
 
 
 class GoToBallStep(AbstractBehaviour):
@@ -50,8 +51,8 @@ class SetRoles(AbstractBehaviour):
 
 class DefendStrategy(AbstractStrategy):
     def __init__(self, robot_id: int, opp_strategy: bool = False):
-        """
-        Initializes the DefendStrategy with a specific robot ID.
+        """Initializes the DefendStrategy with a specific robot ID.
+
         :param robot_id: The ID of the robot this strategy will control to go to ball.
         """
         self.robot_id = robot_id
@@ -89,14 +90,10 @@ class DefendStrategy(AbstractStrategy):
         go_to_ball = py_trees.composites.Sequence(name="GoToBall", memory=True)
 
         # A child sequence to set the robot_id on the blackboard
-        set_robot_id = SetBlackboardVariable(
-            name="SetTargetRobotID", variable_name="robot_id", value=self.robot_id
-        )
+        set_robot_id = SetBlackboardVariable(name="SetTargetRobotID", variable_name="robot_id", value=self.robot_id)
 
         # A selector to decide whether to get the ball or stop
-        has_ball_selector = py_trees.composites.Selector(
-            name="HasBallSelector", memory=False
-        )
+        has_ball_selector = py_trees.composites.Selector(name="HasBallSelector", memory=False)
         has_ball_selector.add_child(HasBall())
         has_ball_selector.add_child(GoToBallStep())
 

@@ -1,12 +1,12 @@
 import py_trees
-from strategy.common import AbstractBehaviour
-from skills.src.block import block_attacker
+
 from entities.data.object import TeamType
+from skills.src.block import block_attacker
+from strategy.common import AbstractBehaviour
 
 
 class BlockAttackerStep(AbstractBehaviour):
-    """
-    A behaviour that executes a single step of the block_attacker skill.
+    """A behaviour that executes a single step of the block_attacker skill.
 
     Expects a "robot_id" key in the blackboard to identify which robot to control.
     """

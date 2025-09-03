@@ -2,14 +2,11 @@ import abc
 
 
 class AbstractSimController:
-    """
-    Template for generic sim controller, allowing actions such
-    """
+    """Template for generic sim controller, allowing actions such."""
 
     @abc.abstractmethod
     def teleport_ball(self, x: float, y: float) -> None:
-        """
-        Teleports the ball to a specific location on the field.
+        """Teleports the ball to a specific location on the field.
 
         Args:
             x (float): The x-coordinate to place the ball at (in meters [-4.5, 4.5]).
@@ -28,8 +25,7 @@ class AbstractSimController:
         y: float,
         theta: float = None,
     ) -> None:
-        """
-        Teleports a robot to a specific location on the field.
+        """Teleports a robot to a specific location on the field.
 
         Args:
             is_team_yellow (bool): if the robot is team yellow, else blue
@@ -43,11 +39,8 @@ class AbstractSimController:
         ...
 
     @abc.abstractmethod
-    def set_robot_presence(
-        self, is_team_yellow: bool, robot_id: int, should_robot_be_present: bool
-    ) -> None:
-        """
-        Sets a robot's presence on the field by teleporting it to a specific location or removing it from the field.
+    def set_robot_presence(self, is_team_yellow: bool, robot_id: int, should_robot_be_present: bool) -> None:
+        """Sets a robot's presence on the field by teleporting it to a specific location or removing it from the field.
 
         Args:
             robot_id (int): The unique ID of the robot.

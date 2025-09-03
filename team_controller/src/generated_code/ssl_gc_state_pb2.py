@@ -12,13 +12,13 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-from . import ssl_gc_common_pb2 as ssl__gc__common__pb2
-from . import ssl_gc_geometry_pb2 as ssl__gc__geometry__pb2
-from . import ssl_gc_game_event_pb2 as ssl__gc__game__event__pb2
-from . import ssl_gc_referee_message_pb2 as ssl__gc__referee__message__pb2
 from google.protobuf import duration_pb2 as google_dot_protobuf_dot_duration__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
+from . import ssl_gc_common_pb2 as ssl__gc__common__pb2
+from . import ssl_gc_game_event_pb2 as ssl__gc__game__event__pb2
+from . import ssl_gc_geometry_pb2 as ssl__gc__geometry__pb2
+from . import ssl_gc_referee_message_pb2 as ssl__gc__referee__message__pb2
 
 DESCRIPTOR = _descriptor.FileDescriptor(
     name="ssl_gc_state.proto",
@@ -1668,88 +1668,54 @@ _SHOOTOUTSTATE = _descriptor.Descriptor(
     serialized_end=2781,
 )
 
-_YELLOWCARD.fields_by_name[
-    "caused_by_game_event"
-].message_type = ssl__gc__game__event__pb2._GAMEEVENT
-_YELLOWCARD.fields_by_name[
-    "time_remaining"
-].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
-_REDCARD.fields_by_name[
-    "caused_by_game_event"
-].message_type = ssl__gc__game__event__pb2._GAMEEVENT
-_FOUL.fields_by_name[
-    "caused_by_game_event"
-].message_type = ssl__gc__game__event__pb2._GAMEEVENT
-_FOUL.fields_by_name[
-    "timestamp"
-].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_YELLOWCARD.fields_by_name["caused_by_game_event"].message_type = ssl__gc__game__event__pb2._GAMEEVENT
+_YELLOWCARD.fields_by_name["time_remaining"].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
+_REDCARD.fields_by_name["caused_by_game_event"].message_type = ssl__gc__game__event__pb2._GAMEEVENT
+_FOUL.fields_by_name["caused_by_game_event"].message_type = ssl__gc__game__event__pb2._GAMEEVENT
+_FOUL.fields_by_name["timestamp"].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _COMMAND.fields_by_name["type"].enum_type = _COMMAND_TYPE
 _COMMAND.fields_by_name["for_team"].enum_type = ssl__gc__common__pb2._TEAM
 _COMMAND_TYPE.containing_type = _COMMAND
 _GAMESTATE.fields_by_name["type"].enum_type = _GAMESTATE_TYPE
 _GAMESTATE.fields_by_name["for_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMESTATE_TYPE.containing_type = _GAMESTATE
-_PROPOSAL.fields_by_name[
-    "timestamp"
-].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_PROPOSAL.fields_by_name[
-    "game_event"
-].message_type = ssl__gc__game__event__pb2._GAMEEVENT
+_PROPOSAL.fields_by_name["timestamp"].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_PROPOSAL.fields_by_name["game_event"].message_type = ssl__gc__game__event__pb2._GAMEEVENT
 _PROPOSALGROUP.fields_by_name["proposals"].message_type = _PROPOSAL
 _TEAMINFO.fields_by_name["yellow_cards"].message_type = _YELLOWCARD
 _TEAMINFO.fields_by_name["red_cards"].message_type = _REDCARD
-_TEAMINFO.fields_by_name[
-    "timeout_time_left"
-].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
+_TEAMINFO.fields_by_name["timeout_time_left"].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
 _TEAMINFO.fields_by_name["fouls"].message_type = _FOUL
-_TEAMINFO.fields_by_name[
-    "requests_bot_substitution_since"
-].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_TEAMINFO.fields_by_name[
-    "requests_timeout_since"
-].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_TEAMINFO.fields_by_name[
-    "requests_emergency_stop_since"
-].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_TEAMINFO.fields_by_name[
-    "bot_substitution_time_left"
-].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
+_TEAMINFO.fields_by_name["requests_bot_substitution_since"].message_type = (
+    google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+)
+_TEAMINFO.fields_by_name["requests_timeout_since"].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_TEAMINFO.fields_by_name["requests_emergency_stop_since"].message_type = (
+    google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+)
+_TEAMINFO.fields_by_name["bot_substitution_time_left"].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
 _STATE_TEAMSTATEENTRY.fields_by_name["value"].message_type = _TEAMINFO
 _STATE_TEAMSTATEENTRY.containing_type = _STATE
 _STATE.fields_by_name["stage"].enum_type = ssl__gc__referee__message__pb2._REFEREE_STAGE
 _STATE.fields_by_name["command"].message_type = _COMMAND
 _STATE.fields_by_name["game_state"].message_type = _GAMESTATE
-_STATE.fields_by_name[
-    "stage_time_elapsed"
-].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
-_STATE.fields_by_name[
-    "stage_time_left"
-].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
-_STATE.fields_by_name[
-    "match_time_start"
-].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_STATE.fields_by_name["stage_time_elapsed"].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
+_STATE.fields_by_name["stage_time_left"].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
+_STATE.fields_by_name["match_time_start"].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _STATE.fields_by_name["team_state"].message_type = _STATE_TEAMSTATEENTRY
 _STATE.fields_by_name["placement_pos"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _STATE.fields_by_name["next_command"].message_type = _COMMAND
-_STATE.fields_by_name[
-    "current_action_time_remaining"
-].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
+_STATE.fields_by_name["current_action_time_remaining"].message_type = google_dot_protobuf_dot_duration__pb2._DURATION
 _STATE.fields_by_name["game_events"].message_type = ssl__gc__game__event__pb2._GAMEEVENT
 _STATE.fields_by_name["proposal_groups"].message_type = _PROPOSALGROUP
 _STATE.fields_by_name["division"].enum_type = ssl__gc__common__pb2._DIVISION
 _STATE.fields_by_name["first_kickoff_team"].enum_type = ssl__gc__common__pb2._TEAM
-_STATE.fields_by_name[
-    "match_type"
-].enum_type = ssl__gc__referee__message__pb2._MATCHTYPE
-_STATE.fields_by_name[
-    "ready_continue_time"
-].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_STATE.fields_by_name["match_type"].enum_type = ssl__gc__referee__message__pb2._MATCHTYPE
+_STATE.fields_by_name["ready_continue_time"].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _STATE.fields_by_name["shootout_state"].message_type = _SHOOTOUTSTATE
 _SHOOTOUTSTATE_NUMBEROFATTEMPTSENTRY.containing_type = _SHOOTOUTSTATE
 _SHOOTOUTSTATE.fields_by_name["next_team"].enum_type = ssl__gc__common__pb2._TEAM
-_SHOOTOUTSTATE.fields_by_name[
-    "number_of_attempts"
-].message_type = _SHOOTOUTSTATE_NUMBEROFATTEMPTSENTRY
+_SHOOTOUTSTATE.fields_by_name["number_of_attempts"].message_type = _SHOOTOUTSTATE_NUMBEROFATTEMPTSENTRY
 DESCRIPTOR.message_types_by_name["YellowCard"] = _YELLOWCARD
 DESCRIPTOR.message_types_by_name["RedCard"] = _REDCARD
 DESCRIPTOR.message_types_by_name["Foul"] = _FOUL

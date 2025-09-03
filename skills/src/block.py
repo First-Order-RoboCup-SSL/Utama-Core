@@ -1,9 +1,10 @@
-from entities.data.vector import Vector2D
-from motion_planning.src.motion_controller import MotionController
-from entities.data.command import RobotCommand
-from entities.game.game import Game
-from skills.src.utils.move_utils import move
 import math
+
+from entities.data.command import RobotCommand
+from entities.data.vector import Vector2D
+from entities.game.game import Game
+from motion_planning.src.motion_controller import MotionController
+from skills.src.utils.move_utils import move
 
 
 def block_attacker(

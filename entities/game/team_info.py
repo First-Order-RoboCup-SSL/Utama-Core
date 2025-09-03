@@ -1,10 +1,8 @@
-from typing import Optional, List
+from typing import List, Optional
 
 
 class TeamInfo:
-    """
-    Class containing information about a team.
-    """
+    """Class containing information about a team."""
 
     def __init__(
         self,
@@ -73,8 +71,7 @@ class TeamInfo:
         )
 
     def parse_referee_packet(self, packet):
-        """
-        Parses the SSL_Referee_TeamInfo packet and updates the team information.
+        """Parses the SSL_Referee_TeamInfo packet and updates the team information.
 
         Args:
             packet (SSL_Referee_TeamInfo): The packet containing team information.
