@@ -52,7 +52,7 @@ class ReplayWriter:
 
         if replay_path.exists():
             if replay_configs.overwrite_existing:
-                open(replay_path, "wb").close()  # clear content
+                replay_path.write_bytes(b'')  # clear content
 
             else:
                 for i in count(1):
