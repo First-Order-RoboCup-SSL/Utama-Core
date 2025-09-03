@@ -1,47 +1,40 @@
-from dataclasses import replace
-import time
+import logging
 import threading
-from typing import Tuple, Optional, List
+import time
 import warnings
-
-from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP, MAX_ROBOTS
-from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
 from collections import deque
-from entities.game import GameHistory, Game
-from entities.data.raw_vision import RawVisionData
-from entities.data.command import RobotCommand
-from motion_planning.src.motion_controller import MotionController
+from dataclasses import replace
+from test.common.abstract_test_manager import AbstractTestManager, TestingStatus
+from typing import List, Optional, Tuple
 
+from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
+from config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, MAX_ROBOTS, TIMESTEP
+from entities.data.command import RobotCommand
+from entities.data.raw_vision import RawVisionData
+from entities.game import Game, GameHistory
 from global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
 )
-from run.receivers import VisionReceiver
-from run.refiners import (
-    RobotInfoRefiner,
-    PositionRefiner,
-    VelocityRefiner,
-)
+from motion_planning.src.motion_controller import MotionController
+from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from run import GameGater
-from test.common.abstract_test_manager import AbstractTestManager, TestingStatus
+from run.receivers import VisionReceiver
+from run.refiners import PositionRefiner, RobotInfoRefiner, VelocityRefiner
 
 # from strategy.examples.strategies.one_robot_placement_strategy import (
 #     RobotPlacementStrategy,
 # )
 from strategy.common.abstract_strategy import AbstractStrategy
 from team_controller.src.controllers import (
-    GRSimRobotController,
-    RSimRobotController,
-    RealRobotController,
-    RSimPVPManager,
-    RSimController,
-    GRSimController,
     AbstractSimController,
+    GRSimController,
+    GRSimRobotController,
+    RealRobotController,
+    RSimController,
+    RSimPVPManager,
+    RSimRobotController,
 )
-
-from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
-
-import logging
 
 logging.basicConfig(
     filename="Utama.log",
@@ -49,14 +42,12 @@ logging.basicConfig(
     filemode="w",
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-logger = logging.getLogger(
-    __name__
-)  # If this is within the class, or define it globally in the module
+logger = logging.getLogger(__name__)  # If this is within the class, or define it globally in the module
 
 
 class StrategyRunner:
-    """
-    Main class to run the robot controller and strategy.
+    """Main class to run the robot controller and strategy.
+
     Args:
         strategy (AbstractStrategy): The strategy to be used.
         my_team_is_yellow (bool): Whether the team is yellow.
@@ -131,27 +122,17 @@ class StrategyRunner:
     def _load_sim_and_controller(
         self,
     ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
-        """
-        Mode "rsim": Loads the RSim environment with the expected number of robots and corresponding sim controller.
-        Mode "grsim": Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of robots is met.
+        """Mode "rsim": Loads the RSim environment with the expected number of robots and corresponding sim controller.
+        Mode "grsim": Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of
+        robots is met.
 
         Returns:
             SSLBaseEnv: The RSim environment (Otherwise None).
             AbstractSimController: The simulation controller for the environment (Otherwise None).
         """
-
-        # Temporary placeholder values when not running rsim
-        if self.opp_strategy:
-            self.opp_strategy.load_rsim_env(None)
-        self.my_strategy.load_rsim_env(None)
-
         if self.mode == "rsim":
-            n_yellow, n_blue = map_friendly_enemy_to_colors(
-                self.my_team_is_yellow, self.exp_friendly, self.exp_enemy
-            )
-            rsim_env = SSLStandardEnv(
-                n_robots_yellow=n_yellow, n_robots_blue=n_blue, render_mode=None
-            )
+            n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
+            rsim_env = SSLStandardEnv(n_robots_yellow=n_yellow, n_robots_blue=n_blue, render_mode=None)
 
             if self.opp_strategy:
                 self.opp_strategy.load_rsim_env(rsim_env)
@@ -162,9 +143,7 @@ class StrategyRunner:
         elif self.mode == "grsim":
             # can consider baking all of these directly into sim controller
             sim_controller = GRSimController()
-            n_yellow, n_blue = map_friendly_enemy_to_colors(
-                self.my_team_is_yellow, self.exp_friendly, self.exp_enemy
-            )
+            n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
 
             # Ensure the expected number of robots is met by teleporting them
             y_to_remove = [i for i in range(n_yellow, MAX_ROBOTS)]
@@ -185,15 +164,11 @@ class StrategyRunner:
             for y in y_to_keep:
                 sim_controller.set_robot_presence(y, True, True)
                 y_start = yellow_start[y]
-                sim_controller.teleport_robot(
-                    True, y, y_start[0], y_start[1], y_start[2]
-                )
+                sim_controller.teleport_robot(True, y, y_start[0], y_start[1], y_start[2])
             for b in b_to_keep:
                 sim_controller.set_robot_presence(b, False, True)
                 b_start = blue_start[b]
-                sim_controller.teleport_robot(
-                    False, b, b_start[0], b_start[1], b_start[2]
-                )
+                sim_controller.teleport_robot(False, b, b_start[0], b_start[1], b_start[2])
             sim_controller.teleport_ball(0, 0)
 
             return None, sim_controller
@@ -202,8 +177,8 @@ class StrategyRunner:
             return None, None
 
     def _setup_vision_and_referee(self) -> Tuple[deque, deque]:
-        """
-        Setup the vision and referee buffers.
+        """Setup the vision and referee buffers.
+
         Returns:
             tuple: Vision and referee buffers.
         """
@@ -217,21 +192,15 @@ class StrategyRunner:
         return vision_buffers, ref_buffer
 
     def _assert_exp_robots(self):
-        """
-        Assert the expected number of robots.
-        """
-        assert self.exp_friendly <= MAX_ROBOTS, (
-            "Expected number of friendly robots is too high."
-        )
-        assert self.exp_enemy <= MAX_ROBOTS, (
-            "Expected number of enemy robots is too high."
-        )
+        """Assert the expected number of robots."""
+        assert self.exp_friendly <= MAX_ROBOTS, "Expected number of friendly robots is too high."
+        assert self.exp_enemy <= MAX_ROBOTS, "Expected number of enemy robots is too high."
         assert self.exp_friendly >= 1, "Expected number of friendly robots is too low."
         assert self.exp_enemy >= 1, "Expected number of enemy robots is too low."
 
-        assert self.my_strategy.assert_exp_robots(self.exp_friendly, self.exp_enemy), (
-            "Expected number of robots at runtime does not match my strategy."
-        )
+        assert self.my_strategy.assert_exp_robots(
+            self.exp_friendly, self.exp_enemy
+        ), "Expected number of robots at runtime does not match my strategy."
         if self.opp_strategy:
             assert self.opp_strategy.assert_exp_robots(
                 self.exp_enemy, self.exp_friendly
@@ -258,13 +227,9 @@ class StrategyRunner:
                     pvp_manager=pvp_manager,
                 )
                 if self.my_team_is_yellow:
-                    pvp_manager.load_controllers(
-                        my_robot_controller, opp_robot_controller
-                    )
+                    pvp_manager.load_controllers(my_robot_controller, opp_robot_controller)
                 else:
-                    pvp_manager.load_controllers(
-                        opp_robot_controller, my_robot_controller
-                    )
+                    pvp_manager.load_controllers(opp_robot_controller, my_robot_controller)
 
         elif self.mode == "grsim":
             my_robot_controller = GRSimRobotController(
@@ -335,16 +300,12 @@ class StrategyRunner:
 
     def _reset_robots(self):
         for i in self.my_current_game_frame.friendly_robots.keys():
-            self.my_strategy.robot_controller.add_robot_commands(
-                RobotCommand(0, 0, 0, 0, 0, 0), i
-            )
+            self.my_strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
         self.my_strategy.robot_controller.send_robot_commands()
 
         if self.opp_strategy and self.opp_current_game_frame:
             for i in self.opp_current_game_frame.friendly_robots.keys():
-                self.opp_strategy.robot_controller.add_robot_commands(
-                    RobotCommand(0, 0, 0, 0, 0, 0), i
-                )
+                self.opp_strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
             self.opp_strategy.robot_controller.send_robot_commands()
 
     def run_test(
@@ -353,8 +314,8 @@ class StrategyRunner:
         episode_timeout: float = 10.0,
         rsim_headless: bool = False,
     ) -> bool:
-        """
-        Run a test with the given test manager and episode timeout.
+        """Run a test with the given test manager and episode timeout.
+
         Args:
             testManager (AbstractTestManager): The test manager to run the test.
             episode_timeout (float): The timeout for each episode in seconds.
@@ -416,9 +377,7 @@ class StrategyRunner:
         if self.mode == "rsim":
             vision_frames = [self.rsim_env._frame_to_observations()[0]]
         else:
-            vision_frames = [
-                buffer.popleft() if buffer else None for buffer in self.vision_buffers
-            ]
+            vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
         # referee_frame = ref_buffer.popleft()
 
         # alternate between opp and friendly playing
@@ -454,8 +413,8 @@ class StrategyRunner:
         vision_frames: List[RawVisionData],
         running_opp: bool,
     ):
-        """
-        Step the game for the robot controller and strategy.
+        """Step the game for the robot controller and strategy.
+
         Args:
             iter_start_time (float): The start time of the iteration.
             vision_frames (List[RawVisionData]): The vision frames.
@@ -463,29 +422,19 @@ class StrategyRunner:
         """
         if running_opp:
             opp_responses = self.opp_strategy.robot_controller.get_robots_responses()
-            game = replace(
-                self.opp_current_game_frame, ts=iter_start_time - self.game_start_time
-            )
+            game = replace(self.opp_current_game_frame, ts=iter_start_time - self.game_start_time)
             game = self.position_refiner.refine(game, vision_frames)
-            game = self.velocity_refiner.refine(
-                self.opp_game_history, game
-            )  # , robot_frame.imu_data)
-            self.opp_current_game_frame = self.robot_info_refiner.refine(
-                game, opp_responses
-            )
+            game = self.velocity_refiner.refine(self.opp_game_history, game)  # , robot_frame.imu_data)
+            self.opp_current_game_frame = self.robot_info_refiner.refine(game, opp_responses)
             # game = referee_refiner.refine(game, referee_frame)
             self.opp_game.add_game(game)
             self.opp_strategy.step(self.opp_game)
         else:
             my_responses = self.my_strategy.robot_controller.get_robots_responses()
-            game = replace(
-                self.my_current_game_frame, ts=iter_start_time - self.game_start_time
-            )
+            game = replace(self.my_current_game_frame, ts=iter_start_time - self.game_start_time)
             game = self.position_refiner.refine(game, vision_frames)
             game = self.velocity_refiner.refine(self.my_game_history, game)
-            self.my_current_game_frame = self.robot_info_refiner.refine(
-                game, my_responses
-            )
+            self.my_current_game_frame = self.robot_info_refiner.refine(game, my_responses)
             # game = referee_refiner.refine(game, referee_frame)
             self.my_game.add_game(game)
             self.my_strategy.step(self.my_game)
