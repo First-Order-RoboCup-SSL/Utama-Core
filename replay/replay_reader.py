@@ -1,8 +1,9 @@
 import argparse
 import pickle
+from collections import deque
 
 from config.settings import REPLAY_BASE_PATH
-from entities.game import Game
+from entities.game import Game, GameFrame
 
 
 def read_replay_file(file_name: str):
@@ -13,7 +14,12 @@ def read_replay_file(file_name: str):
     if not isinstance(replay_data, Game):
         raise ValueError("Not able to replay file, file is not a Game.")
 
-    return replay_data
+    # name mangling
+    history: deque[GameFrame] = replay_data._Game__past.raw_games_history
+    history.append(replay_data.current)
+
+    for game_frame in history:
+        print(game_frame)
 
 
 def main():
@@ -26,8 +32,7 @@ def main():
     )
     args = parser.parse_args()
 
-    replay_data = read_replay_file(args.file_name)
-    print(replay_data.current)
+    read_replay_file(args.file_name)
 
 
 if __name__ == "__main__":
