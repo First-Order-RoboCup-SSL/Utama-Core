@@ -94,14 +94,14 @@ def play_replay(file_name: str):
 def main():
     parser = argparse.ArgumentParser(description="Read and play a replay file.")
     parser.add_argument(
-        "--file_name",
+        "--replay-file",
         type=str,
         required=True,
         help="The name of the replay file (without extension) stored in ./replay/replays folder.",
     )
     args = parser.parse_args()
 
-    play_replay(args.file_name)
+    play_replay(args.replay_file)
 
 
 if __name__ == "__main__":
