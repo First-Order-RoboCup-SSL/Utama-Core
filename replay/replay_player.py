@@ -85,6 +85,7 @@ def play_replay(file_name: str):
     replay_env = ReplayStandardSSL(n_robots_yellow=n_yellow, n_robots_blue=n_blue)
 
     for frame in replay_iter:
+        if not isinstance(frame, GameFrame):
             warnings.warn(f"Invalid frame in replay file (type: {type(frame).__name__}), skipping.")
             continue
         replay_env.step_replay(frame)
