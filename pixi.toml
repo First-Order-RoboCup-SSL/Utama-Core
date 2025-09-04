@@ -30,7 +30,7 @@ rc-robosim = "<2"
 numpy = "<=2.0.2"
 
 [tasks]
-lint = "ruff check ."
+lint = "pre-commit run --all-files"
 test = "pytest test/"
 main = "python -m main"
 replay = "python -m replay.replay_player"
