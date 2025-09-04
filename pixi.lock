@@ -2102,9 +2102,9 @@ packages:
   size: 13858
   timestamp: 1725784165345
 - pypi: ./
-  name: utama
+  name: utama-core
   version: 1.0.0
-  sha256: 571c28bbf56ce250bfc2c9f120ea8437f037dd5a81357077bd240b2647f901a1
+  sha256: 8083d37f03b72f01a8d90e70d1a26d543cae46e5d91c30628a80cb7cc7e2a96b
   requires_python: '>=3.11'
   editable: true
 - conda: https://conda.anaconda.org/conda-forge/noarch/virtualenv-20.34.0-pyhd8ed1ab_0.conda
