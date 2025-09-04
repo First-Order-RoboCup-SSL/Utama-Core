@@ -11,7 +11,7 @@
 5. Finally, run `pixi run precommit-install`. This will ensure that ruff linting is done before you commit.
 
 #### Pixi Tasks
-`pixi run {task_name}` is the generic way to run a task. Some of the main tasks you can run:
+`pixi run <task_name>` is the generic way to run a task. Some of the main tasks you can run:
 1. `pixi run main` runs main.py
 2. `pixi run precommit-install` downloads the precommit hook to ensure that your code is formatted correctly when you commit and push.
 3. `pixi run lint` runs the full suite of precommit checkers on all files (You need to run the precommit install task above first).
@@ -72,7 +72,7 @@ if you see UDP packets everything is working
 6. `global_utils`: store utility functions that can be shared across all folders
 7. `entities`: store classes for building field, robot, data entities etc.
 8. `rsoccer_simulator`: Lightweight rSoccer simulator for testing
-9. [TODO] `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rsoccer sim
+9. `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rsoccer sim
 
 #### Code Writing
 
