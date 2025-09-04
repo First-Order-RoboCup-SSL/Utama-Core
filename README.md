@@ -4,18 +4,25 @@
 
 ### Setup Utama
 
-1. Install `pixi` package manager with `curl -fsSL https://pixi.sh/install.sh | sh` or click here for Windows installaton [Pixi installation](https://pixi.sh/latest/#__tabbed_1_1)
+1. Install `pixi` package manager with `curl -fsSL https://pixi.sh/install.sh | sh` or click here for Windows installaton [Pixi installation](https://pixi.sh/latest/#__tabbed_1_1) 
+3. Restart or create a new terminal 
 2. With pixi: just run `pixi install` in the base folder and you're all setup.
 3. Note that this also installs all modules with `__init__.py` (so you need to run it again when you add an `__init__.py`)
 4. In order to go into the `pixi` venv, run `pixi shell`. You can also run any of the tasks in the `pixi.toml` without first being in a pixi shell. See [Pixi Tasks](#pixi-tasks).
 5. Finally, run `pixi run precommit-install`. This will ensure that ruff linting is done before you commit.
 
+**Note**
+- if you are using the run button and it is selecting the wrong env (robosim) you will need to manually change the interpreter in VScode using `Ctrl + Shift + P` -> `Select Interpreter`.
+- if you want to perform a one-off run (ad-hoc) use `pixi run python path/to/your_file.py`.
+
 #### Pixi Tasks
-`pixi run {task_name}` is the generic way to run a task. Some of the main tasks you can run:
+`pixi run <task_name>` is the generic way to run a task. Some of the main tasks you can run:
 1. `pixi run main` runs main.py
-2. `pixi run lint` runs the ruff checker.
-3. `pixi run test` runs the pytest over the `test/` folder
-4. `pixi run precommit-install` downloads the precommit hook to ensure that your code is formatted correctly when you commit and push.
+2. `pixi run precommit-install` downloads the precommit hook to ensure that your code is formatted correctly when you commit and push.
+3. `pixi run lint` runs the full suite of precommit checkers on all files (You need to run the precommit install task above first).
+4. `pixi run test` runs the pytest over the `test/` folder
+5. `pixi run replay --replay-file <file_name>` runs the replay file stored in `./replay/replays` folder. If no `--replay-file` flag provided, defaults to latest replay in the folder.
+
 
 ### Setup Autoreferee
 
@@ -70,7 +77,7 @@ if you see UDP packets everything is working
 6. `global_utils`: store utility functions that can be shared across all folders
 7. `entities`: store classes for building field, robot, data entities etc.
 8. `rsoccer_simulator`: Lightweight rSoccer simulator for testing
-9. [TODO] `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rsoccer sim
+9. `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rsoccer sim
 
 #### Code Writing
 

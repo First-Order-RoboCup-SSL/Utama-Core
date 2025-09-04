@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from numpy import pi
 
 MAX_ROBOTS = 6
@@ -69,3 +71,5 @@ PORT = "/dev/ttyACM0"
 TIMEOUT = 0.1
 
 MAX_GAME_HISTORY = 20
+
+REPLAY_BASE_PATH = Path(__file__).resolve().parent.parent / "replay" / "replays"

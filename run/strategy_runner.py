@@ -17,6 +17,7 @@ from global_utils.mapping_utils import (
     map_left_right_to_colors,
 )
 from motion_planning.src.motion_controller import MotionController
+from replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from run import GameGater
 from run.receivers import VisionReceiver
@@ -43,6 +44,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)  # If this is within the class, or define it globally in the module
+logging.captureWarnings(True)
 
 
 class StrategyRunner:
@@ -56,6 +58,7 @@ class StrategyRunner:
         exp_friendly (int): Expected number of friendly robots.
         exp_enemy (int): Expected number of enemy robots.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
+        replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
     """
 
     def __init__(
@@ -67,6 +70,7 @@ class StrategyRunner:
         exp_friendly: int,
         exp_enemy: int,
         opp_strategy: Optional[AbstractStrategy] = None,
+        replay_writer_config: Optional[ReplayWriterConfig] = None,
     ):
         self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow
@@ -75,6 +79,11 @@ class StrategyRunner:
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
         self.opp_strategy = opp_strategy
+        self.replay_writer = (
+            ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
+            if replay_writer_config
+            else None
+        )
         self.logger = logging.getLogger(__name__)
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
@@ -330,47 +339,57 @@ class StrategyRunner:
             n_episodes = 1
 
         testManager.load_strategies(self.my_strategy, self.opp_strategy)
-        for i in range(n_episodes):
-            testManager.update_episode_n(i)
+        try:
+            for i in range(n_episodes):
+                testManager.update_episode_n(i)
 
-            if self.sim_controller:
-                testManager.reset_field(self.sim_controller, self.my_current_game_frame)
-                time.sleep(0.1)  # wait for the field to reset
-                # wait for the field to reset
-            self._reset_game()
-            episode_start_time = time.time()
-            # for simplicity, we assume rsim is running in real time. May need to change this
-            while True:
-                if (time.time() - episode_start_time) > episode_timeout:
-                    passed = False
-                    self.logger.log(
-                        logging.WARNING,
-                        "Episode %d timed out after %f secs",
-                        i,
-                        episode_timeout,
-                    )
-                    break
-                self._run_step()
+                if self.sim_controller:
+                    testManager.reset_field(self.sim_controller, self.my_current_game_frame)
+                    time.sleep(0.1)  # wait for the field to reset
+                    # wait for the field to reset
+                self._reset_game()
+                episode_start_time = time.time()
+                # for simplicity, we assume rsim is running in real time. May need to change this
+                while True:
+                    if (time.time() - episode_start_time) > episode_timeout:
+                        passed = False
+                        self.logger.log(
+                            logging.WARNING,
+                            "Episode %d timed out after %f secs",
+                            i,
+                            episode_timeout,
+                        )
+                        break
+                    self._run_step()
 
-                status = testManager.eval_status(self.my_current_game_frame)
+                    status = testManager.eval_status(self.my_current_game_frame)
 
-                if status == TestingStatus.FAILURE:
-                    passed = False
-                    self._reset_robots()
-                    break
-                elif status == TestingStatus.SUCCESS:
-                    self._reset_robots()
-                    break
+                    if status == TestingStatus.FAILURE:
+                        passed = False
+                        self._reset_robots()
+                        break
+                    elif status == TestingStatus.SUCCESS:
+                        self._reset_robots()
+                        break
+        except KeyboardInterrupt:
+            self.logger.info("Terminating...")
+        finally:
+            if self.replay_writer:
+                self.replay_writer.close()
 
         return passed
 
     def run(self):
         if self.rsim_env:
             self.rsim_env.render_mode = "human"
-        while True:
-            self._run_step()
-            # terminal next line print
-            # print("\r")
+        try:
+            while True:
+                self._run_step()
+        except KeyboardInterrupt:
+            self.logger.info("Terminating...")
+        finally:
+            if self.replay_writer:
+                self.replay_writer.close()
 
     def _run_step(self):
         start_time = time.time()
@@ -420,24 +439,40 @@ class StrategyRunner:
             vision_frames (List[RawVisionData]): The vision frames.
             running_opp (bool): Whether to run the opponent strategy.
         """
+        # Select which side to step
         if running_opp:
-            opp_responses = self.opp_strategy.robot_controller.get_robots_responses()
-            game = replace(self.opp_current_game_frame, ts=iter_start_time - self.game_start_time)
-            game = self.position_refiner.refine(game, vision_frames)
-            game = self.velocity_refiner.refine(self.opp_game_history, game)  # , robot_frame.imu_data)
-            self.opp_current_game_frame = self.robot_info_refiner.refine(game, opp_responses)
-            # game = referee_refiner.refine(game, referee_frame)
-            self.opp_game.add_game(game)
-            self.opp_strategy.step(self.opp_game)
+            strategy = self.opp_strategy
+            current_game_frame = self.opp_current_game_frame
+            game_history = self.opp_game_history
+            game = self.opp_game
         else:
-            my_responses = self.my_strategy.robot_controller.get_robots_responses()
-            game = replace(self.my_current_game_frame, ts=iter_start_time - self.game_start_time)
-            game = self.position_refiner.refine(game, vision_frames)
-            game = self.velocity_refiner.refine(self.my_game_history, game)
-            self.my_current_game_frame = self.robot_info_refiner.refine(game, my_responses)
-            # game = referee_refiner.refine(game, referee_frame)
-            self.my_game.add_game(game)
-            self.my_strategy.step(self.my_game)
+            strategy = self.my_strategy
+            current_game_frame = self.my_current_game_frame
+            game_history = self.my_game_history
+            game = self.my_game
+
+        # Pull responses from robot controller
+        responses = strategy.robot_controller.get_robots_responses()
+
+        # Update game frame with refined information
+        new_game_frame = replace(current_game_frame, ts=iter_start_time - self.game_start_time)
+        new_game_frame = self.position_refiner.refine(new_game_frame, vision_frames)
+        new_game_frame = self.velocity_refiner.refine(game_history, new_game_frame)  # , robot_frame.imu_data)
+        new_game_frame = self.robot_info_refiner.refine(new_game_frame, responses)
+        # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)
+
+        # Store updated game frame
+        if running_opp:
+            self.opp_current_game_frame = new_game_frame
+        else:
+            self.my_current_game_frame = new_game_frame
+
+        # write to replay
+        if self.replay_writer and (running_opp != self.replay_writer.replay_configs.is_my_perspective):
+            self.replay_writer.write_frame(new_game_frame)
+
+        game.add_game(new_game_frame)
+        strategy.step(game)
 
 
 # if __name__ == "__main__":
