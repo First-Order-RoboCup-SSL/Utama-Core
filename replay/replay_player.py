@@ -1,4 +1,5 @@
 import argparse
+import logging
 import pickle
 import warnings
 from typing import Generator, Union
@@ -15,6 +16,8 @@ from rsoccer_simulator.src.Entities import Frame as RSoccerFrame
 from rsoccer_simulator.src.Entities import FrameSSL
 from rsoccer_simulator.src.Entities import Robot as RSoccerRobot
 from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
+
+logger = logging.getLogger(__name__)
 
 
 class ReplayStandardSSL(SSLStandardEnv):
@@ -91,17 +94,30 @@ def play_replay(file_name: str):
         replay_env.step_replay(frame)
 
 
+def get_latest_replay_name() -> str:
+    files = list(REPLAY_BASE_PATH.glob("*.pkl"))
+    if not files:
+        raise FileNotFoundError("No replay files found in the replay directory.")
+    latest_file = max(files, key=lambda f: f.stat().st_mtime)
+    return latest_file.stem  # Return the file name without extension
+
+
 def main():
     parser = argparse.ArgumentParser(description="Read and play a replay file.")
     parser.add_argument(
         "--replay-file",
         type=str,
-        required=True,
         help="The name of the replay file (without extension) stored in ./replay/replays folder.",
     )
     args = parser.parse_args()
 
-    play_replay(args.replay_file)
+    if args.replay_file:
+        replay_file = args.replay_file
+    else:
+        replay_file = get_latest_replay_name()
+        logger.info(f"No replay file specified. Using the latest replay: {replay_file}")
+
+    play_replay(replay_file)
 
 
 if __name__ == "__main__":
