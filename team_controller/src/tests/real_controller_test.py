@@ -1,21 +1,16 @@
-from calendar import c
-from motion_planning.src.pid.pid import get_real_pids
-from robot_control.src.skills import (
-    go_to_point,
-    go_to_ball,
-    turn_on_spot,
-    empty_command,
-)
-from team_controller.src.controllers import RealRobotController
-from entities.game import Game
-from entities.data.command import RobotCommand
-import time
 import queue
-import logging
 import threading
-from team_controller.src.data.message_enum import MessageType
-from vision.vision_receiver import VisionReceiver
+import time
+
 import numpy as np
+from robot_control.src.skills import empty_command, go_to_ball, turn_on_spot
+from vision.vision_receiver import VisionReceiver
+
+from entities.data.command import RobotCommand
+from entities.game import Game
+from motion_planning.src.pid.pid import get_real_pids
+from team_controller.src.controllers import RealRobotController
+from team_controller.src.data.message_enum import MessageType
 
 
 def data_update_listener(receiver: VisionReceiver):
@@ -52,9 +47,7 @@ def rotate_on_ball_with_vision(game: Game, robot_controller: RealRobotController
 
             my_pos = game.get_robot_pos(True, 1)
             if my_pos is not None:
-                distance = np.hypot(
-                    my_pos.x - initial_ball_pos.x, my_pos.y - initial_ball_pos.y
-                )
+                distance = np.hypot(my_pos.x - initial_ball_pos.x, my_pos.y - initial_ball_pos.y)
 
                 SLOW_FRAMES = 45
                 print("DIST", distance)
@@ -64,9 +57,7 @@ def rotate_on_ball_with_vision(game: Game, robot_controller: RealRobotController
                     done = True
                 elif go_back <= SLOW_FRAMES:
                     print("TURNING NOW")
-                    cmd = turn_on_spot(
-                        pid_oren, pid_trans, data, 1, np.pi / 2, True, True
-                    )
+                    cmd = turn_on_spot(pid_oren, pid_trans, data, 1, np.pi / 2, True, True)
                     print(cmd)
                 elif go_back <= 2 * SLOW_FRAMES:
                     print("SLOWING")
@@ -120,9 +111,7 @@ def get_ball_test_with_vision(game: Game, robot_controller: RealRobotController)
 
             my_pos = game.get_robot_pos(True, 1)
             if my_pos is not None:
-                distance = np.hypot(
-                    my_pos.x - initial_ball_pos.x, my_pos.y - initial_ball_pos.y
-                )
+                distance = np.hypot(my_pos.x - initial_ball_pos.x, my_pos.y - initial_ball_pos.y)
 
                 SLOW_FRAMES = 200
                 print("DIST", distance)
@@ -239,9 +228,7 @@ def main():
     # stop_buffer_off = [0, 0, 0, 0, 0, 0, 0, 0]
 
     game = Game()
-    robot_controller = RealRobotController(
-        is_team_yellow=True, game_obj=game, n_robots=2
-    )
+    robot_controller = RealRobotController(is_team_yellow=True, game_obj=game, n_robots=2)
     try:
         # test_command(robot_controller, robot_id, 100, False, True)
         # get_ball_test_with_vision(game, robot_controller)

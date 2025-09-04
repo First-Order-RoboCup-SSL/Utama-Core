@@ -1,20 +1,20 @@
-from dataclasses import replace
-from entities.game import Game, Robot
-from entities.data.vector import Vector2D, Vector3D
+import logging
+from typing import Dict, Tuple, Union  # Added List for type hinting
 
-from typing import Dict, List, Union, Tuple  # Added List for type hinting
-from entities.data.object import ObjectKey, TeamType, ObjectType
+import numpy as np  # Import NumPy
+from lenses import UnboundLens, lens
+
+from entities.data.object import ObjectKey, TeamType
+from entities.data.vector import Vector2D, Vector3D
+from entities.game import Game, Robot
 
 # Assuming your new GameHistory is in entities.game.game_history or accessible
 from entities.game.game_history import (
-    GameHistory,
     AttributeType,
+    GameHistory,
     get_structured_object_key,
 )
 from run.refiners.base_refiner import BaseRefiner
-from lenses import UnboundLens, lens
-import logging
-import numpy as np  # Import NumPy
 
 logger = logging.getLogger(__name__)
 
@@ -71,40 +71,26 @@ class VelocityRefiner(BaseRefiner):
         for robot_instance in robots_to_process_dict.values():
             robot_id = getattr(robot_instance, "id", None)
             if robot_id is None:
-                logger.error(
-                    f"{team_type.name} robot instance encountered without an ID. Skipping."
-                )
+                logger.error(f"{team_type.name} robot instance encountered without an ID. Skipping.")
                 continue
 
             if robot_instance.p is None:
-                logger.warning(
-                    f"{team_type.name} robot {robot_id} has no position. Setting zero v/a."
-                )
-                updated_robot = (
-                    robot_instance
-                    & lens.v.set(zero_vector(twod))
-                    & lens.a.set(zero_vector(twod))
-                )
+                logger.warning(f"{team_type.name} robot {robot_id} has no position. Setting zero v/a.")
+                updated_robot = robot_instance & lens.v.set(zero_vector(twod)) & lens.a.set(zero_vector(twod))
                 updated_robots_dict[robot_id] = updated_robot
                 continue
 
             robot_obj_key = get_structured_object_key(robot_instance, team_type)
             if not robot_obj_key:
-                logger.error(
-                    f"Could not get ObjectKey for {team_type.name} robot {robot_id}. Adding original to dict."
-                )
+                logger.error(f"Could not get ObjectKey for {team_type.name} robot {robot_id}. Adding original to dict.")
                 updated_robots_dict[robot_id] = robot_instance
                 continue
 
-            new_v = self._calculate_object_velocity(
-                game_history, robot_instance.p, robot_obj_key, current_ts, twod
-            )
+            new_v = self._calculate_object_velocity(game_history, robot_instance.p, robot_obj_key, current_ts, twod)
 
             new_a = zero_vector(twod)  # Default to zero
             # try:
-            new_a = self._calculate_object_acceleration(
-                game_history, robot_obj_key, twod
-            )
+            new_a = self._calculate_object_acceleration(game_history, robot_obj_key, twod)
             # except Exception as e:
             #     logger.warning(
             #         f"Could not calculate acceleration for {team_type.name} robot {robot_id} (key: {robot_obj_key}), setting to zero: {e}"
@@ -115,21 +101,13 @@ class VelocityRefiner(BaseRefiner):
 
         return game_state & group_lens.set(updated_robots_dict)
 
-    def _refine_ball_kinematics(
-        self, game_history: GameHistory, game_state: Game, current_ts: float
-    ) -> Game:
+    def _refine_ball_kinematics(self, game_history: GameHistory, game_state: Game, current_ts: float) -> Game:
         if not game_state.ball:
             return game_state
 
         if game_state.ball.p is None:
-            logger.warning(
-                "Ball exists but has no position data; setting zero velocity and acceleration."
-            )
-            return (
-                game_state
-                & lens.ball.v.set(zero_vector(twod=False))
-                & lens.ball.a.set(zero_vector(twod=False))
-            )
+            logger.warning("Ball exists but has no position data; setting zero velocity and acceleration.")
+            return game_state & lens.ball.v.set(zero_vector(twod=False)) & lens.ball.a.set(zero_vector(twod=False))
 
         ball_obj_key = get_structured_object_key(game_state.ball, TeamType.NEUTRAL)
         if not ball_obj_key:
@@ -143,13 +121,9 @@ class VelocityRefiner(BaseRefiner):
 
         new_ball_a = zero_vector(twod=False)  # Default to zero
         try:
-            new_ball_a = self._calculate_object_acceleration(
-                game_history, ball_obj_key, twod=False
-            )
+            new_ball_a = self._calculate_object_acceleration(game_history, ball_obj_key, twod=False)
         except Exception as e:
-            logger.warning(
-                f"Could not calculate acceleration for ball (key: {ball_obj_key}), setting to zero: {e}"
-            )
+            logger.warning(f"Could not calculate acceleration for ball (key: {ball_obj_key}), setting to zero: {e}")
         game_state &= lens.ball.a.set(new_ball_a)
 
         return game_state
@@ -177,9 +151,7 @@ class VelocityRefiner(BaseRefiner):
 
         # Assign these *after* confirming timestamps_np and positions_np are not empty
         previous_time_received = timestamps_np[0]
-        previous_pos_np = positions_np[
-            0
-        ]  # This is a 1D NumPy array [x, y] or [x, y, z]
+        previous_pos_np = positions_np[0]  # This is a 1D NumPy array [x, y] or [x, y, z]
 
         # Now calculate dt_secs using the defined previous_time_received
         dt_secs = current_ts - previous_time_received
@@ -195,9 +167,7 @@ class VelocityRefiner(BaseRefiner):
         if twod:
             previous_pos = Vector2D(previous_pos_np[0], y=previous_pos_np[1])
         else:
-            previous_pos = Vector3D(
-                x=previous_pos_np[0], y=previous_pos_np[1], z=previous_pos_np[2]
-            )
+            previous_pos = Vector3D(x=previous_pos_np[0], y=previous_pos_np[1], z=previous_pos_np[2])
 
         velocity = (current_pos - previous_pos) / dt_secs
         # logger.debug(
@@ -222,29 +192,21 @@ class VelocityRefiner(BaseRefiner):
         self, game_history: GameHistory, object_key: ObjectKey, twod: bool
     ) -> Union[Vector2D, Vector3D]:
         try:
-            num_points_needed = (
-                self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
-            )
+            num_points_needed = self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
             timestamps_np, velocities_np = self._extract_time_velocity_np_arrays(
                 game_history, object_key, num_points_needed
             )
 
-            if (
-                timestamps_np.shape[0] < num_points_needed
-            ):  # Check if enough points were returned
+            if timestamps_np.shape[0] < num_points_needed:  # Check if enough points were returned
                 logger.debug(
                     f"Not enough velocity points from GameHistory for {object_key}. Have {timestamps_np.shape[0]}, need {num_points_needed}"
                 )
                 return zero_vector(twod)
         except Exception as e:
-            raise ValueError(
-                f"Velocity data not available for acceleration for {object_key}: {e}"
-            ) from e
+            raise ValueError(f"Velocity data not available for acceleration for {object_key}: {e}") from e
 
         # Pass NumPy arrays directly
-        return self._calculate_acceleration_from_pairs(
-            timestamps_np, velocities_np, twod
-        )
+        return self._calculate_acceleration_from_pairs(timestamps_np, velocities_np, twod)
 
     def _extract_time_velocity_np_arrays(
         self, game_history: GameHistory, object_key: ObjectKey, num_points: int
@@ -260,9 +222,7 @@ class VelocityRefiner(BaseRefiner):
         velocities_np: np.ndarray,  # This is now a 2D NumPy array
         twod: bool,
     ) -> Union[Vector2D, Vector3D]:
-        """
-        Estimates an object's acceleration using NumPy arrays as input.
-        """
+        """Estimates an object's acceleration using NumPy arrays as input."""
         # logger.debug(f"ACCEL_PAIRS_INPUT: timestamps_np shape={timestamps_np.shape}, velocities_np shape={velocities_np.shape}, twod={twod}")
 
         if self.ACCELERATION_N_WINDOWS == 0 or self.ACCELERATION_WINDOW_SIZE == 0:
@@ -278,9 +238,7 @@ class VelocityRefiner(BaseRefiner):
             )
             return zero_vector(twod)
 
-        min_total_points_needed = (
-            self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
-        )
+        min_total_points_needed = self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
 
         if timestamps_np.shape[0] < min_total_points_needed:
             logger.warning(
@@ -333,26 +291,18 @@ class VelocityRefiner(BaseRefiner):
             )
             return zero_vector(twod)
 
-        avg_velocities_per_window = np.mean(
-            windowed_velocities, axis=1
-        )  # Shape: (N_WINDOWS, num_dimensions)
-        middle_ts_per_window = np.mean(
-            windowed_timestamps, axis=1
-        )  # Shape: (N_WINDOWS)
+        avg_velocities_per_window = np.mean(windowed_velocities, axis=1)  # Shape: (N_WINDOWS, num_dimensions)
+        middle_ts_per_window = np.mean(windowed_timestamps, axis=1)  # Shape: (N_WINDOWS)
 
         # Calculate differences between consecutive window averages
-        dv_segments = np.diff(
-            avg_velocities_per_window, axis=0
-        )  # Shape: (N_WINDOWS-1, num_dimensions)
+        dv_segments = np.diff(avg_velocities_per_window, axis=0)  # Shape: (N_WINDOWS-1, num_dimensions)
         dt_segments = np.diff(middle_ts_per_window, axis=0)  # Shape: (N_WINDOWS-1)
 
         # Avoid division by zero or very small dt
         valid_dt_mask = dt_segments > 1e-9
 
         if not np.any(valid_dt_mask):
-            logger.warning(
-                "ACCEL_PAIRS: All dt for acceleration segments are too small or zero. Returning zero."
-            )
+            logger.warning("ACCEL_PAIRS: All dt for acceleration segments are too small or zero. Returning zero.")
             return zero_vector(twod)
 
         # Initialize accelerations_segments with zeros
@@ -360,22 +310,14 @@ class VelocityRefiner(BaseRefiner):
 
         # Perform division only where dt is valid
         # dt_segments needs to be broadcastable: (N_WINDOWS-1,) -> (N_WINDOWS-1, 1) for division
-        acceleration_segments_np[valid_dt_mask] = (
-            dv_segments[valid_dt_mask] / dt_segments[valid_dt_mask, np.newaxis]
-        )
+        acceleration_segments_np[valid_dt_mask] = dv_segments[valid_dt_mask] / dt_segments[valid_dt_mask, np.newaxis]
 
         # Average the valid acceleration segments
-        if (
-            np.sum(valid_dt_mask) == 0
-        ):  # Should be caught by np.any above, but as a safeguard
-            logger.warning(
-                "ACCEL_PAIRS: No valid dt segments after filtering. Returning zero."
-            )
+        if np.sum(valid_dt_mask) == 0:  # Should be caught by np.any above, but as a safeguard
+            logger.warning("ACCEL_PAIRS: No valid dt segments after filtering. Returning zero.")
             return zero_vector(twod)
 
-        final_accel_np = np.sum(
-            acceleration_segments_np[valid_dt_mask], axis=0
-        ) / np.sum(valid_dt_mask)
+        final_accel_np = np.sum(acceleration_segments_np[valid_dt_mask], axis=0) / np.sum(valid_dt_mask)
 
         # logger.debug(f"ACCEL_PAIRS_RESULT: final_accel_np={final_accel_np}")
 

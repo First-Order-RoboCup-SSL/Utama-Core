@@ -1,14 +1,13 @@
-from run.refiners.base_refiner import BaseRefiner
+from typing import Optional
+
+from entities.data.referee import RefereeData
+from entities.game.team_info import TeamInfo
 from entities.referee.referee_command import RefereeCommand
 from entities.referee.stage import Stage
-from entities.game.team_info import TeamInfo
-from entities.data.referee import RefereeData
-
-from typing import Optional
+from run.refiners.base_refiner import BaseRefiner
 
 
 class RefereeRefiner(BaseRefiner):
-
     def refine(self, game, data):
         return game
 
@@ -21,11 +20,7 @@ class RefereeRefiner(BaseRefiner):
             self._referee_records.append(referee_data)
 
     def source_identifier(self) -> Optional[str]:
-        return (
-            self._referee_records[-1].source_identifier
-            if self._referee_records
-            else None
-        )
+        return self._referee_records[-1].source_identifier if self._referee_records else None
 
     @property
     def last_time_sent(self) -> float:
@@ -37,33 +32,19 @@ class RefereeRefiner(BaseRefiner):
 
     @property
     def last_command(self) -> RefereeCommand:
-        return (
-            self._referee_records[-1].referee_command
-            if self._referee_records
-            else RefereeCommand.HALT
-        )
+        return self._referee_records[-1].referee_command if self._referee_records else RefereeCommand.HALT
 
     @property
     def last_command_timestamp(self) -> float:
-        return (
-            self._referee_records[-1].referee_command_timestamp
-            if self._referee_records
-            else 0.0
-        )
+        return self._referee_records[-1].referee_command_timestamp if self._referee_records else 0.0
 
     @property
     def stage(self) -> Stage:
-        return (
-            self._referee_records[-1].stage
-            if self._referee_records
-            else Stage.NORMAL_FIRST_HALF_PRE
-        )
+        return self._referee_records[-1].stage if self._referee_records else Stage.NORMAL_FIRST_HALF_PRE
 
     @property
     def stage_time_left(self) -> float:
-        return (
-            self._referee_records[-1].stage_time_left if self._referee_records else 0.0
-        )
+        return self._referee_records[-1].stage_time_left if self._referee_records else 0.0
 
     @property
     def blue_team(self) -> TeamInfo:
@@ -101,19 +82,11 @@ class RefereeRefiner(BaseRefiner):
 
     @property
     def designated_position(self) -> Optional[tuple[float]]:
-        return (
-            self._referee_records[-1].designated_position
-            if self._referee_records
-            else None
-        )
+        return self._referee_records[-1].designated_position if self._referee_records else None
 
     @property
     def blue_team_on_positive_half(self) -> Optional[bool]:
-        return (
-            self._referee_records[-1].blue_team_on_positive_half
-            if self._referee_records
-            else None
-        )
+        return self._referee_records[-1].blue_team_on_positive_half if self._referee_records else None
 
     @property
     def next_command(self) -> Optional[RefereeCommand]:
@@ -121,11 +94,7 @@ class RefereeRefiner(BaseRefiner):
 
     @property
     def current_action_time_remaining(self) -> Optional[int]:
-        return (
-            self._referee_records[-1].current_action_time_remaining
-            if self._referee_records
-            else None
-        )
+        return self._referee_records[-1].current_action_time_remaining if self._referee_records else None
 
     @property
     def is_halt(self) -> bool:

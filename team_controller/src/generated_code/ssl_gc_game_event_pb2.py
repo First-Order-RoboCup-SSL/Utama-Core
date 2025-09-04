@@ -6,6 +6,7 @@ from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from google.protobuf import reflection as _reflection
 from google.protobuf import symbol_database as _symbol_database
+
 # @@protoc_insertion_point(imports)
 
 _sym_db = _symbol_database.Default()
@@ -13,7 +14,6 @@ _sym_db = _symbol_database.Default()
 
 from . import ssl_gc_common_pb2 as ssl__gc__common__pb2
 from . import ssl_gc_geometry_pb2 as ssl__gc__geometry__pb2
-
 
 DESCRIPTOR = _descriptor.FileDescriptor(
     name="ssl_gc_game_event.proto",
@@ -4974,639 +4974,281 @@ _GAMEEVENT = _descriptor.Descriptor(
     serialized_end=8653,
 )
 
-_GAMEEVENT_BALLLEFTFIELD.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_BALLLEFTFIELD.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BALLLEFTFIELD.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_BALLLEFTFIELD.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BALLLEFTFIELD.containing_type = _GAMEEVENT
 _GAMEEVENT_AIMLESSKICK.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_AIMLESSKICK.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
-_GAMEEVENT_AIMLESSKICK.fields_by_name[
-    "kick_location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_AIMLESSKICK.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_AIMLESSKICK.fields_by_name["kick_location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_AIMLESSKICK.containing_type = _GAMEEVENT
 _GAMEEVENT_GOAL.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_GOAL.fields_by_name["kicking_team"].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_GOAL.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
-_GAMEEVENT_GOAL.fields_by_name[
-    "kick_location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_GOAL.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_GOAL.fields_by_name["kick_location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_GOAL.containing_type = _GAMEEVENT
 _GAMEEVENT_INDIRECTGOAL.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_INDIRECTGOAL.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
-_GAMEEVENT_INDIRECTGOAL.fields_by_name[
-    "kick_location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_INDIRECTGOAL.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_INDIRECTGOAL.fields_by_name["kick_location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_INDIRECTGOAL.containing_type = _GAMEEVENT
 _GAMEEVENT_CHIPPEDGOAL.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_CHIPPEDGOAL.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
-_GAMEEVENT_CHIPPEDGOAL.fields_by_name[
-    "kick_location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_CHIPPEDGOAL.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_CHIPPEDGOAL.fields_by_name["kick_location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_CHIPPEDGOAL.containing_type = _GAMEEVENT
-_GAMEEVENT_BOTTOOFASTINSTOP.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_BOTTOOFASTINSTOP.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTTOOFASTINSTOP.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_BOTTOOFASTINSTOP.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BOTTOOFASTINSTOP.containing_type = _GAMEEVENT
-_GAMEEVENT_DEFENDERTOOCLOSETOKICKPOINT.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_DEFENDERTOOCLOSETOKICKPOINT.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_DEFENDERTOOCLOSETOKICKPOINT.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_DEFENDERTOOCLOSETOKICKPOINT.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_DEFENDERTOOCLOSETOKICKPOINT.containing_type = _GAMEEVENT
-_GAMEEVENT_BOTCRASHDRAWN.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTCRASHDRAWN.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BOTCRASHDRAWN.containing_type = _GAMEEVENT
-_GAMEEVENT_BOTCRASHUNIQUE.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_BOTCRASHUNIQUE.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTCRASHUNIQUE.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_BOTCRASHUNIQUE.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BOTCRASHUNIQUE.containing_type = _GAMEEVENT
 _GAMEEVENT_BOTPUSHEDBOT.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_BOTPUSHEDBOT.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTPUSHEDBOT.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BOTPUSHEDBOT.containing_type = _GAMEEVENT
-_GAMEEVENT_BOTTIPPEDOVER.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_BOTTIPPEDOVER.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
-_GAMEEVENT_BOTTIPPEDOVER.fields_by_name[
-    "ball_location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTTIPPEDOVER.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_BOTTIPPEDOVER.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTTIPPEDOVER.fields_by_name["ball_location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BOTTIPPEDOVER.containing_type = _GAMEEVENT
-_GAMEEVENT_BOTDROPPEDPARTS.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_BOTDROPPEDPARTS.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
-_GAMEEVENT_BOTDROPPEDPARTS.fields_by_name[
-    "ball_location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTDROPPEDPARTS.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_BOTDROPPEDPARTS.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTDROPPEDPARTS.fields_by_name["ball_location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BOTDROPPEDPARTS.containing_type = _GAMEEVENT
-_GAMEEVENT_DEFENDERINDEFENSEAREA.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_DEFENDERINDEFENSEAREA.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_DEFENDERINDEFENSEAREA.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_DEFENDERINDEFENSEAREA.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_DEFENDERINDEFENSEAREA.containing_type = _GAMEEVENT
-_GAMEEVENT_DEFENDERINDEFENSEAREAPARTIALLY.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_DEFENDERINDEFENSEAREAPARTIALLY.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
-_GAMEEVENT_DEFENDERINDEFENSEAREAPARTIALLY.fields_by_name[
-    "ball_location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_DEFENDERINDEFENSEAREAPARTIALLY.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_DEFENDERINDEFENSEAREAPARTIALLY.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_DEFENDERINDEFENSEAREAPARTIALLY.fields_by_name["ball_location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_DEFENDERINDEFENSEAREAPARTIALLY.containing_type = _GAMEEVENT
-_GAMEEVENT_ATTACKERTOUCHEDBALLINDEFENSEAREA.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_ATTACKERTOUCHEDBALLINDEFENSEAREA.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_ATTACKERTOUCHEDBALLINDEFENSEAREA.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_ATTACKERTOUCHEDBALLINDEFENSEAREA.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_ATTACKERTOUCHEDBALLINDEFENSEAREA.containing_type = _GAMEEVENT
-_GAMEEVENT_BOTKICKEDBALLTOOFAST.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_BOTKICKEDBALLTOOFAST.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTKICKEDBALLTOOFAST.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_BOTKICKEDBALLTOOFAST.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BOTKICKEDBALLTOOFAST.containing_type = _GAMEEVENT
-_GAMEEVENT_BOTDRIBBLEDBALLTOOFAR.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_BOTDRIBBLEDBALLTOOFAR.fields_by_name[
-    "start"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
-_GAMEEVENT_BOTDRIBBLEDBALLTOOFAR.fields_by_name[
-    "end"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTDRIBBLEDBALLTOOFAR.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_BOTDRIBBLEDBALLTOOFAR.fields_by_name["start"].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTDRIBBLEDBALLTOOFAR.fields_by_name["end"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BOTDRIBBLEDBALLTOOFAR.containing_type = _GAMEEVENT
-_GAMEEVENT_ATTACKERTOUCHEDOPPONENTINDEFENSEAREA.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_ATTACKERTOUCHEDOPPONENTINDEFENSEAREA.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_ATTACKERTOUCHEDOPPONENTINDEFENSEAREA.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_ATTACKERTOUCHEDOPPONENTINDEFENSEAREA.fields_by_name["location"].message_type = (
+    ssl__gc__geometry__pb2._VECTOR2
+)
 _GAMEEVENT_ATTACKERTOUCHEDOPPONENTINDEFENSEAREA.containing_type = _GAMEEVENT
-_GAMEEVENT_ATTACKERDOUBLETOUCHEDBALL.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_ATTACKERDOUBLETOUCHEDBALL.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_ATTACKERDOUBLETOUCHEDBALL.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_ATTACKERDOUBLETOUCHEDBALL.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_ATTACKERDOUBLETOUCHEDBALL.containing_type = _GAMEEVENT
-_GAMEEVENT_ATTACKERTOOCLOSETODEFENSEAREA.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_ATTACKERTOOCLOSETODEFENSEAREA.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
-_GAMEEVENT_ATTACKERTOOCLOSETODEFENSEAREA.fields_by_name[
-    "ball_location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_ATTACKERTOOCLOSETODEFENSEAREA.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_ATTACKERTOOCLOSETODEFENSEAREA.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_ATTACKERTOOCLOSETODEFENSEAREA.fields_by_name["ball_location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_ATTACKERTOOCLOSETODEFENSEAREA.containing_type = _GAMEEVENT
-_GAMEEVENT_BOTHELDBALLDELIBERATELY.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_BOTHELDBALLDELIBERATELY.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTHELDBALLDELIBERATELY.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_BOTHELDBALLDELIBERATELY.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BOTHELDBALLDELIBERATELY.containing_type = _GAMEEVENT
-_GAMEEVENT_BOTINTERFEREDPLACEMENT.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_BOTINTERFEREDPLACEMENT.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOTINTERFEREDPLACEMENT.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_BOTINTERFEREDPLACEMENT.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BOTINTERFEREDPLACEMENT.containing_type = _GAMEEVENT
-_GAMEEVENT_MULTIPLECARDS.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_MULTIPLECARDS.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_MULTIPLECARDS.containing_type = _GAMEEVENT
-_GAMEEVENT_MULTIPLEFOULS.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_MULTIPLEFOULS.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_MULTIPLEFOULS.fields_by_name["caused_game_events"].message_type = _GAMEEVENT
 _GAMEEVENT_MULTIPLEFOULS.containing_type = _GAMEEVENT
-_GAMEEVENT_MULTIPLEPLACEMENTFAILURES.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_MULTIPLEPLACEMENTFAILURES.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_MULTIPLEPLACEMENTFAILURES.containing_type = _GAMEEVENT
 _GAMEEVENT_KICKTIMEOUT.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_KICKTIMEOUT.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_KICKTIMEOUT.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_KICKTIMEOUT.containing_type = _GAMEEVENT
-_GAMEEVENT_NOPROGRESSINGAME.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_NOPROGRESSINGAME.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_NOPROGRESSINGAME.containing_type = _GAMEEVENT
-_GAMEEVENT_PLACEMENTFAILED.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_PLACEMENTFAILED.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_PLACEMENTFAILED.containing_type = _GAMEEVENT
-_GAMEEVENT_UNSPORTINGBEHAVIORMINOR.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_UNSPORTINGBEHAVIORMINOR.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_UNSPORTINGBEHAVIORMINOR.containing_type = _GAMEEVENT
-_GAMEEVENT_UNSPORTINGBEHAVIORMAJOR.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_UNSPORTINGBEHAVIORMAJOR.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_UNSPORTINGBEHAVIORMAJOR.containing_type = _GAMEEVENT
-_GAMEEVENT_KEEPERHELDBALL.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_KEEPERHELDBALL.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_KEEPERHELDBALL.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_KEEPERHELDBALL.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_KEEPERHELDBALL.containing_type = _GAMEEVENT
-_GAMEEVENT_PLACEMENTSUCCEEDED.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_PLACEMENTSUCCEEDED.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_PLACEMENTSUCCEEDED.containing_type = _GAMEEVENT
 _GAMEEVENT_PREPARED.containing_type = _GAMEEVENT
-_GAMEEVENT_BOTSUBSTITUTION.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_BOTSUBSTITUTION.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_BOTSUBSTITUTION.containing_type = _GAMEEVENT
-_GAMEEVENT_EXCESSIVEBOTSUBSTITUTION.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_EXCESSIVEBOTSUBSTITUTION.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_EXCESSIVEBOTSUBSTITUTION.containing_type = _GAMEEVENT
-_GAMEEVENT_CHALLENGEFLAG.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_CHALLENGEFLAG.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_CHALLENGEFLAG.containing_type = _GAMEEVENT
-_GAMEEVENT_CHALLENGEFLAGHANDLED.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_CHALLENGEFLAGHANDLED.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_CHALLENGEFLAGHANDLED.containing_type = _GAMEEVENT
-_GAMEEVENT_EMERGENCYSTOP.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_EMERGENCYSTOP.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
 _GAMEEVENT_EMERGENCYSTOP.containing_type = _GAMEEVENT
-_GAMEEVENT_TOOMANYROBOTS.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_TOOMANYROBOTS.fields_by_name[
-    "ball_location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_TOOMANYROBOTS.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_TOOMANYROBOTS.fields_by_name["ball_location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_TOOMANYROBOTS.containing_type = _GAMEEVENT
-_GAMEEVENT_BOUNDARYCROSSING.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_BOUNDARYCROSSING.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_BOUNDARYCROSSING.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_BOUNDARYCROSSING.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_BOUNDARYCROSSING.containing_type = _GAMEEVENT
-_GAMEEVENT_PENALTYKICKFAILED.fields_by_name[
-    "by_team"
-].enum_type = ssl__gc__common__pb2._TEAM
-_GAMEEVENT_PENALTYKICKFAILED.fields_by_name[
-    "location"
-].message_type = ssl__gc__geometry__pb2._VECTOR2
+_GAMEEVENT_PENALTYKICKFAILED.fields_by_name["by_team"].enum_type = ssl__gc__common__pb2._TEAM
+_GAMEEVENT_PENALTYKICKFAILED.fields_by_name["location"].message_type = ssl__gc__geometry__pb2._VECTOR2
 _GAMEEVENT_PENALTYKICKFAILED.containing_type = _GAMEEVENT
 _GAMEEVENT.fields_by_name["type"].enum_type = _GAMEEVENT_TYPE
-_GAMEEVENT.fields_by_name[
-    "ball_left_field_touch_line"
-].message_type = _GAMEEVENT_BALLLEFTFIELD
-_GAMEEVENT.fields_by_name[
-    "ball_left_field_goal_line"
-].message_type = _GAMEEVENT_BALLLEFTFIELD
+_GAMEEVENT.fields_by_name["ball_left_field_touch_line"].message_type = _GAMEEVENT_BALLLEFTFIELD
+_GAMEEVENT.fields_by_name["ball_left_field_goal_line"].message_type = _GAMEEVENT_BALLLEFTFIELD
 _GAMEEVENT.fields_by_name["aimless_kick"].message_type = _GAMEEVENT_AIMLESSKICK
-_GAMEEVENT.fields_by_name[
-    "attacker_too_close_to_defense_area"
-].message_type = _GAMEEVENT_ATTACKERTOOCLOSETODEFENSEAREA
-_GAMEEVENT.fields_by_name[
-    "defender_in_defense_area"
-].message_type = _GAMEEVENT_DEFENDERINDEFENSEAREA
-_GAMEEVENT.fields_by_name[
-    "boundary_crossing"
-].message_type = _GAMEEVENT_BOUNDARYCROSSING
+_GAMEEVENT.fields_by_name["attacker_too_close_to_defense_area"].message_type = _GAMEEVENT_ATTACKERTOOCLOSETODEFENSEAREA
+_GAMEEVENT.fields_by_name["defender_in_defense_area"].message_type = _GAMEEVENT_DEFENDERINDEFENSEAREA
+_GAMEEVENT.fields_by_name["boundary_crossing"].message_type = _GAMEEVENT_BOUNDARYCROSSING
 _GAMEEVENT.fields_by_name["keeper_held_ball"].message_type = _GAMEEVENT_KEEPERHELDBALL
-_GAMEEVENT.fields_by_name[
-    "bot_dribbled_ball_too_far"
-].message_type = _GAMEEVENT_BOTDRIBBLEDBALLTOOFAR
+_GAMEEVENT.fields_by_name["bot_dribbled_ball_too_far"].message_type = _GAMEEVENT_BOTDRIBBLEDBALLTOOFAR
 _GAMEEVENT.fields_by_name["bot_pushed_bot"].message_type = _GAMEEVENT_BOTPUSHEDBOT
-_GAMEEVENT.fields_by_name[
-    "bot_held_ball_deliberately"
-].message_type = _GAMEEVENT_BOTHELDBALLDELIBERATELY
+_GAMEEVENT.fields_by_name["bot_held_ball_deliberately"].message_type = _GAMEEVENT_BOTHELDBALLDELIBERATELY
 _GAMEEVENT.fields_by_name["bot_tipped_over"].message_type = _GAMEEVENT_BOTTIPPEDOVER
 _GAMEEVENT.fields_by_name["bot_dropped_parts"].message_type = _GAMEEVENT_BOTDROPPEDPARTS
-_GAMEEVENT.fields_by_name[
-    "attacker_touched_ball_in_defense_area"
-].message_type = _GAMEEVENT_ATTACKERTOUCHEDBALLINDEFENSEAREA
-_GAMEEVENT.fields_by_name[
-    "bot_kicked_ball_too_fast"
-].message_type = _GAMEEVENT_BOTKICKEDBALLTOOFAST
+_GAMEEVENT.fields_by_name["attacker_touched_ball_in_defense_area"].message_type = (
+    _GAMEEVENT_ATTACKERTOUCHEDBALLINDEFENSEAREA
+)
+_GAMEEVENT.fields_by_name["bot_kicked_ball_too_fast"].message_type = _GAMEEVENT_BOTKICKEDBALLTOOFAST
 _GAMEEVENT.fields_by_name["bot_crash_unique"].message_type = _GAMEEVENT_BOTCRASHUNIQUE
 _GAMEEVENT.fields_by_name["bot_crash_drawn"].message_type = _GAMEEVENT_BOTCRASHDRAWN
-_GAMEEVENT.fields_by_name[
-    "defender_too_close_to_kick_point"
-].message_type = _GAMEEVENT_DEFENDERTOOCLOSETOKICKPOINT
-_GAMEEVENT.fields_by_name[
-    "bot_too_fast_in_stop"
-].message_type = _GAMEEVENT_BOTTOOFASTINSTOP
-_GAMEEVENT.fields_by_name[
-    "bot_interfered_placement"
-].message_type = _GAMEEVENT_BOTINTERFEREDPLACEMENT
+_GAMEEVENT.fields_by_name["defender_too_close_to_kick_point"].message_type = _GAMEEVENT_DEFENDERTOOCLOSETOKICKPOINT
+_GAMEEVENT.fields_by_name["bot_too_fast_in_stop"].message_type = _GAMEEVENT_BOTTOOFASTINSTOP
+_GAMEEVENT.fields_by_name["bot_interfered_placement"].message_type = _GAMEEVENT_BOTINTERFEREDPLACEMENT
 _GAMEEVENT.fields_by_name["possible_goal"].message_type = _GAMEEVENT_GOAL
 _GAMEEVENT.fields_by_name["goal"].message_type = _GAMEEVENT_GOAL
 _GAMEEVENT.fields_by_name["invalid_goal"].message_type = _GAMEEVENT_GOAL
-_GAMEEVENT.fields_by_name[
-    "attacker_double_touched_ball"
-].message_type = _GAMEEVENT_ATTACKERDOUBLETOUCHEDBALL
-_GAMEEVENT.fields_by_name[
-    "placement_succeeded"
-].message_type = _GAMEEVENT_PLACEMENTSUCCEEDED
-_GAMEEVENT.fields_by_name[
-    "penalty_kick_failed"
-].message_type = _GAMEEVENT_PENALTYKICKFAILED
-_GAMEEVENT.fields_by_name[
-    "no_progress_in_game"
-].message_type = _GAMEEVENT_NOPROGRESSINGAME
+_GAMEEVENT.fields_by_name["attacker_double_touched_ball"].message_type = _GAMEEVENT_ATTACKERDOUBLETOUCHEDBALL
+_GAMEEVENT.fields_by_name["placement_succeeded"].message_type = _GAMEEVENT_PLACEMENTSUCCEEDED
+_GAMEEVENT.fields_by_name["penalty_kick_failed"].message_type = _GAMEEVENT_PENALTYKICKFAILED
+_GAMEEVENT.fields_by_name["no_progress_in_game"].message_type = _GAMEEVENT_NOPROGRESSINGAME
 _GAMEEVENT.fields_by_name["placement_failed"].message_type = _GAMEEVENT_PLACEMENTFAILED
 _GAMEEVENT.fields_by_name["multiple_cards"].message_type = _GAMEEVENT_MULTIPLECARDS
 _GAMEEVENT.fields_by_name["multiple_fouls"].message_type = _GAMEEVENT_MULTIPLEFOULS
 _GAMEEVENT.fields_by_name["bot_substitution"].message_type = _GAMEEVENT_BOTSUBSTITUTION
-_GAMEEVENT.fields_by_name[
-    "excessive_bot_substitution"
-].message_type = _GAMEEVENT_EXCESSIVEBOTSUBSTITUTION
+_GAMEEVENT.fields_by_name["excessive_bot_substitution"].message_type = _GAMEEVENT_EXCESSIVEBOTSUBSTITUTION
 _GAMEEVENT.fields_by_name["too_many_robots"].message_type = _GAMEEVENT_TOOMANYROBOTS
 _GAMEEVENT.fields_by_name["challenge_flag"].message_type = _GAMEEVENT_CHALLENGEFLAG
-_GAMEEVENT.fields_by_name[
-    "challenge_flag_handled"
-].message_type = _GAMEEVENT_CHALLENGEFLAGHANDLED
+_GAMEEVENT.fields_by_name["challenge_flag_handled"].message_type = _GAMEEVENT_CHALLENGEFLAGHANDLED
 _GAMEEVENT.fields_by_name["emergency_stop"].message_type = _GAMEEVENT_EMERGENCYSTOP
-_GAMEEVENT.fields_by_name[
-    "unsporting_behavior_minor"
-].message_type = _GAMEEVENT_UNSPORTINGBEHAVIORMINOR
-_GAMEEVENT.fields_by_name[
-    "unsporting_behavior_major"
-].message_type = _GAMEEVENT_UNSPORTINGBEHAVIORMAJOR
+_GAMEEVENT.fields_by_name["unsporting_behavior_minor"].message_type = _GAMEEVENT_UNSPORTINGBEHAVIORMINOR
+_GAMEEVENT.fields_by_name["unsporting_behavior_major"].message_type = _GAMEEVENT_UNSPORTINGBEHAVIORMAJOR
 _GAMEEVENT.fields_by_name["prepared"].message_type = _GAMEEVENT_PREPARED
 _GAMEEVENT.fields_by_name["indirect_goal"].message_type = _GAMEEVENT_INDIRECTGOAL
 _GAMEEVENT.fields_by_name["chipped_goal"].message_type = _GAMEEVENT_CHIPPEDGOAL
 _GAMEEVENT.fields_by_name["kick_timeout"].message_type = _GAMEEVENT_KICKTIMEOUT
-_GAMEEVENT.fields_by_name[
-    "attacker_touched_opponent_in_defense_area"
-].message_type = _GAMEEVENT_ATTACKERTOUCHEDOPPONENTINDEFENSEAREA
-_GAMEEVENT.fields_by_name[
-    "attacker_touched_opponent_in_defense_area_skipped"
-].message_type = _GAMEEVENT_ATTACKERTOUCHEDOPPONENTINDEFENSEAREA
-_GAMEEVENT.fields_by_name[
-    "bot_crash_unique_skipped"
-].message_type = _GAMEEVENT_BOTCRASHUNIQUE
-_GAMEEVENT.fields_by_name[
-    "bot_pushed_bot_skipped"
-].message_type = _GAMEEVENT_BOTPUSHEDBOT
-_GAMEEVENT.fields_by_name[
-    "defender_in_defense_area_partially"
-].message_type = _GAMEEVENT_DEFENDERINDEFENSEAREAPARTIALLY
-_GAMEEVENT.fields_by_name[
-    "multiple_placement_failures"
-].message_type = _GAMEEVENT_MULTIPLEPLACEMENTFAILURES
+_GAMEEVENT.fields_by_name["attacker_touched_opponent_in_defense_area"].message_type = (
+    _GAMEEVENT_ATTACKERTOUCHEDOPPONENTINDEFENSEAREA
+)
+_GAMEEVENT.fields_by_name["attacker_touched_opponent_in_defense_area_skipped"].message_type = (
+    _GAMEEVENT_ATTACKERTOUCHEDOPPONENTINDEFENSEAREA
+)
+_GAMEEVENT.fields_by_name["bot_crash_unique_skipped"].message_type = _GAMEEVENT_BOTCRASHUNIQUE
+_GAMEEVENT.fields_by_name["bot_pushed_bot_skipped"].message_type = _GAMEEVENT_BOTPUSHEDBOT
+_GAMEEVENT.fields_by_name["defender_in_defense_area_partially"].message_type = _GAMEEVENT_DEFENDERINDEFENSEAREAPARTIALLY
+_GAMEEVENT.fields_by_name["multiple_placement_failures"].message_type = _GAMEEVENT_MULTIPLEPLACEMENTFAILURES
 _GAMEEVENT_TYPE.containing_type = _GAMEEVENT
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["ball_left_field_touch_line"]
-)
-_GAMEEVENT.fields_by_name[
-    "ball_left_field_touch_line"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["ball_left_field_goal_line"]
-)
-_GAMEEVENT.fields_by_name[
-    "ball_left_field_goal_line"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["aimless_kick"]
-)
-_GAMEEVENT.fields_by_name["aimless_kick"].containing_oneof = _GAMEEVENT.oneofs_by_name[
-    "event"
-]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["attacker_too_close_to_defense_area"]
-)
-_GAMEEVENT.fields_by_name[
-    "attacker_too_close_to_defense_area"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["defender_in_defense_area"]
-)
-_GAMEEVENT.fields_by_name[
-    "defender_in_defense_area"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["boundary_crossing"]
-)
-_GAMEEVENT.fields_by_name[
-    "boundary_crossing"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["keeper_held_ball"]
-)
-_GAMEEVENT.fields_by_name[
-    "keeper_held_ball"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_dribbled_ball_too_far"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_dribbled_ball_too_far"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_pushed_bot"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_pushed_bot"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_held_ball_deliberately"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_held_ball_deliberately"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_tipped_over"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_tipped_over"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_dropped_parts"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_dropped_parts"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["attacker_touched_ball_in_defense_area"]
-)
-_GAMEEVENT.fields_by_name[
-    "attacker_touched_ball_in_defense_area"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_kicked_ball_too_fast"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_kicked_ball_too_fast"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_crash_unique"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_crash_unique"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_crash_drawn"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_crash_drawn"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["defender_too_close_to_kick_point"]
-)
-_GAMEEVENT.fields_by_name[
-    "defender_too_close_to_kick_point"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_too_fast_in_stop"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_too_fast_in_stop"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_interfered_placement"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_interfered_placement"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["possible_goal"]
-)
-_GAMEEVENT.fields_by_name["possible_goal"].containing_oneof = _GAMEEVENT.oneofs_by_name[
-    "event"
-]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["ball_left_field_touch_line"])
+_GAMEEVENT.fields_by_name["ball_left_field_touch_line"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["ball_left_field_goal_line"])
+_GAMEEVENT.fields_by_name["ball_left_field_goal_line"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["aimless_kick"])
+_GAMEEVENT.fields_by_name["aimless_kick"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["attacker_too_close_to_defense_area"])
+_GAMEEVENT.fields_by_name["attacker_too_close_to_defense_area"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["defender_in_defense_area"])
+_GAMEEVENT.fields_by_name["defender_in_defense_area"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["boundary_crossing"])
+_GAMEEVENT.fields_by_name["boundary_crossing"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["keeper_held_ball"])
+_GAMEEVENT.fields_by_name["keeper_held_ball"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_dribbled_ball_too_far"])
+_GAMEEVENT.fields_by_name["bot_dribbled_ball_too_far"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_pushed_bot"])
+_GAMEEVENT.fields_by_name["bot_pushed_bot"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_held_ball_deliberately"])
+_GAMEEVENT.fields_by_name["bot_held_ball_deliberately"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_tipped_over"])
+_GAMEEVENT.fields_by_name["bot_tipped_over"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_dropped_parts"])
+_GAMEEVENT.fields_by_name["bot_dropped_parts"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["attacker_touched_ball_in_defense_area"])
+_GAMEEVENT.fields_by_name["attacker_touched_ball_in_defense_area"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_kicked_ball_too_fast"])
+_GAMEEVENT.fields_by_name["bot_kicked_ball_too_fast"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_crash_unique"])
+_GAMEEVENT.fields_by_name["bot_crash_unique"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_crash_drawn"])
+_GAMEEVENT.fields_by_name["bot_crash_drawn"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["defender_too_close_to_kick_point"])
+_GAMEEVENT.fields_by_name["defender_too_close_to_kick_point"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_too_fast_in_stop"])
+_GAMEEVENT.fields_by_name["bot_too_fast_in_stop"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_interfered_placement"])
+_GAMEEVENT.fields_by_name["bot_interfered_placement"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["possible_goal"])
+_GAMEEVENT.fields_by_name["possible_goal"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
 _GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["goal"])
 _GAMEEVENT.fields_by_name["goal"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["invalid_goal"]
-)
-_GAMEEVENT.fields_by_name["invalid_goal"].containing_oneof = _GAMEEVENT.oneofs_by_name[
-    "event"
-]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["attacker_double_touched_ball"]
-)
-_GAMEEVENT.fields_by_name[
-    "attacker_double_touched_ball"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["placement_succeeded"]
-)
-_GAMEEVENT.fields_by_name[
-    "placement_succeeded"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["penalty_kick_failed"]
-)
-_GAMEEVENT.fields_by_name[
-    "penalty_kick_failed"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["no_progress_in_game"]
-)
-_GAMEEVENT.fields_by_name[
-    "no_progress_in_game"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["placement_failed"]
-)
-_GAMEEVENT.fields_by_name[
-    "placement_failed"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["multiple_cards"]
-)
-_GAMEEVENT.fields_by_name[
-    "multiple_cards"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["multiple_fouls"]
-)
-_GAMEEVENT.fields_by_name[
-    "multiple_fouls"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_substitution"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_substitution"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["excessive_bot_substitution"]
-)
-_GAMEEVENT.fields_by_name[
-    "excessive_bot_substitution"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["too_many_robots"]
-)
-_GAMEEVENT.fields_by_name[
-    "too_many_robots"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["challenge_flag"]
-)
-_GAMEEVENT.fields_by_name[
-    "challenge_flag"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["challenge_flag_handled"]
-)
-_GAMEEVENT.fields_by_name[
-    "challenge_flag_handled"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["emergency_stop"]
-)
-_GAMEEVENT.fields_by_name[
-    "emergency_stop"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["unsporting_behavior_minor"]
-)
-_GAMEEVENT.fields_by_name[
-    "unsporting_behavior_minor"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["unsporting_behavior_major"]
-)
-_GAMEEVENT.fields_by_name[
-    "unsporting_behavior_major"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["invalid_goal"])
+_GAMEEVENT.fields_by_name["invalid_goal"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["attacker_double_touched_ball"])
+_GAMEEVENT.fields_by_name["attacker_double_touched_ball"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["placement_succeeded"])
+_GAMEEVENT.fields_by_name["placement_succeeded"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["penalty_kick_failed"])
+_GAMEEVENT.fields_by_name["penalty_kick_failed"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["no_progress_in_game"])
+_GAMEEVENT.fields_by_name["no_progress_in_game"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["placement_failed"])
+_GAMEEVENT.fields_by_name["placement_failed"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["multiple_cards"])
+_GAMEEVENT.fields_by_name["multiple_cards"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["multiple_fouls"])
+_GAMEEVENT.fields_by_name["multiple_fouls"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_substitution"])
+_GAMEEVENT.fields_by_name["bot_substitution"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["excessive_bot_substitution"])
+_GAMEEVENT.fields_by_name["excessive_bot_substitution"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["too_many_robots"])
+_GAMEEVENT.fields_by_name["too_many_robots"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["challenge_flag"])
+_GAMEEVENT.fields_by_name["challenge_flag"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["challenge_flag_handled"])
+_GAMEEVENT.fields_by_name["challenge_flag_handled"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["emergency_stop"])
+_GAMEEVENT.fields_by_name["emergency_stop"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["unsporting_behavior_minor"])
+_GAMEEVENT.fields_by_name["unsporting_behavior_minor"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["unsporting_behavior_major"])
+_GAMEEVENT.fields_by_name["unsporting_behavior_major"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
 _GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["prepared"])
-_GAMEEVENT.fields_by_name["prepared"].containing_oneof = _GAMEEVENT.oneofs_by_name[
+_GAMEEVENT.fields_by_name["prepared"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["indirect_goal"])
+_GAMEEVENT.fields_by_name["indirect_goal"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["chipped_goal"])
+_GAMEEVENT.fields_by_name["chipped_goal"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["kick_timeout"])
+_GAMEEVENT.fields_by_name["kick_timeout"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["attacker_touched_opponent_in_defense_area"])
+_GAMEEVENT.fields_by_name["attacker_touched_opponent_in_defense_area"].containing_oneof = _GAMEEVENT.oneofs_by_name[
     "event"
 ]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["indirect_goal"]
-)
-_GAMEEVENT.fields_by_name["indirect_goal"].containing_oneof = _GAMEEVENT.oneofs_by_name[
-    "event"
-]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["chipped_goal"]
-)
-_GAMEEVENT.fields_by_name["chipped_goal"].containing_oneof = _GAMEEVENT.oneofs_by_name[
-    "event"
-]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["kick_timeout"]
-)
-_GAMEEVENT.fields_by_name["kick_timeout"].containing_oneof = _GAMEEVENT.oneofs_by_name[
-    "event"
-]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["attacker_touched_opponent_in_defense_area"]
-)
-_GAMEEVENT.fields_by_name[
-    "attacker_touched_opponent_in_defense_area"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
 _GAMEEVENT.oneofs_by_name["event"].fields.append(
     _GAMEEVENT.fields_by_name["attacker_touched_opponent_in_defense_area_skipped"]
 )
-_GAMEEVENT.fields_by_name[
-    "attacker_touched_opponent_in_defense_area_skipped"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_crash_unique_skipped"]
+_GAMEEVENT.fields_by_name["attacker_touched_opponent_in_defense_area_skipped"].containing_oneof = (
+    _GAMEEVENT.oneofs_by_name["event"]
 )
-_GAMEEVENT.fields_by_name[
-    "bot_crash_unique_skipped"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["bot_pushed_bot_skipped"]
-)
-_GAMEEVENT.fields_by_name[
-    "bot_pushed_bot_skipped"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["defender_in_defense_area_partially"]
-)
-_GAMEEVENT.fields_by_name[
-    "defender_in_defense_area_partially"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
-_GAMEEVENT.oneofs_by_name["event"].fields.append(
-    _GAMEEVENT.fields_by_name["multiple_placement_failures"]
-)
-_GAMEEVENT.fields_by_name[
-    "multiple_placement_failures"
-].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_crash_unique_skipped"])
+_GAMEEVENT.fields_by_name["bot_crash_unique_skipped"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["bot_pushed_bot_skipped"])
+_GAMEEVENT.fields_by_name["bot_pushed_bot_skipped"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["defender_in_defense_area_partially"])
+_GAMEEVENT.fields_by_name["defender_in_defense_area_partially"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
+_GAMEEVENT.oneofs_by_name["event"].fields.append(_GAMEEVENT.fields_by_name["multiple_placement_failures"])
+_GAMEEVENT.fields_by_name["multiple_placement_failures"].containing_oneof = _GAMEEVENT.oneofs_by_name["event"]
 DESCRIPTOR.message_types_by_name["GameEvent"] = _GAMEEVENT
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -6037,12 +5679,8 @@ _GAMEEVENT_TYPE.values_by_name["PREPARED"]._options = None
 _GAMEEVENT_TYPE.values_by_name["INDIRECT_GOAL"]._options = None
 _GAMEEVENT_TYPE.values_by_name["CHIPPED_GOAL"]._options = None
 _GAMEEVENT_TYPE.values_by_name["KICK_TIMEOUT"]._options = None
-_GAMEEVENT_TYPE.values_by_name[
-    "ATTACKER_TOUCHED_OPPONENT_IN_DEFENSE_AREA"
-]._options = None
-_GAMEEVENT_TYPE.values_by_name[
-    "ATTACKER_TOUCHED_OPPONENT_IN_DEFENSE_AREA_SKIPPED"
-]._options = None
+_GAMEEVENT_TYPE.values_by_name["ATTACKER_TOUCHED_OPPONENT_IN_DEFENSE_AREA"]._options = None
+_GAMEEVENT_TYPE.values_by_name["ATTACKER_TOUCHED_OPPONENT_IN_DEFENSE_AREA_SKIPPED"]._options = None
 _GAMEEVENT_TYPE.values_by_name["BOT_CRASH_UNIQUE_SKIPPED"]._options = None
 _GAMEEVENT_TYPE.values_by_name["BOT_PUSHED_BOT_SKIPPED"]._options = None
 _GAMEEVENT_TYPE.values_by_name["DEFENDER_IN_DEFENSE_AREA_PARTIALLY"]._options = None
@@ -6052,9 +5690,7 @@ _GAMEEVENT.fields_by_name["indirect_goal"]._options = None
 _GAMEEVENT.fields_by_name["chipped_goal"]._options = None
 _GAMEEVENT.fields_by_name["kick_timeout"]._options = None
 _GAMEEVENT.fields_by_name["attacker_touched_opponent_in_defense_area"]._options = None
-_GAMEEVENT.fields_by_name[
-    "attacker_touched_opponent_in_defense_area_skipped"
-]._options = None
+_GAMEEVENT.fields_by_name["attacker_touched_opponent_in_defense_area_skipped"]._options = None
 _GAMEEVENT.fields_by_name["bot_crash_unique_skipped"]._options = None
 _GAMEEVENT.fields_by_name["bot_pushed_bot_skipped"]._options = None
 _GAMEEVENT.fields_by_name["defender_in_defense_area_partially"]._options = None

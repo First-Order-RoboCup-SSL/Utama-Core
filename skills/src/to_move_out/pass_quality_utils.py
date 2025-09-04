@@ -1,4 +1,5 @@
 import numpy as np
+
 from global_utils.math_utils import distance
 
 ROBOT_RADIUS = 0.09
@@ -23,9 +24,7 @@ def ball_position(t, x0, v0, a):
     return x0[0:2] + v0 * t + 0.5 * a * (t**2)
 
 
-def interception_chance(
-    passer, receiver, opponent, robot_speed, ball_v0_magnitude, ball_a_magnitude
-):
+def interception_chance(passer, receiver, opponent, robot_speed, ball_v0_magnitude, ball_a_magnitude):
     # assert type(passer) != tuple
     # assert type(receiver) != tuple
     # robot_speed = np.linalg.norm(robot_velocity)
@@ -46,20 +45,12 @@ def interception_chance(
     closest_point = passer_vector + projection * passer_to_opp_vec
     ball_distance = np.linalg.norm(closest_point - passer_vector)
     ball_speed = np.linalg.norm(ball_v0)
-    ball_time_roots = np.roots(
-        [0.5 * np.linalg.norm(ball_a), ball_speed, -ball_distance]
-    )
-    ball_time = (
-        np.max(ball_time_roots[ball_time_roots > 0])
-        if np.any(ball_time_roots > 0)
-        else float("inf")
-    )
+    ball_time_roots = np.roots([0.5 * np.linalg.norm(ball_a), ball_speed, -ball_distance])
+    ball_time = np.max(ball_time_roots[ball_time_roots > 0]) if np.any(ball_time_roots > 0) else float("inf")
 
     opp_dist_to_pass = np.linalg.norm(closest_point - opp_vector) - ROBOT_RADIUS
     if opp_dist_to_pass > 0:
-        opp_to_pass_time = (
-            opp_dist_to_pass / robot_speed if robot_speed != 0 else float("inf")
-        )
+        opp_to_pass_time = opp_dist_to_pass / robot_speed if robot_speed != 0 else float("inf")
     else:
         opp_to_pass_time = 0
 
@@ -99,13 +90,9 @@ def find_pass_quality(
             ball_a_magnitude,
         )
         total_interception_chance += interception
-    goal_chance = find_shot_quality(
-        receiver, enemy_positions, goal_x, goal_y1, goal_y2, shoot_in_left_goal
-    )
+    goal_chance = find_shot_quality(receiver, enemy_positions, goal_x, goal_y1, goal_y2, shoot_in_left_goal)
 
-    distance_to_goal_ratio = (np.absolute(receiver.x - goal_x)) / np.absolute(
-        2 * goal_x
-    )
+    distance_to_goal_ratio = (np.absolute(receiver.x - goal_x)) / np.absolute(2 * goal_x)
 
     distance_to_passer = distance((passer.x, passer.y), (receiver.x, receiver.y))
 
@@ -179,8 +166,7 @@ def find_best_receiver_position(
     sample_radius=0.7,
     num_samples=10,
 ):
-    """
-    Finds the best nearby receiver position that maximizes pass quality.
+    """Finds the best nearby receiver position that maximizes pass quality.
 
     Returns:
         - best_position: (x, y) coordinates of the best receiver position
@@ -194,9 +180,7 @@ def find_best_receiver_position(
     best_position = receiver_position
     best_quality = -float("inf")
 
-    sampled_positions = [
-        PointOnField(receiver_position.x, receiver_position.y)
-    ]  # Include the current position
+    sampled_positions = [PointOnField(receiver_position.x, receiver_position.y)]  # Include the current position
     pass_qualities = []  # Store pass quality for each sampled point
 
     angles = np.linspace(0, 2 * np.pi, num_samples, endpoint=False)

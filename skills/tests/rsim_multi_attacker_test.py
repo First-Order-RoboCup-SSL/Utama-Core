@@ -1,28 +1,20 @@
-import time
-import numpy as np
 import logging
+from typing import List, Tuple
 
-from typing import Tuple, List
-
-from motion_planning.src.pid.pid import get_rsim_pids
-from robot_control.src.skills import (
-    go_to_ball,
-    go_to_point,
-    goalkeep,
-    empty_command,
-    man_mark,
-)
+import numpy as np
+from robot_control.src.intent import PassBall, defend, score_goal
+from robot_control.src.skills import empty_command, go_to_ball, go_to_point, goalkeep
 from robot_control.src.tests.utils import setup_pvp
 from robot_control.src.utils.pass_quality_utils import (
     find_best_receiver_position,
     find_pass_quality,
 )
 from robot_control.src.utils.shooting_utils import find_shot_quality
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from robot_control.src.intent import PassBall, defend, score_goal
-from global_utils.math_utils import squared_distance
 
+from entities.game import Game
+from global_utils.math_utils import squared_distance
+from motion_planning.src.pid.pid import get_rsim_pids
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +36,8 @@ def intercept_ball(
     ball_vel: Tuple[float, float],
     robot_speed: float,
 ) -> Tuple[float, float]:
-    """
-    Simple function to calculate intercept position for a robot.
+    """Simple function to calculate intercept position for a robot.
+
     Assumes the ball is moving in a straight line, and we find the point where the receiver should go.
     """
     # Calculate the time it will take for the robot to reach the ball (simplified)
@@ -112,9 +104,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             print(iter)
 
         sim_robot_controller_defender.add_robot_commands(
-            defend(
-                pid_oren_defender, pid_2d_defender, game, not attacker_is_yellow, 1, env
-            ),
+            defend(pid_oren_defender, pid_2d_defender, game, not attacker_is_yellow, 1, env),
             1,
         )
         sim_robot_controller_defender.add_robot_commands(
@@ -129,14 +119,9 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             ),
             0,
         )
-        """
-        sim_robot_controller_defender.add_robot_commands(
-            man_mark(
-                not attacker_is_yellow,
-                game,
-                2,
-                1,
-                pid_oren_defender,
+        """sim_robot_controller_defender.add_robot_commands( man_mark( not attacker_is_yellow, game, 2, 1,
+        pid_oren_defender,
+
                 pid_2d_defender,
             ),
             2,
@@ -186,9 +171,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
 
             friendly_robots, enemy_robots, balls = latest_frame
 
-            enemy_velocities = game.get_robots_velocity(attacker_is_yellow) or [
-                (0.0, 0.0)
-            ] * len(enemy_robots)
+            enemy_velocities = game.get_robots_velocity(attacker_is_yellow) or [(0.0, 0.0)] * len(enemy_robots)
             enemy_speeds = np.linalg.norm(enemy_velocities, axis=1)
 
             # TODO: Not sure if this is sufficient for both blue and yellow scoring
@@ -221,9 +204,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
             if ball_possessor_id is None and not trying_to_pass:
                 print("No one has the ball, trying to intercept")
                 best_interceptor = None
-                best_intercept_score = float(
-                    "inf"
-                )  # Lower is better (closer to ball path)
+                best_intercept_score = float("inf")  # Lower is better (closer to ball path)
                 for rid in friendly_robot_ids:
                     ball_pos = ball_data.x, ball_data.y
                     robot = friendly_robots[rid]
@@ -235,9 +216,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
 
                     # Calculate how close the robot is to the intercept position (lower score is better)
                     intercept_score = (
-                        squared_distance(robot, intercept_pos)
-                        if intercept_pos is not None
-                        else float("inf")
+                        squared_distance(robot, intercept_pos) if intercept_pos is not None else float("inf")
                     )
 
                     if intercept_score < best_intercept_score:
@@ -276,14 +255,10 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                     if trying_to_pass:
                         continue  # Let PassBall handle the receiver
 
-                    potential_passer_id = (
-                        rid + 1 if rid + 1 <= len(friendly_robots) - 1 else rid - 1
-                    )
+                    potential_passer_id = rid + 1 if rid + 1 <= len(friendly_robots) - 1 else rid - 1
                     target_pos, sampled_positions, _ = find_best_receiver_position(
                         friendly_robots[rid],
-                        friendly_robots[
-                            potential_passer_id
-                        ],  # PointOnField(ball_pos[0], ball_pos[1]),
+                        friendly_robots[potential_passer_id],  # PointOnField(ball_pos[0], ball_pos[1]),
                         enemy_robots,
                         enemy_speeds,
                         BALL_V0_MAGNITUDE,
@@ -375,10 +350,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                 if pq > best_pass_quality:
                     best_pass_quality = pq
                     best_receiver_id = rid
-            if (
-                best_receiver_id is not None
-                and best_pass_quality > PASS_QUALITY_THRESHOLD
-            ):
+            if best_receiver_id is not None and best_pass_quality > PASS_QUALITY_THRESHOLD:
                 print(
                     "trying to execute a pass with quality ",
                     best_pass_quality,
@@ -400,9 +372,7 @@ def test_2v5(friendly_robot_ids: List[int], attacker_is_yellow: bool, headless: 
                 commands[ball_possessor_id] = pass_commands[0]
                 commands[best_receiver_id] = pass_commands[1]
             else:
-                commands[ball_possessor_id] = empty_command(
-                    dribbler_on=True
-                )  # Wait for a better pass
+                commands[ball_possessor_id] = empty_command(dribbler_on=True)  # Wait for a better pass
 
             # Move non-possessing robots to good positions
             for rid in friendly_robot_ids:

@@ -1,17 +1,14 @@
-from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import empty_command, go_to_ball, go_to_point, goalkeep
-from robot_control.src.tests.utils import one_robot_placement, setup_pvp
-from robot_control.src.utils.shooting_utils import find_best_shot
-from team_controller.src.controllers import RSimRobotController
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from robot_control.src.intent import PassBall, defend, score_goal
-from motion_planning.src.pid import PID
-from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
-from config.settings import TIMESTEP
-from entities.data.command import RobotCommand
 import math
 import random
+
+from robot_control.src.intent import PassBall, defend, score_goal
+from robot_control.src.skills import empty_command, go_to_ball, go_to_point, goalkeep
+from robot_control.src.tests.utils import setup_pvp
+from robot_control.src.utils.shooting_utils import find_best_shot
+
+from entities.game import Game
+from motion_planning.src.pid.pid import get_rsim_pids
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 random.seed(4)
 
@@ -39,15 +36,9 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
     env.reset()
 
     if attacker_is_yellow:
-        target_pos = [
-            (START_POS - (i + 1) % 2 * SPACING_X, SPACING_Y - SPACING_Y * i)
-            for i in range(N_ROBOTS_ATTACK)
-        ]
+        target_pos = [(START_POS - (i + 1) % 2 * SPACING_X, SPACING_Y - SPACING_Y * i) for i in range(N_ROBOTS_ATTACK)]
     else:
-        target_pos = [
-            (-START_POS + (i + 1) % 2 * SPACING_X, SPACING_Y - SPACING_Y * i)
-            for i in range(N_ROBOTS_ATTACK)
-        ]
+        target_pos = [(-START_POS + (i + 1) % 2 * SPACING_X, SPACING_Y - SPACING_Y * i) for i in range(N_ROBOTS_ATTACK)]
 
     env.teleport_ball(random.uniform(-3, 3), random.uniform(-3, 3))
 
@@ -87,9 +78,7 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
             break
 
         sim_robot_controller_defender.add_robot_commands(
-            defend(
-                pid_oren_defender, pid_2d_defender, game, not attacker_is_yellow, 1, env
-            ),
+            defend(pid_oren_defender, pid_2d_defender, game, not attacker_is_yellow, 1, env),
             1,
         )
         sim_robot_controller_defender.add_robot_commands(
@@ -126,14 +115,9 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
                 robot_data = game.get_robot_pos(attacker_is_yellow, i)
                 ball = game.get_ball_pos()[0]
 
-                if (
-                    i == closest_robot
-                    and not sim_robot_controller_attacker.robot_has_ball(i)
-                ):
+                if i == closest_robot and not sim_robot_controller_attacker.robot_has_ball(i):
                     sim_robot_controller_attacker.add_robot_commands(
-                        go_to_ball(
-                            pid_oren_attacker, pid_2d_attacker, robot_data, i, ball
-                        ),
+                        go_to_ball(pid_oren_attacker, pid_2d_attacker, robot_data, i, ball),
                         i,
                     )
                     possessor = i
@@ -151,10 +135,7 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
                         i,
                     )
 
-                all_in_pos = (
-                    all_in_pos
-                    and math.dist(target_pos[i], (robot_data.x, robot_data.y)) < 0.01
-                )
+                all_in_pos = all_in_pos and math.dist(target_pos[i], (robot_data.x, robot_data.y)) < 0.01
             sim_robot_controller_attacker.send_robot_commands()
 
             if all_in_pos:
@@ -199,9 +180,7 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
                     game,
                     possessor,
                     next_possessor,
-                    target_coords=game.get_robot_pos(
-                        attacker_is_yellow, next_possessor
-                    ),
+                    target_coords=game.get_robot_pos(attacker_is_yellow, next_possessor),
                 )
             # else:
             print(
@@ -216,23 +195,15 @@ def test_three_one_one_v_two(attacker_is_yellow: bool, headless: bool):
                 pass_task = None
                 possessor = next_possessor
                 print("RECEIVED")
-                sim_robot_controller_attacker.add_robot_commands(
-                    empty_command(dribbler_on=True), possessor
-                )
-                sim_robot_controller_attacker.add_robot_commands(
-                    empty_command(dribbler_on=True), 0
-                )
+                sim_robot_controller_attacker.add_robot_commands(empty_command(dribbler_on=True), possessor)
+                sim_robot_controller_attacker.add_robot_commands(empty_command(dribbler_on=True), 0)
                 sim_robot_controller_attacker.send_robot_commands()
             else:
                 (possessor_cmd, next_possessor_cmd) = pass_task.enact(
                     sim_robot_controller_attacker.robot_has_ball(possessor)
                 )
-                sim_robot_controller_attacker.add_robot_commands(
-                    possessor_cmd, possessor
-                )
-                sim_robot_controller_attacker.add_robot_commands(
-                    next_possessor_cmd, next_possessor
-                )
+                sim_robot_controller_attacker.add_robot_commands(possessor_cmd, possessor)
+                sim_robot_controller_attacker.add_robot_commands(next_possessor_cmd, next_possessor)
                 print(
                     "Possessor dribblle",
                     possessor_cmd.dribble,

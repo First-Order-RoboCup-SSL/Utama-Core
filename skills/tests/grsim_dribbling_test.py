@@ -1,18 +1,16 @@
 import logging
-import random
-import threading
 import queue
-from team_controller.src.controllers.sim.grsim_controller import GRSimController
+import threading
+
+from robot_control.src.high_level_skills import DribbleToTarget
+
+from entities.game import Game
+from motion_planning.src.pid.pid import get_grsim_pids
 from team_controller.src.controllers.sim.grsim_robot_controller import (
     GRSimRobotController,
 )
-from config.settings import TIMESTEP
-from motion_planning.src.pid.pid import get_grsim_pids
 from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
-from robot_control.src.high_level_skills import DribbleToTarget
-from rsoccer_simulator.src.ssl.envs import SSLStandardEnv
-from entities.game import Game
 
 
 def test_grsim_dribbling(dribbler_id: int, is_yellow: bool, headless: bool):
@@ -50,8 +48,7 @@ def test_grsim_dribbling(dribbler_id: int, is_yellow: bool, headless: bool):
             f, e, b = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
 
             if (
-                (f[dribbler_id].x - target_coords[idx][0]) ** 2
-                + (f[dribbler_id].y - target_coords[idx][1]) ** 2
+                (f[dribbler_id].x - target_coords[idx][0]) ** 2 + (f[dribbler_id].y - target_coords[idx][1]) ** 2
             ) < 0.1:
                 idx = (idx + 1) % 4
                 dribble_task.update_coord(target_coords[idx])

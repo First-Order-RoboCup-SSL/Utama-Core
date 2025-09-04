@@ -1,14 +1,13 @@
-from motion_planning.src.pid.pid import get_rsim_pids
-from robot_control.src.skills import face_ball, find_likely_enemy_shooter, go_to_point
-from robot_control.src.tests.utils import setup_pvp
-from team_controller.src.controllers import RSimRobotController
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from robot_control.src.intent import score_goal
-from motion_planning.src.pid import PID
-from config.settings import TIMESTEP
 import logging
 import math
+
+from robot_control.src.intent import score_goal
+from robot_control.src.skills import face_ball, find_likely_enemy_shooter, go_to_point
+from robot_control.src.tests.utils import setup_pvp
+
+from entities.game import Game
+from motion_planning.src.pid.pid import get_rsim_pids
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +21,8 @@ def calculate_pass_viability_score(opponent, ball_pos, goal_pos):
         return 0
 
     # Calculate distance to the ball and distance to our goal
-    distance_to_ball = math.sqrt(
-        (opponent.x - ball_pos[0]) ** 2 + (opponent.y - ball_pos[1]) ** 2
-    )
-    distance_to_goal = math.sqrt(
-        (opponent.x - goal_pos[0]) ** 2 + (opponent.y - goal_pos[1]) ** 2
-    )
+    distance_to_ball = math.sqrt((opponent.x - ball_pos[0]) ** 2 + (opponent.y - ball_pos[1]) ** 2)
+    distance_to_goal = math.sqrt((opponent.x - goal_pos[0]) ** 2 + (opponent.y - goal_pos[1]) ** 2)
 
     # Pass viability score
     score = (1 / distance_to_ball) + (1 / distance_to_goal)
@@ -91,9 +86,7 @@ def block_goal_and_attacker(robot, attacker, goal_pos, pid_oren, pid_trans):
     return cmd
 
 
-def block_pass_between_attackers(
-    robot, main_attacker, support_attacker, pid_oren, pid_trans
-):
+def block_pass_between_attackers(robot, main_attacker, support_attacker, pid_oren, pid_trans):
     # Position between the main attacker and the support attacker
     target_x = (main_attacker.x + support_attacker.x) / 2
     target_y = (main_attacker.y + support_attacker.y) / 2
@@ -114,14 +107,10 @@ def test_man_marking(shooter_id: int, defender_is_yellow: bool, headless: bool):
 
     if defender_is_yellow:
         N_ROBOTS_YELLOW = 3  # Our team: 1 keeper, 2 defenders
-        N_ROBOTS_BLUE = (
-            3  # Opponent team: 1 keeper, 1 main attacker, 1 support attacker
-        )
+        N_ROBOTS_BLUE = 3  # Opponent team: 1 keeper, 1 main attacker, 1 support attacker
     else:
         N_ROBOTS_BLUE = 3  # Our team: 1 keeper, 2 defenders
-        N_ROBOTS_YELLOW = (
-            3  # Opponent team: 1 keeper, 1 main attacker, 1 support attacker
-        )
+        N_ROBOTS_YELLOW = 3  # Opponent team: 1 keeper, 1 main attacker, 1 support attacker
 
     env = SSLStandardEnv(
         n_robots_blue=N_ROBOTS_BLUE,
@@ -169,9 +158,7 @@ def test_man_marking(shooter_id: int, defender_is_yellow: bool, headless: bool):
 
     for iter in range(ITERS):
         if not goal_scored:
-            friendly, enemy, balls = game.get_my_latest_frame(
-                my_team_is_yellow=defender_is_yellow
-            )
+            friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=defender_is_yellow)
 
             # Opponent team: Keeper stays near the goal
             keeper_target = (-4.5, 0) if defender_is_yellow else (4.5, 0)
@@ -187,15 +174,11 @@ def test_man_marking(shooter_id: int, defender_is_yellow: bool, headless: bool):
             # sim_robot_controller_attacker.send_robot_commands()
 
             # Visualize keeper target position and orientation
-            env.draw_line(
-                [(enemy[0].x, enemy[0].y), keeper_target], width=2, color="BLUE"
-            )
+            env.draw_line([(enemy[0].x, enemy[0].y), keeper_target], width=2, color="BLUE")
             env.draw_point(keeper_target[0], keeper_target[1], color="BLUE")
 
             # Opponent team: Main attacker tries to score or pass
-            if sim_robot_controller_attacker.robot_has_ball(
-                1
-            ):  # Main attacker (ID 1) has the ball
+            if sim_robot_controller_attacker.robot_has_ball(1):  # Main attacker (ID 1) has the ball
                 # Randomly decide to shoot or pass
                 if random.random() < 0.5:  # 50% chance to shoot
                     cmd = score_goal(
@@ -229,9 +212,7 @@ def test_man_marking(shooter_id: int, defender_is_yellow: bool, headless: bool):
             sim_robot_controller_attacker.add_robot_commands(cmd, 1)
 
             # Opponent team: Support attacker positions to receive a pass
-            if not sim_robot_controller_attacker.robot_has_ball(
-                2
-            ):  # Support attacker (ID 2) does not have the ball
+            if not sim_robot_controller_attacker.robot_has_ball(2):  # Support attacker (ID 2) does not have the ball
                 # Move to a position ahead of the main attacker
                 support_target = (
                     enemy[1].x + 0.5,  # Slightly ahead of the main attacker
@@ -311,9 +292,7 @@ def test_man_marking(shooter_id: int, defender_is_yellow: bool, headless: bool):
                 color="RED",
             )
             # Visualize support attacker target position and orientation
-            env.draw_line(
-                [(enemy[2].x, enemy[2].y), support_target], width=4, color="RED"
-            )
+            env.draw_line([(enemy[2].x, enemy[2].y), support_target], width=4, color="RED")
 
             # Visualize main defender target position and orientation
             env.draw_line(

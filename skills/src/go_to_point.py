@@ -1,8 +1,9 @@
-from entities.game import Game
 from typing import Tuple
+
 from entities.data.command import RobotCommand
-from skills.src.utils.move_utils import move, face_ball
+from entities.game import Game
 from motion_planning.src.motion_controller import MotionController
+from skills.src.utils.move_utils import face_ball, move
 
 
 def go_to_point(
@@ -12,7 +13,6 @@ def go_to_point(
     target_coords: Tuple[float, float],
     dribbling: bool = False,
 ) -> RobotCommand:
-
     return move(
         game=game,
         motion_controller=motion_controller,

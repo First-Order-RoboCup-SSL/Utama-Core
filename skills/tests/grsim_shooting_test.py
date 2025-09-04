@@ -1,17 +1,16 @@
-import threading
+import logging
 import queue
+import threading
 import time
+
+from robot_control.src.intent import score_goal
+
+from entities.game import Game
+from motion_planning.src.pid.pid import get_grsim_pids
 from team_controller.src.controllers import GRSimRobotController
+from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
-from entities.game import Game
-from robot_control.src.intent import score_goal
-from config.settings import TIMESTEP
-from team_controller.src.controllers.sim.grsim_controller import GRSimController
-from motion_planning.src.pid.pid import get_grsim_pids
-
-import logging
-import random
 
 logger = logging.getLogger(__name__)
 

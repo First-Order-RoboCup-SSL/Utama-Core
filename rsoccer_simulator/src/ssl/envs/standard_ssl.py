@@ -1,24 +1,18 @@
+import logging
 import random
-from typing import Dict, Tuple
+from typing import Tuple
 
 import gymnasium as gym
 import numpy as np
-from rsoccer_simulator.src.Entities import Frame, Robot, Ball
+
+from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
+from config.settings import KICK_SPD, TIMESTEP
+from entities.data.command import RobotResponse
+from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
+from global_utils.math_utils import deg_to_rad, rad_to_deg
+from rsoccer_simulator.src.Entities import Ball, Frame, Robot
 from rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from rsoccer_simulator.src.Utils import KDTree
-from config.settings import (
-    TIMESTEP,
-    KICK_SPD,
-)
-from config.defaults import (
-    LEFT_START_ONE,
-    RIGHT_START_ONE,
-)
-from global_utils.math_utils import deg_to_rad, rad_to_deg
-
-from entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
-from entities.data.command import RobotResponse
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -92,33 +86,19 @@ class SSLStandardEnv(SSLBaseEnv):
         # Define action space for 6 robots in both teams
         self.action_space = gym.spaces.Dict(
             {
-                "team_blue": gym.spaces.Tuple(
-                    [robot_action_space for _ in range(self.n_robots_blue)]
-                ),
-                "team_yellow": gym.spaces.Tuple(
-                    [robot_action_space for _ in range(self.n_robots_yellow)]
-                ),
+                "team_blue": gym.spaces.Tuple([robot_action_space for _ in range(self.n_robots_blue)]),
+                "team_yellow": gym.spaces.Tuple([robot_action_space for _ in range(self.n_robots_yellow)]),
             }
         )
 
         # Set scales for rewards
         self.ball_dist_scale = np.linalg.norm([self.field.width, self.field.length / 2])
-        self.ball_grad_scale = (
-            np.linalg.norm([self.field.width / 2, self.field.length / 2]) / 4
-        )
-        self.energy_scale = (
-            160 * 4
-        ) * 1000  # max wheel speed (rad/s) * 4 wheels * steps
+        self.ball_grad_scale = np.linalg.norm([self.field.width / 2, self.field.length / 2]) / 4
+        self.energy_scale = (160 * 4) * 1000  # max wheel speed (rad/s) * 4 wheels * steps
 
         # set starting formation style for
-        self.blue_formation = (
-            LEFT_START_ONE if not blue_starting_formation else blue_starting_formation
-        )
-        self.yellow_formation = (
-            RIGHT_START_ONE
-            if not yellow_starting_formation
-            else yellow_starting_formation
-        )
+        self.blue_formation = LEFT_START_ONE if not blue_starting_formation else blue_starting_formation
+        self.yellow_formation = RIGHT_START_ONE if not yellow_starting_formation else yellow_starting_formation
 
         logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
@@ -134,8 +114,7 @@ class SSLStandardEnv(SSLBaseEnv):
     def _frame_to_observations(
         self,
     ) -> Tuple[RawVisionData, RobotResponse, RobotResponse]:
-        """
-        return observation data that aligns with grSim
+        """Return observation data that aligns with grSim.
 
         Returns (vision_observation, yellow_robot_feedback, blue_robot_feedback)
         vision_observation: closely aligned to SSLVision that returns a FramData object
@@ -143,9 +122,7 @@ class SSLStandardEnv(SSLBaseEnv):
         blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
         """
         # Ball observation shared by all robots
-        ball_obs = RawBallData(
-            self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z, 1.0
-        )
+        ball_obs = RawBallData(self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z, 1.0)
 
         # Robots observation (Blue + Yellow)
         blue_obs = []
@@ -170,17 +147,13 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Camera id as 0, only one camera for RSim
         return (
-            RawVisionData(
-                self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs], 0
-            ),
+            RawVisionData(self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs], 0),
             yellow_robots_info,
             blue_robots_info,
         )
 
     def _get_robot_observation(self, robot):
-        robot_pos = RawRobotData(
-            robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1
-        )
+        robot_pos = RawRobotData(robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1)
         robot_info = RobotResponse(robot.id, robot.infrared)
         return robot_pos, robot_info
 
@@ -258,9 +231,7 @@ class SSLStandardEnv(SSLBaseEnv):
             return abs(rbt.x) > half_len - pen_len and abs(rbt.y) < half_pen_wid
 
         # Check if any robot on the blue team exited field or violated rules (for info)
-        for (_, robot_b), (_, robot_y) in zip(
-            self.frame.robots_blue.items(), self.frame.robots_yellow.items()
-        ):
+        for (_, robot_b), (_, robot_y) in zip(self.frame.robots_blue.items(), self.frame.robots_yellow.items()):
             if abs(robot_y.y) > half_wid or abs(robot_y.x) > half_len:
                 done = True
                 self.reward_shaping_total["blue_team"]["done_rbt_out"] += 1
@@ -327,15 +298,11 @@ class SSLStandardEnv(SSLBaseEnv):
 
         for i in range(self.n_robots_blue):
             x, y, heading = self.blue_formation[i]
-            pos_frame.robots_blue[i] = Robot(
-                id=i, x=x, y=-y, theta=-rad_to_deg(heading)
-            )
+            pos_frame.robots_blue[i] = Robot(id=i, x=x, y=-y, theta=-rad_to_deg(heading))
 
         for i in range(self.n_robots_yellow):
             x, y, heading = self.yellow_formation[i]
-            pos_frame.robots_yellow[i] = Robot(
-                id=i, x=x, y=-y, theta=-rad_to_deg(heading)
-            )
+            pos_frame.robots_yellow[i] = Robot(id=i, x=x, y=-y, theta=-rad_to_deg(heading))
 
         pos_frame.ball = Ball(x=0, y=0)
 

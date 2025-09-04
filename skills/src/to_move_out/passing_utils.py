@@ -1,6 +1,8 @@
-from entities.data.vision import VisionRobotData, VisionBallData
-from typing import Tuple, List
+from typing import List, Tuple
+
 import numpy as np
+
+from entities.data.vision import VisionRobotData
 
 
 def calculate_ttr():
@@ -12,8 +14,7 @@ def calculate_adjusted_receiver_pos(
     receiver_data: VisionRobotData,
     ball_traj_points: List[Tuple[float, float]],
 ) -> Tuple[float, float]:
-    """
-    Returns the adjusted receive position of the receiver based on ball trajectory
+    """Returns the adjusted receive position of the receiver based on ball trajectory.
 
     where ball trajectory is plotted with ax + by + c = 0
 
@@ -24,9 +25,7 @@ def calculate_adjusted_receiver_pos(
     def get_ball_movement_line(
         ball_traj_points: List[Tuple[float, float]],
     ) -> Tuple[float, float, float]:
-        """
-        Returns the line equation ax + by + c = 0 of the ball's movement line
-        """
+        """Returns the line equation ax + by + c = 0 of the ball's movement line."""
         points = np.array(ball_traj_points)
         x = points[:, 0]
         y = points[:, 1]

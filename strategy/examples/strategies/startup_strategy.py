@@ -1,16 +1,11 @@
-from typing import Callable, Tuple, Optional
+import logging
+from typing import Tuple
+
 from config.defaults import LEFT_START_ONE, RIGHT_START_ONE
 from entities.data.command import RobotCommand
 from entities.game import Game
 from skills.src.skills import go_to_point
-from strategy.abstract_strategy import BehaviourTreeStrategy
 from strategy.abstract_strategy import AbstractStrategy
-import numpy as np
-from team_controller.src.controllers.common.robot_controller_abstract import (
-    AbstractRobotController,
-)
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +15,7 @@ class StartupStrategy(AbstractStrategy):
         return True
 
     def step(self, game: Game):
-        START_FORMATION = (
-            RIGHT_START_ONE if game.current.my_team_is_right else LEFT_START_ONE
-        )
+        START_FORMATION = RIGHT_START_ONE if game.current.my_team_is_right else LEFT_START_ONE
 
         for robot_id, robot_data in game.current.friendly_robots.items():
             target_coords = START_FORMATION[robot_id]
@@ -38,7 +31,6 @@ class StartupStrategy(AbstractStrategy):
         game: Game,
         face_ball=False,
     ) -> RobotCommand:
-
         ball_p = game.current.ball.p
         current_p = game.current.friendly_robots[robot_id].p
         target_oren = (ball_p.like(current_p) - current_p).phi if face_ball else None

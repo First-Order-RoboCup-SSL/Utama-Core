@@ -1,14 +1,14 @@
-import socket
-from typing import Tuple, Optional
-from team_controller.src.utils import network_utils
-
 import logging
+import socket
+from typing import Optional, Tuple
+
+from team_controller.src.utils import network_utils
 
 logger = logging.getLogger(__name__)
 
+
 class NetworkManager:
-    """
-    Manages network communication via a UDP socket for sending and receiving data.
+    """Manages network communication via a UDP socket for sending and receiving data.
 
     Args:
         address (Tuple[str, int]): The IP address and port to connect or bind to.
@@ -18,13 +18,10 @@ class NetworkManager:
     def __init__(self, address: Tuple[str, int], bind_socket: bool = False):
         # Initialize the NetworkManager and set up the socket.
         self.address = address
-        self.sock = network_utils.setup_socket(
-            socket.socket(socket.AF_INET, socket.SOCK_DGRAM), address, bind_socket
-        )
+        self.sock = network_utils.setup_socket(socket.socket(socket.AF_INET, socket.SOCK_DGRAM), address, bind_socket)
 
     def send_command(self, command: object, is_sim_robot_cmd: bool = False) -> None:
-        """
-        Sends a command to the server at the specified address.
+        """Sends a command to the server at the specified address.
 
         Args:
             command (object): An object with in the form of a protocol buffer message to be serialized and sent.
@@ -36,8 +33,7 @@ class NetworkManager:
         return network_utils.send_command(self.sock, self.address, command, is_sim_robot_cmd)
 
     def receive_data(self) -> Optional[bytes]:
-        """
-        Receives data from the server.
+        """Receives data from the server.
 
         Returns:
             Optional[bytes]: The received data as bytes if available, otherwise None.
@@ -48,8 +44,7 @@ class NetworkManager:
         return network_utils.receive_data(self.sock)
 
     def close(self) -> None:
-        """
-        Closes the socket connection safely.
+        """Closes the socket connection safely.
 
         Attempts to close the socket and logs any exceptions that may occur during the process.
         """

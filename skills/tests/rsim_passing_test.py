@@ -1,13 +1,12 @@
-import time
-from motion_planning.src.pid.pid import get_rsim_pids
-from team_controller.src.controllers import RSimRobotController
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from robot_control.src.intent import PassBall
-from motion_planning.src.pid import PID
-from config.settings import TIMESTEP
 import logging
-import random
+import time
+
+from robot_control.src.intent import PassBall
+
+from entities.game import Game
+from motion_planning.src.pid.pid import get_rsim_pids
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+from team_controller.src.controllers import RSimRobotController
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +16,8 @@ TARGET_COORDS = (-2, 3)
 
 
 def test_passing(passer_id: int, receiver_id: int, is_yellow: bool, headless: bool):
-    """When the tests are run with pytest, these parameters are filled in
-    based on whether we are in full or quick test mode (see conftest.py)"""
+    """When the tests are run with pytest, these parameters are filled in based on whether we are in full or quick test
+    mode (see conftest.py)"""
 
     game = Game(my_team_is_yellow=is_yellow)
 
@@ -41,9 +40,7 @@ def test_passing(passer_id: int, receiver_id: int, is_yellow: bool, headless: bo
 
     pid_oren, pid_trans = get_rsim_pids()
 
-    sim_robot_controller = RSimRobotController(
-        is_team_yellow=is_yellow, env=env, game_obj=game
-    )
+    sim_robot_controller = RSimRobotController(is_team_yellow=is_yellow, env=env, game_obj=game)
 
     passed = False
 

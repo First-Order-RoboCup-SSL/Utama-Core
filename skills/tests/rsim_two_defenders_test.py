@@ -1,32 +1,25 @@
-import sys
-import os
-import numpy as np
-import pytest
-from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import (
-    find_likely_enemy_shooter,
-    get_goal_centre,
-    go_to_ball,
-    go_to_point,
-    align_defenders,
-    to_defense_parametric,
-    face_ball,
-    velocity_to_orientation,
-)
-from team_controller.src.controllers import RSimRobotController
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from robot_control.src.intent import score_goal
-from motion_planning.src.pid import PID
-from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
-from config.settings import TIMESTEP
-from robot_control.src.tests.utils import one_robot_placement, setup_pvp
-
+import logging
 from typing import List
 
-import logging
-logger = logging.getLogger(__name__)
+from robot_control.src.intent import score_goal
+from robot_control.src.skills import (
+    align_defenders,
+    face_ball,
+    find_likely_enemy_shooter,
+    get_goal_centre,
+    go_to_point,
+    to_defense_parametric,
+    velocity_to_orientation,
+)
+from robot_control.src.tests.utils import setup_pvp
 
+from entities.game import Game
+from motion_planning.src.pid import PID
+from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+from team_controller.src.controllers import RSimRobotController
+
+logger = logging.getLogger(__name__)
 
 
 def defend(
@@ -39,8 +32,7 @@ def defend(
     env,
 ):
     # Assume that is_yellow <-> not is_left here # TODO : FIX
-    """
-    Strategy for two defenders,
+    """Strategy for two defenders,
 
     if only one attacker:
         predict shot location, and extrapolate target parametric position tcenter
@@ -53,7 +45,6 @@ def defend(
         approx arc length tcenter -> t2 as straight line length ROBOT_RADIUS / 2
 
         find unit gradient vector at tcenter, (tx, ty) +- w/2 * deriv at(tx, ty) is t1,t2
-
     """
 
     friendly, enemy, balls = game.get_my_latest_frame(my_team_is_yellow=is_yellow)
@@ -64,10 +55,7 @@ def defend(
     if not shooters_data:
         target_tracking_coord = balls[0].x, balls[0].y
         # TODO game.get_ball_velocity() can return (None, None)
-        if (
-            game.get_ball_velocity() is not None
-            and None not in game.get_ball_velocity()
-        ):
+        if game.get_ball_velocity() is not None and None not in game.get_ball_velocity():
             orientation = velocity_to_orientation(game.get_ball_velocity())
             tracking_ball = True
     else:
@@ -78,9 +66,7 @@ def defend(
 
     real_def_pos = friendly[defender1_id].x, friendly[defender1_id].y
     current_def_parametric = to_defense_parametric(real_def_pos, is_left=not is_yellow)
-    target = align_defenders(
-        current_def_parametric, target_tracking_coord, orientation, not is_yellow, env
-    )
+    target = align_defenders(current_def_parametric, target_tracking_coord, orientation, not is_yellow, env)
     cmd = go_to_point(
         pid_oren,
         pid_2d,
@@ -128,9 +114,7 @@ def attack(
     return False
 
 
-def test_two_defenders(
-    defender_id: int, shooter_id: int, defender_is_yellow: bool, headless: bool
-):
+def test_two_defenders(defender_id: int, shooter_id: int, defender_is_yellow: bool, headless: bool):
     game = Game()
 
     if defender_is_yellow:
@@ -206,14 +190,9 @@ def test_two_defenders(
             env,
         )
 
-        if sim_robot_controller_defender.robot_has_ball(
-            defender_id
-        ):  # Sim ends when the defender gets the ball
+        if sim_robot_controller_defender.robot_has_ball(defender_id):  # Sim ends when the defender gets the ball
             break
-        attacker_gets_ball = (
-            attacker_gets_ball
-            or sim_robot_controller_attacker.robot_has_ball(shooter_id)
-        )
+        attacker_gets_ball = attacker_gets_ball or sim_robot_controller_attacker.robot_has_ball(shooter_id)
 
     assert not any_scored
     assert attacker_gets_ball

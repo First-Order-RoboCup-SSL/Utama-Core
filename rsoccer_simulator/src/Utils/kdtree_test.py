@@ -1,5 +1,6 @@
-from kdtree import KDTree
 import unittest
+
+from kdtree import KDTree
 
 
 class TestKDTree(unittest.TestCase):

@@ -1,14 +1,11 @@
-from typing import Dict, Optional
 import dataclasses
-from dataclasses import dataclass, replace
+import logging
+from dataclasses import dataclass
+from typing import Dict, Optional
+
+from entities.game.ball import Ball
 from entities.game.field import Field
 from entities.game.robot import Robot
-from entities.game.ball import Ball
-from entities.game.proximity_lookup import ProximityLookup
-import numpy as np
-
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +27,9 @@ class GameFrame:
         ball_pos = self.ball.p
         return (
             ball_pos.x < -self.field.half_length
-            and (
-                ball_pos.y < self.field.half_goal_width
-                and ball_pos.y > -self.field.half_goal_width
-            )
+            and (ball_pos.y < self.field.half_goal_width and ball_pos.y > -self.field.half_goal_width)
             and not right_goal
             or ball_pos.x > self.field.half_length
-            and (
-                ball_pos.y < self.field.half_goal_width
-                and ball_pos.y > -self.field.half_goal_width
-            )
+            and (ball_pos.y < self.field.half_goal_width and ball_pos.y > -self.field.half_goal_width)
             and right_goal
         )

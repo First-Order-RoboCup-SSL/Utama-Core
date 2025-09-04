@@ -1,24 +1,22 @@
+import logging
+import random
+import time
+from math import dist
 from typing import List
-from entities.game.game_object import Colour, Robot as GameRobot
 
+from robot_control.src.skills import face_ball, go_to_point, mag
+
+from config.settings import TIMESTEP
+from entities.game import Game
+from entities.game.game_object import Colour
+from entities.game.game_object import Robot as GameRobot
 from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
 from motion_planning.src.planning.controller import (
     TempObstacleType,
     TimedSwitchController,
 )
-from robot_control.src.skills import (
-    go_to_point,
-    mag,
-    face_ball,
-)
-from team_controller.src.controllers import RSimRobotController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from config.settings import TIMESTEP
-import random
-import logging
-import time
-from math import dist
+from team_controller.src.controllers import RSimRobotController
 
 logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.DEBUG)
@@ -49,18 +47,12 @@ def test_pathfinding(headless: bool, moving: bool):
 
     slow_pid2d = TwoDPID(TIMESTEP, 1, 2, 0.1, 0.0, num_robots=6)
 
-    sim_robot_controller = RSimRobotController(
-        is_team_yellow=is_yellow, env=env, game_obj=game
-    )
+    sim_robot_controller = RSimRobotController(is_team_yellow=is_yellow, env=env, game_obj=game)
 
     planner = TimedSwitchController(6, game, Colour.YELLOW, env)
-    targets = [(0, 0)] + [
-        (random.uniform(-2, 2), random.uniform(-1.5, 1.5)) for _ in range(1000)
-    ]
+    targets = [(0, 0)] + [(random.uniform(-2, 2), random.uniform(-1.5, 1.5)) for _ in range(1000)]
     target = targets.pop(0)
-    ba_targets = [
-        (random.uniform(-4.5, 4.5), random.uniform(-2.25, 2.25)) for _ in range(6)
-    ]
+    ba_targets = [(random.uniform(-4.5, 4.5), random.uniform(-2.25, 2.25)) for _ in range(6)]
 
     ma = 0
     avg = 0
@@ -104,23 +96,17 @@ def test_pathfinding(headless: bool, moving: bool):
 
         if moving:
             if i % 50 == 0:
-                ba_targets = [
-                    (random.uniform(-2, 2), random.uniform(-1.5, 1.5)) for _ in range(6)
-                ]
+                ba_targets = [(random.uniform(-2, 2), random.uniform(-1.5, 1.5)) for _ in range(6)]
             cmd_dict = {}
             for i in range(6):
                 if i != mover_id:
-                    cmd_dict[i] = go_to_point(
-                        pid_oren, slow_pid2d, friendly_robots[i], i, ba_targets[i], None
-                    )
+                    cmd_dict[i] = go_to_point(pid_oren, slow_pid2d, friendly_robots[i], i, ba_targets[i], None)
             sim_robot_controller.add_robot_commands(cmd_dict)
 
         sim_robot_controller.send_robot_commands()
 
 
-def randomly_spawn_robots(
-    env: SSLStandardEnv, is_team_yellow: bool, safe_robots: List[int]
-):
+def randomly_spawn_robots(env: SSLStandardEnv, is_team_yellow: bool, safe_robots: List[int]):
     for i in range(6):
         if i not in safe_robots:
             env.teleport_robot(

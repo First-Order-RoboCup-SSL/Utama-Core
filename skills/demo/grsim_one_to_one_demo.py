@@ -1,44 +1,37 @@
 import logging
-import random
 import math
-import threading
 import queue
-import time
-from typing import Optional, Tuple
+import random
 import sys
-import numpy as np
+import threading
+import time
+from typing import Tuple
 
-from entities.game.game_object import Colour
+from robot_control.src.high_level_skills import DribbleToTarget
+from robot_control.src.intent import find_likely_enemy_shooter, score_goal
+from robot_control.src.skills import (
+    clamp_to_goal_height,
+    go_to_ball,
+    go_to_point,
+    predict_goal_y_location,
+    velocity_to_orientation,
+)
+
+from entities.data.command import RobotCommand
+from entities.game import Game
+from motion_planning.src.pid.pid import get_grsim_pids
+from team_controller.src.controllers.real.real_robot_controller import (
+    RealRobotController,
+)
 from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.controllers.sim.grsim_robot_controller import (
     GRSimRobotController,
 )
-from team_controller.src.controllers.real.real_robot_controller import (
-    RealRobotController,
-)
-from motion_planning.src.pid.pid import PID, get_grsim_pids
 from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
-from robot_control.src.high_level_skills import DribbleToTarget
-from entities.game import Game
-from entities.data.command import RobotCommand
 
 # Imports from other scripts or modules within the same project
-from robot_control.src.tests.utils import setup_pvp
-from motion_planning.src.pid.pid import get_rsim_pids
 
-from robot_control.src.skills import (
-    face_ball,
-    go_to_ball,
-    go_to_point,
-    velocity_to_orientation,
-    clamp_to_goal_height,
-    predict_goal_y_location,
-)
-from robot_control.src.intent import (
-    find_likely_enemy_shooter,
-    score_goal,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +45,7 @@ FIELD_Y_MIN, FIELD_Y_MAX = -3, 3
 
 
 def ball_out_of_bounds(ball_x: float, ball_y: float) -> bool:
-    """
-    Check if the ball is out of bounds.
-    """
+    """Check if the ball is out of bounds."""
     return 0 < ball_x < -4.25 or abs(ball_y) > 3
 
 
@@ -72,10 +63,7 @@ def find_goal_position(
     if not shooters_data:
         target_tracking_coord = game.ball.x, game.ball.y
         # TODO game.get_ball_velocity() can return (None, None)
-        if (
-            game.get_ball_velocity() is not None
-            and None not in game.get_ball_velocity()
-        ):
+        if game.get_ball_velocity() is not None and None not in game.get_ball_velocity():
             orientation = velocity_to_orientation(game.get_ball_velocity())
     else:
         # TODO (deploy more defenders, or find closest shooter?)
@@ -89,11 +77,7 @@ def find_goal_position(
     else:
         predicted_goal_position = (
             goal_center[0],
-            clamp_to_goal_height(
-                predict_goal_y_location(
-                    target_tracking_coord, orientation, game.my_team_is_yellow
-                )
-            ),
+            clamp_to_goal_height(predict_goal_y_location(target_tracking_coord, orientation, game.my_team_is_yellow)),
         )
 
     return predicted_goal_position
@@ -191,9 +175,7 @@ def dribble_to_target_decision_maker(
     real_controller: RealRobotController,
     safe_distance: float = 0.2,
 ) -> Tuple[float, float]:
-    """
-    Determines the optimal (x, y) position for the robot to dribble to,
-    avoiding interception by the enemy.
+    """Determines the optimal (x, y) position for the robot to dribble to, avoiding interception by the enemy.
 
     :param game: The game object containing current state information.
     :param robot_id: The ID of the robot making the decision.
@@ -320,12 +302,8 @@ def one_on_one(
             )
             ball = game.ball
 
-            enemy_dist_from_ball = math.hypot(
-                ball.x - enemy_robot.x, ball.y - enemy_robot.y
-            )
-            friendly_dist_from_ball = math.hypot(
-                ball.x - friendly_robot.x, ball.y - friendly_robot.y
-            )
+            enemy_dist_from_ball = math.hypot(ball.x - enemy_robot.x, ball.y - enemy_robot.y)
+            friendly_dist_from_ball = math.hypot(ball.x - friendly_robot.x, ball.y - friendly_robot.y)
 
             if robot_controller.robot_has_ball(0):
                 cmd = score_goal(
@@ -374,9 +352,7 @@ def one_on_one(
                     max_ball_follow_dist=1.0,
                 )
             elif not dribbling:
-                cmd = go_to_ball(
-                    pid_oren, pid_trans, friendly_robot.robot_data, 0, ball
-                )
+                cmd = go_to_ball(pid_oren, pid_trans, friendly_robot.robot_data, 0, ball)
 
             # If dribbling, enact the dribble task
             if dribbling and not can_score:
@@ -392,9 +368,7 @@ def one_on_one(
                     dribbling = False
             elif can_score and dribbling and not robot_controller.robot_has_ball(0):
                 dribbling = False
-                cmd = go_to_ball(
-                    pid_oren, pid_trans, friendly_robot.robot_data, 0, ball
-                )
+                cmd = go_to_ball(pid_oren, pid_trans, friendly_robot.robot_data, 0, ball)
 
             # if robot_controller.robot_has_ball(0):
             #     print(f"Yellow: {game.my_team_is_yellow}, Has Ball")
@@ -425,9 +399,7 @@ def one_on_one(
 
 
 def one_to_one_sim(headless: bool):
-    """
-    A 1v1 scenario with dynamic switching of attacker/defender roles.
-    """
+    """A 1v1 scenario with dynamic switching of attacker/defender roles."""
 
     # Initialize Game and environment
     env = GRSimController()

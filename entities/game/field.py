@@ -1,5 +1,4 @@
-import numpy as np
-from shapely import Polygon, LineString
+from shapely import LineString, Polygon
 from shapely.geometry import Point
 
 
@@ -12,8 +11,7 @@ class ClassProperty:
 
 
 class Field:
-    """
-    Field class that contains all the information about the field
+    """Field class that contains all the information about the field.
 
     Call the class properties to get the field information
     """

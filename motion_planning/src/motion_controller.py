@@ -1,3 +1,8 @@
+from typing import List, Tuple
+
+from shapely.geometry import LineString
+
+from entities.game import Game
 from motion_planning.src.pid.pid import (
     PID,
     TwoDPID,
@@ -6,9 +11,6 @@ from motion_planning.src.pid.pid import (
     get_rsim_pids,
 )
 from motion_planning.src.planning.planner import DynamicWindowPlanner
-from entities.game import Game
-from shapely.geometry import LineString
-from typing import List, Tuple
 
 
 class MotionController:
@@ -24,9 +26,7 @@ class MotionController:
         elif mode == "real":
             return get_real_pids()
         else:
-            raise ValueError(
-                f"Unknown mode: {mode}. Choose from 'rsim', 'grsim', or 'real'."
-            )
+            raise ValueError(f"Unknown mode: {mode}. Choose from 'rsim', 'grsim', or 'real'.")
 
     def path_to(
         self,

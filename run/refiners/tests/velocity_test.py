@@ -1,18 +1,17 @@
 import numpy as np
-from entities.data.vector import Vector3D, Vector2D
+import pytest
+
+from entities.data.vector import Vector2D, Vector3D
 from entities.game.ball import Ball
 from entities.game.game_frame import GameFrame
 from entities.game.game_history import GameHistory, TeamType, get_structured_object_key
 from entities.game.robot import Robot
 from run.refiners import VelocityRefiner
-import pytest
 
 velocity_refiner = VelocityRefiner()
 
 
-def create_ball_only_game(
-    ts: float, x: float, y: float, z: float, vx: float = 1, vy: float = 1, vz: float = 1
-):
+def create_ball_only_game(ts: float, x: float, y: float, z: float, vx: float = 1, vy: float = 1, vz: float = 1):
     return GameFrame(
         ts=ts,
         my_team_is_yellow=True,
@@ -91,10 +90,7 @@ def test_extraction_of_time_velocity_pairs():
         game_history.add_game(game_to_add)
         all_added_game_data.append((time, Vector3D(x=vx, y=vy, z=vz)))
 
-    points_needed = (
-        VelocityRefiner.ACCELERATION_N_WINDOWS
-        * VelocityRefiner.ACCELERATION_WINDOW_SIZE
-    )  # e.g., 15
+    points_needed = VelocityRefiner.ACCELERATION_N_WINDOWS * VelocityRefiner.ACCELERATION_WINDOW_SIZE  # e.g., 15
 
     if len(all_added_game_data) >= points_needed:
         start_index_for_expected = len(all_added_game_data) - points_needed
@@ -105,14 +101,10 @@ def test_extraction_of_time_velocity_pairs():
         expected_time_velocity_pairs = []
 
     game_for_extraction_call = create_ball_only_game(0, 0, 0, 0)
-    ball_obj_key = get_structured_object_key(
-        game_for_extraction_call.ball, TeamType.NEUTRAL
-    )
+    ball_obj_key = get_structured_object_key(game_for_extraction_call.ball, TeamType.NEUTRAL)
 
-    extracted_ts_np, extracted_vel_np = (
-        velocity_refiner._extract_time_velocity_np_arrays(
-            game_history, ball_obj_key, points_needed
-        )
+    extracted_ts_np, extracted_vel_np = velocity_refiner._extract_time_velocity_np_arrays(
+        game_history, ball_obj_key, points_needed
     )
 
     assert len(extracted_ts_np) == len(extracted_vel_np)
@@ -122,27 +114,17 @@ def test_extraction_of_time_velocity_pairs():
         for i in range(len(extracted_ts_np)):
             ts = extracted_ts_np[i]
             vel_components = extracted_vel_np[i]
-            vec_obj = Vector3D(
-                x=vel_components[0], y=vel_components[1], z=vel_components[2]
-            )
+            vec_obj = Vector3D(x=vel_components[0], y=vel_components[1], z=vel_components[2])
             reconstructed_extracted_pairs.append((ts, vec_obj))
 
-    assert len(reconstructed_extracted_pairs) == len(
-        expected_time_velocity_pairs
-    ), "Number of items mismatch"
+    assert len(reconstructed_extracted_pairs) == len(expected_time_velocity_pairs), "Number of items mismatch"
 
-    for actual_pair, expected_pair in zip(
-        reconstructed_extracted_pairs, expected_time_velocity_pairs
-    ):
+    for actual_pair, expected_pair in zip(reconstructed_extracted_pairs, expected_time_velocity_pairs):
         actual_ts, actual_vel = actual_pair
         expected_ts, expected_vel = expected_pair
 
-        assert np.isclose(
-            actual_ts, expected_ts
-        ), f"Timestamp mismatch: actual {actual_ts}, expected {expected_ts}"
-        assert (
-            actual_vel == expected_vel
-        ), f"Velocity mismatch: actual {actual_vel}, expected {expected_vel}"
+        assert np.isclose(actual_ts, expected_ts), f"Timestamp mismatch: actual {actual_ts}, expected {expected_ts}"
+        assert actual_vel == expected_vel, f"Velocity mismatch: actual {actual_vel}, expected {expected_vel}"
 
 
 def test_acceleration_calculation_implements_expected_formula():
@@ -158,22 +140,12 @@ def test_acceleration_calculation_implements_expected_formula():
                 noise = -100
             else:
                 noise = 0
-            game_history.add_game(
-                create_ball_only_game(
-                    ts, 0, 0, 0, acc * i + noise, acc * i + noise, acc * i + noise
-                )
-            )
+            game_history.add_game(create_ball_only_game(ts, 0, 0, 0, acc * i + noise, acc * i + noise, acc * i + noise))
             ts += 1
 
     game = create_ball_only_game(ts, 0, 0, 0)
     game = velocity_refiner.refine(game_history, game)
 
-    assert game.ball.a.x == pytest.approx(
-        acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE
-    )
-    assert game.ball.a.y == pytest.approx(
-        acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE
-    )
-    assert game.ball.a.z == pytest.approx(
-        acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE
-    )
+    assert game.ball.a.x == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)
+    assert game.ball.a.y == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)
+    assert game.ball.a.z == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)

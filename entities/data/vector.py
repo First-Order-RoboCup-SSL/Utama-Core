@@ -1,13 +1,18 @@
-from typing import TypeVar, Type
-import numpy as np
 from abc import ABC, abstractmethod
+from typing import Type, TypeVar
+
+import numpy as np
 
 T = TypeVar("T", bound="VectorBase")
 
 
 class VectorBase(ABC):
     def __init__(self, *coords):
-        self._arr = np.array(coords)
+        # allow for VectorBase(1, 2) or VectorBase((1, 2)) or VectorBase([1, 2])
+        if len(coords) == 1 and isinstance(coords[0], (tuple, list, np.ndarray)):
+            self._arr = np.array(coords[0])
+        else:
+            self._arr = np.array(coords)
 
     @property
     def x(self):
@@ -21,8 +26,8 @@ class VectorBase(ABC):
         return np.linalg.norm(self._arr)
 
     def norm(self: T) -> T:
-        """
-        Normalize the vector to unit length.
+        """Normalize the vector to unit length.
+
         Returns a zero vector if the magnitude is too small.
         """
         magnitude = self.mag()
@@ -35,9 +40,7 @@ class VectorBase(ABC):
         2D: Calculate the angle between this vector and another vector in radians.
         """
         if self._arr.shape != other._arr.shape:
-            raise ValueError(
-                "Cannot calculate angle between vectors of different dimensions"
-            )
+            raise ValueError("Cannot calculate angle between vectors of different dimensions")
         dot_product = np.dot(self._arr, other._arr)
         mag_self = self.mag()
         mag_other = other.mag()
@@ -57,7 +60,10 @@ class VectorBase(ABC):
         """
         2D: Calculate the distance to another vector.
         """
-        return np.hypot(other.y - self.y, other.x - self.x)
+        if isinstance(other, Vector2D):
+            return np.hypot(other.y - self.y, other.x - self.x)
+        else:
+            return np.hypot(other[1] - self.y, other[0] - self.x)
 
     def to_array(self) -> np.ndarray:
         return self._arr

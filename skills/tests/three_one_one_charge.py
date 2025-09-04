@@ -1,15 +1,14 @@
-from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import go_to_ball, go_to_point, goalkeep
-from robot_control.src.tests.utils import one_robot_placement, setup_pvp
-from team_controller.src.controllers import RSimRobotController
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from robot_control.src.intent import PassBall, defend, score_goal
-from motion_planning.src.pid import PID
-from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
-from config.settings import TIMESTEP
-from entities.data.command import RobotCommand
 import math
+
+from robot_control.src.intent import PassBall, defend, score_goal
+from robot_control.src.skills import go_to_point, goalkeep
+from robot_control.src.tests.utils import setup_pvp
+
+from entities.data.command import RobotCommand
+from entities.game import Game
+from motion_planning.src.pid import PID
+from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 CHARGE_ACHIEVED_THRESH = 0.1
 CHARGE_FORWARD_DELTA = 0.7
@@ -51,12 +50,7 @@ class ChargeTask:
 
     def done(self):
         new_pos = self.game.get_robot_pos(self.is_yellow, self.robot_id)
-        return (
-            math.hypot(
-                new_pos.x - self.target_coords[0], new_pos.y - self.target_coords[1]
-            )
-            < CHARGE_ACHIEVED_THRESH
-        )
+        return math.hypot(new_pos.x - self.target_coords[0], new_pos.y - self.target_coords[1]) < CHARGE_ACHIEVED_THRESH
 
 
 def test_three_one_one(attacker_is_yellow: bool, headless: bool):
@@ -115,9 +109,7 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
             print(iter)
 
         sim_robot_controller_defender.add_robot_commands(
-            defend(
-                pid_oren_defender, pid_2d_defender, game, not attacker_is_yellow, 1, env
-            ),
+            defend(pid_oren_defender, pid_2d_defender, game, not attacker_is_yellow, 1, env),
             1,
         )
         sim_robot_controller_defender.add_robot_commands(
@@ -150,9 +142,7 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
                     attacker_is_yellow,
                 )
                 for npc_attacker in set(range(N_ROBOTS_ATTACK)).difference([possessor]):
-                    sim_robot_controller_attacker.add_robot_commands(
-                        RobotCommand(0, 0, 0, 0, 0, 0), npc_attacker
-                    )
+                    sim_robot_controller_attacker.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), npc_attacker)
                 sim_robot_controller_attacker.add_robot_commands(cmd, possessor)
             elif pass_task:  # Passing...
                 if sim_robot_controller_attacker.robot_has_ball(
@@ -165,16 +155,10 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
                 else:  # Still passing...
                     next_possessor = pass_task.receiver_id
                     passer_cmd, receiver_cmd = pass_task.enact(
-                        passer_has_ball=sim_robot_controller_attacker.robot_has_ball(
-                            possessor
-                        )
+                        passer_has_ball=sim_robot_controller_attacker.robot_has_ball(possessor)
                     )
-                    sim_robot_controller_attacker.add_robot_commands(
-                        passer_cmd, possessor
-                    )
-                    sim_robot_controller_attacker.add_robot_commands(
-                        receiver_cmd, next_possessor
-                    )
+                    sim_robot_controller_attacker.add_robot_commands(passer_cmd, possessor)
+                    sim_robot_controller_attacker.add_robot_commands(receiver_cmd, next_possessor)
             else:  # Charging...
                 if not charge_tasks:  # First time charging...
                     charge_tasks = [
@@ -192,16 +176,11 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
                 all_done = True
                 for i, task in enumerate(charge_tasks):
                     if not task.done():
-                        sim_robot_controller_attacker.add_robot_commands(
-                            task.enact(), i
-                        )
+                        sim_robot_controller_attacker.add_robot_commands(task.enact(), i)
                         all_done = False
 
                 if all_done:  # Finished charging...
-                    if (
-                        abs(game.get_robot_pos(attacker_is_yellow, possessor).x)
-                        > SHOOT_THRESH
-                    ):
+                    if abs(game.get_robot_pos(attacker_is_yellow, possessor).x) > SHOOT_THRESH:
                         shooting = True
                     else:
                         charge_tasks = None
@@ -212,19 +191,11 @@ def test_three_one_one(attacker_is_yellow: bool, headless: bool):
                             game,
                             possessor,
                             next_possessor,
-                            target_coords=game.get_robot_pos(
-                                attacker_is_yellow, next_possessor
-                            ),
+                            target_coords=game.get_robot_pos(attacker_is_yellow, next_possessor),
                         )
 
-                        npc_attacker = list(
-                            set(range(N_ROBOTS_ATTACK)).difference(
-                                set([possessor, next_possessor])
-                            )
-                        )[0]
-                        sim_robot_controller_attacker.add_robot_commands(
-                            RobotCommand(0, 0, 0, 0, 0, 0), npc_attacker
-                        )
+                        npc_attacker = list(set(range(N_ROBOTS_ATTACK)).difference(set([possessor, next_possessor])))[0]
+                        sim_robot_controller_attacker.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), npc_attacker)
 
             sim_robot_controller_attacker.send_robot_commands()
 

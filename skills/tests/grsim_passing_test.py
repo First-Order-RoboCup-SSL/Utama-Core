@@ -1,26 +1,23 @@
-import threading
+import logging
 import queue
+import threading
 import time
-import numpy as np
+
+from robot_control.src.intent import PassBall
+
+from entities.game import Game
+from motion_planning.src.pid.pid import get_grsim_pids
 from team_controller.src.controllers import GRSimRobotController
+from team_controller.src.controllers.sim.grsim_controller import GRSimController
 from team_controller.src.data import VisionReceiver
 from team_controller.src.data.message_enum import MessageType
-from entities.game import Game
-from robot_control.src.intent import PassBall
-from config.settings import TIMESTEP
-from team_controller.src.controllers.sim.grsim_controller import GRSimController
-from robot_control.src.skills import turn_on_spot, go_to_ball
-from motion_planning.src.pid.pid import get_grsim_pids
-import logging
 
 logger = logging.getLogger(__name__)
 
 TARGET_COORDS = (-2, 3)
 
 
-def test_grsim_passing(
-    passer_id: int, receiver_id: int, is_yellow: bool, headless: bool
-):
+def test_grsim_passing(passer_id: int, receiver_id: int, is_yellow: bool, headless: bool):
     env = GRSimController()
     env.reset()
 

@@ -19,6 +19,8 @@ MAX_ANGULAR_VEL = 4
 
 ROBOT_RADIUS = 0.09  # TODO: probably not the best place to put this
 
+BLACKBOARD_NAMESPACE_MAP = {True: "Opp", False: "My"}
+
 # sim kick speed
 KICK_SPD = 5
 DRIBBLE_SPD = 3

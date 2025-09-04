@@ -4,10 +4,18 @@
 
 ### Setup Utama
 
-0. Easiest way to avoid conflicts: Install uv https://github.com/astral-sh/uv 
-1. With uv: cd to root folder `/Utama` and run `uv venv`; then run `source .venv/bin/activate`venv and then run `uv sync` 
-   Without uv: cd to root folder `/Utama` and type `pip install -e .` to install all dependencies.
-2. Note that this also installs all modules with `__init__.py` (so you need to run it again when you add an `__init__.py`)
+1. Install `pixi` package manager with `curl -fsSL https://pixi.sh/install.sh | sh` or click here for Windows installaton [Pixi installation](https://pixi.sh/latest/#__tabbed_1_1)
+2. With pixi: just run `pixi install` in the base folder and you're all setup.
+3. Note that this also installs all modules with `__init__.py` (so you need to run it again when you add an `__init__.py`)
+4. In order to go into the `pixi` venv, run `pixi shell`. You can also run any of the tasks in the `pixi.toml` without first being in a pixi shell. See [Pixi Tasks](#pixi-tasks).
+5. Finally, run `pixi run precommit-install`. This will ensure that ruff linting is done before you commit.
+
+#### Pixi Tasks
+`pixi run {task_name}` is the generic way to run a task. Some of the main tasks you can run:
+1. `pixi run main` runs main.py
+2. `pixi run lint` runs the ruff checker.
+3. `pixi run test` runs the pytest over the `test/` folder
+4. `pixi run precommit-install` downloads the precommit hook to ensure that your code is formatted correctly when you commit and push.
 
 ### Setup Autoreferee
 
@@ -54,20 +62,20 @@ if you see UDP packets everything is working
 
 #### Folder Hierarchy
 
-1. `decision_maker`: higher level control from above roles to plays and tactics [**No other folder should be importing from this folder**]
-2. `robot_control`: lower level control for individual robots spanning skills to roles [**utility folder for decision_maker**]
-3. `motion_planning`: control algorithms for movement and path planning [**utility folder for robot_control and other folders**]
-4. `team_controller`: interacing with vision (including processing) and robots [**No other folder should be importing from this folder**]
-5. `vision_processing`: data processing for vision related data [**utility folder for team_controller**]
-6. `global_utils`: store utility functions that can be shared across all folders [**this folder should not be importing from any other folder**]
-7. `entities`: store classes for building field, robot, data entities etc. [**this folder should not be importing from any other folder**]
-8. `rsoccer_simulator`: Lightweight rSoccer simulator for testing [**import this folder for testing**]
-9. `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rSoccer sim [**imports from rsoccer**]
+1. `strategy`: higher level control from above roles to plays and tactics in decision-tree like abstraction
+2. `skills`: lowest level of control for individual robots
+3. `motion_planning`: control algorithms for movement and path planning
+4. `team_controller`: interfacing with vision (including processing) and robots
+5. `run`: The logic for main running loop, including refiners and predictors
+6. `global_utils`: store utility functions that can be shared across all folders
+7. `entities`: store classes for building field, robot, data entities etc.
+8. `rsoccer_simulator`: Lightweight rSoccer simulator for testing
+9. [TODO] `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rsoccer sim
 
 #### Code Writing
 
 1. Use typing for all functions.
-2. Please please document your code on the subfolder's `README.md`.
+2. Document your code on the subfolder's `README.md`.
 3. Download and install `Black Formatter` for code formatting
 
    1. For VScode, go to View > Command Palette and search `Open User Settings (JSON)`
@@ -87,9 +95,17 @@ In CI we are using:
 
 #### Push and Commit
 
-1. Each team should be working within your own branch of the repository.
-2. Inform your lead when ready to push to main.
-3. We aim to merge at different releases, so that it is easier for version control.
+1. Each team should be working within your own branch of the repository. Do not push to main branch on your own.
+2. Ensure that you have run `pixi run precommit-install` at least once. This ensure that the pre-commit steps are run on each commit to clean up your code.
+3. If the precommit fails, click on `Open Git Log` on the popup window to view the error. Often times, the failure is automatically fixed and you just need to commit the changes the precommit hook makes.
+4. The popup window can often be quite cryptic when it fails. If you are getting a `bash: warning: setlocale: LC_ALL: cannot change locale (en_US.UTF-8)` popup on commit, this is not the actual cause of the failure. However, Windows decides to show this warning, because it is first warning in the output. To silence this:
+```bash
+sudo apt-get update
+sudo apt-get install -y locales
+sudo locale-gen en_US.UTF-8
+sudo update-locale LANG=en_US.UTF-8
+source ~/.bashrc
+```
 
 ## Milestones
 

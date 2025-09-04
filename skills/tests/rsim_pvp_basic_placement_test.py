@@ -1,14 +1,10 @@
-from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import go_to_ball, go_to_point
-from robot_control.src.tests.utils import one_robot_placement, setup_pvp
-from team_controller.src.controllers import RSimRobotController
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from robot_control.src.intent import score_goal
-from motion_planning.src.pid import PID
-from team_controller.src.controllers.sim.rsim_robot_controller import PVPManager
-from config.settings import TIMESTEP
 import math
+
+from robot_control.src.tests.utils import one_robot_placement, setup_pvp
+
+from entities.game import Game
+from motion_planning.src.pid.pid import get_rsim_pids
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 TEST_EXPECTED_ITERS = 2
 TEST_EXPECTED_REL_DIFF = 0.02
@@ -25,9 +21,7 @@ def test_pvp_placement(target_robot: int, headless: bool):
     N_ROBOTS_YELLOW = 6
     N_ROBOTS_BLUE = 3
 
-    env = SSLStandardEnv(
-        n_robots_blue=N_ROBOTS_BLUE, render_mode="ansi" if headless else "human"
-    )
+    env = SSLStandardEnv(n_robots_blue=N_ROBOTS_BLUE, render_mode="ansi" if headless else "human")
     env.reset()
 
     env.teleport_ball(1, 1)

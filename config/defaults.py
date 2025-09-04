@@ -1,5 +1,6 @@
 import numpy as np
-from strategy.common.roles import Role
+
+from config.roles import Role
 
 # Starting positions for right team
 RIGHT_START_ONE = [
@@ -30,6 +31,7 @@ LEFT_START_ONE = [
     (-2.0000, 1.5000, 0),
     (-2.0000, -2.2500, 0),
 ]
+
 
 ATK_ROLE_MAP_ONE = {
     0: Role.GOALKEEPER,

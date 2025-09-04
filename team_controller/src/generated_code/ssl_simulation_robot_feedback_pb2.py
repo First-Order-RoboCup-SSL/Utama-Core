@@ -6,14 +6,15 @@ from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from google.protobuf import reflection as _reflection
 from google.protobuf import symbol_database as _symbol_database
+
 # @@protoc_insertion_point(imports)
 
 _sym_db = _symbol_database.Default()
 
 
-from . import ssl_simulation_error_pb2 as ssl__simulation__error__pb2
 from google.protobuf import any_pb2 as google_dot_protobuf_dot_any__pb2
 
+from . import ssl_simulation_error_pb2 as ssl__simulation__error__pb2
 
 DESCRIPTOR = _descriptor.FileDescriptor(
     name="ssl_simulation_robot_feedback.proto",
@@ -167,12 +168,8 @@ _ROBOTCONTROLRESPONSE = _descriptor.Descriptor(
     serialized_end=281,
 )
 
-_ROBOTFEEDBACK.fields_by_name[
-    "custom"
-].message_type = google_dot_protobuf_dot_any__pb2._ANY
-_ROBOTCONTROLRESPONSE.fields_by_name[
-    "errors"
-].message_type = ssl__simulation__error__pb2._SIMULATORERROR
+_ROBOTFEEDBACK.fields_by_name["custom"].message_type = google_dot_protobuf_dot_any__pb2._ANY
+_ROBOTCONTROLRESPONSE.fields_by_name["errors"].message_type = ssl__simulation__error__pb2._SIMULATORERROR
 _ROBOTCONTROLRESPONSE.fields_by_name["feedback"].message_type = _ROBOTFEEDBACK
 DESCRIPTOR.message_types_by_name["RobotFeedback"] = _ROBOTFEEDBACK
 DESCRIPTOR.message_types_by_name["RobotControlResponse"] = _ROBOTCONTROLRESPONSE

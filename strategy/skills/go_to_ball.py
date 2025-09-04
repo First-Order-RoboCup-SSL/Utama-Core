@@ -1,37 +1,16 @@
 import py_trees
-from strategy.common import AbstractStrategy, AbstractBehaviour
+from py_trees.composites import Selector, Sequence
+
+from strategy.common import AbstractStrategy
+from strategy.utils.action_nodes import GoToBallStep
 from strategy.utils.blackboard_utils import SetBlackboardVariable
 from strategy.utils.selector_utils import HasBall
-from skills.src.go_to_ball import go_to_ball
-
-
-class GoToBallStep(AbstractBehaviour):
-    """A behaviour that executes a single step of the go_to_ball skill."""
-
-    def __init__(self, name="GoToBallStep"):
-        super().__init__(name=name)
-        self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-
-    def update(self) -> py_trees.common.Status:
-        game = self.blackboard.game.current
-        env = self.blackboard.rsim_env
-        if env:
-            v = game.friendly_robots[self.blackboard.robot_id].v
-            p = game.friendly_robots[self.blackboard.robot_id].p
-            env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")
-        command = go_to_ball(
-            game,
-            self.blackboard.motion_controller,
-            self.blackboard.robot_id,
-        )
-        self.blackboard.cmd_map[self.blackboard.robot_id] = command
-        return py_trees.common.Status.RUNNING
 
 
 class GoToBallStrategy(AbstractStrategy):
     def __init__(self, robot_id: int):
-        """
-        Initializes the GoToBallStrategy with a specific robot ID.
+        """Initializes the GoToBallStrategy with a specific robot ID.
+
         :param robot_id: The ID of the robot this strategy will control.
         """
         self.robot_id = robot_id
@@ -45,23 +24,43 @@ class GoToBallStrategy(AbstractStrategy):
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete go_to_ball behaviour tree."""
 
-        # Root sequence for the whole behaviour
-        root = py_trees.composites.Sequence(name="GoToBall", memory=True)
-
-        # A child sequence to set the robot_id on the blackboard
-        set_robot_id = SetBlackboardVariable(
-            name="SetTargetRobotID", variable_name="robot_id", value=self.robot_id
+        # Main logic for the robot
+        go_to_ball_logic = Selector(
+            name="GoToBallSelector",
+            memory=False,
+            children=[
+                HasBall(),
+                GoToBallStep(),
+            ],
         )
 
-        # A selector to decide whether to get the ball or stop
-        has_ball_selector = py_trees.composites.Selector(
-            name="HasBallSelector", memory=False
+        # Root of the tree that sets up the blackboard first
+        root = Sequence(
+            name="GoToBallModule",
+            memory=True,  # Use memory to ensure setup runs only once
+            children=[
+                SetBlackboardVariable(
+                    name="SetRobotID",
+                    variable_name="robot_id",  # Use a general name
+                    value=self.robot_id,
+                ),
+                go_to_ball_logic,  # Run the main logic after setup
+            ],
         )
-        has_ball_selector.add_child(HasBall())
-        has_ball_selector.add_child(GoToBallStep())
-
-        # Assemble the tree
-        root.add_child(set_robot_id)
-        root.add_child(has_ball_selector)
 
         return root
+
+    def create_module(self) -> py_trees.behaviour.Behaviour:
+        """Factory function to create a complete go_to_ball behaviour tree."""
+
+        # Main logic for the robot
+        go_to_ball_logic = Selector(
+            name="GoToBallSelector",
+            memory=False,
+            children=[
+                HasBall(),
+                GoToBallStep(),
+            ],
+        )
+
+        return go_to_ball_logic

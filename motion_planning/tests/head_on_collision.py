@@ -1,19 +1,16 @@
-from entities.game.game_object import Robot as GameRobot
-
-from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
-from robot_control.src.skills import (
-    go_to_point,
-    mag,
-    face_ball,
-)
-from team_controller.src.controllers import RSimRobotController
-from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from entities.game import Game
-from config.settings import TIMESTEP
-from motion_planning.src.planning.path_planner_ref import DynamicWindowPlanner
-from math import dist
-import random
 import logging
+import random
+from math import dist
+
+from robot_control.src.skills import face_ball, go_to_point, mag
+
+from config.settings import TIMESTEP
+from entities.game import Game
+from entities.game.game_object import Robot as GameRobot
+from motion_planning.src.pid.pid import TwoDPID, get_rsim_pids
+from motion_planning.src.planning.path_planner import DynamicWindowPlanner
+from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+from team_controller.src.controllers import RSimRobotController
 
 logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.DEBUG)
@@ -53,13 +50,9 @@ def test_pathfinding(headless: bool):
 
     slow_pid2d = TwoDPID(TIMESTEP, 1, -1, 2, 0.1, 0.0, num_robots=6, normalize=False)
 
-    sim_robot_controller = RSimRobotController(
-        is_team_yellow=is_yellow, env=env, game_obj=game
-    )
+    sim_robot_controller = RSimRobotController(is_team_yellow=is_yellow, env=env, game_obj=game)
     planner = DynamicWindowPlanner(game)
-    targets = [(0, 0)] + [
-        (random.uniform(-2, 2), random.uniform(-1, 1)) for _ in range(1000)
-    ]
+    targets = [(0, 0)] + [(random.uniform(-2, 2), random.uniform(-1, 1)) for _ in range(1000)]
     target = targets.pop(0)
 
     for _ in range(5000):
@@ -103,13 +96,7 @@ def test_pathfinding(headless: bool):
         arrived = True
 
         for i, cid in enumerate(collider_ids):
-            arrived = (
-                arrived
-                and dist(
-                    (friendly_robots[cid].x, friendly_robots[cid].y), collide_targets[i]
-                )
-                < 0.02
-            )
+            arrived = arrived and dist((friendly_robots[cid].x, friendly_robots[cid].y), collide_targets[i]) < 0.02
 
         if arrived:
             for x in collide_targets:

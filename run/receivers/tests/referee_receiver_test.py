@@ -1,5 +1,3 @@
-import os
-import sys
 import time
 
 from run.receivers.referee_receiver import RefereeMessageReceiver

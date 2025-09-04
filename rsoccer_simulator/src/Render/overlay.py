@@ -1,7 +1,9 @@
-import pygame
-from rsoccer_simulator.src.Render.utils import COLORS
 from collections import namedtuple
 from enum import Enum
+
+import pygame
+
+from rsoccer_simulator.src.Render.utils import COLORS
 
 
 class OverlayType(Enum):

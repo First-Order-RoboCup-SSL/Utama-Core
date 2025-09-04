@@ -66,9 +66,7 @@ class KDTree:
             else:
                 closest, closest_dist2 = self, self.distance2_to(values)
 
-            line_dist = (
-                values[depth % len(values)] - self.values[depth % len(self.values)]
-            )
+            line_dist = values[depth % len(values)] - self.values[depth % len(self.values)]
 
             if other_branch is not None:
                 if closest_dist2 >= line_dist**2:

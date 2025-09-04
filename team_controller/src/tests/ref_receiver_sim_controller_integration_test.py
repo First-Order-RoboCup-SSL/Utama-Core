@@ -1,11 +1,9 @@
-import os
-import sys
+import logging
 import time
 
 from team_controller.src.controllers import GRSimController
 from team_controller.src.data import RefereeMessageReceiver
 from team_controller.src.generated_code.ssl_gc_referee_message_pb2 import Referee
-import logging
 
 """ TODO: Traceback (most recent call last):
   File "/home/fredh/robocup_ssl/Robocup/src/tests/referee_receiver_test.py", line 25, in <module>
@@ -48,31 +46,22 @@ if __name__ == "__main__":
                 blue_team_robots_removed = []
                 id = 0
 
-                logger.info(
-                    f"Yellow team yellow card times: {yellow_team_yellow_card_times}"
-                )
-                logger.info(
-                    f"Blue team yellow card times: {blue_team_yellow_card_times}"
-                )
+                logger.info(f"Yellow team yellow card times: {yellow_team_yellow_card_times}")
+                logger.info(f"Blue team yellow card times: {blue_team_yellow_card_times}")
                 if len(yellow_team_yellow_card_times) == 0:
                     pass  # print("!!!!!!!!!")
 
-                if len(yellow_team_yellow_card_times) != 0 and len(
-                    yellow_team_yellow_card_times
-                ) > len(yellow_team_robots_removed):
+                if len(yellow_team_yellow_card_times) != 0 and len(yellow_team_yellow_card_times) > len(
+                    yellow_team_robots_removed
+                ):
                     yellow_team_robots_removed.append(id)
                     for yellow_team_yellow_card_time in yellow_team_yellow_card_times[
                         len(yellow_team_robots_removed) - 1 :
                     ]:
                         logger.info("Yellow card detected! (yellow)")
                         # TODO: Implement method to chose which robot to remove
-                        sim_control.set_robot_presence(
-                            id, team_colour_is_blue=False, should_robot_be_present=False
-                        )
-                elif (
-                    robots_to_add := len(yellow_team_robots_removed)
-                    - len(yellow_team_yellow_card_times)
-                ) > 0:
+                        sim_control.set_robot_presence(id, team_colour_is_blue=False, should_robot_be_present=False)
+                elif (robots_to_add := len(yellow_team_robots_removed) - len(yellow_team_yellow_card_times)) > 0:
                     for _ in range(robots_to_add):
                         sim_control.set_robot_presence(
                             yellow_team_robots_removed[0],
@@ -83,17 +72,10 @@ if __name__ == "__main__":
 
                 if len(blue_team_yellow_card_times) != 0:
                     blue_team_robots_removed.append(id)
-                    for blue_team_yellow_card_time in blue_team_yellow_card_times[
-                        len(blue_team_robots_removed) - 1 :
-                    ]:
+                    for blue_team_yellow_card_time in blue_team_yellow_card_times[len(blue_team_robots_removed) - 1 :]:
                         logger.info("Yellow card detected! (blue)")
-                        sim_control.set_robot_presence(
-                            id, team_colour_is_blue=True, should_robot_be_present=False
-                        )
-                elif (
-                    robots_to_add := len(blue_team_robots_removed)
-                    - len(blue_team_yellow_card_times)
-                ) > 0:
+                        sim_control.set_robot_presence(id, team_colour_is_blue=True, should_robot_be_present=False)
+                elif (robots_to_add := len(blue_team_robots_removed) - len(blue_team_yellow_card_times)) > 0:
                     for _ in range(robots_to_add):
                         sim_control.set_robot_presence(
                             blue_team_robots_removed[0],
@@ -104,15 +86,11 @@ if __name__ == "__main__":
 
                 # "Manual" automatic ball placement
                 if receiver.check_new_command():
-                    if receiver.check_command_sequence(
-                        desired_sequenceA or desired_sequenceB
-                    ):
+                    if receiver.check_command_sequence(desired_sequenceA or desired_sequenceB):
                         logger.info("Desired sequence detected!")
                         if des_pos != (0.0, 0.0):
                             logger.info("Teleporting ball to", des_pos)
-                            sim_control.teleport_ball(
-                                des_pos[0] / 1000, des_pos[1] / 1000
-                            )
+                            sim_control.teleport_ball(des_pos[0] / 1000, des_pos[1] / 1000)
             time.sleep(max(0, 0.03334 - (time.time() - start_time)))
     except KeyboardInterrupt:
         print("\nExiting...")
