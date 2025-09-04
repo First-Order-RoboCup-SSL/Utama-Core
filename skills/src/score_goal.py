@@ -11,7 +11,6 @@ from entities.game import Game, Robot
 from global_utils.math_utils import angle_between_points as _angle_between_points
 from motion_planning.src.motion_controller import MotionController
 from rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from skills.src.utils.move_utils import kick, turn_on_spot
 from skills.src.go_to_ball import go_to_ball
 from skills.src.utils.move_utils import kick, turn_on_spot
 
@@ -215,7 +214,7 @@ def find_shot_quality(
 
     if largest_gap is None:
         return 0.0
-    
+
     # Compute the open angle (gap angle)
     open_angle = _angle_between_points(
         point,

@@ -2104,7 +2104,7 @@ packages:
 - pypi: ./
   name: utama
   version: 1.0.0
-  sha256: 571c28bbf56ce250bfc2c9f120ea8437f037dd5a81357077bd240b2647f901a1
+  sha256: 627be09c6388b266b0d68f93ffbd163124ca2d2793c8b3776a4a531c3d6082d2
   requires_python: '>=3.11'
   editable: true
 - conda: https://conda.anaconda.org/conda-forge/noarch/virtualenv-20.34.0-pyhd8ed1ab_0.conda
