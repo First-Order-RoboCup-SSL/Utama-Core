@@ -2,9 +2,9 @@ from math import cos, dist, exp, sin
 from typing import List, Tuple
 
 import numpy as np
-from config.settings import ROBOT_RADIUS
 from shapely.geometry import LineString, Point, Polygon
 
+from utama_core.config.settings import ROBOT_RADIUS
 from utama_core.entities.game import Game, Robot
 
 ROBOT_DIAMETER = 2 * ROBOT_RADIUS
