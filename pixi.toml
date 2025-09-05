@@ -43,7 +43,7 @@ numpy = "<=2.0.2"
 lint = "pre-commit run --all-files"
 test = "pytest utama_core/test/"
 main = "python -m main"
-replay = "python -m replay.replay_player"
+replay = "python -m utama_core.replay.replay_player"
 precommit-install = "pre-commit install && pixi run pre-commit install --hook-type pre-commit"
 precommit-uninstall = "pre-commit uninstall"
 

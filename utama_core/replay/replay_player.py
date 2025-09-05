@@ -107,7 +107,7 @@ def main():
     parser.add_argument(
         "--replay-file",
         type=str,
-        help="The name of the replay file (without extension) stored in ./replay/replays folder.",
+        help="The name of the replay file (without extension) stored in ./replays folder.",
     )
     args = parser.parse_args()
 
