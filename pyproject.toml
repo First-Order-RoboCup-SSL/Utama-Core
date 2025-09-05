@@ -19,5 +19,5 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [tool.hatch.build.targets.wheel]
-include = ["global_utils", "entities", "strategy"]
+include = ["*"]
 exclude = ["*.md", "*.toml", "docs*", "test*"]
