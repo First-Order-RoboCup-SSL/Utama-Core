@@ -1,11 +1,13 @@
 import json
 import subprocess
+from pathlib import Path
 
 import numpy as np
 
 
 class RSimSubprocessWrapper:
     def __init__(self, sim_type, n_blue, n_yellow, field_type, time_step_ms):
+        script_path = (Path(__file__).parent / "robosim_subprocess.py").resolve()
         self.proc = subprocess.Popen(
             [
                 "pixi",
@@ -14,7 +16,7 @@ class RSimSubprocessWrapper:
                 "robosim",
                 "--",
                 "python",
-                "./utama_core/rsoccer_simulator/src/Simulators/robosim/robosim_subprocess.py",
+                str(script_path),
                 "--sim_type",
                 sim_type,
                 "--n_blue",
