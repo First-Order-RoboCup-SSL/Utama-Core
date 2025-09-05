@@ -1,11 +1,7 @@
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "Utama-Core"
 version = "1.0.0"
-description = "Imperial RoboCup SSL 25 Software Algorithms Codebase."
+description = "Imperial RoboCup SSL 25 Software Algorithms Codebase Core."
 readme = "README.md"
 authors = [
     { name = "Fred Huang", email = "fred.huang23@imperial.ac.uk" },
@@ -18,6 +14,10 @@ authors = [
 ]
 requires-python = ">=3.11"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["*"]
+[build-system] 
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.build.targets.wheel]
+include = ["global_utils", "entities", "strategy"]
+exclude = ["*.md", "*.toml", "docs*", "test*"]

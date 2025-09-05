@@ -1,11 +1,11 @@
 [workspace]
 name = "Utama-Core"
-channels = ["conda-forge"]
+channels = ["https://prefix.dev/conda-forge"]
 platforms = ["linux-64"]
+preview = ["pixi-build"]
 version = "1.0.0"
 
 [pypi-dependencies]
-Utama-Core = { path = ".", editable = true }
 lenses = ">=1.2.0"
 py-trees = ">=2.3.0"
 
@@ -20,7 +20,17 @@ pyserial = "==3.5"
 pytest = "==8.3.4"
 ruff = ">=0.9.8"
 pre-commit = ">=3.8.0"
+hatch = ">=1.14.1,<2"
 
+[package]
+name = "Utama-Core"
+version = "1.0.0"
+
+[package.build]
+backend = { name = "pixi-build-python", version = "*" }
+
+[package.host-dependencies] 
+hatchling = "*"
 
 [feature.robosim.dependencies]
 python = "3.10.*"
@@ -39,5 +49,3 @@ precommit-uninstall = "pre-commit uninstall"
 
 [environments]
 robosim = { features = ["robosim"], no-default-feature = true }
-
-
