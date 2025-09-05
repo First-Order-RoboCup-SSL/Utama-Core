@@ -20,4 +20,4 @@ requires = ["hatchling"]
 
 [tool.hatch.build.targets.wheel]
 include = ["*"]
-exclude = ["*.md", "*.toml", "docs*", "test*"]
+exclude = ["*.md", "*.toml", "docs*"]
