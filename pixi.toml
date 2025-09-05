@@ -1,11 +1,11 @@
 [workspace]
-name = "Utama"
-channels = ["conda-forge"]
+name = "Utama-Core"
+channels = ["https://prefix.dev/conda-forge"]
 platforms = ["linux-64"]
+preview = ["pixi-build"]
 version = "1.0.0"
 
 [pypi-dependencies]
-Utama = { path = ".", editable = true }
 lenses = ">=1.2.0"
 py-trees = ">=2.3.0"
 
@@ -20,7 +20,17 @@ pyserial = "==3.5"
 pytest = "==8.3.4"
 ruff = ">=0.9.8"
 pre-commit = ">=3.8.0"
+hatch = ">=1.14.1,<2"
 
+[package]
+name = "Utama-Core"
+version = "1.0.0"
+
+[package.build]
+backend = { name = "pixi-build-python", version = "*" }
+
+[package.host-dependencies] 
+hatchling = "*"
 
 [feature.robosim.dependencies]
 python = "3.10.*"
@@ -30,13 +40,12 @@ rc-robosim = "<2"
 numpy = "<=2.0.2"
 
 [tasks]
-lint = "ruff check ."
-test = "pytest test/"
+lint = "pre-commit run --all-files"
+test = "pytest utama_core/test/"
 main = "python -m main"
+replay = "python -m utama_core.replay.replay_player"
 precommit-install = "pre-commit install && pixi run pre-commit install --hook-type pre-commit"
 precommit-uninstall = "pre-commit uninstall"
 
 [environments]
 robosim = { features = ["robosim"], no-default-feature = true }
-
-

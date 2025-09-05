@@ -19,9 +19,9 @@ jobs:
       - name: Run tests
         run: |
           if [[ $GITHUB_EVENT_NAME == "push" ]]; then
-            pixi run -- pytest test/ --level full --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
+            pixi run -- pytest utama_core/test/ --level full --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
           elif [[ $GITHUB_EVENT_NAME == "pull_request" ]]; then
-            pixi run -- pytest test/ --level quick --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
+            pixi run -- pytest utama_core/test/ --level quick --ignore-glob "**/*grsim*" --headless --junit-xml=test-results.xml
           fi
 
 

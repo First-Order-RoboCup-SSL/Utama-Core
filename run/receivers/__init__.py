@@ -1,2 +1,0 @@
-from run.receivers.referee_receiver import RefereeMessageReceiver
-from run.receivers.vision_receiver import VisionReceiver
