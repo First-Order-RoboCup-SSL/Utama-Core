@@ -1,14 +1,9 @@
 import py_trees
-from skills.src.utils.move_utils import (
-    turn_on_spot,
-    kick,
-    move,
-    empty_command,
-)
-from skills.src.go_to_ball import go_to_ball
-from skills.src.utils.move_utils import kick, turn_on_spot
-from strategy.common import AbstractBehaviour
+
 from entities.data.vector import Vector2D
+from skills.src.go_to_ball import go_to_ball
+from skills.src.utils.move_utils import empty_command, kick, move, turn_on_spot
+from strategy.common import AbstractBehaviour
 
 
 class TurnOnSpotStep(AbstractBehaviour):
@@ -32,7 +27,9 @@ class TurnOnSpotStep(AbstractBehaviour):
         self.blackboard.register_key(key="target_orientation", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
-        print(f"Executing TurnOnSpotStep for robot {self.blackboard.robot_id}, target orientation: {self.blackboard.target_orientation}")
+        print(
+            f"Executing TurnOnSpotStep for robot {self.blackboard.robot_id}, target orientation: {self.blackboard.target_orientation}"
+        )
         game = self.blackboard.game.current
         env = self.blackboard.rsim_env
         if env:
@@ -123,13 +120,8 @@ class UpdateDribbleDistance(AbstractBehaviour):
 
     def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(
-            key="dribbled_distance", access=py_trees.common.Access.WRITE
-        )
-        self.blackboard.set(
-            "dribbled_distance", 0.0, overwrite=True
-        )
-
+        self.blackboard.register_key(key="dribbled_distance", access=py_trees.common.Access.WRITE)
+        self.blackboard.set("dribbled_distance", 0.0, overwrite=True)
 
     def update(self) -> py_trees.common.Status:
         game = self.blackboard.game.current
@@ -139,17 +131,13 @@ class UpdateDribbleDistance(AbstractBehaviour):
 
         if robot.has_ball:
             if self.last_point_with_ball is not None:
-                dribbled_distance += self.last_point_with_ball.distance_to(
-                    current_point
-                )
+                dribbled_distance += self.last_point_with_ball.distance_to(current_point)
             self.last_point_with_ball = current_point
         else:
             self.last_point_with_ball = None
             dribbled_distance = 0.0
-        
-        self.blackboard.set(
-            "dribbled_distance", dribbled_distance, overwrite=True
-        )
+
+        self.blackboard.set("dribbled_distance", dribbled_distance, overwrite=True)
 
         return py_trees.common.Status.SUCCESS
 
@@ -161,25 +149,21 @@ class DribbleMoveStep(AbstractBehaviour):
         self.limit = dribble_limit
         self.stop_dribble_ratio = stop_dribble_ratio
         super().__init__()
-    
+
     def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
-        self.blackboard.register_key(
-            key="target_coords", access=py_trees.common.Access.READ
-        )
-        self.blackboard.register_key(
-            key="dribbled_distance", access=py_trees.common.Access.READ
-        )
+        self.blackboard.register_key(key="target_coords", access=py_trees.common.Access.READ)
+        self.blackboard.register_key(key="dribbled_distance", access=py_trees.common.Access.READ)
 
-    def update(self) -> py_trees.common.Status: 
-        bb = self.blackboard     
+    def update(self) -> py_trees.common.Status:
+        bb = self.blackboard
         dribbled_dist = bb.dribbled_distance
         game = bb.game.current
         target = bb.target_coords
         robot = game.friendly_robots[bb.robot_id]
-        
+
         print(f"Executing DribbleMoveStep for robot {self.blackboard.robot_id}, target{target}")
-        
+
         dribble = True if dribbled_dist <= self.limit * self.stop_dribble_ratio else False
         current_point = Vector2D(robot.p.x, robot.p.y)
         if target is None:
@@ -208,4 +192,3 @@ class StopStep(AbstractBehaviour):
         command = empty_command()
         self.blackboard.cmd_map[self.blackboard.robot_id] = command
         return py_trees.common.Status.SUCCESS
-

@@ -1,32 +1,24 @@
 import py_trees
-from entities.game import Game, Robot
-from entities.data.command import RobotCommand
-from strategy.common import AbstractStrategy, AbstractBehaviour
-from strategy.utils.blackboard_utils import SetBlackboardVariable
-from strategy.utils.selector_utils import HasBall
-from strategy.common.roles import Role
-from strategy.skills.go_to_ball import GoToBallStep
-from skills.src.go_to_ball import go_to_ball
 
 from config.roles import Role
-from entities.game import Game
+from entities.data.command import RobotCommand
+from entities.game import Game, Robot
 from skills.src.defend_parameter import defend_parameter
 from skills.src.go_to_ball import go_to_ball
 from skills.src.goalkeep import goalkeep
 from skills.src.utils.move_utils import empty_command
 from strategy.common import AbstractBehaviour, AbstractStrategy
+from strategy.skills.go_to_ball import GoToBallStep
 from strategy.utils.blackboard_utils import SetBlackboardVariable
 from strategy.utils.selector_utils import HasBall
 
-    
+
 class SetRoles(AbstractBehaviour):
     """A behaviour that sets the roles of the robots."""
 
     def setup_(self):
         # Register the role_map key in the blackboard
-        self.blackboard.register_key(
-            key="role_map", access=py_trees.common.Access.WRITE
-        )
+        self.blackboard.register_key(key="role_map", access=py_trees.common.Access.WRITE)
 
     def update(self) -> py_trees.common.Status:
         self.blackboard.role_map = {
@@ -38,8 +30,8 @@ class SetRoles(AbstractBehaviour):
 
 class DefendStrategy(AbstractStrategy):
     def __init__(self, robot_id: int):
-        """
-        Initializes the DefendStrategy with a specific robot ID.
+        """Initializes the DefendStrategy with a specific robot ID.
+
         :param robot_id: The ID of the robot this strategy will control to go to ball.
         """
         self.robot_id = robot_id
@@ -72,7 +64,7 @@ class DefendStrategy(AbstractStrategy):
 
         # Create the SetRoles behaviour
         set_roles = SetRoles()
-        
+
         # # Root sequence for the whole behaviour
         # go_to_ball = py_trees.composites.Sequence(name="GoToBall", memory=True)
 
@@ -89,7 +81,7 @@ class DefendStrategy(AbstractStrategy):
         # # Assemble the tree
         # go_to_ball.add_child(set_robot_id)
         # go_to_ball.add_child(has_ball_selector)
-        
+
         root.add_child(set_roles)
         # root.add_child(go_to_ball)
 

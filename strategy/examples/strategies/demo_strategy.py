@@ -1,15 +1,6 @@
 import py_trees
-from py_trees.composites import Sequence, Selector
-from py_trees.decorators import Inverter
-from strategy.common import AbstractStrategy, AbstractBehaviour
-from strategy.utils.blackboard_utils import SetBlackboardVariable
-from strategy.utils.selector_utils import GoalScored
-from strategy.utils.atk_utils import ShouldScoreGoal
-from strategy.skills.go_to_ball import GoToBallStrategy
-from strategy.skills.score_goal import ScoreGoalStrategy
-from strategy.skills.dribble import DribbleStrategy
-from strategy.skills.block_attacker import BlockAttackerStep
 from py_trees.composites import Selector, Sequence
+from py_trees.decorators import Inverter
 
 from config.roles import Role
 from config.tactics import Tactic
@@ -20,6 +11,7 @@ from skills.src.goalkeep import goalkeep
 from skills.src.utils.move_utils import empty_command
 from strategy.common import AbstractBehaviour, AbstractStrategy
 from strategy.skills.block_attacker import BlockAttackerStep
+from strategy.skills.dribble import DribbleStrategy
 from strategy.skills.go_to_ball import GoToBallStrategy
 from strategy.skills.score_goal import ScoreGoalStrategy
 from strategy.utils.atk_utils import ShouldScoreGoal
@@ -143,7 +135,7 @@ class DemoStrategy(AbstractStrategy):
                             children=[
                                 ShouldScoreGoal(name="ShouldScoreGoal?"),
                                 score_goal_branch,
-                            ]
+                            ],
                         ),
                         dribble_branch,
                     ],
@@ -154,9 +146,7 @@ class DemoStrategy(AbstractStrategy):
         # 2. A top-level selector that stops the robot if a goal has been scored.
         # This prevents the robot from acting unnecessarily.
         goal_scored_selector = Selector(name="StopIfGoalScored", memory=True)
-        goal_scored_selector.add_children(
-            [GoalScored(name="IsGoalScored?"), acquire_then_play]
-        )
+        goal_scored_selector.add_children([GoalScored(name="IsGoalScored?"), acquire_then_play])
 
         # 3. The root of the tree, which initializes and then runs the main logic.
         attacking = Sequence(name="ScoreGoal", memory=False)

@@ -2,7 +2,6 @@ import time
 from typing import Tuple
 
 import config.defaults as cfg
-from team_controller.src.utils import network_manager
 from config.settings import (
     ADD_Y_COORD,
     LOCAL_HOST,
@@ -20,11 +19,7 @@ from team_controller.src.generated_code.ssl_simulation_control_pb2 import (
     TeleportBall,
     TeleportRobot,
 )
-from team_controller.src.generated_code.ssl_gc_common_pb2 import RobotId, Team
-
-from team_controller.src.controllers import (
-    AbstractSimController,
-)
+from team_controller.src.utils import network_manager
 
 
 class GRSimController(AbstractSimController):
