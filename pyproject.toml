@@ -19,5 +19,4 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [tool.hatch.build.targets.wheel]
-include = ["*"]
-exclude = ["*.md", "*.toml", "docs*"]
+packages = ["utama_core"]
