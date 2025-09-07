@@ -7,7 +7,15 @@ from utama_core.team_controller.src.data import VisionReceiver
 from utama_core.team_controller.src.data.message_enum import MessageType
 
 logger = logging.getLogger(__name__)
-# TODO: This needs to be moved out of team_controller soon
+import warnings
+
+# Emit a deprecation notice indicating upcoming relocation of this utility.
+warnings.warn(
+    "real_vision_test.py will be moved out of team_controller soon. "
+    "Prefer using `utama_core.run.receivers.vision_receiver.VisionReceiver`.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 def data_update_listener(receiver: VisionReceiver):

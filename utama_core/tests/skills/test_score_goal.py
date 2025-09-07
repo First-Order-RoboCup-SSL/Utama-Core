@@ -46,7 +46,7 @@ class ScoreGoalTestManager(AbstractTestManager):
         ini_pos = self.ini_pos[self.episode_i]
         sim_controller.teleport_robot(
             game.my_team_is_yellow,
-            self.my_strategy.robot_id,
+            self.my_strategy,
             ini_pos[0],
             ini_pos[1],
         )
