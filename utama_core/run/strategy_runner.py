@@ -40,7 +40,7 @@ from utama_core.team_controller.src.controllers import (
     RSimPVPManager,
     RSimRobotController,
 )
-from utama_core.test.common.abstract_test_manager import (
+from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
 )

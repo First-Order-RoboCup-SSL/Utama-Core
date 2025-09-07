@@ -9,7 +9,7 @@ from utama_core.global_utils.mapping_utils import (
 from utama_core.run import StrategyRunner
 from utama_core.strategy.skills.go_to_ball import GoToBallStrategy
 from utama_core.team_controller.src.controllers import AbstractSimController
-from utama_core.test.common.abstract_test_manager import (
+from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
 )
