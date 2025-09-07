@@ -1,53 +1,56 @@
 import logging
-import queue
 import threading
+import time
+from collections import deque
 
-from utama_core.entities.game import Game
-from utama_core.team_controller.src.data import VisionReceiver
-from utama_core.team_controller.src.data.message_enum import MessageType
+from utama_core.config.settings import MAX_CAMERAS, TIMESTEP
+from utama_core.run.receivers import VisionReceiver
 
-logger = logging.getLogger(__name__)
-import warnings
-
-# Emit a deprecation notice indicating upcoming relocation of this utility.
-warnings.warn(
-    "real_vision_test.py will be moved out of team_controller soon. "
-    "Prefer using `utama_core.run.receivers.vision_receiver.VisionReceiver`.",
-    DeprecationWarning,
-    stacklevel=2,
+logging.basicConfig(
+    filename="Utama.log",
+    level=logging.CRITICAL,
+    filemode="w",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+logger = logging.getLogger(__name__)
+logging.captureWarnings(True)
 
 
-def data_update_listener(receiver: VisionReceiver):
-    # Start receiving game data; this will run in a separate thread.
+def data_update_listener(receiver: VisionReceiver) -> None:
+    """Continuously pull game data in the background thread."""
     receiver.pull_game_data()
 
 
+def start_threads(vision_receiver: VisionReceiver) -> None:
+    """Start the vision receiver in a daemon thread so it exits with the main program."""
+    vision_thread = threading.Thread(target=vision_receiver.pull_game_data, daemon=True)
+    vision_thread.start()
+
+
 def main():
-    game = Game()
-
-    message_queue = queue.SimpleQueue()
-    receiver = VisionReceiver(message_queue)
-
-    # Start the data receiving in a separate thread
-    data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
-    data_thread.daemon = True  # Allows the thread to close when the main program exits
-    data_thread.start()
-
-    # TODO: Not implemented
-    # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
-    # referee_thread.daemon = True
-    # referee_thread.start()
-
+    vision_buffers = [deque(maxlen=1) for _ in range(MAX_CAMERAS)]
+    vision_receiver = VisionReceiver(vision_buffers)
+    start_threads(vision_receiver)
     try:
         while True:
-            (message_type, message) = message_queue.get()  # Infinite timeout for now
+            start_time = time.time()
+            vision_frames = [buffer.popleft() if buffer else None for buffer in vision_buffers]
+            # referee_frame = ref_buffer.popleft()
+            print(vision_frames)
 
-            if message_type == MessageType.VISION:
-                game.add_new_state(message)
-                print(message)
-            elif message_type == MessageType.REF:
-                pass
+            end_time = time.time()
+
+            # processing_time = end_time - start_time
+
+            # self.logger.log(
+            #     logging.WARNING if processing_time > TIMESTEP else logging.INFO,
+            #     "Game loop took %f secs",
+            #     processing_time,
+            # )
+
+            # Sleep to maintain FPS
+            wait_time = max(0, TIMESTEP - (end_time - start_time))
+            time.sleep(wait_time)
 
     except KeyboardInterrupt:
         print("Stopping main program.")
