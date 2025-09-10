@@ -27,9 +27,9 @@ The relationship is hierarchical:
 3.  To execute the tactic, the Coach may decide to initiate a specific **Play**.
 4.  The robots, knowing their **Roles** and seeing the **Play** being called, execute the necessary low-level actions. These are either an action from a play or the role's default action.
 
-# Examples of Trees
+# Py-Trees
 
-### **Legend for Behaviour Tree ASCII Art**
+### **Legend for Behaviour Tree in ASCII Art**
 
 | Symbol | Name                | Description                                                                                                                                              |
 | :----- | :------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------- |
