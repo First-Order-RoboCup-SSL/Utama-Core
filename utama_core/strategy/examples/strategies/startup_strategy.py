@@ -1,18 +1,19 @@
-import logging
-from typing import Tuple
-
 import py_trees
 
 from utama_core.config.defaults import LEFT_START_ONE, RIGHT_START_ONE
-from utama_core.entities.game import Game
 from utama_core.global_utils.math_utils import Vector2D
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
 
-logger = logging.getLogger(__name__)
-
 
 class StartupFormationStep(AbstractBehaviour):
+    """
+    A behaviour that commands all robots to move to their starting formation positions.
+
+    **Returns:**
+        - `py_trees.common.Status.RUNNING`: The behaviour is actively commanding the robot to move.
+    """
+
     def update(self) -> py_trees.common.Status:
         game = self.blackboard.game.current
         motion_controller = self.blackboard.motion_controller
@@ -40,6 +41,7 @@ class StartupStrategy(AbstractStrategy):
         return False
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
+        """Factory function to create a complete behaviour tree."""
         coach_root = py_trees.composites.Sequence(name="CoachRoot", memory=False)
         coach_root.add_children([StartupFormationStep()])
         return coach_root

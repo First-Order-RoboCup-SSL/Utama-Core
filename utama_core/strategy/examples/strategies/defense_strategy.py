@@ -1,7 +1,7 @@
 from typing import Any
 
 import py_trees
-from py_trees.composites import Selector, Sequence
+from py_trees.composites import Sequence
 
 from utama_core.config.roles import Role
 from utama_core.entities.data.object import TeamType
@@ -14,9 +14,15 @@ from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
 
 
 class BlockAttackerStep(AbstractBehaviour):
-    """A behaviour that executes a single step of the block_attacker skill.
+    """
+    A behaviour that commands a robot to block the closest enemy robot to the ball.
 
-    Expects a "robot_id" key in the blackboard to identify which robot to control.
+    **Blackboard Interaction:**
+        Reads:
+            - `robot_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
+
+    **Returns:**
+        - `py_trees.common.Status.RUNNING`: The behaviour is actively commanding the robot to block the attacker.
     """
 
     def setup_(self):
@@ -82,7 +88,7 @@ class DefenceStrategy(AbstractStrategy):
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if 1 <= n_runtime_friendly <= 3 and 1 <= n_runtime_enemy <= 3:
+        if 3 <= n_runtime_friendly <= 5 and 1 <= n_runtime_enemy <= 6:
             return True
         return False
 
@@ -101,7 +107,7 @@ class DefenceStrategy(AbstractStrategy):
             return empty_command(True)
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        """Factory function to create a complete go_to_ball behaviour tree."""
+        """Factory function to create a complete behaviour tree."""
 
         # Create the root of the behaviour tree
         root = Sequence(name="CoachRoot", memory=True)

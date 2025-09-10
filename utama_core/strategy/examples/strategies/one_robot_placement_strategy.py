@@ -3,9 +3,8 @@ from typing import Any
 
 import numpy as np
 import py_trees
-from py_trees.composites import Selector, Sequence
+from py_trees.composites import Sequence
 
-from utama_core.entities.game import Game
 from utama_core.global_utils.math_utils import Vector2D
 from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
@@ -15,6 +14,17 @@ from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 
 class RobotPlacementStep(AbstractBehaviour):
+    """
+    A behaviour that commands a robot to move between two specific positions on the field.
+
+    **Blackboard Interaction:**
+        Reads:
+            - `robot_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
+
+    **Returns:**
+        - `py_trees.common.Status.RUNNING`: The behaviour is actively commanding the robot to move.
+    """
+
     def __init__(self, invert: bool = False):
         super().__init__()
         self.ty = -1
@@ -101,7 +111,8 @@ class SetBlackboardVariable(AbstractBehaviour):
 
 class RobotPlacementStrategy(AbstractStrategy):
     def __init__(self, robot_id: int):
-        """Initializes the DemoStrategy with a specific robot ID.
+        """
+        Initializes the RobotPlacementStrategy with a specific robot ID.
 
         :param robot_id: The ID of the robot this strategy will control.
         """
@@ -109,10 +120,12 @@ class RobotPlacementStrategy(AbstractStrategy):
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        return True
+        if 1 <= n_runtime_friendly <= 6:
+            return True
+        return False
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        """Factory function to create a complete score_goal behaviour tree."""
+        """Factory function to create a complete behaviour tree."""
 
         set_rbt_id = SetBlackboardVariable(
             name="SetTargetRobotID",
