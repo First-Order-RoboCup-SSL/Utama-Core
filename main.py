@@ -1,7 +1,10 @@
 from utama_core.replay import ReplayWriterConfig
 from utama_core.run import StrategyRunner
-from utama_core.strategy.examples.strategies.demo_strategy import DemoStrategy
-from utama_core.strategy.skills.score_goal import ScoreGoalStrategy
+from utama_core.strategy.examples.strategies.defense_strategy import DefenceStrategy
+from utama_core.strategy.examples.strategies.one_robot_placement_strategy import (
+    RobotPlacementStrategy,
+)
+from utama_core.strategy.examples.strategies.startup_strategy import StartupStrategy
 
 if __name__ == "__main__":
     # The robot we want to control
@@ -9,13 +12,12 @@ if __name__ == "__main__":
 
     # Set up the runner
     runner = StrategyRunner(
-        strategy=DemoStrategy(robot_id=0),
+        strategy=StartupStrategy(),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",
-        exp_friendly=3,
+        exp_friendly=6,
         exp_enemy=3,
-        opp_strategy=ScoreGoalStrategy(robot_id=0),
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
     )
 
