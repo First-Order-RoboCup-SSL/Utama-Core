@@ -1,6 +1,5 @@
 # Table of Contents
   * [Link to The Coach AI Tree](#the-coach-tree)
-  * [Link to The Generic Player AI Tree](#the-generic-player-tree)
   * [Link to Our Implementation Principles](#our-implementation-principles)
   * [Link to Base Strategy](#base-strategy)
 
@@ -8,66 +7,7 @@
 
 Clarifying the distinction between roles, tactics, and plays is crucial for building a well-structured multi-agent AI system. While often used interchangeably, in our robotics context, they represent a clear hierarchy of command and action.
 
-### 1. Role: The *Individual's* Job
-
-A **Role** defines the primary responsibility and expected behaviour of a *single robot* at a specific moment in time. It's the most granular level of assignment.
-
-* **Scope:** Individual Agent (one robot).
-* **Duration:** Dynamic and momentary. A robot's role can (and should) change from one second to the next as the game evolves.
-* **Purpose:** To define a "job description" so the robot knows which skills to prioritise.
-* **Set By:** The Coach AI's `[AssignDynamicRoles]` node, based on the current situation.
-* **Analogy:** In human football, a player might be a "centre-back" on paper, but when their team has a corner kick, their role for that moment might become "attacking header."
-
-**Examples from our design:**
-* `Attacker`: The robot tasked with possessing the ball and trying to score.
-* `PrimaryDefender`: The robot tasked with pressing the opponent who has the ball.
-* `Winger`: The robot tasked with providing width in an attack.
-* `Goalie`: The robot tasked with defending the goal.
-
-> **In short: A Role is about *who you are* right now.**
-
----
-
-### 2. Tactic: The *Team's* Strategic Posture
-
-A **Tactic** is the team's overall strategic approach or formation. It's a high-level plan that dictates the collective behaviour of all robots on the field, influencing which roles are assigned and where they should be positioned.
-
-* **Scope:** The Entire Team (all 6 robots).
-* **Duration:** Situational. A tactic persists as long as the game situation that requires it persists (e.g., the team will remain in a "Defending" tactic as long as the opponent has the ball).
-* **Purpose:** To manage the team's shape and strategic objectives based on the phase of the game.
-* **Set By:** The Coach AI's `[DetermineStrategicMode]` node.
-* **Analogy:** A human football team choosing to play a "High-Press Counter-Attack" tactic versus a "Park the Bus" defensive tactic.
-
-**Examples from our design:**
-* `ATTACKING`: The team pushes forward, roles like `Winger` and `MidfieldSupport` are prioritised.
-* `DEFENDING`: The team falls back into a compact shape, roles like `SupportDefender` are prioritised.
-* `FORMING_WALL`: A particular tactic for defending a free kick.
-* `CONTESTING_BALL`: A neutral tactic where the primary goal is to win possession.
-
-> **In short: A Tactic is about *what we are doing* as a team.**
-
----
-
-### 3. Play: A *Specific, Coordinated* Action Sequence
-
-A **Play** is a pre-defined, coordinated sequence of actions involving a subset of the team to achieve a specific, short-term objective. It's a "set piece" or a rehearsed manoeuvre that happens *within* a tactic.
-
-* **Scope:** A specific subset of the team (usually 2-3 robots).
-* **Duration:** Short-term and finite. A play has a clear beginning and end.
-* **Purpose:** To execute a specific manoeuvre to gain an advantage, like getting past a defender or creating a scoring chance.
-* **Set By:** The Coach AI's `[ChooseTeamTactic]` branch, like `OrchestratePassOrDribble`.
-* **Analogy:** A "give-and-go" or "one-two pass" in football, or a "pick and roll" in basketball. These are specific, named plays.
-
-**Examples from our design:**
-* **The Dynamic Pass:** This is a perfect example of a play. It involves a Passer and a Receiver executing a coordinated sequence. The `team_pass_intent` object is the signal that initiates this specific play.
-* **A Defensive Double-Team:** The Coach could initiate a play where the `PrimaryDefender` and a `SupportDefender` both converge on the opponent attacker.
-* **An Overlapping Winger Run:** A play where a `Winger` runs past the `Attacker` to receive a through-ball.
-
-> **In short: A Play is about *how we are executing* a specific maneuver right now.**
-
----
-
-### Summary Table of Differences
+### Table of Differences
 
 | Feature    | Role                    | Tactic                      | Play                               |
 | :--------- | :---------------------- | :-------------------------- | :--------------------------------- |
@@ -84,8 +24,8 @@ The relationship is hierarchical:
 
 1.  The Coach AI observes the game and selects a **Tactic** (e.g., `ATTACKING`).
 2.  Based on this tactic, the Coach assigns **Roles** to each player (e.g., Robot 5 becomes `Attacker`, Robot 2 becomes `Winger`).
-3.  To execute the tactic, the Coach may decide to initiate a specific **Play** (e.g., it creates a `team_pass_intent` for the "Dynamic Pass" play between Robot 5 and Robot 2).
-4.  The robots, knowing their **Roles** and seeing the **Play** being called, execute the necessary low-level actions.
+3.  To execute the tactic, the Coach may decide to initiate a specific **Play**.
+4.  The robots, knowing their **Roles** and seeing the **Play** being called, execute the necessary low-level actions. These are either an action from a play or the role's default action.
 
 # Examples of Trees
 
@@ -187,7 +127,7 @@ This tree runs on a sideline computer and dictates the entire team's strategy.
   |  `--[ SetUpKickOffFormation ]
   |
   |-(S) HandleTheirKickOff
-  |  | // ... and other preset game states like penalties, corners, etc.
+  |  | // ... and other preset game states (referee handling) like penalties, corners, etc.
   |
   `-(S) HandleInPlay
       |
@@ -223,63 +163,6 @@ This tree runs on a sideline computer and dictates the entire team's strategy.
              |--{ IsDefendingTactic? }
              `--[ UpdateFormationCoordinates ]
                   `--> (Writes `formation_positions` to Blackboard)
-</pre>
-
-## The Generic Player Tree 
-This tree runs identically on all 6 robots. It is a reactive agent that executes the Coach's commands.
-<pre>
-  (?) PlayerMainLogic
-  |
-  |-(S) ExecuteRole_Attacker
-  |  |
-  |  |--{ IsMyRole_Attacker? }  // Step 1: Am I the designated attacker?
-  |  |    `--< (Reads `robot_roles`)
-  |  |
-  |  |--{ DoIHaveTheBall? }       // Step 2: As the attacker, do I actually have the ball?
-  |  |
-  |  `--(?) AttackerDecisionLogic // Step 3: Given I am the attacker with the ball, what should I do?
-  |      |
-  |      |  Description: This Selector tries to execute a specific, high-priority play first. If no play is active, it falls back to a safe, default action.
-  |      |
-  |      |-(S) Execute_PassPlay              // <-- HIGHEST PRIORITY: A specific Coach command
-  |      |  |--{ Is_PassPlay_Active? }
-  |      |  |    `--< (Reads `team_pass_intent`)
-  |      |  `--[ PerformPassAction ]
-  |      |
-  |      |-(S) Execute_ShootPlay
-  |      |  |--{ Is_ShootPlay_Active? }
-  |      |  |    `--< (Reads `team_shoot_intent`)
-  |      |  `--[ PerformShootAction ]
-  |      |
-  |      `--[ DefaultAttackerAction ]         // <-- LOWEST PRIORITY: The crucial fallback
-  |           |
-  |           |  Description: My role is Attacker, but the Coach hasn't called a play. My default is to assess the situation.
-  |           |
-  |           `-- (Logic for: "Hold Ball & Scan for Options" or "Dribble Forward Cautiously")
-  |
-  |-(S) ExecuteRole_Receiver
-  |  |
-  |  |--{ AmITheDesignatedReceiver? } // Checks if this robot is the target of the current play
-  |  |    `--< (Reads `team_pass_intent.receiver_id`)
-  |  |
-  |  `--[ PositionToReceiveBall ]
-  |       `--< (Reads `team_pass_intent.predicted_intercept_pos`)
-  |
-  |-(S) ExecuteRole_Contester
-  |  |
-  |  |--{ IsMyRole_Contester? }
-  |  |    `--< (Reads `robot_roles`)
-  |  |
-  |  `--[ GoToBall ] // This is the simple, low-level skill
-  |
-  `-(S) ExecuteRole_Supporter
-     |
-     |--{ IsMyRole_Supporter? OR IsMyRole_Winger? OR IsMyRole_Defender? }
-     |    `--< (Reads `robot_roles`)
-     |
-     `--[ MoveToFormationPosition ]
-          |
-          `--< (Reads `formation_positions` from Blackboard)
 </pre>
 
 ### **Part 1: How the Tactic is Chosen (The `DetermineStrategicMode` Node)**
