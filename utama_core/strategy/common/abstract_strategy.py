@@ -1,11 +1,11 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import cast
+from typing import Optional, cast
 
 import py_trees
 
 from utama_core.config.roles import Role
-from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP
+from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PATH
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.motion_controller import MotionController
@@ -133,3 +133,28 @@ class AbstractStrategy(ABC):
 
         blackboard: BaseBlackboard = cast(BaseBlackboard, blackboard)
         return blackboard
+
+    def render(
+        self,
+        name: Optional[str] = None,
+        visibility_level=py_trees.common.VisibilityLevel.DETAIL,
+        with_blackboard_variables=False,
+        with_qualified_names=False,
+    ):
+        """
+        Renders a dot, png and svg file of the behaviour tree in the current directory.
+        - `visibility_level` (py_trees.common.VisibilityLevel): The visibility level for the rendering.
+        - `with_blackboard_variables` (bool): Whether to include blackboard variables in the rendering.
+        - `with_qualified_names` (bool): Whether to use qualified names in the rendering.
+        """
+        RENDER_BASE_PATH.mkdir(parents=True, exist_ok=True)
+        name = self.__class__.__name__ if name is None else name
+
+        py_trees.display.render_dot_tree(
+            root=self.behaviour_tree.root,
+            visibility_level=visibility_level,
+            target_directory=RENDER_BASE_PATH,
+            name=name,
+            with_blackboard_variables=with_blackboard_variables,
+            with_qualified_names=with_qualified_names,
+        )
