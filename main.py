@@ -21,7 +21,7 @@ if __name__ == "__main__":
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
     )
 
-    ScoreGoalStrategy(robot_id=target_robot_id).render()
+    StartupStrategy(robot_id=target_robot_id).render()
 
     # Run the simulation
     test = runner.run()
