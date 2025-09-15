@@ -34,7 +34,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Install toml-cli
-        run: pip install toml-cli
+        run: pip install toml-cli jq
 
       - name: Fetch main version
         id: main_version
@@ -43,6 +43,20 @@ jobs:
           MAIN_VERSION=$(git show origin/main:utama_core/__init__.py | grep '__version__' | cut -d '"' -f 2)
           echo "MAIN_VERSION=$MAIN_VERSION" >> $GITHUB_ENV
           echo "Main branch version: $MAIN_VERSION"
+
+      - name: Determine bump type from PR labels
+        id: bump_type
+        run: |
+          BUMP="patch"  # default
+          for label in $(jq -r '.pull_request.labels[].name' "$GITHUB_EVENT_PATH"); do
+            case "$label" in
+              "release:major") BUMP="major" ;;
+              "release:minor") BUMP="minor" ;;
+              "release:patch") BUMP="patch" ;;
+            esac
+          done
+          echo "BUMP_TYPE=$BUMP" >> $GITHUB_ENV
+          echo "Determined bump type: $BUMP"
 
       - name: Bump version if PR version <= main
         run: |
@@ -58,8 +72,8 @@ jobs:
           if [ "$PR_MAJOR" -lt "$MAIN_MAJOR" ] || \
              [ "$PR_MAJOR" -eq "$MAIN_MAJOR" ] && [ "$PR_MINOR" -lt "$MAIN_MINOR" ] || \
              [ "$PR_MAJOR" -eq "$MAIN_MAJOR" ] && [ "$PR_MINOR" -eq "$MAIN_MINOR" ] && [ "$PR_PATCH" -le "$MAIN_PATCH" ]; then
-            echo "Bumping version..."
-            pixi run hatch version patch
+            echo "Bumping version ($BUMP_TYPE)..."
+            pixi run hatch version $BUMP_TYPE
 
             # Update pixi.toml
             NEW_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
@@ -76,3 +90,4 @@ jobs:
           fi
         env:
           GITHUB_HEAD_REF: ${{ github.head_ref }}
+          BUMP_TYPE: ${{ env.BUMP_TYPE }}
