@@ -51,13 +51,18 @@ jobs:
           toml set --toml-path pixi.toml workspace.version "$NEW_VERSION"
           toml set --toml-path pixi.toml package.version "$NEW_VERSION"
 
-      - name: Commit and push changes
+      - name: Commit version bump to PR branch
         run: |
           git add pyproject.toml pixi.toml utama_core/__init__.py
           if ! git diff --staged --quiet; then
             NEW_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
             git commit -m "chore(release): bump version to v$NEW_VERSION"
-            git push
+            
+            # Push to the PR branch using GITHUB_HEAD_REF
+            git push origin HEAD:${GITHUB_HEAD_REF}
           else
             echo "No version changes to commit."
           fi
+        env:
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+
