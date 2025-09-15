@@ -41,7 +41,7 @@ numpy = "<=2.0.2"
 
 [tasks]
 lint = "pre-commit run --all-files"
-test = "pytest utama_core/test/"
+test = "pytest utama_core/tests/"
 main = "python -m main"
 replay = "python -m utama_core.replay.replay_player"
 precommit-install = "pre-commit install && pixi run pre-commit install --hook-type pre-commit"

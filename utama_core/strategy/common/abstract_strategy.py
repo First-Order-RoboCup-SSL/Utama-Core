@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 
 class AbstractStrategy(ABC):
+    """
+    Base class for team strategies backed by behaviour trees.
+    """
+
     def __init__(self):
         self.behaviour_tree = py_trees.trees.BehaviourTree(self.create_behaviour_tree())
 
@@ -31,28 +35,46 @@ class AbstractStrategy(ABC):
 
     @abstractmethod
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        """Create the behaviour tree for this strategy.
+        """
+        Create and return the root behaviour for this strategy.
 
-        This method should return a py_trees tree that defines the behaviour of the strategy.
-        Behaviour trees must follow the following structure:
-        1. **Game Analysis and Role Assignment**: Analyse game state and assign roles via `role_map`.
-        2. **Tactical Execution**: Execute tactic and set commands for robots involved in the play via `cmd_map`.
+        The tree should be structured in two conceptual phases:
+        1. Game analysis and role assignment (populate `blackboard.role_map`).
+        2. Tactical execution (set per-robot commands in `blackboard.cmd_map`).
         """
         ...
 
     @abstractmethod
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        """Called on initial run to make sure that the expected robots on runtime.
+        """
+        Validate the number of robots for which the strategy is designed.
 
-        match the possible robots in this strategy. By default, 1 <= n_robots <= 6 is already asserted, so does not need
-        to be checked here.
+        Called once on initial run. Implementations can assert constraints on
+        the number of friendly and enemy robots that the strategy expects.
+        By default an external guard ensures 1 <= robots <= 6, so only add
+        additional checks if needed.
+
+        Args:
+            n_runtime_friendly: Number of friendly robots in the match.
+            n_runtime_enemy: Number of opponent robots in the match.
         """
         ...
 
     def execute_default_action(self, game: Game, role: Role, robot_id: int) -> RobotCommand:
-        """Called on each unassigned robot to execute the default action.
+        """
+        Provide a fallback command for robots without assignments.
 
-        This is used when no specific command is set in the blackboard after the coach tree for this robot.
+        Invoked after the tree tick for any robot that did not receive a
+        command via `blackboard.cmd_map`. Override to implement a safer or
+        more appropriate default behaviour.
+
+        Args:
+            game: Current game state snapshot.
+            role: Role assigned to the robot, or `Role.UNASSIGNED`.
+            robot_id: Identifier of the robot.
+
+        Returns:
+            A `RobotCommand` to send to the controller.
         """
         return empty_command(True)
 
@@ -79,7 +101,8 @@ class AbstractStrategy(ABC):
         self.blackboard.register_key(key="motion_controller", access=py_trees.common.Access.READ)
 
     def setup_behaviour_tree(self, is_opp_strat: bool):
-        """Must be called before strategy can be run.
+        """
+        Must be called before strategy can be run.
 
         Setups the tree and blackboard based on if is_opp_strat
         """

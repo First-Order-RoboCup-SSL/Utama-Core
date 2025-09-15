@@ -30,6 +30,7 @@ class PositionRefiner(BaseRefiner):
     BOUNDS_BUFFER = 1.0
 
     def __init__(self):
+        # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
         # Example field width, adjust as needed
 

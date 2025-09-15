@@ -201,6 +201,7 @@ renders/
 
 .vscode
 
-.ruff_cache/# pixi environments
+.ruff_cache/
+# pixi environments
 .pixi/*
 !.pixi/config.toml

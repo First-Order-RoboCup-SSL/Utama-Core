@@ -4,12 +4,12 @@ ignore = [
     "E501",  # Line too long error
 ]
 
+# Enable auto-fix for fixable errors
+fixable = ["E"]  # Fix all fixable E codes (like E402)
+
 # Optionally, exclude certain files or directories
 exclude = [
     "*_pb2.py",
     "build/",
     "dist/",
 ]
-
-# Enable auto-fix for fixable errors
-fixable = ["E"]  # Fix all fixable E codes (like E402)
