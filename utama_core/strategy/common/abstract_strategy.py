@@ -165,7 +165,7 @@ class AbstractStrategy(ABC):
         with_qualified_names=False,
     ):
         """
-        Renders a dot, png and svg file of the behaviour tree in the current directory.
+        Renders a dot, png, and svg file of the behaviour tree in the directory specified by `RENDER_BASE_PATH`.
         - `name` (str, optional): The name of the output files. If None, uses the class name.
         - `visibility_level` (py_trees.common.VisibilityLevel, optional): The visibility level for the rendering. Default is DETAIL.
         - `with_blackboard_variables` (bool, optional): Whether to include blackboard variables in the rendering. Default is False.
