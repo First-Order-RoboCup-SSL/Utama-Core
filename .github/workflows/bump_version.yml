@@ -1,0 +1,66 @@
+# .github/workflows/bump_version.yml
+name: Bump Version
+
+on:
+  push:
+    branches:
+      - main
+
+# Cancels previous runs of this workflow on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    # Grant permissions to write back to the repository
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch all history so hatch can find the last version
+          fetch-depth: 0
+          # Use a token with write permissions
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Pixi
+        uses: prefix-dev/setup-pixi@v0.8.0
+        with:
+          cache: true
+
+      - name: Configure Git User
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Install toml-cli for file editing
+        run: pip install toml-cli
+
+      - name: Bump version and sync files
+        run: |
+          # 1. Bump the version in pyproject.toml and utama_core/__init__.py
+          # You can change "patch" to "minor" or "major" if needed
+          pixi run hatch version patch
+
+          # 2. Get the new version from the single source of truth
+          NEW_VERSION=$(toml get pyproject.toml project.version | tr -d '"')
+          echo "New version: $NEW_VERSION"
+
+          # 3. Update the pixi.toml file with the new version
+          toml set pixi.toml workspace.version "$NEW_VERSION"
+          toml set pixi.toml package.version "$NEW_VERSION"
+
+      - name: Commit and push changes
+        run: |
+          git add pyproject.toml pixi.toml utama_core/__init__.py
+          # Check if there are changes to commit
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(release): bump version to v$(toml get pyproject.toml project.version | tr -d '\"')"
+            git push
+          else
+            echo "No version changes to commit."
+          fi

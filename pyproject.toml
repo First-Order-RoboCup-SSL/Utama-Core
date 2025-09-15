@@ -14,6 +14,9 @@ authors = [
 ]
 requires-python = ">=3.11"
 
+[tool.hatch.version]
+path = "utama_core/__init__.py"
+
 [build-system] 
 build-backend = "hatchling.build"
 requires = ["hatchling"]
