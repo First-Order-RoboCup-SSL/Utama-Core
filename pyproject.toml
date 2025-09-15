@@ -1,6 +1,6 @@
 [project]
 name = "Utama-Core"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Imperial RoboCup SSL 25 Software Algorithms Codebase Core."
 readme = "README.md"
 authors = [
