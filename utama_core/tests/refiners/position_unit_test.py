@@ -70,13 +70,14 @@ def bfac(x, y) -> Ball:
 def base_refine(is_yellow: bool):
     friendly = {0: rfac(0, is_yellow, 0, 0)}
     enemy = {}
-    raw_yellow = [RawRobotData(0, -1, -10, 0, 1)]
-    raw_blue = [RawRobotData(0, -100, -1000, 0, 1)]
+    # Use in-bounds positions to align with refiner's bounds filtering
+    raw_yellow = [RawRobotData(0, -1, -1, 0, 1)]
+    raw_blue = [RawRobotData(0, 2, 2, 0, 1)]
     raw_balls = [RawBallData(0, 0, 0, 0)]
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, raw_blue, raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, raw_blue, raw_balls, 1)
     p = PositionRefiner()
-    g = GameFrame(0, is_yellow, True, friendly, enemy, bfac(0, 0), None)
+    g = GameFrame(0, is_yellow, True, friendly, enemy, bfac(0, 0))
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2])
     fr = result.friendly_robots[0]
     er = result.enemy_robots[0]
@@ -102,12 +103,13 @@ def test_refine_for_blue():
 
 def test_refine_for_multiple_yellow():
     friendly = {0: rfac(0, True, 0, 0)}
-    raw_yellow = [RawRobotData(0, -1, -10, 0, 1), RawRobotData(1, -2, -20, 0, 1)]
+    # Two in-bounds yellow robots
+    raw_yellow = [RawRobotData(0, -1, -1, 0, 1), RawRobotData(1, -2, -2, 0, 1)]
     raw_balls = [RawBallData(0, 0, 0, 0)]
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, [], raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, [], raw_balls, 1)
     p = PositionRefiner()
-    g = GameFrame(0, True, True, friendly, {}, bfac(0, 0), None)
+    g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2])
 
     assert len(result.friendly_robots) == 2
@@ -120,12 +122,13 @@ def test_refine_for_multiple_yellow():
 
 def test_refine_nones():
     friendly = {0: rfac(0, True, 0, 0)}
-    raw_yellow = [RawRobotData(0, -1, -10, 0, 1), RawRobotData(1, -2, -20, 0, 1)]
+    # Two in-bounds yellow robots
+    raw_yellow = [RawRobotData(0, -1, -1, 0, 1), RawRobotData(1, -2, -2, 0, 1)]
     raw_balls = [RawBallData(0, 0, 0, 0)]
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, [], raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, [], raw_balls, 1)
     p = PositionRefiner()
-    g = GameFrame(0, True, True, friendly, {}, bfac(0, 0), None)
+    g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2, None, None])
 
     assert len(result.friendly_robots) == 2
@@ -134,6 +137,40 @@ def test_refine_nones():
         assert fr.p.x == raw_yellow[i].x
         assert fr.p.y == raw_yellow[i].y
         assert fr.orientation == raw_yellow[i].orientation
+
+
+def test_out_of_bounds_does_not_update_existing_robot():
+    # Existing friendly robot at origin
+    friendly = {0: rfac(0, True, 0, 0)}
+    # Vision sees same robot far outside bounds (x beyond 5.5)
+    raw_yellow = [RawRobotData(0, 10.0, 0.0, 0.0, 1.0)]
+    raw_balls = [RawBallData(0, 0, 0, 0)]
+    frames = [RawVisionData(0, raw_yellow, [], raw_balls, 0)]
+
+    p = PositionRefiner()
+    g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
+    result = p.refine(g, frames)
+
+    # Robot should not be updated due to out-of-bounds filtering
+    fr = result.friendly_robots[0]
+    assert fr.p.x == 0
+    assert fr.p.y == 0
+
+
+def test_out_of_bounds_enemy_not_added():
+    # No enemy robots initially
+    friendly = {0: rfac(0, True, 0, 0)}
+    # Vision sees a blue robot outside bounds (y beyond 4.0)
+    raw_blue = [RawRobotData(1, 0.0, 10.0, 0.0, 1.0)]
+    raw_balls = [RawBallData(0, 0, 0, 0)]
+    frames = [RawVisionData(0, [], raw_blue, raw_balls, 0)]
+
+    p = PositionRefiner()
+    g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
+    result = p.refine(g, frames)
+
+    # Enemy robot should not be added since it is out of bounds
+    assert 1 not in result.enemy_robots
 
 
 if __name__ == "__main__":
