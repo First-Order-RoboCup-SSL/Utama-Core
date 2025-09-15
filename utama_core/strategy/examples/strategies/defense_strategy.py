@@ -1,65 +1,94 @@
+from typing import Any
+
 import py_trees
+from py_trees.composites import Sequence
 
 from utama_core.config.roles import Role
+from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
+from utama_core.skills.src.block import block_attacker
 from utama_core.skills.src.defend_parameter import defend_parameter
-from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.goalkeep import goalkeep
 from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
-from utama_core.strategy.utils.blackboard_utils import SetBlackboardVariable
-from utama_core.strategy.utils.selector_utils import HasBall
 
 
-class GoToBallStep(AbstractBehaviour):
-    """A behaviour that executes a single step of the go_to_ball skill."""
+class BlockAttackerStep(AbstractBehaviour):
+    """
+    A behaviour that commands a robot to block the closest enemy robot to the ball.
 
-    def __init__(self, name="GoToBallStep"):
-        super().__init__(name=name)
+    **Blackboard Interaction:**
+        Reads:
+            - `robot_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
+
+    **Returns:**
+        - `py_trees.common.Status.RUNNING`: The behaviour is actively commanding the robot to block the attacker.
+    """
+
+    def setup_(self):
         self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
+        # print(f"Executing BlockAttackerStep for robot {self.blackboard.robot_id}")
         game = self.blackboard.game.current
-        env = self.blackboard.rsim_env
-        if env:
-            v = game.friendly_robots[self.blackboard.robot_id].v
-            p = game.friendly_robots[self.blackboard.robot_id].p
-            env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")
-        command = go_to_ball(
+        enemy, _ = game.proximity_lookup.closest_to_ball(TeamType.ENEMY)
+
+        command = block_attacker(
             game,
             self.blackboard.motion_controller,
-            self.blackboard.robot_id,
+            self.blackboard.robot_id,  # Use remapped robot_id
+            enemy.id,  # Use the closest enemy robot to the ball
+            True,
         )
         self.blackboard.cmd_map[self.blackboard.robot_id] = command
         return py_trees.common.Status.RUNNING
 
 
+class SetBlackboardVariable(AbstractBehaviour):
+    """A generic behaviour to set a variable on the blackboard."""
+
+    def __init__(self, name: str, variable_name: str, value: Any, opp_strategy: bool = False):
+        super().__init__(name=name)
+        # Store the configuration, but DO NOT use the blackboard here.
+        self.variable_name = variable_name
+        self.value = value
+
+    def setup_(self):
+        self.blackboard.register_key(key=self.variable_name, access=py_trees.common.Access.WRITE)
+
+    def update(self) -> py_trees.common.Status:
+        # print(f"Setting {self.variable_name} to {self.value} on the blackboard.")
+        self.blackboard.set(self.variable_name, self.value, overwrite=True)
+        return py_trees.common.Status.SUCCESS
+
+
 class SetRoles(AbstractBehaviour):
     """A behaviour that sets the roles of the robots."""
 
-    def __init__(self, name="SetRoles"):
-        super().__init__(name=name)
+    def setup_(self):
+        # Register the role_map key in the blackboard
+        self.blackboard.register_key(key="role_map", access=py_trees.common.Access.WRITE)
 
     def update(self) -> py_trees.common.Status:
         self.blackboard.role_map = {
-            0: Role.STRIKER,
+            0: Role.DEFENDER,
             1: Role.DEFENDER,
             2: Role.GOALKEEPER,
         }
         return py_trees.common.Status.SUCCESS
 
 
-class DefendStrategy(AbstractStrategy):
-    def __init__(self, robot_id: int, opp_strategy: bool = False):
+class DefenceStrategy(AbstractStrategy):
+    def __init__(self, robot_id: int):
         """Initializes the DefendStrategy with a specific robot ID.
 
         :param robot_id: The ID of the robot this strategy will control to go to ball.
         """
         self.robot_id = robot_id
-        super().__init__(opp_strategy=opp_strategy)
+        super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if 1 <= n_runtime_friendly <= 3 and 1 <= n_runtime_enemy <= 3:
+        if 3 <= n_runtime_friendly <= 5 and 1 <= n_runtime_enemy <= 6:
             return True
         return False
 
@@ -78,30 +107,24 @@ class DefendStrategy(AbstractStrategy):
             return empty_command(True)
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        """Factory function to create a complete go_to_ball behaviour tree."""
+        """Factory function to create a complete behaviour tree."""
 
         # Create the root of the behaviour tree
-        root = py_trees.composites.Sequence(name="CoachRoot", memory=True)
+        root = Sequence(name="CoachRoot", memory=True)
 
         # Create the SetRoles behaviour
         set_roles = SetRoles()
 
         # Root sequence for the whole behaviour
-        go_to_ball = py_trees.composites.Sequence(name="GoToBall", memory=True)
+        block = Sequence(name="GoToBall", memory=True)
 
         # A child sequence to set the robot_id on the blackboard
         set_robot_id = SetBlackboardVariable(name="SetTargetRobotID", variable_name="robot_id", value=self.robot_id)
 
-        # A selector to decide whether to get the ball or stop
-        has_ball_selector = py_trees.composites.Selector(name="HasBallSelector", memory=False)
-        has_ball_selector.add_child(HasBall())
-        has_ball_selector.add_child(GoToBallStep())
-
-        # Assemble the tree
-        go_to_ball.add_child(set_robot_id)
-        go_to_ball.add_child(has_ball_selector)
+        block.add_child(set_robot_id)
+        block.add_child(BlockAttackerStep())
 
         root.add_child(set_roles)
-        root.add_child(go_to_ball)
+        root.add_child(block)
 
         return root
