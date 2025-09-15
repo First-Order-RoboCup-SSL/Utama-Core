@@ -1,9 +1,8 @@
-# .github/workflows/bump_version.yml
 name: Bump Version
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, reopened, synchronize]
     branches:
       - main
 
@@ -33,36 +32,47 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      
-      - name: Install toml-cli for file editing
+
+      - name: Install toml-cli
         run: pip install toml-cli
 
-      - name: Bump version and sync files
+      - name: Fetch main version
+        id: main_version
         run: |
-          # 1. This command will now correctly edit utama_core/__init__.py
-          pixi run hatch version patch
+          git fetch origin main
+          MAIN_VERSION=$(git show origin/main:utama_core/__init__.py | grep '__version__' | cut -d '"' -f 2)
+          echo "MAIN_VERSION=$MAIN_VERSION" >> $GITHUB_ENV
+          echo "Main branch version: $MAIN_VERSION"
 
-          # 2. Get the new version from the single source of truth (the __init__.py file)
-          #    This command finds the line with __version__ and extracts the string in quotes.
-          NEW_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
-          echo "New version: $NEW_VERSION"
-
-          # 3. Update the pixi.toml file with the new version
-          toml set --toml-path pixi.toml workspace.version "$NEW_VERSION"
-          toml set --toml-path pixi.toml package.version "$NEW_VERSION"
-
-      - name: Commit version bump to PR branch
+      - name: Bump version if PR version <= main
         run: |
-          git add pyproject.toml pixi.toml utama_core/__init__.py
-          if ! git diff --staged --quiet; then
+          # Get PR branch version
+          PR_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
+          echo "PR branch version: $PR_VERSION"
+
+          # Convert to arrays
+          IFS='.' read -r MAIN_MAJOR MAIN_MINOR MAIN_PATCH <<< "$MAIN_VERSION"
+          IFS='.' read -r PR_MAJOR PR_MINOR PR_PATCH <<< "$PR_VERSION"
+
+          # Determine if bump is needed
+          if [ "$PR_MAJOR" -lt "$MAIN_MAJOR" ] || \
+             [ "$PR_MAJOR" -eq "$MAIN_MAJOR" ] && [ "$PR_MINOR" -lt "$MAIN_MINOR" ] || \
+             [ "$PR_MAJOR" -eq "$MAIN_MAJOR" ] && [ "$PR_MINOR" -eq "$MAIN_MINOR" ] && [ "$PR_PATCH" -le "$MAIN_PATCH" ]; then
+            echo "Bumping version..."
+            pixi run hatch version patch
+
+            # Update pixi.toml
             NEW_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
+            toml set --toml-path pixi.toml workspace.version "$NEW_VERSION"
+            toml set --toml-path pixi.toml package.version "$NEW_VERSION"
+
+            # Commit and push to PR branch
+            git add pyproject.toml pixi.toml utama_core/__init__.py
             git commit -m "chore(release): bump version to v$NEW_VERSION"
-            
-            # Push to the PR branch using GITHUB_HEAD_REF
             git push origin HEAD:${GITHUB_HEAD_REF}
+            echo "Version bumped to $NEW_VERSION"
           else
-            echo "No version changes to commit."
+            echo "PR version is already ahead of main; no bump needed."
           fi
         env:
           GITHUB_HEAD_REF: ${{ github.head_ref }}
-
