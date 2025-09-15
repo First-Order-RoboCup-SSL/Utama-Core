@@ -47,8 +47,8 @@ jobs:
           echo "New version: $NEW_VERSION"
 
           # 3. Update the pixi.toml file with the new version
-          toml set pixi.toml workspace.version "$NEW_VERSION"
-          toml set pixi.toml package.version "$NEW_VERSION"
+          toml set --toml-path pixi.toml workspace.version "$NEW_VERSION"
+          toml set --toml-path pixi.toml package.version "$NEW_VERSION"
 
       - name: Commit and push changes
         run: |
