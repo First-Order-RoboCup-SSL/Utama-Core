@@ -94,3 +94,15 @@ jobs:
           git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION" $MERGE_COMMIT_SHA
           git push origin "v$NEW_VERSION"
 
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        with:
+          tag_name: "v${{ steps.bump_type.outputs.NEW_VERSION }}"
+          release_name: "v${{ steps.bump_type.outputs.NEW_VERSION }}"
+          body: "Automated release generated from PR #${{ github.event.pull_request.number }}"
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
