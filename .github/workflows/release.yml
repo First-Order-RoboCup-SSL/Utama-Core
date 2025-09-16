@@ -63,6 +63,7 @@ jobs:
           echo "BUMP_TYPE=$BUMP" >> $GITHUB_OUTPUT
 
       - name: Bump version
+        id: bump_version
         run: |
           # Get PR branch version
           PR_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
@@ -99,8 +100,8 @@ jobs:
       - name: Create GitHub Release
         uses: actions/create-release@v1
         with:
-          tag_name: "v${{ steps.bump_type.outputs.new_version }}"
-          release_name: "v${{ steps.bump_type.outputs.new_version }}"
+          tag_name: "v${{ steps.bump_version.outputs.new_version }}"
+          release_name: "v${{ steps.bump_version.outputs.new_version }}"
           body: "Automated release generated from PR #${{ github.event.pull_request.number }}"
           draft: false
           prerelease: false
