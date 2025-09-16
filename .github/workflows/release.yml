@@ -67,8 +67,6 @@ jobs:
           echo "PR branch version: $PR_VERSION"
 
           # Convert to arrays
-          IFS='.' read -r MAIN_MAJOR MAIN_MINOR MAIN_PATCH <<< "$MAIN_VERSION"
-          IFS='.' read -r PR_MAJOR PR_MINOR PR_PATCH <<< "$PR_VERSION"
 
           echo "Bumping version ($BUMP_TYPE)..."
           pixi run hatch version $BUMP_TYPE
