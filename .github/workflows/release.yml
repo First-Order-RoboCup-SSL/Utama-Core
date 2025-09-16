@@ -85,14 +85,16 @@ jobs:
           git push origin HEAD:main
           echo "Version bumped to $NEW_VERSION"
 
+          # Set output for next step
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
       - name: Tag release at PR merge commit
         run: |
           # Get the PR merge commit SHA
           MERGE_COMMIT_SHA=$(jq -r .pull_request.merge_commit_sha "$GITHUB_EVENT_PATH")
-          NEW_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
-          echo "Tagging PR merge commit $MERGE_COMMIT_SHA with v$NEW_VERSION"
-          git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION" $MERGE_COMMIT_SHA
-          git push origin "v$NEW_VERSION"
+          echo "Tagging PR merge commit $MERGE_COMMIT_SHA with v${{ steps.bump_version.outputs.new_version }}"
+          git tag -a "v${{ steps.bump_version.outputs.new_version }}" -m "Release v${{ steps.bump_version.outputs.new_version }}" $MERGE_COMMIT_SHA
+          git push origin "v${{ steps.bump_version.outputs.new_version }}"
 
       - name: Create GitHub Release
         uses: actions/create-release@v1
