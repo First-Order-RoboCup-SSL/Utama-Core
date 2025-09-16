@@ -18,7 +18,7 @@ if __name__ == "__main__":
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
     )
 
-    StartupStrategy().render()
+    runner.my_strategy.render()
 
     # Run the simulation
     test = runner.run()
