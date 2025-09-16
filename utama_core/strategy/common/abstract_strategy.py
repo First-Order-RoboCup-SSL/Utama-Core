@@ -160,9 +160,9 @@ class AbstractStrategy(ABC):
     def render(
         self,
         name: Optional[str] = None,
-        visibility_level=py_trees.common.VisibilityLevel.DETAIL,
-        with_blackboard_variables=False,
-        with_qualified_names=False,
+        visibility_level: Optional[py_trees.common.VisibilityLevel] = py_trees.common.VisibilityLevel.DETAIL,
+        with_blackboard_variables: Optional[bool] = False,
+        with_qualified_names: Optional[bool] = False,
     ):
         """
         Renders a dot, png, and svg file of the behaviour tree in the directory specified by `RENDER_BASE_PATH`.
