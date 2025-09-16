@@ -20,11 +20,13 @@ jobs:
         with:
           app-id: ${{ vars.RELEASE_MANAGER_APPID }}
           private-key: ${{ secrets.RELEASE_MANAGER_SECRET }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
+
       - name: Set up Pixi
         uses: prefix-dev/setup-pixi@v0.8.0
         with:
@@ -82,3 +84,27 @@ jobs:
           git remote set-url origin https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository }}
           git push origin HEAD:main
           echo "Version bumped to $NEW_VERSION"
+
+          # Set output for next step
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Tag release at PR merge commit
+        run: |
+          # Get the PR merge commit SHA
+          MERGE_COMMIT_SHA=$(jq -r .pull_request.merge_commit_sha "$GITHUB_EVENT_PATH")
+          echo "Tagging PR merge commit $MERGE_COMMIT_SHA with v${{ steps.bump_version.outputs.new_version }}"
+          git tag -a "v${{ steps.bump_version.outputs.new_version }}" -m "Release v${{ steps.bump_version.outputs.new_version }}" $MERGE_COMMIT_SHA
+          git push origin "v${{ steps.bump_version.outputs.new_version }}"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        with:
+          tag_name: "v${{ steps.bump_type.outputs.NEW_VERSION }}"
+          release_name: "v${{ steps.bump_type.outputs.NEW_VERSION }}"
+          body: "Automated release generated from PR #${{ github.event.pull_request.number }}"
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
