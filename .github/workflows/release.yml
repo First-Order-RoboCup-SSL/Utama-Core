@@ -18,8 +18,8 @@ jobs:
       - uses: actions/create-github-app-token@v1
         id: app-token
         with:
-          app_id: ${{ vars.RELEASE_MANAGER_APPID }}
-          private_key: ${{ secrets.RELEASE_MANAGER_SECRET }}
+          app-id: ${{ vars.RELEASE_MANAGER_APPID }}
+          private-key: ${{ secrets.RELEASE_MANAGER_SECRET }}
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -32,11 +32,11 @@ jobs:
 
       - name: Configure Git User
         run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
+          git config user.name "Utama Release Manager"
+          git config user.email "1959341+utama-release-manager[bot]@users.noreply.github.com"
 
       - name: Install toml-cli
-        run: pip install toml-cli jq
+        run: pip install toml-cli==0.8.2 jq==1.10.0
 
       - name: Fetch main version
         id: main_version
@@ -57,38 +57,27 @@ jobs:
               "release:patch") BUMP="patch" ;;
             esac
           done
-          echo "BUMP_TYPE=$BUMP" >> $GITHUB_ENV
           echo "Determined bump type: $BUMP"
+          echo "BUMP_TYPE=$BUMP" >> $GITHUB_OUTPUT
 
-      - name: Bump version if PR version <= main
+      - name: Bump version
         run: |
           # Get PR branch version
           PR_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
           echo "PR branch version: $PR_VERSION"
 
           # Convert to arrays
-          IFS='.' read -r MAIN_MAJOR MAIN_MINOR MAIN_PATCH <<< "$MAIN_VERSION"
-          IFS='.' read -r PR_MAJOR PR_MINOR PR_PATCH <<< "$PR_VERSION"
 
-          # Determine if bump is needed
-          if [ "$PR_MAJOR" -lt "$MAIN_MAJOR" ] || \
-             [ "$PR_MAJOR" -eq "$MAIN_MAJOR" ] && [ "$PR_MINOR" -lt "$MAIN_MINOR" ] || \
-             [ "$PR_MAJOR" -eq "$MAIN_MAJOR" ] && [ "$PR_MINOR" -eq "$MAIN_MINOR" ] && [ "$PR_PATCH" -le "$MAIN_PATCH" ]; then
-            echo "Bumping version ($BUMP_TYPE)..."
-            pixi run hatch version $BUMP_TYPE
+          echo "Bumping version (${{ steps.bump_type.outputs.BUMP_TYPE }})..."
+          pixi run hatch version ${{ steps.bump_type.outputs.BUMP_TYPE }}
 
-            # Update pixi.toml
-            NEW_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
-            toml set --toml-path pixi.toml workspace.version "$NEW_VERSION"
-            toml set --toml-path pixi.toml package.version "$NEW_VERSION"
+          # Update pixi.toml
+          NEW_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
+          toml set --toml-path pixi.toml workspace.version "$NEW_VERSION"
+          toml set --toml-path pixi.toml package.version "$NEW_VERSION"
 
-            # Commit and push to PR branch
-            git add pyproject.toml pixi.toml utama_core/__init__.py
-            git commit -m "chore(release): bump version to v$NEW_VERSION"
-            git push origin HEAD:main
-            echo "Version bumped to $NEW_VERSION"
-          else
-            echo "PR version is already ahead of main; no bump needed."
-          fi
-        env:
-          BUMP_TYPE: ${{ env.BUMP_TYPE }}
+          # Commit and push to PR branch
+          git add pyproject.toml pixi.toml utama_core/__init__.py
+          git commit -m "chore(release): bump version to v$NEW_VERSION"
+          git push origin main
+          echo "Version bumped to $NEW_VERSION"
