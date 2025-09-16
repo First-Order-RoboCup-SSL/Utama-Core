@@ -91,5 +91,4 @@ jobs:
             echo "PR version is already ahead of main; no bump needed."
           fi
         env:
-          GITHUB_HEAD_REF: ${{ github.head_ref }}
           BUMP_TYPE: ${{ env.BUMP_TYPE }}
