@@ -7,9 +7,6 @@ from utama_core.strategy.examples.strategies.one_robot_placement_strategy import
 from utama_core.strategy.examples.strategies.startup_strategy import StartupStrategy
 
 if __name__ == "__main__":
-    # The robot we want to control
-    target_robot_id = 0
-
     # Set up the runner
     runner = StrategyRunner(
         strategy=StartupStrategy(),
@@ -21,7 +18,7 @@ if __name__ == "__main__":
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
     )
 
-    StartupStrategy(robot_id=target_robot_id).render()
+    StartupStrategy().render()
 
     # Run the simulation
     test = runner.run()
