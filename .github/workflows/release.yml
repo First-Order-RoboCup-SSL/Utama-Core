@@ -1,28 +1,27 @@
 name: Bump Version
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize]
+  push:
     branches:
       - main
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  bump-version:
+  release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app_id: ${{ vars.RELEASE_MANAGER_APPID }}
+          private_key: ${{ secrets.RELEASE_MANAGER_SECRET }}
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
+          token: ${{ steps.app-token.outputs.token }}
       - name: Set up Pixi
         uses: prefix-dev/setup-pixi@v0.8.0
         with:
@@ -30,8 +29,8 @@ jobs:
 
       - name: Configure Git User
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name github-actions
+          git config user.email github-actions@github.com
 
       - name: Install toml-cli
         run: pip install toml-cli jq
