@@ -1,9 +1,5 @@
 from utama_core.replay import ReplayWriterConfig
 from utama_core.run import StrategyRunner
-from utama_core.strategy.examples.strategies.defense_strategy import DefenceStrategy
-from utama_core.strategy.examples.strategies.one_robot_placement_strategy import (
-    RobotPlacementStrategy,
-)
 from utama_core.strategy.examples.strategies.startup_strategy import StartupStrategy
 
 if __name__ == "__main__":
