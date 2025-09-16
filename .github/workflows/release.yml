@@ -32,8 +32,8 @@ jobs:
 
       - name: Configure Git User
         run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
+          git config user.name "Utama Release Manager"
+          git config user.email "1959341+utama-release-manager[bot]@users.noreply.github.com"
 
       - name: Install toml-cli
         run: pip install toml-cli==0.8.2 jq==1.10.0
