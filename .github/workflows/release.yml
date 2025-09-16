@@ -99,8 +99,8 @@ jobs:
       - name: Create GitHub Release
         uses: actions/create-release@v1
         with:
-          tag_name: "v${{ steps.bump_type.outputs.NEW_VERSION }}"
-          release_name: "v${{ steps.bump_type.outputs.NEW_VERSION }}"
+          tag_name: "v${{ steps.bump_type.outputs.new_version }}"
+          release_name: "v${{ steps.bump_type.outputs.new_version }}"
           body: "Automated release generated from PR #${{ github.event.pull_request.number }}"
           draft: false
           prerelease: false
