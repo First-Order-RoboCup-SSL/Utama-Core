@@ -60,7 +60,7 @@ jobs:
           echo "BUMP_TYPE=$BUMP" >> $GITHUB_ENV
           echo "Determined bump type: $BUMP"
 
-      - name: Bump version if PR version <= main
+      - name: Bump version
         run: |
           # Get PR branch version
           PR_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
