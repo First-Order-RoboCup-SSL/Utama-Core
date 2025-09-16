@@ -57,8 +57,8 @@ jobs:
               "release:patch") BUMP="patch" ;;
             esac
           done
-          echo "BUMP_TYPE=$BUMP" >> $GITHUB_ENV
           echo "Determined bump type: $BUMP"
+          echo "BUMP_TYPE=$BUMP" >> $GITHUB_OUTPUT
 
       - name: Bump version
         run: |
@@ -68,8 +68,8 @@ jobs:
 
           # Convert to arrays
 
-          echo "Bumping version ($BUMP_TYPE)..."
-          pixi run hatch version $BUMP_TYPE
+          echo "Bumping version (${{ steps.bump_type.outputs.BUMP_TYPE }})..."
+          pixi run hatch version ${{ steps.bump_type.outputs.BUMP_TYPE }}
 
           # Update pixi.toml
           NEW_VERSION=$(grep '__version__' utama_core/__init__.py | cut -d '"' -f 2)
@@ -81,5 +81,3 @@ jobs:
           git commit -m "chore(release): bump version to v$NEW_VERSION"
           git push origin main
           echo "Version bumped to $NEW_VERSION"
-        env:
-          BUMP_TYPE: ${{ env.BUMP_TYPE }}
