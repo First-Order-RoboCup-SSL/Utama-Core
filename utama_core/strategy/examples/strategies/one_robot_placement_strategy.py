@@ -95,6 +95,7 @@ class SetBlackboardVariable(AbstractBehaviour):
     """A generic behaviour to set a variable on the blackboard."""
 
     def __init__(self, variable_name: str, value: Any, opp_strategy: bool = False):
+        super().__init__()
         self.variable_name = variable_name
         self.value = value
 
