@@ -72,7 +72,7 @@ class BlockAttackerStep(AbstractBehaviour):
 
 
 class BlockPlay(AbstractBehaviour):
-    """A behaviour that decides whether to play as attacker or defender based on the game state, and assings a defender if defending."""
+    """A behaviour that decides whether to play as attacker or defender based on the game state, and assigns a defender if defending."""
 
     def __init__(self):
         super().__init__(name="BlockPlay?")
