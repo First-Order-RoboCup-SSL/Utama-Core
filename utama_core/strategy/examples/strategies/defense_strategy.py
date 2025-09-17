@@ -135,10 +135,7 @@ class SetTactics(AbstractBehaviour):
 
 class DefenceStrategy(AbstractStrategy):
     def __init__(self):
-        """Initializes the DefendStrategy with a specific robot ID.
-
-        :param robot_id: The ID of the robot this strategy will control to go to ball.
-        """
+        """Initializes the DefenceStrategy."""
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
