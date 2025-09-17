@@ -5,7 +5,7 @@ from utama_core.strategy.examples.strategies.defense_strategy import DefenceStra
 if __name__ == "__main__":
     # Set up the runner
     runner = StrategyRunner(
-        strategy=DefenceStrategy(robot_id=0),
+        strategy=DefenceStrategy(),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",

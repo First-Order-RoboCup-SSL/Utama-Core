@@ -15,8 +15,8 @@ from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
 
 
 class FindBlockingTarget(AbstractBehaviour):
-    def __init__(self, name: str = "FindBlockingTarget2BB"):
-        super().__init__(name=name)
+    def __init__(self):
+        super().__init__(name="FindBlockingTarget2BB")
 
     def setup_(self):
         self.blackboard.register_key(
@@ -74,8 +74,8 @@ class BlockAttackerStep(AbstractBehaviour):
 class BlockPlay(AbstractBehaviour):
     """A behaviour that decides whether to play as attacker or defender based on the game state, and assings a defender if defending."""
 
-    def __init__(self, name: str = "BlockPlay?"):
-        super().__init__(name=name)
+    def __init__(self):
+        super().__init__(name="BlockPlay?")
 
     def update(self) -> py_trees.common.Status:
         tactic = self.blackboard.get("tactic")
@@ -90,8 +90,8 @@ class BlockPlay(AbstractBehaviour):
 class SetBlocker(AbstractBehaviour):
     """A behaviour that sets the defender robot"""
 
-    def __init__(self, name: str = "SetDefender2BB"):
-        super().__init__(name=name)
+    def __init__(self):
+        super().__init__(name="SetDefender2BB")
 
     def setup_(self):
         # Register the defender_id key in the blackboard
@@ -134,12 +134,11 @@ class SetTactics(AbstractBehaviour):
 
 
 class DefenceStrategy(AbstractStrategy):
-    def __init__(self, robot_id: int):
+    def __init__(self):
         """Initializes the DefendStrategy with a specific robot ID.
 
         :param robot_id: The ID of the robot this strategy will control to go to ball.
         """
-        self.robot_id = robot_id
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):

@@ -94,9 +94,7 @@ class RobotPlacementStep(AbstractBehaviour):
 class SetBlackboardVariable(AbstractBehaviour):
     """A generic behaviour to set a variable on the blackboard."""
 
-    def __init__(self, name: str, variable_name: str, value: Any, opp_strategy: bool = False):
-        super().__init__(name=name)
-        # Store the configuration, but DO NOT use the blackboard here.
+    def __init__(self, variable_name: str, value: Any, opp_strategy: bool = False):
         self.variable_name = variable_name
         self.value = value
 
