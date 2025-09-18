@@ -12,6 +12,16 @@ from utama_core.team_controller.src.controllers import AbstractRobotController
 
 
 class BaseBlackboard(py_trees.blackboard.Client):
+    @classmethod
+    def base_keys(cls) -> set[str]:
+        """Return the canonical blackboard keys registered by the base client."""
+        return {name for name, value in vars(cls).items() if isinstance(value, property)}
+
+    @classmethod
+    def base_client_names(cls) -> set[str]:
+        """Return the default client names used by the base blackboard setup."""
+        return {"GlobalBlackboard"}
+
     @property
     def game(self) -> Game:
         return self.get("game")

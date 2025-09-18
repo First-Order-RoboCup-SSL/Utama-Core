@@ -96,7 +96,6 @@ class SetBlackboardVariable(AbstractBehaviour):
 
     def __init__(self, name: str, variable_name: str, value: Any, opp_strategy: bool = False):
         super().__init__(name=name)
-        # Store the configuration, but DO NOT use the blackboard here.
         self.variable_name = variable_name
         self.value = value
 
