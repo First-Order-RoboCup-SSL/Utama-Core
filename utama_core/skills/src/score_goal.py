@@ -177,14 +177,14 @@ def _find_best_shot(
         s, e = interval
         gap_length = e - s
         # If the interval touches a goal boundary, the best candidate is that boundary.
-        is_lower_bound = np.isclose(s, goal_y1, rel_tol=0.0, abs_tol=1e-6)
-        is_upper_bound = np.isclose(e, goal_y2, rel_tol=0.0, abs_tol=1e-6)
+        is_lower_bound = np.isclose(s, goal_y1, rtol=0.0, atol=1e-6)
+        is_upper_bound = np.isclose(e, goal_y2, rtol=0.0, atol=1e-6)
 
         if is_lower_bound:
-            candidate = s + 0.3 * gap_length
+            candidate = s + 0.2 * gap_length
             clearance = gap_length
         elif is_upper_bound:
-            candidate = e - 0.3 * gap_length
+            candidate = e - 0.2 * gap_length
             clearance = gap_length
         else:
             candidate = (s + e) / 2
