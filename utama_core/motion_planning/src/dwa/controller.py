@@ -29,6 +29,7 @@ from utama_core.motion_planning.src.pid.pid import (
 )
 from utama_core.motion_planning.src.pid.pid_abstract import AbstractPID
 from utama_core.motion_planning.src.planning.path_planner import DynamicWindowPlanner
+from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 
 @dataclass(slots=True)
@@ -38,7 +39,7 @@ class DWATranslationParams:
     max_speed: float
     max_acceleration: float
     horizon: float = DynamicWindowPlanner.SIMULATED_TIMESTEP
-    target_tolerance: float = 0.02
+    target_tolerance: float = 0.1
 
 
 @dataclass(slots=True)
@@ -65,9 +66,11 @@ class DWATranslationController(AbstractPID[Tuple[float, float]]):
 
     def __init__(self, params: DWATranslationParams, num_robots: int = MAX_ROBOTS):
         self._params = params
+        self._control_period = TIMESTEP
         self._game: Optional[Game] = None
         self._planner: Optional[DynamicWindowPlanner] = None
         self._previous_velocity: Dict[int, Tuple[float, float]] = {idx: (0.0, 0.0) for idx in range(num_robots)}
+        self.env: SSLStandardEnv = None  # type: ignore
 
     # ------------------------------------------------------------------
     # Public interface shared with AbstractPID implementers
@@ -85,15 +88,14 @@ class DWATranslationController(AbstractPID[Tuple[float, float]]):
         self._ensure_planner()
         assert self._planner is not None  # for type-checkers
 
-        robot = self._game.friendly_robots.get(robot_id)
-        if robot is None:
+        if current is None:
             return 0.0, 0.0
 
-        start_x, start_y = robot.p.x, robot.p.y
+        start_x, start_y = current[0], current[1]
         if target is None or None in target:
             return 0.0, 0.0
 
-        # If we are sufficiently close to the goal, stop.
+        # If we are sufficiently close to the target, stop.
         if math.dist((start_x, start_y), target) <= self._params.target_tolerance:
             self._previous_velocity[robot_id] = (0.0, 0.0)
             return 0.0, 0.0
@@ -107,12 +109,32 @@ class DWATranslationController(AbstractPID[Tuple[float, float]]):
         if best_move is None:
             return 0.0, 0.0
 
-        vx = (best_move[0] - start_x) / self._params.horizon
-        vy = (best_move[1] - start_y) / self._params.horizon
-        vx, vy = self._apply_speed_limits(vx, vy)
-        vx, vy = self._apply_acceleration_limits(robot_id, vx, vy)
-        self._previous_velocity[robot_id] = (vx, vy)
-        return vx, vy
+        dt_plan = self._params.horizon
+        dx_w = best_move[0] - start_x
+        dy_w = best_move[1] - start_y
+        vx_w = dx_w / dt_plan
+        vy_w = dy_w / dt_plan
+
+        dist_to_goal = math.dist((start_x, start_y), target)
+        vmax_goal = min(self._params.max_speed, 2 * dist_to_goal)
+        speed = math.hypot(vx_w, vy_w)
+        if vmax_goal > 1e-6 and speed > vmax_goal:
+            s = vmax_goal / speed
+            vx_w *= s
+            vy_w *= s
+
+        theta = getattr(self._game.friendly_robots[robot_id].p, "theta", 0.0)
+        c, s = math.cos(theta), math.sin(theta)
+        vx_b = c * vx_w + s * vy_w
+        vy_b = -s * vx_w + c * vy_w
+
+        # --- Respect speed/accel limits in the frame the actuators expect (usually body) ---
+        vx_b, vy_b = self._apply_speed_limits(vx_b, vy_b)
+        vx_b, vy_b = self._apply_acceleration_limits(robot_id, vx_b, vy_b)
+        self._previous_velocity[robot_id] = (vx_b, vy_b)
+
+        self.env.draw_point(best_move[0], best_move[1], color="blue", width=2)
+        return vx_b, vy_b
 
     def reset(self, robot_id: int):
         self._previous_velocity[robot_id] = (0.0, 0.0)
@@ -153,6 +175,12 @@ class DWATranslationController(AbstractPID[Tuple[float, float]]):
             return prev_vx, prev_vy
         scale = allowed_delta / delta_speed
         return prev_vx + delta_vx * scale, prev_vy + delta_vy * scale
+
+    def set_debug_env(self, env):
+        self.env = env
+
+
+### Using PID for Yaw control for now, as DWA is too unstable and not very useful ###
 
 
 class DWAOrientationController(AbstractPID[float]):
@@ -221,9 +249,9 @@ def get_rsim_dwa_controllers() -> Tuple[AbstractPID, DWATranslationController]:
     translation = DWATranslationController(
         DWATranslationParams(
             max_speed=MAX_VEL,
-            max_acceleration=2.0,
+            max_acceleration=DynamicWindowPlanner.MAX_ACCELERATION,
             horizon=DynamicWindowPlanner.SIMULATED_TIMESTEP,
-            target_tolerance=0.02,
+            target_tolerance=0.05,
         )
     )
     return pid_orientation, translation
@@ -234,9 +262,9 @@ def get_grsim_dwa_controllers() -> Tuple[AbstractPID, DWATranslationController]:
     translation = DWATranslationController(
         DWATranslationParams(
             max_speed=MAX_VEL,
-            max_acceleration=2.0,
+            max_acceleration=DynamicWindowPlanner.MAX_ACCELERATION,
             horizon=DynamicWindowPlanner.SIMULATED_TIMESTEP,
-            target_tolerance=0.02,
+            target_tolerance=0.05,
         )
     )
     return pid_orientation, translation

@@ -4,6 +4,9 @@ import cProfile
 
 from utama_core.replay import ReplayWriterConfig
 from utama_core.run import StrategyRunner
+from utama_core.strategy.examples.strategies.one_robot_placement_strategy import (
+    RobotPlacementStrategy,
+)
 from utama_core.strategy.examples.strategies.startup_strategy import StartupStrategy
 
 profiler = cProfile.Profile()

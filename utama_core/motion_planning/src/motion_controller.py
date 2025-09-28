@@ -40,6 +40,7 @@ class MotionController:
         self._control_scheme = control_scheme.lower()
         self._debug_env = debug_env
         self._orientation, self._translation = self._initialise_controllers(mode)
+        self._attach_debug_env(self._translation)
 
     def _initialise_controllers(self, mode: str) -> ControllerPair:
         if self._control_scheme == "dwa":
@@ -77,9 +78,9 @@ class MotionController:
             translation.set_debug_env(self._debug_env)
 
     @property
-    def pid_oren(self) -> AbstractPID:
+    def orientation(self) -> AbstractPID:
         return self._orientation
 
     @property
-    def pid_trans(self) -> AbstractPID:
+    def translation(self) -> AbstractPID:
         return self._translation

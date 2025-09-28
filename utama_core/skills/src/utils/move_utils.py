@@ -19,15 +19,15 @@ def move(
     dribbling: bool = False,
 ) -> RobotCommand:
     """Calculate the robot command to move towards a target point with a specified orientation."""
-    pid_trans = motion_controller.pid_trans
-    pid_oren = motion_controller.pid_oren
+    trans = motion_controller.translation
+    oren = motion_controller.orientation
 
     robot = game.friendly_robots[robot_id]
 
     target_x, target_y = target_coords.x, target_coords.y
 
     if target_x is not None and target_y is not None:
-        global_x, global_y = pid_trans.calculate((target_x, target_y), (robot.p.x, robot.p.y), robot_id)
+        global_x, global_y = trans.calculate((target_x, target_y), (robot.p.x, robot.p.y), robot_id)
     else:
         global_x = 0
         global_y = 0
@@ -35,7 +35,7 @@ def move(
     forward_vel, left_vel = rotate_vector(global_x, global_y, robot.orientation)
 
     if target_oren is not None:
-        angular_vel = pid_oren.calculate(target_oren, robot.orientation, robot_id)
+        angular_vel = oren.calculate(target_oren, robot.orientation, robot_id)
     else:
         angular_vel = 0
 

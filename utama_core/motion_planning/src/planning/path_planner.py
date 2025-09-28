@@ -12,6 +12,7 @@ from utama_core.config.settings import ROBOT_RADIUS
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import Field
 from utama_core.entities.game.robot import Robot
+from utama_core.global_utils.math_utils import normalise_heading
 from utama_core.motion_planning.src.planning.geometry import (
     AxisAlignedRectangle,
     point_segment_distance,
@@ -304,9 +305,8 @@ class DynamicWindowPlanner:
     behaviour tree should handle this.
     """
 
-    SIMULATED_TIMESTEP = 0.2  # seconds
+    SIMULATED_TIMESTEP = 0.05  # seconds
     MAX_ACCELERATION = 2  # Measured in ms^2
-    DIRECTIONS = [i * 2 * pi / N_DIRECTIONS for i in range(N_DIRECTIONS)]
     ROBOT_RADIUS = 0.1
 
     def __init__(self, game: Game):
@@ -360,8 +360,14 @@ class DynamicWindowPlanner:
         sf = 1
         rect_obstacles = to_rectangles(temporary_obstacles)
 
+        dx, dy = float(target[0] - start_x), float(target[1] - start_y)
+        ang0 = np.atan2(dy, dx)  # (-pi, pi]
+        step = 2 * np.pi / N_DIRECTIONS
+
+        ordered_angles = [normalise_heading(ang0 + k * step) for k in range(N_DIRECTIONS)]
+
         while best_score < 0 and sf > 0.05:
-            for ang in DynamicWindowPlanner.DIRECTIONS:
+            for ang in ordered_angles:
                 segment_start, segment_end = self._get_motion_segment((start_x, start_y), velocity, delta_vel * sf, ang)
 
                 if segment_too_close_to_obstacles(segment_start, segment_end, rect_obstacles, ROBOT_RADIUS):
