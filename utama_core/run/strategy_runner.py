@@ -67,6 +67,7 @@ class StrategyRunner:
         exp_enemy (int): Expected number of enemy robots.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
+        control_scheme (str): Motion controller family to use ("dwa" or "pid").
     """
 
     def __init__(
@@ -79,6 +80,7 @@ class StrategyRunner:
         exp_enemy: int,
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
+        control_scheme: str = "dwa",
     ):
         self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow
@@ -92,6 +94,7 @@ class StrategyRunner:
             if replay_writer_config
             else None
         )
+        self.control_scheme = control_scheme
         self.logger = logging.getLogger(__name__)
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
@@ -269,11 +272,13 @@ class StrategyRunner:
         else:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
+        debug_env = self.rsim_env if self.mode == "rsim" else None
+
         self.my_strategy.load_robot_controller(my_robot_controller)
-        self.my_strategy.load_motion_controller(MotionController(self.mode))
+        self.my_strategy.load_motion_controller(MotionController(self.mode, self.control_scheme, debug_env))
         if self.opp_strategy:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
-            self.opp_strategy.load_motion_controller(MotionController(self.mode))
+            self.opp_strategy.load_motion_controller(MotionController(self.mode, self.control_scheme, debug_env))
 
     def _load_game(self):
         my_current_game_frame, opp_current_game_frame = GameGater.wait_until_game_valid(

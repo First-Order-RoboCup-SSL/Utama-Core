@@ -1,8 +1,9 @@
 import logging
 import random
-from math import cos, dist, exp, pi, sin
+from math import dist, exp, pi
 from typing import Generator, List, Optional, Tuple, Union
 
+import numpy as np
 from shapely import Polygon
 from shapely.affinity import rotate
 from shapely.geometry import LineString, Point
@@ -11,6 +12,15 @@ from utama_core.config.settings import ROBOT_RADIUS
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import Field
 from utama_core.entities.game.robot import Robot
+from utama_core.motion_planning.src.planning.geometry import (
+    AxisAlignedRectangle,
+    point_segment_distance,
+)
+from utama_core.motion_planning.src.planning.obstacles import (
+    ObstacleRegion,
+    to_polygons,
+    to_rectangles,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -273,6 +283,18 @@ def intersects_any_polygon(segment: LineString, obstacles: List[Polygon]) -> boo
     return False
 
 
+def segment_too_close_to_obstacles(
+    start: np.ndarray,
+    end: np.ndarray,
+    obstacles: List[AxisAlignedRectangle],
+    clearance: float,
+) -> bool:
+    for obstacle in obstacles:
+        if obstacle.distance_to_segment(start, end) < clearance:
+            return True
+    return False
+
+
 class DynamicWindowPlanner:
     """This class is a stateless planning class and should not be used on its own see the controllers class which
     provide state tracking and waypoint switching for these classes such as TimedSwitchController.
@@ -294,16 +316,18 @@ class DynamicWindowPlanner:
         self,
         friendly_robot_id: int,
         target: Tuple[float, float],
-        temporary_obstacles: List[LineString] = [],
+        temporary_obstacles: Optional[List[ObstacleRegion]] = None,
     ) -> Tuple[Tuple[float, float], float]:
-        """Plan a path to the target for the specified friendly robot.
+        """Plan a short-horizon move and associated score for a robot.
 
         Args:
             friendly_robot_id (int): The ID of the friendly robot.
             target (Tuple[float, float]): The target coordinates (x, y).
+            temporary_obstacles (Optional[List[Polygon]]): Obstacles to avoid in addition to robots.
 
         Returns:
-            Tuple[float, float]: The next waypoint coordinates (x, y) or the target if already reached.
+            Tuple[Tuple[float, float], float]: The next waypoint (x, y) and its score. If the
+            robot is already within the goal tolerance, the target itself is returned.
         """
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
         start_x, start_y = robot.p.x, robot.p.y
@@ -311,13 +335,14 @@ class DynamicWindowPlanner:
         if dist((start_x, start_y), target) < 1.5 * ROBOT_RADIUS:
             return target, float("inf")
 
-        return self.local_planning(friendly_robot_id, target, temporary_obstacles)
+        obstacles = temporary_obstacles or []
+        return self.local_planning(friendly_robot_id, np.array(target, dtype=float), obstacles)
 
     def local_planning(
         self,
         friendly_robot_id: int,
-        target: Tuple[float, float],
-        temporary_obstacles: List[Polygon],
+        target: np.ndarray,
+        temporary_obstacles: List[ObstacleRegion],
     ) -> Tuple[Tuple[float, float], float]:
         velocity = self._game.friendly_robots[friendly_robot_id].v
 
@@ -327,32 +352,40 @@ class DynamicWindowPlanner:
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
 
         start_x, start_y = robot.p.x, robot.p.y
-        best_move = start_x, start_y
+        best_move = np.array([start_x, start_y], dtype=float)
 
         # sf is the scale factor for the velocity - we start with full velocity to prioritise speed
         # and then reduce it if we can't find a good segment, this allows the robot to dynamically adjust
         # its speed and path length to avoid obstacles
         sf = 1
+        rect_obstacles = to_rectangles(temporary_obstacles)
+
         while best_score < 0 and sf > 0.05:
             for ang in DynamicWindowPlanner.DIRECTIONS:
-                segment = self._get_motion_segment((start_x, start_y), velocity, delta_vel * sf, ang)
-                if intersects_any_polygon(segment, temporary_obstacles):
+                segment_start, segment_end = self._get_motion_segment((start_x, start_y), velocity, delta_vel * sf, ang)
+
+                if segment_too_close_to_obstacles(segment_start, segment_end, rect_obstacles, ROBOT_RADIUS):
                     continue
                 # Evaluate this segment, avoiding obstacles
-                score = self._evaluate_segment(friendly_robot_id, segment, Point(target[0], target[1]))
+                score = self._evaluate_segment(
+                    friendly_robot_id,
+                    segment_start,
+                    segment_end,
+                    target,
+                )
 
                 if score > best_score:
                     best_score = score
-                    best_move = segment.coords[1]
+                    best_move = segment_end
 
             sf /= 4
 
-        return best_move, best_score
+        return (float(best_move[0]), float(best_move[1])), best_score
 
     def _get_obstacles(self, robot_id: int) -> List[Robot]:
-        return (
-            self._game.friendly_robots[:robot_id] + self._game.friendly_robots[robot_id + 1 :] + self._game.enemy_robots
-        )
+        friendly = [r for rid, r in self._game.friendly_robots.items() if rid != robot_id]
+        enemies = list(self._game.enemy_robots.values())
+        return friendly + enemies
 
     def make_inf_long(self, segment: LineString):
         norm = segment.length
@@ -367,49 +400,47 @@ class DynamicWindowPlanner:
     def target_closeness_function(self, x):
         return 4 * exp(-8 * x)
 
-    def _evaluate_segment(self, robot_id: int, segment: LineString, target: Point) -> float:
+    def _evaluate_segment(
+        self,
+        robot_id: int,
+        start: np.ndarray,
+        end: np.ndarray,
+        target: np.ndarray,
+    ) -> float:
         """Evaluate line segment; bigger score is better."""
-        # Distance travelled towards the target should be rewarded
-        target_factor = target.distance(Point(segment.coords[0])) - target.distance(Point(segment.coords[1]))
-        our_velocity_vector = (
-            (segment.coords[1][0] - segment.coords[0][0]) / self.SIMULATED_TIMESTEP,
-            (segment.coords[1][1] - segment.coords[0][1]) / self.SIMULATED_TIMESTEP,
-        )
-        if our_velocity_vector is None:
-            our_velocity_vector = (0, 0)
+        seg_vec = end - start
 
-        our_position = self._game.friendly_robots[robot_id].p
+        start_dist = np.linalg.norm(target - start)
+        end_dist = np.linalg.norm(target - end)
+        target_factor = start_dist - end_dist
 
-        # If we are too close to an obstacle, we should be penalised
-        obstacle_factor = 0
+        our_velocity_vector = seg_vec / self.SIMULATED_TIMESTEP
+        our_position = np.asarray(self._game.friendly_robots[robot_id].p.to_array(), dtype=float)
 
-        # Factor in obstacle velocity, do some maths to find their closest approach to us
-        # and the time at which that happens.
-        for r in self._get_obstacles(robot_id):
-            if r.is_friendly:
-                their_velocity_vector = self._game.friendly_robots[r.id].v
-            else:
-                their_velocity_vector = self._game.enemy_robots[r.id].v
+        obstacle_factor = 0.0
+        for obstacle in self._get_obstacles(robot_id):
+            their_velocity = np.asarray(obstacle.v.to_array(), dtype=float)
+            their_position = np.asarray(obstacle.p.to_array(), dtype=float)
 
-            their_position = (r.p.x, r.p.y)
+            diff_v = our_velocity_vector - their_velocity
+            denom = float(np.dot(diff_v, diff_v))
+            if denom == 0.0:
+                continue
 
-            diff_v_x = our_velocity_vector[0] - their_velocity_vector[0]
-            diff_p_x = our_position[0] - their_position[0]
-            diff_v_y = our_velocity_vector[1] - their_velocity_vector[1]
-            diff_p_y = our_position[1] - their_position[1]
+            diff_p = our_position - their_position
+            t = -float(np.dot(diff_v, diff_p)) / denom
+            if t <= 0.0:
+                continue
 
-            if (denom := (diff_v_x * diff_v_x + diff_v_y * diff_v_y)) != 0:
-                t = (-diff_v_x * diff_p_x - diff_v_y * diff_p_y) / denom
-                if t > 0:
-                    d_sq = (diff_p_x + t * diff_v_x) ** 2 + (diff_p_y + t * diff_v_y) ** 2
+            closest = diff_p + t * diff_v
+            d_sq = float(np.dot(closest, closest))
+            obstacle_factor = max(
+                obstacle_factor,
+                self.obstacle_penalty_function(d_sq) * self.obstacle_penalty_function(t),
+            )
 
-                    obstacle_factor = max(
-                        obstacle_factor,
-                        self.obstacle_penalty_function(d_sq) * self.obstacle_penalty_function(t),
-                    )
-
-        # Adjust weights for the final score - this is done by tuning
-        score = 5 * target_factor - obstacle_factor + self.target_closeness_function(target.distance(segment))
+        distance_to_line = point_segment_distance(target, start, end)
+        score = 5 * target_factor - obstacle_factor + self.target_closeness_function(distance_to_line)
         return score
 
     def _get_motion_segment(
@@ -418,12 +449,17 @@ class DynamicWindowPlanner:
         rvel: Tuple[float, float],
         delta_vel: float,
         ang: float,
-    ) -> LineString:
-        adj_vel_y = rvel[1] * DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel * sin(ang)
-        adj_vel_x = rvel[0] * DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel * cos(ang)
-        end_y = adj_vel_y + rpos[1]
-        end_x = adj_vel_x + rpos[0]
-        return LineString([(rpos[0], rpos[1]), (end_x, end_y)])
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        start = np.array([rpos[0], rpos[1]], dtype=float)
+        adj_vel = np.array(
+            [
+                rvel[0] * DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel * np.cos(ang),
+                rvel[1] * DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel * np.sin(ang),
+            ],
+            dtype=float,
+        )
+        end = start + adj_vel
+        return start, end
 
 
 class BisectorPlanner:
