@@ -100,7 +100,7 @@ class DWATranslationController(AbstractPID[Tuple[float, float]]):
             self._previous_velocity[robot_id] = (0.0, 0.0)
             return 0.0, 0.0
 
-        best_move, _score = self._planner.path_to(
+        best_move, _ = self._planner.path_to(
             robot_id,
             target,
             temporary_obstacles=[],
@@ -123,13 +123,8 @@ class DWATranslationController(AbstractPID[Tuple[float, float]]):
             vx_w *= s
             vy_w *= s
 
-        theta = getattr(self._game.friendly_robots[robot_id].p, "theta", 0.0)
-        c, s = math.cos(theta), math.sin(theta)
-        vx_b = c * vx_w + s * vy_w
-        vy_b = -s * vx_w + c * vy_w
-
         # --- Respect speed/accel limits in the frame the actuators expect (usually body) ---
-        vx_b, vy_b = self._apply_speed_limits(vx_b, vy_b)
+        vx_b, vy_b = self._apply_speed_limits(vx_w, vy_w)
         vx_b, vy_b = self._apply_acceleration_limits(robot_id, vx_b, vy_b)
         self._previous_velocity[robot_id] = (vx_b, vy_b)
 

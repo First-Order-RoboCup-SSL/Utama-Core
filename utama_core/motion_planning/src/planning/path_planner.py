@@ -307,7 +307,9 @@ class DynamicWindowPlanner:
 
     SIMULATED_TIMESTEP = 0.05  # seconds
     MAX_ACCELERATION = 2  # Measured in ms^2
-    ROBOT_RADIUS = 0.1
+    SAFETY_RADIUS = ROBOT_RADIUS * 2.5  # m - minimum distance to obstacles we try to maintain
+    SAFETY_PENALTY_DISTANCE_SQ = 0.3
+    MAX_SPEED_FOR_FULL_BUBBLE = 1  # m/s at which we apply the full safety bubble
 
     def __init__(self, game: Game):
         self._game = game
@@ -345,6 +347,9 @@ class DynamicWindowPlanner:
         temporary_obstacles: List[ObstacleRegion],
     ) -> Tuple[Tuple[float, float], float]:
         velocity = self._game.friendly_robots[friendly_robot_id].v
+        current_speed = float(np.linalg.norm(velocity.to_array()))
+        safety_radius = self._dynamic_safety_radius(current_speed)
+        safety_radius_sq = safety_radius * safety_radius
 
         # Calculate the allowed velocities in this frame
         delta_vel = DynamicWindowPlanner.SIMULATED_TIMESTEP * DynamicWindowPlanner.MAX_ACCELERATION
@@ -370,7 +375,7 @@ class DynamicWindowPlanner:
             for ang in ordered_angles:
                 segment_start, segment_end = self._get_motion_segment((start_x, start_y), velocity, delta_vel * sf, ang)
 
-                if segment_too_close_to_obstacles(segment_start, segment_end, rect_obstacles, ROBOT_RADIUS):
+                if segment_too_close_to_obstacles(segment_start, segment_end, rect_obstacles, safety_radius):
                     continue
                 # Evaluate this segment, avoiding obstacles
                 score = self._evaluate_segment(
@@ -378,6 +383,7 @@ class DynamicWindowPlanner:
                     segment_start,
                     segment_end,
                     target,
+                    safety_radius_sq,
                 )
 
                 if score > best_score:
@@ -401,7 +407,7 @@ class DynamicWindowPlanner:
         return LineString([segment.coords[0], new])
 
     def obstacle_penalty_function(self, x):
-        return exp(-8 * (x - 0.22))
+        return exp(-8 * (x - self.SAFETY_PENALTY_DISTANCE_SQ))
 
     def target_closeness_function(self, x):
         return 4 * exp(-8 * x)
@@ -412,6 +418,7 @@ class DynamicWindowPlanner:
         start: np.ndarray,
         end: np.ndarray,
         target: np.ndarray,
+        safety_radius_sq: float,
     ) -> float:
         """Evaluate line segment; bigger score is better."""
         seg_vec = end - start
@@ -440,14 +447,27 @@ class DynamicWindowPlanner:
 
             closest = diff_p + t * diff_v
             d_sq = float(np.dot(closest, closest))
+            adjustment = max(self.SAFETY_PENALTY_DISTANCE_SQ - safety_radius_sq, 0.0)
+            effective_d_sq = d_sq + adjustment
             obstacle_factor = max(
                 obstacle_factor,
-                self.obstacle_penalty_function(d_sq) * self.obstacle_penalty_function(t),
+                self.obstacle_penalty_function(effective_d_sq) * self.obstacle_penalty_function(t),
             )
 
         distance_to_line = point_segment_distance(target, start, end)
         score = 5 * target_factor - obstacle_factor + self.target_closeness_function(distance_to_line)
         return score
+
+    def _dynamic_safety_radius(self, speed: float) -> float:
+        """Interpolate the clearance radius between the physical robot radius and the nominal DWA bubble."""
+        min_radius = ROBOT_RADIUS
+        max_radius = self.SAFETY_RADIUS
+        if max_radius <= min_radius:
+            return max_radius
+        if self.MAX_SPEED_FOR_FULL_BUBBLE <= 1e-6:
+            return max_radius
+        ratio = min(max(speed / self.MAX_SPEED_FOR_FULL_BUBBLE, 0.0), 1.0)
+        return min_radius + (max_radius - min_radius) * ratio
 
     def _get_motion_segment(
         self,
