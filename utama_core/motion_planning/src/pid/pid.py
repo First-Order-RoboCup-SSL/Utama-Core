@@ -171,7 +171,7 @@ class PID(AbstractPID[float]):
         # For very small errors, return zero
         if abs(error) < 0.001:
             self.prev_times[robot_id] = call_func_time
-            return 0.0
+            return 0.0, 0.0
 
         # Compute time difference
         dt = self.dt  # Default
