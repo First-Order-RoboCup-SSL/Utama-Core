@@ -103,23 +103,23 @@ git merge main
 
 4. Get the latest [compiled game controller](https://github.com/RoboCup-SSL/ssl-game-controller/releases/) and rename it to `ssl_game_controller`. Save it in `/ssl-game-controller` directory.
 
-## Setup SSL Vision for real testing
+## Setup SSL Vision for Real Testing
 
-1. Connect to a external hotspot and connect the vison linux laoptop and you own personal laptop to the same network
-2. Allow Inbound UDP packets to allow packets through the port you set, run this with adim privaleges:
+1. Connect to an external hotspot and ensure both the vision Linux laptop and your personal laptop are connected to the same network.
+2. Allow inbound UDP packets through the port you set. Run the following command with admin privileges:
 <pre>
 New-NetFirewallRule -DisplayName "Allow Multicast UDP 10006" -Direction Inbound -Protocol UDP -LocalPort 10006 -Action Allow
 </pre>
-3. paste "%USERPROFILE%" into "Windows + R" then add a .wslconfig file ensure that the file type properties are WSLCONFIG file.
+3. Type "%USERPROFILE%" into "Windows + R", then add a `.wslconfig` file. Ensure that the file type is set to WSLCONFIG.
 <pre>
 [wsl2]
 networkingMode=mirrored
 </pre>
-4. restart wsl using --shutdown then check using the cmd:
+4. Restart WSL using `wsl --shutdown`, then check the connection using the following command:
 <pre>
 sudo tcpdump -i eth1 -n host 224.5.23.2 and udp port 10006
 </pre>
-if you see UDP packets everything is working
+If you see UDP packets, everything is working.
 
 ## Field Guide
 
