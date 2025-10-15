@@ -10,7 +10,7 @@
 
 ## Setup Utama
 
-1. Install `pixi` package manager with `curl -fsSL https://pixi.sh/install.sh | sh` or click here for Windows installaton [Pixi installation](https://pixi.sh/latest/#__tabbed_1_1) 
+1. Install `pixi` package manager with `curl -fsSL https://pixi.sh/install.sh | sh` or click here for Windows installation [Pixi installation](https://pixi.sh/latest/#__tabbed_1_1) 
 3. Restart or create a new terminal 
 2. With pixi: just run `pixi install` in the base folder and you're all setup.
 3. Note that this also installs all modules with `__init__.py` (so you need to run it again when you add an `__init__.py`)
