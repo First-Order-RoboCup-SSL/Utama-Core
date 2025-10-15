@@ -64,7 +64,7 @@
 ### Push and Commit
 
 1. Each feature should live within its own branch of the repository. Clear out stale branches.
-2. Ensure that you have run `pixi run precommit-install` at least once. This ensure that the pre-commit steps are run on each commit to clean up your code.
+2. Ensure that you have run `pixi run precommit-install` at least once. This ensures that the pre-commit steps are run on each commit to clean up your code.
 3. If the precommit fails, click on `Open Git Log` on the popup window to view the error. Often times, the failure is automatically fixed and you just need to commit the changes the precommit hook makes.
 4. The popup window can often be quite cryptic when it fails. If you are getting a `bash: warning: setlocale: LC_ALL: cannot change locale (en_US.UTF-8)` popup on commit, this is not the actual cause of the failure. However, Windows decides to show this warning, because it is first warning in the output. To silence this:
 ```bash
