@@ -18,7 +18,7 @@
 1. Finally, run `pixi run precommit-install`. This will ensure that linting is done before you commit.
 
 **Note**
-- if you are using the run button and it is selecting the wrong env (robosim) you will need to manually change the interpreter in VScode using `Ctrl + Shift + P` -> `Select Interpreter`.
+- if you are using the run button and it is selecting the wrong env (robosim) you will need to manually change the interpreter in VS Code using `Ctrl + Shift + P` -> `Select Interpreter`.
 - if you want to perform a one-off run (ad-hoc) use `pixi run python path/to/your_file.py`.
 
 ### Pixi Tasks
