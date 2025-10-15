@@ -75,7 +75,7 @@ sudo update-locale LANG=en_US.UTF-8
 source ~/.bashrc
 ```
 
-### Making A PR
+### Making a PR
 For a PR to be accepted, it must:
 1. have a `release` tag assigned, either `release:major`, `release:minor`, or `release:patch`.
 2. Pass all CI checks, both tests and linting.
