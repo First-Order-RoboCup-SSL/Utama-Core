@@ -3,7 +3,7 @@
 ## Table of Contents
 - [Setup Utama](#setup-utama)
 - [Repository Guide](#repository-guide)
-- [Setup Autoreferee](#setup-autoreferee)
+- [Setup AutoReferee](#setup-autoreferee)
 - [Setup SSL Vision for Real Testing](#setup-ssl-vision-for-real-testing)
 - [Field Guide](#field-guide)
 - [Milestones](#milestones)
