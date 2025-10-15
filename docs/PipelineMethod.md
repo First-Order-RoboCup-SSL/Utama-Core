@@ -7,7 +7,7 @@
 - Uncertainty on strategies which we aim to address with the Behaviour Tree
   
 ### System diagram
-![Dataflow Diagram](assets/images/pipeline_new.drawio.png)
+![Dataflow Diagram](../assets/images/pipeline_new.drawio.png)
 ### Solution
 Solve this by maintaining the idea that the game represents everything we have about the "true current state" of the game but allow it to be passed through a pipeline in which it is repeatedly augmented by new data. 
 
