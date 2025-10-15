@@ -88,7 +88,7 @@ git merge main
 4. have all Copilot comments reviewed (Not all must be addressed: Copilot makes mistakes too, so don't blindly accept!)
 5. have at least one tick from an assigned reviewer
 
-## Setup Autoreferee
+## Setup AutoReferee
 
 1. Make sure `grSim` is setup properly and can be called through terminal.
 2. `git clone` from [AutoReferee repo](https://github.com/TIGERs-Mannheim/AutoReferee) in a folder named `/AutoReferee` in root directory.
