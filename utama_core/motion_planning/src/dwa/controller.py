@@ -128,7 +128,8 @@ class DWATranslationController(AbstractPID[Tuple[float, float]]):
         vx_b, vy_b = self._apply_acceleration_limits(robot_id, vx_b, vy_b)
         self._previous_velocity[robot_id] = (vx_b, vy_b)
 
-        self.env.draw_point(best_move[0], best_move[1], color="blue", width=2)
+        if self.env is not None:
+            self.env.draw_point(best_move[0], best_move[1], color="blue", width=2)
         return vx_b, vy_b
 
     def reset(self, robot_id: int):
