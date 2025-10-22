@@ -228,5 +228,5 @@ class AbstractStrategy(ABC):
             output_path = RENDER_BASE_PATH / f"{filename_wo_extension}.{extension}"
             try:
                 writer(output_path.as_posix())
-            except (OSError, FileNotFoundError):
+            except (AssertionError, OSError, FileNotFoundError):
                 logger.warning("skipping %s export; Graphviz 'dot' executable not available", extension)
