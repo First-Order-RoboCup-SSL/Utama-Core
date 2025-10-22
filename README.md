@@ -3,6 +3,7 @@
 ## Table of Contents
 - [Setup Utama](#setup-utama)
 - [Repository Guide](#repository-guide)
+- [Setup grSim](#setup-autoreferee)
 - [Setup AutoReferee](#setup-autoreferee)
 - [Setup SSL Vision for Real Testing](#setup-ssl-vision-for-real-testing)
 - [Field Guide](#field-guide)
@@ -87,6 +88,15 @@ git merge main
 ```
 4. have all Copilot comments reviewed (Not all must be addressed: Copilot makes mistakes too, so don't blindly accept!)
 5. have at least one tick from an assigned reviewer
+
+## Setup grSim
+1. Go to [grSim repo](https://github.com/RoboCup-SSL/grSim) and follow the [installation steps](https://github.com/RoboCup-SSL/grSim/blob/master/INSTALL.md).
+2. Change the values in the configuration to what is highlighted below:
+
+![grsim_setup](./assets/images/grsim_setup.png)
+
+3. To run, execute `./bin/grSim` in the cloned repo.
+
 
 ## Setup AutoReferee
 
