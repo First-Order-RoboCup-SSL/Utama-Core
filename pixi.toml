@@ -35,6 +35,8 @@ hatchling = "*"
 
 [feature.robosim.dependencies]
 python = "3.10.*"
+cmake = "<3.27"
+libode = ">=0.16.2,<0.17"
 
 [feature.robosim.pypi-dependencies]
 rc-robosim = "<2"
