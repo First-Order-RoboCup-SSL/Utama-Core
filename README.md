@@ -14,6 +14,7 @@
 1. Restart or create a new terminal 
 1. With pixi: just run `pixi install` in the base folder and you're all setup.
 1. Then, run `pixi workspace platform add <PLATFORM>...`, where <PLATFORM> is the platform(s) that you are using, and that you want to add. For example, run `pixi workspace platform add osx-arm64` for MacOS M-chip laptops.
+1. Then, run `pixi workspace platform add <PLATFORM>...`, where <PLATFORM> is the platform(s) that you are using, and that you want to add. For example, run `pixi workspace platform add osx-arm64` for MacOS M-chip laptops.
 1. Note that this also installs all modules with `__init__.py` (so you need to run it again when you add an `__init__.py`)
 1. In order to go into the `pixi` venv, run `pixi shell`. You can also run any of the tasks in the `pixi.toml` without first being in a pixi shell. See [Pixi Tasks](#pixi-tasks).
 1. Finally, run `pixi run precommit-install`. This will ensure that linting is done before you commit.
