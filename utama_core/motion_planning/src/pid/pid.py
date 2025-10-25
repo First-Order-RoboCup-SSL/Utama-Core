@@ -10,6 +10,7 @@ from utama_core.config.settings import (
     SENDING_DELAY,
     TIMESTEP,
 )
+from utama_core.entities.data.vector import Vector2D
 from utama_core.global_utils.math_utils import normalise_heading
 from utama_core.motion_planning.src.pid.pid_abstract import AbstractPID
 
@@ -237,7 +238,7 @@ class PID(AbstractPID[float]):
         self.first_pass[robot_id] = True
 
 
-class TwoDPID(AbstractPID[Tuple[float, float]]):
+class TwoDPID(AbstractPID[Vector2D]):
     """A 2D PID controller that controls the X and Y dimensions and scales the resulting velocity vector to a maximum
     speed if needed."""
 
@@ -273,9 +274,7 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
 
         self.first_pass = {i: True for i in range(6)}
 
-    def calculate(
-        self, target: Tuple[float, float], current: Tuple[float, float], robot_id: int
-    ) -> Tuple[float, float]:
+    def calculate(self, target: Vector2D, current: Vector2D, robot_id: int) -> Vector2D:
         call_func_time = time.time()
 
         dx = target[0] - current[0]
@@ -342,7 +341,7 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
             y_vel = output * (dy / error)
             return self.scale_velocity(x_vel, y_vel, self.max_velocity)
 
-    def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float) -> Tuple[float, float]:
+    def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float) -> Vector2D:
         current_vel = math.hypot(x_vel, y_vel)
         if current_vel > max_vel:
             scaling_factor = max_vel / current_vel
