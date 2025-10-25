@@ -37,7 +37,6 @@ def move(
         local_forward_vel=forward_vel,
         local_left_vel=left_vel,
         angular_vel=angular_vel,
-        # angular_vel=0,
         kick=0,
         chip=0,
         dribble=1 if dribbling else 0,
