@@ -1,11 +1,13 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import cast
+from typing import Optional, cast
 
 import py_trees
+import pydot
+from py_trees import utilities as py_trees_utilities
 
 from utama_core.config.roles import Role
-from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP
+from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PATH
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.motion_controller import MotionController
@@ -17,6 +19,38 @@ from utama_core.team_controller.src.controllers.common.robot_controller_abstract
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _prune_base_blackboard_elements(graph: pydot.Dot) -> None:
+    """Strip BaseBlackboard artifacts from the rendered DOT graph."""
+    prunable_names = BaseBlackboard.base_keys() | BaseBlackboard.base_client_names()
+    if not prunable_names:
+        return
+
+    name_cache: dict[str, str] = {}
+
+    def should_prune(name: str) -> bool:
+        if name in name_cache:
+            normalised = name_cache[name]
+        else:
+            normalised = name.strip('"')
+            if normalised.startswith("/"):
+                normalised = normalised.rsplit("/", 1)[-1]
+            name_cache[name] = normalised
+        return normalised in prunable_names
+
+    for edge in list(graph.get_edges()):
+        if should_prune(edge.get_source()) or should_prune(edge.get_destination()):
+            graph.del_edge(edge.get_source(), edge.get_destination())
+
+    def prune_nodes(container: pydot.Dot) -> None:
+        for node in list(container.get_nodes()):
+            if should_prune(node.get_name()):
+                container.del_node(node)
+        for subgraph in container.get_subgraphs():
+            prune_nodes(subgraph)
+
+    prune_nodes(graph)
 
 
 class AbstractStrategy(ABC):
@@ -156,3 +190,43 @@ class AbstractStrategy(ABC):
 
         blackboard: BaseBlackboard = cast(BaseBlackboard, blackboard)
         return blackboard
+
+    def render(
+        self,
+        name: Optional[str] = None,
+        visibility_level: py_trees.common.VisibilityLevel = py_trees.common.VisibilityLevel.DETAIL,
+        with_blackboard_variables: bool = True,
+        with_qualified_names: bool = False,
+    ):
+        """
+        Renders a dot, png, and svg file of the behaviour tree in the directory specified by `RENDER_BASE_PATH`.
+        - `name` (str, optional): The name of the output files. If None, uses the class name.
+        - `visibility_level` (py_trees.common.VisibilityLevel): The visibility level for the rendering. Default is DETAIL.
+        - `with_blackboard_variables` (bool): Whether to include blackboard variables in the rendering. Default is True.
+        - `with_qualified_names` (bool): Whether to use qualified names in the rendering. Default is False.
+        """
+        RENDER_BASE_PATH.mkdir(parents=True, exist_ok=True)
+        name = self.__class__.__name__ if name is None else name
+
+        graph = py_trees.display.dot_tree(
+            root=self.behaviour_tree.root,
+            visibility_level=visibility_level,
+            with_blackboard_variables=with_blackboard_variables,
+            with_qualified_names=with_qualified_names,
+        )
+
+        if with_blackboard_variables:
+            _prune_base_blackboard_elements(graph)
+
+        filename_wo_extension = py_trees_utilities.get_valid_filename(name)
+
+        for extension, writer in {
+            "dot": graph.write_dot,
+            "png": graph.write_png,
+            "svg": graph.write_svg,
+        }.items():
+            output_path = RENDER_BASE_PATH / f"{filename_wo_extension}.{extension}"
+            try:
+                writer(output_path.as_posix())
+            except (AssertionError, OSError, FileNotFoundError):
+                logger.warning("skipping %s export; Graphviz 'dot' executable not available", extension)

@@ -1,48 +1,21 @@
-# entities
+# Entities
 
-Contains the entity objects used to store game state and game data.
+Data containers that describe everything the rest of the code base reasons about: robot and ball pose, field geometry, referee state and the packets exchanged with hardware.
 
-## data
+## Folder overview
 
-This folder contains `namedtuple` declarations that are used across the repository.
+### `data/`
+- `command.py`, `referee.py`, `vision.py`, `raw_vision.py`: strongly-typed packet descriptions for low-level IO (robot commands, referee messages, SSL-Vision feed).
+- `vector.py`, `object.py`: small utility types used to expose consistent vector maths and object identifiers across the stack.
 
-- `vision.py` declares the namedtuples output from our vision systems (grSim or SSLVision)
-- `command.py` declares the namedtuples sent and received from the physical robots
+### `game/`
+- `game_frame.py`, `current_game_frame.py`, `game_history.py`: immutable snapshots of the match and helpers to track history/current context.
+- `game.py`: lightweight façade that exposes the current snapshot while preserving history.
+- `field.py`: canonical field geometry (Shapely primitives) used by planners and strategies.
+- `ball.py`, `robot.py`, `team_info.py`, `proximity_lookup.py`: value objects that capture per-entity state and provide fast distance queries.
 
-## game
+### `referee/`
+(WORK IN PROGRESS)
+- `referee_command.py`, `stage.py`: enums/lookup helpers that map integer IDs from the referee box into descriptive objects shared by the strategy layer.
 
-- `game.py` contains all records of the various frames in this game
-- `field.py` contains the pre-defined positions of critical field objects, stored as `Shapely` objects for easy spatial analysis
-- `ball.py`, `robot.py` are not currently in use, but can be implemented to create persistent objects to store relevant info about the ball or each robot
-- `team_info.py`: **TeamInfo Class** represents the information about a team, including the team's name, score, red and yellow cards, timeouts, and goalie.
-  - **Attributes**:
-    - `name`: The team's name.
-    - `score`: The number of goals scored by the team.
-    - `red_cards`: The number of red cards issued to the team.
-    - `yellow_cards`: The total number of yellow cards ever issued to the team.
-    - `timeouts`: The number of timeouts this team can still call.
-    - `timeout_time`: The number of microseconds of timeout this team can use.
-  - **Methods**:
-    - `parse_referee_packet(packet)`: Parses the referee packet and updates the team information.
-
-## referee
-
-This folder contains classes related to the referee system and game state management.
-
-### referee_command.py
-
-- **RefereeCommand Class**: Represents a referee command with an ID and name.
-  - **Attributes**:
-    - `command_id`: The ID of the command.
-    - `name`: The name of the command.
-  - **Methods**:
-    - `from_id(command_id: int)`: Creates a `Command` instance from the given command ID.
-
-### stage.py
-
-- **Stage Class**: Represents a game stage with an ID and name.
-  - **Attributes**:
-    - `stage_id`: The ID of the stage.
-    - `name`: The name of the stage.
-  - **Methods**:
-    - `from_id(stage_id: int)`: Creates a `Stage` instance from the given stage ID.
+> These modules are intentionally light on behaviour—other packages consume them as immutable records or simple helpers.

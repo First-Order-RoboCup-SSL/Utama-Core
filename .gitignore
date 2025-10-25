@@ -197,6 +197,7 @@ cython_debug/
 AutoReferee/
 ssl-game-controller/
 replays/
+renders/
 
 .vscode
 

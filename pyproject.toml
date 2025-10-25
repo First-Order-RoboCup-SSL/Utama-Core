@@ -1,6 +1,6 @@
 [project]
 name = "Utama-Core"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Imperial RoboCup SSL 25 Software Algorithms Codebase Core."
 readme = "README.md"
 authors = [
@@ -13,6 +13,9 @@ authors = [
     { name = "Li Han", email = "han.li124@imperial.ac.uk" }
 ]
 requires-python = ">=3.11"
+
+[tool.hatch.version]
+path = "utama_core/__init__.py"
 
 [build-system] 
 build-backend = "hatchling.build"
