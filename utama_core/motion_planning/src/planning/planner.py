@@ -41,7 +41,6 @@ class DynamicWindowPlanner:
         game: Game,
         friendly_robot_id: int,
         target: Tuple[float, float],
-        temporary_obstacles: List[LineString] = [],
     ) -> Tuple[Tuple[float, float], float]:
         """
         Plan a path to the target for the specified friendly robot.
@@ -53,6 +52,7 @@ class DynamicWindowPlanner:
         Returns:
             Tuple[float, float]: The next waypoint coordinates (x, y) or the target if already reached.
         """
+        temporary_obstacles: List[Polygon] = []
         self._game = game
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
         start_x, start_y = robot.p.x, robot.p.y

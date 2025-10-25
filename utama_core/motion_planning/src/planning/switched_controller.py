@@ -4,7 +4,7 @@ from typing import Tuple
 from utama_core.entities.game.field import Field
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.motion_planning.src.planning.exit_strategies import ExitStrategy
-from utama_core.motion_planning.src.planning.path_planner_ref import (
+from utama_core.motion_planning.src.planning.path_planner import (
     BisectorPlanner,
     DynamicWindowPlanner,
 )

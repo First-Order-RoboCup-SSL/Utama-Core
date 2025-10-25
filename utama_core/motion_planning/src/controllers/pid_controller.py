@@ -1,0 +1,44 @@
+from typing import Tuple
+
+from utama_core.config.modes import Mode
+from utama_core.entities.game import Game
+from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.src.pid.pid import (
+    PID,
+    TwoDPID,
+    get_grsim_pids,
+    get_real_pids,
+    get_rsim_pids,
+)
+
+
+class PIDController(MotionController):
+    def __init__(self, mode_str: str):
+        super().__init__(mode_str)
+        self.pid_oren, self.pid_trans = self._initialize_pids(self.mode)
+
+    def _initialize_pids(self, mode: Mode) -> tuple[PID, TwoDPID]:
+        if mode == Mode.RSIM:
+            return get_rsim_pids()
+        elif mode == Mode.GRSIM:
+            return get_grsim_pids()
+        elif mode == Mode.REAL:
+            return get_real_pids()
+        else:
+            raise ValueError(f"Unknown mode enum: {mode}.")
+
+    def path_to(
+        self,
+        game: Game,
+        robot_id: int,
+        target_pos: Tuple[float, float],
+        target_oren: float,
+    ) -> Tuple[Tuple[float, float], float]:
+        robot = game.friendly_robots[robot_id]
+        return self.pid_trans.calculate(target_pos, robot.p, robot_id), self.pid_oren.calculate(
+            target_oren, robot.orientation, robot_id
+        )
+
+    def reset(self, robot_id):
+        self.pid_oren.reset(robot_id)
+        self.pid_trans.reset(robot_id)
