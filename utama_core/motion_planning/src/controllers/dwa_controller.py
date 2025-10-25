@@ -4,6 +4,7 @@ from utama_core.config.modes import Mode
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.src.dwa.planner import DynamicWindowPlanner
 from utama_core.motion_planning.src.pid.pid import (
     PID,
     TwoDPID,
@@ -11,7 +12,6 @@ from utama_core.motion_planning.src.pid.pid import (
     get_real_pids,
     get_rsim_pids,
 )
-from utama_core.motion_planning.src.planning.planner import DynamicWindowPlanner
 
 
 class DWAController(MotionController):
