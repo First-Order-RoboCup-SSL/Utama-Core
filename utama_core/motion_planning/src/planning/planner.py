@@ -51,14 +51,13 @@ class DynamicWindowPlanner:
             target (Vector2D): The target coordinates (x, y).
 
         Returns:
-            Vector2D: The next waypoint coordinates (x, y) or the target if already reached.
+            Tuple[Vector2D, float]: The next waypoint coordinates (x, y) or the target if already reached and score.
         """
         temporary_obstacles: List[Polygon] = []
         self._game = game
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
-        start_x, start_y = robot.p.x, robot.p.y
 
-        if dist((start_x, start_y), target) < 1.1 * ROBOT_RADIUS:
+        if robot.p.distance_to(target) < 1.1 * ROBOT_RADIUS:
             return target, float("inf")
 
         return self.local_planning(friendly_robot_id, target, temporary_obstacles)
@@ -76,9 +75,7 @@ class DynamicWindowPlanner:
         best_score = float("-inf")
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
 
-        start_x, start_y = robot.p.x, robot.p.y
-
-        best_move = start_x, start_y
+        best_move = robot.p.x, robot.p.y
 
         # sf is the scale factor for the velocity - we start with full velocity to prioritise speed
         # and then reduce it if we can't find a good segment, this allows the robot to dynamically adjust
@@ -86,22 +83,22 @@ class DynamicWindowPlanner:
         sf = 1
         while best_score < 0 and sf > 0.05:
             for ang in DynamicWindowPlanner.DIRECTIONS:
-                segment = self._get_motion_segment((start_x, start_y), velocity, delta_vel * sf, ang)
+                segment = self._get_motion_segment(robot.p, velocity, delta_vel * sf, ang)
                 if intersects_any_polygon(segment, temporary_obstacles):
                     continue
                 # Evaluate this segment, avoiding obstacles
-                score = self._evaluate_segment(friendly_robot_id, segment, Point(target[0], target[1]))
+                score = self._evaluate_segment(friendly_robot_id, segment, Point(target.x, target.y))
 
                 if score > best_score:
                     best_score = score
                     best_move = segment.coords[1]
 
             sf /= 4
-        dist_to_target = dist((start_x, start_y), target)
+        dist_to_target = robot.p.distance_to(target)
         slowdown_scale = min(1.0, dist_to_target / 3)
         best_vel = (
-            (best_move[0] - start_x) / DynamicWindowPlanner.SIMULATED_TIMESTEP * slowdown_scale,
-            (best_move[1] - start_y) / DynamicWindowPlanner.SIMULATED_TIMESTEP * slowdown_scale,
+            (best_move[0] - robot.p.x) / DynamicWindowPlanner.SIMULATED_TIMESTEP * slowdown_scale,
+            (best_move[1] - robot.p.y) / DynamicWindowPlanner.SIMULATED_TIMESTEP * slowdown_scale,
         )
         return best_vel, best_score
 
@@ -133,17 +130,13 @@ class DynamicWindowPlanner:
         # Factor in obstacle velocity, do some maths to find their closest approach to us
         # and the time at which that happens.
         for r in self._get_obstacles(robot_id):
-            if r.is_friendly:
-                their_velocity_vector = self._game.friendly_robots[r.id].v
-            else:
-                their_velocity_vector = self._game.enemy_robots[r.id].v
-
-            their_position = (r.p.x, r.p.y)
+            their_velocity_vector = r.v
+            their_position = r.p
 
             diff_v_x = our_velocity_vector[0] - their_velocity_vector[0]
-            diff_p_x = our_position[0] - their_position[0]
+            diff_p_x = our_position.x - their_position.x
             diff_v_y = our_velocity_vector[1] - their_velocity_vector[1]
-            diff_p_y = our_position[1] - their_position[1]
+            diff_p_y = our_position.y - their_position.y
 
             if (denom := (diff_v_x * diff_v_x + diff_v_y * diff_v_y)) != 0:
                 t = (-diff_v_x * diff_p_x - diff_v_y * diff_p_y) / denom

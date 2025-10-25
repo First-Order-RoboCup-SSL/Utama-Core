@@ -15,11 +15,11 @@ class VectorBase(ABC):
             self._arr = np.array(coords)
 
     @property
-    def x(self):
+    def x(self) -> float:
         return self._arr[0]
 
     @property
-    def y(self):
+    def y(self) -> float:
         return self._arr[1]
 
     def mag(self) -> float:
@@ -109,15 +109,15 @@ class VectorBase(ABC):
 
 
 class Vector2D(VectorBase):
-    def __init__(self, x, y):
+    def __init__(self, x: float, y: float):
         super().__init__(x, y)
 
     @property
-    def x(self):
+    def x(self) -> float:
         return super().x
 
     @property
-    def y(self):
+    def y(self) -> float:
         return super().y
 
     @classmethod
@@ -129,19 +129,19 @@ class Vector2D(VectorBase):
 
 
 class Vector3D(VectorBase):
-    def __init__(self, x, y, z):
+    def __init__(self, x: float, y: float, z: float):
         super().__init__(x, y, z)
 
     @property
-    def x(self):
+    def x(self) -> float:
         return super().x
 
     @property
-    def y(self):
+    def y(self) -> float:
         return super().y
 
     @property
-    def z(self):
+    def z(self) -> float:
         return self._arr[2]
 
     @classmethod
