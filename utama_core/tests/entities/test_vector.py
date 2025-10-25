@@ -4,7 +4,7 @@ from timeit import timeit
 import numpy as np
 import pytest
 
-from utama_core.entities.data.vector import Vector2D, Vector3D  # replace with your file
+from utama_core.entities.data.vector import Vector2D, Vector3D
 
 N_ITERS = 10000
 
