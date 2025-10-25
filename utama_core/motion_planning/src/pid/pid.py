@@ -337,16 +337,17 @@ class TwoDPID(AbstractPID[Vector2D]):
         if error == 0.0:
             return Vector2D(0.0, 0.0)
         else:
-            vel = Vector2D(output * (dx / error), output * (dy / error))
-            return self.scale_velocity(vel, self.max_velocity)
+            x_vel = output * (dx / error)
+            y_vel = output * (dy / error)
+            return self.scale_velocity(x_vel, y_vel, self.max_velocity)
 
-    def scale_velocity(self, vel: Vector2D, max_vel: float) -> Vector2D:
-        current_vel = math.hypot(vel.x, vel.y)
+    def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float) -> Vector2D:
+        current_vel = math.hypot(x_vel, y_vel)
         if current_vel > max_vel:
             scaling_factor = max_vel / current_vel
-            vel.x *= scaling_factor
-            vel.y *= scaling_factor
-        return vel
+            x_vel *= scaling_factor
+            y_vel *= scaling_factor
+        return Vector2D(x_vel, y_vel)
 
     def reset(self, robot_id: int):
         """Reset the error and integral for the specified robot."""
@@ -385,11 +386,11 @@ class PIDAccelerationLimiterWrapper:
             diff = result - last_val
             diff = max(-dv_allowed, min(dv_allowed, diff))
             limited_result = last_val + diff
-        elif isinstance(result, tuple):
+        elif isinstance(result, Vector2D):
             # Handle 2D vector outputs
             last_val = (0.0, 0.0) if last_result is None else last_result
-            dx = result[0] - last_val[0]
-            dy = result[1] - last_val[1]
+            dx = result.x - last_val[0]
+            dy = result.y - last_val[1]
             norm_diff = math.hypot(dx, dy)
 
             if norm_diff <= dv_allowed:
