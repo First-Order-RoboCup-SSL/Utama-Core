@@ -1,3 +1,4 @@
+import math
 from abc import ABC, abstractmethod
 from typing import Type, TypeVar
 
@@ -23,47 +24,53 @@ class VectorBase(ABC):
         return self._arr[1]
 
     def mag(self) -> float:
-        return np.linalg.norm(self._arr)
+        if len(self._arr) == 2:
+            return math.hypot(self._arr[0], self._arr[1])
+        elif len(self._arr) == 3:
+            return math.sqrt(self._arr[0] ** 2 + self._arr[1] ** 2 + self._arr[2] ** 2)
+        else:
+            # Generic fallback for higher dimensions
+            return math.sqrt(sum(c * c for c in self._arr))
 
     def norm(self: T) -> T:
         """Normalize the vector to unit length.
 
         Returns a zero vector if the magnitude is too small.
         """
-        magnitude = self.mag()
-        if magnitude < 1e-8:
-            return self.__class__.from_array(np.zeros_like(self._arr))
-        return self.__class__.from_array(self._arr / magnitude)
+        mag = self.mag()
+        if mag < 1e-8:
+            return self.__class__(0.0, 0.0)
+        return self.__class__(self.x / mag, self.y / mag)
 
     def angle_between(self, other: T) -> float:
-        """
-        2D: Calculate the angle between this vector and another vector in radians.
-        """
-        if self._arr.shape != other._arr.shape:
-            raise ValueError("Cannot calculate angle between vectors of different dimensions")
-        dot_product = np.dot(self._arr, other._arr)
-        mag_self = self.mag()
-        mag_other = other.mag()
-        norm_prod = mag_self * mag_other
-        if norm_prod == 0:
+        """2D: Angle between self and other vector using only x and y."""
+        dx1, dy1 = self.x, self.y
+        dx2, dy2 = other.x, other.y
+
+        dot = dx1 * dx2 + dy1 * dy2
+        mag1 = math.hypot(dx1, dy1)
+        mag2 = math.hypot(dx2, dy2)
+
+        if mag1 == 0 or mag2 == 0:
             return 0.0
-        cos_theta = dot_product / norm_prod
-        return np.arccos(np.clip(cos_theta, -1.0, 1.0))
+
+        cos_theta = max(-1.0, min(1.0, dot / (mag1 * mag2)))
+        return math.acos(cos_theta)
 
     def angle_to(self, other: T) -> float:
         """
         2D: Calculate the angle from this vector to another vector in radians.
         """
-        return np.arctan2(other.y - self.y, other.x - self.x)
+        return math.atan2(other.y - self.y, other.x - self.x)
 
     def distance_to(self, other: T) -> float:
         """
         2D: Calculate the distance to another vector.
         """
         if isinstance(other, Vector2D):
-            return np.hypot(other.y - self.y, other.x - self.x)
+            return math.hypot(other.y - self.y, other.x - self.x)
         else:
-            return np.hypot(other[1] - self.y, other[0] - self.x)
+            return math.hypot(other[1] - self.y, other[0] - self.x)
 
     def to_array(self) -> np.ndarray:
         return self._arr
