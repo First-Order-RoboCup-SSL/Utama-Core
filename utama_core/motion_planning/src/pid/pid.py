@@ -284,7 +284,7 @@ class TwoDPID(AbstractPID[Vector2D]):
 
         if abs(error) < 3 / 1000:
             self.prev_times[robot_id] = call_func_time
-            return 0.0, 0.0
+            return Vector2D(0.0, 0.0)
 
         # Compute time difference
         dt = self.dt
@@ -335,19 +335,18 @@ class TwoDPID(AbstractPID[Vector2D]):
 
         # print(f"x-y PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
         if error == 0.0:
-            return 0.0, 0.0
+            return Vector2D(0.0, 0.0)
         else:
-            x_vel = output * (dx / error)
-            y_vel = output * (dy / error)
-            return self.scale_velocity(x_vel, y_vel, self.max_velocity)
+            vel = Vector2D(output * (dx / error), output * (dy / error))
+            return self.scale_velocity(vel, self.max_velocity)
 
-    def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float) -> Vector2D:
-        current_vel = math.hypot(x_vel, y_vel)
+    def scale_velocity(self, vel: Vector2D, max_vel: float) -> Vector2D:
+        current_vel = math.hypot(vel.x, vel.y)
         if current_vel > max_vel:
             scaling_factor = max_vel / current_vel
-            x_vel *= scaling_factor
-            y_vel *= scaling_factor
-        return x_vel, y_vel
+            vel.x *= scaling_factor
+            vel.y *= scaling_factor
+        return vel
 
     def reset(self, robot_id: int):
         """Reset the error and integral for the specified robot."""
