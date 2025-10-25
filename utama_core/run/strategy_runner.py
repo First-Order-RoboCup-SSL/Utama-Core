@@ -22,7 +22,7 @@ from utama_core.global_utils.mapping_utils import (
     map_left_right_to_colors,
 )
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.motion_planning.src.controllers import DWAController, PIDController
+from utama_core.motion_planning.src.controllers import PIDController
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.run import GameGater
@@ -81,7 +81,7 @@ class StrategyRunner:
         exp_enemy: int,
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
-        motion_controller: Type[MotionController] = DWAController,
+        motion_controller: Type[MotionController] = PIDController,
     ):
         self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow

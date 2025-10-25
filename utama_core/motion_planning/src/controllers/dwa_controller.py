@@ -1,6 +1,7 @@
 from typing import Tuple
 
 from utama_core.config.modes import Mode
+from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.motion_planning.src.pid.pid import (
@@ -14,8 +15,8 @@ from utama_core.motion_planning.src.planning.planner import DynamicWindowPlanner
 
 
 class DWAController(MotionController):
-    def __init__(self, mode_str: str):
-        super().__init__(mode_str)
+    def __init__(self, mode: Mode):
+        super().__init__(mode)
         self.pid_oren, _ = self._initialize_pids(self.mode)
         self._planner = DynamicWindowPlanner()
 
@@ -33,9 +34,9 @@ class DWAController(MotionController):
         self,
         game: Game,
         robot_id: int,
-        target_pos: Tuple[float, float],
+        target_pos: Vector2D,
         target_oren: float,
-    ) -> Tuple[Tuple[float, float], float]:
+    ) -> Tuple[Vector2D, float]:
         robot = game.friendly_robots[robot_id]
         global_vel, score = self._planner.path_to(game, robot_id, target_pos)
         return global_vel, self.pid_oren.calculate(target_oren, robot.orientation, robot_id)

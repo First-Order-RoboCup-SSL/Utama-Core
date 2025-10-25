@@ -5,6 +5,7 @@ import numpy as np
 from shapely.geometry import LineString, Point, Polygon
 
 from utama_core.config.settings import ROBOT_RADIUS
+from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game, Robot
 
 ROBOT_DIAMETER = 2 * ROBOT_RADIUS
@@ -40,17 +41,17 @@ class DynamicWindowPlanner:
         self,
         game: Game,
         friendly_robot_id: int,
-        target: Tuple[float, float],
-    ) -> Tuple[Tuple[float, float], float]:
+        target: Vector2D,
+    ) -> Tuple[Vector2D, float]:
         """
         Plan a path to the target for the specified friendly robot.
 
         Args:
             friendly_robot_id (int): The ID of the friendly robot.
-            target (Tuple[float, float]): The target coordinates (x, y).
+            target (Vector2D): The target coordinates (x, y).
 
         Returns:
-            Tuple[float, float]: The next waypoint coordinates (x, y) or the target if already reached.
+            Vector2D: The next waypoint coordinates (x, y) or the target if already reached.
         """
         temporary_obstacles: List[Polygon] = []
         self._game = game
@@ -65,9 +66,9 @@ class DynamicWindowPlanner:
     def local_planning(
         self,
         friendly_robot_id: int,
-        target: Tuple[float, float],
+        target: Vector2D,
         temporary_obstacles: List[Polygon],
-    ) -> Tuple[Tuple[float, float], float]:
+    ) -> Tuple[Vector2D, float]:
         velocity = self._game.friendly_robots[friendly_robot_id].v
 
         # Calculate the allowed velocities in this frame
@@ -123,8 +124,6 @@ class DynamicWindowPlanner:
             (segment.coords[1][0] - segment.coords[0][0]) / self.SIMULATED_TIMESTEP,
             (segment.coords[1][1] - segment.coords[0][1]) / self.SIMULATED_TIMESTEP,
         )
-        if our_velocity_vector is None:
-            our_velocity_vector = (0, 0)
 
         our_position = self._game.friendly_robots[robot_id].p
 
@@ -162,8 +161,8 @@ class DynamicWindowPlanner:
 
     def _get_motion_segment(
         self,
-        rpos: Tuple[float, float],
-        rvel: Tuple[float, float],
+        rpos: Vector2D,
+        rvel: Vector2D,
         delta_vel: float,
         ang: float,
     ) -> LineString:
