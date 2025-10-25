@@ -54,8 +54,7 @@ class RobotPlacementStep(AbstractBehaviour):
                     self.ty = -2
                 else:
                     self.ty = -1
-                self.blackboard.motion_controller.pid_oren.reset(id)
-                self.blackboard.motion_controller.pid_trans.reset(id)
+                self.blackboard.motion_controller.reset(id)
 
             # changed so the robot tracks the ball while moving
             oren = np.atan2(by - cy, bx - cx)

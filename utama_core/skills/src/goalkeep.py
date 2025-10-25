@@ -4,7 +4,7 @@ import numpy as np
 
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.motion_controller import MotionController
+from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from utama_core.run.predictors.position import predict_ball_pos_at_x
 from utama_core.skills.src.go_to_point import go_to_point

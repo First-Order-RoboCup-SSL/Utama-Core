@@ -6,7 +6,7 @@ from utama_core.config.roles import Role
 from utama_core.config.tactics import Tactic
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.motion_controller import MotionController
+from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.team_controller.src.controllers import AbstractRobotController
 
