@@ -37,10 +37,10 @@ class VectorBase(ABC):
 
         Returns a zero vector if the magnitude is too small.
         """
-        mag = self.mag()
-        if mag < 1e-8:
-            return self.__class__(0.0, 0.0)
-        return self.__class__(self.x / mag, self.y / mag)
+        magnitude = self.mag()
+        if magnitude < 1e-8:
+            return self.__class__.from_array(np.zeros_like(self._arr))
+        return self.__class__.from_array(self._arr / magnitude)
 
     def angle_between(self, other: T) -> float:
         """2D: Angle between self and other vector using only x and y."""
