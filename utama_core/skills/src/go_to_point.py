@@ -2,7 +2,7 @@ from typing import Tuple
 
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.src.motion_controller import MotionController
 from utama_core.skills.src.utils.move_utils import face_ball, move
 
 

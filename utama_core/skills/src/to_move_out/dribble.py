@@ -10,8 +10,6 @@ from utama_core.entities.game import Game
 from utama_core.global_utils.math_utils import distance
 from utama_core.motion_planning.src.pid import PID
 
-### NEEDS TO BE COMPLETELY REFACTORED ###
-
 
 class DribbleToTarget:
     """Dribble the ball to a target location using repeated cycles of releasing, repositioning, and reabsorbing the

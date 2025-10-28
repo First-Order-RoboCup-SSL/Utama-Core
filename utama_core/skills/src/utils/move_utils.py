@@ -7,9 +7,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.global_utils.math_utils import rotate_vector
-from utama_core.motion_planning.src.common.motion_controller import MotionController
-
-### TODO: IT IS CONTENTIOUS IF WE EVEN NEED THIS MOVE FUNCTION ANYMORE. POTENTIALLY JUST SEND DIRECTLY TO MOTION CONTROLLER ###
+from utama_core.motion_planning.src.motion_controller import MotionController
 
 
 def move(
@@ -21,17 +19,25 @@ def move(
     dribbling: bool = False,
 ) -> RobotCommand:
     """Calculate the robot command to move towards a target point with a specified orientation."""
+    trans = motion_controller.translation
+    oren = motion_controller.orientation
 
     robot = game.friendly_robots[robot_id]
 
-    (global_x_vel, global_y_vel), angular_vel = motion_controller.path_to(
-        game=game,
-        robot_id=robot_id,
-        target_pos=target_coords,
-        target_oren=target_oren,
-    )
+    target_x, target_y = target_coords.x, target_coords.y
 
-    forward_vel, left_vel = rotate_vector(global_x_vel, global_y_vel, robot.orientation)
+    if target_x is not None and target_y is not None:
+        global_x, global_y = trans.calculate((target_x, target_y), (robot.p.x, robot.p.y), robot_id)
+    else:
+        global_x = 0
+        global_y = 0
+
+    forward_vel, left_vel = rotate_vector(global_x, global_y, robot.orientation)
+
+    if target_oren is not None:
+        angular_vel = oren.calculate(target_oren, robot.orientation, robot_id)
+    else:
+        angular_vel = 0
 
     return RobotCommand(
         local_forward_vel=forward_vel,
