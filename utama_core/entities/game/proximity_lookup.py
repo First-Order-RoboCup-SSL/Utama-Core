@@ -52,6 +52,8 @@ class ProximityLookup:
 
         return object_keys, np.array(point_array)
 
+    # Optimisation: could potentially store np.dot for ranking purposes,
+    # then sqrt only when querying (profile to see if this is worth it)
     def _build_proximity_matrix(self, point_array: np.ndarray) -> np.ndarray:
         """Build the pairwise Euclidean distance matrix between all objects."""
         if point_array.size < 2:
