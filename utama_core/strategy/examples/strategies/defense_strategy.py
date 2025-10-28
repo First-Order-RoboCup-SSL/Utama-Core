@@ -139,7 +139,7 @@ class DefenceStrategy(AbstractStrategy):
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if 3 <= n_runtime_friendly <= 5 and 1 <= n_runtime_enemy <= 6:
+        if 3 <= n_runtime_friendly <= 6 and 1 <= n_runtime_enemy <= 6:
             return True
         return False
 

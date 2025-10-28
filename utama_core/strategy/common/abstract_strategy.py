@@ -146,6 +146,11 @@ class AbstractStrategy(ABC):
     def step(self, game: Game):
         # start_time = time.time()
         self.blackboard.game = game
+
+        motion_controller: MotionController = getattr(self.blackboard, "motion_controller", None)
+        if motion_controller is not None:
+            motion_controller.update_game(game)
+
         self.blackboard.cmd_map = {robot_id: None for robot_id in game.friendly_robots}
 
         self.behaviour_tree.tick()
