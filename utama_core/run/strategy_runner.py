@@ -4,10 +4,9 @@ import time
 import warnings
 from collections import deque
 from dataclasses import replace
-from typing import List, Optional, Tuple, Type
+from typing import List, Optional, Tuple
 
 from utama_core.config.defaults import LEFT_START_ONE, RIGHT_START_ONE
-from utama_core.config.modes import Mode, mode_str_to_enum
 from utama_core.config.settings import (
     MAX_CAMERAS,
     MAX_GAME_HISTORY,
@@ -21,8 +20,7 @@ from utama_core.global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
 )
-from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.motion_planning.src.controllers import DWAController, PIDController
+from utama_core.motion_planning.src.motion_controller import MotionController
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.run import GameGater
@@ -69,6 +67,7 @@ class StrategyRunner:
         exp_enemy (int): Expected number of enemy robots.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
+        control_scheme (str): Motion controller family to use ("dwa" or "pid").
     """
 
     def __init__(
@@ -81,11 +80,12 @@ class StrategyRunner:
         exp_enemy: int,
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
+        control_scheme: str = "dwa",
     ):
         self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
-        self.mode: Mode = self._load_mode(mode)
+        self.mode = mode
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
         self.opp_strategy = opp_strategy
@@ -94,7 +94,7 @@ class StrategyRunner:
             if replay_writer_config
             else None
         )
-        self.motion_controller: Type[MotionController] = PIDController
+        self.control_scheme = control_scheme
         self.logger = logging.getLogger(__name__)
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
@@ -122,12 +122,6 @@ class StrategyRunner:
 
         self.toggle_opp_first = False  # alternate the order of opp and friendly in run
 
-    def _load_mode(self, mode_str: str) -> Mode:
-        mode = mode_str_to_enum.get(mode_str.lower())
-        if mode is None:
-            raise ValueError(f"Unknown mode: {mode_str}. Choose from 'rsim', 'grsim', or 'real'.")
-        return mode
-
     def data_update_listener(self, receiver: VisionReceiver):
         # Start receiving game data; this will run in a separate thread.
         receiver.pull_game_data()
@@ -148,15 +142,15 @@ class StrategyRunner:
     def _load_sim_and_controller(
         self,
     ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
-        """Mode RSIM: Loads the RSim environment with the expected number of robots and corresponding sim controller.
-        Mode GRSIM: Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of
+        """Mode "rsim": Loads the RSim environment with the expected number of robots and corresponding sim controller.
+        Mode "grsim": Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of
         robots is met.
 
         Returns:
             SSLBaseEnv: The RSim environment (Otherwise None).
             AbstractSimController: The simulation controller for the environment (Otherwise None).
         """
-        if self.mode == Mode.RSIM:
+        if self.mode == "rsim":
             n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
             rsim_env = SSLStandardEnv(n_robots_yellow=n_yellow, n_robots_blue=n_blue, render_mode=None)
 
@@ -166,7 +160,7 @@ class StrategyRunner:
 
             return rsim_env, RSimController(env=rsim_env)
 
-        elif self.mode == Mode.GRSIM:
+        elif self.mode == "grsim":
             # can consider baking all of these directly into sim controller
             sim_controller = GRSimController()
             n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
@@ -212,7 +206,7 @@ class StrategyRunner:
         ref_buffer = deque(maxlen=1)
         # referee_receiver = RefereeMessageReceiver(ref_buffer, debug=False)
         vision_receiver = VisionReceiver(vision_buffers)
-        if self.mode != Mode.RSIM:
+        if self.mode != "rsim":
             self.start_threads(vision_receiver)  # , referee_receiver)
 
         return vision_buffers, ref_buffer
@@ -233,7 +227,7 @@ class StrategyRunner:
             ), "Expected number of robots at runtime does not match opponent strategy."
 
     def _load_robot_control_and_pids(self):
-        if self.mode == Mode.RSIM:
+        if self.mode == "rsim":
             pvp_manager = None
             if self.opp_strategy:
                 pvp_manager = RSimPVPManager(self.rsim_env)
@@ -257,7 +251,7 @@ class StrategyRunner:
                 else:
                     pvp_manager.load_controllers(opp_robot_controller, my_robot_controller)
 
-        elif self.mode == Mode.GRSIM:
+        elif self.mode == "grsim":
             my_robot_controller = GRSimRobotController(
                 is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
             )
@@ -266,7 +260,7 @@ class StrategyRunner:
                     is_team_yellow=not self.my_team_is_yellow, n_friendly=self.exp_enemy
                 )
 
-        elif self.mode == Mode.REAL:
+        elif self.mode == "real":
             my_robot_controller = RealRobotController(
                 is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
             )
@@ -278,11 +272,13 @@ class StrategyRunner:
         else:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
+        debug_env = self.rsim_env if self.mode == "rsim" else None
+
         self.my_strategy.load_robot_controller(my_robot_controller)
-        self.my_strategy.load_motion_controller(self.motion_controller(self.mode))
+        self.my_strategy.load_motion_controller(MotionController(self.mode, self.control_scheme, debug_env))
         if self.opp_strategy:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
-            self.opp_strategy.load_motion_controller(self.motion_controller(self.mode))
+            self.opp_strategy.load_motion_controller(MotionController(self.mode, self.control_scheme, debug_env))
 
     def _load_game(self):
         my_current_game_frame, opp_current_game_frame = GameGater.wait_until_game_valid(
@@ -410,7 +406,7 @@ class StrategyRunner:
 
     def _run_step(self):
         start_time = time.time()
-        if self.mode == Mode.RSIM:
+        if self.mode == "rsim":
             vision_frames = [self.rsim_env._frame_to_observations()[0]]
         else:
             vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
@@ -440,7 +436,7 @@ class StrategyRunner:
         # Sleep to maintain FPS
         wait_time = max(0, TIMESTEP - (end_time - start_time))
         self.logger.info("Sleeping for %f secs", wait_time)
-        if self.mode != Mode.RSIM:
+        if self.mode != "rsim":
             time.sleep(wait_time)
 
     def _step_game(

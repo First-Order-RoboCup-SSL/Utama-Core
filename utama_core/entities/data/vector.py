@@ -1,4 +1,3 @@
-import math
 from abc import ABC, abstractmethod
 from typing import Type, TypeVar
 
@@ -16,21 +15,15 @@ class VectorBase(ABC):
             self._arr = np.array(coords)
 
     @property
-    def x(self) -> float:
+    def x(self):
         return self._arr[0]
 
     @property
-    def y(self) -> float:
+    def y(self):
         return self._arr[1]
 
     def mag(self) -> float:
-        if len(self._arr) == 2:
-            return math.hypot(self._arr[0], self._arr[1])
-        elif len(self._arr) == 3:
-            return math.sqrt(self._arr[0] ** 2 + self._arr[1] ** 2 + self._arr[2] ** 2)
-        else:
-            # Generic fallback for higher dimensions
-            return math.sqrt(sum(c * c for c in self._arr))
+        return np.linalg.norm(self._arr)
 
     def norm(self: T) -> T:
         """Normalize the vector to unit length.
@@ -43,34 +36,34 @@ class VectorBase(ABC):
         return self.__class__.from_array(self._arr / magnitude)
 
     def angle_between(self, other: T) -> float:
-        """2D: Angle between self and other vector using only x and y."""
-        dx1, dy1 = self.x, self.y
-        dx2, dy2 = other.x, other.y
-
-        dot = dx1 * dx2 + dy1 * dy2
-        mag1 = math.hypot(dx1, dy1)
-        mag2 = math.hypot(dx2, dy2)
-
-        if mag1 == 0 or mag2 == 0:
+        """
+        2D: Calculate the angle between this vector and another vector in radians.
+        """
+        if self._arr.shape != other._arr.shape:
+            raise ValueError("Cannot calculate angle between vectors of different dimensions")
+        dot_product = np.dot(self._arr, other._arr)
+        mag_self = self.mag()
+        mag_other = other.mag()
+        norm_prod = mag_self * mag_other
+        if norm_prod == 0:
             return 0.0
-
-        cos_theta = max(-1.0, min(1.0, dot / (mag1 * mag2)))
-        return math.acos(cos_theta)
+        cos_theta = dot_product / norm_prod
+        return np.arccos(np.clip(cos_theta, -1.0, 1.0))
 
     def angle_to(self, other: T) -> float:
         """
         2D: Calculate the angle from this vector to another vector in radians.
         """
-        return math.atan2(other.y - self.y, other.x - self.x)
+        return np.arctan2(other.y - self.y, other.x - self.x)
 
     def distance_to(self, other: T) -> float:
         """
         2D: Calculate the distance to another vector.
         """
         if isinstance(other, Vector2D):
-            return math.hypot(other.y - self.y, other.x - self.x)
+            return np.hypot(other.y - self.y, other.x - self.x)
         else:
-            return math.hypot(other[1] - self.y, other[0] - self.x)
+            return np.hypot(other[1] - self.y, other[0] - self.x)
 
     def to_array(self) -> np.ndarray:
         return self._arr
@@ -116,15 +109,15 @@ class VectorBase(ABC):
 
 
 class Vector2D(VectorBase):
-    def __init__(self, x: float, y: float):
+    def __init__(self, x, y):
         super().__init__(x, y)
 
     @property
-    def x(self) -> float:
+    def x(self):
         return super().x
 
     @property
-    def y(self) -> float:
+    def y(self):
         return super().y
 
     @classmethod
@@ -136,19 +129,19 @@ class Vector2D(VectorBase):
 
 
 class Vector3D(VectorBase):
-    def __init__(self, x: float, y: float, z: float):
+    def __init__(self, x, y, z):
         super().__init__(x, y, z)
 
     @property
-    def x(self) -> float:
+    def x(self):
         return super().x
 
     @property
-    def y(self) -> float:
+    def y(self):
         return super().y
 
     @property
-    def z(self) -> float:
+    def z(self):
         return self._arr[2]
 
     @classmethod
