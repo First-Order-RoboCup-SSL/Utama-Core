@@ -22,7 +22,6 @@ ruff = ">=0.9.8"
 pre-commit = ">=3.8.0"
 hatch = ">=1.14.1,<2"
 graphviz = ">=13.1.2,<14"
-snakeviz = ">=2.2.2,<3"
 
 [package]
 name = "Utama-Core"

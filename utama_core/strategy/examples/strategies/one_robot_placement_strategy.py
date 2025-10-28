@@ -1,5 +1,4 @@
 import math
-import random
 from typing import Any
 
 import numpy as np
@@ -52,12 +51,10 @@ class RobotPlacementStep(AbstractBehaviour):
             switch = error < 0.05
             if switch:
                 if self.ty == -1:
-                    self.ty = 1
-                    self.tx = 0
+                    self.ty = -2
                 else:
                     self.ty = -1
-                    self.tx = 0
-                    # self.tx = random.choice([0, 1])
+                self.blackboard.motion_controller.reset(id)
 
             # changed so the robot tracks the ball while moving
             oren = np.atan2(by - cy, bx - cx)
@@ -72,7 +69,7 @@ class RobotPlacementStep(AbstractBehaviour):
                 rsim_env.draw_point(self.tx, self.ty, color="red")
                 v = game.friendly_robots[id].v
                 p = game.friendly_robots[id].p
-                rsim_env.draw_point(p.x + v.x * 0.167, p.y + v.y * 0.167, color="green")
+                rsim_env.draw_point(p.x + v.x * 0.2, p.y + v.y * 0.2, color="green")
 
             # # Rotate the local forward and left velocities to the global frame
             # lf_x, lf_y = rotate_vector(cmd.local_forward_vel, 0, -co)
