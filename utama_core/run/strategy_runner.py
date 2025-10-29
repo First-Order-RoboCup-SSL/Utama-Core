@@ -81,6 +81,7 @@ class StrategyRunner:
         exp_enemy: int,
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
+        control_scheme: str = "dwa",
     ):
         self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow
@@ -94,7 +95,10 @@ class StrategyRunner:
             if replay_writer_config
             else None
         )
-        self.motion_controller: Type[MotionController] = DWAController
+        if control_scheme.lower() == "pid":
+            self.motion_controller: Type[MotionController] = PIDController
+        else:
+            self.motion_controller: Type[MotionController] = DWAController
         self.logger = logging.getLogger(__name__)
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
