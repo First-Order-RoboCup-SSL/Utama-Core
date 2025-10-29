@@ -22,9 +22,6 @@ from utama_core.entities.game import Game
 from utama_core.entities.game.robot import Robot
 from utama_core.global_utils.math_utils import normalise_heading
 from utama_core.motion_planning.src.dwa.config import DynamicWindowConfig
-from utama_core.motion_planning.src.dwa.dwa_abstract import (
-    AbstractDynamicWindowController,
-)
 from utama_core.motion_planning.src.planning.geometry import (
     AxisAlignedRectangle,
     point_segment_distance,
@@ -44,7 +41,7 @@ class PlanResult:
     score: float
 
 
-class DWATranslationController(AbstractDynamicWindowController):
+class DWATranslationController:
     """Compute global linear velocities using a Dynamic Window Approach."""
 
     def __init__(
@@ -53,8 +50,19 @@ class DWATranslationController(AbstractDynamicWindowController):
         num_robots: int = MAX_ROBOTS,
         env: SSLStandardEnv | None = None,
     ):
-        super().__init__(config=config, env=env)
+        self._planner_config = config
+        self.env: SSLStandardEnv | None = env
+        self._control_period = TIMESTEP
+        self._planner: Optional["DynamicWindowPlanner"] = None
         self._previous_velocity: Dict[int, Vector2D] = {idx: Vector2D(0.0, 0.0) for idx in range(num_robots)}
+
+    def _ensure_planner(self, game: Game) -> "DynamicWindowPlanner":
+        if not isinstance(game, Game):
+            raise TypeError(f"DWA planner requires a Game instance. {type(game)} given.")
+
+        if self._planner is None:
+            self._planner = self._create_planner(game)
+        return self._planner
 
     def calculate(
         self,
