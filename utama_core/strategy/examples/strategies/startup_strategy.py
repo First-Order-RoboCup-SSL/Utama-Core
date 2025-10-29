@@ -15,11 +15,11 @@ class StartupFormationStep(AbstractBehaviour):
     """
 
     def initialise(self):
-        self.start_formation = RIGHT_START_ONE if self.blackboard.game.current.my_team_is_right else LEFT_START_ONE
+        self.start_formation = RIGHT_START_ONE if self.blackboard.game.my_team_is_right else LEFT_START_ONE
         self.start_formation.reverse()
 
     def update(self) -> py_trees.common.Status:
-        game = self.blackboard.game.current
+        game = self.blackboard.game
         motion_controller = self.blackboard.motion_controller
 
         for robot_id in game.friendly_robots.keys():

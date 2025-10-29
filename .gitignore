@@ -1,6 +1,9 @@
 # Prerequisites
 *.d
 
+# Profile files
+*.prof
+
 # Compiled Object files
 *.slo
 *.lo
@@ -197,6 +200,7 @@ cython_debug/
 AutoReferee/
 ssl-game-controller/
 replays/
+renders/
 
 .vscode
 
