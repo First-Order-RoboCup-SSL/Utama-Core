@@ -24,7 +24,7 @@ def move(
 
     robot = game.friendly_robots[robot_id]
 
-    (global_x_vel, global_y_vel), angular_vel = motion_controller.path_to(
+    (global_x_vel, global_y_vel), angular_vel = motion_controller.calculate(
         game=game,
         robot_id=robot_id,
         target_pos=target_coords,

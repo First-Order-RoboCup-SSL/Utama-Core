@@ -26,7 +26,7 @@ class FindBlockingTarget(AbstractBehaviour):
         )
 
     def update(self) -> py_trees.common.Status:
-        game = self.blackboard.game.current
+        game = self.blackboard.game
         enemy, _ = game.proximity_lookup.closest_to_ball(TeamType.ENEMY)
         self.blackboard.blocking_target = enemy.id
         return py_trees.common.Status.SUCCESS
@@ -57,7 +57,7 @@ class BlockAttackerStep(AbstractBehaviour):
         )
 
     def update(self) -> py_trees.common.Status:
-        game = self.blackboard.game.current
+        game = self.blackboard.game
         robot_id = self.blackboard.defender_id
         blocking_target = self.blackboard.blocking_target
         command = block_attacker(

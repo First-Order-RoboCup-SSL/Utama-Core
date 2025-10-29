@@ -29,7 +29,7 @@ class PIDController(MotionController):
         else:
             raise ValueError(f"Unknown mode enum: {mode}.")
 
-    def path_to(
+    def calculate(
         self,
         game: Game,
         robot_id: int,

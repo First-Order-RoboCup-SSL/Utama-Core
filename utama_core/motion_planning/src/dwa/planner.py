@@ -133,6 +133,9 @@ class DWATranslationController(AbstractPID[Tuple[float, float]]):
     # Internal helpers
     # ------------------------------------------------------------------
     def _ensure_planner(self, game: Game):
+        if not isinstance(game, Game):
+            raise TypeError(f"DWA planner requires a Game instance. {type(game)} given.")
+
         if self._planner is None:
             self._planner = DynamicWindowPlanner(
                 game=game,

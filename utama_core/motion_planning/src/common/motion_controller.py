@@ -14,7 +14,7 @@ class MotionController(ABC):
         self.rsim_env: SSLStandardEnv | None = rsim_env
 
     @abstractmethod
-    def path_to(
+    def calculate(
         self,
         game: Game,
         robot_id: int,

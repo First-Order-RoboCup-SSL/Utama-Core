@@ -57,7 +57,7 @@ class DWAController(MotionController):
         )
         return pid_oren, trans
 
-    def path_to(
+    def calculate(
         self,
         game: Game,
         robot_id: int,

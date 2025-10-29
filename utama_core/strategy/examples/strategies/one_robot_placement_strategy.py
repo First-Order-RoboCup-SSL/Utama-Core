@@ -36,7 +36,7 @@ class RobotPlacementStep(AbstractBehaviour):
 
     def update(self) -> py_trees.common.Status:
         """Closure which advances the simulation by one step."""
-        game = self.blackboard.game.current
+        game = self.blackboard.game
         rsim_env = self.blackboard.rsim_env
         id: int = self.blackboard.robot_id
 
