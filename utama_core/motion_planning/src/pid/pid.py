@@ -388,16 +388,22 @@ class PIDAccelerationLimiterWrapper:
             limited_result = last_val + diff
         elif isinstance(result, Vector2D):
             # Handle 2D vector outputs
-            last_val = (0.0, 0.0) if last_result is None else last_result
-            dx = result.x - last_val[0]
-            dy = result.y - last_val[1]
+            if last_result is None:
+                last_vec = Vector2D(0.0, 0.0)
+            elif isinstance(last_result, Vector2D):
+                last_vec = last_result
+            else:
+                last_vec = Vector2D(last_result[0], last_result[1])
+
+            dx = result.x - last_vec.x
+            dy = result.y - last_vec.y
             norm_diff = math.hypot(dx, dy)
 
             if norm_diff <= dv_allowed:
                 limited_result = result
             else:
                 scale = dv_allowed / norm_diff
-                limited_result = (last_val[0] + dx * scale, last_val[1] + dy * scale)
+                limited_result = Vector2D(last_vec.x + dx * scale, last_vec.y + dy * scale)
                 # assert isinstance(limited_result, float)
         else:
             raise NotImplementedError(f"Unsupported output type: {type(result)}")
