@@ -8,7 +8,7 @@ T = TypeVar("T", bound="VectorBase")
 
 
 class VectorBase(ABC):
-    __slots__ = ("_x", "_y")
+    __slots__ = ("x", "y")
 
     @abstractmethod
     def mag(self) -> float:
@@ -25,12 +25,12 @@ class VectorBase(ABC):
 
     def dot(self, other: T) -> float:
         """2D: Dot product with another vector."""
-        return self._x * other._x + self._y * other._y
+        return self.x * other.x + self.y * other.y
 
     def angle_between(self, other: T) -> float:
         """2D: Angle between self and other vector using only x and y."""
-        dx1, dy1 = self._x, self._y
-        dx2, dy2 = other._x, other._y
+        dx1, dy1 = self.x, self.y
+        dx2, dy2 = other.x, other.y
 
         dot = dx1 * dx2 + dy1 * dy2
         mag1 = math.hypot(dx1, dy1)
@@ -46,16 +46,16 @@ class VectorBase(ABC):
         """
         2D: Calculate the angle from this vector to another vector in radians.
         """
-        return math.atan2(other._y - self._y, other._x - self._x)
+        return math.atan2(other.y - self.y, other.x - self.x)
 
     def distance_to(self, other: T) -> float:
         """
         2D: Calculate the distance to another vector.
         """
         if isinstance(other, Vector2D):
-            return math.hypot(other._y - self._y, other._x - self._x)
+            return math.hypot(other.y - self.y, other.x - self.x)
         else:
-            return math.hypot(other[1] - self._y, other[0] - self._x)
+            return math.hypot(other[1] - self.y, other[0] - self.x)
 
     def to_array(self) -> np.ndarray:
         return np.array(list(self))
@@ -67,30 +67,19 @@ class VectorBase(ABC):
 class Vector2D(VectorBase):
     __slots__ = ()
 
-    def __init__(self, *coords):
-        # Handle (1, 2), ((1, 2)), [1, 2], np.array([1, 2])
-        if len(coords) == 1:
-            c = coords[0]
-            if isinstance(c, (tuple, list, np.ndarray)):
-                self._x = float(c[0])
-                self._y = float(c[1])
-            else:
-                raise TypeError(f"Invalid single argument type for Vector2D: {type(c)}")
-        elif len(coords) == 2:
-            self._x = float(coords[0])
-            self._y = float(coords[1])
-        else:
-            raise TypeError(f"Vector2D requires 2 coordinates, got {len(coords)}")
+    def __init__(self, x, y):
+        self.x = float(x)
+        self.y = float(y)
 
     def __iter__(self):
-        yield self._x
-        yield self._y
+        yield self.x
+        yield self.y
 
     def __getitem__(self, index: int) -> float:
         if index == 0:
-            return self._x
+            return self.x
         elif index == 1:
-            return self._y
+            return self.y
         raise IndexError("Vector2D index out of range")
 
     def __add__(self, other: "Vector2D") -> "Vector2D":
@@ -120,59 +109,39 @@ class Vector2D(VectorBase):
         return np.array([self.x, self.y], dtype=dtype, copy=copy)
 
     def mag(self) -> float:
-        return math.hypot(self._x, self._y)
+        return math.hypot(self.x, self.y)
 
     def norm(self) -> "Vector2D":
         """Return a normalized copy of the vector. Returns zero vector if magnitude is too small."""
         magnitude = self.mag()
         if magnitude < 1e-8:
             return Vector2D(0.0, 0.0)
-        return Vector2D(self._x / magnitude, self._y / magnitude)
-
-    @property
-    def x(self) -> float:
-        return self._x
-
-    @property
-    def y(self) -> float:
-        return self._y
+        return Vector2D(self.x / magnitude, self.y / magnitude)
 
     def __repr__(self):
         return f"Vector2D(x={self.x}, y={self.y})"
 
 
 class Vector3D(VectorBase):
-    __slots__ = ("_z",)
+    __slots__ = ("z",)
 
     def __init__(self, *coords):
-        # Handle (1, 2, 3), ((1, 2, 3)), [1, 2, 3], np.array([1, 2, 3])
-        if len(coords) == 1:
-            c = coords[0]
-            if isinstance(c, (tuple, list, np.ndarray)):
-                self._x = float(c[0])
-                self._y = float(c[1])
-                self._z = float(c[2])
-            else:
-                raise TypeError(f"Invalid single argument type for Vector3D: {type(c)}")
-        elif len(coords) == 3:
-            self._x = float(coords[0])
-            self._y = float(coords[1])
-            self._z = float(coords[2])
-        else:
-            raise TypeError(f"Vector3D requires 3 coordinates, got {len(coords)}")
+        self.x = float(coords[0])
+        self.y = float(coords[1])
+        self.z = float(coords[2])
 
     def __iter__(self):
-        yield self._x
-        yield self._y
-        yield self._z
+        yield self.x
+        yield self.y
+        yield self.z
 
     def __getitem__(self, index: int) -> float:
         if index == 0:
-            return self._x
+            return self.x
         elif index == 1:
-            return self._y
+            return self.y
         elif index == 2:
-            return self._z
+            return self.z
         raise IndexError("Vector3D index out of range")
 
     def __add__(self, other: "Vector3D") -> "Vector3D":
@@ -202,26 +171,14 @@ class Vector3D(VectorBase):
         return np.array([self.x, self.y, self.z], dtype=dtype, copy=copy)
 
     def mag(self) -> float:
-        return math.sqrt(self._x**2 + self._y**2 + self._z**2)
+        return math.sqrt(self.x**2 + self.y**2 + self.z**2)
 
     def norm(self) -> "Vector3D":
         """Return a normalized copy of the vector. Returns zero vector if magnitude is too small."""
         magnitude = self.mag()
         if magnitude < 1e-8:
             return Vector3D(0.0, 0.0, 0.0)
-        return Vector3D(self._x / magnitude, self._y / magnitude, self._z / magnitude)
-
-    @property
-    def x(self) -> float:
-        return self._x
-
-    @property
-    def y(self) -> float:
-        return self._y
-
-    @property
-    def z(self) -> float:
-        return self._z
+        return Vector3D(self.x / magnitude, self.y / magnitude, self.z / magnitude)
 
     def to_2d(self) -> Vector2D:
         return Vector2D(self.x, self.y)
