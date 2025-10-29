@@ -118,7 +118,7 @@ def test_extraction_of_time_velocity_pairs():
         for i in range(len(extracted_ts_np)):
             ts = extracted_ts_np[i]
             vel_components = extracted_vel_np[i]
-            vec_obj = Vector3D(x=vel_components[0], y=vel_components[1], z=vel_components[2])
+            vec_obj = Vector3D(vel_components[0], vel_components[1], vel_components[2])
             reconstructed_extracted_pairs.append((ts, vec_obj))
 
     assert len(reconstructed_extracted_pairs) == len(expected_time_velocity_pairs), "Number of items mismatch"
