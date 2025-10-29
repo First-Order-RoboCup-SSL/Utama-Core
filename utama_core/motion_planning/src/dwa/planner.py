@@ -22,10 +22,12 @@ from utama_core.config.settings import (
 )
 from utama_core.entities.game import Game
 from utama_core.global_utils.math_utils import normalise_heading
-from utama_core.motion_planning.src.pid.pid import (
-    get_grsim_pids,
-    get_real_pids,
-    get_rsim_pids,
+from utama_core.motion_planning.src.dwa.config import (
+    MAX_ACCELERATION,
+    MAX_SAFETY_RADIUS,
+    MAX_SPEED_FOR_FULL_BUBBLE,
+    SAFETY_PENALTY_DISTANCE_SQ,
+    SIMULATED_TIMESTEP,
 )
 from utama_core.motion_planning.src.pid.pid_abstract import AbstractPID
 from utama_core.motion_planning.src.planning.path_planner import DynamicWindowPlanner
@@ -38,7 +40,7 @@ class DWATranslationParams:
 
     max_speed: float
     max_acceleration: float
-    horizon: float = DynamicWindowPlanner.SIMULATED_TIMESTEP
+    horizon: float = SIMULATED_TIMESTEP
     target_tolerance: float = 0.1
 
 
@@ -56,18 +58,11 @@ class DWAOrientationParams:
 
 
 class DWATranslationController(AbstractPID[Tuple[float, float]]):
-    """Compute global linear velocities using a Dynamic Window Approach.
-
-    The controller keeps the AbstractPID API so that existing call-sites can
-    continue to call ``calculate`` and ``reset`` without modifications. Under
-    the hood it relies on :class:`DynamicWindowPlanner` to generate a short
-    horizon trajectory and converts that trajectory into a velocity command.
-    """
+    """Compute global linear velocities using a Dynamic Window Approach."""
 
     def __init__(self, params: DWATranslationParams, num_robots: int = MAX_ROBOTS):
         self._params = params
         self._control_period = TIMESTEP
-        self._game: Optional[Game] = None
         self._planner: Optional[DynamicWindowPlanner] = None
         self._previous_velocity: Dict[int, Tuple[float, float]] = {idx: (0.0, 0.0) for idx in range(num_robots)}
         self.env: SSLStandardEnv = None  # type: ignore
@@ -77,16 +72,14 @@ class DWATranslationController(AbstractPID[Tuple[float, float]]):
     # ------------------------------------------------------------------
     def calculate(
         self,
+        game: Game,
         target: Tuple[float, float],
-        current: Tuple[float, float],
         robot_id: int,
     ) -> Tuple[float, float]:
-        if self._game is None:
-            # No context has been provided yet – treat as stationary.
-            return 0.0, 0.0
-
-        self._ensure_planner()
+        self._ensure_planner(game)
         assert self._planner is not None  # for type-checkers
+
+        current = game.friendly_robots[robot_id].p
 
         if current is None:
             return 0.0, 0.0
@@ -130,25 +123,25 @@ class DWATranslationController(AbstractPID[Tuple[float, float]]):
 
         if self.env is not None:
             self.env.draw_point(best_move[0], best_move[1], color="blue", width=2)
+
         return vx_b, vy_b
 
     def reset(self, robot_id: int):
         self._previous_velocity[robot_id] = (0.0, 0.0)
 
     # ------------------------------------------------------------------
-    # Context management
-    # ------------------------------------------------------------------
-    def update_game(self, game: Game):
-        self._game = game
-        if self._planner is not None:
-            self._planner._game = game
-
-    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _ensure_planner(self):
-        if self._planner is None and self._game is not None:
-            self._planner = DynamicWindowPlanner(self._game)
+    def _ensure_planner(self, game: Game):
+        if self._planner is None:
+            self._planner = DynamicWindowPlanner(
+                game=game,
+                simulated_timestep=SIMULATED_TIMESTEP,
+                max_acceleration=MAX_ACCELERATION,
+                max_safety_radius=MAX_SAFETY_RADIUS,
+                safety_penalty_distance_sq=SAFETY_PENALTY_DISTANCE_SQ,
+                max_speed_for_full_bubble=MAX_SPEED_FOR_FULL_BUBBLE,
+            )
 
     def _apply_speed_limits(self, vx: float, vy: float) -> Tuple[float, float]:
         speed = math.hypot(vx, vy)
@@ -233,47 +226,3 @@ class DWAOrientationController(AbstractPID[float]):
         step = (stop - start) / (samples - 1)
         for idx in range(samples):
             yield start + step * idx
-
-
-# ----------------------------------------------------------------------
-# Factory helpers matching the PID API
-# ----------------------------------------------------------------------
-
-
-def get_rsim_dwa_controllers() -> Tuple[AbstractPID, DWATranslationController]:
-    pid_orientation, _ = get_rsim_pids()
-    translation = DWATranslationController(
-        DWATranslationParams(
-            max_speed=MAX_VEL,
-            max_acceleration=DynamicWindowPlanner.MAX_ACCELERATION,
-            horizon=DynamicWindowPlanner.SIMULATED_TIMESTEP,
-            target_tolerance=0.05,
-        )
-    )
-    return pid_orientation, translation
-
-
-def get_grsim_dwa_controllers() -> Tuple[AbstractPID, DWATranslationController]:
-    pid_orientation, _ = get_grsim_pids()
-    translation = DWATranslationController(
-        DWATranslationParams(
-            max_speed=MAX_VEL,
-            max_acceleration=DynamicWindowPlanner.MAX_ACCELERATION,
-            horizon=DynamicWindowPlanner.SIMULATED_TIMESTEP,
-            target_tolerance=0.05,
-        )
-    )
-    return pid_orientation, translation
-
-
-def get_real_dwa_controllers() -> Tuple[AbstractPID, DWATranslationController]:
-    pid_orientation, _ = get_real_pids()
-    translation = DWATranslationController(
-        DWATranslationParams(
-            max_speed=REAL_MAX_VEL,
-            max_acceleration=0.3,
-            horizon=DynamicWindowPlanner.SIMULATED_TIMESTEP,
-            target_tolerance=0.015,
-        )
-    )
-    return pid_orientation, translation

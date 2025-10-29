@@ -66,7 +66,8 @@ def target_inside_robot_radius(rpos: Tuple[float, float], target: Tuple[float, f
 
 class RRTPlanner:
     """This class is a stateless planning class and should not be used on its own see the controllers class which
-    provide state tracking and waypoint switching for these classes such as TimedSwitchController."""
+    provide state tracking and waypoint switching for these classes such as TimedSwitchController.
+    """
 
     # TODO - make these parameters configurable at runtime
     # TODO - Add support for avoiding goal areas - should be easy to use the Field object for this
@@ -305,14 +306,29 @@ class DynamicWindowPlanner:
     behaviour tree should handle this.
     """
 
-    SIMULATED_TIMESTEP = 0.05  # seconds
-    MAX_ACCELERATION = 2  # Measured in ms^2
-    SAFETY_RADIUS = ROBOT_RADIUS * 2.5  # m - minimum distance to obstacles we try to maintain
-    SAFETY_PENALTY_DISTANCE_SQ = 0.3
-    MAX_SPEED_FOR_FULL_BUBBLE = 1  # m/s at which we apply the full safety bubble
-
-    def __init__(self, game: Game):
+    def __init__(
+        self,
+        game: Game,
+        simulated_timestep: float,
+        max_acceleration: float,
+        max_safety_radius: float,
+        safety_penalty_distance_sq: float,
+        max_speed_for_full_bubble: float,
+    ):
+        """
+        :param game: The current game state
+        :param simulated_timestep: The timestep to simulate ahead for planning
+        :param max_acceleration: The maximum acceleration of the robot
+        :param max_safety_radius: The maximum safety radius to maintain from obstacles
+        :param safety_penalty_distance_sq: The distance squared at which we start applying obstacle penalties
+        :param max_speed_for_full_bubble: The speed at which we apply the full safety bubble
+        """
         self._game = game
+        self._simulated_timestep = simulated_timestep
+        self._max_acceleration = max_acceleration
+        self._max_safety_radius = max_safety_radius
+        self._safety_penalty_distance_sq = safety_penalty_distance_sq
+        self._max_speed_for_full_bubble = max_speed_for_full_bubble
 
     def path_to(
         self,
@@ -352,7 +368,7 @@ class DynamicWindowPlanner:
         safety_radius_sq = safety_radius * safety_radius
 
         # Calculate the allowed velocities in this frame
-        delta_vel = DynamicWindowPlanner.SIMULATED_TIMESTEP * DynamicWindowPlanner.MAX_ACCELERATION
+        delta_vel = self._simulated_timestep * self._max_acceleration
         best_score = float("-inf")
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
 
@@ -407,7 +423,7 @@ class DynamicWindowPlanner:
         return LineString([segment.coords[0], new])
 
     def obstacle_penalty_function(self, x):
-        return exp(-8 * (x - self.SAFETY_PENALTY_DISTANCE_SQ))
+        return exp(-8 * (x - self._safety_penalty_distance_sq))
 
     def target_closeness_function(self, x):
         return 4 * exp(-8 * x)
@@ -427,7 +443,7 @@ class DynamicWindowPlanner:
         end_dist = np.linalg.norm(target - end)
         target_factor = start_dist - end_dist
 
-        our_velocity_vector = seg_vec / self.SIMULATED_TIMESTEP
+        our_velocity_vector = seg_vec / self._simulated_timestep
         our_position = np.asarray(self._game.friendly_robots[robot_id].p.to_array(), dtype=float)
 
         obstacle_factor = 0.0
@@ -447,7 +463,7 @@ class DynamicWindowPlanner:
 
             closest = diff_p + t * diff_v
             d_sq = float(np.dot(closest, closest))
-            adjustment = max(self.SAFETY_PENALTY_DISTANCE_SQ - safety_radius_sq, 0.0)
+            adjustment = max(self._safety_penalty_distance_sq - safety_radius_sq, 0.0)
             effective_d_sq = d_sq + adjustment
             obstacle_factor = max(
                 obstacle_factor,
@@ -461,12 +477,12 @@ class DynamicWindowPlanner:
     def _dynamic_safety_radius(self, speed: float) -> float:
         """Interpolate the clearance radius between the physical robot radius and the nominal DWA bubble."""
         min_radius = ROBOT_RADIUS
-        max_radius = self.SAFETY_RADIUS
+        max_radius = self._max_safety_radius
         if max_radius <= min_radius:
             return max_radius
-        if self.MAX_SPEED_FOR_FULL_BUBBLE <= 1e-6:
+        if self._max_speed_for_full_bubble <= 1e-6:
             return max_radius
-        ratio = min(max(speed / self.MAX_SPEED_FOR_FULL_BUBBLE, 0.0), 1.0)
+        ratio = min(max(speed / self._max_speed_for_full_bubble, 0.0), 1.0)
         return min_radius + (max_radius - min_radius) * ratio
 
     def _get_motion_segment(
@@ -479,8 +495,8 @@ class DynamicWindowPlanner:
         start = np.array([rpos[0], rpos[1]], dtype=float)
         adj_vel = np.array(
             [
-                rvel[0] * DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel * np.cos(ang),
-                rvel[1] * DynamicWindowPlanner.SIMULATED_TIMESTEP + delta_vel * np.sin(ang),
+                rvel[0] * self._simulated_timestep + delta_vel * np.cos(ang),
+                rvel[1] * self._simulated_timestep + delta_vel * np.sin(ang),
             ],
             dtype=float,
         )
@@ -490,7 +506,8 @@ class DynamicWindowPlanner:
 
 class BisectorPlanner:
     """This class is a stateless planning class and should not be used on its own see the controllers class which
-    provide state tracking and waypoint switching for these classes such as TimedSwitchController."""
+    provide state tracking and waypoint switching for these classes such as TimedSwitchController.
+    """
 
     OBSTACLE_CLEARANCE = ROBOT_DIAMETER
     ClOSE_LIMIT = 0.5
