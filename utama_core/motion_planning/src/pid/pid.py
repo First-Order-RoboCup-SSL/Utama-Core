@@ -10,6 +10,7 @@ from utama_core.config.settings import (
     SENDING_DELAY,
     TIMESTEP,
 )
+from utama_core.entities.data.vector import Vector2D
 from utama_core.global_utils.math_utils import normalise_heading
 from utama_core.motion_planning.src.pid.pid_abstract import AbstractPID
 
@@ -237,7 +238,7 @@ class PID(AbstractPID[float]):
         self.first_pass[robot_id] = True
 
 
-class TwoDPID(AbstractPID[Tuple[float, float]]):
+class TwoDPID(AbstractPID[Vector2D]):
     """A 2D PID controller that controls the X and Y dimensions and scales the resulting velocity vector to a maximum
     speed if needed."""
 
@@ -273,9 +274,7 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
 
         self.first_pass = {i: True for i in range(6)}
 
-    def calculate(
-        self, target: Tuple[float, float], current: Tuple[float, float], robot_id: int
-    ) -> Tuple[float, float]:
+    def calculate(self, target: Vector2D, current: Vector2D, robot_id: int) -> Vector2D:
         call_func_time = time.time()
 
         dx = target[0] - current[0]
@@ -285,7 +284,7 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
 
         if abs(error) < 3 / 1000:
             self.prev_times[robot_id] = call_func_time
-            return 0.0, 0.0
+            return Vector2D(0.0, 0.0)
 
         # Compute time difference
         dt = self.dt
@@ -336,19 +335,19 @@ class TwoDPID(AbstractPID[Tuple[float, float]]):
 
         # print(f"x-y PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
         if error == 0.0:
-            return 0.0, 0.0
+            return Vector2D(0.0, 0.0)
         else:
             x_vel = output * (dx / error)
             y_vel = output * (dy / error)
             return self.scale_velocity(x_vel, y_vel, self.max_velocity)
 
-    def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float) -> Tuple[float, float]:
+    def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float) -> Vector2D:
         current_vel = math.hypot(x_vel, y_vel)
         if current_vel > max_vel:
             scaling_factor = max_vel / current_vel
             x_vel *= scaling_factor
             y_vel *= scaling_factor
-        return x_vel, y_vel
+        return Vector2D(x_vel, y_vel)
 
     def reset(self, robot_id: int):
         """Reset the error and integral for the specified robot."""
@@ -387,18 +386,24 @@ class PIDAccelerationLimiterWrapper:
             diff = result - last_val
             diff = max(-dv_allowed, min(dv_allowed, diff))
             limited_result = last_val + diff
-        elif isinstance(result, tuple):
+        elif isinstance(result, Vector2D):
             # Handle 2D vector outputs
-            last_val = (0.0, 0.0) if last_result is None else last_result
-            dx = result[0] - last_val[0]
-            dy = result[1] - last_val[1]
+            if last_result is None:
+                last_vec = Vector2D(0.0, 0.0)
+            elif isinstance(last_result, Vector2D):
+                last_vec = last_result
+            else:
+                last_vec = Vector2D(last_result[0], last_result[1])
+
+            dx = result.x - last_vec.x
+            dy = result.y - last_vec.y
             norm_diff = math.hypot(dx, dy)
 
             if norm_diff <= dv_allowed:
                 limited_result = result
             else:
                 scale = dv_allowed / norm_diff
-                limited_result = (last_val[0] + dx * scale, last_val[1] + dy * scale)
+                limited_result = Vector2D(last_vec.x + dx * scale, last_vec.y + dy * scale)
                 # assert isinstance(limited_result, float)
         else:
             raise NotImplementedError(f"Unsupported output type: {type(result)}")

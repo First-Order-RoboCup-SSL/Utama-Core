@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from utama_core.entities.data.object import ObjectKey, ObjectType, TeamType
+from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.robot import Robot
 
@@ -34,7 +35,7 @@ class ProximityLookup:
         ball: Optional[Ball],
     ) -> Tuple[List[ObjectKey], np.ndarray]:
         object_keys: List[ObjectKey] = []
-        point_array: List[np.ndarray] = []
+        point_array: List[Vector2D] = []
 
         if friendly_robots:
             for robot in friendly_robots.values():
@@ -52,6 +53,8 @@ class ProximityLookup:
 
         return object_keys, np.array(point_array)
 
+    # Optimisation: could potentially store np.dot for ranking purposes,
+    # then sqrt only when querying (profile to see if this is worth it)
     def _build_proximity_matrix(self, point_array: np.ndarray) -> np.ndarray:
         """Build the pairwise Euclidean distance matrix between all objects."""
         if point_array.size < 2:

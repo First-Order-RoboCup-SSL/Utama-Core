@@ -10,7 +10,7 @@ from utama_core.config.roles import Role
 from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PATH
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.motion_controller import MotionController
+from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.strategy.common.base_blackboard import BaseBlackboard
@@ -229,4 +229,7 @@ class AbstractStrategy(ABC):
             try:
                 writer(output_path.as_posix())
             except (AssertionError, OSError, FileNotFoundError):
-                logger.warning("skipping %s export; Graphviz 'dot' executable not available", extension)
+                logger.warning(
+                    "skipping %s export; Graphviz 'dot' executable not available",
+                    extension,
+                )

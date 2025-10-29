@@ -26,7 +26,7 @@ class FindBlockingTarget(AbstractBehaviour):
         )
 
     def update(self) -> py_trees.common.Status:
-        game = self.blackboard.game.current
+        game = self.blackboard.game
         enemy, _ = game.proximity_lookup.closest_to_ball(TeamType.ENEMY)
         self.blackboard.blocking_target = enemy.id
         return py_trees.common.Status.SUCCESS
@@ -57,7 +57,7 @@ class BlockAttackerStep(AbstractBehaviour):
         )
 
     def update(self) -> py_trees.common.Status:
-        game = self.blackboard.game.current
+        game = self.blackboard.game
         robot_id = self.blackboard.defender_id
         blocking_target = self.blackboard.blocking_target
         command = block_attacker(
@@ -139,7 +139,7 @@ class DefenceStrategy(AbstractStrategy):
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if 3 <= n_runtime_friendly <= 5 and 1 <= n_runtime_enemy <= 6:
+        if 3 <= n_runtime_friendly <= 6 and 1 <= n_runtime_enemy <= 6:
             return True
         return False
 
