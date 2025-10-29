@@ -93,7 +93,7 @@ class PositionRefiner(BaseRefiner):
         return replace(
             old_robot,
             id=robot_data.id,
-            p=Vector2D(x=new_x, y=new_y),
+            p=Vector2D(new_x, new_y),
             orientation=robot_data.orientation,
         )
 
@@ -105,16 +105,16 @@ class PositionRefiner(BaseRefiner):
             id=robot_data.id,
             is_friendly=is_friendly,
             has_ball=False,
-            p=Vector2D(x=robot_data.x, y=robot_data.y),
-            v=Vector2D(x=0, y=0),
-            a=Vector2D(x=0, y=0),
+            p=Vector2D(robot_data.x, robot_data.y),
+            v=Vector2D(0, 0),
+            a=Vector2D(0, 0),
             orientation=robot_data.orientation,
         )
 
     @staticmethod
     def _ball_from_vision(ball_data: VisionBallData) -> Ball:
-        zv = Vector3D(x=0, y=0, z=0)
-        return Ball(Vector3D(x=ball_data.x, y=ball_data.y, z=ball_data.z), zv, zv)
+        zv = Vector3D(0, 0, 0)
+        return Ball(Vector3D(ball_data.x, ball_data.y, ball_data.z), zv, zv)
 
     @staticmethod
     def _get_most_confident_ball(balls: List[VisionBallData]) -> Ball:

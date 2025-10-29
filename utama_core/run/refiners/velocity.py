@@ -165,9 +165,9 @@ class VelocityRefiner(BaseRefiner):
 
         # Convert previous_pos_np back to VectorObject for subtraction
         if twod:
-            previous_pos = Vector2D(previous_pos_np[0], y=previous_pos_np[1])
+            previous_pos = Vector2D(previous_pos_np[0], previous_pos_np[1])
         else:
-            previous_pos = Vector3D(x=previous_pos_np[0], y=previous_pos_np[1], z=previous_pos_np[2])
+            previous_pos = Vector3D(previous_pos_np[0], previous_pos_np[1], previous_pos_np[2])
 
         velocity = (current_pos - previous_pos) / dt_secs
         # logger.debug(

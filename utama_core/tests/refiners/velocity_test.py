@@ -22,7 +22,7 @@ def create_ball_only_game(ts: float, x: float, y: float, z: float, vx: float = 1
         my_team_is_right=True,
         friendly_robots={},
         enemy_robots={},
-        ball=Ball(Vector3D(x=x, y=y, z=z), Vector3D(x=vx, y=vy, z=vz), None),
+        ball=Ball(Vector3D(x, y, z), Vector3D(vx, vy, vz), None),
     )
 
 
@@ -32,7 +32,7 @@ def create_one_robot_only_game(ts: float, x: float, y: float, is_friendly: bool)
             id=1,
             is_friendly=is_friendly,
             has_ball=True,
-            p=Vector2D(x=x, y=y),
+            p=Vector2D(x, y),
             v=None,
             a=None,
             orientation=0,
@@ -92,7 +92,7 @@ def test_extraction_of_time_velocity_pairs():
         vx, vy, vz = 1.0, 1.0, 1.0
         game_to_add = create_ball_only_game(time, time, time, time, vx, vy, vz)
         game_history.add_game(game_to_add)
-        all_added_game_data.append((time, Vector3D(x=vx, y=vy, z=vz)))
+        all_added_game_data.append((time, Vector3D(vx, vy, vz)))
 
     points_needed = VelocityRefiner.ACCELERATION_N_WINDOWS * VelocityRefiner.ACCELERATION_WINDOW_SIZE  # e.g., 15
 

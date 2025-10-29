@@ -8,6 +8,7 @@ local motion decisions.
 
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import dataclass
 from math import exp
@@ -46,7 +47,12 @@ class PlanResult:
 class DWATranslationController(AbstractDynamicWindowController):
     """Compute global linear velocities using a Dynamic Window Approach."""
 
-    def __init__(self, config: DynamicWindowConfig, num_robots: int = MAX_ROBOTS, env: SSLStandardEnv | None = None):
+    def __init__(
+        self,
+        config: DynamicWindowConfig,
+        num_robots: int = MAX_ROBOTS,
+        env: SSLStandardEnv | None = None,
+    ):
         super().__init__(config=config, env=env)
         self._previous_velocity: Dict[int, Vector2D] = {idx: Vector2D(0.0, 0.0) for idx in range(num_robots)}
 
@@ -132,7 +138,12 @@ N_DIRECTIONS = 16
 class DynamicWindowPlanner:
     """Stateless local planner backing the DWA translation controller."""
 
-    def __init__(self, game: Game, config: DynamicWindowConfig | None = None, env: SSLStandardEnv | None = None):
+    def __init__(
+        self,
+        game: Game,
+        config: DynamicWindowConfig | None = None,
+        env: SSLStandardEnv | None = None,
+    ):
         self._game = game
         self._config = config or DynamicWindowConfig()
         self._simulate_timestep = self._config.simulate_frames * TIMESTEP
@@ -155,36 +166,36 @@ class DynamicWindowPlanner:
             return PlanResult(target, float("inf"))
 
         obstacles = temporary_obstacles or []
-        return self._plan_local(friendly_robot_id, target.to_array(), obstacles)
+        return self._plan_local(friendly_robot_id, target, obstacles)
 
     def _plan_local(
         self,
         friendly_robot_id: int,
-        target: np.ndarray,
+        target: Vector2D,
         temporary_obstacles: List[ObstacleRegion],
     ) -> PlanResult | None:
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
         velocity = robot.v
-        current_speed = float(np.linalg.norm(velocity.to_array()))
+        current_speed = velocity.mag()
         safety_radius = self._dynamic_safety_radius(current_speed)
         safety_radius_sq = safety_radius * safety_radius
 
         delta_max_vel = self._simulate_timestep * self._max_acceleration
         best_score = float("-inf")
-        start_x, start_y = robot.p.x, robot.p.y
-        best_move = np.array([start_x, start_y], dtype=float)
+        start = robot.p
+        best_move = start
 
         rect_obstacles = to_rectangles(temporary_obstacles)
 
-        dx, dy = float(target[0] - start_x), float(target[1] - start_y)
-        ang0 = np.atan2(dy, dx)  # (-pi, pi]
-        step = 2 * np.pi / N_DIRECTIONS
+        dx, dy = target - start
+        ang0 = math.atan2(dy, dx)
+        step = 2 * math.pi / N_DIRECTIONS
         ordered_angles = [normalise_heading(ang0 + k * step) for k in range(N_DIRECTIONS)]
 
         for scale in self._candidate_scales():
             for ang in ordered_angles:
                 segment_start, segment_end = self._get_motion_segment(
-                    robot.p,
+                    start,
                     velocity,
                     delta_max_vel * scale,
                     ang,
@@ -214,11 +225,11 @@ class DynamicWindowPlanner:
         if best_score == float("-inf"):
             return None
 
-        segment_start = np.array([start_x, start_y], dtype=float)
+        segment_start = copy.copy(start)
         if self._segment_overshoots_target(segment_start, best_move, target):
-            best_move = target.copy()
+            best_move = copy.copy(target)
 
-        return PlanResult(Vector2D(float(best_move[0]), float(best_move[1])), best_score)
+        return PlanResult(best_move, best_score)
 
     def _get_obstacles(self, robot_id: int) -> List[Robot]:
         friendly = [r for rid, r in self._game.friendly_robots.items() if rid != robot_id]
@@ -235,38 +246,38 @@ class DynamicWindowPlanner:
     def _evaluate_segment(
         self,
         robot_id: int,
-        start: np.ndarray,
-        end: np.ndarray,
-        target: np.ndarray,
+        start: Vector2D,
+        end: Vector2D,
+        target: Vector2D,
         safety_radius_sq: float,
     ) -> float:
         """Evaluate a candidate motion segment; higher score is better."""
         seg_vec = end - start
 
-        start_dist = np.linalg.norm(target - start)
-        end_dist = np.linalg.norm(target - end)
+        start_dist = target.distance_to(start)
+        end_dist = target.distance_to(end)
         target_factor = start_dist - end_dist
 
         our_velocity_vector = seg_vec / self._simulate_timestep
-        our_position = np.asarray(self._game.friendly_robots[robot_id].p.to_array(), dtype=float)
+        our_position = self._game.friendly_robots[robot_id].p
 
         obstacle_factor = 0.0
         for obstacle in self._get_obstacles(robot_id):
-            their_velocity = np.asarray(obstacle.v.to_array(), dtype=float)
-            their_position = np.asarray(obstacle.p.to_array(), dtype=float)
+            their_velocity = obstacle.v
+            their_position = obstacle.p
 
             diff_v = our_velocity_vector - their_velocity
-            denom = float(np.dot(diff_v, diff_v))
+            denom = diff_v.dot(diff_v)
             if denom == 0.0:
                 continue
 
             diff_p = our_position - their_position
-            t = -float(np.dot(diff_v, diff_p)) / denom
+            t = -diff_v.dot(diff_p) / denom
             if t <= 0.0:
                 continue
 
             closest = diff_p + t * diff_v
-            d_sq = float(np.dot(closest, closest))
+            d_sq = closest.dot(closest)
             adjustment = max(self._safety_penalty_distance_sq - safety_radius_sq, 0.0)
             effective_d_sq = d_sq + adjustment
             obstacle_factor = max(
@@ -295,14 +306,12 @@ class DynamicWindowPlanner:
         rvel: Vector2D,
         delta_max_vel: float,
         ang: float,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        start = np.array(rpos.to_array(), dtype=float)
-        curr_velocity = np.array(rvel.to_array(), dtype=float)
-        direction = np.array([np.cos(ang), np.sin(ang)], dtype=float)
-        new_velocity = curr_velocity + delta_max_vel * direction
+    ) -> tuple[Vector2D, Vector2D]:
+        direction = Vector2D(math.cos(ang), math.sin(ang))
+        new_velocity = rvel + delta_max_vel * direction
         displacement = new_velocity * self._simulate_timestep
-        end = start + displacement
-        return start, end
+        end = rpos + displacement
+        return rpos, end
 
     def _candidate_scales(self) -> Iterable[float]:
         """Yield velocity scale factors from fast to slow until the window shrinks."""
@@ -311,25 +320,25 @@ class DynamicWindowPlanner:
             yield scale
             scale /= 4
 
-    def _segment_overshoots_target(self, start: np.ndarray, end: np.ndarray, target: np.ndarray) -> bool:
+    def _segment_overshoots_target(self, start: Vector2D, end: Vector2D, target: Vector2D) -> bool:
         """Return True when the candidate segment would pass through the target."""
         segment = end - start
-        seg_len_sq = float(np.dot(segment, segment))
+        seg_len_sq = segment.dot(segment)
         if seg_len_sq <= 1e-9:
             return False
 
         to_target = target - start
-        projection = float(np.dot(to_target, segment))
+        projection = to_target.dot(segment)
         if projection <= 0.0 or projection >= seg_len_sq:
             return False
 
         distance = point_segment_distance(target, start, end)
         return distance <= self._config.target_tolerance
 
-    @staticmethod
     def _segment_too_close(
-        start: np.ndarray,
-        end: np.ndarray,
+        self,
+        start: Vector2D,
+        end: Vector2D,
         obstacles: List[AxisAlignedRectangle],
         clearance: float,
     ) -> bool:
