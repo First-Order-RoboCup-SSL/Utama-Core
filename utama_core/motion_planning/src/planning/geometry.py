@@ -20,18 +20,22 @@ def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
 
 
-def point_segment_distance(point: np.ndarray, start: np.ndarray, end: np.ndarray) -> float:
-    """Return the minimal Euclidean distance between ``point`` and a line segment."""
-
+def point_segment_distance(point: np.ndarray, start: np.ndarray, end: np.ndarray, eps: float = 1e-9) -> float:
+    """Optimized minimal Euclidean distance between a point and a line segment (2D)."""
     segment = end - start
-    denom = float(np.dot(segment, segment))
-    if denom <= EPSILON:
-        return float(np.linalg.norm(point - start))
+    denom = np.dot(segment, segment)
 
-    t = float(np.dot(point - start, segment) / denom)
-    t = _clamp(t, 0.0, 1.0)
-    projection = start + t * segment
-    return float(np.linalg.norm(point - projection))
+    if denom < eps:
+        # Degenerate segment (start == end)
+        diff = point - start
+        return np.sqrt(np.dot(diff, diff))
+
+    t = np.dot(point - start, segment) / denom
+    # Clamp t without calling another function
+    t = np.clip(t, 0.0, 1.0)
+    projection = start + float(t) * segment
+    diff = point - projection
+    return np.sqrt(np.dot(diff, diff))
 
 
 def _orientation(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
