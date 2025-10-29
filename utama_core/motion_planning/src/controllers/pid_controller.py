@@ -11,11 +11,12 @@ from utama_core.motion_planning.src.pid.pid import (
     get_real_pids,
     get_rsim_pids,
 )
+from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 
 class PIDController(MotionController):
-    def __init__(self, mode: Mode):
-        super().__init__(mode)
+    def __init__(self, mode: Mode, n_friendly: int, rsim_env: SSLStandardEnv | None = None):
+        super().__init__(mode, n_friendly, rsim_env)
         self.pid_oren, self.pid_trans = self._initialize_pids(self.mode)
 
     def _initialize_pids(self, mode: Mode) -> tuple[PID, TwoDPID]:
@@ -28,7 +29,7 @@ class PIDController(MotionController):
         else:
             raise ValueError(f"Unknown mode enum: {mode}.")
 
-    def path_to(
+    def calculate(
         self,
         game: Game,
         robot_id: int,

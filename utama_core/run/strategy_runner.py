@@ -81,6 +81,7 @@ class StrategyRunner:
         exp_enemy: int,
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
+        control_scheme: str = "dwa",
     ):
         self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow
@@ -94,7 +95,10 @@ class StrategyRunner:
             if replay_writer_config
             else None
         )
-        self.motion_controller: Type[MotionController] = PIDController
+        if control_scheme.lower() == "pid":
+            self.motion_controller: Type[MotionController] = PIDController
+        else:
+            self.motion_controller: Type[MotionController] = DWAController
         self.logger = logging.getLogger(__name__)
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
@@ -102,9 +106,9 @@ class StrategyRunner:
             self.opp_strategy.setup_behaviour_tree(is_opp_strat=True)
 
         self._assert_exp_robots()
-        self.rsim_env, self.sim_controller = self._load_sim_and_controller()
+        self.rsim_env, self.sim_controller = self._load_sim()
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
-        self._load_robot_control_and_pids()
+        self._load_robot_controllers()
 
         self.position_refiner = PositionRefiner()
         self.velocity_refiner = VelocityRefiner()
@@ -118,6 +122,7 @@ class StrategyRunner:
             self.opp_current_game_frame,
             self.opp_game,
         ) = self._load_game()
+
         self.game_start_time = time.time()
 
         self.toggle_opp_first = False  # alternate the order of opp and friendly in run
@@ -145,7 +150,7 @@ class StrategyRunner:
         vision_thread.start()
         # referee_thread.start()
 
-    def _load_sim_and_controller(
+    def _load_sim(
         self,
     ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
         """Mode RSIM: Loads the RSim environment with the expected number of robots and corresponding sim controller.
@@ -232,7 +237,10 @@ class StrategyRunner:
                 self.exp_enemy, self.exp_friendly
             ), "Expected number of robots at runtime does not match opponent strategy."
 
-    def _load_robot_control_and_pids(self):
+    def _load_robot_controllers(self):
+        """
+        Load the robot controllers and motion controllers for both friendly and opponent strategies.
+        """
         if self.mode == Mode.RSIM:
             pvp_manager = None
             if self.opp_strategy:
@@ -279,10 +287,10 @@ class StrategyRunner:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
         self.my_strategy.load_robot_controller(my_robot_controller)
-        self.my_strategy.load_motion_controller(self.motion_controller(self.mode))
+        self.my_strategy.load_motion_controller(self.motion_controller(self.mode, self.exp_friendly, self.rsim_env))
         if self.opp_strategy:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
-            self.opp_strategy.load_motion_controller(self.motion_controller(self.mode))
+            self.opp_strategy.load_motion_controller(self.motion_controller(self.mode, self.exp_enemy, self.rsim_env))
 
     def _load_game(self):
         my_current_game_frame, opp_current_game_frame = GameGater.wait_until_game_valid(

@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from utama_core.entities.data.object import ObjectKey, ObjectType, TeamType
+from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.robot import Robot
 
@@ -34,7 +35,7 @@ class ProximityLookup:
         ball: Optional[Ball],
     ) -> Tuple[List[ObjectKey], np.ndarray]:
         object_keys: List[ObjectKey] = []
-        point_array: List[np.ndarray] = []
+        point_array: List[Vector2D] = []
 
         if friendly_robots:
             for robot in friendly_robots.values():

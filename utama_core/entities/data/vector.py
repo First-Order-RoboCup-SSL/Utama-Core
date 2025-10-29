@@ -8,39 +8,24 @@ T = TypeVar("T", bound="VectorBase")
 
 
 class VectorBase(ABC):
-    def __init__(self, *coords):
-        # allow for VectorBase(1, 2) or VectorBase((1, 2)) or VectorBase([1, 2])
-        if len(coords) == 1 and isinstance(coords[0], (tuple, list, np.ndarray)):
-            self._arr = np.array(coords[0])
-        else:
-            self._arr = np.array(coords)
+    __slots__ = ("x", "y")
 
-    @property
-    def x(self) -> float:
-        return self._arr[0]
-
-    @property
-    def y(self) -> float:
-        return self._arr[1]
-
+    @abstractmethod
     def mag(self) -> float:
-        if len(self._arr) == 2:
-            return math.hypot(self._arr[0], self._arr[1])
-        elif len(self._arr) == 3:
-            return math.sqrt(self._arr[0] ** 2 + self._arr[1] ** 2 + self._arr[2] ** 2)
-        else:
-            # Generic fallback for higher dimensions
-            return math.sqrt(sum(c * c for c in self._arr))
+        """
+        Calculate the magnitude of the vector.
+        """
+        ...
 
     def norm(self: T) -> T:
-        """Normalize the vector to unit length.
-
-        Returns a zero vector if the magnitude is too small.
         """
-        magnitude = self.mag()
-        if magnitude < 1e-8:
-            return self.__class__.from_array(np.zeros_like(self._arr))
-        return self.__class__.from_array(self._arr / magnitude)
+        Return a normalized copy of the vector. Returns zero vector if magnitude is too small.
+        """
+        ...
+
+    def dot(self, other: T) -> float:
+        """2D: Dot product with another vector."""
+        return self.x * other.x + self.y * other.y
 
     def angle_between(self, other: T) -> float:
         """2D: Angle between self and other vector using only x and y."""
@@ -67,93 +52,130 @@ class VectorBase(ABC):
         """
         2D: Calculate the distance to another vector.
         """
-        if isinstance(other, Vector2D):
-            return math.hypot(other.y - self.y, other.x - self.x)
-        else:
-            return math.hypot(other[1] - self.y, other[0] - self.x)
+        return math.hypot(other.y - self.y, other.x - self.x)
 
     def to_array(self) -> np.ndarray:
-        return self._arr
-
-    def __add__(self: T, other: T) -> T:
-        return self.__class__.from_array(self._arr + other._arr)
-
-    def __sub__(self: T, other: T) -> T:
-        return self.__class__.from_array(self._arr - other._arr)
-
-    def __mul__(self: T, scalar: float) -> T:
-        return self.__class__.from_array(self._arr * scalar)
-
-    def __rmul__(self: T, scalar: float) -> T:
-        return self.__mul__(scalar)
-
-    def __truediv__(self: T, scalar: float) -> T:
-        return self.__class__.from_array(self._arr / scalar)
-
-    def __neg__(self: T) -> T:
-        return self.__class__.from_array(-self._arr)
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, VectorBase):
-            return NotImplemented
-        return np.allclose(self._arr, other._arr)
+        return np.array(list(self))
 
     def __abs__(self) -> float:
         return self.mag()
 
-    def __getitem__(self, idx: int) -> float:
-        return self._arr[idx]
-
-    def __iter__(self):
-        return iter(self._arr)
-
-    def __array__(self, dtype=None, copy=True):
-        return np.array(self._arr, dtype=dtype, copy=copy)
-
-    @classmethod
-    @abstractmethod
-    def from_array(cls: Type[T], arr: np.ndarray) -> T: ...
-
 
 class Vector2D(VectorBase):
-    def __init__(self, x: float, y: float):
-        super().__init__(x, y)
+    __slots__ = ()
 
-    @property
-    def x(self) -> float:
-        return super().x
+    def __init__(self, x, y):
+        self.x = float(x)
+        self.y = float(y)
 
-    @property
-    def y(self) -> float:
-        return super().y
+    def __iter__(self):
+        yield self.x
+        yield self.y
 
-    @classmethod
-    def from_array(cls, arr: np.ndarray) -> "Vector2D":
-        return cls(arr[0], arr[1])
+    def __getitem__(self, index: int) -> float:
+        if index == 0:
+            return self.x
+        elif index == 1:
+            return self.y
+        raise IndexError("Vector2D index out of range")
+
+    def __add__(self, other: "Vector2D") -> "Vector2D":
+        return Vector2D(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other: "Vector2D") -> "Vector2D":
+        return Vector2D(self.x - other.x, self.y - other.y)
+
+    def __mul__(self, scalar: float) -> "Vector2D":
+        return Vector2D(self.x * scalar, self.y * scalar)
+
+    def __rmul__(self, scalar: float) -> "Vector2D":
+        return self.__mul__(scalar)
+
+    def __truediv__(self, scalar: float) -> "Vector2D":
+        return Vector2D(self.x / scalar, self.y / scalar)
+
+    def __neg__(self) -> "Vector2D":
+        return Vector2D(-self.x, -self.y)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Vector2D):
+            return NotImplemented
+        return math.isclose(self.x, other.x) and math.isclose(self.y, other.y)
+
+    def __array__(self, dtype=None, copy=True):
+        return np.array([self.x, self.y], dtype=dtype, copy=copy)
+
+    def mag(self) -> float:
+        return math.hypot(self.x, self.y)
+
+    def norm(self) -> "Vector2D":
+        """Return a normalized copy of the vector. Returns zero vector if magnitude is too small."""
+        magnitude = self.mag()
+        if magnitude < 1e-8:
+            return Vector2D(0.0, 0.0)
+        return Vector2D(self.x / magnitude, self.y / magnitude)
 
     def __repr__(self):
         return f"Vector2D(x={self.x}, y={self.y})"
 
 
 class Vector3D(VectorBase):
-    def __init__(self, x: float, y: float, z: float):
-        super().__init__(x, y, z)
+    __slots__ = ("z",)
 
-    @property
-    def x(self) -> float:
-        return super().x
+    def __init__(self, *coords):
+        self.x = float(coords[0])
+        self.y = float(coords[1])
+        self.z = float(coords[2])
 
-    @property
-    def y(self) -> float:
-        return super().y
+    def __iter__(self):
+        yield self.x
+        yield self.y
+        yield self.z
 
-    @property
-    def z(self) -> float:
-        return self._arr[2]
+    def __getitem__(self, index: int) -> float:
+        if index == 0:
+            return self.x
+        elif index == 1:
+            return self.y
+        elif index == 2:
+            return self.z
+        raise IndexError("Vector3D index out of range")
 
-    @classmethod
-    def from_array(cls, arr: np.ndarray) -> "Vector3D":
-        return cls(arr[0], arr[1], arr[2])
+    def __add__(self, other: "Vector3D") -> "Vector3D":
+        return Vector3D(self.x + other.x, self.y + other.y, self.z + other.z)
+
+    def __sub__(self, other: "Vector3D") -> "Vector3D":
+        return Vector3D(self.x - other.x, self.y - other.y, self.z - other.z)
+
+    def __mul__(self, scalar: float) -> "Vector3D":
+        return Vector3D(self.x * scalar, self.y * scalar, self.z * scalar)
+
+    def __rmul__(self, scalar: float) -> "Vector3D":
+        return self.__mul__(scalar)
+
+    def __truediv__(self, scalar: float) -> "Vector3D":
+        return Vector3D(self.x / scalar, self.y / scalar, self.z / scalar)
+
+    def __neg__(self) -> "Vector3D":
+        return Vector3D(-self.x, -self.y, -self.z)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Vector3D):
+            return NotImplemented
+        return math.isclose(self.x, other.x) and math.isclose(self.y, other.y) and math.isclose(self.z, other.z)
+
+    def __array__(self, dtype=None, copy=True):
+        return np.array([self.x, self.y, self.z], dtype=dtype, copy=copy)
+
+    def mag(self) -> float:
+        return math.sqrt(self.x**2 + self.y**2 + self.z**2)
+
+    def norm(self) -> "Vector3D":
+        """Return a normalized copy of the vector. Returns zero vector if magnitude is too small."""
+        magnitude = self.mag()
+        if magnitude < 1e-8:
+            return Vector3D(0.0, 0.0, 0.0)
+        return Vector3D(self.x / magnitude, self.y / magnitude, self.z / magnitude)
 
     def to_2d(self) -> Vector2D:
         return Vector2D(self.x, self.y)
@@ -167,11 +189,12 @@ if __name__ == "__main__":
 
     v2d = Vector2D(3, 4)
     v2d2 = Vector2D(1, 2)
-    print(np.dot(v2d, v2d2))  # Should print 5.0
+    print(np.dot(v2d, v2d2))  # Should print 11.0
+    print(v2d.dot(v2d2))  # Should print 11.0
 
-    print(v2d.angle_to(v2d2))  # Should print 0.5880026035475675
-    print(np.arctan2(v2d2.y - v2d.y, v2d2.x - v2d.x))  # Should print 0.5880026035475675
+    print(v2d.angle_to(v2d2))  # Should print -2.356194490192345
+    print(np.arctan2(v2d2.y - v2d.y, v2d2.x - v2d.x))  # Should print -2.356194490192345
 
     d = v2d2 - v2d
-    print(np.linalg.norm(d))  # Should print 2.23606797749979
-    print(v2d.distance_to(v2d2))  # Should print 2.23606797749979
+    print(np.linalg.norm(d))  # Should print 2.8284271247461903
+    print(v2d.distance_to(v2d2))  # Should print 2.8284271247461903

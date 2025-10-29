@@ -229,4 +229,7 @@ class AbstractStrategy(ABC):
             try:
                 writer(output_path.as_posix())
             except (AssertionError, OSError, FileNotFoundError):
-                logger.warning("skipping %s export; Graphviz 'dot' executable not available", extension)
+                logger.warning(
+                    "skipping %s export; Graphviz 'dot' executable not available",
+                    extension,
+                )
