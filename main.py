@@ -23,6 +23,7 @@ atexit.register(dump)
 
 def main():
     runner = StrategyRunner(
+        # strategy=RobotPlacementStrategy(robot_id=0),
         strategy=StartupStrategy(),
         my_team_is_yellow=True,
         my_team_is_right=True,

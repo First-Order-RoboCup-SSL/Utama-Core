@@ -53,10 +53,10 @@ class RobotPlacementStep(AbstractBehaviour):
             if switch:
                 if self.ty == -1:
                     self.ty = 1
-                    self.tx = 0
+                    self.tx = random.choice([0, 1])
                 else:
                     self.ty = -1
-                    self.tx = 0
+                    self.tx = 1
                     # self.tx = random.choice([0, 1])
 
             # changed so the robot tracks the ball while moving

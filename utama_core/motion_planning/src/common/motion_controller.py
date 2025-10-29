@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
 
 from utama_core.config.modes import Mode
 from utama_core.entities.data.vector import Vector2D
@@ -20,10 +19,10 @@ class MotionController(ABC):
         robot_id: int,
         target_pos: Vector2D,
         target_oren: float,
-    ) -> Tuple[Vector2D, float]:
+    ) -> tuple[Vector2D, float]:
         """
         Calculate the next motion command for the robot to reach the target.
-        returns a tuple of (tuple(global_x_velocity, global_y_velocity), angular_velocity).
+        returns a tuple of (Vector2D global velocity, angular_velocity).
         """
         ...
 

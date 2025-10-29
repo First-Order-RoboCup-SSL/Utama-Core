@@ -24,14 +24,14 @@ def move(
 
     robot = game.friendly_robots[robot_id]
 
-    (global_x_vel, global_y_vel), angular_vel = motion_controller.calculate(
+    global_velocity, angular_vel = motion_controller.calculate(
         game=game,
         robot_id=robot_id,
         target_pos=target_coords,
         target_oren=target_oren,
     )
 
-    forward_vel, left_vel = rotate_vector(global_x_vel, global_y_vel, robot.orientation)
+    forward_vel, left_vel = rotate_vector(global_velocity.x, global_velocity.y, robot.orientation)
 
     return RobotCommand(
         local_forward_vel=forward_vel,

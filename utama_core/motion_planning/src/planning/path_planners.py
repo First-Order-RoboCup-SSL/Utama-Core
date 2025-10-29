@@ -8,7 +8,7 @@ from shapely import Polygon
 from shapely.affinity import rotate
 from shapely.geometry import LineString, Point
 
-from utama_core.config.settings import ROBOT_RADIUS
+from utama_core.config.settings import ROBOT_RADIUS, TIMESTEP
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import Field
 from utama_core.entities.game.robot import Robot
@@ -22,6 +22,7 @@ from utama_core.motion_planning.src.planning.obstacles import (
     to_polygons,
     to_rectangles,
 )
+from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 logger = logging.getLogger(__name__)
 
@@ -275,235 +276,6 @@ class RRTPlanner:
         return None
 
 
-N_DIRECTIONS = 16
-
-
-def intersects_any_polygon(segment: LineString, obstacles: List[Polygon]) -> bool:
-    for o in obstacles:
-        if segment.distance(o.boundary) < ROBOT_RADIUS:
-            return True
-    return False
-
-
-def segment_too_close_to_obstacles(
-    start: np.ndarray,
-    end: np.ndarray,
-    obstacles: List[AxisAlignedRectangle],
-    clearance: float,
-) -> bool:
-    for obstacle in obstacles:
-        if obstacle.distance_to_segment(start, end) < clearance:
-            return True
-    return False
-
-
-class DynamicWindowPlanner:
-    """This class is a stateless planning class and should not be used on its own see the controllers class which
-    provide state tracking and waypoint switching for these classes such as TimedSwitchController.
-
-    TODO Add code to leave the defense areas via the nearest point such that the robot is outside the polygon this
-    should not be in the planners as we need this to be more reactive, happening during any skills like go_to_ball. The
-    behaviour tree should handle this.
-    """
-
-    def __init__(
-        self,
-        game: Game,
-        simulated_timestep: float,
-        max_acceleration: float,
-        max_safety_radius: float,
-        safety_penalty_distance_sq: float,
-        max_speed_for_full_bubble: float,
-    ):
-        """
-        :param game: The current game state
-        :param simulated_timestep: The timestep to simulate ahead for planning
-        :param max_acceleration: The maximum acceleration of the robot
-        :param max_safety_radius: The maximum safety radius to maintain from obstacles
-        :param safety_penalty_distance_sq: The distance squared at which we start applying obstacle penalties
-        :param max_speed_for_full_bubble: The speed at which we apply the full safety bubble
-        """
-        self._game = game
-        self._simulated_timestep = simulated_timestep
-        self._max_acceleration = max_acceleration
-        self._max_safety_radius = max_safety_radius
-        self._safety_penalty_distance_sq = safety_penalty_distance_sq
-        self._max_speed_for_full_bubble = max_speed_for_full_bubble
-
-    def path_to(
-        self,
-        friendly_robot_id: int,
-        target: Tuple[float, float],
-        temporary_obstacles: Optional[List[ObstacleRegion]] = None,
-    ) -> Tuple[Tuple[float, float], float]:
-        """Plan a short-horizon move and associated score for a robot.
-
-        Args:
-            friendly_robot_id (int): The ID of the friendly robot.
-            target (Tuple[float, float]): The target coordinates (x, y).
-            temporary_obstacles (Optional[List[Polygon]]): Obstacles to avoid in addition to robots.
-
-        Returns:
-            Tuple[Tuple[float, float], float]: The next waypoint (x, y) and its score. If the
-            robot is already within the goal tolerance, the target itself is returned.
-        """
-        robot: Robot = self._game.friendly_robots[friendly_robot_id]
-        start_x, start_y = robot.p.x, robot.p.y
-
-        if dist((start_x, start_y), target) < 1.5 * ROBOT_RADIUS:
-            return target, float("inf")
-
-        obstacles = temporary_obstacles or []
-        return self.local_planning(friendly_robot_id, np.array(target, dtype=float), obstacles)
-
-    def local_planning(
-        self,
-        friendly_robot_id: int,
-        target: np.ndarray,
-        temporary_obstacles: List[ObstacleRegion],
-    ) -> Tuple[Tuple[float, float], float]:
-        velocity = self._game.friendly_robots[friendly_robot_id].v
-        current_speed = float(np.linalg.norm(velocity.to_array()))
-        safety_radius = self._dynamic_safety_radius(current_speed)
-        safety_radius_sq = safety_radius * safety_radius
-
-        # Calculate the allowed velocities in this frame
-        delta_vel = self._simulated_timestep * self._max_acceleration
-        best_score = float("-inf")
-        robot: Robot = self._game.friendly_robots[friendly_robot_id]
-
-        start_x, start_y = robot.p.x, robot.p.y
-        best_move = np.array([start_x, start_y], dtype=float)
-
-        # sf is the scale factor for the velocity - we start with full velocity to prioritise speed
-        # and then reduce it if we can't find a good segment, this allows the robot to dynamically adjust
-        # its speed and path length to avoid obstacles
-        sf = 1
-        rect_obstacles = to_rectangles(temporary_obstacles)
-
-        dx, dy = float(target[0] - start_x), float(target[1] - start_y)
-        ang0 = np.atan2(dy, dx)  # (-pi, pi]
-        step = 2 * np.pi / N_DIRECTIONS
-
-        ordered_angles = [normalise_heading(ang0 + k * step) for k in range(N_DIRECTIONS)]
-
-        while best_score < 0 and sf > 0.05:
-            for ang in ordered_angles:
-                segment_start, segment_end = self._get_motion_segment((start_x, start_y), velocity, delta_vel * sf, ang)
-
-                if segment_too_close_to_obstacles(segment_start, segment_end, rect_obstacles, safety_radius):
-                    continue
-                # Evaluate this segment, avoiding obstacles
-                score = self._evaluate_segment(
-                    friendly_robot_id,
-                    segment_start,
-                    segment_end,
-                    target,
-                    safety_radius_sq,
-                )
-
-                if score > best_score:
-                    best_score = score
-                    best_move = segment_end
-
-            sf /= 4
-
-        return (float(best_move[0]), float(best_move[1])), best_score
-
-    def _get_obstacles(self, robot_id: int) -> List[Robot]:
-        friendly = [r for rid, r in self._game.friendly_robots.items() if rid != robot_id]
-        enemies = list(self._game.enemy_robots.values())
-        return friendly + enemies
-
-    def make_inf_long(self, segment: LineString):
-        norm = segment.length
-        endX, endY = segment.coords[1]
-        startX, startY = segment.coords[0]
-        new = Point(startX + (endX - startX) / norm * 18, startY + (endY - startY) / norm * 18)
-        return LineString([segment.coords[0], new])
-
-    def obstacle_penalty_function(self, x):
-        return exp(-8 * (x - self._safety_penalty_distance_sq))
-
-    def target_closeness_function(self, x):
-        return 4 * exp(-8 * x)
-
-    def _evaluate_segment(
-        self,
-        robot_id: int,
-        start: np.ndarray,
-        end: np.ndarray,
-        target: np.ndarray,
-        safety_radius_sq: float,
-    ) -> float:
-        """Evaluate line segment; bigger score is better."""
-        seg_vec = end - start
-
-        start_dist = np.linalg.norm(target - start)
-        end_dist = np.linalg.norm(target - end)
-        target_factor = start_dist - end_dist
-
-        our_velocity_vector = seg_vec / self._simulated_timestep
-        our_position = np.asarray(self._game.friendly_robots[robot_id].p.to_array(), dtype=float)
-
-        obstacle_factor = 0.0
-        for obstacle in self._get_obstacles(robot_id):
-            their_velocity = np.asarray(obstacle.v.to_array(), dtype=float)
-            their_position = np.asarray(obstacle.p.to_array(), dtype=float)
-
-            diff_v = our_velocity_vector - their_velocity
-            denom = float(np.dot(diff_v, diff_v))
-            if denom == 0.0:
-                continue
-
-            diff_p = our_position - their_position
-            t = -float(np.dot(diff_v, diff_p)) / denom
-            if t <= 0.0:
-                continue
-
-            closest = diff_p + t * diff_v
-            d_sq = float(np.dot(closest, closest))
-            adjustment = max(self._safety_penalty_distance_sq - safety_radius_sq, 0.0)
-            effective_d_sq = d_sq + adjustment
-            obstacle_factor = max(
-                obstacle_factor,
-                self.obstacle_penalty_function(effective_d_sq) * self.obstacle_penalty_function(t),
-            )
-
-        distance_to_line = point_segment_distance(target, start, end)
-        score = 5 * target_factor - obstacle_factor + self.target_closeness_function(distance_to_line)
-        return score
-
-    def _dynamic_safety_radius(self, speed: float) -> float:
-        """Interpolate the clearance radius between the physical robot radius and the nominal DWA bubble."""
-        min_radius = ROBOT_RADIUS
-        max_radius = self._max_safety_radius
-        if max_radius <= min_radius:
-            return max_radius
-        if self._max_speed_for_full_bubble <= 1e-6:
-            return max_radius
-        ratio = min(max(speed / self._max_speed_for_full_bubble, 0.0), 1.0)
-        return min_radius + (max_radius - min_radius) * ratio
-
-    def _get_motion_segment(
-        self,
-        rpos: Tuple[float, float],
-        rvel: Tuple[float, float],
-        delta_vel: float,
-        ang: float,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        start = np.array([rpos[0], rpos[1]], dtype=float)
-        adj_vel = np.array(
-            [
-                rvel[0] * self._simulated_timestep + delta_vel * np.cos(ang),
-                rvel[1] * self._simulated_timestep + delta_vel * np.sin(ang),
-            ],
-            dtype=float,
-        )
-        end = start + adj_vel
-        return start, end
-
-
 class BisectorPlanner:
     """This class is a stateless planning class and should not be used on its own see the controllers class which
     provide state tracking and waypoint switching for these classes such as TimedSwitchController.
@@ -635,3 +407,10 @@ class BisectorPlanner:
             if Point((o.x, o.y)).distance(seg) < BisectorPlanner.OBSTACLE_CLEARANCE:
                 return True
         return False
+
+
+def intersects_any_polygon(segment: LineString, obstacles: List[Polygon]) -> bool:
+    for o in obstacles:
+        if segment.distance(o.boundary) < ROBOT_RADIUS:
+            return True
+    return False
