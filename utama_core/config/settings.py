@@ -2,6 +2,8 @@ from pathlib import Path
 
 from numpy import pi
 
+from .formulas import max_acceleration
+
 MAX_ROBOTS = 6
 
 # interval between frames
@@ -20,6 +22,8 @@ MAX_VEL = 2
 MAX_ANGULAR_VEL = 4
 
 ROBOT_RADIUS = 0.09  # TODO: probably not the best place to put this
+
+HEIGHT_COM = 0.07  # height of the robot's center of mass
 
 BLACKBOARD_NAMESPACE_MAP = {True: "Opp", False: "My"}
 
@@ -74,3 +78,7 @@ MAX_GAME_HISTORY = 20
 
 REPLAY_BASE_PATH = Path.cwd() / "replays"
 RENDER_BASE_PATH = Path.cwd() / "renders"
+
+GRAVITY = 9.81
+
+MAX_ACCELERATION = max_acceleration(gravity=GRAVITY, robot_radius=ROBOT_RADIUS, height_com=HEIGHT_COM)

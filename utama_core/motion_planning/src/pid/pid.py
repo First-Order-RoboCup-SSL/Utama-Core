@@ -3,6 +3,7 @@ import time
 from typing import Optional, Tuple
 
 from utama_core.config.settings import (
+    MAX_ACCELERATION,
     MAX_ANGULAR_VEL,
     MAX_VEL,
     REAL_MAX_ANGULAR_VEL,
@@ -362,7 +363,7 @@ class PIDAccelerationLimiterWrapper:
     Maintains separate state for each robot to prevent interference.
     """
 
-    def __init__(self, internal_pid: AbstractPID, max_acceleration: float, dt: float = TIMESTEP):
+    def __init__(self, internal_pid: AbstractPID, max_acceleration: float = MAX_ACCELERATION, dt: float = TIMESTEP):
         self._internal_pid = internal_pid
         self._last_results = {}  # Key: robot_id
         self._max_acceleration = max_acceleration
