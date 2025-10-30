@@ -2,10 +2,9 @@ import math
 import time
 from typing import Optional, Tuple
 
-from utama_core.config.robot_params.grsim import MAX_ANGULAR_VEL
-from utama_core.config.robot_params.grsim import MAX_ANGULAR_VEL as REAL_MAX_ANG
-from utama_core.config.robot_params.grsim import MAX_VEL
-from utama_core.config.robot_params.grsim import MAX_VEL as REAL_MAX_VEL
+from utama_core.config.robot_params.grsim import MAX_ANGULAR_VEL, MAX_VEL
+from utama_core.config.robot_params.real import MAX_ANGULAR_VEL as REAL_MAX_ANG
+from utama_core.config.robot_params.real import MAX_VEL as REAL_MAX_VEL
 from utama_core.config.robot_params.rsim import MAX_ANGULAR_VEL as RSIM_MAX_ANG
 from utama_core.config.robot_params.rsim import MAX_VEL as RSIM_MAX_VEL
 from utama_core.config.settings import SENDING_DELAY, TIMESTEP
