@@ -185,7 +185,7 @@ class DynamicWindowPlanner:
         Args:
             friendly_robot_id (int): The ID of the friendly robot to plan for.
             target (Vector2D): The target position to move towards.
-            temporary_obstacles (List[ObstacleRegion]): A list of temporary obstacles to consider during planning
+            temporary_obstacles (List[ObstacleRegion]): A list of temporary obstacles to consider during planning.
         Returns:
             Optional[tuple[Vector2D, float]]: A tuple containing the best waypoint and its score,
             or None if no valid path is found.
