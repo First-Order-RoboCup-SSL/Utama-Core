@@ -1,8 +1,7 @@
 import numpy as np
 
+from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.global_utils.math_utils import distance
-
-ROBOT_RADIUS = 0.09
 
 
 class PointOnField:

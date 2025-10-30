@@ -2,13 +2,11 @@ import logging
 import warnings
 from typing import Dict, List, Optional, Union
 
+from utama_core.config.physical_constants import MAX_ROBOTS
+from utama_core.config.robot_params.grsim import CHIP_ANGLE, DRIBBLE_SPD, KICK_SPD
 from utama_core.config.settings import (
     BLUE_TEAM_SIM_PORT,
-    CHIP_ANGLE,
-    DRIBBLE_SPD,
-    KICK_SPD,
     LOCAL_HOST,
-    MAX_ROBOTS,
     YELLOW_TEAM_SIM_PORT,
 )
 from utama_core.entities.data.command import (
