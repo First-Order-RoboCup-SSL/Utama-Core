@@ -3,7 +3,8 @@ import math
 import numpy as np
 from robot_control.src.tests.utils import one_robot_placement
 
-from utama_core.config.settings import MAX_ANGULAR_VEL, MAX_VEL, TIMESTEP
+from utama_core.config.robot_params.real import MAX_ANGULAR_VEL, MAX_VEL
+from utama_core.config.settings import TIMESTEP
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.pid.pid import (
     PID,

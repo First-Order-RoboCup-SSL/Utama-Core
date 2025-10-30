@@ -6,7 +6,7 @@ import py_trees
 import pydot
 from py_trees import utilities as py_trees_utilities
 
-from utama_core.config.roles import Role
+from utama_core.config.enums import Role
 from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PATH
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game

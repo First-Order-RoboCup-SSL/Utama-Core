@@ -1,7 +1,7 @@
 import time
 from typing import Tuple
 
-from utama_core.config.defaults import LEFT_START_ONE, RIGHT_START_ONE
+from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.config.settings import (
     ADD_Y_COORD,
     LOCAL_HOST,

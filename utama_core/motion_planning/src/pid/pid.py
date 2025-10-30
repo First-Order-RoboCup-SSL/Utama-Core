@@ -2,14 +2,13 @@ import math
 import time
 from typing import Optional, Tuple
 
-from utama_core.config.settings import (
-    MAX_ANGULAR_VEL,
-    MAX_VEL,
-    REAL_MAX_ANGULAR_VEL,
-    REAL_MAX_VEL,
-    SENDING_DELAY,
-    TIMESTEP,
-)
+from utama_core.config.robot_params.grsim import MAX_ANGULAR_VEL
+from utama_core.config.robot_params.grsim import MAX_ANGULAR_VEL as REAL_MAX_ANG
+from utama_core.config.robot_params.grsim import MAX_VEL
+from utama_core.config.robot_params.grsim import MAX_VEL as REAL_MAX_VEL
+from utama_core.config.robot_params.rsim import MAX_ANGULAR_VEL as RSIM_MAX_ANG
+from utama_core.config.robot_params.rsim import MAX_VEL as RSIM_MAX_VEL
+from utama_core.config.settings import SENDING_DELAY, TIMESTEP
 from utama_core.entities.data.vector import Vector2D
 from utama_core.global_utils.math_utils import normalise_heading
 from utama_core.motion_planning.src.pid.pid_abstract import AbstractPID
@@ -19,8 +18,8 @@ from utama_core.motion_planning.src.pid.pid_abstract import AbstractPID
 def get_real_pids():
     pid_oren = PID(
         TIMESTEP,
-        REAL_MAX_ANGULAR_VEL,
-        -REAL_MAX_ANGULAR_VEL,
+        REAL_MAX_ANG,
+        -REAL_MAX_ANG,
         0.5,
         0.075,
         0,
@@ -40,8 +39,8 @@ def get_real_pids():
 def get_real_pids_goalie():
     pid_oren = PID(
         TIMESTEP,
-        REAL_MAX_ANGULAR_VEL,
-        -REAL_MAX_ANGULAR_VEL,
+        REAL_MAX_ANG,
+        -REAL_MAX_ANG,
         1.5,
         0,
         0,
@@ -80,8 +79,8 @@ def get_grsim_pids():
 def get_rsim_pids():
     pid_oren = PID(
         TIMESTEP,
-        MAX_ANGULAR_VEL,
-        -MAX_ANGULAR_VEL,
+        RSIM_MAX_ANG,
+        -RSIM_MAX_ANG,
         4.5,
         0.02,
         0,
@@ -90,7 +89,7 @@ def get_rsim_pids():
     )
     pid_trans = TwoDPID(
         TIMESTEP,
-        MAX_VEL,
+        RSIM_MAX_VEL,
         1.8,
         0.025,
         0.0,

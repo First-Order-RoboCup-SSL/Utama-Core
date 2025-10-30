@@ -1,5 +1,7 @@
-from utama_core.config.modes import Mode
-from utama_core.config.settings import MAX_VEL, REAL_MAX_VEL
+from utama_core.config.enums import Mode
+from utama_core.config.robot_params.grsim import MAX_VEL
+from utama_core.config.robot_params.real import MAX_VEL as REAL_MAX_VEL
+from utama_core.config.robot_params.rsim import MAX_VEL as RSIM_MAX_VEL
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
@@ -23,14 +25,15 @@ class DWAController(MotionController):
         self, mode: Mode, n_friendly: int, env: SSLStandardEnv | None
     ) -> tuple[PID, DWATranslationController]:
         defaults = DynamicWindowConfig()
-        max_speed = MAX_VEL
         max_acceleration = defaults.max_acceleration
         target_tolerance = defaults.target_tolerance
 
         if mode == Mode.RSIM:
             pid_oren, _ = get_rsim_pids()
+            max_speed = RSIM_MAX_VEL
         elif mode == Mode.GRSIM:
             pid_oren, _ = get_grsim_pids()
+            max_speed = MAX_VEL
         elif mode == Mode.REAL:
             pid_oren, _ = get_real_pids()
             max_speed = REAL_MAX_VEL
