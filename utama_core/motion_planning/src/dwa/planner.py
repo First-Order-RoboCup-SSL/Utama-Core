@@ -33,14 +33,6 @@ from utama_core.motion_planning.src.planning.obstacles import (
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 
-@dataclass(slots=True)
-class PlanResult:
-    """Lightweight container for the planner outcome."""
-
-    waypoint: Vector2D
-    score: float
-
-
 class DWATranslationController:
     """Compute global linear velocities using a Dynamic Window Approach."""
 
@@ -84,15 +76,14 @@ class DWATranslationController:
             self._previous_velocity[robot_id] = zero_velocity
             return zero_velocity
 
-        plan = planner.path_to(
+        best_move, best_score = planner.path_to(
             robot_id,
             target,
             temporary_obstacles=[],
         )
 
-        if plan is None or plan.score == float("-inf"):
+        if best_move is None or best_score == float("-inf"):
             return Vector2D(0.0, 0.0)
-        best_move = plan.waypoint
 
         dt_plan = self._planner_config.simulate_frames * TIMESTEP
         dx_w = best_move.x - current.x
@@ -166,12 +157,21 @@ class DynamicWindowPlanner:
         friendly_robot_id: int,
         target: Vector2D,
         temporary_obstacles: Optional[List[ObstacleRegion]] = None,
-    ) -> PlanResult | None:
-        """Return the next short-horizon waypoint for the given robot."""
+    ) -> tuple[Vector2D, float] | None:
+        """
+        Plan a path for the specified friendly robot to the target position, avoiding any temporary obstacles.
+        Args:
+            friendly_robot_id (int): The ID of the friendly robot to plan for.
+            target (Vector2D): The target position to move towards.
+            temporary_obstacles (Optional[List[ObstacleRegion]]): A list of temporary obstacles to consider during planning.
+        Returns:
+            Optional[tuple[Vector2D, float]]: A tuple containing the best waypoint and its score,
+            or None if no valid path is found.
+        """
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
 
         if robot.p.distance_to(target) < 1.5 * ROBOT_RADIUS:
-            return PlanResult(target, float("inf"))
+            return target, float("inf")
 
         obstacles = temporary_obstacles or []
         return self._plan_local(friendly_robot_id, target, obstacles)
@@ -181,7 +181,17 @@ class DynamicWindowPlanner:
         friendly_robot_id: int,
         target: Vector2D,
         temporary_obstacles: List[ObstacleRegion],
-    ) -> PlanResult | None:
+    ) -> tuple[Vector2D, float] | None:
+        """
+        Plan a local motion segment towards the target while avoiding obstacles.
+        Args:
+            friendly_robot_id (int): The ID of the friendly robot to plan for.
+            target (Vector2D): The target position to move towards.
+            temporary_obstacles (List[ObstacleRegion]): A list of temporary obstacles to consider during planning
+        Returns:
+            Optional[tuple[Vector2D, float]]: A tuple containing the best waypoint and its score,
+            or None if no valid path is found.
+        """
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
         velocity = robot.v
         current_speed = velocity.mag()
@@ -237,7 +247,7 @@ class DynamicWindowPlanner:
         if self._segment_overshoots_target(segment_start, best_move, target):
             best_move = copy.copy(target)
 
-        return PlanResult(best_move, best_score)
+        return best_move, best_score
 
     def _get_obstacles(self, robot_id: int) -> List[Robot]:
         friendly = [r for rid, r in self._game.friendly_robots.items() if rid != robot_id]
