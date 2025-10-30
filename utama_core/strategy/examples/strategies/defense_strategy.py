@@ -3,8 +3,7 @@ from typing import Any
 import py_trees
 from py_trees.composites import Selector, Sequence
 
-from utama_core.config.roles import Role
-from utama_core.config.tactics import Tactic
+from utama_core.config.enums import Role, Tactic
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
 from utama_core.skills.src.block import block_attacker

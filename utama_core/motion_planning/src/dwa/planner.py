@@ -16,7 +16,8 @@ from typing import Dict, Iterable, List, Optional
 
 import numpy as np
 
-from utama_core.config.settings import MAX_ROBOTS, ROBOT_RADIUS, TIMESTEP
+from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
+from utama_core.config.settings import TIMESTEP
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.game.robot import Robot

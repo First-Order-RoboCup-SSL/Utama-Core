@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from utama_core.config.modes import Mode
+from utama_core.config.enums import Mode
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
