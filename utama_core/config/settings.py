@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from formulas import max_acceleration
 from numpy import pi
+
+from .formulas import max_acceleration
 
 MAX_ROBOTS = 6
 
@@ -80,4 +81,4 @@ RENDER_BASE_PATH = Path.cwd() / "renders"
 
 GRAVITY = 9.81
 
-MAX_ACCELERATION = max_acceleration()
+MAX_ACCELERATION = max_acceleration(gravity=GRAVITY, robot_radius=ROBOT_RADIUS, height_com=HEIGHT_COM)
