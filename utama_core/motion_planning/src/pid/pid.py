@@ -2,6 +2,7 @@ import math
 import time
 from typing import Optional, Tuple
 
+from utama_core.config.enums import Mode
 from utama_core.config.robot_params.grsim import MAX_ANGULAR_VEL, MAX_VEL
 from utama_core.config.robot_params.real import MAX_ANGULAR_VEL as REAL_MAX_ANG
 from utama_core.config.robot_params.real import MAX_VEL as REAL_MAX_VEL
@@ -11,93 +12,6 @@ from utama_core.config.settings import SENDING_DELAY, TIMESTEP
 from utama_core.entities.data.vector import Vector2D
 from utama_core.global_utils.math_utils import normalise_heading
 from utama_core.motion_planning.src.pid.pid_abstract import AbstractPID
-
-
-# Helper functions to create PID controllers.
-def get_real_pids():
-    pid_oren = PID(
-        TIMESTEP,
-        REAL_MAX_ANG,
-        -REAL_MAX_ANG,
-        0.5,
-        0.075,
-        0,
-    )
-    pid_trans = TwoDPID(
-        TIMESTEP,
-        REAL_MAX_VEL,
-        0,
-        0,
-        0.0,
-    )
-    return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=0.2), PIDAccelerationLimiterWrapper(
-        pid_trans, max_acceleration=0.05
-    )
-
-
-def get_real_pids_goalie():
-    pid_oren = PID(
-        TIMESTEP,
-        REAL_MAX_ANG,
-        -REAL_MAX_ANG,
-        1.5,
-        0,
-        0,
-    )
-    pid_trans = TwoDPID(TIMESTEP, 2, 8.5, 0.025, 1)
-    return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=2), PIDAccelerationLimiterWrapper(
-        pid_trans, max_acceleration=1
-    )
-
-
-def get_grsim_pids():
-    pid_oren = PID(
-        TIMESTEP,
-        MAX_ANGULAR_VEL,
-        -MAX_ANGULAR_VEL,
-        4.5,
-        0.02,
-        0,
-        integral_min=-10,
-        integral_max=10,
-    )
-    pid_trans = TwoDPID(
-        TIMESTEP,
-        MAX_VEL,
-        1.8,
-        0.025,
-        0.0,
-        integral_min=-5,
-        integral_max=5,
-    )
-    return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=50, dt=TIMESTEP), PIDAccelerationLimiterWrapper(
-        pid_trans, max_acceleration=2, dt=TIMESTEP
-    )
-
-
-def get_rsim_pids():
-    pid_oren = PID(
-        TIMESTEP,
-        RSIM_MAX_ANG,
-        -RSIM_MAX_ANG,
-        4.5,
-        0.02,
-        0,
-        integral_min=-10,
-        integral_max=10,
-    )
-    pid_trans = TwoDPID(
-        TIMESTEP,
-        RSIM_MAX_VEL,
-        1.8,
-        0.025,
-        0.0,
-        integral_min=-5,
-        integral_max=5,
-    )
-    return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=50, dt=TIMESTEP), PIDAccelerationLimiterWrapper(
-        pid_trans, max_acceleration=2, dt=TIMESTEP
-    )
 
 
 class PID(AbstractPID[float]):
@@ -416,6 +330,95 @@ class PIDAccelerationLimiterWrapper:
         self._internal_pid.reset(robot_id)
         if robot_id in self._last_results:
             del self._last_results[robot_id]
+
+
+# Helper functions to create PID controllers.
+def get_pids(mode: Mode) -> tuple[PID, TwoDPID]:
+    """
+    Get PID controllers for orientation and translation based on the specified mode.
+    """
+    if mode == Mode.RSIM:
+        pid_oren = PID(
+            TIMESTEP,
+            RSIM_MAX_ANG,
+            -RSIM_MAX_ANG,
+            4.5,
+            0.02,
+            0,
+            integral_min=-10,
+            integral_max=10,
+        )
+        pid_trans = TwoDPID(
+            TIMESTEP,
+            RSIM_MAX_VEL,
+            1.8,
+            0.025,
+            0.0,
+            integral_min=-5,
+            integral_max=5,
+        )
+        return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=50, dt=TIMESTEP), PIDAccelerationLimiterWrapper(
+            pid_trans, max_acceleration=2, dt=TIMESTEP
+        )
+    elif mode == Mode.GRSIM:
+        pid_oren = PID(
+            TIMESTEP,
+            MAX_ANGULAR_VEL,
+            -MAX_ANGULAR_VEL,
+            4.5,
+            0.02,
+            0,
+            integral_min=-10,
+            integral_max=10,
+        )
+        pid_trans = TwoDPID(
+            TIMESTEP,
+            MAX_VEL,
+            1.8,
+            0.025,
+            0.0,
+            integral_min=-5,
+            integral_max=5,
+        )
+        return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=50, dt=TIMESTEP), PIDAccelerationLimiterWrapper(
+            pid_trans, max_acceleration=2, dt=TIMESTEP
+        )
+    elif mode == Mode.REAL:
+        pid_oren = PID(
+            TIMESTEP,
+            REAL_MAX_ANG,
+            -REAL_MAX_ANG,
+            0.5,
+            0.075,
+            0,
+        )
+        pid_trans = TwoDPID(
+            TIMESTEP,
+            REAL_MAX_VEL,
+            0,
+            0,
+            0.0,
+        )
+        return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=0.2), PIDAccelerationLimiterWrapper(
+            pid_trans, max_acceleration=0.05
+        )
+    else:
+        raise ValueError(f"Unknown mode enum: {mode}.")
+
+
+def get_real_pids_goalie():
+    pid_oren = PID(
+        TIMESTEP,
+        REAL_MAX_ANG,
+        -REAL_MAX_ANG,
+        1.5,
+        0,
+        0,
+    )
+    pid_trans = TwoDPID(TIMESTEP, 2, 8.5, 0.025, 1)
+    return PIDAccelerationLimiterWrapper(pid_oren, max_acceleration=2), PIDAccelerationLimiterWrapper(
+        pid_trans, max_acceleration=1
+    )
 
 
 if __name__ == "__main__":
