@@ -14,3 +14,4 @@ class DynamicWindowConfig:
     max_speed_for_full_bubble: float = 1.0
     target_tolerance: float = 0.01
     max_speed: float = MAX_VEL
+    n_directions: int = 16

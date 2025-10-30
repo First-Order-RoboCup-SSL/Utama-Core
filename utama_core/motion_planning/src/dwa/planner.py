@@ -131,9 +131,6 @@ class DWATranslationController:
         )
 
 
-N_DIRECTIONS = 16
-
-
 class DynamicWindowPlanner:
     """Stateless local planner backing the DWA translation controller."""
 
@@ -207,8 +204,8 @@ class DynamicWindowPlanner:
 
         dx, dy = target - start
         ang0 = math.atan2(dy, dx)
-        step = 2 * math.pi / N_DIRECTIONS
-        ordered_angles = [normalise_heading(ang0 + k * step) for k in range(N_DIRECTIONS)]
+        step = 2 * math.pi / self._config.n_directions
+        ordered_angles = [normalise_heading(ang0 + k * step) for k in range(self._config.n_directions)]
 
         for scale in self._candidate_scales():
             for ang in ordered_angles:
