@@ -8,7 +8,8 @@ from shapely import Polygon
 from shapely.affinity import rotate
 from shapely.geometry import LineString, Point
 
-from utama_core.config.settings import ROBOT_RADIUS, TIMESTEP
+from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.settings import TIMESTEP
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import Field
 from utama_core.entities.game.robot import Robot

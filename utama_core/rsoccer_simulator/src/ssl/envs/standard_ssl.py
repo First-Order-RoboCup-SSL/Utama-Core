@@ -5,8 +5,9 @@ from typing import Tuple
 import gymnasium as gym
 import numpy as np
 
-from utama_core.config.defaults import LEFT_START_ONE, RIGHT_START_ONE
-from utama_core.config.settings import KICK_SPD, TIMESTEP
+from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
+from utama_core.config.robot_params.rsim import KICK_SPD
+from utama_core.config.settings import TIMESTEP
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.global_utils.math_utils import deg_to_rad, rad_to_deg

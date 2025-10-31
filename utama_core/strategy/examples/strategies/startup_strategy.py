@@ -1,6 +1,6 @@
 import py_trees
 
-from utama_core.config.defaults import LEFT_START_ONE, RIGHT_START_ONE
+from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.global_utils.math_utils import Vector2D
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy

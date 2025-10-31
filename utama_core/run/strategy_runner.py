@@ -6,14 +6,10 @@ from collections import deque
 from dataclasses import replace
 from typing import List, Optional, Tuple, Type
 
-from utama_core.config.defaults import LEFT_START_ONE, RIGHT_START_ONE
-from utama_core.config.modes import Mode, mode_str_to_enum
-from utama_core.config.settings import (
-    MAX_CAMERAS,
-    MAX_GAME_HISTORY,
-    MAX_ROBOTS,
-    TIMESTEP,
-)
+from utama_core.config.enums import Mode, mode_str_to_enum
+from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
+from utama_core.config.physical_constants import MAX_ROBOTS
+from utama_core.config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameHistory

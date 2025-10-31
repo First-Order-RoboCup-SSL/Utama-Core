@@ -2,8 +2,7 @@ from typing import Dict, Union
 
 import py_trees
 
-from utama_core.config.roles import Role
-from utama_core.config.tactics import Tactic
+from utama_core.config.enums import Role, Tactic
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
