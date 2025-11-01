@@ -1,6 +1,5 @@
 from typing import Optional
 
-from utama_core.config.physical_constants import MAX_ROBOTS
 from utama_core.config.settings import TIMESTEP
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
