@@ -283,10 +283,10 @@ class StrategyRunner:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
         self.my_strategy.load_robot_controller(my_robot_controller)
-        self.my_strategy.load_motion_controller(self.motion_controller(self.mode, self.exp_friendly, self.rsim_env))
+        self.my_strategy.load_motion_controller(self.motion_controller(self.mode, self.rsim_env))
         if self.opp_strategy:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
-            self.opp_strategy.load_motion_controller(self.motion_controller(self.mode, self.exp_enemy, self.rsim_env))
+            self.opp_strategy.load_motion_controller(self.motion_controller(self.mode, self.rsim_env))
 
     def _load_game(self):
         my_current_game_frame, opp_current_game_frame = GameGater.wait_until_game_valid(

@@ -1,22 +1,9 @@
-"""Dynamic Window Approach based motion controllers.
-
-This module provides drop-in replacements for the legacy PID translation and
-rotation controllers. The new controllers share the same public interface so
-that existing skills can remain unchanged while leveraging the DWA planner for
-local motion decisions.
-"""
-
-from __future__ import annotations
-
 import copy
 import math
-from dataclasses import dataclass
 from math import exp
-from typing import Dict, Iterable, List, Optional
+from typing import Iterable, List, Optional
 
-import numpy as np
-
-from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
+from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.config.settings import TIMESTEP
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -34,116 +21,6 @@ from utama_core.motion_planning.src.planning.obstacles import (
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 
-@dataclass(slots=True)
-class PlanResult:
-    """Lightweight container for the planner outcome."""
-
-    waypoint: Vector2D
-    score: float
-
-
-class DWATranslationController:
-    """Compute global linear velocities using a Dynamic Window Approach."""
-
-    def __init__(
-        self,
-        config: DynamicWindowConfig,
-        num_robots: int = MAX_ROBOTS,
-        env: SSLStandardEnv | None = None,
-    ):
-        self._planner_config = config
-        self.env: SSLStandardEnv | None = env
-        self._control_period = TIMESTEP
-        self._planner: Optional["DynamicWindowPlanner"] = None
-        self._previous_velocity: Dict[int, Vector2D] = {idx: Vector2D(0.0, 0.0) for idx in range(num_robots)}
-
-    def _ensure_planner(self, game: Game) -> "DynamicWindowPlanner":
-        if not isinstance(game, Game):
-            raise TypeError(f"DWA planner requires a Game instance. {type(game)} given.")
-
-        if self._planner is None:
-            self._planner = self._create_planner(game)
-        return self._planner
-
-    def calculate(
-        self,
-        game: Game,
-        target: Vector2D,
-        robot_id: int,
-    ) -> Vector2D:
-        planner = self._ensure_planner(game)
-
-        current = game.friendly_robots[robot_id].p
-        if current is None:
-            return Vector2D(0.0, 0.0)
-
-        if target is None:
-            return Vector2D(0.0, 0.0)
-
-        if current.distance_to(target) <= self._planner_config.target_tolerance:
-            zero_velocity = Vector2D(0.0, 0.0)
-            self._previous_velocity[robot_id] = zero_velocity
-            return zero_velocity
-
-        plan = planner.path_to(
-            robot_id,
-            target,
-            temporary_obstacles=[],
-        )
-
-        if plan is None or plan.score == float("-inf"):
-            return Vector2D(0.0, 0.0)
-        best_move = plan.waypoint
-
-        dt_plan = self._planner_config.simulate_frames * TIMESTEP
-        dx_w = best_move.x - current.x
-        dy_w = best_move.y - current.y
-        velocity_global = Vector2D(dx_w / dt_plan, dy_w / dt_plan)
-
-        velocity_limited = self._apply_speed_limits(velocity_global)
-        velocity_limited = self._apply_acceleration_limits(robot_id, velocity_limited)
-        self._previous_velocity[robot_id] = velocity_limited
-
-        if self.env is not None:
-            self.env.draw_point(best_move.x, best_move.y, color="blue", width=2)
-
-        return velocity_limited
-
-    def reset(self, robot_id: int):
-        self._previous_velocity[robot_id] = Vector2D(0.0, 0.0)
-
-    def _apply_speed_limits(self, velocity: Vector2D) -> Vector2D:
-        speed = velocity.mag()
-        if speed <= self._planner_config.max_speed:
-            return velocity
-        if speed == 0:
-            return Vector2D(0.0, 0.0)
-        scale = self._planner_config.max_speed / speed
-        return Vector2D(velocity.x * scale, velocity.y * scale)
-
-    def _apply_acceleration_limits(self, robot_id: int, velocity: Vector2D) -> Vector2D:
-        prev_velocity = self._previous_velocity.get(robot_id, Vector2D(0.0, 0.0))
-        delta_velocity = velocity - prev_velocity
-        delta_speed = delta_velocity.mag()
-        allowed_delta = self._planner_config.max_acceleration * self._control_period
-        if delta_speed <= allowed_delta:
-            return velocity
-        if delta_speed == 0:
-            return prev_velocity
-        scale = allowed_delta / delta_speed
-        return prev_velocity + delta_velocity * scale
-
-    def _create_planner(self, game: Game) -> "DynamicWindowPlanner":
-        return DynamicWindowPlanner(
-            game=game,
-            config=self._planner_config,
-            env=self.env,
-        )
-
-
-N_DIRECTIONS = 16
-
-
 class DynamicWindowPlanner:
     """Stateless local planner backing the DWA translation controller."""
 
@@ -156,6 +33,7 @@ class DynamicWindowPlanner:
         self._game = game
         self._config = config or DynamicWindowConfig()
         self._simulate_timestep = self._config.simulate_frames * TIMESTEP
+        self._control_period = TIMESTEP
         self._max_acceleration = self._config.max_acceleration
         self._max_safety_radius = self._config.max_safety_radius
         self._safety_penalty_distance_sq = self._config.safety_penalty_distance_sq
@@ -167,12 +45,21 @@ class DynamicWindowPlanner:
         friendly_robot_id: int,
         target: Vector2D,
         temporary_obstacles: Optional[List[ObstacleRegion]] = None,
-    ) -> PlanResult | None:
-        """Return the next short-horizon waypoint for the given robot."""
+    ) -> tuple[Vector2D, float] | None:
+        """
+        Plan a path for the specified friendly robot to the target position, avoiding any temporary obstacles.
+        Args:
+            friendly_robot_id (int): The ID of the friendly robot to plan for.
+            target (Vector2D): The target position to move towards.
+            temporary_obstacles (Optional[List[ObstacleRegion]]): A list of temporary obstacles to consider during planning.
+        Returns:
+            Optional[tuple[Vector2D, float]]: A tuple containing the best waypoint and its score,
+            or None if no valid path is found.
+        """
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
 
         if robot.p.distance_to(target) < 1.5 * ROBOT_RADIUS:
-            return PlanResult(target, float("inf"))
+            return target, float("inf")
 
         obstacles = temporary_obstacles or []
         return self._plan_local(friendly_robot_id, target, obstacles)
@@ -182,14 +69,24 @@ class DynamicWindowPlanner:
         friendly_robot_id: int,
         target: Vector2D,
         temporary_obstacles: List[ObstacleRegion],
-    ) -> PlanResult | None:
+    ) -> tuple[Vector2D, float] | None:
+        """
+        Plan a local motion segment towards the target while avoiding obstacles.
+        Args:
+            friendly_robot_id (int): The ID of the friendly robot to plan for.
+            target (Vector2D): The target position to move towards.
+            temporary_obstacles (List[ObstacleRegion]): A list of temporary obstacles to consider during planning.
+        Returns:
+            Optional[tuple[Vector2D, float]]: A tuple containing the best waypoint and its score,
+            or None if no valid path is found.
+        """
         robot: Robot = self._game.friendly_robots[friendly_robot_id]
         velocity = robot.v
         current_speed = velocity.mag()
         safety_radius = self._dynamic_safety_radius(current_speed)
         safety_radius_sq = safety_radius * safety_radius
 
-        delta_max_vel = self._simulate_timestep * self._max_acceleration
+        delta_max_vel = self._control_period * self._max_acceleration
         best_score = float("-inf")
         start = robot.p
         best_move = start
@@ -198,8 +95,8 @@ class DynamicWindowPlanner:
 
         dx, dy = target - start
         ang0 = math.atan2(dy, dx)
-        step = 2 * math.pi / N_DIRECTIONS
-        ordered_angles = [normalise_heading(ang0 + k * step) for k in range(N_DIRECTIONS)]
+        step = 2 * math.pi / self._config.n_directions
+        ordered_angles = [normalise_heading(ang0 + k * step) for k in range(self._config.n_directions)]
 
         for scale in self._candidate_scales():
             for ang in ordered_angles:
@@ -228,6 +125,8 @@ class DynamicWindowPlanner:
                     best_score = score
                     best_move = segment_end
 
+            ### EARLY EXIT ###
+            ## NEEDS TO BE CAREFUL WITH THIS TO AVOID SUBOPTIMAL PATHS ##
             if best_score >= 0:
                 break
 
@@ -238,7 +137,7 @@ class DynamicWindowPlanner:
         if self._segment_overshoots_target(segment_start, best_move, target):
             best_move = copy.copy(target)
 
-        return PlanResult(best_move, best_score)
+        return best_move, best_score
 
     def _get_obstacles(self, robot_id: int) -> List[Robot]:
         friendly = [r for rid, r in self._game.friendly_robots.items() if rid != robot_id]

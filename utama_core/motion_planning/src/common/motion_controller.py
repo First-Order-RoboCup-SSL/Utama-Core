@@ -7,9 +7,8 @@ from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 
 class MotionController(ABC):
-    def __init__(self, mode: Mode, n_friendly: int, rsim_env: SSLStandardEnv | None = None):
+    def __init__(self, mode: Mode, rsim_env: SSLStandardEnv | None = None):
         self.mode = mode
-        self.n_friendly = n_friendly
         self.rsim_env: SSLStandardEnv | None = rsim_env
 
     @abstractmethod

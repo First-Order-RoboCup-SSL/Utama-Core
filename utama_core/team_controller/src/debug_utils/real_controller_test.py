@@ -6,9 +6,10 @@ import numpy as np
 from robot_control.src.skills import empty_command, go_to_ball, turn_on_spot
 from vision.vision_receiver import VisionReceiver
 
+from utama_core.config.enums import Mode
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.pid.pid import get_real_pids
+from utama_core.motion_planning.src.pid.pid import get_pids
 from utama_core.team_controller.src.controllers import RealRobotController
 from utama_core.team_controller.src.data.message_enum import MessageType
 
@@ -19,7 +20,7 @@ def data_update_listener(receiver: VisionReceiver):
 
 
 def rotate_on_ball_with_vision(game: Game, robot_controller: RealRobotController):
-    pid_oren, pid_trans = get_real_pids(6)
+    pid_oren, pid_trans = get_pids(Mode.REAL)
     message_queue = queue.SimpleQueue()
     receiver = VisionReceiver(message_queue, n_cameras=1)
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
@@ -83,7 +84,7 @@ def rotate_on_ball_with_vision(game: Game, robot_controller: RealRobotController
 
 
 def get_ball_test_with_vision(game: Game, robot_controller: RealRobotController):
-    pid_oren, pid_trans = get_real_pids(6)
+    pid_oren, pid_trans = get_pids(Mode.REAL)
     message_queue = queue.SimpleQueue()
     receiver = VisionReceiver(message_queue, n_cameras=1)
     data_thread = threading.Thread(target=data_update_listener, args=(receiver,))
