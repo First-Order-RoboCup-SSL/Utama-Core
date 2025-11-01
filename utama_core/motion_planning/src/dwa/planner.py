@@ -125,6 +125,8 @@ class DynamicWindowPlanner:
                     best_score = score
                     best_move = segment_end
 
+            ### EARLY EXIT ###
+            ## NEEDS TO BE CAREFUL WITH THIS TO AVOID SUBOPTIMAL PATHS ##
             if best_score >= 0:
                 break
 

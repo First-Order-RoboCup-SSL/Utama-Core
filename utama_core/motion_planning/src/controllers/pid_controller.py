@@ -9,8 +9,8 @@ from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 
 class PIDController(MotionController):
-    def __init__(self, mode: Mode, n_friendly: int, rsim_env: SSLStandardEnv | None = None):
-        super().__init__(mode, n_friendly, rsim_env)
+    def __init__(self, mode: Mode, rsim_env: SSLStandardEnv | None = None):
+        super().__init__(mode, rsim_env)
         self.pid_oren, self.pid_trans = get_pids(mode)
 
     def calculate(

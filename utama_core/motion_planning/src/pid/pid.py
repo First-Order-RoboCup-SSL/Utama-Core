@@ -245,9 +245,9 @@ class TwoDPID(AbstractPID[Vector2D]):
         else:
             x_vel = output * (dx / error)
             y_vel = output * (dy / error)
-            return self.scale_velocity(x_vel, y_vel, self.max_velocity)
+            return self._apply_speed_limits(x_vel, y_vel, self.max_velocity)
 
-    def scale_velocity(self, x_vel: float, y_vel: float, max_vel: float) -> Vector2D:
+    def _apply_speed_limits(self, x_vel: float, y_vel: float, max_vel: float) -> Vector2D:
         current_vel = math.hypot(x_vel, y_vel)
         if current_vel > max_vel:
             scaling_factor = max_vel / current_vel

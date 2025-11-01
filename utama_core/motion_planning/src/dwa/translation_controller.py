@@ -1,9 +1,12 @@
-from typing import Dict, Optional
+from typing import Optional
 
 from utama_core.config.physical_constants import MAX_ROBOTS
 from utama_core.config.settings import TIMESTEP
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.motion_planning.src.common.acceleration_limiter import (
+    AccelerationLimiter,
+)
 from utama_core.motion_planning.src.dwa.config import DynamicWindowConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
@@ -16,14 +19,16 @@ class DWATranslationController:
     def __init__(
         self,
         config: DynamicWindowConfig,
-        num_robots: int = MAX_ROBOTS,
         env: SSLStandardEnv | None = None,
     ):
         self._planner_config = config
         self.env: SSLStandardEnv | None = env
         self._control_period = TIMESTEP
         self._planner: Optional[DynamicWindowPlanner] = None
-        self._previous_velocity: Dict[int, Vector2D] = {idx: Vector2D(0.0, 0.0) for idx in range(num_robots)}
+        self._acceleration_limiter = AccelerationLimiter(
+            max_acceleration=self._planner_config.max_acceleration,
+            dt=self._control_period,
+        )
 
     def _ensure_planner(self, game: Game) -> DynamicWindowPlanner:
         if not isinstance(game, Game):
@@ -50,7 +55,7 @@ class DWATranslationController:
 
         if current.distance_to(target) <= self._planner_config.target_tolerance:
             zero_velocity = Vector2D(0.0, 0.0)
-            self._previous_velocity[robot_id] = zero_velocity
+            self._acceleration_limiter.reset(robot_id)
             return zero_velocity
 
         path = planner.path_to(
@@ -71,8 +76,7 @@ class DWATranslationController:
         velocity_global = Vector2D(dx_w / dt_plan, dy_w / dt_plan)
 
         velocity_limited = self._apply_speed_limits(velocity_global)
-        velocity_limited = self._apply_acceleration_limits(robot_id, velocity_limited)
-        self._previous_velocity[robot_id] = velocity_limited
+        velocity_limited = self._acceleration_limiter.limit(robot_id, velocity_limited)
 
         if self.env is not None:
             self.env.draw_point(best_move.x, best_move.y, color="blue", width=2)
@@ -80,7 +84,7 @@ class DWATranslationController:
         return velocity_limited
 
     def reset(self, robot_id: int):
-        self._previous_velocity[robot_id] = Vector2D(0.0, 0.0)
+        self._acceleration_limiter.reset(robot_id)
 
     def _apply_speed_limits(self, velocity: Vector2D) -> Vector2D:
         speed = velocity.mag()
@@ -90,18 +94,6 @@ class DWATranslationController:
             return Vector2D(0.0, 0.0)
         scale = self._planner_config.max_speed / speed
         return Vector2D(velocity.x * scale, velocity.y * scale)
-
-    def _apply_acceleration_limits(self, robot_id: int, velocity: Vector2D) -> Vector2D:
-        prev_velocity = self._previous_velocity.get(robot_id, Vector2D(0.0, 0.0))
-        delta_velocity = velocity - prev_velocity
-        delta_speed = delta_velocity.mag()
-        allowed_delta = self._planner_config.max_acceleration * self._control_period
-        if delta_speed <= allowed_delta:
-            return velocity
-        if delta_speed == 0:
-            return prev_velocity
-        scale = allowed_delta / delta_speed
-        return prev_velocity + delta_velocity * scale
 
     def _create_planner(self, game: Game) -> DynamicWindowPlanner:
         return DynamicWindowPlanner(

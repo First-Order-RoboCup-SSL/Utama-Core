@@ -12,20 +12,17 @@ from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEn
 
 
 class DWAController(MotionController):
-    def __init__(self, mode: Mode, n_friendly: int, rsim_env: SSLStandardEnv | None):
-        super().__init__(mode, n_friendly, rsim_env)
-        self._dwa_oren, self._dwa_trans = self._initialize_dwa(mode, n_friendly, rsim_env)
+    def __init__(self, mode: Mode, rsim_env: SSLStandardEnv | None):
+        super().__init__(mode, rsim_env)
+        self._dwa_oren, self._dwa_trans = self._initialize_dwa(mode, rsim_env)
 
-    def _initialize_dwa(
-        self, mode: Mode, n_friendly: int, env: SSLStandardEnv | None
-    ) -> tuple[PID, DWATranslationController]:
+    def _initialize_dwa(self, mode: Mode, env: SSLStandardEnv | None) -> tuple[PID, DWATranslationController]:
 
         pid_oren, _ = get_pids(mode)
         dwa_config = get_dwa_config(mode)
 
         trans = DWATranslationController(
             config=dwa_config,
-            num_robots=n_friendly,
             env=env,
         )
         return pid_oren, trans
