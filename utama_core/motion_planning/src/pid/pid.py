@@ -2,10 +2,39 @@ import math
 import time
 from typing import Optional
 
+from utama_core.config.enums import Mode
 from utama_core.config.settings import SENDING_DELAY
 from utama_core.entities.data.vector import Vector2D
 from utama_core.global_utils.math_utils import normalise_heading
+from utama_core.motion_planning.src.pid.configs import (
+    OrientationPIDConfigs,
+    PIDConfigs,
+    TranslationPIDConfigs,
+    get_pid_configs,
+)
 from utama_core.motion_planning.src.pid.pid_abstract import AbstractPID
+from utama_core.motion_planning.src.pid.pid_acceleration_limiter import (
+    PIDAccelerationLimiterWrapper,
+)
+
+
+def get_pids(mode: Mode, config: PIDConfigs) -> tuple[PIDAccelerationLimiterWrapper, PIDAccelerationLimiterWrapper]:
+    """Instantiate PID controllers from a configuration."""
+    config = get_pid_configs(mode)
+
+    pid_oren = PID(config.orientation)
+    pid_trans = TwoDPID(config.translation)
+    limited_oren = PIDAccelerationLimiterWrapper(
+        pid_oren,
+        max_acceleration=config.orientation.max_acceleration,
+        dt=config.orientation.dt,
+    )
+    limited_trans = PIDAccelerationLimiterWrapper(
+        pid_trans,
+        max_acceleration=config.translation.max_acceleration,
+        dt=config.translation.dt,
+    )
+    return limited_oren, limited_trans
 
 
 class PID(AbstractPID[float]):
@@ -28,33 +57,26 @@ class PID(AbstractPID[float]):
 
     def __init__(
         self,
-        dt: float,
-        max_output: Optional[float],
-        min_output: Optional[float],
-        Kp: float,
-        Kd: float,
-        Ki: float,
-        integral_min: Optional[float] = None,
-        integral_max: Optional[float] = None,
+        config: OrientationPIDConfigs,
     ):
-        if dt <= 0:
+        if config.dt <= 0:
             raise ValueError("dt should be greater than zero")
-        self.dt = dt
+        self.dt = config.dt
         self.delay = SENDING_DELAY / 1000  # Convert to seconds
 
-        self.max_output = max_output
-        self.min_output = min_output
+        self.max_output = config.max_output
+        self.min_output = config.min_output
 
-        self.Kp = Kp
-        self.Kd = Kd
-        self.Ki = Ki
+        self.Kp = config.kp
+        self.Kd = config.kd
+        self.Ki = config.ki
 
         self.pre_errors = {i: 0.0 for i in range(6)}
         self.integrals = {i: 0.0 for i in range(6)}
 
         # Anti-windup limits
-        self.integral_min = integral_min
-        self.integral_max = integral_max
+        self.integral_min = config.integral_min
+        self.integral_max = config.integral_max
 
         self.prev_times = {i: 0.0 for i in range(6)}
 
@@ -150,31 +172,25 @@ class TwoDPID(AbstractPID[Vector2D]):
 
     def __init__(
         self,
-        dt: float,
-        max_velocity: float,
-        Kp: float,
-        Kd: float,
-        Ki: float,
-        integral_min: Optional[float] = None,
-        integral_max: Optional[float] = None,
+        config: TranslationPIDConfigs,
     ):
-        if dt <= 0:
+        if config.dt <= 0:
             raise ValueError("dt should be greater than zero")
-        self.dt = dt
+        self.dt = config.dt
         self.delay = SENDING_DELAY / 1000  # Delay in seconds
 
-        self.max_velocity = max_velocity
+        self.max_velocity = config.max_velocity
 
-        self.Kp = Kp
-        self.Kd = Kd
-        self.Ki = Ki
+        self.Kp = config.kp
+        self.Kd = config.kd
+        self.Ki = config.ki
 
         self.pre_errors = {i: 0.0 for i in range(6)}
         self.integrals = {i: 0.0 for i in range(6)}
 
         # Anti-windup limits
-        self.integral_min = integral_min
-        self.integral_max = integral_max
+        self.integral_min = config.integral_min
+        self.integral_max = config.integral_max
 
         self.prev_times = {i: 0.0 for i in range(6)}
 

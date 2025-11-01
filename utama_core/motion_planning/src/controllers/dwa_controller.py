@@ -6,8 +6,8 @@ from utama_core.motion_planning.src.dwa.config import get_dwa_config
 from utama_core.motion_planning.src.dwa.translation_controller import (
     DWATranslationController,
 )
-from utama_core.motion_planning.src.pid.config import get_pids
-from utama_core.motion_planning.src.pid.pid import PID
+from utama_core.motion_planning.src.pid.configs import get_pid_configs
+from utama_core.motion_planning.src.pid.pid import PID, get_pids
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 
@@ -18,7 +18,8 @@ class DWAController(MotionController):
 
     def _initialize_dwa(self, mode: Mode, env: SSLStandardEnv | None) -> tuple[PID, DWATranslationController]:
 
-        pid_oren, _ = get_pids(mode)
+        pid_config = get_pid_configs(mode)
+        pid_oren, _ = get_pids(mode, pid_config)
         dwa_config = get_dwa_config(mode)
 
         trans = DWATranslationController(

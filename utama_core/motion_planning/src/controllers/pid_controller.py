@@ -4,14 +4,16 @@ from utama_core.config.enums import Mode
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.motion_planning.src.pid.config import get_pids
+from utama_core.motion_planning.src.pid.configs import get_pid_configs
+from utama_core.motion_planning.src.pid.pid import get_pids
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 
 class PIDController(MotionController):
     def __init__(self, mode: Mode, rsim_env: SSLStandardEnv | None = None):
         super().__init__(mode, rsim_env)
-        self.pid_oren, self.pid_trans = get_pids(mode)
+        pid_config = get_pid_configs(mode)
+        self.pid_oren, self.pid_trans = get_pids(mode, pid_config)
 
     def calculate(
         self,
