@@ -11,14 +11,14 @@ from utama_core.config.robot_params.rsim import MAX_VEL as RSIM_MAX_VEL
 class DynamicWindowConfig:
     """Configuration shared by the Dynamic Window planner and controller."""
 
-    simulate_frames: float = 3.0
-    max_acceleration: float = 50
+    simulate_frames: int = 10
+    max_acceleration: float = 8.0
     max_safety_radius: float = ROBOT_RADIUS * 2.5
     safety_penalty_distance_sq: float = 0.3
     max_speed_for_full_bubble: float = 1.0
     target_tolerance: float = 0.01
     max_speed: float = MAX_VEL
-    n_directions: int = 8
+    n_directions: int = 16
 
 
 def get_dwa_config(mode: Mode) -> DynamicWindowConfig:
