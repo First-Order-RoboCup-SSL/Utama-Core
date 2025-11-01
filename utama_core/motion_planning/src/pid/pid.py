@@ -18,7 +18,9 @@ from utama_core.motion_planning.src.pid.pid_acceleration_limiter import (
 )
 
 
-def get_pids(mode: Mode, config: PIDConfigs) -> tuple[PIDAccelerationLimiterWrapper, PIDAccelerationLimiterWrapper]:
+def get_pids(
+    mode: Mode,
+) -> tuple[PIDAccelerationLimiterWrapper, PIDAccelerationLimiterWrapper]:
     """Instantiate PID controllers from a configuration."""
     config = get_pid_configs(mode)
 
