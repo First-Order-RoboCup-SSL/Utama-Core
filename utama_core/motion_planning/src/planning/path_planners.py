@@ -136,7 +136,7 @@ class RRTPlanner:
                     yield p
 
     def _compress_point(self, point: Point) -> Tuple[int, int]:
-        return int((point.x + Field.half_length) // 1), int((point.y + Field.half_width) // 1)
+        return int((point.x + self.game.field.half_length) // 1), int((point.y + self.game.field.half_width) // 1)
 
     def _add_compressed_point(self, point: Point):
         cp = self._compress_point(point)
@@ -194,8 +194,8 @@ class RRTPlanner:
                 )
             if random.random() < self.EXPLORE_BIAS:
                 rand_point = Point(
-                    random.uniform(-Field.half_length, Field.half_length),
-                    random.uniform(-Field.half_width, Field.half_width),
+                    random.uniform(-self.game.field.half_length, self.game.field.half_length),
+                    random.uniform(-self.game.field.half_width, self.game.field.half_width),
                 )
             else:
                 rand_point = Point(target[0], target[1])
@@ -370,7 +370,9 @@ class BisectorPlanner:
             self._env.draw_line(halves[0].coords, width=3)
             self._env.draw_line(halves[1].coords, width=3)
         got = None
-        for s in range(int(max(Field.half_length * 2, Field.half_width * 2) / BisectorPlanner.SAMPLE_SIZE)):
+        for s in range(
+            int(max(self.game.field.half_length * 2, self.game.field.half_width * 2) / BisectorPlanner.SAMPLE_SIZE)
+        ):
             offset = s * BisectorPlanner.SAMPLE_SIZE
 
             for h in halves:

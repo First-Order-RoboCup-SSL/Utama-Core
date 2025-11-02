@@ -3,7 +3,7 @@ import threading
 import time
 import warnings
 from collections import deque
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import List, Optional, Tuple, Type
 
 from utama_core.config.enums import Mode, mode_str_to_enum
@@ -13,6 +13,7 @@ from utama_core.config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameHistory
+from utama_core.entities.game.field import Field
 from utama_core.global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
@@ -53,6 +54,14 @@ logger = logging.getLogger(__name__)  # If this is within the class, or define i
 logging.captureWarnings(True)
 
 
+@dataclass
+class FieldConfig:
+    """Defines field geometry with two corner coordinates. Center of the field at (0,0)."""
+
+    top_left: tuple[float, float]
+    bottom_right: tuple[float, float]
+
+
 class StrategyRunner:
     """Main class to run the robot controller and strategy.
 
@@ -75,6 +84,7 @@ class StrategyRunner:
         mode: str,
         exp_friendly: int,
         exp_enemy: int,
+        field_config: FieldConfig,
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         control_scheme: str = "dwa",
@@ -85,6 +95,7 @@ class StrategyRunner:
         self.mode: Mode = self._load_mode(mode)
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
+        self.field_config = field_config
         self.opp_strategy = opp_strategy
         self.replay_writer = (
             ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
@@ -300,7 +311,9 @@ class StrategyRunner:
             rsim_env=self.rsim_env,
         )
         my_game_history = GameHistory(MAX_GAME_HISTORY)
-        my_game = Game(my_game_history, my_current_game_frame)
+        field = Field(my_current_game_frame.my_team_is_right, field_config=self.field_config)
+        my_game = Game(my_game_history, my_current_game_frame, field=field)
+
         if self.opp_strategy:
             opp_game_history = GameHistory(MAX_GAME_HISTORY)
             opp_game = Game(opp_game_history, opp_current_game_frame)
