@@ -31,62 +31,11 @@ class Field:
     Call the class properties to get the field information
     """
 
-    # _HALF_LENGTH = 4.5  # x value
-    # _HALF_WIDTH = 3  # y value
     _HALF_GOAL_WIDTH = 0.5
     _HALF_DEFENSE_AREA_LENGTH = 0.5
     _HALF_DEFENSE_AREA_WIDTH = 1
-    # _RIGHT_GOAL_LINE = LineString(
-    #     [
-    #         (_HALF_LENGTH, _HALF_GOAL_WIDTH),
-    #         (_HALF_LENGTH, -_HALF_GOAL_WIDTH),
-    #     ]
-    # )
-    # _LEFT_GOAL_LINE = LineString(
-    #     [
-    #         (-_HALF_LENGTH, _HALF_GOAL_WIDTH),
-    #         (-_HALF_LENGTH, -_HALF_GOAL_WIDTH),
-    #     ]
-    # )
+
     _CENTER_CIRCLE = Point(0, 0).buffer(0.5)  # center circle with radius 500
-    # _RIGHT_DEFENSE_AREA = Polygon(
-    #     [
-    #         (_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
-    #         (
-    #             _HALF_LENGTH - 2 * _HALF_DEFENSE_AREA_LENGTH,
-    #             _HALF_DEFENSE_AREA_WIDTH,
-    #         ),
-    #         (
-    #             _HALF_LENGTH - 2 * _HALF_DEFENSE_AREA_LENGTH,
-    #             -_HALF_DEFENSE_AREA_WIDTH,
-    #         ),
-    #         (_HALF_LENGTH, -_HALF_DEFENSE_AREA_WIDTH),
-    #         (_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
-    #     ]
-    # )
-    # _LEFT_DEFENSE_AREA = Polygon(
-    #     [
-    #         (-_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
-    #         (
-    #             -_HALF_LENGTH + 2 * _HALF_DEFENSE_AREA_LENGTH,
-    #             _HALF_DEFENSE_AREA_WIDTH,
-    #         ),
-    #         (
-    #             -_HALF_LENGTH + 2 * _HALF_DEFENSE_AREA_LENGTH,
-    #             -_HALF_DEFENSE_AREA_WIDTH,
-    #         ),
-    #         (-_HALF_LENGTH, -_HALF_DEFENSE_AREA_WIDTH),
-    #         (-_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
-    #     ]
-    # )
-    # _FULL_FIELD = Polygon(
-    #     [
-    #         [-_HALF_LENGTH, -_HALF_WIDTH],
-    #         [-_HALF_LENGTH, _HALF_WIDTH],
-    #         [_HALF_LENGTH, _HALF_WIDTH],
-    #         [_HALF_LENGTH, -_HALF_WIDTH],
-    #     ]
-    # )
 
     def __init__(self, my_team_is_right: bool, field_config: FieldConfig):
         self.my_team_is_right = my_team_is_right
