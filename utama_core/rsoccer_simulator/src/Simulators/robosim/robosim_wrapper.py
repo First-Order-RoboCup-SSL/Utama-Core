@@ -90,5 +90,15 @@ class RSimSubprocessWrapper:
         return resp["state"]
 
     def close(self):
-        self.proc.terminate()
-        self.proc.wait()
+        try:
+            if self.proc and self.proc.poll() is None:
+                self.proc.terminate()
+                self.proc.wait(timeout=1)
+        except Exception as e:
+            import traceback
+
+            os.write(1, f"Error in close(): {e}\n".encode())
+            traceback.print_exc()
+            raise e
+        finally:
+            os.write(1, b"RsimSubprocessWrapper cleanup finished\n")

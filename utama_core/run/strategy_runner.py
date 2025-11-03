@@ -397,7 +397,8 @@ class StrategyRunner:
         finally:
             if self.replay_writer:
                 self.replay_writer.close()
-
+            if self.rsim_env:
+                self.rsim_env.close()
         return passed
 
     def run(self):
@@ -411,6 +412,8 @@ class StrategyRunner:
         finally:
             if self.replay_writer:
                 self.replay_writer.close()
+            if self.rsim_env:
+                self.rsim_env.close()
 
     def _run_step(self):
         start_time = time.time()
