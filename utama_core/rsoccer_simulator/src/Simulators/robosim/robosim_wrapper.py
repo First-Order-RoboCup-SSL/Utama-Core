@@ -99,6 +99,5 @@ class RSimSubprocessWrapper:
 
             os.write(1, f"Error in close(): {e}\n".encode())
             traceback.print_exc()
-            raise e
         finally:
             os.write(1, b"RsimSubprocessWrapper cleanup finished\n")
