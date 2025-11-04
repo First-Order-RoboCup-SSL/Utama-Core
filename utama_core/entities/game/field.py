@@ -77,8 +77,22 @@ class Field:
     def __init__(self, my_team_is_right: bool, field_config: FieldConfig):
         self.my_team_is_right = my_team_is_right
 
+        self._field_config = field_config
+
         self._half_length = (field_config.bottom_right[0] - field_config.top_left[0]) / 2
         self._half_width = (field_config.top_left[1] - field_config.bottom_right[1]) / 2
+
+    @property
+    def has_left_goal(self) -> bool:
+        return self._field_config.top_left[0] == -4.5 and (
+            self._field_config.top_left[1] >= 0.5 and self._field_config.bottom_right[1] <= -0.5
+        )
+
+    @property
+    def has_right_goal(self) -> bool:
+        return self._field_config.bottom_right[0] == 4.5 and (
+            self._field_config.top_left[1] >= 0.5 and self._field_config.bottom_right[1] <= -0.5
+        )
 
     @property
     def my_goal_line(self) -> LineString:
