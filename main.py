@@ -30,7 +30,6 @@ def main():
         mode="rsim",
         exp_friendly=6,
         exp_enemy=3,
-        field_config=[(-4500, 3000), (4500, -3000)],
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         control_scheme="dwa",
     )

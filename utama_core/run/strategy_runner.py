@@ -84,7 +84,7 @@ class StrategyRunner:
         mode: str,
         exp_friendly: int,
         exp_enemy: int,
-        field_config: FieldConfig,
+        field_config: FieldConfig = FieldConfig(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0)),
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         control_scheme: str = "dwa",
