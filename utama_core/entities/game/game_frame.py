@@ -18,10 +18,6 @@ class GameFrame:
     friendly_robots: Dict[int, Robot]
     enemy_robots: Dict[int, Robot]
     ball: Optional[Ball]
-    # field: Field = dataclasses.field(init=False)
-
-    # def __post_init__(self):
-    #     object.__setattr__(self, "field", Field(self.my_team_is_right))
 
     def is_ball_in_goal(self, right_goal: bool) -> bool:
         ball_pos = self.ball.p
