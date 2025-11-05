@@ -20,6 +20,7 @@ jobs:
         with:
           app-id: ${{ vars.RELEASE_MANAGER_APPID }}
           private-key: ${{ secrets.RELEASE_MANAGER_SECRET }}
+          owner: First-Order-RoboCup-SSL
 
       - name: Checkout repository
         uses: actions/checkout@v4
