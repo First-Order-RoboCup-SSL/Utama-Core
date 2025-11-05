@@ -103,14 +103,14 @@ jobs:
             # Example: update version reference inside pyproject.toml or pixi.toml
             # Adjust search/replace as needed for your dependency structure
             if grep -q 'utama_core' pixi.toml; then
-              toml set --toml-path pixi.toml dependencies.utama_core "==${NEW_VERSION}"
+              toml set --toml-path pixi.toml pypi-dependencies."utama_core".rev "v${NEW_VERSION}"
             fi
 
             git config user.name "utama-release-manager[bot]"
             git config user.email "232491996+utama-release-manager[bot]@users.noreply.github.com"
             git add .
             git commit -m "chore(deps): bump utama_core to v${NEW_VERSION}" || echo "No changes to commit"
-            git push origin main || echo "No push needed"
+            git push origin main
 
             cd ..
             rm -rf "$(basename "$REPO")"
