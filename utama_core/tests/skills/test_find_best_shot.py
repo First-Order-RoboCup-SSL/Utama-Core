@@ -4,7 +4,6 @@ import types
 import numpy as np
 
 from utama_core.entities.data.vector import Vector2D
-from utama_core.skills.src.score_goal import _find_best_shot
 
 # Stub out heavy simulator dependency before importing the module under test
 module = types.ModuleType("rsoccer_simulator.src.ssl.envs.standard_ssl")
