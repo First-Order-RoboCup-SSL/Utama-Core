@@ -10,6 +10,7 @@ from utama_core.config.enums import Role
 from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PATH
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
+from utama_core.entities.game.field import Field
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command
@@ -93,6 +94,16 @@ class AbstractStrategy(ABC):
             n_runtime_enemy: Number of opponent robots in the match.
         """
         ...
+
+    @abstractmethod
+    def assert_exp_goals(self, field: Field):
+        """
+        Validate that the field we are playing on has the expected goals.
+        This checks for a left and right goal.
+
+        Args:
+            field: The field we are playing on.
+        """
 
     def execute_default_action(self, game: Game, role: Role, robot_id: int) -> RobotCommand:
         """

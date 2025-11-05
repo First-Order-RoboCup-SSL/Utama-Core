@@ -72,6 +72,7 @@ class StrategyRunner:
         mode (str): "real", "rsim", "grism"
         exp_friendly (int): Expected number of friendly robots.
         exp_enemy (int): Expected number of enemy robots.
+        field_config (FieldConfig): Configuration of the field. Defaults to standard field.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
     """
@@ -129,6 +130,8 @@ class StrategyRunner:
             self.opp_current_game_frame,
             self.opp_game,
         ) = self._load_game()
+
+        self._assert_exp_goals()
 
         self.game_start_time = time.time()
 
@@ -243,6 +246,16 @@ class StrategyRunner:
             assert self.opp_strategy.assert_exp_robots(
                 self.exp_enemy, self.exp_friendly
             ), "Expected number of robots at runtime does not match opponent strategy."
+
+    def _assert_exp_goals(self):
+        """Assert the expected number of goals."""
+        assert self.my_strategy.assert_exp_goals(
+            self.my_game.field
+        ), "Field does not match expected goals for my strategy."
+        if self.opp_strategy:
+            assert self.opp_strategy.assert_exp_goals(
+                self.opp_game.field
+            ), "Field does not match expected goals for opponent strategy."
 
     def _load_robot_controllers(self):
         """

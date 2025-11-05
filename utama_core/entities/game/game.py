@@ -40,7 +40,7 @@ class Game:
 
     @property
     def field(self):
-        return self.field
+        return self._field
 
     @property
     def robot_with_ball(self):

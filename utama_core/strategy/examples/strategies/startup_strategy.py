@@ -42,6 +42,11 @@ class StartupStrategy(AbstractStrategy):
             return True
         return False
 
+    def assert_exp_goals(self, field):
+        if field.has_left_goal and field.has_right_goal:
+            return True
+        return False
+
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete behaviour tree."""
         coach_root = py_trees.composites.Sequence(name="CoachRoot", memory=False)
