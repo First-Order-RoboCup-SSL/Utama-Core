@@ -88,6 +88,26 @@ class Vector2D(VectorBase):
     def __mul__(self, scalar: float) -> "Vector2D":
         return Vector2D(self.x * scalar, self.y * scalar)
 
+    def __iadd__(self, other: "Vector2D") -> "Vector2D":
+        self.x += other.x
+        self.y += other.y
+        return self
+
+    def __isub__(self, other: "Vector2D") -> "Vector2D":
+        self.x -= other.x
+        self.y -= other.y
+        return self
+
+    def __imul__(self, scalar: float) -> "Vector2D":
+        self.x *= scalar
+        self.y *= scalar
+        return self
+
+    def __itruediv__(self, scalar: float) -> "Vector2D":
+        self.x /= scalar
+        self.y /= scalar
+        return self
+
     def __rmul__(self, scalar: float) -> "Vector2D":
         return self.__mul__(scalar)
 
@@ -149,6 +169,30 @@ class Vector3D(VectorBase):
 
     def __mul__(self, scalar: float) -> "Vector3D":
         return Vector3D(self.x * scalar, self.y * scalar, self.z * scalar)
+
+    def __iadd__(self, other: "Vector3D") -> "Vector3D":
+        self.x += other.x
+        self.y += other.y
+        self.z += other.z
+        return self
+
+    def __isub__(self, other: "Vector3D") -> "Vector3D":
+        self.x -= other.x
+        self.y -= other.y
+        self.z -= other.z
+        return self
+
+    def __imul__(self, scalar: float) -> "Vector3D":
+        self.x *= scalar
+        self.y *= scalar
+        self.z *= scalar
+        return self
+
+    def __itruediv__(self, scalar: float) -> "Vector3D":
+        self.x /= scalar
+        self.y /= scalar
+        self.z /= scalar
+        return self
 
     def __rmul__(self, scalar: float) -> "Vector3D":
         return self.__mul__(scalar)
