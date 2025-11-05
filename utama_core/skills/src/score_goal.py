@@ -36,8 +36,6 @@ def _filter_and_merge_shadows(
 
     for start, end in shadows:
         # Ensure start is less than end
-        if start > end:
-            start, end = end, start
 
         clipped_start = max(start, goal_y1)
         clipped_end = min(end, goal_y2)
