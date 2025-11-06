@@ -35,14 +35,12 @@ def _filter_and_merge_shadows(
     valid_shadows: List[Tuple[float, float]] = []
 
     for start, end in shadows:
-        if start > goal_y1 and start < goal_y2:
-            if end > goal_y2:
-                end = goal_y2
-            valid_shadows.append((start, end))
-        elif end > goal_y1 and end < goal_y2:
-            if start < goal_y1:
-                start = goal_y1
-            valid_shadows.append((start, end))
+        # Ensure start is less than end
+
+        clipped_start = max(start, goal_y1)
+        clipped_end = min(end, goal_y2)
+        if clipped_start < clipped_end:
+            valid_shadows.append((clipped_start, clipped_end))
 
     valid_shadows.sort()
 
@@ -73,9 +71,14 @@ def _ray_casting(
     for enemy in enemy_robots:
         if enemy:
             if goal_multi * enemy.p.x > goal_multi * point[0]:
-                dist: float = math.dist((point[0], point[1]), (enemy.p.x, enemy.p.y))
+                dist: float = point.distance_to(enemy.p)
                 angle_to_robot_ = point.angle_to(enemy.p)
-                alpha: float = np.arcsin(ROBOT_RADIUS / dist)
+
+                if dist <= ROBOT_RADIUS:
+                    alpha: float = math.pi / 2  # treat overlaps as fully blocking
+                else:
+                    ratio = ROBOT_RADIUS / dist
+                    alpha = np.arcsin(np.clip(ratio, -1.0, 1.0))
                 shadows.append(
                     _shadow(
                         point[0],
@@ -105,8 +108,8 @@ def _find_best_shot(
         point: The (x, y) coordinate from which the shot is being taken.
         enemy_robots: List of (x, y) positions for enemy robots.
         goal_x: The x-coordinate of the goal line.
-        goal_y1: The lower y-coordinate of the goal.
-        goal_y2: The upper y-coordinate of the goal.
+        goal_y1: The smallest y-coordinate of the goal.
+        goal_y2: The largest y-coordinate of the goal.
 
     Returns:
         A tuple containing:
@@ -170,16 +173,20 @@ def _find_best_shot(
     best_clearance = -1
     for interval in open_spaces:
         s, e = interval
+        gap_length = e - s
         # If the interval touches a goal boundary, the best candidate is that boundary.
-        if s == goal_y1:
-            candidate = s + 0.2 * abs(s + e) / 2
-            clearance = e - s  # Full gap length is clearance.
-        elif e == goal_y2:
-            candidate = e - 0.2 * abs(s + e) / 2
-            clearance = e - s
+        is_lower_bound = np.isclose(s, goal_y1, rtol=0.0, atol=1e-6)
+        is_upper_bound = np.isclose(e, goal_y2, rtol=0.0, atol=1e-6)
+
+        if is_lower_bound:
+            candidate = s + 0.2 * gap_length
+            clearance = gap_length
+        elif is_upper_bound:
+            candidate = e - 0.2 * gap_length
+            clearance = gap_length
         else:
             candidate = (s + e) / 2
-            clearance = (e - s) / 2
+            clearance = gap_length / 2
 
         if clearance > best_clearance:
             best_clearance = clearance
@@ -205,13 +212,20 @@ def find_shot_quality(
     full_angle = _angle_between_points(point, Vector2D(goal_x, goal_y1), Vector2D(goal_x, goal_y2))
 
     # Use _find_best_shot to get the largest gap
-    _, largest_gap = _find_best_shot(point, enemy_robots, goal_x, goal_y1, goal_y2)
+    best_target, largest_gap = _find_best_shot(point, enemy_robots, goal_x, goal_y1, goal_y2)
+
+    if not largest_gap or best_target is None:
+        return 0.0
+
+    gap_start, gap_end = largest_gap
+    if gap_end - gap_start <= 0:
+        return 0.0
 
     # Compute the open angle (gap angle)
     open_angle = _angle_between_points(
         point,
-        Vector2D(goal_x, largest_gap[0]),
-        Vector2D(goal_x, largest_gap[1]),
+        Vector2D(goal_x, gap_start),
+        Vector2D(goal_x, gap_end),
     )
 
     distance_to_goal_ratio = (np.absolute(point.x - goal_x)) / np.absolute(2 * goal_x)
@@ -219,8 +233,10 @@ def find_shot_quality(
     distance_to_goal_weight = 0.4
 
     # Normalize shot quality
-    shot_quality = open_angle / full_angle - distance_to_goal_weight * distance_to_goal_ratio if full_angle > 0 else 0
-    return shot_quality
+    shot_quality = open_angle / full_angle - distance_to_goal_weight * distance_to_goal_ratio if full_angle > 0 else 0.0
+
+    # protect against negative shot quality
+    return max(0.0, shot_quality)
 
 
 def is_goal_blocked(game: Game, best_shot: Tuple[float, float], defenders: List[Robot]) -> bool:
@@ -255,71 +271,3 @@ def is_goal_blocked(game: Game, best_shot: Tuple[float, float], defenders: List[
                 return True  # Shot is blocked
 
     return False  # No robot is blocking
-
-
-def score_goal(
-    game: Game,
-    motion_controller: MotionController,
-    shooter_id: int,
-    env: SSLStandardEnv = None,
-) -> RobotCommand:
-    """Attempts to score a goal by calculating the best shot angle and executing the kick if possible."""
-    target_goal_line = game.field.enemy_goal_line
-    shooter = game.friendly_robots[shooter_id]
-    defender_robots = game.enemy_robots
-    ball = game.ball
-    goal_x = target_goal_line.coords[0][0]
-    goal_y1 = target_goal_line.coords[1][1]
-    goal_y2 = target_goal_line.coords[0][1]
-
-    # calculate best shot from the position of the ball
-    # TODO: add sampling function to try to find other angles to shoot from that are more optimal
-    if defender_robots and shooter and ball:
-        best_shot, _ = _find_best_shot(ball.p, list(defender_robots.values()), goal_x, goal_y1, goal_y2)
-
-        # Safe fall-back if no best shot is found
-        if best_shot is None and is_goal_blocked(game, (goal_x, goal_y2 - goal_y1), defender_robots):
-            return None
-        elif best_shot is None and not is_goal_blocked(game, (goal_x, goal_y2 - goal_y1), defender_robots):
-            best_shot = (goal_y2 + goal_y1) / 2
-
-        shot_orientation = (np.atan2((best_shot - ball.p.y), (goal_x - ball.p.x))) % (2 * np.pi)
-
-        if env is not None:
-            line_points = [
-                (shooter.p.x, shooter.p.y),
-                (
-                    goal_x,
-                    shooter.p.y + np.tan(shot_orientation) * (goal_x - shooter.p.x),
-                ),
-            ]
-            env.draw_line(line_points)
-            env.draw_point(goal_x, best_shot, color="red")
-
-    if shooter.has_ball:
-        logging.debug("robot has ball")
-        current_oren = shooter.orientation % (2 * np.pi)
-        # if robot has ball and is facing the goal, kick the ball
-        # TODO: This should be changed to a smarter metric (ie within the range of tolerance of the shot)
-        # Because 0.02 as a threshold is meaningless (different at different distances)
-        # TODO: consider also adding a distance from goal threshold
-        if abs(current_oren - shot_orientation) * abs(goal_x - shooter.p.x) <= 0.05 and not is_goal_blocked(
-            game, (goal_x, best_shot), list(defender_robots.values())
-        ):
-            logger.info("kicking ball")
-            robot_command = kick()
-        # TODO: Consider also advancing closer to the goal
-        else:
-            # print("turning on spot to " + str(shot_orientation))
-            # print("right now at " + str(current_oren))
-            robot_command = turn_on_spot(
-                game,
-                motion_controller,
-                shooter_id,
-                shot_orientation,
-                dribbling=True,
-            )
-    else:
-        # robot_command = move(game, motion_controller, shooter_id, shooter_id, ball)
-        robot_command = go_to_ball(game, motion_controller, shooter_id)
-    return robot_command

@@ -43,9 +43,9 @@ def move(
     )
 
 
-def face_ball(current: Tuple[float, float], ball: Tuple[float, float]) -> float:
+def face_ball(current: Vector2D, ball: Vector2D) -> float:
     """Calculate the angle to face the ball from the current position."""
-    return np.arctan2(ball[1] - current[1], ball[0] - current[0])
+    return current.angle_to(ball)
 
 
 def turn_on_spot(

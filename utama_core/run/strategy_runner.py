@@ -4,7 +4,7 @@ import time
 import warnings
 from collections import deque
 from dataclasses import replace
-from typing import List, Optional, Tuple, Type
+from typing import List, Optional, Tuple
 
 from utama_core.config.enums import Mode, mode_str_to_enum
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
@@ -18,8 +18,8 @@ from utama_core.global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
 )
+from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.motion_planning.src.controllers import DWAController, PIDController
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.run import GameGater
@@ -80,8 +80,10 @@ class StrategyRunner:
         field_config: FieldConfig = FieldConfig(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0)),
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
-        control_scheme: str = "dwa",
+        control_scheme: str = "pid",
     ):
+        self.logger = logging.getLogger(__name__)
+
         self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
@@ -95,11 +97,8 @@ class StrategyRunner:
             if replay_writer_config
             else None
         )
-        if control_scheme.lower() == "pid":
-            self.motion_controller: Type[MotionController] = PIDController
-        else:
-            self.motion_controller: Type[MotionController] = DWAController
-        self.logger = logging.getLogger(__name__)
+
+        self.motion_controller = get_control_scheme(control_scheme)
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
         if self.opp_strategy:
@@ -415,7 +414,8 @@ class StrategyRunner:
         finally:
             if self.replay_writer:
                 self.replay_writer.close()
-
+            if self.rsim_env:
+                self.rsim_env.close()
         return passed
 
     def run(self):
@@ -429,6 +429,8 @@ class StrategyRunner:
         finally:
             if self.replay_writer:
                 self.replay_writer.close()
+            if self.rsim_env:
+                self.rsim_env.close()
 
     def _run_step(self):
         start_time = time.time()
