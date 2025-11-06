@@ -24,7 +24,7 @@ class Field:
     Call the class properties to get the field information
     """
 
-    # Class constants refere to the standard SSL field (9m x 6m)
+    # Class constants refer to the standard SSL field (9m x 6m)
 
     _HALF_GOAL_WIDTH = 0.5
     _HALF_DEFENSE_AREA_LENGTH = 0.5

@@ -104,6 +104,7 @@ class AbstractStrategy(ABC):
         Args:
             field: The field we are playing on.
         """
+        ...
 
     def execute_default_action(self, game: Game, role: Role, robot_id: int) -> RobotCommand:
         """

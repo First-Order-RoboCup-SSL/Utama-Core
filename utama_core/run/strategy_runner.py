@@ -3,7 +3,7 @@ import threading
 import time
 import warnings
 from collections import deque
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import List, Optional, Tuple, Type
 
 from utama_core.config.enums import Mode, mode_str_to_enum
@@ -13,7 +13,7 @@ from utama_core.config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameHistory
-from utama_core.entities.game.field import Field
+from utama_core.entities.game.field import Field, FieldConfig
 from utama_core.global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
@@ -52,14 +52,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)  # If this is within the class, or define it globally in the module
 logging.captureWarnings(True)
-
-
-@dataclass
-class FieldConfig:
-    """Defines field geometry with two corner coordinates. Center of the field at (0,0)."""
-
-    top_left: tuple[float, float]
-    bottom_right: tuple[float, float]
 
 
 class StrategyRunner:
@@ -329,7 +321,7 @@ class StrategyRunner:
 
         if self.opp_strategy:
             opp_game_history = GameHistory(MAX_GAME_HISTORY)
-            opp_game = Game(opp_game_history, opp_current_game_frame)
+            opp_game = Game(opp_game_history, opp_current_game_frame, field=field)
         else:
             opp_game_history, opp_game = None, None
         return (
