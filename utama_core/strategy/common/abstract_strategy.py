@@ -95,16 +95,19 @@ class AbstractStrategy(ABC):
         """
         ...
 
-    @abstractmethod
-    def assert_exp_goals(self, field: Field):
+    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         """
         Validate that the field we are playing on has the expected goals.
-        This checks for a left and right goal.
+        This checks for our own and the opponent's goal.
+
+        The default implementation checks that both goals are present.
 
         Args:
             field: The field we are playing on.
         """
-        ...
+        if includes_my_goal_line and includes_opp_goal_line:
+            return True
+        return False
 
     def execute_default_action(self, game: Game, role: Role, robot_id: int) -> RobotCommand:
         """

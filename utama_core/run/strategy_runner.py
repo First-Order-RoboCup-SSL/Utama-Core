@@ -244,11 +244,13 @@ class StrategyRunner:
     def _assert_exp_goals(self):
         """Assert the expected number of goals."""
         assert self.my_strategy.assert_exp_goals(
-            self.my_game.field
+            self.my_game.field.includes_my_goal_line,
+            self.my_game.field.includes_opp_goal_line,
         ), "Field does not match expected goals for my strategy."
         if self.opp_strategy:
             assert self.opp_strategy.assert_exp_goals(
-                self.opp_game.field
+                self.opp_game.field.includes_my_goal_line,
+                self.opp_game.field.includes_opp_goal_line,
             ), "Field does not match expected goals for opponent strategy."
 
     def _load_robot_controllers(self):
@@ -318,12 +320,13 @@ class StrategyRunner:
             rsim_env=self.rsim_env,
         )
         my_game_history = GameHistory(MAX_GAME_HISTORY)
-        field = Field(my_current_game_frame.my_team_is_right, field_config=self.field_config)
-        my_game = Game(my_game_history, my_current_game_frame, field=field)
+        my_field = Field(my_current_game_frame.my_team_is_right, field_config=self.field_config)
+        my_game = Game(my_game_history, my_current_game_frame, field=my_field)
 
         if self.opp_strategy:
             opp_game_history = GameHistory(MAX_GAME_HISTORY)
-            opp_game = Game(opp_game_history, opp_current_game_frame, field=field)
+            opp_field = Field(opp_current_game_frame.my_team_is_right, field_config=self.field_config)
+            opp_game = Game(opp_game_history, opp_current_game_frame, field=opp_field)
         else:
             opp_game_history, opp_game = None, None
         return (
