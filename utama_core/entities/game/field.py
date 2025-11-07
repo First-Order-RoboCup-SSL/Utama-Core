@@ -29,46 +29,61 @@ class Field:
     _HALF_DEFENSE_AREA_LENGTH = 0.5
     _HALF_DEFENSE_AREA_WIDTH = 1
 
+    _FULL_FIELD_HALF_WIDTH = 3.0
+    _FULL_FIELD_HALF_LENGTH = 4.5
+
     _RIGHT_GOAL_LINE = np.array(
         [
-            (4.5, 0.5),
-            (4.5, -0.5),
+            (_FULL_FIELD_HALF_LENGTH, _HALF_GOAL_WIDTH),
+            (_FULL_FIELD_HALF_LENGTH, -_HALF_GOAL_WIDTH),
         ]
     )
 
     _LEFT_GOAL_LINE = np.array(
         [
-            (-4.5, 0.5),
-            (-4.5, -0.5),
+            (-_FULL_FIELD_HALF_LENGTH, _HALF_GOAL_WIDTH),
+            (-_FULL_FIELD_HALF_LENGTH, -_HALF_GOAL_WIDTH),
         ]
     )
 
     _RIGHT_DEFENSE_AREA = np.array(
         [
-            (4.5, 1.0),
-            (3.5, 1.0),
-            (3.5, -1.0),
-            (4.5, -1.0),
-            (4.5, 1.0),
+            (_FULL_FIELD_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
+            (
+                _FULL_FIELD_HALF_LENGTH - 2 * _HALF_DEFENSE_AREA_LENGTH,
+                _HALF_DEFENSE_AREA_WIDTH,
+            ),
+            (
+                _FULL_FIELD_HALF_LENGTH - 2 * _HALF_DEFENSE_AREA_LENGTH,
+                -_HALF_DEFENSE_AREA_WIDTH,
+            ),
+            (_FULL_FIELD_HALF_LENGTH, -_HALF_DEFENSE_AREA_WIDTH),
+            (_FULL_FIELD_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
         ]
     )
 
     _LEFT_DEFENSE_AREA = np.array(
         [
-            (-4.5, 1.0),
-            (-3.5, 1.0),
-            (-3.5, -1.0),
-            (-4.5, -1.0),
-            (-4.5, 1.0),
+            (-_FULL_FIELD_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
+            (
+                -_FULL_FIELD_HALF_LENGTH + 2 * _HALF_DEFENSE_AREA_LENGTH,
+                _HALF_DEFENSE_AREA_WIDTH,
+            ),
+            (
+                -_FULL_FIELD_HALF_LENGTH + 2 * _HALF_DEFENSE_AREA_LENGTH,
+                -_HALF_DEFENSE_AREA_WIDTH,
+            ),
+            (-_FULL_FIELD_HALF_LENGTH, -_HALF_DEFENSE_AREA_WIDTH),
+            (-_FULL_FIELD_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
         ]
     )
 
     _FULL_FIELD = np.array(
         [
-            (-4.5, -3.0),
-            (-4.5, 3.0),
-            (4.5, 3.0),
-            (4.5, -3.0),
+            (-_FULL_FIELD_HALF_LENGTH, -_FULL_FIELD_HALF_WIDTH),
+            (-_FULL_FIELD_HALF_LENGTH, _FULL_FIELD_HALF_WIDTH),
+            (_FULL_FIELD_HALF_LENGTH, _FULL_FIELD_HALF_WIDTH),
+            (_FULL_FIELD_HALF_LENGTH, -_FULL_FIELD_HALF_WIDTH),
         ]
     )
 
@@ -122,7 +137,7 @@ class Field:
 
     @property
     def half_length(self) -> float:
-        return self._half_length
+        return self._half_width
 
     @property
     def half_width(self) -> float:
@@ -149,6 +164,14 @@ class Field:
     @ClassProperty
     def right_defense_area(cls) -> np.ndarray:
         return cls._RIGHT_DEFENSE_AREA
+
+    @ClassProperty
+    def full_field_half_length(cls) -> float:
+        return cls._FULL_FIELD_HALF_LENGTH
+
+    @ClassProperty
+    def full_field_half_width(cls) -> float:
+        return cls._FULL_FIELD_HALF_WIDTH
 
     @ClassProperty
     def full_field(cls) -> np.ndarray:

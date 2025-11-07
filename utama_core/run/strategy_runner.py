@@ -77,7 +77,10 @@ class StrategyRunner:
         mode: str,
         exp_friendly: int,
         exp_enemy: int,
-        field_config: FieldConfig = FieldConfig(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0)),
+        field_config: FieldConfig = FieldConfig(
+            top_left=(-Field.full_field_half_length, Field.full_field_half_width),
+            bottom_right=(Field.full_field_half_length, -Field.full_field_half_width),
+        ),
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         control_scheme: str = "pid",
