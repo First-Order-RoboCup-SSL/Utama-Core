@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
-from shapely import LineString, Polygon
-from shapely.geometry import Point
+import numpy as np
 
 
 class ClassProperty:
@@ -30,22 +29,21 @@ class Field:
     _HALF_DEFENSE_AREA_LENGTH = 0.5
     _HALF_DEFENSE_AREA_WIDTH = 1
 
-    _RIGHT_GOAL_LINE = LineString(
+    _RIGHT_GOAL_LINE = np.array(
         [
             (4.5, 0.5),
             (4.5, -0.5),
         ]
     )
 
-    _LEFT_GOAL_LINE = LineString(
+    _LEFT_GOAL_LINE = np.array(
         [
             (-4.5, 0.5),
             (-4.5, -0.5),
         ]
     )
 
-    _CENTER_CIRCLE = Point(0.0, 0.0).buffer(0.5)
-    _RIGHT_DEFENSE_AREA = Polygon(
+    _RIGHT_DEFENSE_AREA = np.array(
         [
             (4.5, 1.0),
             (3.5, 1.0),
@@ -55,7 +53,7 @@ class Field:
         ]
     )
 
-    _LEFT_DEFENSE_AREA = Polygon(
+    _LEFT_DEFENSE_AREA = np.array(
         [
             (-4.5, 1.0),
             (-3.5, 1.0),
@@ -65,7 +63,7 @@ class Field:
         ]
     )
 
-    _FULL_FIELD = Polygon(
+    _FULL_FIELD = np.array(
         [
             (-4.5, -3.0),
             (-4.5, 3.0),
@@ -95,28 +93,28 @@ class Field:
         )
 
     @property
-    def my_goal_line(self) -> LineString:
+    def my_goal_line(self) -> np.ndarray:
         if self.my_team_is_right:
             return self._RIGHT_GOAL_LINE
         else:
             return self._LEFT_GOAL_LINE
 
     @property
-    def enemy_goal_line(self) -> LineString:
+    def enemy_goal_line(self) -> np.ndarray:
         if self.my_team_is_right:
             return self._LEFT_GOAL_LINE
         else:
             return self._RIGHT_GOAL_LINE
 
     @property
-    def my_defense_area(self) -> LineString:
+    def my_defense_area(self) -> np.ndarray:
         if self.my_team_is_right:
             return self._RIGHT_DEFENSE_AREA
         else:
             return self._LEFT_DEFENSE_AREA
 
     @property
-    def enemy_defense_area(self) -> LineString:
+    def enemy_defense_area(self) -> np.ndarray:
         if self.my_team_is_right:
             return self._LEFT_DEFENSE_AREA
         else:
@@ -130,30 +128,28 @@ class Field:
     def half_width(self) -> float:
         return self._half_width
 
+    ### Class Properties for standard field dimensions ###
+
     @ClassProperty
     def half_goal_width(cls) -> float:
         return cls._HALF_GOAL_WIDTH
 
     @ClassProperty
-    def left_goal_line(cls) -> LineString:
+    def left_goal_line(cls) -> np.ndarray:
         return cls._LEFT_GOAL_LINE
 
     @ClassProperty
-    def right_goal_line(cls) -> LineString:
+    def right_goal_line(cls) -> np.ndarray:
         return cls._RIGHT_GOAL_LINE
 
     @ClassProperty
-    def center_circle(cls) -> Point:
-        return cls._CENTER_CIRCLE
-
-    @ClassProperty
-    def left_defense_area(cls) -> Polygon:
+    def left_defense_area(cls) -> np.ndarray:
         return cls._LEFT_DEFENSE_AREA
 
     @ClassProperty
-    def right_defense_area(cls) -> Polygon:
+    def right_defense_area(cls) -> np.ndarray:
         return cls._RIGHT_DEFENSE_AREA
 
     @ClassProperty
-    def full_field(cls) -> Polygon:
+    def full_field(cls) -> np.ndarray:
         return cls._FULL_FIELD
