@@ -38,9 +38,7 @@ class StartupFormationStep(AbstractBehaviour):
 
 class StartupStrategy(AbstractStrategy):
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if n_runtime_friendly == 6:
-            return True
-        return False
+        return True
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete behaviour tree."""
