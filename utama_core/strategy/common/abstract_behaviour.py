@@ -17,14 +17,18 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
     ### START OF FUNCTIONS TO BE IMPLEMENTED BY YOUR STRATEGY ###
 
     def setup_(self):
-        """This method is called at the end of setup(), before the first tree tick.
+        """This method is called ONCE at the end of setup(), before the first tree tick.
+
+        The blackboard should already exist and be populated at this point.
 
         For adding additional blackboard keys or other setup tasks.
         """
 
     def initialise(self) -> None:
-        """Configures and resets the behaviour ready for (repeated) execution Initialisation is called on the first tick
-        that the node is called.
+        """Configures and resets the behaviour ready for (repeated) execution. Initialisation is called on the first tick
+        that the node is made valid ie this can be run a few times during the lifetime of a behaviour
+
+        (DO NOT PUT EXPENSIVE OPERATIONS HERE)
 
         Some examples:
         - Initialising/resetting/clearing variables

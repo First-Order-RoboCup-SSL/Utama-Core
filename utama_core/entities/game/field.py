@@ -12,7 +12,7 @@ class ClassProperty:
 
 
 @dataclass(frozen=True)
-class FieldConfig:
+class FieldBounds:
     top_left: tuple[float, float]
     bottom_right: tuple[float, float]
 
@@ -87,26 +87,26 @@ class Field:
         ]
     )
 
-    def __init__(self, my_team_is_right: bool, field_config: FieldConfig):
+    def __init__(self, my_team_is_right: bool, field_bounds: FieldBounds):
         self.my_team_is_right = my_team_is_right
 
-        self._field_config = field_config
+        self._field_bounds = field_bounds
 
-        self._half_length = (field_config.bottom_right[0] - field_config.top_left[0]) / 2
-        self._half_width = (field_config.top_left[1] - field_config.bottom_right[1]) / 2
+        self._half_length = (field_bounds.bottom_right[0] - field_bounds.top_left[0]) / 2
+        self._half_width = (field_bounds.top_left[1] - field_bounds.bottom_right[1]) / 2
 
     @property
     def has_left_goal(self) -> bool:
-        return self._field_config.top_left[0] == -self._FULL_FIELD_HALF_LENGTH and (
-            self._field_config.top_left[1] >= self._HALF_GOAL_WIDTH
-            and self._field_config.bottom_right[1] <= -self._HALF_GOAL_WIDTH
+        return self._field_bounds.top_left[0] == -self._FULL_FIELD_HALF_LENGTH and (
+            self._field_bounds.top_left[1] >= self._HALF_GOAL_WIDTH
+            and self._field_bounds.bottom_right[1] <= -self._HALF_GOAL_WIDTH
         )
 
     @property
     def has_right_goal(self) -> bool:
-        return self._field_config.bottom_right[0] == self._FULL_FIELD_HALF_LENGTH and (
-            self._field_config.top_left[1] >= self._HALF_GOAL_WIDTH
-            and self._field_config.bottom_right[1] <= -self._HALF_GOAL_WIDTH
+        return self._field_bounds.bottom_right[0] == self._FULL_FIELD_HALF_LENGTH and (
+            self._field_bounds.top_left[1] >= self._HALF_GOAL_WIDTH
+            and self._field_bounds.bottom_right[1] <= -self._HALF_GOAL_WIDTH
         )
 
     @property
@@ -158,6 +158,10 @@ class Field:
     @property
     def half_width(self) -> float:
         return self._half_width
+
+    @property
+    def field_bounds(self) -> FieldBounds:
+        return self._field_bounds
 
     ### Class Properties for standard field dimensions ###
 

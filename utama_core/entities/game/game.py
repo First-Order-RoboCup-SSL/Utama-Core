@@ -19,6 +19,10 @@ class Game:
     # def predict_/
 
     @property
+    def ts(self) -> float:
+        return self.current.ts
+
+    @property
     def my_team_is_yellow(self) -> bool:
         return self.current.my_team_is_yellow
 
