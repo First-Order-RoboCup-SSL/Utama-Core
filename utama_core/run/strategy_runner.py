@@ -77,10 +77,7 @@ class StrategyRunner:
         mode: str,
         exp_friendly: int,
         exp_enemy: int,
-        field_bounds: FieldBounds = FieldBounds(
-            top_left=(-Field.full_field_half_length, Field.full_field_half_width),
-            bottom_right=(Field.full_field_half_length, -Field.full_field_half_width),
-        ),
+        field_bounds: FieldBounds = Field.full_field_bounds,
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         control_scheme: str = "pid",

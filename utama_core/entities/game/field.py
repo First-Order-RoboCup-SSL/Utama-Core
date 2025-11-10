@@ -196,3 +196,10 @@ class Field:
     @ClassProperty
     def full_field(cls) -> np.ndarray:
         return cls._FULL_FIELD
+
+    @ClassProperty
+    def full_field_bounds(cls) -> FieldBounds:
+        return FieldBounds(
+            top_left=(-cls._FULL_FIELD_HALF_LENGTH, cls._FULL_FIELD_HALF_WIDTH),
+            bottom_right=(cls._FULL_FIELD_HALF_LENGTH, -cls._FULL_FIELD_HALF_WIDTH),
+        )

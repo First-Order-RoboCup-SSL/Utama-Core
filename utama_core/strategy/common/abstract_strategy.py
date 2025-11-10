@@ -115,7 +115,7 @@ class AbstractStrategy(ABC):
         a `FieldBounds` defining the minimum area required. Otherwise return
         `None` to indicate that there is no restriction.
 
-        This is called during setup(), so the blackboard already exists.
+        This is called during load_game(), so the blackboard already exists.
 
         Note that this is a bounding zone not area, so the coordinates must be field-accurate.
 
