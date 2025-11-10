@@ -173,17 +173,45 @@ class AbstractStrategy(ABC):
         self.blackboard.set("motion_controller", motion_controller, overwrite=True)
         self.blackboard.register_key(key="motion_controller", access=py_trees.common.Access.READ)
 
+    # --- Helper function to check a valid bounding box ---
+    def _assert_valid_bb(self, bb: FieldBounds, name: str):
+
+        fx, fy = Field._FULL_FIELD_HALF_LENGTH, Field._FULL_FIELD_HALF_WIDTH
+
+        x0, y0 = bb.top_left
+        x1, y1 = bb.bottom_right
+        assert x0 <= x1, f"{name} top-left x {x0} must be <= bottom-right x {x1}"
+        assert y0 >= y1, f"{name} top-left y {y0} must be >= bottom-right y {y1}"
+        # Also ensure within full field
+        assert -fx <= x0 <= fx and -fx <= x1 <= fx, f"{name} x coordinates out of full field bounds ±{fx}"
+        assert -fy <= y0 <= fy and -fy <= y1 <= fy, f"{name} y coordinates out of full field bounds ±{fy}"
+
     def assert_field_requirements(self):
         """
-        Assert that the actual field size meets the strategy's requirements.
+        Assert that the actual field size meets the strategy's requirements,
+        that both actual field and min_bounding_zone are within the full field,
+        and that bounding boxes are well-formed (top-left above/left of bottom-right).
         """
         actual_field_size = self.blackboard.game.field.field_bounds
         min_bounding_zone = self.get_min_bounding_zone()
+
+        # --- Validate actual field ---
+        self._assert_valid_bb(actual_field_size, "Actual field")
+
+        # --- Validate min bounding zone ---
         if min_bounding_zone is not None:
-            assert actual_field_size.top_left[0] <= min_bounding_zone.top_left[0]
-            assert actual_field_size.top_left[1] >= min_bounding_zone.top_left[1]
-            assert actual_field_size.bottom_right[0] >= min_bounding_zone.bottom_right[0]
-            assert actual_field_size.bottom_right[1] <= min_bounding_zone.bottom_right[1]
+            self._assert_valid_bb(min_bounding_zone, "Min bounding zone")
+
+            # --- Check that actual field contains min_bounding_zone ---
+            ax0, ay0 = actual_field_size.top_left
+            ax1, ay1 = actual_field_size.bottom_right
+            mx0, my0 = min_bounding_zone.top_left
+            mx1, my1 = min_bounding_zone.bottom_right
+
+            assert ax0 <= mx0, f"Field top-left x {ax0} smaller than required {mx0}"
+            assert ay0 >= my0, f"Field top-left y {ay0} smaller than required {my0}"
+            assert ax1 >= mx1, f"Field bottom-right x {ax1} smaller than required {mx1}"
+            assert ay1 <= my1, f"Field bottom-right y {ay1} smaller than required {my1}"
 
     def load_game(self, game: Game):
         """

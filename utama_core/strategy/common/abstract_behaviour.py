@@ -23,6 +23,7 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
 
         For adding additional blackboard keys or other setup tasks.
         """
+        ...
 
     def initialise(self) -> None:
         """Configures and resets the behaviour ready for (repeated) execution. Initialisation is called on the first tick
