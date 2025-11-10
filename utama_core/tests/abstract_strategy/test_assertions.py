@@ -6,13 +6,6 @@ from utama_core.entities.game.field import FieldBounds
 from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
 
 
-# Dummy FieldSize class
-class DummyFieldSize:
-    def __init__(self, top_left, bottom_right):
-        self.top_left = top_left
-        self.bottom_right = bottom_right
-
-
 # Dummy blackboard helper
 def make_dummy_blackboard(actual_field_bounds):
     bb = SimpleNamespace()
@@ -45,23 +38,23 @@ class DummyStrategy(AbstractStrategy):
 
 
 def test_normal_case():
-    actual_field = DummyFieldSize(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
-    min_bb = DummyFieldSize(top_left=(-4.0, 2.5), bottom_right=(4.0, -2.5))
+    actual_field = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
+    min_bb = FieldBounds(top_left=(-4.0, 2.5), bottom_right=(4.0, -2.5))
     strategy = DummyStrategy(min_bb=min_bb)
     strategy.blackboard = make_dummy_blackboard(actual_field)
     strategy.assert_field_requirements()  # should pass
 
 
 def test_min_bb_none():
-    actual_field = DummyFieldSize(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
+    actual_field = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
     strategy = DummyStrategy(min_bb=None)
     strategy.blackboard = make_dummy_blackboard(actual_field)
     strategy.assert_field_requirements()  # should pass
 
 
 def test_min_bb_outside_field():
-    actual_field = DummyFieldSize(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
-    min_bb = DummyFieldSize(top_left=(-5.0, 3.5), bottom_right=(4.0, -2.5))
+    actual_field = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
+    min_bb = FieldBounds(top_left=(-5.0, 3.5), bottom_right=(4.0, -2.5))
     strategy = DummyStrategy(min_bb=min_bb)
     strategy.blackboard = make_dummy_blackboard(actual_field)
     with pytest.raises(AssertionError):
@@ -69,8 +62,8 @@ def test_min_bb_outside_field():
 
 
 def test_crossed_bounding_box():
-    actual_field = DummyFieldSize(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
-    min_bb = DummyFieldSize(top_left=(1.0, -1.0), bottom_right=(-1.0, 1.0))  # crossed
+    actual_field = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
+    min_bb = FieldBounds(top_left=(1.0, -1.0), bottom_right=(-1.0, 1.0))  # crossed
     strategy = DummyStrategy(min_bb=min_bb)
     strategy.blackboard = make_dummy_blackboard(actual_field)
     with pytest.raises(AssertionError):
@@ -78,8 +71,8 @@ def test_crossed_bounding_box():
 
 
 def test_actual_field_exceeds_full_field():
-    actual_field = DummyFieldSize(top_left=(-10.0, 5.0), bottom_right=(10.0, -5.0))
-    min_bb = DummyFieldSize(top_left=(-4.0, 2.0), bottom_right=(4.0, -2.0))
+    actual_field = FieldBounds(top_left=(-10.0, 5.0), bottom_right=(10.0, -5.0))
+    min_bb = FieldBounds(top_left=(-4.0, 2.0), bottom_right=(4.0, -2.0))
     strategy = DummyStrategy(min_bb=min_bb)
     strategy.blackboard = make_dummy_blackboard(actual_field)
     with pytest.raises(AssertionError):
@@ -87,8 +80,8 @@ def test_actual_field_exceeds_full_field():
 
 
 def test_min_bb_exceeds_full_field():
-    actual_field = DummyFieldSize(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
-    min_bb = DummyFieldSize(top_left=(-5.0, 4.0), bottom_right=(5.0, -4.0))
+    actual_field = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
+    min_bb = FieldBounds(top_left=(-5.0, 4.0), bottom_right=(5.0, -4.0))
     strategy = DummyStrategy(min_bb=min_bb)
     strategy.blackboard = make_dummy_blackboard(actual_field)
     with pytest.raises(AssertionError):
