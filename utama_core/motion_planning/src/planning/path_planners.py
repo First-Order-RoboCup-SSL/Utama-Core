@@ -71,8 +71,6 @@ def point_to_segment_distance(point: np.ndarray, seg_start: np.ndarray, seg_end:
 def segment_to_segment_distance(a1: np.ndarray, a2: np.ndarray, b1: np.ndarray, b2: np.ndarray) -> float:
     """Shortest distance between two line segments in 2D."""
 
-    def clamp(v, lo, hi):
-        return max(lo, min(v, hi))
 
     u = a2 - a1
     v = b2 - b1
