@@ -173,6 +173,8 @@ class RRTPlanner:
     def _closest_obstacle(self, robot_id: int, seg_start: np.ndarray, seg_end: Optional[np.ndarray] = None) -> float:
         """Return minimum distance to any robot obstacle."""
         obs = self._get_obstacles(robot_id)
+        if not obs:
+            return float('inf')
         if seg_end is None:
             return min(distance(o, seg_start) for o in obs)
         return min(point_to_segment_distance(o, seg_start, seg_end) for o in obs)
