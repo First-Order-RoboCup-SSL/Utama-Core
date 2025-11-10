@@ -1,13 +1,15 @@
 from utama_core.entities.game.current_game_frame import CurrentGameFrame
+from utama_core.entities.game.field import Field
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.game_history import GameHistory
 
 
 class Game:
-    def __init__(self, past: GameHistory, current: GameFrame):
+    def __init__(self, past: GameHistory, current: GameFrame, field: Field):
         self.__past = past
         self._current_game_standard_frame = current
         self.current = CurrentGameFrame(current)
+        self._field = field
 
     def add_game(self, game_frame: GameFrame):
         self.__past.add_game(self._current_game_standard_frame)
@@ -15,6 +17,10 @@ class Game:
         self.current = CurrentGameFrame(game_frame)
 
     # def predict_/
+
+    @property
+    def ts(self) -> float:
+        return self.current.ts
 
     @property
     def my_team_is_yellow(self) -> bool:
@@ -38,7 +44,7 @@ class Game:
 
     @property
     def field(self):
-        return self.current.field
+        return self._field
 
     @property
     def robot_with_ball(self):

@@ -13,6 +13,7 @@ from utama_core.config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameHistory
+from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
@@ -63,6 +64,7 @@ class StrategyRunner:
         mode (str): "real", "rsim", "grism"
         exp_friendly (int): Expected number of friendly robots.
         exp_enemy (int): Expected number of enemy robots.
+        field_bounds (FieldBounds): Configuration of the field. Defaults to standard field.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
     """
@@ -75,6 +77,10 @@ class StrategyRunner:
         mode: str,
         exp_friendly: int,
         exp_enemy: int,
+        field_bounds: FieldBounds = FieldBounds(
+            top_left=(-Field.full_field_half_length, Field.full_field_half_width),
+            bottom_right=(Field.full_field_half_length, -Field.full_field_half_width),
+        ),
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         control_scheme: str = "pid",
@@ -87,6 +93,7 @@ class StrategyRunner:
         self.mode: Mode = self._load_mode(mode)
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
+        self.field_bounds = field_bounds
         self.opp_strategy = opp_strategy
         self.replay_writer = (
             ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
@@ -117,6 +124,8 @@ class StrategyRunner:
             self.opp_current_game_frame,
             self.opp_game,
         ) = self._load_game()
+
+        self._assert_exp_goals()
 
         self.game_start_time = time.time()
 
@@ -232,6 +241,18 @@ class StrategyRunner:
                 self.exp_enemy, self.exp_friendly
             ), "Expected number of robots at runtime does not match opponent strategy."
 
+    def _assert_exp_goals(self):
+        """Assert the expected number of goals."""
+        assert self.my_strategy.assert_exp_goals(
+            self.my_game.field.includes_my_goal_line,
+            self.my_game.field.includes_opp_goal_line,
+        ), "Field does not match expected goals for my strategy."
+        if self.opp_strategy:
+            assert self.opp_strategy.assert_exp_goals(
+                self.opp_game.field.includes_my_goal_line,
+                self.opp_game.field.includes_opp_goal_line,
+            ), "Field does not match expected goals for opponent strategy."
+
     def _load_robot_controllers(self):
         """
         Load the robot controllers and motion controllers for both friendly and opponent strategies.
@@ -288,6 +309,11 @@ class StrategyRunner:
             self.opp_strategy.load_motion_controller(self.motion_controller(self.mode, self.rsim_env))
 
     def _load_game(self):
+        """
+        Load the game state for both friendly and opponent strategies after waiting for valid game data with GameGater.
+
+        Side effect: Loads games for both friendly and opponent strategies.
+        """
         my_current_game_frame, opp_current_game_frame = GameGater.wait_until_game_valid(
             self.my_team_is_yellow,
             self.my_team_is_right,
@@ -299,12 +325,20 @@ class StrategyRunner:
             rsim_env=self.rsim_env,
         )
         my_game_history = GameHistory(MAX_GAME_HISTORY)
-        my_game = Game(my_game_history, my_current_game_frame)
+        my_field = Field(my_current_game_frame.my_team_is_right, field_bounds=self.field_bounds)
+        my_game = Game(my_game_history, my_current_game_frame, field=my_field)
+
         if self.opp_strategy:
             opp_game_history = GameHistory(MAX_GAME_HISTORY)
-            opp_game = Game(opp_game_history, opp_current_game_frame)
+            opp_field = Field(opp_current_game_frame.my_team_is_right, field_bounds=self.field_bounds)
+            opp_game = Game(opp_game_history, opp_current_game_frame, field=opp_field)
         else:
             opp_game_history, opp_game = None, None
+
+        self.my_strategy.load_game(my_game)
+        if self.opp_strategy:
+            self.opp_strategy.load_game(opp_game)
+
         return (
             my_game_history,
             my_current_game_frame,
@@ -359,12 +393,13 @@ class StrategyRunner:
             n_episodes = 1
 
         testManager.load_strategies(self.my_strategy, self.opp_strategy)
+
         try:
             for i in range(n_episodes):
                 testManager.update_episode_n(i)
 
                 if self.sim_controller:
-                    testManager.reset_field(self.sim_controller, self.my_current_game_frame)
+                    testManager.reset_field(self.sim_controller, self.my_game)
                     time.sleep(0.1)  # wait for the field to reset
                     # wait for the field to reset
                 self._reset_game()
@@ -382,7 +417,7 @@ class StrategyRunner:
                         break
                     self._run_step()
 
-                    status = testManager.eval_status(self.my_current_game_frame)
+                    status = testManager.eval_status(self.my_game)
 
                     if status == TestingStatus.FAILURE:
                         passed = False
@@ -495,7 +530,7 @@ class StrategyRunner:
             self.replay_writer.write_frame(new_game_frame)
 
         game.add_game(new_game_frame)
-        strategy.step(game)
+        strategy.step()
 
 
 # if __name__ == "__main__":

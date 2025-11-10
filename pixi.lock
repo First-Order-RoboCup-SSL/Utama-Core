@@ -48,7 +48,6 @@ environments:
       - conda: https://prefix.dev/conda-forge/linux-64/freetype-2.13.3-ha770c72_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/fribidi-1.0.16-hb03c661_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/gdk-pixbuf-2.44.1-h2b0a6b4_0.conda
-      - conda: https://prefix.dev/conda-forge/linux-64/geos-3.13.0-h5888daf_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/gettext-0.25.1-h3f43e3d_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/gettext-tools-0.25.1-h3f43e3d_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/glib-tools-2.86.0-hf516916_0.conda
@@ -191,7 +190,6 @@ environments:
       - conda: https://prefix.dev/conda-forge/linux-64/sdl3-3.2.22-h68140b3_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/secretstorage-3.3.3-py311h38be061_4.conda
       - conda: https://prefix.dev/conda-forge/noarch/setuptools-80.9.0-pyhff2d567_0.conda
-      - conda: https://prefix.dev/conda-forge/linux-64/shapely-2.0.6-py311h2fdb869_2.conda
       - conda: https://prefix.dev/conda-forge/noarch/shellingham-1.5.4-pyhd8ed1ab_1.conda
       - conda: https://prefix.dev/conda-forge/noarch/six-1.17.0-pyhe01879c_1.conda
       - conda: https://prefix.dev/conda-forge/noarch/snakeviz-2.2.2-pyhd8ed1ab_1.conda
@@ -271,7 +269,6 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-arm64/freetype-2.14.1-hce30654_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/fribidi-1.0.16-hc919400_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/gdk-pixbuf-2.44.4-h7542897_0.conda
-      - conda: https://prefix.dev/conda-forge/osx-arm64/geos-3.13.0-hf9b8971_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/gettext-0.25.1-h3dcc1bd_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/gettext-tools-0.25.1-h493aca8_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/glib-tools-2.86.0-hb9d6e3a_0.conda
@@ -385,7 +382,6 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-arm64/sdl2_ttf-2.24.0-h49b19f9_1.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/sdl3-3.2.24-h919df07_0.conda
       - conda: https://prefix.dev/conda-forge/noarch/setuptools-80.9.0-pyhff2d567_0.conda
-      - conda: https://prefix.dev/conda-forge/osx-arm64/shapely-2.0.6-py311hac502b4_2.conda
       - conda: https://prefix.dev/conda-forge/noarch/shellingham-1.5.4-pyhd8ed1ab_1.conda
       - conda: https://prefix.dev/conda-forge/noarch/six-1.17.0-pyhe01879c_1.conda
       - conda: https://prefix.dev/conda-forge/noarch/snakeviz-2.2.2-pyhd8ed1ab_1.conda
@@ -1334,27 +1330,6 @@ packages:
   purls: []
   size: 544149
   timestamp: 1761082904334
-- conda: https://prefix.dev/conda-forge/linux-64/geos-3.13.0-h5888daf_0.conda
-  sha256: 5c70d6d16e044859edca85feb9d4f1c3c6062aaf88d650826f5ccdf8c44336de
-  md5: 40b4ab956c90390e407bb177f8a58bab
-  depends:
-  - __glibc >=2.17,<3.0.a0
-  - libgcc >=13
-  - libstdcxx >=13
-  license: LGPL-2.1-only
-  purls: []
-  size: 1869233
-  timestamp: 1725676083126
-- conda: https://prefix.dev/conda-forge/osx-arm64/geos-3.13.0-hf9b8971_0.conda
-  sha256: 273381020b72bde1597d4e07e855ed50ffac083512e61ccbdd99d93f03c6cbf2
-  md5: 45b2e9adb9663644b1eefa5300b9eef3
-  depends:
-  - __osx >=11.0
-  - libcxx >=17
-  license: LGPL-2.1-only
-  purls: []
-  size: 1481430
-  timestamp: 1725676193541
 - conda: https://prefix.dev/conda-forge/linux-64/gettext-0.25.1-h3f43e3d_1.conda
   sha256: cbfa8c80771d1842c2687f6016c5e200b52d4ca8f2cc119f6377f64f899ba4ff
   md5: c42356557d7f2e37676e121515417e3b
@@ -4793,38 +4768,6 @@ packages:
   - pkg:pypi/setuptools?source=hash-mapping
   size: 748788
   timestamp: 1748804951958
-- conda: https://prefix.dev/conda-forge/linux-64/shapely-2.0.6-py311h2fdb869_2.conda
-  sha256: c09f263d503aa59d9bb31425c175bd202917669d1047f830942407b23de231ab
-  md5: 4c78235905053663d1c9e23df3f11b65
-  depends:
-  - __glibc >=2.17,<3.0.a0
-  - geos >=3.13.0,<3.13.1.0a0
-  - libgcc >=13
-  - numpy >=1.19,<3
-  - python >=3.11,<3.12.0a0
-  - python_abi 3.11.* *_cp311
-  license: BSD-3-Clause
-  license_family: BSD
-  purls:
-  - pkg:pypi/shapely?source=hash-mapping
-  size: 581316
-  timestamp: 1727273591182
-- conda: https://prefix.dev/conda-forge/osx-arm64/shapely-2.0.6-py311hac502b4_2.conda
-  sha256: ce20ddfb0c8c96eebf3123d5c56e6d32c56b01650eb4b0da86603dad7b0bbf32
-  md5: b3088a6bbd05fb8481257a97cbc65b48
-  depends:
-  - __osx >=11.0
-  - geos >=3.13.0,<3.13.1.0a0
-  - numpy >=1.19,<3
-  - python >=3.11,<3.12.0a0
-  - python >=3.11,<3.12.0a0 *_cpython
-  - python_abi 3.11.* *_cp311
-  license: BSD-3-Clause
-  license_family: BSD
-  purls:
-  - pkg:pypi/shapely?source=hash-mapping
-  size: 543087
-  timestamp: 1727273733033
 - conda: https://prefix.dev/conda-forge/noarch/shellingham-1.5.4-pyhd8ed1ab_1.conda
   sha256: 0557c090913aa63cdbe821dbdfa038a321b488e22bc80196c4b3b1aace4914ef
   md5: 7c3c2a0f3ebdea2bbc35538d162b43bf

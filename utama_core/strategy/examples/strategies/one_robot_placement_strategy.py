@@ -1,11 +1,12 @@
 import math
 import random
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import py_trees
 from py_trees.composites import Sequence
 
+from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.math_utils import Vector2D
 from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
@@ -124,6 +125,13 @@ class RobotPlacementStrategy(AbstractStrategy):
         if 1 <= n_runtime_friendly <= 6:
             return True
         return False
+
+    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
+        return True  # No specific goal line requirements
+
+    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
+        # toggles robot between (1, -1) and (1, 1)
+        return FieldBounds(top_left=(-1, 1), bottom_right=(1, -1))
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete behaviour tree."""

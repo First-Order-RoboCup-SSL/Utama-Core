@@ -10,6 +10,7 @@ from utama_core.config.enums import Role
 from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PATH
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
+from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command
@@ -94,6 +95,35 @@ class AbstractStrategy(ABC):
         """
         ...
 
+    @abstractmethod
+    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
+        """
+        Validate that the field we are playing on has the expected goals.
+        This checks for our own and the opponent's goal.
+
+        Args:
+            field: The field we are playing on.
+        """
+        ...
+
+    @abstractmethod
+    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
+        """
+        Return the minimum bounding zone required by the strategy.
+
+        If the strategy can operate on a subset of the full field, return
+        a `FieldBounds` defining the minimum area required. Otherwise return
+        `None` to indicate that there is no restriction.
+
+        This is called during setup(), so the blackboard already exists.
+
+        Note that this is a bounding zone not area, so the coordinates must be field-accurate.
+
+        Returns:
+            A `FieldBounds` defining the minimum bounding zone, or `None`.
+        """
+        ...
+
     def execute_default_action(self, game: Game, role: Role, robot_id: int) -> RobotCommand:
         """
         Provide a fallback command for robots without assignments.
@@ -114,6 +144,15 @@ class AbstractStrategy(ABC):
 
     ### END OF STRATEGY IMPLEMENTATION ###
 
+    def setup_behaviour_tree(self, is_opp_strat: bool):
+        """
+        Must be called before strategy can be run.
+
+        Setups the tree and blackboard based on if is_opp_strat
+        """
+        self.blackboard = self._setup_blackboard(is_opp_strat)
+        self.behaviour_tree.setup(is_opp_strat=is_opp_strat)
+
     def load_rsim_env(self, env: SSLBaseEnv):
         """
         Called by StrategyRunner: Load the RSim environment into the blackboard.
@@ -123,7 +162,7 @@ class AbstractStrategy(ABC):
 
     def load_robot_controller(self, robot_controller: AbstractRobotController):
         """
-        Called by StrategyRunner: Load the robot controller into the blackboard.
+        Called by StrategyRunner: Load the robot controller into the class.
         """
         self.robot_controller = robot_controller
 
@@ -134,18 +173,59 @@ class AbstractStrategy(ABC):
         self.blackboard.set("motion_controller", motion_controller, overwrite=True)
         self.blackboard.register_key(key="motion_controller", access=py_trees.common.Access.READ)
 
-    def setup_behaviour_tree(self, is_opp_strat: bool):
-        """
-        Must be called before strategy can be run.
+    # --- Helper function to check a valid bounding box ---
+    def _assert_valid_bb(self, bb: FieldBounds, name: str):
 
-        Setups the tree and blackboard based on if is_opp_strat
-        """
-        self.blackboard = self._setup_blackboard(is_opp_strat)
-        self.behaviour_tree.setup(is_opp_strat=is_opp_strat)
+        fx, fy = Field._FULL_FIELD_HALF_LENGTH, Field._FULL_FIELD_HALF_WIDTH
 
-    def step(self, game: Game):
+        x0, y0 = bb.top_left
+        x1, y1 = bb.bottom_right
+        assert x0 <= x1, f"{name} top-left x {x0} must be <= bottom-right x {x1}"
+        assert y0 >= y1, f"{name} top-left y {y0} must be >= bottom-right y {y1}"
+        # Also ensure within full field
+        assert -fx <= x0 <= fx and -fx <= x1 <= fx, f"{name} x coordinates out of full field bounds ±{fx}"
+        assert -fy <= y0 <= fy and -fy <= y1 <= fy, f"{name} y coordinates out of full field bounds ±{fy}"
+
+    def assert_field_requirements(self):
+        """
+        Assert that the actual field size meets the strategy's requirements,
+        that both actual field and min_bounding_zone are within the full field,
+        and that bounding boxes are well-formed (top-left above/left of bottom-right).
+        """
+        actual_field_size = self.blackboard.game.field.field_bounds
+        min_bounding_zone = self.get_min_bounding_zone()
+
+        # --- Validate actual field ---
+        self._assert_valid_bb(actual_field_size, "Actual field")
+
+        # --- Validate min bounding zone ---
+        if min_bounding_zone is not None:
+            self._assert_valid_bb(min_bounding_zone, "Min bounding zone")
+
+            # --- Check that actual field contains min_bounding_zone ---
+            ax0, ay0 = actual_field_size.top_left
+            ax1, ay1 = actual_field_size.bottom_right
+            mx0, my0 = min_bounding_zone.top_left
+            mx1, my1 = min_bounding_zone.bottom_right
+
+            assert ax0 <= mx0, f"Field top-left x {ax0} smaller than required {mx0}"
+            assert ay0 >= my0, f"Field top-left y {ay0} smaller than required {my0}"
+            assert ax1 >= mx1, f"Field bottom-right x {ax1} smaller than required {mx1}"
+            assert ay1 <= my1, f"Field bottom-right y {ay1} smaller than required {my1}"
+
+    def load_game(self, game: Game):
+        """
+        Called by StrategyRunner: Load the game object into the blackboard.
+
+        We do not set to READ after, as we TestManager may reset the game object for the new episode.
+        """
+        self.blackboard.set("game", game, overwrite=True)
+        self.assert_field_requirements()
+
+    def step(self):
         # start_time = time.time()
-        self.blackboard.game = game
+        game = self.blackboard.game
+
         self.blackboard.cmd_map = {robot_id: None for robot_id in game.friendly_robots}
 
         self.behaviour_tree.tick()

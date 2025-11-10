@@ -11,7 +11,7 @@ Data containers that describe everything the rest of the code base reasons about
 ### `game/`
 - `game_frame.py`, `current_game_frame.py`, `game_history.py`: immutable snapshots of the match and helpers to track history/current context.
 - `game.py`: lightweight façade that exposes the current snapshot while preserving history.
-- `field.py`: canonical field geometry (Shapely primitives) used by planners and strategies.
+- `field.py`: canonical field geometry (numpy arrays) used by planners and strategies.
 - `ball.py`, `robot.py`, `team_info.py`, `proximity_lookup.py`: value objects that capture per-entity state and provide fast distance queries.
 
 ### `referee/`
