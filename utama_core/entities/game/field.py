@@ -153,7 +153,7 @@ class Field:
 
     @property
     def half_length(self) -> float:
-        return self._half_width
+        return self._half_length
 
     @property
     def half_width(self) -> float:
