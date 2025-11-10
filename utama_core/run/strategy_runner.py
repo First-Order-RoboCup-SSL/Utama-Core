@@ -464,6 +464,9 @@ class StrategyRunner:
 
         # Update game frame with refined information
         new_game_frame = replace(current_game_frame, ts=iter_start_time - self.game_start_time)
+        with open("expected_pos.txt", "a") as f:
+            f.write(str(vision_frames))
+            f.write("\n")
         new_game_frame = self.position_refiner.refine(new_game_frame, vision_frames)
         new_game_frame = self.velocity_refiner.refine(game_history, new_game_frame)  # , robot_frame.imu_data)
         new_game_frame = self.robot_info_refiner.refine(new_game_frame, responses)

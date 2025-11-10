@@ -12,26 +12,16 @@ class RSimSubprocessWrapper:
         env = os.environ.copy()
         cmake_policy_flag = "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
         # Ensure rc-robosim's scikit-build uses a compatible CMake policy level.
-        env["CMAKE_ARGS"] = (
-            f"{env.get('CMAKE_ARGS', '')} {cmake_policy_flag}".strip()
-        )
-        env["SKBUILD_CMAKE_ARGS"] = (
-            f"{env.get('SKBUILD_CMAKE_ARGS', '')} {cmake_policy_flag}".strip()
-        )
+        env["CMAKE_ARGS"] = f"{env.get('CMAKE_ARGS', '')} {cmake_policy_flag}".strip()
+        env["SKBUILD_CMAKE_ARGS"] = f"{env.get('SKBUILD_CMAKE_ARGS', '')} {cmake_policy_flag}".strip()
         project_root = Path(__file__).resolve().parents[5]
         robosim_env = project_root / ".pixi" / "envs" / "robosim"
         include_dir = robosim_env / "include"
         lib_dir = robosim_env / "lib"
         prefix = str(robosim_env)
-        env["CMAKE_PREFIX_PATH"] = (
-            f"{prefix}:{env.get('CMAKE_PREFIX_PATH', '')}".strip(":")
-        )
-        env["CMAKE_LIBRARY_PATH"] = (
-            f"{lib_dir}:{env.get('CMAKE_LIBRARY_PATH', '')}".strip(":")
-        )
-        env["CMAKE_INCLUDE_PATH"] = (
-            f"{include_dir}:{env.get('CMAKE_INCLUDE_PATH', '')}".strip(":")
-        )
+        env["CMAKE_PREFIX_PATH"] = f"{prefix}:{env.get('CMAKE_PREFIX_PATH', '')}".strip(":")
+        env["CMAKE_LIBRARY_PATH"] = f"{lib_dir}:{env.get('CMAKE_LIBRARY_PATH', '')}".strip(":")
+        env["CMAKE_INCLUDE_PATH"] = f"{include_dir}:{env.get('CMAKE_INCLUDE_PATH', '')}".strip(":")
         self.proc = subprocess.Popen(
             [
                 "pixi",
