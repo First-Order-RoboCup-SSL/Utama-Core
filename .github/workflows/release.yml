@@ -104,6 +104,7 @@ jobs:
             # Adjust search/replace as needed for your dependency structure
             if grep -q 'utama_core' pixi.toml; then
               toml set --toml-path pixi.toml pypi-dependencies."utama-core".rev "v${NEW_VERSION}"
+              pixi update
             fi
 
             git config user.name "utama-release-manager[bot]"
