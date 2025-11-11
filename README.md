@@ -7,6 +7,7 @@
 - [Setup AutoReferee](#setup-autoreferee)
 - [Setup SSL Vision for Real Testing](#setup-ssl-vision-for-real-testing)
 - [Field Guide](#field-guide)
+- [System Design](#system-design)
 - [Milestones](#milestones)
 
 ## Setup Utama
@@ -138,6 +139,13 @@ If you see UDP packets, everything is working.
 1. All coordinates and velocities will be in meters or meters per second.
 2. All angular properties will be in radians or radians per second, normalised between [pi, -pi]. A heading of radian 0 indicates a robot facing towards the positive x-axis (ie left to right).
 3. Unless otherwise stated, the coordinate system is aligned such that blue robots are on the left and yellow are on the right.
+4. The center of the field is marked as (0, 0).
+
+## System Design
+
+![Dataflow Diagram](/assets/images/pipeline_new.drawio.png)
+
+The system design diagram is attached here for reference. For more information on the design, see [here](/docs/PipelineMethod.md).
 
 ## Milestones
 
