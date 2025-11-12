@@ -457,12 +457,12 @@ class StrategyRunner:
         # alternate between opp and friendly playing
         if self.toggle_opp_first:
             if self.opp_strategy:
-                self._step_game(start_time, vision_frames, True)
-            self._step_game(start_time, vision_frames, False)
+                self._step_game(vision_frames, True)
+            self._step_game(vision_frames, False)
         else:
-            self._step_game(start_time, vision_frames, False)
+            self._step_game(vision_frames, False)
             if self.opp_strategy:
-                self._step_game(start_time, vision_frames, True)
+                self._step_game(vision_frames, True)
         self.toggle_opp_first = not self.toggle_opp_first
 
         end_time = time.time()
@@ -483,14 +483,12 @@ class StrategyRunner:
 
     def _step_game(
         self,
-        iter_start_time: float,
         vision_frames: List[RawVisionData],
         running_opp: bool,
     ):
         """Step the game for the robot controller and strategy.
 
         Args:
-            iter_start_time (float): The start time of the iteration.
             vision_frames (List[RawVisionData]): The vision frames.
             running_opp (bool): Whether to run the opponent strategy.
         """
@@ -510,8 +508,7 @@ class StrategyRunner:
         responses = strategy.robot_controller.get_robots_responses()
 
         # Update game frame with refined information
-        new_game_frame = replace(current_game_frame, ts=iter_start_time - self.game_start_time)
-        new_game_frame = self.position_refiner.refine(new_game_frame, vision_frames)
+        new_game_frame = self.position_refiner.refine(current_game_frame, vision_frames)
         new_game_frame = self.velocity_refiner.refine(game_history, new_game_frame)  # , robot_frame.imu_data)
         new_game_frame = self.robot_info_refiner.refine(new_game_frame, responses)
         # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)
