@@ -106,10 +106,7 @@ class StrategyRunner:
         self._load_robot_controllers()
 
         assert_valid_bounding_box(self.field_bounds)
-        self.my_field = Field(my_team_is_right, self.field_bounds)
-        self.opp_field = Field(not my_team_is_right, self.field_bounds)
-
-        self.position_refiner = PositionRefiner(self.my_field.half_length, self.my_field.half_width)
+        self.position_refiner = PositionRefiner(self.field_bounds)
         self.velocity_refiner = VelocityRefiner()
         self.robot_info_refiner = RobotInfoRefiner()
         # self.referee_refiner = RefereeRefiner()
@@ -350,12 +347,14 @@ class StrategyRunner:
             is_pvp=self.opp_strategy is not None,
             rsim_env=self.rsim_env,
         )
+        my_field = Field(self.my_team_is_right, self.field_bounds)
         my_game_history = GameHistory(MAX_GAME_HISTORY)
-        my_game = Game(my_game_history, my_current_game_frame, field=self.my_field)
+        my_game = Game(my_game_history, my_current_game_frame, field=my_field)
 
         if self.opp_strategy:
+            opp_field = Field(not self.my_team_is_right, self.field_bounds)
             opp_game_history = GameHistory(MAX_GAME_HISTORY)
-            opp_game = Game(opp_game_history, opp_current_game_frame, field=self.opp_field)
+            opp_game = Game(opp_game_history, opp_current_game_frame, field=opp_field)
         else:
             opp_game_history, opp_game = None, None
 

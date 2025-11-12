@@ -3,35 +3,7 @@ import pytest
 from utama_core.config.enums import Mode
 from utama_core.entities.game.field import FieldBounds
 from utama_core.run.strategy_runner import StrategyRunner
-
-
-class DummyStrategy:
-    def assert_exp_robots(self, exp_friendly, exp_enemy):
-        return True
-
-    def assert_exp_goals(self, my_goal, opp_goal):
-        return True
-
-    def get_min_bounding_zone(self):
-        return None
-
-    def setup_behaviour_tree(self, is_opp_strat):
-        pass
-
-    def load_rsim_env(self, env):
-        pass
-
-    def load_robot_controller(self, controller):
-        pass
-
-    def load_motion_controller(self, controller):
-        pass
-
-    def load_game(self, game):
-        pass
-
-    def step(self):
-        pass
+from utama_core.tests.strategy_runner.strat_runner_test_utils import DummyStrategy
 
 
 @pytest.fixture

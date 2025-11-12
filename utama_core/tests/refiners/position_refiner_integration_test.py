@@ -27,7 +27,7 @@ def main():
     # Runs the vision receiver,
     vision_buffers = [deque(maxlen=1) for _ in range(4)]
     vision_receiver = VisionReceiver(vision_buffers)
-    position_refiner = PositionRefiner(Field.full_field_half_length, Field.full_field_half_width)
+    position_refiner = PositionRefiner(Field.full_field_bounds)
 
     start_threads(vision_receiver)
     NUM_FRIENDLY = 1

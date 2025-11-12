@@ -7,7 +7,7 @@ import numpy as np
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
-from utama_core.entities.game import Ball, GameFrame, Robot
+from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
 
 
@@ -25,11 +25,13 @@ class AngleSmoother:
 
 
 class PositionRefiner(BaseRefiner):
-    def __init__(self, half_length: float, half_width: float, bounds_buffer: float = 1.0):
+    def __init__(self, field_bounds: FieldBounds, bounds_buffer: float = 1.0):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
-        self.HALF_FIELD_LENGTH = half_length
-        self.HALF_FIELD_WIDTH = half_width
+        self.x_min = field_bounds.top_left[0] - bounds_buffer  # expand left
+        self.x_max = field_bounds.bottom_right[0] + bounds_buffer  # expand right
+        self.y_min = field_bounds.bottom_right[1] - bounds_buffer  # expand bottom
+        self.y_max = field_bounds.top_left[1] + bounds_buffer  # expand top
         self.BOUNDS_BUFFER = bounds_buffer
 
     # Primary function for the Refiner interface
@@ -134,10 +136,9 @@ class PositionRefiner(BaseRefiner):
         for robot in vision_robots:
             new_x, new_y = robot.x, robot.y
 
-            if (np.abs(new_x) > self.HALF_FIELD_LENGTH + self.BOUNDS_BUFFER) or (
-                np.abs(new_y) > self.HALF_FIELD_WIDTH + self.BOUNDS_BUFFER
-            ):
-                continue  # Ignore robots that are out of bounds
+            if not (self.x_min <= new_x <= self.x_max and self.y_min <= new_y <= self.y_max):
+                # Out of bounds so ignore this robot
+                continue
 
             if robot.id not in new_game_robots:
                 # At the start of the game, we haven't seen anything yet, so just create a new robot
