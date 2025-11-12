@@ -22,5 +22,5 @@ class RobotInfoRefiner(BaseRefiner):
                 friendly_robots[id] = replace(robot, has_ball=robot_response.has_ball)
             else:
                 warnings.warn(f"Robot ID {id} in robot responses not found in friendly robots. ")
-        new_game = replace(game_frame, friendly_robots=friendly_robots)
-        return new_game
+        new_game_frame = replace(game_frame, friendly_robots=friendly_robots)
+        return new_game_frame

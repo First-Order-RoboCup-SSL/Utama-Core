@@ -7,7 +7,7 @@ import numpy as np
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
-from utama_core.entities.game import Ball, Game, Robot
+from utama_core.entities.game import Ball, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
 
 
@@ -35,13 +35,13 @@ class PositionRefiner(BaseRefiner):
         # Example field width, adjust as needed
 
     # Primary function for the Refiner interface
-    def refine(self, game: Game, data: List[RawVisionData]):
+    def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
         frames = [frame for frame in data if frame is not None]
 
         # If no information just return the original
         # TODO: this needs to be replaced by an extrapolation function (otherwise we will be using old data forever)
         if not frames:
-            return game
+            return game_frame
         # Can combine previous position from game with new data to produce new position if desired
         combined_vision_data = CameraCombiner().combine_cameras(frames)
 
@@ -50,7 +50,7 @@ class PositionRefiner(BaseRefiner):
         #             print(f"robot orientation: {robot.orientation}")
 
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
-            game,
+            game_frame,
             combined_vision_data.yellow_robots,
             combined_vision_data.blue_robots,
         )
@@ -59,26 +59,26 @@ class PositionRefiner(BaseRefiner):
         new_ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
         if new_ball is None:
             # If none, take the ball from the last frame of the game
-            new_ball = game.ball
+            new_ball = game_frame.ball
 
-        if game.my_team_is_yellow:
-            new_game = replace(
-                game,
+        if game_frame.my_team_is_yellow:
+            new_game_frame = replace(
+                game_frame,
                 ts=combined_vision_data.ts,
                 friendly_robots=new_yellow_robots,
                 enemy_robots=new_blue_robots,
                 ball=new_ball,
             )
         else:
-            new_game = replace(
-                game,
+            new_game_frame = replace(
+                game_frame,
                 ts=combined_vision_data.ts,
                 friendly_robots=new_blue_robots,
                 enemy_robots=new_yellow_robots,
                 ball=new_ball,
             )
 
-        return new_game
+        return new_game_frame
 
     # Static methods
     @staticmethod
@@ -153,22 +153,26 @@ class PositionRefiner(BaseRefiner):
 
     def _combine_both_teams_game_vision_positions(
         self,
-        game: Game,
+        game_frame: GameFrame,
         yellow_vision_robots: List[VisionRobotData],
         blue_vision_robots: List[VisionRobotData],
     ) -> Tuple[Dict[int, Robot], Dict[int, Robot]]:
-        if game.my_team_is_yellow:
-            old_yellow_robots = game.friendly_robots.copy()
-            old_blue_robots = game.enemy_robots.copy()
+        if game_frame.my_team_is_yellow:
+            old_yellow_robots = game_frame.friendly_robots.copy()
+            old_blue_robots = game_frame.enemy_robots.copy()
         else:
-            old_yellow_robots = game.enemy_robots.copy()
-            old_blue_robots = game.friendly_robots.copy()
+            old_yellow_robots = game_frame.enemy_robots.copy()
+            old_blue_robots = game_frame.friendly_robots.copy()
 
         new_yellow_robots = self._combine_single_team_positions(
-            old_yellow_robots, yellow_vision_robots, friendly=game.my_team_is_yellow
+            old_yellow_robots,
+            yellow_vision_robots,
+            friendly=game_frame.my_team_is_yellow,
         )
         new_blue_robots = self._combine_single_team_positions(
-            old_blue_robots, blue_vision_robots, friendly=not game.my_team_is_yellow
+            old_blue_robots,
+            blue_vision_robots,
+            friendly=not game_frame.my_team_is_yellow,
         )
 
         return new_yellow_robots, new_blue_robots
