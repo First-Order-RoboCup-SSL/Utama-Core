@@ -1,5 +1,5 @@
 import time
-from typing import Deque, List, Tuple
+from typing import Deque, List, Optional, Tuple
 
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game.game_frame import GameFrame
@@ -18,8 +18,16 @@ class GameGater:
         position_refiner: PositionRefiner,
         is_pvp: bool,
         rsim_env: SSLBaseEnv = None,
-    ) -> Tuple[GameFrame, GameFrame]:
-        def _add_frame(my_game_frame: GameFrame, opp_game_frame: GameFrame) -> Tuple[GameFrame, GameFrame]:
+    ) -> Tuple[GameFrame, Optional[GameFrame]]:
+        """
+        Waits until the game frame has the expected number of robots and a ball.
+        This function continuously refines the game frame using vision data until the conditions are met.
+
+        Returns:
+            A tuple containing the refined game frame for the player's team and the opponent's team (if is_pvp is True).
+        """
+
+        def _add_frame(my_game_frame: GameFrame, opp_game_frame: GameFrame) -> Tuple[GameFrame, Optional[GameFrame]]:
             if rsim_env:
                 vision_frames = [rsim_env._frame_to_observations()[0]]
             else:

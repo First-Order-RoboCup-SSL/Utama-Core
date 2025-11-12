@@ -67,6 +67,7 @@ class StrategyRunner:
         field_bounds (FieldBounds): Configuration of the field. Defaults to standard field.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
+        control_scheme (str, optional): Name of the motion control scheme to use.
     """
 
     def __init__(
@@ -129,16 +130,45 @@ class StrategyRunner:
         self.toggle_opp_first = False  # alternate the order of opp and friendly in run
 
     def _load_mode(self, mode_str: str) -> Mode:
+        """Convert a mode string to a Mode enum value.
+
+        Performs case-insensitive lookup and raises a ValueError if the
+        provided string does not map to a known Mode.
+
+        Args:
+            mode_str: Mode string (e.g. "rsim", "grsim", "real").
+
+        Returns:
+            Corresponding Mode enum.
+
+        Raises:
+            ValueError: If mode_str is not a recognized mode.
+        """
         mode = mode_str_to_enum.get(mode_str.lower())
         if mode is None:
             raise ValueError(f"Unknown mode: {mode_str}. Choose from 'rsim', 'grsim', or 'real'.")
         return mode
 
     def data_update_listener(self, receiver: VisionReceiver):
+        """Listener function to pull vision data from a VisionReceiver.
+
+        This method is intended to be run in a separate thread and will call
+        the receiver to continuously pull game data.
+
+        Args:
+            receiver: VisionReceiver instance to pull data from.
+        """
         # Start receiving game data; this will run in a separate thread.
         receiver.pull_game_data()
 
     def start_threads(self, vision_receiver: VisionReceiver):  # , referee_receiver):
+        """Start background threads for receiving vision (and referee) data.
+
+        Starts daemon threads so they do not prevent process exit.
+
+        Args:
+            vision_receiver: VisionReceiver to run in a background thread.
+        """
         # Start the data receiving in separate threads
         vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
         # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
@@ -347,6 +377,11 @@ class StrategyRunner:
 
     # Reset the game state and robot info in buffer
     def _reset_game(self):
+        """Reload game state by waiting for valid frames and reinitializing Game objects.
+
+        Calls into the same loading logic used at construction to refresh the
+        current game and history objects (useful between episodes or after resets).
+        """
         _ = self.my_strategy.robot_controller.get_robots_responses()
 
         (
@@ -359,6 +394,11 @@ class StrategyRunner:
         ) = self._load_game()
 
     def _reset_robots(self):
+        """Send zero-velocity commands to all robots to stop them.
+
+        Ensures both friendly and opponent robots (if present) receive
+        zeroed commands and that those commands are sent immediately.
+        """
         for i in self.my_current_game_frame.friendly_robots.keys():
             self.my_strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
         self.my_strategy.robot_controller.send_robot_commands()
@@ -433,6 +473,12 @@ class StrategyRunner:
         return passed
 
     def run(self):
+        """Run the main loop, stepping the game until interrupted.
+
+        If an RSim environment is present, it ensures rendering is on. The loop
+        continues until a KeyboardInterrupt is received, after which resources
+        (such as replay writer and rsim env) are closed.
+        """
         if self.rsim_env:
             self.rsim_env.render_mode = "human"
         try:
@@ -447,6 +493,14 @@ class StrategyRunner:
                 self.rsim_env.close()
 
     def _run_step(self):
+        """Perform one tick of the overall game loop.
+
+        This collects vision frames, alternates which side runs first, steps
+        the strategies, writes replay frames if enabled, and enforces timestep
+        rate-limiting (sleeping when necessary).
+
+        No return value; updates internal game state and controllers.
+        """
         start_time = time.time()
         if self.mode == Mode.RSIM:
             vision_frames = [self.rsim_env._frame_to_observations()[0]]
