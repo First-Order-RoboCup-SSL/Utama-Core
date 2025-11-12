@@ -457,12 +457,12 @@ class StrategyRunner:
         # alternate between opp and friendly playing
         if self.toggle_opp_first:
             if self.opp_strategy:
-                self._step_game(start_time, vision_frames, True)
-            self._step_game(start_time, vision_frames, False)
+                self._step_game(vision_frames, True)
+            self._step_game(vision_frames, False)
         else:
-            self._step_game(start_time, vision_frames, False)
+            self._step_game(vision_frames, False)
             if self.opp_strategy:
-                self._step_game(start_time, vision_frames, True)
+                self._step_game(vision_frames, True)
         self.toggle_opp_first = not self.toggle_opp_first
 
         end_time = time.time()
