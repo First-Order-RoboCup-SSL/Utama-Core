@@ -96,7 +96,7 @@ def compute_bounding_zone_from_points(
 
 
 def assert_valid_bounding_box(bb: FieldBounds):
-    """Asserts that a FieldBounds object is valid, raising a ValueError if not."""
+    """Asserts that a FieldBounds object is valid, raising an AssertionError if not."""
     fx, fy = Field._FULL_FIELD_HALF_LENGTH, Field._FULL_FIELD_HALF_WIDTH
 
     x0, y0 = bb.top_left
