@@ -172,6 +172,20 @@ def test_out_of_bounds_enemy_not_added():
     assert 1 not in result.enemy_robots
 
 
+def test_out_of_bounds_friendly_not_added():
+    # Vision sees a blue robot outside bounds (y beyond 4.0)
+    raw_yellow = [RawRobotData(1, 3.0, 3.1, 0.0, 1.0)]
+    raw_balls = [RawBallData(0, 0, 0, 0)]
+    frames = [RawVisionData(0, raw_yellow, [], raw_balls, 0)]
+
+    p = PositionRefiner(half_length=5.0, half_width=2.0)
+    g = GameFrame(0, True, True, {}, {}, bfac(0, 0))
+    result = p.refine(g, frames)
+
+    # Enemy robot should not be added since it is out of bounds
+    assert 1 not in result.friendly_robots
+
+
 if __name__ == "__main__":
     test_combining_single_team_combines_single_robot()
     test_combining_with_robot_not_in_game_adds()
