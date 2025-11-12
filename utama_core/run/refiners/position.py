@@ -31,8 +31,6 @@ class PositionRefiner(BaseRefiner):
         self.HALF_FIELD_LENGTH = half_length  # Example field length, adjust as needed
         self.HALF_FIELD_WIDTH = half_width
         self.BOUNDS_BUFFER = bounds_buffer
-        # Example field width, adjust as needed
-
     # Primary function for the Refiner interface
     def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
         frames = [frame for frame in data if frame is not None]
