@@ -173,7 +173,7 @@ def test_out_of_bounds_enemy_not_added():
 
 
 def test_out_of_bounds_friendly_not_added():
-    # Vision sees a blue robot outside bounds (y beyond 4.0)
+    # Vision sees a yellow robot outside bounds (y beyond 4.0)
     raw_yellow = [RawRobotData(1, 3.0, 3.1, 0.0, 1.0)]
     raw_balls = [RawBallData(0, 0, 0, 0)]
     frames = [RawVisionData(0, raw_yellow, [], raw_balls, 0)]
