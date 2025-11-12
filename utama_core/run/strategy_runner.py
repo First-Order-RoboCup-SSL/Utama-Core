@@ -228,6 +228,7 @@ class StrategyRunner:
         assert self.exp_friendly <= MAX_ROBOTS, "Expected number of friendly robots is too high."
         assert self.exp_enemy <= MAX_ROBOTS, "Expected number of enemy robots is too high."
         assert self.exp_friendly >= 1, "Expected number of friendly robots is too low."
+        assert self.exp_enemy >= 0, "Expected number of enemy robots is too low."
 
         assert self.my_strategy.assert_exp_robots(
             self.exp_friendly, self.exp_enemy
