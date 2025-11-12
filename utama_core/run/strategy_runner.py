@@ -510,8 +510,7 @@ class StrategyRunner:
         responses = strategy.robot_controller.get_robots_responses()
 
         # Update game frame with refined information
-        new_game_frame = replace(current_game_frame, ts=iter_start_time - self.game_start_time)
-        new_game_frame = self.position_refiner.refine(new_game_frame, vision_frames)
+        new_game_frame = self.position_refiner.refine(current_game_frame, vision_frames)
         new_game_frame = self.velocity_refiner.refine(game_history, new_game_frame)  # , robot_frame.imu_data)
         new_game_frame = self.robot_info_refiner.refine(new_game_frame, responses)
         # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)

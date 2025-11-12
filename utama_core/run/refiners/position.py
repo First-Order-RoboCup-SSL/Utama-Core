@@ -36,13 +36,14 @@ class PositionRefiner(BaseRefiner):
 
     # Primary function for the Refiner interface
     def refine(self, game: Game, data: List[RawVisionData]):
-        data = [frame for frame in data if frame is not None]
+        frames = [frame for frame in data if frame is not None]
 
         # If no information just return the original
-        if not data:
+        # TODO: this needs to be replaced by an extrapolation function (otherwise we will be using old data forever)
+        if not frames:
             return game
         # Can combine previous position from game with new data to produce new position if desired
-        combined_vision_data = CameraCombiner().combine_cameras(game, data)
+        combined_vision_data = CameraCombiner().combine_cameras(frames)
 
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
@@ -63,6 +64,7 @@ class PositionRefiner(BaseRefiner):
         if game.my_team_is_yellow:
             new_game = replace(
                 game,
+                ts=combined_vision_data.ts,
                 friendly_robots=new_yellow_robots,
                 enemy_robots=new_blue_robots,
                 ball=new_ball,
@@ -70,6 +72,7 @@ class PositionRefiner(BaseRefiner):
         else:
             new_game = replace(
                 game,
+                ts=combined_vision_data.ts,
                 friendly_robots=new_blue_robots,
                 enemy_robots=new_yellow_robots,
                 ball=new_ball,
@@ -175,7 +178,7 @@ class CameraCombiner:
     BALL_CONFIDENCE_THRESHOLD = 0.1
     BALL_MERGE_THRESHOLD = 0.05
 
-    def combine_cameras(self, game: Game, frames: List[RawVisionData]) -> VisionData:
+    def combine_cameras(self, frames: List[RawVisionData]) -> VisionData:
         # Now we have access to the game we can do more sophisticated things
         # Such as ignoring outlier cameras etc
 
