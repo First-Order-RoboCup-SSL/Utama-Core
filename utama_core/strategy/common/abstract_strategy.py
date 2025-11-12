@@ -11,6 +11,7 @@ from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PAT
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.global_utils.math_utils import assert_valid_bounding_box
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command
@@ -184,19 +185,6 @@ class AbstractStrategy(ABC):
         self.blackboard.set("motion_controller", motion_controller, overwrite=True)
         self.blackboard.register_key(key="motion_controller", access=py_trees.common.Access.READ)
 
-    # --- Helper function to check a valid bounding box ---
-    def _assert_valid_bb(self, bb: FieldBounds, name: str):
-
-        fx, fy = Field._FULL_FIELD_HALF_LENGTH, Field._FULL_FIELD_HALF_WIDTH
-
-        x0, y0 = bb.top_left
-        x1, y1 = bb.bottom_right
-        assert x0 <= x1, f"{name} top-left x {x0} must be <= bottom-right x {x1}"
-        assert y0 >= y1, f"{name} top-left y {y0} must be >= bottom-right y {y1}"
-        # Also ensure within full field
-        assert -fx <= x0 <= fx and -fx <= x1 <= fx, f"{name} x coordinates out of full field bounds ±{fx}"
-        assert -fy <= y0 <= fy and -fy <= y1 <= fy, f"{name} y coordinates out of full field bounds ±{fy}"
-
     def assert_field_requirements(self):
         """
         Assert that the actual field size meets the strategy's requirements,
@@ -206,12 +194,9 @@ class AbstractStrategy(ABC):
         actual_field_size = self.blackboard.game.field.field_bounds
         min_bounding_zone = self.get_min_bounding_zone()
 
-        # --- Validate actual field ---
-        self._assert_valid_bb(actual_field_size, "Actual field")
-
         # --- Validate min bounding zone ---
         if min_bounding_zone is not None:
-            self._assert_valid_bb(min_bounding_zone, "Min bounding zone")
+            assert_valid_bounding_box(min_bounding_zone)
 
             # --- Check that actual field contains min_bounding_zone ---
             ax0, ay0 = actual_field_size.top_left

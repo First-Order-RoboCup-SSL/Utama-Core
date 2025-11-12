@@ -85,7 +85,7 @@ class GameHistory:
         # if hasattr(entity, "a"):
         #     self._add_attribute_to_history(entity_key, AttributeType.ACCELERATION, timestamp, entity.a)
 
-    def add_game(self, game: GameFrame):
+    def add_game_frame(self, game: GameFrame):
         self.raw_games_history.append(game)
         current_ts = game.ts
 

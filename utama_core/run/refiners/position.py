@@ -25,13 +25,12 @@ class AngleSmoother:
 
 
 class PositionRefiner(BaseRefiner):
-    HALF_FIELD_LENGTH = 4.5
-    HALF_FIELD_WIDTH = 3.0
-    BOUNDS_BUFFER = 1.0
-
-    def __init__(self):
+    def __init__(self, half_length: float, half_width: float, bounds_buffer: float = 1.0):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
+        self.HALF_FIELD_LENGTH = half_length  # Example field length, adjust as needed
+        self.HALF_FIELD_WIDTH = half_width
+        self.BOUNDS_BUFFER = bounds_buffer
         # Example field width, adjust as needed
 
     # Primary function for the Refiner interface

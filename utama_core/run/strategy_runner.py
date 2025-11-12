@@ -3,7 +3,6 @@ import threading
 import time
 import warnings
 from collections import deque
-from dataclasses import replace
 from typing import List, Optional, Tuple
 
 from utama_core.config.enums import Mode, mode_str_to_enum
@@ -18,17 +17,13 @@ from utama_core.global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
 )
+from utama_core.global_utils.math_utils import assert_valid_bounding_box
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
-from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.run import GameGater
 from utama_core.run.receivers import VisionReceiver
 from utama_core.run.refiners import PositionRefiner, RobotInfoRefiner, VelocityRefiner
-
-# from utama_core.strategy.examples.strategies.one_robot_placement_strategy import (
-#     RobotPlacementStrategy,
-# )
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import (
     AbstractSimController,
@@ -110,7 +105,11 @@ class StrategyRunner:
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
         self._load_robot_controllers()
 
-        self.position_refiner = PositionRefiner()
+        assert_valid_bounding_box(self.field_bounds)
+        self.my_field = Field(my_team_is_right, self.field_bounds)
+        self.opp_field = Field(not my_team_is_right, self.field_bounds)
+
+        self.position_refiner = PositionRefiner(self.my_field.half_length, self.my_field.half_width)
         self.velocity_refiner = VelocityRefiner()
         self.robot_info_refiner = RobotInfoRefiner()
         # self.referee_refiner = RefereeRefiner()
@@ -352,13 +351,11 @@ class StrategyRunner:
             rsim_env=self.rsim_env,
         )
         my_game_history = GameHistory(MAX_GAME_HISTORY)
-        my_field = Field(my_current_game_frame.my_team_is_right, field_bounds=self.field_bounds)
-        my_game = Game(my_game_history, my_current_game_frame, field=my_field)
+        my_game = Game(my_game_history, my_current_game_frame, field=self.my_field)
 
         if self.opp_strategy:
             opp_game_history = GameHistory(MAX_GAME_HISTORY)
-            opp_field = Field(opp_current_game_frame.my_team_is_right, field_bounds=self.field_bounds)
-            opp_game = Game(opp_game_history, opp_current_game_frame, field=opp_field)
+            opp_game = Game(opp_game_history, opp_current_game_frame, field=self.opp_field)
         else:
             opp_game_history, opp_game = None, None
 
@@ -577,7 +574,7 @@ class StrategyRunner:
         if self.replay_writer and (running_opp != self.replay_writer.replay_configs.is_my_perspective):
             self.replay_writer.write_frame(new_game_frame)
 
-        game.add_game(new_game_frame)
+        game.add_game_frame(new_game_frame)
         strategy.step()
 
 
