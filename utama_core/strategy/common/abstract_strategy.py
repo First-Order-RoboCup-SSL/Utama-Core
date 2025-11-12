@@ -80,47 +80,58 @@ class AbstractStrategy(ABC):
         ...
 
     @abstractmethod
-    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
+    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
         """
-        Validate the number of robots for which the strategy is designed.
+        Validate that the number of friendly and enemy robots matches the strategy's expectations.
 
-        Called once on initial run. Implementations can assert constraints on
-        the number of friendly and enemy robots that the strategy expects.
-        By default an external guard ensures 1 <= robots <= 6, so only add
+        This method is called once during initialization. Implementations can enforce
+        specific constraints on the number of robots the strategy supports.
+        An external guard already ensures that 1 ≤ robots ≤ 6, so only apply
         additional checks if needed.
 
         Args:
-            n_runtime_friendly: Number of friendly robots in the match.
-            n_runtime_enemy: Number of opponent robots in the match.
+            n_runtime_friendly: Number of friendly robots available during the match.
+            n_runtime_enemy: Number of opponent robots available during the match.
+
+        Returns:
+            bool: True if the robot counts are as expected, False otherwise.
         """
         ...
 
     @abstractmethod
-    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
+    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
         """
-        Validate that the field we are playing on has the expected goals.
-        This checks for our own and the opponent's goal.
+        Validate that the field configuration includes the expected goals.
+
+        Implementations should verify that the strategy can operate correctly
+        given whether our own and the opponent’s goal lines are present.
 
         Args:
-            field: The field we are playing on.
+            includes_my_goal_line: True if the field includes our own goal line.
+            includes_opp_goal_line: True if the field includes the opponent’s goal line.
+
+        Returns:
+            bool: True if the field configuration matches the strategy’s expectations, False otherwise.
         """
         ...
 
     @abstractmethod
     def get_min_bounding_zone(self) -> Optional[FieldBounds]:
         """
-        Return the minimum bounding zone required by the strategy.
+        Return the minimum field region required by the strategy.
 
-        If the strategy can operate on a subset of the full field, return
-        a `FieldBounds` defining the minimum area required. Otherwise return
-        `None` to indicate that there is no restriction.
+        If the strategy only operates within a subset of the full field, return
+        a `FieldBounds` object defining that region. Otherwise, return `None`
+        to indicate no restriction.
 
-        This is called during load_game(), so the blackboard already exists.
+        This method is called during `load_game()`, when the blackboard is already initialized,
+        so `game` is available.
 
-        Note that this is a bounding zone not area, so the coordinates must be field-accurate.
+        Note:
+            The bounding zone should be defined in field coordinates (i.e., absolute positions).
 
         Returns:
-            A `FieldBounds` defining the minimum bounding zone, or `None`.
+            Optional[FieldBounds]: A `FieldBounds` specifying the minimum bounding region, or `None`.
         """
         ...
 
