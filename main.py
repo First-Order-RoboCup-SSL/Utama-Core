@@ -8,6 +8,9 @@ from utama_core.strategy.examples.strategies.one_robot_placement_strategy import
     RobotPlacementStrategy,
 )
 from utama_core.strategy.examples.strategies.startup_strategy import StartupStrategy
+from utama_core.strategy.examples.strategies.test_collision.random_charging_strategy import (
+    RandomChargingStrategy,
+)
 
 profiler = cProfile.Profile()
 profiler.enable()
@@ -24,12 +27,13 @@ atexit.register(dump)
 def main():
     runner = StrategyRunner(
         # strategy=RobotPlacementStrategy(robot_id=0),
-        strategy=StartupStrategy(),
+        strategy=RandomChargingStrategy(),
+        opp_strategy=RandomChargingStrategy(),
         my_team_is_yellow=True,
         my_team_is_right=True,
-        mode="rsim",
+        mode="grsim",
         exp_friendly=6,
-        exp_enemy=3,
+        exp_enemy=6,
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         control_scheme="dwa",
     )
