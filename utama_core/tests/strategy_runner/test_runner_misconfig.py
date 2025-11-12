@@ -45,7 +45,7 @@ def test_assert_exp_robots_too_few_friendly(base_runner):
         base_runner._assert_exp_robots()
 
 
-def test_assert_exp_goals_fails(monkeypatch, base_runner):
+def test_assert_exp_goals_fails(base_runner):
     # Mock the strategy to return False on assert_exp_goals
     base_runner.my_strategy.assert_exp_goals = lambda *a, **k: False
     with pytest.raises(AssertionError):
