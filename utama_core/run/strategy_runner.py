@@ -483,14 +483,12 @@ class StrategyRunner:
 
     def _step_game(
         self,
-        iter_start_time: float,
         vision_frames: List[RawVisionData],
         running_opp: bool,
     ):
         """Step the game for the robot controller and strategy.
 
         Args:
-            iter_start_time (float): The start time of the iteration.
             vision_frames (List[RawVisionData]): The vision frames.
             running_opp (bool): Whether to run the opponent strategy.
         """
