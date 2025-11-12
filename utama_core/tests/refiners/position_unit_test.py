@@ -182,7 +182,7 @@ def test_out_of_bounds_friendly_not_added():
     g = GameFrame(0, True, True, {}, {}, bfac(0, 0))
     result = p.refine(g, frames)
 
-    # Enemy robot should not be added since it is out of bounds
+    # Friendly robot should not be added since it is out of bounds
     assert 1 not in result.friendly_robots
 
 
