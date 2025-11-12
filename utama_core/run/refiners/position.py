@@ -28,9 +28,10 @@ class PositionRefiner(BaseRefiner):
     def __init__(self, half_length: float, half_width: float, bounds_buffer: float = 1.0):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
-        self.HALF_FIELD_LENGTH = half_length  # Example field length, adjust as needed
+        self.HALF_FIELD_LENGTH = half_length
         self.HALF_FIELD_WIDTH = half_width
         self.BOUNDS_BUFFER = bounds_buffer
+
     # Primary function for the Refiner interface
     def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
         frames = [frame for frame in data if frame is not None]

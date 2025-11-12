@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from utama_core.entities.data.vector import Vector2D
-from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.math_utils import (
     angle_between_points,
     assert_valid_bounding_box,
