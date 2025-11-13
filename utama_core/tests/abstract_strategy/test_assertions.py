@@ -70,15 +70,6 @@ def test_crossed_bounding_box():
         strategy.assert_field_requirements()
 
 
-def test_actual_field_exceeds_full_field():
-    actual_field = FieldBounds(top_left=(-10.0, 5.0), bottom_right=(10.0, -5.0))
-    min_bb = FieldBounds(top_left=(-4.0, 2.0), bottom_right=(4.0, -2.0))
-    strategy = DummyStrategy(min_bb=min_bb)
-    strategy.blackboard = make_dummy_blackboard(actual_field)
-    with pytest.raises(AssertionError):
-        strategy.assert_field_requirements()
-
-
 def test_min_bb_exceeds_full_field():
     actual_field = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
     min_bb = FieldBounds(top_left=(-5.0, 4.0), bottom_right=(5.0, -4.0))

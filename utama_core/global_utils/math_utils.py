@@ -3,7 +3,7 @@ from typing import Tuple
 import numpy as np
 
 from utama_core.entities.data.vector import Vector2D
-from utama_core.entities.game.field import FieldBounds
+from utama_core.entities.game.field import Field, FieldBounds
 
 
 def rotate_vector(vx_global: float, vy_global: float, theta: float) -> Tuple[float, float]:
@@ -93,3 +93,16 @@ def compute_bounding_zone_from_points(
     min_y, max_y = min(ys), max(ys)
 
     return FieldBounds(top_left=(min_x, max_y), bottom_right=(max_x, min_y))
+
+
+def assert_valid_bounding_box(bb: FieldBounds):
+    """Asserts that a FieldBounds object is valid, raising an AssertionError if not."""
+    fx, fy = Field._FULL_FIELD_HALF_LENGTH, Field._FULL_FIELD_HALF_WIDTH
+
+    x0, y0 = bb.top_left
+    x1, y1 = bb.bottom_right
+    assert x0 <= x1, f"top-left x {x0} must be <= bottom-right x {x1}"
+    assert y0 >= y1, f"top-left y {y0} must be >= bottom-right y {y1}"
+    # Also ensure within full field
+    assert -fx <= x0 <= fx and -fx <= x1 <= fx, f"x coordinates out of full field bounds ±{fx}"
+    assert -fy <= y0 <= fy and -fy <= y1 <= fy, f"y coordinates out of full field bounds ±{fy}"

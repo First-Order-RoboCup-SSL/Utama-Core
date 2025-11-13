@@ -96,14 +96,14 @@ class Field:
         self._half_width = (field_bounds.top_left[1] - field_bounds.bottom_right[1]) / 2
 
     @property
-    def has_left_goal(self) -> bool:
+    def includes_left_goal(self) -> bool:
         return self._field_bounds.top_left[0] == -self._FULL_FIELD_HALF_LENGTH and (
             self._field_bounds.top_left[1] >= self._HALF_GOAL_WIDTH
             and self._field_bounds.bottom_right[1] <= -self._HALF_GOAL_WIDTH
         )
 
     @property
-    def has_right_goal(self) -> bool:
+    def includes_right_goal(self) -> bool:
         return self._field_bounds.bottom_right[0] == self._FULL_FIELD_HALF_LENGTH and (
             self._field_bounds.top_left[1] >= self._HALF_GOAL_WIDTH
             and self._field_bounds.bottom_right[1] <= -self._HALF_GOAL_WIDTH
@@ -112,16 +112,16 @@ class Field:
     @property
     def includes_my_goal_line(self) -> bool:
         if self.my_team_is_right:
-            return self.has_right_goal
+            return self.includes_right_goal
         else:
-            return self.has_left_goal
+            return self.includes_left_goal
 
     @property
     def includes_opp_goal_line(self) -> bool:
         if self.my_team_is_right:
-            return self.has_left_goal
+            return self.includes_left_goal
         else:
-            return self.has_right_goal
+            return self.includes_right_goal
 
     @property
     def my_goal_line(self) -> np.ndarray:
