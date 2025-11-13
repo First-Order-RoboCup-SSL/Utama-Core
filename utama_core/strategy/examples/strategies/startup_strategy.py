@@ -1,4 +1,5 @@
 import py_trees
+from py_trees.composites import Selector, Sequence
 
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.entities.data.vector import Vector2D
@@ -68,6 +69,11 @@ class StartupStrategy(AbstractStrategy):
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete behaviour tree."""
-        coach_root = py_trees.composites.Sequence(name="CoachRoot", memory=False)
+
+        coach_root = Sequence(name="CoachRoot", memory=False)
+
+        ### Assemble the tree ###
+
         coach_root.add_children([StartupFormationStep()])
+
         return coach_root
