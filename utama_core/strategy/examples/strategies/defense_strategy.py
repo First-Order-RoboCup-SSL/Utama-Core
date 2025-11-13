@@ -81,9 +81,6 @@ class BlockPlay(AbstractBehaviour):
     """
     A behaviour that decides whether to play as attacker or defender based on the game state, and assigns a defender if defending.
 
-    **Blackboard Interaction:**
-        - Reads:
-            - `tactic` (Tactic): The current tactic of the team. Typically from the `SetTactics` node.
     **Returns:**
         - `py_trees.common.Status.SUCCESS`: The team is in defending mode.
         - `py_trees.common.Status.FAILURE`: The team is not in defending mode.
@@ -232,11 +229,11 @@ class DefenceStrategy(AbstractStrategy):
 
         ### Assemble the tree ###
 
-        root.add_children([SetTactics(wr_tactic="tactic"), SetRoles(wr_role_map="role_map"), play_selector])
+        root.add_children([SetTactics(), SetRoles(), play_selector])
 
         play_selector.add_children([block_play, attacking_play])
 
-        block_play.add_child(BlockPlay(rd_tactic="tactic"))
+        block_play.add_child(BlockPlay())
         block_play.add_child(SetBlocker(wr_defender_id=defender_id_key))
         block_play.add_child(FindBlockingTarget(wr_blocking_target=blocking_target_key))
         block_play.add_child(BlockAttackerStep(rd_defender_id=defender_id_key, rd_locking_target=blocking_target_key))
