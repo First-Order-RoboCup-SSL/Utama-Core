@@ -1,4 +1,5 @@
 import logging
+import math
 import random
 from typing import Tuple
 
@@ -101,16 +102,128 @@ class SSLStandardEnv(SSLBaseEnv):
         self.blue_formation = LEFT_START_ONE if not blue_starting_formation else blue_starting_formation
         self.yellow_formation = RIGHT_START_ONE if not yellow_starting_formation else yellow_starting_formation
 
+        # Track dribbler state across steps so we can model ball release when
+        # the dribbler turns off in a way that depends on robot speed.
+        self.prev_dribbler_blue = [False] * self.n_robots_blue
+        self.prev_dribbler_yellow = [False] * self.n_robots_yellow
+
         logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
+        # Reset dribbler tracking state
+        self.prev_dribbler_blue = [False] * self.n_robots_blue
+        self.prev_dribbler_yellow = [False] * self.n_robots_yellow
         return super().reset(seed=seed, options=options)
 
     def step(self, action):
-        observation, reward, terminated, truncated, _ = super().step(action)
+        """
+        Advance the simulation by one step while modelling ball release when the
+        dribbler turns off. The ball's release speed is proportional to the
+        robot's current speed and capped to a realistic maximum.
+        """
+        # Increment step counter and build low-level simulator commands
+        self.steps += 1
+        commands = self._get_commands(action)
 
-        return observation, reward, terminated, truncated, self.reward_shaping_total
+        # Send command to simulator
+        self.rsim.send_commands(commands)
+        self.sent_commands = commands
+
+        # Get Frame from simulator
+        prev_prev_frame = self.last_frame
+        prev_frame = self.frame
+        self.last_frame = self.frame
+        self.frame = self.rsim.get_frame()
+
+        # Derive current dribbler commands from actions (blue first, then yellow)
+        n_blue = self.n_robots_blue
+        curr_dribbler_blue = [cmd.dribbler for cmd in commands[:n_blue]]
+        curr_dribbler_yellow = [cmd.dribbler for cmd in commands[n_blue:]]
+
+        # When the dribbler falls from True -> False while the robot had the ball
+        # in the previous frame, give the ball a small velocity in the direction
+        # of the robot's motion. This approximates the ball "rolling away" after
+        # release, as in grSim.
+        if prev_frame is not None and prev_prev_frame is not None:
+            applied = False
+            dt = self.time_step if self.time_step > 0 else 1.0
+
+            # Check yellow robots first
+            for i in range(self.n_robots_yellow):
+                if self.prev_dribbler_yellow[i] and not curr_dribbler_yellow[i]:
+                    # Use motion between the two previous frames (when the
+                    # dribbler was still on) to estimate release speed.
+                    prev_robot_prev = prev_prev_frame.robots_yellow[i]
+                    prev_robot_curr = prev_frame.robots_yellow[i]
+                    if getattr(prev_robot_curr, "infrared", False):
+                        applied = self._apply_ball_release(prev_robot_prev, prev_robot_curr, dt)
+                        if applied:
+                            break
+
+            # If no yellow release was applied, check blue robots
+            if not applied:
+                for i in range(self.n_robots_blue):
+                    if self.prev_dribbler_blue[i] and not curr_dribbler_blue[i]:
+                        prev_robot_prev = prev_prev_frame.robots_blue[i]
+                        prev_robot_curr = prev_frame.robots_blue[i]
+                        if getattr(prev_robot_curr, "infrared", False):
+                            applied = self._apply_ball_release(prev_robot_prev, prev_robot_curr, dt)
+                            if applied:
+                                break
+
+        # Update dribbler history for the next step
+        self.prev_dribbler_blue = curr_dribbler_blue
+        self.prev_dribbler_yellow = curr_dribbler_yellow
+
+        # Calculate environment observation, reward and done condition
+        observation = self._frame_to_observations()
+        reward, done = self._calculate_reward_and_done()
+        if self.render_mode == "human":
+            self.render()
+
+        # Expose reward shaping totals via the info dict (for compatibility
+        # with existing callers of SSLStandardEnv)
+        return observation, reward, done, False, self.reward_shaping_total
+
+    def _apply_ball_release(self, prev_robot: Robot, curr_robot: Robot, dt: float) -> bool:
+        """
+        Apply a release impulse to the ball based on the robot's linear speed.
+
+        The ball's speed is proportional to the robot speed and capped to a
+        reasonable maximum so that it behaves realistically in the simulator.
+        """
+        if dt <= 0:
+            return False
+
+        # Estimate robot linear velocity in simulator coordinates (m/s)
+        vx = (curr_robot.x - prev_robot.x) / dt
+        vy = (curr_robot.y - prev_robot.y) / dt
+        speed = math.hypot(vx, vy)
+
+        # Ignore tiny movements to avoid numerical noise causing releases
+        MIN_RELEASE_SPEED = 0.1  # m/s
+        if speed < MIN_RELEASE_SPEED:
+            return False
+
+        # Map robot speed to ball release speed. We use a gain < 1 so the ball
+        # moves slightly slower than the robot, and cap to a realistic upper
+        # bound to prevent extreme velocities.
+        RELEASE_GAIN = 0.8
+        MAX_BALL_SPEED = 3.0  # m/s
+
+        ball_speed = min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
+        ux = vx / speed
+        uy = vy / speed
+
+        ball = self.frame.ball
+        ball.v_x = ux * ball_speed
+        ball.v_y = uy * ball_speed
+        self.frame.ball = ball
+
+        # Commit the new ball velocity to the underlying simulator state
+        self.rsim.reset(self.frame)
+        return True
 
     def _frame_to_observations(
         self,
