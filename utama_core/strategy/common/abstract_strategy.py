@@ -11,6 +11,7 @@ from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PAT
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.global_utils.math_utils import assert_valid_bounding_box
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command
@@ -80,47 +81,58 @@ class AbstractStrategy(ABC):
         ...
 
     @abstractmethod
-    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
+    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
         """
-        Validate the number of robots for which the strategy is designed.
+        Validate that the number of friendly and enemy robots matches the strategy's expectations.
 
-        Called once on initial run. Implementations can assert constraints on
-        the number of friendly and enemy robots that the strategy expects.
-        By default an external guard ensures 1 <= robots <= 6, so only add
+        This method is called once during initialization. Implementations can enforce
+        specific constraints on the number of robots the strategy supports.
+        An external guard already ensures that 1 ≤ robots ≤ 6, so only apply
         additional checks if needed.
 
         Args:
-            n_runtime_friendly: Number of friendly robots in the match.
-            n_runtime_enemy: Number of opponent robots in the match.
+            n_runtime_friendly: Number of friendly robots available during the match.
+            n_runtime_enemy: Number of opponent robots available during the match.
+
+        Returns:
+            bool: True if the robot counts are as expected, False otherwise.
         """
         ...
 
     @abstractmethod
-    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
+    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
         """
-        Validate that the field we are playing on has the expected goals.
-        This checks for our own and the opponent's goal.
+        Validate that the field configuration includes the expected goals.
+
+        Implementations should verify that the strategy can operate correctly
+        given whether our own and the opponent’s goal lines are present.
 
         Args:
-            field: The field we are playing on.
+            includes_my_goal_line: True if the field includes our own goal line.
+            includes_opp_goal_line: True if the field includes the opponent’s goal line.
+
+        Returns:
+            bool: True if the field configuration matches the strategy’s expectations, False otherwise.
         """
         ...
 
     @abstractmethod
     def get_min_bounding_zone(self) -> Optional[FieldBounds]:
         """
-        Return the minimum bounding zone required by the strategy.
+        Return the minimum field region required by the strategy.
 
-        If the strategy can operate on a subset of the full field, return
-        a `FieldBounds` defining the minimum area required. Otherwise return
-        `None` to indicate that there is no restriction.
+        If the strategy only operates within a subset of the full field, return
+        a `FieldBounds` object defining that region. Otherwise, return `None`
+        to indicate no restriction.
 
-        This is called during load_game(), so the blackboard already exists.
+        This method is called during `load_game()`, when the blackboard is already initialized,
+        so `game` is available.
 
-        Note that this is a bounding zone not area, so the coordinates must be field-accurate.
+        Note:
+            The bounding zone should be defined in field coordinates (i.e., absolute positions).
 
         Returns:
-            A `FieldBounds` defining the minimum bounding zone, or `None`.
+            Optional[FieldBounds]: A `FieldBounds` specifying the minimum bounding region, or `None`.
         """
         ...
 
@@ -173,19 +185,6 @@ class AbstractStrategy(ABC):
         self.blackboard.set("motion_controller", motion_controller, overwrite=True)
         self.blackboard.register_key(key="motion_controller", access=py_trees.common.Access.READ)
 
-    # --- Helper function to check a valid bounding box ---
-    def _assert_valid_bb(self, bb: FieldBounds, name: str):
-
-        fx, fy = Field._FULL_FIELD_HALF_LENGTH, Field._FULL_FIELD_HALF_WIDTH
-
-        x0, y0 = bb.top_left
-        x1, y1 = bb.bottom_right
-        assert x0 <= x1, f"{name} top-left x {x0} must be <= bottom-right x {x1}"
-        assert y0 >= y1, f"{name} top-left y {y0} must be >= bottom-right y {y1}"
-        # Also ensure within full field
-        assert -fx <= x0 <= fx and -fx <= x1 <= fx, f"{name} x coordinates out of full field bounds ±{fx}"
-        assert -fy <= y0 <= fy and -fy <= y1 <= fy, f"{name} y coordinates out of full field bounds ±{fy}"
-
     def assert_field_requirements(self):
         """
         Assert that the actual field size meets the strategy's requirements,
@@ -195,12 +194,9 @@ class AbstractStrategy(ABC):
         actual_field_size = self.blackboard.game.field.field_bounds
         min_bounding_zone = self.get_min_bounding_zone()
 
-        # --- Validate actual field ---
-        self._assert_valid_bb(actual_field_size, "Actual field")
-
         # --- Validate min bounding zone ---
         if min_bounding_zone is not None:
-            self._assert_valid_bb(min_bounding_zone, "Min bounding zone")
+            assert_valid_bounding_box(min_bounding_zone)
 
             # --- Check that actual field contains min_bounding_zone ---
             ax0, ay0 = actual_field_size.top_left

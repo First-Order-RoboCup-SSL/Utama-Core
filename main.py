@@ -4,10 +4,7 @@ import cProfile
 
 from utama_core.replay import ReplayWriterConfig
 from utama_core.run import StrategyRunner
-from utama_core.strategy.examples.strategies.one_robot_placement_strategy import (
-    RobotPlacementStrategy,
-)
-from utama_core.strategy.examples.strategies.startup_strategy import StartupStrategy
+from utama_core.strategy import DefenceStrategy, RobotPlacementStrategy, StartupStrategy
 
 profiler = cProfile.Profile()
 profiler.enable()
@@ -23,7 +20,6 @@ atexit.register(dump)
 
 def main():
     runner = StrategyRunner(
-        # strategy=RobotPlacementStrategy(robot_id=0),
         strategy=StartupStrategy(),
         my_team_is_yellow=True,
         my_team_is_right=True,

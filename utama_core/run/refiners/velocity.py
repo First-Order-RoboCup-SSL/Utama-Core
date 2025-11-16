@@ -6,9 +6,7 @@ from lenses import UnboundLens, lens
 
 from utama_core.entities.data.object import ObjectKey, TeamType
 from utama_core.entities.data.vector import Vector2D, Vector3D
-from utama_core.entities.game import Game, Robot
-
-# Assuming your new GameHistory is in entities.game.game_history or accessible
+from utama_core.entities.game import GameFrame, Robot
 from utama_core.entities.game.game_history import (
     AttributeType,
     GameHistory,
@@ -27,46 +25,46 @@ class VelocityRefiner(BaseRefiner):
     ACCELERATION_WINDOW_SIZE = 5
     ACCELERATION_N_WINDOWS = 3
 
-    def refine(self, game_history: GameHistory, game: Game) -> Game:
-        current_game_ts = game.ts
+    def refine(self, game_history: GameHistory, game_frame: GameFrame) -> GameFrame:
+        current_game_ts = game_frame.ts
 
         # Process Ball (Keep this commented if you want to focus on robots first)
-        if game.ball:  # Ensure ball processing is guarded
-            game = self._refine_ball_kinematics(game_history, game, current_game_ts)
+        if game_frame.ball:  # Ensure ball processing is guarded
+            game_frame = self._refine_ball_kinematics(game_history, game_frame, current_game_ts)
 
         # Process Friendly Robots
-        game = self._refine_robot_group(
+        game_frame = self._refine_robot_group(
             game_history,
-            game,
+            game_frame,
             current_game_ts,
-            game.friendly_robots,
+            game_frame.friendly_robots,
             TeamType.FRIENDLY,
             lens.friendly_robots,
             twod=True,
         )
 
         # Process Enemy Robots
-        game = self._refine_robot_group(
+        game_frame = self._refine_robot_group(
             game_history,
-            game,
+            game_frame,
             current_game_ts,
-            game.enemy_robots,
+            game_frame.enemy_robots,
             TeamType.ENEMY,
             lens.enemy_robots,
             twod=True,
         )
-        return game
+        return game_frame
 
     def _refine_robot_group(
         self,
         game_history: GameHistory,
-        game_state: Game,
+        game_state: GameFrame,
         current_ts: float,
         robots_to_process_dict: Dict[int, Robot],
         team_type: TeamType,
         group_lens: UnboundLens,
         twod: bool,
-    ) -> Game:
+    ) -> GameFrame:
         updated_robots_dict = {}
         for robot_instance in robots_to_process_dict.values():
             robot_id = getattr(robot_instance, "id", None)
@@ -101,7 +99,7 @@ class VelocityRefiner(BaseRefiner):
 
         return game_state & group_lens.set(updated_robots_dict)
 
-    def _refine_ball_kinematics(self, game_history: GameHistory, game_state: Game, current_ts: float) -> Game:
+    def _refine_ball_kinematics(self, game_history: GameHistory, game_state: GameFrame, current_ts: float) -> GameFrame:
         if not game_state.ball:
             return game_state
 
