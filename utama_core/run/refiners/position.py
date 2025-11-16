@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import replace
 from typing import Dict, List, Optional, Tuple
 
@@ -25,6 +25,8 @@ class AngleSmoother:
 
 
 class PositionRefiner(BaseRefiner):
+    MAXLEN = 20
+    
     def __init__(self, field_bounds: FieldBounds, bounds_buffer: float = 1.0):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
@@ -33,22 +35,25 @@ class PositionRefiner(BaseRefiner):
         self.y_min = field_bounds.bottom_right[1] - bounds_buffer  # expand bottom
         self.y_max = field_bounds.top_left[1] + bounds_buffer  # expand top
         self.BOUNDS_BUFFER = bounds_buffer
+        
+        self.past_game_frames: deque[VisionData] = deque(maxlen=PositionRefiner.MAXLEN)
 
     # Primary function for the Refiner interface
     def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
-        frames = [frame for frame in data if frame is not None]
+        frames = [frame for frame in data if frame is not None]  # Remove null GameFrames
 
         # If no information just return the original
         # TODO: this needs to be replaced by an extrapolation function (otherwise we will be using old data forever)
         if not frames:
             return game_frame
         # Can combine previous position from game with new data to produce new position if desired
-        combined_vision_data = CameraCombiner().combine_cameras(frames)
+        combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
 
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
         #             print(f"robot orientation: {robot.orientation}")
 
+        # Some processing of robot vision data
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
             game_frame,
             combined_vision_data.yellow_robots,
@@ -56,7 +61,7 @@ class PositionRefiner(BaseRefiner):
         )
 
         # After the balls have been combined, take the most confident
-        new_ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
+        new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
         if new_ball is None:
             # If none, take the ball from the last frame of the game
             new_ball = game_frame.ball
@@ -78,6 +83,7 @@ class PositionRefiner(BaseRefiner):
                 ball=new_ball,
             )
 
+        self.past_game_frames.append(combined_vision_data)
         return new_game_frame
 
     # Static methods
