@@ -211,7 +211,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Constants for mapping robot speed to ball release speed
         MIN_RELEASE_SPEED = 0.1  # m/s
-        RELEASE_GAIN = 0.7
+        RELEASE_GAIN = 0.1
         MAX_BALL_SPEED = 3.0  # m/s
 
         # Blue robots
