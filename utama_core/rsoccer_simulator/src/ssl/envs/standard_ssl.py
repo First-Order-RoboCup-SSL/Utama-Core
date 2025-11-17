@@ -227,7 +227,7 @@ class SSLStandardEnv(SSLBaseEnv):
             if frame is not None and self.prev_dribbler_blue[i] and not dribbler:
                 robot_state = frame.robots_blue[i]
                 if getattr(robot_state, "infrared", False):
-                    speed = math.hypot(robot_state.v_x, robot_state.v_y)
+                    speed = math.hypot(v_x, v_y)
                     if speed >= MIN_RELEASE_SPEED:
                         release_kick_v_x = min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
 
@@ -255,7 +255,7 @@ class SSLStandardEnv(SSLBaseEnv):
             if frame is not None and self.prev_dribbler_yellow[i] and not dribbler:
                 robot_state = frame.robots_yellow[i]
                 if getattr(robot_state, "infrared", False):
-                    speed = math.hypot(robot_state.v_x, robot_state.v_y)
+                    speed = math.hypot(v_x, v_y)
                     if speed >= MIN_RELEASE_SPEED:
                         release_kick_v_x = min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
 
