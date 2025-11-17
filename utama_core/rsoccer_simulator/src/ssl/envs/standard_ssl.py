@@ -131,8 +131,6 @@ class SSLStandardEnv(SSLBaseEnv):
         self.sent_commands = commands
 
         # Get Frame from simulator
-        prev_prev_frame = self.last_frame
-        prev_frame = self.frame
         self.last_frame = self.frame
         self.frame = self.rsim.get_frame()
 
@@ -140,37 +138,6 @@ class SSLStandardEnv(SSLBaseEnv):
         n_blue = self.n_robots_blue
         curr_dribbler_blue = [cmd.dribbler for cmd in commands[:n_blue]]
         curr_dribbler_yellow = [cmd.dribbler for cmd in commands[n_blue:]]
-
-        # When the dribbler falls from True -> False while the robot had the ball
-        # in the previous frame, give the ball a small velocity in the direction
-        # of the robot's motion. This approximates the ball "rolling away" after
-        # release, as in grSim.
-        if prev_frame is not None and prev_prev_frame is not None:
-            applied = False
-            dt = self.time_step if self.time_step > 0 else 1.0
-
-            # Check yellow robots first
-            for i in range(self.n_robots_yellow):
-                if self.prev_dribbler_yellow[i] and not curr_dribbler_yellow[i]:
-                    # Use motion between the two previous frames (when the
-                    # dribbler was still on) to estimate release speed.
-                    prev_robot_prev = prev_prev_frame.robots_yellow[i]
-                    prev_robot_curr = prev_frame.robots_yellow[i]
-                    if getattr(prev_robot_curr, "infrared", False):
-                        applied = self._apply_ball_release(prev_robot_prev, prev_robot_curr, dt)
-                        if applied:
-                            break
-
-            # If no yellow release was applied, check blue robots
-            if not applied:
-                for i in range(self.n_robots_blue):
-                    if self.prev_dribbler_blue[i] and not curr_dribbler_blue[i]:
-                        prev_robot_prev = prev_prev_frame.robots_blue[i]
-                        prev_robot_curr = prev_frame.robots_blue[i]
-                        if getattr(prev_robot_curr, "infrared", False):
-                            applied = self._apply_ball_release(prev_robot_prev, prev_robot_curr, dt)
-                            if applied:
-                                break
 
         # Update dribbler history for the next step
         self.prev_dribbler_blue = curr_dribbler_blue
@@ -185,45 +152,6 @@ class SSLStandardEnv(SSLBaseEnv):
         # Expose reward shaping totals via the info dict (for compatibility
         # with existing callers of SSLStandardEnv)
         return observation, reward, done, False, self.reward_shaping_total
-
-    def _apply_ball_release(self, prev_robot: Robot, curr_robot: Robot, dt: float) -> bool:
-        """
-        Apply a release impulse to the ball based on the robot's linear speed.
-
-        The ball's speed is proportional to the robot speed and capped to a
-        reasonable maximum so that it behaves realistically in the simulator.
-        """
-        if dt <= 0:
-            return False
-
-        # Estimate robot linear velocity in simulator coordinates (m/s)
-        vx = (curr_robot.x - prev_robot.x) / dt
-        vy = (curr_robot.y - prev_robot.y) / dt
-        speed = math.hypot(vx, vy)
-
-        # Ignore tiny movements to avoid numerical noise causing releases
-        MIN_RELEASE_SPEED = 0.1  # m/s
-        if speed < MIN_RELEASE_SPEED:
-            return False
-
-        # Map robot speed to ball release speed. We use a gain < 1 so the ball
-        # moves slightly slower than the robot, and cap to a realistic upper
-        # bound to prevent extreme velocities.
-        RELEASE_GAIN = 0.8
-        MAX_BALL_SPEED = 3.0  # m/s
-
-        ball_speed = min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
-        ux = vx / speed
-        uy = vy / speed
-
-        ball = self.frame.ball
-        ball.v_x = ux * ball_speed
-        ball.v_y = uy * ball_speed
-        self.frame.ball = ball
-
-        # Commit the new ball velocity to the underlying simulator state
-        self.rsim.reset(self.frame)
-        return True
 
     def _frame_to_observations(
         self,
@@ -274,33 +202,71 @@ class SSLStandardEnv(SSLBaseEnv):
     def _get_commands(self, actions) -> list[Robot]:
         commands = []
 
+        # Use current frame information (robot velocities and infrared) to
+        # model a ball release when the dribbler turns off on this step.
+        frame = self.frame
+
+        # Constants for mapping robot speed to ball release speed
+        MIN_RELEASE_SPEED = 0.1  # m/s
+        RELEASE_GAIN = 0.8
+        MAX_BALL_SPEED = 3.0  # m/s
+
+        # Blue robots
         for i in range(self.n_robots_blue):
             v_x = actions["team_blue"][i][0]
             v_y = actions["team_blue"][i][1]
             v_theta = actions["team_blue"][i][2]
+
+            dribbler = actions["team_blue"][i][4] > 0
+            base_kick_v_x = KICK_SPD if actions["team_blue"][i][3] > 0 else 0.0
+            release_kick_v_x = 0.0
+
+            # If the dribbler is turning off this step and the robot had the
+            # ball in the previous frame, approximate a release by sending a
+            # kick whose speed depends on the robot's linear speed.
+            if frame is not None and self.prev_dribbler_blue[i] and not dribbler:
+                robot_state = frame.robots_blue[i]
+                if getattr(robot_state, "infrared", False):
+                    speed = math.hypot(robot_state.v_x, robot_state.v_y)
+                    if speed >= MIN_RELEASE_SPEED:
+                        release_kick_v_x = min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
+
             cmd = Robot(
                 yellow=False,  # Blue team
                 id=i,  # ID of the robot
                 v_x=v_x,
                 v_y=v_y,
                 v_theta=v_theta,
-                kick_v_x=KICK_SPD if actions["team_blue"][i][3] > 0 else 0.0,
-                dribbler=True if actions["team_blue"][i][4] > 0 else False,
+                kick_v_x=max(base_kick_v_x, release_kick_v_x),
+                dribbler=dribbler,
             )
             commands.append(cmd)
 
+        # Yellow robots
         for i in range(self.n_robots_yellow):
             v_x = actions["team_yellow"][i][0]
             v_y = actions["team_yellow"][i][1]
             v_theta = actions["team_yellow"][i][2]
+
+            dribbler = actions["team_yellow"][i][4] > 0
+            base_kick_v_x = KICK_SPD if actions["team_yellow"][i][3] > 0 else 0.0
+            release_kick_v_x = 0.0
+
+            if frame is not None and self.prev_dribbler_yellow[i] and not dribbler:
+                robot_state = frame.robots_yellow[i]
+                if getattr(robot_state, "infrared", False):
+                    speed = math.hypot(robot_state.v_x, robot_state.v_y)
+                    if speed >= MIN_RELEASE_SPEED:
+                        release_kick_v_x = min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
+
             cmd = Robot(
                 yellow=True,  # Yellow team
                 id=i,  # ID of the robot
                 v_x=v_x,
                 v_y=v_y,
                 v_theta=v_theta,
-                kick_v_x=KICK_SPD if actions["team_yellow"][i][3] > 0 else 0.0,
-                dribbler=True if actions["team_yellow"][i][4] > 0 else False,
+                kick_v_x=max(base_kick_v_x, release_kick_v_x),
+                dribbler=dribbler,
             )
             commands.append(cmd)
 
