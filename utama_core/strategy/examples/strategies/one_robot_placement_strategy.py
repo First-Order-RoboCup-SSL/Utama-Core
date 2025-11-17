@@ -23,7 +23,7 @@ class RobotPlacementStep(AbstractBehaviour):
         invert (bool): Whether to invert the robot's movement direction.
     **Blackboard Interaction:**
         Reads:
-            - `robot_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
+            - `rd_robot_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
 
     **Returns:**
         - `py_trees.common.Status.RUNNING`: The behaviour is actively commanding the robot to move.

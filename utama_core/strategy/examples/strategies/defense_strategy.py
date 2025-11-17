@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Optional
 
 import py_trees
 from py_trees.composites import Selector, Sequence
@@ -38,8 +38,8 @@ class BlockAttackerStep(AbstractBehaviour):
 
     **Blackboard Interaction:**
         Reads:
-            - `defender_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
-            - `blocking_target` (int): The ID of the enemy robot to block. Typically from the `FindBlockingTarget` node.
+            - `rd_defender_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
+            - `rd_blocking_target` (int): The ID of the enemy robot to block. Typically from the `FindBlockingTarget` node.
 
     **Returns:**
         - `py_trees.common.Status.RUNNING`: The behaviour is actively commanding the robot to block the attacker.
@@ -106,7 +106,7 @@ class SetBlocker(AbstractBehaviour):
 
     **Blackboard Interaction:**
         - Writes:
-            - `defender_id` (int): The ID of the robot assigned as defender. Typically from the `SetRoles` node.
+            - `rd_defender_id` (int): The ID of the robot assigned as defender.
     **Returns:**
         - `py_trees.common.Status.SUCCESS`: The defender ID has been successfully set.
         - `py_trees.common.Status.FAILURE`: No suitable robot found to assign as defender

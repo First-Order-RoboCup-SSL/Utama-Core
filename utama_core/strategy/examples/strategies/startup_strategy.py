@@ -1,5 +1,5 @@
 import py_trees
-from py_trees.composites import Selector, Sequence
+from py_trees.composites import Sequence
 
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.entities.data.vector import Vector2D
