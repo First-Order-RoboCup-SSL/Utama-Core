@@ -143,6 +143,9 @@ class SSLStandardEnv(SSLBaseEnv):
         self.prev_dribbler_blue = curr_dribbler_blue
         self.prev_dribbler_yellow = curr_dribbler_yellow
 
+        self.prev_speed_blue = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[:n_blue]]
+        self.prev_speed_yellow = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[n_blue:]]
+
         # Calculate environment observation, reward and done condition
         observation = self._frame_to_observations()
         reward, done = self._calculate_reward_and_done()
@@ -208,7 +211,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Constants for mapping robot speed to ball release speed
         MIN_RELEASE_SPEED = 0.1  # m/s
-        RELEASE_GAIN = 0.8
+        RELEASE_GAIN = 0.7
         MAX_BALL_SPEED = 3.0  # m/s
 
         # Blue robots
@@ -227,7 +230,7 @@ class SSLStandardEnv(SSLBaseEnv):
             if frame is not None and self.prev_dribbler_blue[i] and not dribbler:
                 robot_state = frame.robots_blue[i]
                 if getattr(robot_state, "infrared", False):
-                    speed = math.hypot(v_x, v_y)
+                    speed = self.prev_speed_blue[i]
                     if speed >= MIN_RELEASE_SPEED:
                         release_kick_v_x = min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
 
@@ -255,12 +258,12 @@ class SSLStandardEnv(SSLBaseEnv):
             if frame is not None and self.prev_dribbler_yellow[i] and not dribbler:
                 robot_state = frame.robots_yellow[i]
                 if getattr(robot_state, "infrared", False):
-                    speed = math.hypot(v_x, v_y)
+                    speed = self.prev_speed_yellow[i]
                     if speed >= MIN_RELEASE_SPEED:
                         release_kick_v_x = min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
 
             cmd = Robot(
-                yellow=True,  # Yellow team
+                yellow=True,  # Yellow team,
                 id=i,  # ID of the robot
                 v_x=v_x,
                 v_y=v_y,
