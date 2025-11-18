@@ -12,6 +12,7 @@ from utama_core.entities.data.command import (
     RobotPacketCommand,
     RobotResponse,
 )
+from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -33,7 +34,7 @@ class RealRobotController(AbstractRobotController):
 
     def __init__(self, is_team_yellow: bool, n_friendly: int):
         super().__init__(is_team_yellow, n_friendly)
-        # self._serial_port = self._init_serial()
+        self._serial_port = self._init_serial()
         self._rbt_cmd_size = 10  # packet size for one robot
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the feedback packet received from the robots
@@ -315,10 +316,10 @@ if __name__ == "__main__":
     )
     for _ in range(15):
         robot_controller.add_robot_commands(cmd, 0)
-        # robot_controller.send_robot_commands()
-    # for _ in range(10):
-    #     robot_controller.add_robot_commands(empty_command(), 0)
-    #     robot_controller.send_robot_commands()
+        robot_controller.send_robot_commands()
+    for _ in range(10):
+        robot_controller.add_robot_commands(empty_command(), 0)
+        robot_controller.send_robot_commands()
 
     # print(list(robot_controller.out_packet))
     # binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
