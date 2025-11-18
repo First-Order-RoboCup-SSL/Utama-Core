@@ -106,7 +106,12 @@ class StrategyRunner:
         self._load_robot_controllers()
 
         assert_valid_bounding_box(self.field_bounds)
-        self.position_refiner = PositionRefiner(self.field_bounds)
+        self.position_refiner = PositionRefiner(
+            self.my_team_is_yellow,
+            self.exp_friendly,
+            self.exp_enemy,
+            self.field_bounds
+            )
         self.velocity_refiner = VelocityRefiner()
         self.robot_info_refiner = RobotInfoRefiner()
         # self.referee_refiner = RefereeRefiner()
