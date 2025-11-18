@@ -50,7 +50,7 @@ def create_one_robot_only_game(ts: float, x: float, y: float, is_friendly: bool)
 
 def test_velocity_calculation_correct_for_ball():
     game_history = GameHistory(10)
-    game_history.add_game(create_ball_only_game(2, 10, 20, 30))
+    game_history.add_game_frame(create_ball_only_game(2, 10, 20, 30))
 
     game = create_ball_only_game(5, 19, 32, 33)
     velocity_refiner = VelocityRefiner()
@@ -65,7 +65,7 @@ def test_velocity_calculation_correct_for_ball():
 @pytest.mark.parametrize("is_friendly", [True, False])
 def test_velocity_calculation_correct_for_one_robot(is_friendly):
     game_history = GameHistory(10)
-    game_history.add_game(create_one_robot_only_game(4, 15, 30, is_friendly))
+    game_history.add_game_frame(create_one_robot_only_game(4, 15, 30, is_friendly))
     game = create_one_robot_only_game(10, 15, 3, is_friendly)
     game = velocity_refiner.refine(game_history, game)
 
@@ -91,7 +91,7 @@ def test_extraction_of_time_velocity_pairs():
         time = float(i)
         vx, vy, vz = 1.0, 1.0, 1.0
         game_to_add = create_ball_only_game(time, time, time, time, vx, vy, vz)
-        game_history.add_game(game_to_add)
+        game_history.add_game_frame(game_to_add)
         all_added_game_data.append((time, Vector3D(vx, vy, vz)))
 
     points_needed = VelocityRefiner.ACCELERATION_N_WINDOWS * VelocityRefiner.ACCELERATION_WINDOW_SIZE  # e.g., 15
@@ -144,7 +144,9 @@ def test_acceleration_calculation_implements_expected_formula():
                 noise = -100
             else:
                 noise = 0
-            game_history.add_game(create_ball_only_game(ts, 0, 0, 0, acc * i + noise, acc * i + noise, acc * i + noise))
+            game_history.add_game_frame(
+                create_ball_only_game(ts, 0, 0, 0, acc * i + noise, acc * i + noise, acc * i + noise)
+            )
             ts += 1
 
     game = create_ball_only_game(ts, 0, 0, 0)
