@@ -25,7 +25,7 @@ def main():
         my_team_is_right=True,
         mode="grsim",
         exp_friendly=6,
-        exp_enemy=0,
+        exp_enemy=3,
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         control_scheme="pid",
     )

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import List
+from numpy.random import normal
 
 # position data: meters
 # orientation: radians
@@ -19,6 +20,10 @@ class VisionRobotData:
     x: float
     y: float
     orientation: float
+    
+    def add_noise(self):
+        self.x += normal(loc=0.0, scale=0.05)
+        self.y += normal(loc=0.0, scale=0.05)
 
 
 @dataclass
