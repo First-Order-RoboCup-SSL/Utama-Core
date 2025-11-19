@@ -7,7 +7,7 @@ import numpy as np
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
-from utama_core.entities.game import Ball, Game, Robot
+from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
 
 
@@ -25,31 +25,32 @@ class AngleSmoother:
 
 
 class PositionRefiner(BaseRefiner):
-    HALF_FIELD_LENGTH = 4.5
-    HALF_FIELD_WIDTH = 3.0
-    BOUNDS_BUFFER = 1.0
-
-    def __init__(self):
+    def __init__(self, field_bounds: FieldBounds, bounds_buffer: float = 1.0):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
-        # Example field width, adjust as needed
+        self.x_min = field_bounds.top_left[0] - bounds_buffer  # expand left
+        self.x_max = field_bounds.bottom_right[0] + bounds_buffer  # expand right
+        self.y_min = field_bounds.bottom_right[1] - bounds_buffer  # expand bottom
+        self.y_max = field_bounds.top_left[1] + bounds_buffer  # expand top
+        self.BOUNDS_BUFFER = bounds_buffer
 
     # Primary function for the Refiner interface
-    def refine(self, game: Game, data: List[RawVisionData]):
-        data = [frame for frame in data if frame is not None]
+    def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
+        frames = [frame for frame in data if frame is not None]
 
         # If no information just return the original
-        if not data:
-            return game
+        # TODO: this needs to be replaced by an extrapolation function (otherwise we will be using old data forever)
+        if not frames:
+            return game_frame
         # Can combine previous position from game with new data to produce new position if desired
-        combined_vision_data = CameraCombiner().combine_cameras(game, data)
+        combined_vision_data = CameraCombiner().combine_cameras(frames)
 
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
         #             print(f"robot orientation: {robot.orientation}")
 
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
-            game,
+            game_frame,
             combined_vision_data.yellow_robots,
             combined_vision_data.blue_robots,
         )
@@ -58,24 +59,26 @@ class PositionRefiner(BaseRefiner):
         new_ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
         if new_ball is None:
             # If none, take the ball from the last frame of the game
-            new_ball = game.ball
+            new_ball = game_frame.ball
 
-        if game.my_team_is_yellow:
-            new_game = replace(
-                game,
+        if game_frame.my_team_is_yellow:
+            new_game_frame = replace(
+                game_frame,
+                ts=combined_vision_data.ts,
                 friendly_robots=new_yellow_robots,
                 enemy_robots=new_blue_robots,
                 ball=new_ball,
             )
         else:
-            new_game = replace(
-                game,
+            new_game_frame = replace(
+                game_frame,
+                ts=combined_vision_data.ts,
                 friendly_robots=new_blue_robots,
                 enemy_robots=new_yellow_robots,
                 ball=new_ball,
             )
 
-        return new_game
+        return new_game_frame
 
     # Static methods
     @staticmethod
@@ -93,7 +96,7 @@ class PositionRefiner(BaseRefiner):
         return replace(
             old_robot,
             id=robot_data.id,
-            p=Vector2D(x=new_x, y=new_y),
+            p=Vector2D(new_x, new_y),
             orientation=robot_data.orientation,
         )
 
@@ -105,16 +108,16 @@ class PositionRefiner(BaseRefiner):
             id=robot_data.id,
             is_friendly=is_friendly,
             has_ball=False,
-            p=Vector2D(x=robot_data.x, y=robot_data.y),
-            v=Vector2D(x=0, y=0),
-            a=Vector2D(x=0, y=0),
+            p=Vector2D(robot_data.x, robot_data.y),
+            v=Vector2D(0, 0),
+            a=Vector2D(0, 0),
             orientation=robot_data.orientation,
         )
 
     @staticmethod
     def _ball_from_vision(ball_data: VisionBallData) -> Ball:
-        zv = Vector3D(x=0, y=0, z=0)
-        return Ball(Vector3D(x=ball_data.x, y=ball_data.y, z=ball_data.z), zv, zv)
+        zv = Vector3D(0, 0, 0)
+        return Ball(Vector3D(ball_data.x, ball_data.y, ball_data.z), zv, zv)
 
     @staticmethod
     def _get_most_confident_ball(balls: List[VisionBallData]) -> Ball:
@@ -133,10 +136,9 @@ class PositionRefiner(BaseRefiner):
         for robot in vision_robots:
             new_x, new_y = robot.x, robot.y
 
-            if (np.abs(new_x) > self.HALF_FIELD_LENGTH + self.BOUNDS_BUFFER) or (
-                np.abs(new_y) > self.HALF_FIELD_WIDTH + self.BOUNDS_BUFFER
-            ):
-                continue  # Ignore robots that are out of bounds
+            if not (self.x_min <= new_x <= self.x_max and self.y_min <= new_y <= self.y_max):
+                # Out of bounds so ignore this robot
+                continue
 
             if robot.id not in new_game_robots:
                 # At the start of the game, we haven't seen anything yet, so just create a new robot
@@ -150,22 +152,26 @@ class PositionRefiner(BaseRefiner):
 
     def _combine_both_teams_game_vision_positions(
         self,
-        game: Game,
+        game_frame: GameFrame,
         yellow_vision_robots: List[VisionRobotData],
         blue_vision_robots: List[VisionRobotData],
     ) -> Tuple[Dict[int, Robot], Dict[int, Robot]]:
-        if game.my_team_is_yellow:
-            old_yellow_robots = game.friendly_robots.copy()
-            old_blue_robots = game.enemy_robots.copy()
+        if game_frame.my_team_is_yellow:
+            old_yellow_robots = game_frame.friendly_robots.copy()
+            old_blue_robots = game_frame.enemy_robots.copy()
         else:
-            old_yellow_robots = game.enemy_robots.copy()
-            old_blue_robots = game.friendly_robots.copy()
+            old_yellow_robots = game_frame.enemy_robots.copy()
+            old_blue_robots = game_frame.friendly_robots.copy()
 
         new_yellow_robots = self._combine_single_team_positions(
-            old_yellow_robots, yellow_vision_robots, friendly=game.my_team_is_yellow
+            old_yellow_robots,
+            yellow_vision_robots,
+            friendly=game_frame.my_team_is_yellow,
         )
         new_blue_robots = self._combine_single_team_positions(
-            old_blue_robots, blue_vision_robots, friendly=not game.my_team_is_yellow
+            old_blue_robots,
+            blue_vision_robots,
+            friendly=not game_frame.my_team_is_yellow,
         )
 
         return new_yellow_robots, new_blue_robots
@@ -175,7 +181,7 @@ class CameraCombiner:
     BALL_CONFIDENCE_THRESHOLD = 0.1
     BALL_MERGE_THRESHOLD = 0.05
 
-    def combine_cameras(self, game: Game, frames: List[RawVisionData]) -> VisionData:
+    def combine_cameras(self, frames: List[RawVisionData]) -> VisionData:
         # Now we have access to the game we can do more sophisticated things
         # Such as ignoring outlier cameras etc
 

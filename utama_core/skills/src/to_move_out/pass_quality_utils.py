@@ -1,20 +1,8 @@
 import numpy as np
 
+from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.entities.data.vector import Vector2D
 from utama_core.global_utils.math_utils import distance
-
-ROBOT_RADIUS = 0.09
-
-
-class PointOnField:
-    def __init__(self, x: float, y: float):
-        self.x = x
-        self.y = y
-
-    def x(self) -> float:
-        self.x
-
-    def y(self) -> float:
-        self.y
 
 
 def ball_position(t, x0, v0, a):
@@ -152,7 +140,7 @@ def find_best_pass(
 
 
 def find_best_receiver_position(
-    receiver_position,
+    receiver_position: Vector2D,
     passer,
     enemy_positions,
     enemy_speeds,
@@ -180,7 +168,7 @@ def find_best_receiver_position(
     best_position = receiver_position
     best_quality = -float("inf")
 
-    sampled_positions = [PointOnField(receiver_position.x, receiver_position.y)]  # Include the current position
+    sampled_positions = [receiver_position]  # Include the current position
     pass_qualities = []  # Store pass quality for each sampled point
 
     angles = np.linspace(0, 2 * np.pi, num_samples, endpoint=False)
@@ -191,7 +179,7 @@ def find_best_receiver_position(
 
         # Ensure the sampled position is within the field
         if x_min <= new_x <= x_max and y_min <= new_y <= y_max:
-            sampled_positions.append(PointOnField(new_x, new_y))
+            sampled_positions.append(Vector2D(new_x, new_y))
 
     for candidate in sampled_positions:
         pass_quality = find_pass_quality(

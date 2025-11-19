@@ -19,7 +19,7 @@ class RSim:
         self.n_robots_blue = n_robots_blue
         self.n_robots_yellow = n_robots_yellow
 
-        self.simulator = self._init_simulator(
+        self.simulator: RSimSubprocessWrapper = self._init_simulator(
             field_type=field_type,
             n_robots_blue=n_robots_blue,
             n_robots_yellow=n_robots_yellow,
@@ -36,6 +36,7 @@ class RSim:
         )
 
     def stop(self):
+        self.simulator.close()
         del self.simulator
 
     def send_commands(self, commands):
@@ -81,7 +82,7 @@ class RSim:
         blue_robots_pos,
         yellow_robots_pos,
         time_step_ms,
-    ):
+    ) -> RSimSubprocessWrapper:
         raise NotImplementedError
 
 
@@ -112,7 +113,7 @@ class RSimVSS(RSim):
         n_robots_blue,
         n_robots_yellow,
         time_step_ms,
-    ):
+    ) -> RSimSubprocessWrapper:
         return RSimSubprocessWrapper(
             sim_type="VSS",
             n_blue=n_robots_blue,
@@ -165,7 +166,7 @@ class RSimSSL(RSim):
         n_robots_blue,
         n_robots_yellow,
         time_step_ms,
-    ):
+    ) -> RSimSubprocessWrapper:
         return RSimSubprocessWrapper(
             sim_type="SSL",
             n_blue=n_robots_blue,

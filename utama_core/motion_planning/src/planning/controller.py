@@ -5,7 +5,7 @@ from utama_core.entities.game.field import Field
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.motion_planning.src.mpc.omni_mpc import OmnidirectionalMPC
 from utama_core.motion_planning.src.planning.exit_strategies import ExitStrategy
-from utama_core.motion_planning.src.planning.path_planner import (
+from utama_core.motion_planning.src.planning.other_path_planners import (
     BisectorPlanner,
     DynamicWindowPlanner,
 )
@@ -81,11 +81,14 @@ class TimedSwitchController:
             ):
                 self._exit_points[robot_id] = None
             else:
-                return self._fast_planner.path_to(
+                plan = self._fast_planner.path_to(
                     robot_id,
                     self._exit_points[robot_id],
                     temporary_obstacles=TempObstacleType.NONE.value,
-                )[0]
+                )
+                if plan is None:
+                    return self._exit_points[robot_id]
+                return plan.waypoint
 
         if target == self._real_targets[robot_id]:
             if self._last_slow_frame[robot_id] == 0:
@@ -104,9 +107,11 @@ class TimedSwitchController:
             )
             self._last_slow_frame[robot_id] = self.DEFAULT_RUN
 
-        target = self._fast_planner.path_to(
+        plan = self._fast_planner.path_to(
             robot_id,
             self._intermediate_target[robot_id],
             temporary_obstacles=temporary_obstacles_enum.value,
-        )[0]
-        return target
+        )
+        if plan is None:
+            return self._intermediate_target[robot_id]
+        return plan.waypoint

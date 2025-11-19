@@ -6,11 +6,13 @@ import py_trees
 import pydot
 from py_trees import utilities as py_trees_utilities
 
-from utama_core.config.roles import Role
+from utama_core.config.enums import Role
 from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PATH
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.motion_controller import MotionController
+from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.global_utils.math_utils import assert_valid_bounding_box
+from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.strategy.common.base_blackboard import BaseBlackboard
@@ -79,18 +81,58 @@ class AbstractStrategy(ABC):
         ...
 
     @abstractmethod
-    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
+    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
         """
-        Validate the number of robots for which the strategy is designed.
+        Validate that the number of friendly and enemy robots matches the strategy's expectations.
 
-        Called once on initial run. Implementations can assert constraints on
-        the number of friendly and enemy robots that the strategy expects.
-        By default an external guard ensures 1 <= robots <= 6, so only add
+        This method is called once during initialization. Implementations can enforce
+        specific constraints on the number of robots the strategy supports.
+        An external guard already ensures that 1 ≤ robots ≤ 6, so only apply
         additional checks if needed.
 
         Args:
-            n_runtime_friendly: Number of friendly robots in the match.
-            n_runtime_enemy: Number of opponent robots in the match.
+            n_runtime_friendly: Number of friendly robots available during the match.
+            n_runtime_enemy: Number of opponent robots available during the match.
+
+        Returns:
+            bool: True if the robot counts are as expected, False otherwise.
+        """
+        ...
+
+    @abstractmethod
+    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
+        """
+        Validate that the field configuration includes the expected goals.
+
+        Implementations should verify that the strategy can operate correctly
+        given whether our own and the opponent’s goal lines are present.
+
+        Args:
+            includes_my_goal_line: True if the field includes our own goal line.
+            includes_opp_goal_line: True if the field includes the opponent’s goal line.
+
+        Returns:
+            bool: True if the field configuration matches the strategy’s expectations, False otherwise.
+        """
+        ...
+
+    @abstractmethod
+    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
+        """
+        Return the minimum field region required by the strategy.
+
+        If the strategy only operates within a subset of the full field, return
+        a `FieldBounds` object defining that region. Otherwise, return `None`
+        to indicate no restriction.
+
+        This method is called during `load_game()`, when the blackboard is already initialized,
+        so `game` is available.
+
+        Note:
+            The bounding zone should be defined in field coordinates (i.e., absolute positions).
+
+        Returns:
+            Optional[FieldBounds]: A `FieldBounds` specifying the minimum bounding region, or `None`.
         """
         ...
 
@@ -114,6 +156,15 @@ class AbstractStrategy(ABC):
 
     ### END OF STRATEGY IMPLEMENTATION ###
 
+    def setup_behaviour_tree(self, is_opp_strat: bool):
+        """
+        Must be called before strategy can be run.
+
+        Setups the tree and blackboard based on if is_opp_strat
+        """
+        self.blackboard = self._setup_blackboard(is_opp_strat)
+        self.behaviour_tree.setup(is_opp_strat=is_opp_strat)
+
     def load_rsim_env(self, env: SSLBaseEnv):
         """
         Called by StrategyRunner: Load the RSim environment into the blackboard.
@@ -123,7 +174,7 @@ class AbstractStrategy(ABC):
 
     def load_robot_controller(self, robot_controller: AbstractRobotController):
         """
-        Called by StrategyRunner: Load the robot controller into the blackboard.
+        Called by StrategyRunner: Load the robot controller into the class.
         """
         self.robot_controller = robot_controller
 
@@ -134,18 +185,43 @@ class AbstractStrategy(ABC):
         self.blackboard.set("motion_controller", motion_controller, overwrite=True)
         self.blackboard.register_key(key="motion_controller", access=py_trees.common.Access.READ)
 
-    def setup_behaviour_tree(self, is_opp_strat: bool):
+    def assert_field_requirements(self):
         """
-        Must be called before strategy can be run.
-
-        Setups the tree and blackboard based on if is_opp_strat
+        Assert that the actual field size meets the strategy's requirements,
+        that both actual field and min_bounding_zone are within the full field,
+        and that bounding boxes are well-formed (top-left above/left of bottom-right).
         """
-        self.blackboard = self._setup_blackboard(is_opp_strat)
-        self.behaviour_tree.setup(is_opp_strat=is_opp_strat)
+        actual_field_size = self.blackboard.game.field.field_bounds
+        min_bounding_zone = self.get_min_bounding_zone()
 
-    def step(self, game: Game):
+        # --- Validate min bounding zone ---
+        if min_bounding_zone is not None:
+            assert_valid_bounding_box(min_bounding_zone)
+
+            # --- Check that actual field contains min_bounding_zone ---
+            ax0, ay0 = actual_field_size.top_left
+            ax1, ay1 = actual_field_size.bottom_right
+            mx0, my0 = min_bounding_zone.top_left
+            mx1, my1 = min_bounding_zone.bottom_right
+
+            assert ax0 <= mx0, f"Field top-left x {ax0} smaller than required {mx0}"
+            assert ay0 >= my0, f"Field top-left y {ay0} smaller than required {my0}"
+            assert ax1 >= mx1, f"Field bottom-right x {ax1} smaller than required {mx1}"
+            assert ay1 <= my1, f"Field bottom-right y {ay1} smaller than required {my1}"
+
+    def load_game(self, game: Game):
+        """
+        Called by StrategyRunner: Load the game object into the blackboard.
+
+        We do not set to READ after, as we TestManager may reset the game object for the new episode.
+        """
+        self.blackboard.set("game", game, overwrite=True)
+        self.assert_field_requirements()
+
+    def step(self):
         # start_time = time.time()
-        self.blackboard.game = game
+        game = self.blackboard.game
+
         self.blackboard.cmd_map = {robot_id: None for robot_id in game.friendly_robots}
 
         self.behaviour_tree.tick()
@@ -229,4 +305,7 @@ class AbstractStrategy(ABC):
             try:
                 writer(output_path.as_posix())
             except (AssertionError, OSError, FileNotFoundError):
-                logger.warning("skipping %s export; Graphviz 'dot' executable not available", extension)
+                logger.warning(
+                    "skipping %s export; Graphviz 'dot' executable not available",
+                    extension,
+                )

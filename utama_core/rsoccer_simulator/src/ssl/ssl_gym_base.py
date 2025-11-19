@@ -148,9 +148,6 @@ class SSLBaseEnv(gym.Env):
             return np.transpose(np.array(pygame.surfarray.pixels3d(self.window_surface)), axes=(1, 0, 2))
 
     def close(self):
-        if self.window_surface is not None:
-            pygame.display.quit()
-            pygame.quit()
         self.rsim.stop()
 
     ### CUSTOM FUNCTIONS WE ADDED ###

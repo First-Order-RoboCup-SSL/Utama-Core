@@ -20,6 +20,7 @@ jobs:
         with:
           app-id: ${{ vars.RELEASE_MANAGER_APPID }}
           private-key: ${{ secrets.RELEASE_MANAGER_SECRET }}
+          owner: First-Order-RoboCup-SSL
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -97,6 +98,34 @@ jobs:
           git tag -a "v${{ steps.bump_version.outputs.new_version }}" -m "Release v${{ steps.bump_version.outputs.new_version }}" $MERGE_COMMIT_SHA
           git push origin "v${{ steps.bump_version.outputs.new_version }}"
 
+      - name: Bump dependent repositories
+        if: success() && steps.bump_version.outputs.new_version != ''
+        run: |
+          NEW_VERSION=${{ steps.bump_version.outputs.new_version }}
+          for REPO in $DEPENDENT_REPOS; do
+            echo "Updating dependency in $REPO..."
+
+            git clone "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/$REPO.git"
+            cd "$(basename "$REPO")"
+
+            # Example: update version reference inside pyproject.toml or pixi.toml
+            # Adjust search/replace as needed for your dependency structure
+            if grep -q 'utama_core' pixi.toml; then
+              toml set --toml-path pixi.toml pypi-dependencies."utama-core".rev "v${NEW_VERSION}"
+              pixi update
+            fi
+
+            git config user.name "utama-release-manager[bot]"
+            git config user.email "232491996+utama-release-manager[bot]@users.noreply.github.com"
+            git add .
+            git commit -m "chore(deps): bump utama_core to v${NEW_VERSION}" || echo "No changes to commit"
+            git push origin main || echo "No push needed"
+
+            cd ..
+            rm -rf "$(basename "$REPO")"
+          done
+          echo "Dependent repositories updated."
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2.3.3
         with:
@@ -106,3 +135,6 @@ jobs:
           prerelease: false
 
 
+env:
+  DEPENDENT_REPOS: |
+    First-Order-RoboCup-SSL/Utama-Strategy

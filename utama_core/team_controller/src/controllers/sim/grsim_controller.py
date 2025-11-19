@@ -1,7 +1,7 @@
 import time
 from typing import Tuple
 
-from utama_core.config.defaults import LEFT_START_ONE, RIGHT_START_ONE
+from utama_core.config import formations
 from utama_core.config.settings import (
     ADD_Y_COORD,
     LOCAL_HOST,
@@ -65,9 +65,9 @@ class GRSimController(AbstractSimController):
         return sim_control
 
     def reset(self):
-        for idx, x in enumerate(RIGHT_START_ONE):
+        for idx, x in enumerate(formations.RIGHT_START_ONE):
             self.teleport_robot(True, idx, x[0], x[1], x[2])
-        for idx, x in enumerate(LEFT_START_ONE):
+        for idx, x in enumerate(formations.LEFT_START_ONE):
             self.teleport_robot(False, idx, x[0], x[1], x[2])
         self.teleport_ball(0, 0, 0, 0)
 

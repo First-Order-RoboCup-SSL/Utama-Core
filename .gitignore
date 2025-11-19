@@ -1,6 +1,9 @@
 # Prerequisites
 *.d
 
+# Profile files
+*.prof
+
 # Compiled Object files
 *.slo
 *.lo
