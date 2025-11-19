@@ -6,13 +6,13 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.controllers.pid_controller import PIDController
 
-# Try to import the compiled C++ extension we are about to build
+# Try to import your new C++ module
 try:
     import mpc_cpp_extension
 
     CPP_AVAILABLE = True
 except ImportError:
-    print("[MPCCppController] ⚠️ WARNING: C++ Extension not built/found. Falling back to PID.")
+    print("[MPCCppController] ⚠️ CRITICAL: C++ Extension not found. Did you run 'pip install -e ...'?")
     CPP_AVAILABLE = False
 
 
@@ -22,13 +22,14 @@ class MPCCppController(PIDController):
     Wrapper around the 'mpc_cpp_extension' module.
     """
 
-    def __init__(self, mode, rsim_env=None):
+    def __init__(self, *args, **kwargs):
         # Initialize PID (for rotation and fallback)
-        super().__init__(mode, rsim_env)
+        super().__init__(*args, **kwargs)
         self.mpc = None
 
         if CPP_AVAILABLE:
             # Configure C++ MPC
+            # These values match your "Overdamped" Python tuning
             config = mpc_cpp_extension.MPCConfig()
             config.T = 5
             config.DT = 0.05
@@ -41,12 +42,11 @@ class MPCCppController(PIDController):
             config.safety_vel_coeff = 0.15
 
             self.mpc = mpc_cpp_extension.OmniMPC(config)
-            print("[MPCCppController] ✅ C++ MPC Engine Loaded Successfully")
+            print("[MPCCppController] 🚀 C++ MPC Engine Loaded")
 
     def calculate(self, game: Game, robot_id: int, target_pos: Vector2D, target_oren: float) -> Tuple[Vector2D, float]:
 
         # 1. Run Base PID to get Angular Velocity (Rotation)
-        # We still use Python PID for turning because it's simple and fast enough
         pid_vel, angular_vel = super().calculate(game, robot_id, target_pos, target_oren)
 
         if self.mpc is None:
@@ -54,8 +54,8 @@ class MPCCppController(PIDController):
 
         robot = game.friendly_robots[robot_id]
 
-        # 2. Prepare Data for C++
-        # Convert objects to raw numpy arrays for fast transfer
+        # 2. Prepare Data for C++ (Numpy arrays are fast to transfer)
+        # State: [x, y, vx, vy]
         current_state = np.array([robot.p.x, robot.p.y, robot.v.x, robot.v.y])
         goal_pos_arr = np.array([target_pos.x, target_pos.y])
 
@@ -74,5 +74,5 @@ class MPCCppController(PIDController):
         if success:
             return Vector2D(vx, vy), angular_vel
 
-        # Fallback
+        # Fallback to PID if C++ solver fails (unlikely with current logic)
         return pid_vel, angular_vel
