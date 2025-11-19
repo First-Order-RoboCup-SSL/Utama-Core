@@ -25,10 +25,10 @@ class DynamicWindowPlanner:
 
     def __init__(
         self,
-        config: DynamicWindowConfig | None = None,
+        config: DynamicWindowConfig,
         env: SSLStandardEnv | None = None,
     ):
-        self._config = config or DynamicWindowConfig()
+        self._config = config
         self._simulate_timestep = self._config.simulate_frames * TIMESTEP
         self._control_period = TIMESTEP
         self._max_acceleration = self._config.max_acceleration
