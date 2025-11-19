@@ -21,7 +21,7 @@
 
 **Note**
 - if you are using the run button and it is selecting the wrong env (robosim) you will need to manually change the interpreter in VS Code using `Ctrl + Shift + P` -> `Select Interpreter`.
-- if you want to perform a one-off run (ad-hoc) use `pixi run python path/to/your_file.py`.
+- if you want to perform a one-off run (ad-hoc) use `pixi run python -m path.to.your_file`, where you replace the `/` with `.` and remove the trailing `.py`.
 
 ### Pixi Tasks
 `pixi run <task_name>` is the generic way to run a task. Some of the main tasks you can run:
