@@ -1,11 +1,9 @@
 from __future__ import annotations
-from typing import Tuple, Optional, TYPE_CHECKING
 
 import time
-import numpy as np
+from typing import TYPE_CHECKING, Optional, Tuple
 
-if TYPE_CHECKING:
-    from utama_core.motion_planning.src.mpc.omni_mpc import OmnidirectionalMPC
+import numpy as np
 
 from utama_core.config.settings import ROBOT_RADIUS
 from utama_core.entities.data.command import RobotCommand
@@ -16,7 +14,12 @@ from utama_core.motion_planning.src.motion_controller import MotionController
 
 # MPC imports
 try:
-    from utama_core.motion_planning.src.mpc.omni_mpc import OmnidirectionalMPC, OmniMPCConfig
+    # if TYPE_CHECKING:
+    from utama_core.motion_planning.src.mpc.omni_mpc import (
+        OmnidirectionalMPC,
+        OmniMPCConfig,
+    )
+
     MPC_AVAILABLE = True
     # Global MPC instance (reuse solver for speed)
     _global_mpc = None
@@ -32,16 +35,16 @@ ENABLE_MPC_LOGGING = True  # Log MPC performance every N frames
 _mpc_call_count = 0
 _mpc_total_solve_time = 0.0
 _mpc_failures = 0
-_mpc_robot_speeds = {} 
-_last_mpc_log_time = time.time() 
+_mpc_robot_speeds = {}
+_last_mpc_log_time = time.time()
 
 # PID tracking
 _pid_call_count = 0
-_pid_robot_speeds = {} 
+_pid_robot_speeds = {}
 _last_pid_log_time = time.time()
 
 
-def _get_mpc_instance() -> Optional['OmnidirectionalMPC']:
+def _get_mpc_instance() -> Optional["OmnidirectionalMPC"]:
     """Get or create global MPC instance"""
     global _global_mpc
     if not MPC_AVAILABLE:
@@ -49,13 +52,13 @@ def _get_mpc_instance() -> Optional['OmnidirectionalMPC']:
     if _global_mpc is None:
         # --- AGGRESSIVE CONFIGURATION ---
         config = OmniMPCConfig(
-            T=5,            # Short horizon for speed
-            DT=0.05,        # 50ms steps
-            max_vel=4.0,    
-            max_accel=15.0, # Aggressive acceleration
-            Q_pos=80.0,     
-            Q_vel=200.0,    # Force velocity tracking
-            R_accel=0.01,   
+            T=5,  # Short horizon for speed
+            DT=0.05,  # 50ms steps
+            max_vel=4.0,
+            max_accel=15.0,  # Aggressive acceleration
+            Q_pos=80.0,
+            Q_vel=200.0,  # Force velocity tracking
+            R_accel=0.01,
             Q_obstacle=50.0,
             safety_base=0.15,
             safety_vel_coeff=0.05,
@@ -71,24 +74,12 @@ def _collect_obstacles(game: Game, robot_id: int):
 
     # Add enemy robots
     for enemy in game.enemy_robots.values():
-        obstacles.append((
-            enemy.p.x,
-            enemy.p.y,
-            enemy.v.x,
-            enemy.v.y,
-            0.09  # Enemy robot radius
-        ))
+        obstacles.append((enemy.p.x, enemy.p.y, enemy.v.x, enemy.v.y, 0.09))  # Enemy robot radius
 
     # Add friendly robots (except self)
     for fid, friendly in game.friendly_robots.items():
         if fid != robot_id:
-            obstacles.append((
-                friendly.p.x,
-                friendly.p.y,
-                friendly.v.x,
-                friendly.v.y,
-                0.09  # Friendly robot radius
-            ))
+            obstacles.append((friendly.p.x, friendly.p.y, friendly.v.x, friendly.v.y, 0.09))  # Friendly robot radius
 
     return obstacles
 
@@ -112,12 +103,7 @@ def move(
 
         if mpc is not None and target_x is not None and target_y is not None:
             # Current state: [x, y, vx, vy]
-            current_state = np.array([
-                robot.p.x,
-                robot.p.y,
-                robot.v.x,
-                robot.v.y
-            ])
+            current_state = np.array([robot.p.x, robot.p.y, robot.v.x, robot.v.y])
 
             # Goal position
             goal_pos = (target_x, target_y)
@@ -127,15 +113,13 @@ def move(
 
             # Solve MPC
             try:
-                global_x, global_y, info = mpc.get_control_velocities(
-                    current_state, goal_pos, obstacles
-                )
+                global_x, global_y, info = mpc.get_control_velocities(current_state, goal_pos, obstacles)
 
                 # Track performance
                 global _mpc_call_count, _mpc_total_solve_time, _mpc_failures, _mpc_robot_speeds, _last_mpc_log_time
                 _mpc_call_count += 1
-                if info['success']:
-                    _mpc_total_solve_time += info['solve_time']
+                if info["success"]:
+                    _mpc_total_solve_time += info["solve_time"]
                 else:
                     _mpc_failures += 1
 
@@ -152,10 +136,12 @@ def move(
                     # effective_fps = (Calls / Diff) / Num_Robots (Approx)
                     fps = 60.0 / time_diff if time_diff > 0 else 0.0
                     _last_mpc_log_time = current_time
-                    
+
                     avg_time = (_mpc_total_solve_time / max(1, _mpc_call_count - _mpc_failures)) * 1000
-                    robot_info = " | ".join([f"R{rid}: {spd:.2f}m/s" for rid, (spd, dist) in sorted(_mpc_robot_speeds.items())])
-                    
+                    robot_info = " | ".join(
+                        [f"R{rid}: {spd:.2f}m/s" for rid, (spd, dist) in sorted(_mpc_robot_speeds.items())]
+                    )
+
                     # Print with FPS
                     print(f"[MPC Stats] FPS: {fps:.1f} | Avg Solve: {avg_time:.2f}ms | {robot_info}")
 
@@ -201,8 +187,10 @@ def move(
                 fps = 60.0 / time_diff if time_diff > 0 else 0.0
                 _last_pid_log_time = current_time
 
-                robot_info = " | ".join([f"R{rid}: {spd:.2f}m/s" for rid, (spd, dist) in sorted(_pid_robot_speeds.items())])
-                
+                robot_info = " | ".join(
+                    [f"R{rid}: {spd:.2f}m/s" for rid, (spd, dist) in sorted(_pid_robot_speeds.items())]
+                )
+
                 # Print with FPS
                 print(f"[PID Stats] FPS: {fps:.1f} | {robot_info}")
         else:

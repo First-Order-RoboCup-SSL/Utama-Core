@@ -6,39 +6,42 @@ Uses linear dynamics (no iterative linearization needed).
 Perfect for holonomic/omnidirectional robots.
 """
 
-import numpy as np
-import cvxpy as cp
-from typing import List, Tuple, Optional, Dict
-from dataclasses import dataclass
 import time
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
+
+import cvxpy as cp
+import numpy as np
 
 
 @dataclass
 class OmniMPCConfig:
     """Configuration for omnidirectional MPC"""
+
     # Prediction horizon
-    T: int = 5          # Reduced from 8 -> 5 (Crucial for 60Hz performance)
-    DT: float = 0.05    # Reduced from 0.1 -> 0.05 (Faster updates)
+    T: int = 5  # Reduced from 8 -> 5 (Crucial for 60Hz performance)
+    DT: float = 0.05  # Reduced from 0.1 -> 0.05 (Faster updates)
 
-    # Cost weights 
-    Q_pos: float = 80.0   
+    # Cost weights
+    Q_pos: float = 80.0
     Q_vel: float = 200.0  # High velocity cost forces acceleration
-    R_accel: float = 0.01 # Cheap acceleration
-    R_jerk: float = 0.001 
-    Q_obstacle: float = 50.0 
+    R_accel: float = 0.01  # Cheap acceleration
+    R_jerk: float = 0.001
+    Q_obstacle: float = 50.0
 
-    # Robot limits 
-    max_vel: float = 4.0    
-    max_accel: float = 15.0 # Fake high acceleration to stop internal limiting
-    robot_radius: float = 0.09  
+    # Robot limits
+    max_vel: float = 4.0
+    max_accel: float = 15.0  # Fake high acceleration to stop internal limiting
+    robot_radius: float = 0.09
 
     # Safety margins
-    safety_base: float = 0.15  
-    safety_vel_coeff: float = 0.05 
+    safety_base: float = 0.15
+    safety_vel_coeff: float = 0.05
 
     # Solver
-    max_solve_time: float = 0.015 
+    max_solve_time: float = 0.015
     verbose: bool = False
+
 
 """
 @dataclass
@@ -68,6 +71,7 @@ class OmniMPCConfig:
     max_solve_time: float = 0.015  # 15ms max for 60Hz
     verbose: bool = False  # Disable for speed
 """
+
 
 class OmnidirectionalMPC:
     """
@@ -99,8 +103,10 @@ class OmnidirectionalMPC:
         self.solve_time = 0.0
         self.success = True
 
-        print(f"[OmniMPC] CVXPY solver initialized: T={self.config.T}, "
-              f"dt={self.config.DT}s, horizon={self.config.T * self.config.DT:.2f}s")
+        print(
+            f"[OmniMPC] CVXPY solver initialized: T={self.config.T}, "
+            f"dt={self.config.DT}s, horizon={self.config.T * self.config.DT:.2f}s"
+        )
 
     def _build_dynamics(self):
         """Build linear dynamics matrices A and B"""
@@ -110,25 +116,29 @@ class OmnidirectionalMPC:
         # State: [x, y, vx, vy]
         # Control: [ax, ay]
 
-        self.A = np.array([
-            [1, 0, dt, 0],   # x_next = x + dt * vx
-            [0, 1, 0, dt],   # y_next = y + dt * vy
-            [0, 0, 1, 0],    # vx_next = vx + dt * ax
-            [0, 0, 0, 1]     # vy_next = vy + dt * ay
-        ])
+        self.A = np.array(
+            [
+                [1, 0, dt, 0],  # x_next = x + dt * vx
+                [0, 1, 0, dt],  # y_next = y + dt * vy
+                [0, 0, 1, 0],  # vx_next = vx + dt * ax
+                [0, 0, 0, 1],  # vy_next = vy + dt * ay
+            ]
+        )
 
-        self.B = np.array([
-            [0, 0],          # x doesn't directly depend on control
-            [0, 0],          # y doesn't directly depend on control
-            [dt, 0],         # vx += dt * ax
-            [0, dt]          # vy += dt * ay
-        ])
+        self.B = np.array(
+            [
+                [0, 0],  # x doesn't directly depend on control
+                [0, 0],  # y doesn't directly depend on control
+                [dt, 0],  # vx += dt * ax
+                [0, dt],  # vy += dt * ay
+            ]
+        )
 
     def solve(
         self,
         current_state: np.ndarray,  # [x, y, vx, vy]
         goal_pos: Tuple[float, float],
-        obstacles: List[Tuple[float, float, float, float, float]] = None
+        obstacles: List[Tuple[float, float, float, float, float]] = None,
     ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Dict]:
         """
         Solve MPC problem using CVXPY.
@@ -149,8 +159,8 @@ class OmnidirectionalMPC:
         dt = self.config.DT
 
         # Decision variables
-        X = cp.Variable((4, T+1))  # States: [x, y, vx, vy] at each timestep
-        U = cp.Variable((2, T))    # Controls: [ax, ay] at each timestep
+        X = cp.Variable((4, T + 1))  # States: [x, y, vx, vy] at each timestep
+        U = cp.Variable((2, T))  # Controls: [ax, ay] at each timestep
 
         # Cost function
         cost = 0
@@ -160,7 +170,7 @@ class OmnidirectionalMPC:
 
         for k in range(T):
             # Dynamics constraints (linear!)
-            constraints += [X[:, k+1] == self.A @ X[:, k] + self.B @ U[:, k]]
+            constraints += [X[:, k + 1] == self.A @ X[:, k] + self.B @ U[:, k]]
 
             # Velocity limits (total speed)
             constraints += [
@@ -186,8 +196,10 @@ class OmnidirectionalMPC:
 
                 # Debug output on first iteration
                 if k == 0 and start_time is not None:
-                    print(f"[MPC Debug] goal_dist={goal_dist:.2f}m, desired_speed={desired_speed:.2f}m/s, "
-                          f"desired_vel=({desired_vel[0]:.2f}, {desired_vel[1]:.2f})")
+                    print(
+                        f"[MPC Debug] goal_dist={goal_dist:.2f}m, desired_speed={desired_speed:.2f}m/s, "
+                        f"desired_vel=({desired_vel[0]:.2f}, {desired_vel[1]:.2f})"
+                    )
 
                 vel_error = cp.sum_squares(X[2:4, k] - desired_vel)
                 cost += self.config.Q_vel * vel_error
@@ -197,7 +209,7 @@ class OmnidirectionalMPC:
 
             # Control smoothness (penalize jerk)
             if k > 0:
-                jerk = cp.sum_squares(U[:, k] - U[:, k-1])
+                jerk = cp.sum_squares(U[:, k] - U[:, k - 1])
                 cost += self.config.R_jerk * jerk
 
             # TODO: Add obstacle avoidance with DCP-compliant formulation
@@ -223,16 +235,13 @@ class OmnidirectionalMPC:
                 # Shift previous solution
                 X.value = self.prev_states
                 U.value = self.prev_controls
-            except:
+            except BaseException:
                 pass
 
         # Solve
         try:
             problem.solve(
-                solver=cp.CLARABEL,
-                verbose=self.config.verbose,
-                max_iter=50,
-                time_limit=self.config.max_solve_time
+                solver=cp.CLARABEL, verbose=self.config.verbose, max_iter=50, time_limit=self.config.max_solve_time
             )
 
             if problem.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
@@ -241,8 +250,8 @@ class OmnidirectionalMPC:
                 controls = U.value
 
                 # Debug: print trajectory velocities
-                print(f"[MPC Debug] Planned velocities over horizon:")
-                for k in range(min(3, T+1)):  # Print first 3 timesteps
+                print("[MPC Debug] Planned velocities over horizon:")
+                for k in range(min(3, T + 1)):  # Print first 3 timesteps
                     vx, vy = states[2, k], states[3, k]
                     speed = np.hypot(vx, vy)
                     print(f"  t={k*self.config.DT:.2f}s: vx={vx:.3f}, vy={vy:.3f}, speed={speed:.3f} m/s")
@@ -254,39 +263,39 @@ class OmnidirectionalMPC:
                 self.solve_time = time.time() - start_time
                 self.success = True
 
-                return controls.T, states.T, {
-                    'success': True,
-                    'solve_time': self.solve_time,
-                    'message': f'{problem.status}',
-                    'cost': problem.value
-                }
+                return (
+                    controls.T,
+                    states.T,
+                    {
+                        "success": True,
+                        "solve_time": self.solve_time,
+                        "message": f"{problem.status}",
+                        "cost": problem.value,
+                    },
+                )
             else:
                 # Solver didn't find optimal solution
                 self.solve_time = time.time() - start_time
                 self.success = False
 
-                return None, None, {
-                    'success': False,
-                    'solve_time': self.solve_time,
-                    'message': f'Solver status: {problem.status}'
-                }
+                return (
+                    None,
+                    None,
+                    {"success": False, "solve_time": self.solve_time, "message": f"Solver status: {problem.status}"},
+                )
 
         except Exception as e:
             self.solve_time = time.time() - start_time
             self.success = False
             print(f"[OmniMPC] Solve failed: {e}")
 
-            return None, None, {
-                'success': False,
-                'solve_time': self.solve_time,
-                'message': str(e)
-            }
+            return None, None, {"success": False, "solve_time": self.solve_time, "message": str(e)}
 
     def get_control_velocities(
         self,
         current_state: np.ndarray,
         goal_pos: Tuple[float, float],
-        obstacles: List[Tuple[float, float, float, float, float]] = None
+        obstacles: List[Tuple[float, float, float, float, float]] = None,
     ) -> Tuple[float, float, Dict]:
         """
         Get velocity commands for current timestep.
@@ -311,14 +320,14 @@ class OmnidirectionalMPC:
             else:
                 vx_cmd, vy_cmd = 0.0, 0.0
 
-            info['fallback'] = True
+            info["fallback"] = True
             return vx_cmd, vy_cmd, info
 
         # Use first velocity from planned trajectory
         vx_cmd = trajectory[1, 2]  # Next velocity (not current)
         vy_cmd = trajectory[1, 3]
 
-        info['fallback'] = False
+        info["fallback"] = False
         return vx_cmd, vy_cmd, info
 
     def reset(self):

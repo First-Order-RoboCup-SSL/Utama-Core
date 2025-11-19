@@ -7,16 +7,16 @@ Usage: pixi run python compare_controllers.py
 
 import sys
 
-print("="*80)
+print("=" * 80)
 print("CONTROLLER COMPARISON TOOL")
-print("="*80)
+print("=" * 80)
 print("\nThis will help you compare PID vs MPC performance.")
 print("\nTo test:")
 print("  1. Run with PID:  Edit move_utils.py, set USE_MPC = False")
 print("  2. Run sim for ~30 seconds, note collisions")
 print("  3. Run with MPC:  Edit move_utils.py, set USE_MPC = True")
 print("  4. Run sim for ~30 seconds, compare results")
-print("\n" + "="*80)
+print("\n" + "=" * 80)
 
 print("\n📊 METRICS TO WATCH:\n")
 
@@ -40,7 +40,7 @@ print("   - MPC predicts future robot positions")
 print("   - Should see robots giving each other more space")
 print("   - Velocity-dependent safety margins (faster = wider berth)\n")
 
-print("="*80)
+print("=" * 80)
 print("\n🔧 TUNING MPC:\n")
 
 print("If robots still collide, increase safety in omni_mpc.py:")
@@ -56,7 +56,7 @@ print("If robots are too timid:")
 print("  - safety_base: 0.30 → 0.25  (smaller safety bubble)")
 print("  - Q_obstacle: 100 → 50      (weaker avoidance)\n")
 
-print("="*80)
+print("=" * 80)
 print("\n📈 EXPECTED IMPROVEMENTS WITH MPC:\n")
 
 print("✓ 50-80% reduction in collisions")
@@ -70,18 +70,18 @@ print("  - Slightly higher CPU usage (but still <16ms)")
 print("  - More complex to tune")
 print("  - May be overly cautious initially\n")
 
-print("="*80)
+print("=" * 80)
 print("\n🎮 CURRENT CONFIGURATION:\n")
 
 try:
-    from utama_core.skills.src.utils.move_utils import USE_MPC
     from utama_core.motion_planning.src.mpc.omni_mpc import OmniMPCConfig
+    from utama_core.skills.src.utils.move_utils import USE_MPC
 
     print(f"Controller: {'MPC' if USE_MPC else 'PID'}")
 
     if USE_MPC:
         config = OmniMPCConfig()
-        print(f"\nMPC Settings:")
+        print("\nMPC Settings:")
         print(f"  Horizon: T={config.T} steps × {config.DT}s = {config.T * config.DT:.2f}s lookahead")
         print(f"  Max velocity: {config.max_vel} m/s")
         print(f"  Max acceleration: {config.max_accel} m/s²")
@@ -98,7 +98,7 @@ try:
 except ImportError as e:
     print(f"Could not load config: {e}")
 
-print("\n" + "="*80)
+print("\n" + "=" * 80)
 print("\nReady to test! Run:  pixi run main")
 print("Watch for [MPC Stats] and [MPC Warning] messages in terminal.")
-print("="*80 + "\n")
+print("=" * 80 + "\n")
