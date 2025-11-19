@@ -26,8 +26,8 @@ def main():
         mode="rsim",
         exp_friendly=6,
         exp_enemy=3,
-        replay_writer_config=ReplayWriterConfig(replay_name="test_replay2", overwrite_existing=True),
-        control_scheme="pid",
+        replay_writer_config=ReplayWriterConfig(replay_name="test_replay_mpc [v1]", overwrite_existing=True),
+        control_scheme="dwa",
     )
     runner.my_strategy.render()
     runner.run()
