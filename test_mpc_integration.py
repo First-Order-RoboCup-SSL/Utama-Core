@@ -9,14 +9,8 @@ print("=" * 60)
 print("Testing Omnidirectional MPC")
 print("=" * 60)
 
-# Create MPC
-config = OmniMPCConfig(
-    T=10,
-    DT=0.05,
-    max_vel=4.0,
-    max_accel=2.0,
-)
-mpc = OmnidirectionalMPC(config)
+# Create MPC with default config (optimized for speed)
+mpc = OmnidirectionalMPC()
 
 # Test solve
 current_state = np.array([0.0, 0.0, 0.0, 0.0])  # At origin, stationary

@@ -1,12 +1,13 @@
 """
 Fast Omnidirectional MPC for SSL Robots
 
-Uses linear dynamics (no need for iterative linearization) for faster solving.
-Perfect for holonomic/omnidirectional robots that can move in any direction.
+CVXPY-based implementation for numerical stability.
+Uses linear dynamics (no iterative linearization needed).
+Perfect for holonomic/omnidirectional robots.
 """
 
 import numpy as np
-import casadi as ca
+import cvxpy as cp
 from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
 import time
@@ -16,182 +17,112 @@ import time
 class OmniMPCConfig:
     """Configuration for omnidirectional MPC"""
     # Prediction horizon
-    T: int = 15  # Shorter horizon for speed
-    DT: float = 0.05  # 50ms timesteps
+    T: int = 5          # Reduced from 8 -> 5 (Crucial for 60Hz performance)
+    DT: float = 0.05    # Reduced from 0.1 -> 0.05 (Faster updates)
 
-    # Cost weights
-    Q_pos: float = 10.0  # Position tracking weight
-    Q_vel: float = 0.1  # Velocity tracking weight
-    R_accel: float = 0.01  # Acceleration cost
-    R_smooth: float = 0.1  # Smoothness cost
-    Q_obstacle: float = 100.0  # Obstacle avoidance weight (INCREASED from 50!)
+    # Cost weights 
+    Q_pos: float = 80.0   
+    Q_vel: float = 200.0  # High velocity cost forces acceleration
+    R_accel: float = 0.01 # Cheap acceleration
+    R_jerk: float = 0.001 
+    Q_obstacle: float = 50.0 
 
-    # Robot limits
-    max_vel: float = 4.0  # m/s
-    max_accel: float = 2.0  # m/s^2
-    robot_radius: float = 0.09  # m
+    # Robot limits 
+    max_vel: float = 4.0    
+    max_accel: float = 15.0 # Fake high acceleration to stop internal limiting
+    robot_radius: float = 0.09  
 
-    # Safety margins (INCREASED to prevent collisions)
-    safety_base: float = 0.30  # Base safety radius (3.3 * robot_radius) - LARGER!
-    safety_vel_coeff: float = 0.20  # Velocity-dependent component - MORE aggressive!
+    # Safety margins
+    safety_base: float = 0.15  
+    safety_vel_coeff: float = 0.05 
 
     # Solver
-    max_solve_time: float = 0.01  # 10ms for 60Hz with margin
+    max_solve_time: float = 0.015 
     verbose: bool = False
 
+"""
+@dataclass
+class OmniMPCConfig:
+    ###Configuration for omnidirectional MPC
+    # Prediction horizon (shorter for speed)
+    T: int = 8  # 8 steps
+    DT: float = 0.1  # 100ms timestep = 0.8s total lookahead
+
+    # Cost weights (BALANCED for reliable convergence)
+    Q_pos: float = 100.0  # Position tracking
+    Q_vel: float = 50.0  # Velocity tracking (prefer moving fast)
+    R_accel: float = 0.01  # Acceleration cost
+    R_jerk: float = 0.001  # Smoothness
+    Q_obstacle: float = 50.0  # Obstacle avoidance (will add later)
+
+    # Robot limits (aggressive for SSL)
+    max_vel: float = 4.0  # m/s
+    max_accel: float = 6.0  # m/s^2 (SSL robots can do 3-4 m/s^2, use 6 for responsiveness)
+    robot_radius: float = 0.09  # m
+
+    # Safety margins
+    safety_base: float = 0.15  # Base safety radius
+    safety_vel_coeff: float = 0.05  # Velocity-dependent component
+
+    # Solver
+    max_solve_time: float = 0.015  # 15ms max for 60Hz
+    verbose: bool = False  # Disable for speed
+"""
 
 class OmnidirectionalMPC:
     """
-    Fast MPC for omnidirectional robots with linear dynamics.
+    CVXPY-based MPC for omnidirectional robots with linear dynamics.
 
     State: [x, y, vx, vy] (no theta needed for translation control)
     Controls: [ax, ay]
 
-    Dynamics (linear!):
+    Linear dynamics:
         x_{k+1} = x_k + dt * vx_k
         y_{k+1} = y_k + dt * vy_k
         vx_{k+1} = vx_k + dt * ax_k
         vy_{k+1} = vy_k + dt * ay_k
+
+    Matrix form: x_{k+1} = A @ x_k + B @ u_k
     """
 
     def __init__(self, config: OmniMPCConfig = None):
         self.config = config or OmniMPCConfig()
 
-        # Build solver once (reuse for speed)
-        self.solver = None
-        self._build_solver()
+        # Build dynamics matrices
+        self._build_dynamics()
 
         # Warm start
-        self.prev_solution = None
+        self.prev_states = None
+        self.prev_controls = None
 
         # Stats
         self.solve_time = 0.0
         self.success = True
 
-    def _build_solver(self):
-        """Build CasADi solver once for reuse"""
-        T = self.config.T
+        print(f"[OmniMPC] CVXPY solver initialized: T={self.config.T}, "
+              f"dt={self.config.DT}s, horizon={self.config.T * self.config.DT:.2f}s")
+
+    def _build_dynamics(self):
+        """Build linear dynamics matrices A and B"""
         dt = self.config.DT
 
-        # Decision variables
-        X = ca.MX.sym('X', 4, T+1)  # States: [x, y, vx, vy]
-        U = ca.MX.sym('U', 2, T)    # Controls: [ax, ay]
+        # State transition matrix: x_{k+1} = A @ x_k + B @ u_k
+        # State: [x, y, vx, vy]
+        # Control: [ax, ay]
 
-        # Parameters (things that change each solve)
-        x0 = ca.MX.sym('x0', 4)  # Initial state
-        goal = ca.MX.sym('goal', 2)  # Goal position [x, y]
-        n_obs = ca.MX.sym('n_obs')  # Number of obstacles
-        obs_pos = ca.MX.sym('obs_pos', 2, 10)  # Max 10 obstacles [x, y]
-        obs_vel = ca.MX.sym('obs_vel', 2, 10)  # Obstacle velocities
-        obs_rad = ca.MX.sym('obs_rad', 10)     # Obstacle radii
+        self.A = np.array([
+            [1, 0, dt, 0],   # x_next = x + dt * vx
+            [0, 1, 0, dt],   # y_next = y + dt * vy
+            [0, 0, 1, 0],    # vx_next = vx + dt * ax
+            [0, 0, 0, 1]     # vy_next = vy + dt * ay
+        ])
 
-        # Cost function
-        cost = 0
-
-        # Dynamics constraints (LINEAR!)
-        constraints = [X[:, 0] - x0]  # Initial condition
-        lbg = [0, 0, 0, 0]
-        ubg = [0, 0, 0, 0]
-
-        for k in range(T):
-            # Linear dynamics
-            x_next = X[0, k] + dt * X[2, k]
-            y_next = X[1, k] + dt * X[3, k]
-            vx_next = X[2, k] + dt * U[0, k]
-            vy_next = X[3, k] + dt * U[1, k]
-
-            dynamics = ca.vertcat(x_next, y_next, vx_next, vy_next) - X[:, k+1]
-            constraints.append(dynamics)
-            lbg.extend([0, 0, 0, 0])
-            ubg.extend([0, 0, 0, 0])
-
-            # Position tracking cost
-            pos_error = ca.sumsqr(X[0:2, k] - goal)
-            cost += self.config.Q_pos * pos_error
-
-            # Velocity cost (prefer moderate speed)
-            vel_error = ca.sumsqr(X[2:4, k])
-            cost += self.config.Q_vel * vel_error
-
-            # Control effort
-            cost += self.config.R_accel * ca.sumsqr(U[:, k])
-
-            # Control smoothness
-            if k > 0:
-                du = U[:, k] - U[:, k-1]
-                cost += self.config.R_smooth * ca.sumsqr(du)
-
-            # Obstacle avoidance (soft constraints using barrier)
-            for i in range(10):  # Max 10 obstacles
-                # Skip if i >= n_obs (handled by weighting)
-                active = ca.fmin(1.0, ca.fmax(0.0, n_obs - i))
-
-                # Predict obstacle position
-                obs_x = obs_pos[0, i] + obs_vel[0, i] * k * dt
-                obs_y = obs_pos[1, i] + obs_vel[1, i] * k * dt
-
-                # Distance to obstacle
-                dx = X[0, k] - obs_x
-                dy = X[1, k] - obs_y
-                dist = ca.sqrt(dx**2 + dy**2 + 1e-6)
-
-                # Velocity-dependent safety radius
-                robot_speed = ca.sqrt(X[2, k]**2 + X[3, k]**2)
-                safety_radius = (self.config.safety_base +
-                               self.config.safety_vel_coeff * robot_speed +
-                               obs_rad[i])
-
-                # Barrier: penalize if dist < safety_radius
-                barrier = ca.exp(-5.0 * (dist - safety_radius))
-                cost += active * self.config.Q_obstacle * barrier
-
-        # Terminal cost
-        terminal_pos = ca.sumsqr(X[0:2, T] - goal)
-        cost += 2.0 * self.config.Q_pos * terminal_pos
-
-        # Variable bounds
-        lbx = []
-        ubx = []
-        for k in range(T+1):
-            lbx.extend([-np.inf, -np.inf,  # x, y unbounded
-                       -self.config.max_vel, -self.config.max_vel])  # vx, vy bounded
-            ubx.extend([np.inf, np.inf,
-                       self.config.max_vel, self.config.max_vel])
-        for k in range(T):
-            lbx.extend([-self.config.max_accel, -self.config.max_accel])
-            ubx.extend([self.config.max_accel, self.config.max_accel])
-
-        # Pack decision variables and parameters
-        opt_vars = ca.vertcat(ca.reshape(X, -1, 1), ca.reshape(U, -1, 1))
-        params = ca.vertcat(x0, goal, n_obs,
-                           ca.reshape(obs_pos, -1, 1),
-                           ca.reshape(obs_vel, -1, 1),
-                           obs_rad)
-
-        # Create NLP
-        nlp = {
-            'x': opt_vars,
-            'f': cost,
-            'g': ca.vertcat(*constraints),
-            'p': params
-        }
-
-        # Solver options
-        opts = {
-            'ipopt.print_level': 0,
-            'print_time': 0,
-            'ipopt.max_iter': 50,
-            'ipopt.max_cpu_time': self.config.max_solve_time,
-            'ipopt.warm_start_init_point': 'yes',
-        }
-
-        self.solver = ca.nlpsol('mpc_solver', 'ipopt', nlp, opts)
-        self.lbg = lbg
-        self.ubg = ubg
-        self.lbx = lbx
-        self.ubx = ubx
-
-        print(f"[OmniMPC] Solver built: T={T}, dt={dt}s, horizon={T*dt:.2f}s")
+        self.B = np.array([
+            [0, 0],          # x doesn't directly depend on control
+            [0, 0],          # y doesn't directly depend on control
+            [dt, 0],         # vx += dt * ax
+            [0, dt]          # vy += dt * ay
+        ])
 
     def solve(
         self,
@@ -200,7 +131,7 @@ class OmnidirectionalMPC:
         obstacles: List[Tuple[float, float, float, float, float]] = None
     ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Dict]:
         """
-        Solve MPC problem.
+        Solve MPC problem using CVXPY.
 
         Args:
             current_state: [x, y, vx, vy]
@@ -214,74 +145,131 @@ class OmnidirectionalMPC:
         """
         start_time = time.time()
 
-        # Prepare obstacle data (pad to max 10)
-        obstacles = obstacles or []
-        n_obs = min(len(obstacles), 10)
+        T = self.config.T
+        dt = self.config.DT
 
-        obs_pos = np.zeros((2, 10))
-        obs_vel = np.zeros((2, 10))
-        obs_rad = np.zeros(10)
+        # Decision variables
+        X = cp.Variable((4, T+1))  # States: [x, y, vx, vy] at each timestep
+        U = cp.Variable((2, T))    # Controls: [ax, ay] at each timestep
 
-        for i, obs in enumerate(obstacles[:10]):
-            obs_pos[0, i] = obs[0]  # x
-            obs_pos[1, i] = obs[1]  # y
-            obs_vel[0, i] = obs[2]  # vx
-            obs_vel[1, i] = obs[3]  # vy
-            obs_rad[i] = obs[4]     # radius
+        # Cost function
+        cost = 0
 
-        # Pack parameters
-        params = np.concatenate([
-            current_state,
-            goal_pos,
-            [n_obs],
-            obs_pos.flatten(),
-            obs_vel.flatten(),
-            obs_rad
-        ])
+        # Initial condition constraint
+        constraints = [X[:, 0] == current_state]
 
-        # Initial guess (use previous solution if available)
-        if self.prev_solution is not None:
-            # Shift previous solution
-            x0_guess = self.prev_solution
-        else:
-            # Simple guess: go straight to goal
-            x0_guess = np.zeros(4 * (self.config.T + 1) + 2 * self.config.T)
-            for k in range(self.config.T + 1):
-                x0_guess[4*k:4*k+2] = current_state[:2]  # Stay at current pos
-                x0_guess[4*k+2:4*k+4] = [0, 0]  # Zero velocity
+        for k in range(T):
+            # Dynamics constraints (linear!)
+            constraints += [X[:, k+1] == self.A @ X[:, k] + self.B @ U[:, k]]
+
+            # Velocity limits (total speed)
+            constraints += [
+                cp.norm(X[2:4, k], 2) <= self.config.max_vel,  # Speed limit
+            ]
+
+            # Acceleration limits (total acceleration magnitude)
+            constraints += [
+                cp.norm(U[:, k], 2) <= self.config.max_accel,  # Total accel limit
+            ]
+
+            # Position tracking cost (drive towards goal)
+            pos_error = cp.sum_squares(X[0:2, k] - goal_pos)
+            cost += self.config.Q_pos * pos_error
+
+            # Velocity cost (prefer moving, not stopping)
+            # Want to move fast towards goal
+            goal_dir = np.array(goal_pos) - current_state[0:2]
+            goal_dist = np.linalg.norm(goal_dir)
+            if goal_dist > 0.1:
+                desired_speed = min(self.config.max_vel * 0.9, goal_dist / (T * dt))
+                desired_vel = (goal_dir / goal_dist) * desired_speed
+
+                # Debug output on first iteration
+                if k == 0 and start_time is not None:
+                    print(f"[MPC Debug] goal_dist={goal_dist:.2f}m, desired_speed={desired_speed:.2f}m/s, "
+                          f"desired_vel=({desired_vel[0]:.2f}, {desired_vel[1]:.2f})")
+
+                vel_error = cp.sum_squares(X[2:4, k] - desired_vel)
+                cost += self.config.Q_vel * vel_error
+
+            # Control effort (penalize large accelerations)
+            cost += self.config.R_accel * cp.sum_squares(U[:, k])
+
+            # Control smoothness (penalize jerk)
+            if k > 0:
+                jerk = cp.sum_squares(U[:, k] - U[:, k-1])
+                cost += self.config.R_jerk * jerk
+
+            # TODO: Add obstacle avoidance with DCP-compliant formulation
+            # For now, skip obstacles to get basic MPC working
+            # Will add back using linearization or SOC constraints
+            pass
+
+        # Terminal cost (prefer being at goal at end)
+        terminal_pos_error = cp.sum_squares(X[0:2, T] - goal_pos)
+        cost += self.config.Q_pos * terminal_pos_error
+
+        # Only penalize terminal velocity if very close to goal (within 0.5m)
+        # This allows robot to move fast when far from goal
+        # Note: can't use conditionals in CVXPY, so we skip this for now
+        # The position cost will naturally slow the robot as it approaches
+
+        # Create problem
+        problem = cp.Problem(cp.Minimize(cost), constraints)
+
+        # Warm start if available
+        if self.prev_states is not None and self.prev_controls is not None:
+            try:
+                # Shift previous solution
+                X.value = self.prev_states
+                U.value = self.prev_controls
+            except:
+                pass
 
         # Solve
         try:
-            sol = self.solver(
-                x0=x0_guess,
-                lbx=self.lbx,
-                ubx=self.ubx,
-                lbg=self.lbg,
-                ubg=self.ubg,
-                p=params
+            problem.solve(
+                solver=cp.CLARABEL,
+                verbose=self.config.verbose,
+                max_iter=50,
+                time_limit=self.config.max_solve_time
             )
 
-            # Extract solution
-            sol_x = sol['x'].full().flatten()
+            if problem.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE]:
+                # Extract solution
+                states = X.value
+                controls = U.value
 
-            n_states = 4 * (self.config.T + 1)
-            states_flat = sol_x[:n_states]
-            controls_flat = sol_x[n_states:]
+                # Debug: print trajectory velocities
+                print(f"[MPC Debug] Planned velocities over horizon:")
+                for k in range(min(3, T+1)):  # Print first 3 timesteps
+                    vx, vy = states[2, k], states[3, k]
+                    speed = np.hypot(vx, vy)
+                    print(f"  t={k*self.config.DT:.2f}s: vx={vx:.3f}, vy={vy:.3f}, speed={speed:.3f} m/s")
 
-            trajectory = states_flat.reshape((self.config.T + 1, 4))
-            controls = controls_flat.reshape((self.config.T, 2))
+                # Store for warm start
+                self.prev_states = states
+                self.prev_controls = controls
 
-            # Store for warm start
-            self.prev_solution = sol_x
+                self.solve_time = time.time() - start_time
+                self.success = True
 
-            self.solve_time = time.time() - start_time
-            self.success = True
+                return controls.T, states.T, {
+                    'success': True,
+                    'solve_time': self.solve_time,
+                    'message': f'{problem.status}',
+                    'cost': problem.value
+                }
+            else:
+                # Solver didn't find optimal solution
+                self.solve_time = time.time() - start_time
+                self.success = False
 
-            return controls, trajectory, {
-                'success': True,
-                'solve_time': self.solve_time,
-                'message': 'Success'
-            }
+                return None, None, {
+                    'success': False,
+                    'solve_time': self.solve_time,
+                    'message': f'Solver status: {problem.status}'
+                }
 
         except Exception as e:
             self.solve_time = time.time() - start_time
@@ -317,8 +305,9 @@ class OmnidirectionalMPC:
             dist = np.hypot(dx, dy)
 
             if dist > 0.01:
-                vx_cmd = np.clip(2.0 * dx, -self.config.max_vel, self.config.max_vel)
-                vy_cmd = np.clip(2.0 * dy, -self.config.max_vel, self.config.max_vel)
+                # Proportional control with high gain
+                vx_cmd = np.clip(3.0 * dx, -self.config.max_vel, self.config.max_vel)
+                vy_cmd = np.clip(3.0 * dy, -self.config.max_vel, self.config.max_vel)
             else:
                 vx_cmd, vy_cmd = 0.0, 0.0
 
@@ -334,4 +323,5 @@ class OmnidirectionalMPC:
 
     def reset(self):
         """Reset warm start"""
-        self.prev_solution = None
+        self.prev_states = None
+        self.prev_controls = None

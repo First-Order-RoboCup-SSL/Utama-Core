@@ -31,6 +31,11 @@ ENABLE_MPC_LOGGING = True  # Log MPC performance every N frames
 _mpc_call_count = 0
 _mpc_total_solve_time = 0.0
 _mpc_failures = 0
+_mpc_robot_speeds = {}  # Track speed per robot
+
+# PID tracking
+_pid_call_count = 0
+_pid_robot_speeds = {}  # Track speed per robot
 
 
 def _get_mpc_instance() -> Optional['OmnidirectionalMPC']:
@@ -39,18 +44,10 @@ def _get_mpc_instance() -> Optional['OmnidirectionalMPC']:
     if not MPC_AVAILABLE:
         return None
     if _global_mpc is None:
-        config = OmniMPCConfig(
-            T=15,  # 15 steps
-            DT=0.05,  # 50ms per step = 0.75s total horizon
-            max_vel=4.0,  # 4 m/s max
-            max_accel=2.0,  # 2 m/s^2
-            Q_pos=10.0,
-            Q_obstacle=30.0,
-            safety_base=0.20,  # Larger safety margin at high speed
-            safety_vel_coeff=0.15,
-        )
+        # Use default config from OmniMPCConfig (already tuned)
+        config = OmniMPCConfig()
         _global_mpc = OmnidirectionalMPC(config)
-        print("[move_utils] MPC controller initialized")
+        print("[move_utils] CVXPY-based MPC controller initialized (SPEED MODE)")
     return _global_mpc
 
 
@@ -121,18 +118,26 @@ def move(
                 )
 
                 # Track performance
-                global _mpc_call_count, _mpc_total_solve_time, _mpc_failures
+                global _mpc_call_count, _mpc_total_solve_time, _mpc_failures, _mpc_robot_speeds
                 _mpc_call_count += 1
                 if info['success']:
                     _mpc_total_solve_time += info['solve_time']
                 else:
                     _mpc_failures += 1
 
-                # Periodic logging
-                if ENABLE_MPC_LOGGING and _mpc_call_count % 300 == 0:  # Every 5 sec at 60Hz
+                # Track this robot's speed
+                speed = np.hypot(global_x, global_y)
+                dist_to_goal = np.hypot(target_x - robot.p.x, target_y - robot.p.y)
+                _mpc_robot_speeds[robot_id] = (speed, dist_to_goal)
+
+                # Periodic logging (every 1 sec instead of 5 sec)
+                if ENABLE_MPC_LOGGING and _mpc_call_count % 60 == 0:  # Every 1 sec at 60Hz
                     avg_time = (_mpc_total_solve_time / max(1, _mpc_call_count - _mpc_failures)) * 1000
-                    print(f"[MPC Stats] Calls: {_mpc_call_count} | Avg: {avg_time:.2f}ms | "
-                          f"Failures: {_mpc_failures} | Obstacles: {len(obstacles)}")
+                    # Show all robots
+                    robot_info = " | ".join([f"R{rid}: {spd:.2f}m/s @{dist:.2f}m"
+                                            for rid, (spd, dist) in sorted(_mpc_robot_speeds.items())])
+                    print(f"[MPC Stats] t={_mpc_call_count/60:.0f}s | Avg: {avg_time:.2f}ms | "
+                          f"Fails: {_mpc_failures} | {robot_info}")
 
                 # Check for close obstacles (collision warning)
                 if obstacles:
@@ -157,6 +162,22 @@ def move(
         pid_trans = motion_controller.pid_trans
         if target_x is not None and target_y is not None:
             global_x, global_y = pid_trans.calculate((target_x, target_y), (robot.p.x, robot.p.y), robot_id)
+
+            # PID logging
+            global _pid_call_count, _pid_robot_speeds
+            _pid_call_count += 1
+
+            # Track this robot's speed
+            speed = np.hypot(global_x, global_y)
+            dist_to_goal = np.hypot(target_x - robot.p.x, target_y - robot.p.y)
+            _pid_robot_speeds[robot_id] = (speed, dist_to_goal)
+
+            # Periodic logging (every 1 sec)
+            if ENABLE_MPC_LOGGING and _pid_call_count % 60 == 0:
+                # Show all robots
+                robot_info = " | ".join([f"R{rid}: {spd:.2f}m/s @{dist:.2f}m"
+                                        for rid, (spd, dist) in sorted(_pid_robot_speeds.items())])
+                print(f"[PID Stats] t={_pid_call_count/60:.0f}s | {robot_info}")
         else:
             global_x = 0
             global_y = 0
