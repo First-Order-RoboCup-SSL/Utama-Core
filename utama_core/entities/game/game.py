@@ -11,8 +11,8 @@ class Game:
         self.current = CurrentGameFrame(current)
         self._field = field
 
-    def add_game(self, game_frame: GameFrame):
-        self.__past.add_game(self._current_game_standard_frame)
+    def add_game_frame(self, game_frame: GameFrame):
+        self.__past.add_game_frame(self._current_game_standard_frame)
         self._current_game_standard_frame = game_frame
         self.current = CurrentGameFrame(game_frame)
 

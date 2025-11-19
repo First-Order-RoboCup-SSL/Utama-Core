@@ -1,5 +1,5 @@
 import time
-from typing import Deque, List, Tuple
+from typing import Deque, List, Optional, Tuple
 
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game.game_frame import GameFrame
@@ -18,8 +18,17 @@ class GameGater:
         position_refiner: PositionRefiner,
         is_pvp: bool,
         rsim_env: SSLBaseEnv = None,
-    ) -> Tuple[GameFrame, GameFrame]:
-        def _add_frame(my_game_frame: GameFrame, opp_game_frame: GameFrame) -> Tuple[GameFrame, GameFrame]:
+        wait_before_warn: float = 3.0,
+    ) -> Tuple[GameFrame, Optional[GameFrame]]:
+        """
+        Waits until the game frame has the expected number of robots and a ball.
+        This function continuously refines the game frame using vision data until the conditions are met.
+
+        Returns:
+            A tuple containing the refined game frame for the player's team and the opponent's team (if is_pvp is True).
+        """
+
+        def _add_frame(my_game_frame: GameFrame, opp_game_frame: GameFrame) -> Tuple[GameFrame, Optional[GameFrame]]:
             if rsim_env:
                 vision_frames = [rsim_env._frame_to_observations()[0]]
             else:
@@ -29,6 +38,8 @@ class GameGater:
                 opp_game_frame = position_refiner.refine(opp_game_frame, vision_frames)
 
             return my_game_frame, opp_game_frame
+
+        start_time = time.time()
 
         my_game_frame = GameFrame(0, my_team_is_yellow, my_team_is_right, {}, {}, None)
 
@@ -44,6 +55,12 @@ class GameGater:
             or len(my_game_frame.enemy_robots) < exp_enemy
             or my_game_frame.ball is None
         ):
+            if time.time() - start_time > wait_before_warn:
+                start_time = time.time()
+                print("Waiting for valid game frame...")
+                print(f"Friendly robots: {len(my_game_frame.friendly_robots)}/{exp_friendly}")
+                print(f"Enemy robots: {len(my_game_frame.enemy_robots)}/{exp_enemy}")
+                print(f"Ball present: {my_game_frame.ball is not None}\n")
             time.sleep(0.05)
             my_game_frame, opp_game_frame = _add_frame(my_game_frame, opp_game_frame)
 
