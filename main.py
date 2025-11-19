@@ -27,7 +27,7 @@ def main():
         exp_friendly=6,
         exp_enemy=3,
         replay_writer_config=ReplayWriterConfig(
-            replay_name="test_replay_mpc [v2-highDamping]", overwrite_existing=True
+            replay_name="test_replay_mpc [v3-overDamping]", overwrite_existing=True
         ),
         control_scheme="dwa",
     )
