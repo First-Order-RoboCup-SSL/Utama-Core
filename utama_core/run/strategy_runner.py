@@ -77,6 +77,7 @@ class StrategyRunner:
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         control_scheme: str = "pid",
+        print_real_fps: bool = False,  # Turn this on for RSim
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -124,6 +125,11 @@ class StrategyRunner:
         self.game_start_time = time.time()
 
         self.toggle_opp_first = False  # alternate the order of opp and friendly in run
+
+        # FPS Printing
+        self.num_frames_elapsed = 0
+        self.elapsed_time = 0.0
+        self.fps_printing_interval = 1.0
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -524,6 +530,14 @@ class StrategyRunner:
         #     "Game loop took %f secs",
         #     processing_time,
         # )
+
+        self.elapsed_time += end_time - start_time
+        self.num_frames_elapsed += 1
+        if self.elapsed_time >= self.fps_printing_interval:
+            fps = self.num_frames_elapsed / self.elapsed_time
+            print(f"FPS: {fps: .2f}")
+            self.elapsed_time = 0.0
+            self.num_frames_elapsed = 0
 
         # Sleep to maintain FPS
         wait_time = max(0, TIMESTEP - (end_time - start_time))
