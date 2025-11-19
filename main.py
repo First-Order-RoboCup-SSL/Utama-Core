@@ -7,7 +7,7 @@ from utama_core.run import StrategyRunner
 from utama_core.strategy import DefenceStrategy, RobotPlacementStrategy, StartupStrategy
 
 profiler = cProfile.Profile()
-# profiler.enable()
+profiler.enable()
 
 
 def dump():
@@ -26,8 +26,8 @@ def main():
         mode="rsim",
         exp_friendly=6,
         exp_enemy=3,
-        replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
-        control_scheme="dwa",
+        replay_writer_config=ReplayWriterConfig(replay_name="test_replay2", overwrite_existing=True),
+        control_scheme="pid",
     )
     runner.my_strategy.render()
     runner.run()

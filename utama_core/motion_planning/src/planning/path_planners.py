@@ -71,7 +71,6 @@ def point_to_segment_distance(point: np.ndarray, seg_start: np.ndarray, seg_end:
 def segment_to_segment_distance(a1: np.ndarray, a2: np.ndarray, b1: np.ndarray, b2: np.ndarray) -> float:
     """Shortest distance between two line segments in 2D."""
 
-
     u = a2 - a1
     v = b2 - b1
     w = a1 - b1
@@ -172,7 +171,7 @@ class RRTPlanner:
         """Return minimum distance to any robot obstacle."""
         obs = self._get_obstacles(robot_id)
         if not obs:
-            return float('inf')
+            return float("inf")
         if seg_end is None:
             return min(distance(o, seg_start) for o in obs)
         return min(point_to_segment_distance(o, seg_start, seg_end) for o in obs)

@@ -30,7 +30,7 @@ except ImportError:
     _global_mpc = None
 
 # Control mode selection
-USE_MPC = True  # Set to True to use MPC override
+USE_MPC = False  # Set to True to use MPC override
 ENABLE_MPC_LOGGING = True
 
 # Performance tracking
