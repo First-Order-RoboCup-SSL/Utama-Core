@@ -125,6 +125,11 @@ class StrategyRunner:
 
         self.toggle_opp_first = False  # alternate the order of opp and friendly in run
 
+        # Performance tracking
+        self.frame_times = []
+        self.last_fps_print_time = time.time()
+        self.fps_print_interval = 1.0  # Print FPS every second
+
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
 
@@ -517,13 +522,29 @@ class StrategyRunner:
 
         end_time = time.time()
 
-        # processing_time = end_time - start_time
+        # Track performance
+        elapsed_time = end_time - start_time
+        self.frame_times.append(elapsed_time)
 
-        # self.logger.log(
-        #     logging.WARNING if processing_time > TIMESTEP else logging.INFO,
-        #     "Game loop took %f secs",
-        #     processing_time,
-        # )
+        # Print FPS statistics periodically
+        current_time = time.time()
+        if current_time - self.last_fps_print_time >= self.fps_print_interval:
+            if self.frame_times:
+                avg_frame_time = sum(self.frame_times) / len(self.frame_times)
+                real_fps = 1.0 / avg_frame_time if avg_frame_time > 0 else float("inf")
+                target_fps = 1.0 / TIMESTEP
+                min_frame_time = min(self.frame_times)
+                max_frame_time = max(self.frame_times)
+
+                print(
+                    f"FPS: {real_fps:.2f} (target: {target_fps:.2f}) | "
+                    f"Avg frame time: {avg_frame_time*1000:.2f}ms | "
+                    f"Min: {min_frame_time*1000:.2f}ms | Max: {max_frame_time*1000:.2f}ms"
+                )
+
+                # Reset counters
+                self.frame_times = []
+                self.last_fps_print_time = current_time
 
         # Sleep to maintain FPS
         wait_time = max(0, TIMESTEP - (end_time - start_time))

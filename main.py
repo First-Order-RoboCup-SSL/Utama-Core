@@ -5,6 +5,9 @@ import cProfile
 from utama_core.replay import ReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy import DefenceStrategy, RobotPlacementStrategy, StartupStrategy
+from utama_core.strategy.examples.strategies.test_collision.random_charging_strategy import (
+    RandomChargingStrategy,
+)
 
 profiler = cProfile.Profile()
 profiler.enable()
@@ -23,7 +26,7 @@ def main():
         strategy=StartupStrategy(),
         my_team_is_yellow=True,
         my_team_is_right=True,
-        mode="grsim",
+        mode="rsim",
         exp_friendly=6,
         exp_enemy=6,
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
