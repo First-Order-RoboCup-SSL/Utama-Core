@@ -1,6 +1,10 @@
-from typing import Tuple
+from __future__ import annotations
+from typing import Tuple, Optional, TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from utama_core.motion_planning.src.mpc.omni_mpc import OmnidirectionalMPC
 
 from utama_core.config.settings import ROBOT_RADIUS
 from utama_core.entities.data.command import RobotCommand
@@ -8,6 +12,74 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.global_utils.math_utils import rotate_vector
 from utama_core.motion_planning.src.motion_controller import MotionController
+
+# MPC imports
+try:
+    from utama_core.motion_planning.src.mpc.omni_mpc import OmnidirectionalMPC, OmniMPCConfig
+    MPC_AVAILABLE = True
+    # Global MPC instance (reuse solver for speed)
+    _global_mpc = None
+except ImportError:
+    MPC_AVAILABLE = False
+    _global_mpc = None
+
+# Control mode selection
+USE_MPC = True  # Set to True to use MPC, False for PID
+ENABLE_MPC_LOGGING = True  # Log MPC performance every N frames
+
+# Performance tracking
+_mpc_call_count = 0
+_mpc_total_solve_time = 0.0
+_mpc_failures = 0
+
+
+def _get_mpc_instance() -> Optional['OmnidirectionalMPC']:
+    """Get or create global MPC instance"""
+    global _global_mpc
+    if not MPC_AVAILABLE:
+        return None
+    if _global_mpc is None:
+        config = OmniMPCConfig(
+            T=15,  # 15 steps
+            DT=0.05,  # 50ms per step = 0.75s total horizon
+            max_vel=4.0,  # 4 m/s max
+            max_accel=2.0,  # 2 m/s^2
+            Q_pos=10.0,
+            Q_obstacle=30.0,
+            safety_base=0.20,  # Larger safety margin at high speed
+            safety_vel_coeff=0.15,
+        )
+        _global_mpc = OmnidirectionalMPC(config)
+        print("[move_utils] MPC controller initialized")
+    return _global_mpc
+
+
+def _collect_obstacles(game: Game, robot_id: int):
+    """Collect obstacle information for MPC (all other robots)"""
+    obstacles = []
+
+    # Add enemy robots
+    for enemy in game.enemy_robots.values():
+        obstacles.append((
+            enemy.p.x,
+            enemy.p.y,
+            enemy.v.x,
+            enemy.v.y,
+            0.09  # Enemy robot radius
+        ))
+
+    # Add friendly robots (except self)
+    for fid, friendly in game.friendly_robots.items():
+        if fid != robot_id:
+            obstacles.append((
+                friendly.p.x,
+                friendly.p.y,
+                friendly.v.x,
+                friendly.v.y,
+                0.09  # Friendly robot radius
+            ))
+
+    return obstacles
 
 
 def move(
@@ -19,23 +91,82 @@ def move(
     dribbling: bool = False,
 ) -> RobotCommand:
     """Calculate the robot command to move towards a target point with a specified orientation."""
-    pid_trans = motion_controller.pid_trans
-    pid_oren = motion_controller.pid_oren
-
     robot = game.friendly_robots[robot_id]
-
     target_x, target_y = target_coords.x, target_coords.y
 
-    if target_x is not None and target_y is not None:
-        global_x, global_y = pid_trans.calculate((target_x, target_y), (robot.p.x, robot.p.y), robot_id)
-    else:
-        global_x = 0
-        global_y = 0
+    # Choose control method
+    if USE_MPC and MPC_AVAILABLE:
+        # Use MPC for translation control
+        mpc = _get_mpc_instance()
 
+        if mpc is not None and target_x is not None and target_y is not None:
+            # Current state: [x, y, vx, vy]
+            current_state = np.array([
+                robot.p.x,
+                robot.p.y,
+                robot.v.x,
+                robot.v.y
+            ])
+
+            # Goal position
+            goal_pos = (target_x, target_y)
+
+            # Collect obstacles (other robots)
+            obstacles = _collect_obstacles(game, robot_id)
+
+            # Solve MPC
+            try:
+                global_x, global_y, info = mpc.get_control_velocities(
+                    current_state, goal_pos, obstacles
+                )
+
+                # Track performance
+                global _mpc_call_count, _mpc_total_solve_time, _mpc_failures
+                _mpc_call_count += 1
+                if info['success']:
+                    _mpc_total_solve_time += info['solve_time']
+                else:
+                    _mpc_failures += 1
+
+                # Periodic logging
+                if ENABLE_MPC_LOGGING and _mpc_call_count % 300 == 0:  # Every 5 sec at 60Hz
+                    avg_time = (_mpc_total_solve_time / max(1, _mpc_call_count - _mpc_failures)) * 1000
+                    print(f"[MPC Stats] Calls: {_mpc_call_count} | Avg: {avg_time:.2f}ms | "
+                          f"Failures: {_mpc_failures} | Obstacles: {len(obstacles)}")
+
+                # Check for close obstacles (collision warning)
+                if obstacles:
+                    min_dist = min(np.hypot(robot.p.x - obs[0], robot.p.y - obs[1]) for obs in obstacles)
+                    if min_dist < 0.18 and _mpc_call_count % 60 == 0:  # Warn every second
+                        print(f"[MPC Warning] Robot {robot_id} very close to obstacle: {min_dist:.3f}m")
+
+            except Exception as e:
+                # Fallback to PID if MPC fails
+                print(f"[MPC] Failed, using PID fallback: {e}")
+                _mpc_failures += 1
+                global_x, global_y = motion_controller.pid_trans.calculate(
+                    (target_x, target_y), (robot.p.x, robot.p.y), robot_id
+                )
+        else:
+            # Fallback to PID
+            global_x, global_y = motion_controller.pid_trans.calculate(
+                (target_x, target_y), (robot.p.x, robot.p.y), robot_id
+            )
+    else:
+        # Use PID for translation control
+        pid_trans = motion_controller.pid_trans
+        if target_x is not None and target_y is not None:
+            global_x, global_y = pid_trans.calculate((target_x, target_y), (robot.p.x, robot.p.y), robot_id)
+        else:
+            global_x = 0
+            global_y = 0
+
+    # Convert global velocities to robot-local frame
     forward_vel, left_vel = rotate_vector(global_x, global_y, robot.orientation)
 
+    # Use PID for orientation control (keep this regardless of MPC)
     if target_oren is not None:
-        angular_vel = pid_oren.calculate(target_oren, robot.orientation, robot_id)
+        angular_vel = motion_controller.pid_oren.calculate(target_oren, robot.orientation, robot_id)
     else:
         angular_vel = 0
 

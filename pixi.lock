@@ -229,6 +229,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/noarch/zipp-3.23.0-pyhd8ed1ab_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/zstandard-0.24.0-py311h4854a17_1.conda
       - conda: https://prefix.dev/conda-forge/linux-64/zstd-1.5.7-hb8e6e7a_2.conda
+      - pypi: https://files.pythonhosted.org/packages/23/32/ac1f3999273aa4aae48516f6f4b7b267e0cc70d8527866989798cb81312f/casadi-3.7.2-cp311-none-manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/fb/06/6a7c30c3519181263e1bbf0cbea67ef4a43a64443ee16717c7d760214943/lenses-1.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f6/f0/10642828a8dfb741e5f3fbaac830550a518a775c7fff6f04a007259b0548/py-1.11.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/39/1c/9f32299572bce7c1d46ca98425d82f3fe6723a526f05a01b39d491cbfdf6/py_trees-2.3.0-py3-none-any.whl
@@ -403,6 +404,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/noarch/zipp-3.23.0-pyhd8ed1ab_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/zstandard-0.25.0-py311h5bb9006_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/zstd-1.5.7-h6491c7d_2.conda
+      - pypi: https://files.pythonhosted.org/packages/0e/cf/4af27e010d599a5419129d34fdde41637029a1cca2a40bef0965d6d52228/casadi-3.7.2-cp311-none-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/fb/06/6a7c30c3519181263e1bbf0cbea67ef4a43a64443ee16717c7d760214943/lenses-1.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f6/f0/10642828a8dfb741e5f3fbaac830550a518a775c7fff6f04a007259b0548/py-1.11.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/39/1c/9f32299572bce7c1d46ca98425d82f3fe6723a526f05a01b39d491cbfdf6/py_trees-2.3.0-py3-none-any.whl
@@ -815,6 +817,18 @@ packages:
   purls: []
   size: 896173
   timestamp: 1741554795915
+- pypi: https://files.pythonhosted.org/packages/0e/cf/4af27e010d599a5419129d34fdde41637029a1cca2a40bef0965d6d52228/casadi-3.7.2-cp311-none-macosx_11_0_arm64.whl
+  name: casadi
+  version: 3.7.2
+  sha256: 70add3334b437b60a9bc0f864d094350f1a4fcbf9e8bafec870b61aed64674df
+  requires_dist:
+  - numpy
+- pypi: https://files.pythonhosted.org/packages/23/32/ac1f3999273aa4aae48516f6f4b7b267e0cc70d8527866989798cb81312f/casadi-3.7.2-cp311-none-manylinux2014_x86_64.whl
+  name: casadi
+  version: 3.7.2
+  sha256: 5086799a46d10ba884b72fd02c21be09dae52cbc189272354a5d424791b55f37
+  requires_dist:
+  - numpy
 - conda: https://prefix.dev/conda-forge/noarch/certifi-2025.10.5-pyhd8ed1ab_0.conda
   sha256: 955bac31be82592093f6bc006e09822cd13daf52b28643c9a6abd38cd5f4a306
   md5: 257ae203f1d204107ba389607d375ded
