@@ -6,17 +6,6 @@ from utama_core.replay import ReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy import DefenceStrategy, RobotPlacementStrategy, StartupStrategy
 
-profiler = cProfile.Profile()
-profiler.enable()
-
-
-def dump():
-    profiler.disable()
-    profiler.dump_stats("sim_run.prof")
-
-
-atexit.register(dump)
-
 
 def main():
     runner = StrategyRunner(

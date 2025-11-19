@@ -8,7 +8,12 @@ from typing import List, Optional, Tuple
 from utama_core.config.enums import Mode, mode_str_to_enum
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.config.physical_constants import MAX_ROBOTS
-from utama_core.config.settings import MAX_CAMERAS, MAX_GAME_HISTORY, TIMESTEP
+from utama_core.config.settings import (
+    FPS_PRINT_INTERVAL,
+    MAX_CAMERAS,
+    MAX_GAME_HISTORY,
+    TIMESTEP,
+)
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameHistory
@@ -47,6 +52,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)  # If this is within the class, or define it globally in the module
 logging.captureWarnings(True)
+
+import atexit
+import cProfile
+
+profiler = cProfile.Profile()
+
+
+def dump():
+    profiler.disable()
+    profiler.dump_stats("sim_run.prof")
+
+
+atexit.register(dump)
 
 
 class StrategyRunner:
@@ -122,14 +140,12 @@ class StrategyRunner:
 
         self._assert_exp_goals()
 
-        self.game_start_time = time.time()
-
         self.toggle_opp_first = False  # alternate the order of opp and friendly in run
 
         # FPS Printing
         self.num_frames_elapsed = 0
         self.elapsed_time = 0.0
-        self.fps_printing_interval = 1.0
+        self.print_real_fps = print_real_fps
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -484,6 +500,7 @@ class StrategyRunner:
         if self.rsim_env:
             self.rsim_env.render_mode = "human"
         try:
+            profiler.enable()
             while True:
                 self._run_step()
         except KeyboardInterrupt:
@@ -530,17 +547,17 @@ class StrategyRunner:
         #     "Game loop took %f secs",
         #     processing_time,
         # )
-
-        self.elapsed_time += end_time - start_time
+        delta_t = end_time - start_time
+        self.elapsed_time += delta_t
         self.num_frames_elapsed += 1
-        if self.elapsed_time >= self.fps_printing_interval:
+        if self.print_real_fps and self.elapsed_time >= FPS_PRINT_INTERVAL:
             fps = self.num_frames_elapsed / self.elapsed_time
-            print(f"FPS: {fps: .2f}")
+            print(f"\rFPS: {fps: .2f}", end="")
             self.elapsed_time = 0.0
             self.num_frames_elapsed = 0
 
         # Sleep to maintain FPS
-        wait_time = max(0, TIMESTEP - (end_time - start_time))
+        wait_time = max(0, TIMESTEP - delta_t)
         self.logger.info("Sleeping for %f secs", wait_time)
         if self.mode != Mode.RSIM:
             time.sleep(wait_time)

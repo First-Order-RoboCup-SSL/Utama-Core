@@ -31,3 +31,5 @@ MAX_GAME_HISTORY = 20
 
 REPLAY_BASE_PATH = Path.cwd() / "replays"
 RENDER_BASE_PATH = Path.cwd() / "renders"
+
+FPS_PRINT_INTERVAL = 1.0  # seconds
