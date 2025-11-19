@@ -19,7 +19,10 @@ class DynamicWindowConfig:
     target_tolerance: float = 0.01
     max_speed: float = MAX_VEL
     n_directions: int = 8
-
+    v_resolution = 0.05
+    weight_goal = 1.0
+    weight_obstacle = 1.0
+    weight_speed = 0.1
 
 def get_dwa_config(mode: Mode) -> DynamicWindowConfig:
     """Returns the Dynamic Window configuration."""
