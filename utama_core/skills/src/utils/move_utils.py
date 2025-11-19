@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import Tuple
 
 import numpy as np
 
-# --- IMPORTS FROM MAIN BRANCH (NEW STRUCTURE) ---
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
@@ -13,71 +12,14 @@ from utama_core.entities.game import Game
 from utama_core.global_utils.math_utils import rotate_vector
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 
-# if TYPE_CHECKING:
-# from utama_core.motion_planning.src.mpc.omni_mpc import OmnidirectionalMPC
+# --- LOGGING CONFIGURATION ---
+ENABLE_PERFORMANCE_LOGGING = True  # Set to False to silence console
 
-# --- MPC SETUP (FROM YOUR WORK) ---
-try:
-    from utama_core.motion_planning.src.mpc.omni_mpc import (
-        OmnidirectionalMPC,
-        OmniMPCConfig,
-    )
-
-    MPC_AVAILABLE = True
-    _global_mpc = None
-except ImportError:
-    MPC_AVAILABLE = False
-    _global_mpc = None
-
-# Control mode selection
-USE_MPC = True  # Set to True to use MPC override
-ENABLE_MPC_LOGGING = True
-
-# Performance tracking
-_mpc_call_count = 0
-_mpc_total_solve_time = 0.0
-_mpc_failures = 0
-_mpc_robot_speeds = {}
-_last_mpc_log_time = time.time()
-
-_pid_call_count = 0
-_pid_robot_speeds = {}
-_last_pid_log_time = time.time()
-
-
-def _get_mpc_instance() -> Optional["OmnidirectionalMPC"]:
-    """Get or create global MPC instance"""
-    global _global_mpc
-    if not MPC_AVAILABLE:
-        return None
-    if _global_mpc is None:
-        # --- AGGRESSIVE CONFIGURATION (Merged) ---
-        config = OmniMPCConfig(
-            T=5,  # Short horizon for speed (60Hz compliant)
-            DT=0.05,  # 50ms steps
-            max_vel=2.0,  # Limit to 2.0 m/s per your request
-            max_accel=3.0,  # Realistic acceleration for 2.0 m/s
-            Q_pos=80.0,
-            Q_vel=100.0,
-            R_accel=0.05,
-            Q_obstacle=50.0,
-        )
-        _global_mpc = OmnidirectionalMPC(config)
-        print("[move_utils] CVXPY-based MPC controller initialized (HYBRID MERGE)")
-    return _global_mpc
-
-
-def _collect_obstacles(game: Game, robot_id: int):
-    """Collect obstacle information for MPC"""
-    obstacles = []
-    # Add enemy robots
-    for enemy in game.enemy_robots.values():
-        obstacles.append((enemy.p.x, enemy.p.y, enemy.v.x, enemy.v.y, 0.09))
-    # Add friendly robots (except self)
-    for fid, friendly in game.friendly_robots.items():
-        if fid != robot_id:
-            obstacles.append((friendly.p.x, friendly.p.y, friendly.v.x, friendly.v.y, 0.09))
-    return obstacles
+# Global tracking variables
+_call_count = 0
+_last_log_time = time.time()
+_robot_speeds = {}  # Stores {robot_id: speed}
+_total_compute_time = 0.0
 
 
 def move(
@@ -89,83 +31,58 @@ def move(
     dribbling: bool = False,
 ) -> RobotCommand:
     """
-    Unified move function.
-    1. Calculates baseline PID (for rotation and fallback).
-    2. Overwrites translation with MPC if enabled.
+    Calculate the robot command to move towards a target.
+    Delegates logic to motion_controller but handles Performance Logging.
     """
     robot = game.friendly_robots[robot_id]
 
-    # 1. Run Standard PID Controller (Main Branch Logic)
-    # This ensures we always have angular_vel and a safe fallback
-    pid_global_vel, angular_vel = motion_controller.calculate(
+    # --- 1. RUN CONTROLLER & MEASURE TIME ---
+    start_time = time.perf_counter()
+
+    global_velocity, angular_vel = motion_controller.calculate(
         game=game,
         robot_id=robot_id,
         target_pos=target_coords,
         target_oren=target_oren,
     )
 
-    # Default velocities come from PID
-    final_vx, final_vy = pid_global_vel.x, pid_global_vel.y
+    compute_duration = time.perf_counter() - start_time
 
-    # 2. Attempt MPC Override
-    if USE_MPC and MPC_AVAILABLE:
-        mpc = _get_mpc_instance()
-        if mpc and target_coords is not None:
-            current_state = np.array([robot.p.x, robot.p.y, robot.v.x, robot.v.y])
-            goal_pos = (target_coords.x, target_coords.y)
-            obstacles = _collect_obstacles(game, robot_id)
+    # --- 2. PERFORMANCE LOGGING ---
+    if ENABLE_PERFORMANCE_LOGGING:
+        global _call_count, _last_log_time, _robot_speeds, _total_compute_time
 
-            try:
-                mpc_vx, mpc_vy, info = mpc.get_control_velocities(current_state, goal_pos, obstacles)
+        # Update stats
+        _call_count += 1
+        _total_compute_time += compute_duration
 
-                # Performance Tracking
-                global _mpc_call_count, _mpc_total_solve_time, _mpc_failures, _mpc_robot_speeds, _last_mpc_log_time
-                _mpc_call_count += 1
+        # Track speed for this robot
+        speed = np.hypot(global_velocity.x, global_velocity.y)
+        _robot_speeds[robot_id] = speed
 
-                if info["success"]:
-                    _mpc_total_solve_time += info["solve_time"]
-
-                    # OVERWRITE PID TRANSLATION WITH MPC
-                    final_vx, final_vy = mpc_vx, mpc_vy
-
-                    # Stats Update
-                    speed = np.hypot(final_vx, final_vy)
-                    _mpc_robot_speeds[robot_id] = (speed, 0.0)
-
-                    # MPC Logging (with FPS)
-                    if ENABLE_MPC_LOGGING and _mpc_call_count % 60 == 0:
-                        current_time = time.time()
-                        fps = 60.0 / max(0.001, current_time - _last_mpc_log_time)
-                        _last_mpc_log_time = current_time
-                        avg_time = (_mpc_total_solve_time / max(1, _mpc_call_count - _mpc_failures)) * 1000
-
-                        robot_info = " | ".join(
-                            [f"R{rid}: {spd:.2f}m/s" for rid, (spd, _) in sorted(_mpc_robot_speeds.items())]
-                        )
-                        print(f"[MPC Stats] FPS: {fps:.1f} | Avg Solve: {avg_time:.2f}ms | {robot_info}")
-                else:
-                    _mpc_failures += 1
-                    # Fallback to PID (implicitly done by not overwriting final_vx/vy)
-
-            except Exception as e:
-                print(f"[MPC Error] {e}")
-                _mpc_failures += 1
-    else:
-        # PID Stats Logging (Only if MPC is off)
-        global _pid_call_count, _pid_robot_speeds, _last_pid_log_time
-        _pid_call_count += 1
-        speed = np.hypot(final_vx, final_vy)
-        _pid_robot_speeds[robot_id] = (speed, 0.0)
-
-        if ENABLE_MPC_LOGGING and _pid_call_count % 60 == 0:
+        # Log every ~60 calls (approx 1 second at 60Hz)
+        if _call_count % 60 == 0:
             current_time = time.time()
-            fps = 60.0 / max(0.001, current_time - _last_pid_log_time)
-            _last_pid_log_time = current_time
-            robot_info = " | ".join([f"R{rid}: {spd:.2f}m/s" for rid, (spd, _) in sorted(_pid_robot_speeds.items())])
-            print(f"[PID Stats] FPS: {fps:.1f} | {robot_info}")
+            time_diff = current_time - _last_log_time
 
-    # 3. Apply Rotation (Main Branch Logic)
-    forward_vel, left_vel = rotate_vector(final_vx, final_vy, robot.orientation)
+            # Avoid division by zero
+            fps = 60.0 / time_diff if time_diff > 0 else 0.0
+            avg_latency_ms = (_total_compute_time / 60) * 1000
+
+            # Reset counters
+            _last_log_time = current_time
+            _total_compute_time = 0.0
+
+            # Format robot info string
+            robot_info = " | ".join([f"R{rid}: {spd:.2f}m/s" for rid, spd in sorted(_robot_speeds.items())])
+
+            # Print Unified Stats
+            # We try to guess the controller name for better logs
+            ctrl_name = motion_controller.__class__.__name__.replace("Controller", "")
+            print(f"[{ctrl_name} Stats] FPS: {fps:.1f} | Latency: {avg_latency_ms:.2f}ms | {robot_info}")
+
+    # --- 3. CONVERT TO LOCAL FRAME ---
+    forward_vel, left_vel = rotate_vector(global_velocity.x, global_velocity.y, robot.orientation)
 
     return RobotCommand(
         local_forward_vel=forward_vel,
