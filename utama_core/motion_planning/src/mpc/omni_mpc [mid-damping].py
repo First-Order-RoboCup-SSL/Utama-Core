@@ -1,8 +1,9 @@
 """
 Fast Omnidirectional MPC for SSL Robots
-FINAL STABLE VERSION
-- Increased Damping (Fixes Oscillation)
-- Wider Arrival Zone (Smoother stopping)
+FINAL POLISHED VERSION
+- Velocity-Based Safety Margins (Anti-Crash)
+- Soft Constraints (Robustness)
+- Anti-Oscillation Logic (Smooth Arrival)
 """
 
 import time
@@ -49,7 +50,7 @@ class OmnidirectionalMPC:
         self._build_dynamics()
         self.prev_states = None
         self.prev_controls = None
-        print("[OmniMPC] ULTRA-STABLE SOLVER LOADED")
+        print("[OmniMPC] ANTI-OSCILLATION SOLVER LOADED")
 
     def _build_dynamics(self):
         dt = self.config.DT
@@ -72,11 +73,11 @@ class OmnidirectionalMPC:
         cost = 0
         constraints = [X[:, 0] == current_state]
 
-        # --- TUNING CHANGE 1: WIDER ARRIVAL ZONE ---
-        # Increased from 0.15 to 0.30 (30cm)
+        # Check if we are already very close to goal (Arrival Mode)
         dist_to_goal_now = np.linalg.norm(np.array(goal_pos) - current_state[0:2])
-        is_arriving = dist_to_goal_now < 0.30
+        is_arriving = dist_to_goal_now < 0.15  # 15cm arrival zone
 
+        # --- DYNAMIC OBSTACLE PREDICTION ---
         hyperplanes_per_step = []
         if obstacles:
             rx, ry, rvx, rvy = current_state
@@ -92,6 +93,7 @@ class OmnidirectionalMPC:
                     dy = ry - oy_k
                     dist = np.hypot(dx, dy)
 
+                    # Safety Calculation
                     base_margin = self.config.robot_radius * self.config.obstacle_buffer_ratio
                     vel_margin = current_speed * self.config.safety_vel_coeff
                     safety_dist = base_margin + vel_margin + rad
@@ -120,7 +122,8 @@ class OmnidirectionalMPC:
             # --- ANTI-OSCILLATION LOGIC ---
             curr_dist = np.linalg.norm(np.array(goal_pos) - current_state[0:2])
 
-            # Target Velocity Logic
+            # 1. Target Velocity Logic
+            # If we are arriving, FORCE target velocity to 0
             if is_arriving or curr_dist < 0.10:
                 ref_vel = np.zeros(2)
             elif curr_dist > 0.05:
@@ -132,10 +135,11 @@ class OmnidirectionalMPC:
             cost += self.config.Q_pos * cp.sum_squares(X[0:2, k] - goal_pos)
             cost += self.config.Q_vel * cp.sum_squares(X[2:4, k] - ref_vel)
 
-            # --- TUNING CHANGE 2: HEAVIER DAMPING ---
+            # 2. Damping Logic
+            # If arriving, increase control cost to prevent twitching
             if is_arriving:
-                # Increased from 1.0 to 10.0 (Very heavy controls near goal)
-                cost += 10.0 * cp.sum_squares(U[:, k])
+                # High damping (1.0) makes it very expensive to accelerate
+                cost += 1.0 * cp.sum_squares(U[:, k])
             else:
                 # Low damping (0.01) allows aggressive movement
                 cost += self.config.R_accel * cp.sum_squares(U[:, k])
@@ -171,14 +175,17 @@ class OmnidirectionalMPC:
             info["fallback"] = True
             return 0.0, 0.0, info
 
-        # Intelligent Lookahead
+        # --- INTELLIGENT LOOKAHEAD ---
+        # If we are arriving, look closer (don't overshoot).
+        # If we are travelling, look further (accelerate hard).
+
         dist = np.linalg.norm(goal_pos - current_state[0:2])
 
-        # --- TUNING CHANGE 3: WIDER PRECISION LOOKAHEAD ---
-        # Match the new arrival zone (0.30m)
-        if dist < 0.30:
+        if dist < 0.20:
+            # Precision mode: Use immediate next step
             idx = 1
         else:
+            # Turbo mode: Use future step
             idx = min(3, self.config.T)
 
         vx = trajectory[idx, 2]
