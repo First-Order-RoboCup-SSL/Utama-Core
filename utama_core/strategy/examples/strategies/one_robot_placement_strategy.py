@@ -19,27 +19,31 @@ class RobotPlacementStep(AbstractBehaviour):
     """
     A behaviour that commands a robot to move between two specific positions on the field.
 
+    **Args:**
+        invert (bool): Whether to invert the robot's movement direction.
     **Blackboard Interaction:**
         Reads:
-            - `robot_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
+            - `rd_robot_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
 
     **Returns:**
         - `py_trees.common.Status.RUNNING`: The behaviour is actively commanding the robot to move.
     """
 
-    def __init__(self, invert: bool = False):
+    def __init__(self, rd_robot_id: str, invert: bool = False):
         super().__init__()
+        self.robot_id_key = rd_robot_id
+
         self.ty = -1
         self.tx = -1 if invert else 1
 
     def setup_(self):
-        self.blackboard.register_key(key="robot_id", access=py_trees.common.Access.READ)
+        self.blackboard.register_key(key=self.robot_id_key, access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
         """Closure which advances the simulation by one step."""
         game = self.blackboard.game
         rsim_env = self.blackboard.rsim_env
-        id: int = self.blackboard.robot_id
+        id: int = self.blackboard.get(self.robot_id_key)
 
         friendly_robots = game.friendly_robots
 
@@ -73,23 +77,8 @@ class RobotPlacementStep(AbstractBehaviour):
                 rsim_env.draw_point(self.tx, self.ty, color="red")
                 v = game.friendly_robots[id].v
                 p = game.friendly_robots[id].p
-                rsim_env.draw_point(p.x + v.x * 0.167, p.y + v.y * 0.167, color="green")
+                rsim_env.draw_point(p.x + v.x * 0.167 * 5, p.y + v.y * 0.167 * 5, color="green")
 
-            # # Rotate the local forward and left velocities to the global frame
-            # lf_x, lf_y = rotate_vector(cmd.local_forward_vel, 0, -co)
-            # ll_x, ll_y = rotate_vector(0, cmd.local_left_vel, -co)
-
-            # # Draw the local forward vector
-            # self.env.draw_line([(cx, cy), (cx + lf_x, cy + lf_y)], color="blue")
-
-            # # Draw the local left vector
-            # self.env.draw_line([(cx, cy), (cx + ll_x, cy + ll_y)], color="blue")
-
-            # # Rotate the global velocity vector
-            # gx, gy = rotate_vector(cmd.local_forward_vel, cmd.local_left_vel, -co)
-
-            # # Draw the global velocity vector
-            # self.env.draw_line([(cx, cy), (gx + cx, gy + cy)], color="black", width=2)
             self.blackboard.cmd_map[id] = cmd
             return py_trees.common.Status.RUNNING
 
@@ -97,7 +86,7 @@ class RobotPlacementStep(AbstractBehaviour):
 class SetBlackboardVariable(AbstractBehaviour):
     """A generic behaviour to set a variable on the blackboard."""
 
-    def __init__(self, name: str, variable_name: str, value: Any, opp_strategy: bool = False):
+    def __init__(self, name: str, variable_name: str, value: Any):
         super().__init__(name=name)
         self.variable_name = variable_name
         self.value = value
@@ -136,14 +125,18 @@ class RobotPlacementStrategy(AbstractStrategy):
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete behaviour tree."""
 
+        robot_id_key = "target_robot_id"
+
+        coach_root = Sequence(name="CoachRoot", memory=False)
+
         set_rbt_id = SetBlackboardVariable(
             name="SetTargetRobotID",
-            variable_name="robot_id",
+            variable_name=robot_id_key,
             value=self.robot_id,
         )
 
-        # Create the root of the behaviour tree
-        coach_root = Sequence(name="CoachRoot", memory=False)
-        coach_root.add_children([set_rbt_id, RobotPlacementStep()])
+        ### Assemble the tree ###
+
+        coach_root.add_children([set_rbt_id, RobotPlacementStep(rd_robot_id=robot_id_key)])
 
         return coach_root
