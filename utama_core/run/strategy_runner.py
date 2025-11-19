@@ -7,6 +7,9 @@ import warnings
 from collections import deque
 from typing import List, Optional, Tuple
 
+from rich.live import Live
+from rich.text import Text
+
 from utama_core.config.enums import Mode, mode_str_to_enum
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.config.physical_constants import MAX_ROBOTS
@@ -54,6 +57,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)  # If this is within the class, or define it globally in the module
 logging.captureWarnings(True)
+
+_fps_live = Live(auto_refresh=False)
+_fps_live.start()  # manually control it so it never overrides prints
 
 profiler = cProfile.Profile()
 
@@ -559,7 +565,11 @@ class StrategyRunner:
         self.num_frames_elapsed += 1
         if self.print_real_fps and self.elapsed_time >= FPS_PRINT_INTERVAL:
             fps = self.num_frames_elapsed / self.elapsed_time
-            print(f"FPS: {fps: .2f}")
+
+            # Update the live FPS area (one line, no box)
+            _fps_live.update(Text(f"FPS: {fps:.2f}"))
+            _fps_live.refresh()
+
             self.elapsed_time = 0.0
             self.num_frames_elapsed = 0
 
