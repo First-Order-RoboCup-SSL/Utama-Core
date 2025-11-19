@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Tuple, Optional, TYPE_CHECKING
 
+import time
 import numpy as np
 
 if TYPE_CHECKING:
@@ -24,18 +25,20 @@ except ImportError:
     _global_mpc = None
 
 # Control mode selection
-USE_MPC = True  # Set to True to use MPC, False for PID
+USE_MPC = False  # Set to True to use MPC, False for PID
 ENABLE_MPC_LOGGING = True  # Log MPC performance every N frames
 
 # Performance tracking
 _mpc_call_count = 0
 _mpc_total_solve_time = 0.0
 _mpc_failures = 0
-_mpc_robot_speeds = {}  # Track speed per robot
+_mpc_robot_speeds = {} 
+_last_mpc_log_time = time.time() 
 
 # PID tracking
 _pid_call_count = 0
-_pid_robot_speeds = {}  # Track speed per robot
+_pid_robot_speeds = {} 
+_last_pid_log_time = time.time()
 
 
 def _get_mpc_instance() -> Optional['OmnidirectionalMPC']:
@@ -44,10 +47,21 @@ def _get_mpc_instance() -> Optional['OmnidirectionalMPC']:
     if not MPC_AVAILABLE:
         return None
     if _global_mpc is None:
-        # Use default config from OmniMPCConfig (already tuned)
-        config = OmniMPCConfig()
+        # --- AGGRESSIVE CONFIGURATION ---
+        config = OmniMPCConfig(
+            T=5,            # Short horizon for speed
+            DT=0.05,        # 50ms steps
+            max_vel=4.0,    
+            max_accel=15.0, # Aggressive acceleration
+            Q_pos=80.0,     
+            Q_vel=200.0,    # Force velocity tracking
+            R_accel=0.01,   
+            Q_obstacle=50.0,
+            safety_base=0.15,
+            safety_vel_coeff=0.05,
+        )
         _global_mpc = OmnidirectionalMPC(config)
-        print("[move_utils] CVXPY-based MPC controller initialized (SPEED MODE)")
+        print("[move_utils] CVXPY-based MPC controller initialized (AGGRESSIVE MODE)")
     return _global_mpc
 
 
@@ -118,7 +132,7 @@ def move(
                 )
 
                 # Track performance
-                global _mpc_call_count, _mpc_total_solve_time, _mpc_failures, _mpc_robot_speeds
+                global _mpc_call_count, _mpc_total_solve_time, _mpc_failures, _mpc_robot_speeds, _last_mpc_log_time
                 _mpc_call_count += 1
                 if info['success']:
                     _mpc_total_solve_time += info['solve_time']
@@ -130,20 +144,27 @@ def move(
                 dist_to_goal = np.hypot(target_x - robot.p.x, target_y - robot.p.y)
                 _mpc_robot_speeds[robot_id] = (speed, dist_to_goal)
 
-                # Periodic logging (every 1 sec instead of 5 sec)
-                if ENABLE_MPC_LOGGING and _mpc_call_count % 60 == 0:  # Every 1 sec at 60Hz
+                # Periodic logging (every 1 sec approx)
+                if ENABLE_MPC_LOGGING and _mpc_call_count % 60 == 0:
+                    # --- CALCULATE FPS ---
+                    current_time = time.time()
+                    time_diff = current_time - _last_mpc_log_time
+                    # effective_fps = (Calls / Diff) / Num_Robots (Approx)
+                    fps = 60.0 / time_diff if time_diff > 0 else 0.0
+                    _last_mpc_log_time = current_time
+                    
                     avg_time = (_mpc_total_solve_time / max(1, _mpc_call_count - _mpc_failures)) * 1000
-                    # Show all robots
-                    robot_info = " | ".join([f"R{rid}: {spd:.2f}m/s @{dist:.2f}m"
-                                            for rid, (spd, dist) in sorted(_mpc_robot_speeds.items())])
-                    print(f"[MPC Stats] t={_mpc_call_count/60:.0f}s | Avg: {avg_time:.2f}ms | "
-                          f"Fails: {_mpc_failures} | {robot_info}")
+                    robot_info = " | ".join([f"R{rid}: {spd:.2f}m/s" for rid, (spd, dist) in sorted(_mpc_robot_speeds.items())])
+                    
+                    # Print with FPS
+                    print(f"[MPC Stats] FPS: {fps:.1f} | Avg Solve: {avg_time:.2f}ms | {robot_info}")
 
                 # Check for close obstacles (collision warning)
                 if obstacles:
                     min_dist = min(np.hypot(robot.p.x - obs[0], robot.p.y - obs[1]) for obs in obstacles)
                     if min_dist < 0.18 and _mpc_call_count % 60 == 0:  # Warn every second
-                        print(f"[MPC Warning] Robot {robot_id} very close to obstacle: {min_dist:.3f}m")
+                        # print(f"[MPC Warning] Robot {robot_id} very close to obstacle: {min_dist:.3f}m")
+                        pass
 
             except Exception as e:
                 # Fallback to PID if MPC fails
@@ -164,7 +185,7 @@ def move(
             global_x, global_y = pid_trans.calculate((target_x, target_y), (robot.p.x, robot.p.y), robot_id)
 
             # PID logging
-            global _pid_call_count, _pid_robot_speeds
+            global _pid_call_count, _pid_robot_speeds, _last_pid_log_time
             _pid_call_count += 1
 
             # Track this robot's speed
@@ -174,10 +195,16 @@ def move(
 
             # Periodic logging (every 1 sec)
             if ENABLE_MPC_LOGGING and _pid_call_count % 60 == 0:
-                # Show all robots
-                robot_info = " | ".join([f"R{rid}: {spd:.2f}m/s @{dist:.2f}m"
-                                        for rid, (spd, dist) in sorted(_pid_robot_speeds.items())])
-                print(f"[PID Stats] t={_pid_call_count/60:.0f}s | {robot_info}")
+                # --- CALCULATE FPS ---
+                current_time = time.time()
+                time_diff = current_time - _last_pid_log_time
+                fps = 60.0 / time_diff if time_diff > 0 else 0.0
+                _last_pid_log_time = current_time
+
+                robot_info = " | ".join([f"R{rid}: {spd:.2f}m/s" for rid, (spd, dist) in sorted(_pid_robot_speeds.items())])
+                
+                # Print with FPS
+                print(f"[PID Stats] FPS: {fps:.1f} | {robot_info}")
         else:
             global_x = 0
             global_y = 0
