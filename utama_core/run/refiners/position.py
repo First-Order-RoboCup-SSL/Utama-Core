@@ -3,6 +3,7 @@ from dataclasses import replace
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import pickle
 
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -71,6 +72,11 @@ class PositionRefiner(BaseRefiner):
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
         
+        #print(combined_vision_data, "\n")
+        
+        with open("noisy-raw.pkl", "ab") as f:
+            pickle.dump(combined_vision_data, f)
+        
         filtered_vision_data: VisionData = VisionData(
             ts=combined_vision_data.ts,
             yellow_robots=list(
@@ -85,6 +91,11 @@ class PositionRefiner(BaseRefiner):
                 ),
             balls=combined_vision_data.balls
         )
+        
+        #print(filtered_vision_data, "\n")
+        
+        with open("noisy-filtered.pkl", "ab") as f:
+            pickle.dump(filtered_vision_data, f)
 
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:

@@ -221,7 +221,8 @@ class AbstractStrategy(ABC):
     def step(self):
         # start_time = time.time()
         game = self.blackboard.game
-
+        
+        # Dict[int, Union[None, RobotCommand]]. Initialise empty Dict.
         self.blackboard.cmd_map = {robot_id: None for robot_id in game.friendly_robots}
 
         self.behaviour_tree.tick()
@@ -232,6 +233,7 @@ class AbstractStrategy(ABC):
 
             # if the robot is not assigned a command, execute the default action
             else:
+                # Dict[int, Role]
                 if robot_id not in self.blackboard.role_map:
                     role = Role.UNASSIGNED
                 else:

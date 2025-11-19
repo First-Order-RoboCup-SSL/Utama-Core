@@ -1,5 +1,6 @@
 import numpy as np
 from collections import deque
+from scipy.signal import firwin
 from utama_core.entities.data.vision import VisionRobotData
 
 class FIR_filter:
@@ -17,22 +18,24 @@ class FIR_filter:
     taps : array-like or None
         FIR taps. If None, a boxcar of length `window_len` is used.
     window_len : int
-        Length for boxcar if `taps` is None. Default 7.
+        Length for boxcar if `taps` is None. Default 20.
     """
 
-    def __init__(self, fs=60.0, taps=None, window_len=7):
+    def __init__(self, fs=60.0, taps=None, window_len=20):
         self.fs = float(fs)
+        self.N = window_len
 
         if taps is None:
             assert window_len >= 1, "window_len must be >= 1"
-            self.taps = np.ones(window_len, dtype=float) / float(window_len)
+            self.taps = firwin(window_len, self.approx_boxcar_fc, fs=fs)
+            #self.taps = np.ones(window_len, dtype=float) / float(window_len)
         else:
             t = np.asarray(taps, dtype=float).ravel()
             assert t.size >= 1, "taps must have at least 1 element"
             # Normalize taps to sum to 1 for unity DC gain
             self.taps = t / np.sum(t)
+            self.N = self.taps.size
 
-        self.N = self.taps.size
         self.buf_x = deque(maxlen=self.N)
         self.buf_y = deque(maxlen=self.N)
         self.buf_th = deque(maxlen=self.N)
@@ -51,10 +54,10 @@ class FIR_filter:
     def approx_boxcar_fc(self):
         """
         Approximate -3 dB cutoff for a boxcar of length N:
-        fc ≈ 0.443 * fs / N.
+        fc = 0.4 * fs / N.
         For non-boxcar taps, this is just a reference.
         """
-        return 0.443 * self.fs / self.N
+        return 0.4 * self.fs
 
     @staticmethod
     def wrap_angle(a):
