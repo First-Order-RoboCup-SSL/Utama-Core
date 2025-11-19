@@ -72,7 +72,7 @@ class PositionRefiner(BaseRefiner):
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
         
-        #print(combined_vision_data, "\n")
+        # print(combined_vision_data, "\n")
         
         with open("noisy-raw.pkl", "ab") as f:
             pickle.dump(combined_vision_data, f)
@@ -92,7 +92,7 @@ class PositionRefiner(BaseRefiner):
             balls=combined_vision_data.balls
         )
         
-        #print(filtered_vision_data, "\n")
+        # print(filtered_vision_data, "\n")
         
         with open("noisy-filtered.pkl", "ab") as f:
             pickle.dump(filtered_vision_data, f)
