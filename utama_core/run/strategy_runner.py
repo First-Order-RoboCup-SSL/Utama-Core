@@ -1,3 +1,5 @@
+import atexit
+import cProfile
 import logging
 import threading
 import time
@@ -53,9 +55,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)  # If this is within the class, or define it globally in the module
 logging.captureWarnings(True)
 
-import atexit
-import cProfile
-
 profiler = cProfile.Profile()
 
 
@@ -81,6 +80,8 @@ class StrategyRunner:
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
         control_scheme (str, optional): Name of the motion control scheme to use.
+        print_real_fps (bool, optional): Whether to print real FPS. Defaults to False.
+        run_profiler (bool, optional): Whether to run the profiler. Defaults to False.
     """
 
     def __init__(
@@ -96,6 +97,7 @@ class StrategyRunner:
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         control_scheme: str = "pid",
         print_real_fps: bool = False,  # Turn this on for RSim
+        run_profiler: bool = False,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -146,6 +148,7 @@ class StrategyRunner:
         self.num_frames_elapsed = 0
         self.elapsed_time = 0.0
         self.print_real_fps = print_real_fps
+        self.run_profiler = run_profiler
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -460,6 +463,8 @@ class StrategyRunner:
                 self._reset_game()
                 episode_start_time = time.time()
                 # for simplicity, we assume rsim is running in real time. May need to change this
+                if self.run_profiler:
+                    profiler.enable()
                 while True:
                     if (time.time() - episode_start_time) > episode_timeout:
                         passed = False
@@ -481,6 +486,7 @@ class StrategyRunner:
                     elif status == TestingStatus.SUCCESS:
                         self._reset_robots()
                         break
+                profiler.disable()
         except KeyboardInterrupt:
             self.logger.info("Terminating...")
         finally:
@@ -500,7 +506,8 @@ class StrategyRunner:
         if self.rsim_env:
             self.rsim_env.render_mode = "human"
         try:
-            profiler.enable()
+            if self.run_profiler:
+                profiler.enable()
             while True:
                 self._run_step()
         except KeyboardInterrupt:
@@ -552,7 +559,7 @@ class StrategyRunner:
         self.num_frames_elapsed += 1
         if self.print_real_fps and self.elapsed_time >= FPS_PRINT_INTERVAL:
             fps = self.num_frames_elapsed / self.elapsed_time
-            print(f"\rFPS: {fps: .2f}", end="")
+            print(f"FPS: {fps: .2f}")
             self.elapsed_time = 0.0
             self.num_frames_elapsed = 0
 
