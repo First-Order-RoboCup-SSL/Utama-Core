@@ -7,7 +7,6 @@ from utama_core.motion_planning.src.pid.pid_abstract import AbstractPID
 
 class PIDAccelerationLimiterWrapper:
     """Wraps a PID controller and limits the acceleration using a fixed time step (dt).
-
     Maintains separate state for each robot to prevent interference.
     """
 

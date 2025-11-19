@@ -23,19 +23,14 @@ class DWATranslationController:
         self._planner_config = config
         self.env: SSLStandardEnv | None = env
         self._control_period = TIMESTEP
-        self._planner: Optional[DynamicWindowPlanner] = None
+        self._planner = DynamicWindowPlanner(
+            config=self._planner_config,
+            env=self.env,
+        )
         self._acceleration_limiter = AccelerationLimiter(
             max_acceleration=self._planner_config.max_acceleration,
             dt=self._control_period,
         )
-
-    def _ensure_planner(self, game: Game) -> DynamicWindowPlanner:
-        if not isinstance(game, Game):
-            raise TypeError(f"DWA planner requires a Game instance. {type(game)} given.")
-
-        if self._planner is None:
-            self._planner = self._create_planner(game)
-        return self._planner
 
     def calculate(
         self,
@@ -43,8 +38,6 @@ class DWATranslationController:
         target: Vector2D,
         robot_id: int,
     ) -> Vector2D:
-        planner = self._ensure_planner(game)
-
         current = game.friendly_robots[robot_id].p
         if current is None:
             return Vector2D(0.0, 0.0)
@@ -57,7 +50,8 @@ class DWATranslationController:
             self._acceleration_limiter.reset(robot_id)
             return zero_velocity
 
-        path = planner.path_to(
+        path = self._planner.path_to(
+            game,
             robot_id,
             target,
             temporary_obstacles=[],
@@ -93,10 +87,3 @@ class DWATranslationController:
             return Vector2D(0.0, 0.0)
         scale = self._planner_config.max_speed / speed
         return Vector2D(velocity.x * scale, velocity.y * scale)
-
-    def _create_planner(self, game: Game) -> DynamicWindowPlanner:
-        return DynamicWindowPlanner(
-            game=game,
-            config=self._planner_config,
-            env=self.env,
-        )
