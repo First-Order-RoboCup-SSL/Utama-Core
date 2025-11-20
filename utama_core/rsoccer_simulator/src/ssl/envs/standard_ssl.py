@@ -291,6 +291,8 @@ class SSLStandardEnv(SSLBaseEnv):
         if robot_states is None or not prev_dribbler[index] or dribbler:
             return 0.0
 
+        if index not in robot_states:
+            return 0.0
         robot_state = robot_states[index]
         if not getattr(robot_state, "infrared", False):
             return 0.0
