@@ -477,7 +477,7 @@ class StrategyRunner:
                 self._reset_game()
                 episode_start_time = time.time()
                 # for simplicity, we assume rsim is running in real time. May need to change this
-                if self.profiler is not None:
+                if self.profiler:
                     self.profiler.enable()
                 while True:
                     if (time.time() - episode_start_time) > episode_timeout:
@@ -500,7 +500,7 @@ class StrategyRunner:
                     elif status == TestingStatus.SUCCESS:
                         self._reset_robots()
                         break
-                if self.profiler is not None:
+                if self.profiler:
                     self.profiler.disable()
         except KeyboardInterrupt:
             self.logger.info("Terminating...")
@@ -518,7 +518,7 @@ class StrategyRunner:
         if self.rsim_env:
             self.rsim_env.render_mode = "human"
         try:
-            if self.profiler is not None:
+            if self.profiler:
                 self.profiler.enable()
             while True:
                 self._run_step()
