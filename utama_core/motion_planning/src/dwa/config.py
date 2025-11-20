@@ -29,3 +29,5 @@ def get_dwa_config(mode: Mode) -> DynamicWindowConfig:
         return DynamicWindowConfig(
             max_speed=REAL_PARAMS.MAX_VEL, max_acceleration=REAL_PARAMS.MAX_ACCELERATION, target_tolerance=0.015
         )
+    else:
+        raise ValueError(f"Unknown mode for DWA config: {mode}")
