@@ -1,22 +1,19 @@
 import logging
 from math import dist, pi
-from typing import Generator, List, Optional, Tuple, Union
 
 import numpy as np # type: ignore
 
-from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
-import copy
-import math
+
+
 from math import exp
-from typing import Iterable, List, Optional
+from typing import List, Tuple
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
-from utama_core.config.settings import TIMESTEP
-from utama_core.entities.data.vector import Vector2D
+
 from utama_core.entities.game import Game
-from utama_core.entities.game.robot import Robot
+
 from utama_core.global_utils.math_utils import normalise_heading
 
 logger = logging.getLogger(__name__)
@@ -201,7 +198,7 @@ class BisectorPlanner:
 
                
                 seg1_start, seg1_end = our_pos, p1
-                seg2_start, seg2_end = p1, ((p1+target)/2 * 1)
+                seg2_start, seg2_end = p1, ((p1+target)/2 * 1.25)
             
                 if all(
                     point_to_segment_distance(o, seg1_start, seg1_end) > self.OBSTACLE_CLEARANCE for o in obstacles
