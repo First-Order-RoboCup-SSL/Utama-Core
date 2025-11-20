@@ -1,7 +1,7 @@
 import logging
 import math
 import random
-from typing import Tuple
+from typing import Dict, List, Optional, Tuple
 
 import gymnasium as gym
 import numpy as np
@@ -236,7 +236,7 @@ class SSLStandardEnv(SSLBaseEnv):
             kick_v_x = KICK_SPD if actions["team_yellow"][i][3] > 0 else 0.0
 
             cmd = Robot(
-                yellow=True,  # Yellow team,
+                yellow=True,  # Yellow team
                 id=i,  # ID of the robot
                 v_x=v_x,
                 v_y=v_y,
@@ -284,7 +284,14 @@ class SSLStandardEnv(SSLBaseEnv):
         self.prev_speed_blue = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[:n_blue]]
         self.prev_speed_yellow = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[n_blue:]]
 
-    def _dribbler_release_kick(self, robot_states, prev_dribbler, prev_speed, index, dribbler):
+    def _dribbler_release_kick(
+        self,
+        robot_states: Optional[Dict[int, Robot]],
+        prev_dribbler: List[bool],
+        prev_speed: List[float],
+        index: int,
+        dribbler: bool,
+    ) -> float:
         """Estimate the kick needed to release the ball when the dribbler turns off."""
         if robot_states is None or not prev_dribbler[index] or dribbler:
             return 0.0
