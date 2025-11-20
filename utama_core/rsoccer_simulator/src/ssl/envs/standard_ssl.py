@@ -8,7 +8,12 @@ import numpy as np
 
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.config.robot_params.rsim import KICK_SPD
-from utama_core.config.settings import TIMESTEP
+from utama_core.config.settings import (
+    MAX_BALL_SPEED,
+    MIN_RELEASE_SPEED,
+    RELEASE_GAIN,
+    TIMESTEP,
+)
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.global_utils.math_utils import deg_to_rad, rad_to_deg
@@ -106,6 +111,8 @@ class SSLStandardEnv(SSLBaseEnv):
         # the dribbler turns off in a way that depends on robot speed.
         self.prev_dribbler_blue = [False] * self.n_robots_blue
         self.prev_dribbler_yellow = [False] * self.n_robots_yellow
+        self.prev_speed_blue = [0.0] * self.n_robots_blue
+        self.prev_speed_yellow = [0.0] * self.n_robots_yellow
 
         logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
@@ -114,6 +121,8 @@ class SSLStandardEnv(SSLBaseEnv):
         # Reset dribbler tracking state
         self.prev_dribbler_blue = [False] * self.n_robots_blue
         self.prev_dribbler_yellow = [False] * self.n_robots_yellow
+        self.prev_speed_blue = [0.0] * self.n_robots_blue
+        self.prev_speed_yellow = [0.0] * self.n_robots_yellow
         return super().reset(seed=seed, options=options)
 
     def step(self, action):
@@ -126,25 +135,17 @@ class SSLStandardEnv(SSLBaseEnv):
         self.steps += 1
         commands = self._get_commands(action)
 
+        # Apply any implicit kicks caused by dribbler state transitions.
+        self._apply_dribbler_release_kicks(commands)
+
         # Send command to simulator
         self.rsim.send_commands(commands)
         self.sent_commands = commands
 
-        # Get Frame from simulator
+        # Get Frame from simulator and update dribbler/speed history
         self.last_frame = self.frame
         self.frame = self.rsim.get_frame()
-
-        # Derive current dribbler commands from actions (blue first, then yellow)
-        n_blue = self.n_robots_blue
-        curr_dribbler_blue = [cmd.dribbler for cmd in commands[:n_blue]]
-        curr_dribbler_yellow = [cmd.dribbler for cmd in commands[n_blue:]]
-
-        # Update dribbler history for the next step
-        self.prev_dribbler_blue = curr_dribbler_blue
-        self.prev_dribbler_yellow = curr_dribbler_yellow
-
-        self.prev_speed_blue = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[:n_blue]]
-        self.prev_speed_yellow = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[n_blue:]]
+        self._update_dribbler_history(commands)
 
         # Calculate environment observation, reward and done condition
         observation = self._frame_to_observations()
@@ -205,15 +206,6 @@ class SSLStandardEnv(SSLBaseEnv):
     def _get_commands(self, actions) -> list[Robot]:
         commands = []
 
-        # Use current frame information (robot velocities and infrared) to
-        # model a ball release when the dribbler turns off on this step.
-        frame = self.frame
-
-        # Constants for mapping robot speed to ball release speed
-        MIN_RELEASE_SPEED = 0.1  # m/s
-        RELEASE_GAIN = 0.1
-        MAX_BALL_SPEED = 3.0  # m/s
-
         # Blue robots
         for i in range(self.n_robots_blue):
             v_x = actions["team_blue"][i][0]
@@ -221,18 +213,7 @@ class SSLStandardEnv(SSLBaseEnv):
             v_theta = actions["team_blue"][i][2]
 
             dribbler = actions["team_blue"][i][4] > 0
-            base_kick_v_x = KICK_SPD if actions["team_blue"][i][3] > 0 else 0.0
-            release_kick_v_x = 0.0
-
-            # If the dribbler is turning off this step and the robot had the
-            # ball in the previous frame, approximate a release by sending a
-            # kick whose speed depends on the robot's linear speed.
-            if frame is not None and self.prev_dribbler_blue[i] and not dribbler:
-                robot_state = frame.robots_blue[i]
-                if getattr(robot_state, "infrared", False):
-                    speed = self.prev_speed_blue[i]
-                    if speed >= MIN_RELEASE_SPEED:
-                        release_kick_v_x = min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
+            kick_v_x = KICK_SPD if actions["team_blue"][i][3] > 0 else 0.0
 
             cmd = Robot(
                 yellow=False,  # Blue team
@@ -240,7 +221,7 @@ class SSLStandardEnv(SSLBaseEnv):
                 v_x=v_x,
                 v_y=v_y,
                 v_theta=v_theta,
-                kick_v_x=max(base_kick_v_x, release_kick_v_x),
+                kick_v_x=kick_v_x,
                 dribbler=dribbler,
             )
             commands.append(cmd)
@@ -252,15 +233,7 @@ class SSLStandardEnv(SSLBaseEnv):
             v_theta = actions["team_yellow"][i][2]
 
             dribbler = actions["team_yellow"][i][4] > 0
-            base_kick_v_x = KICK_SPD if actions["team_yellow"][i][3] > 0 else 0.0
-            release_kick_v_x = 0.0
-
-            if frame is not None and self.prev_dribbler_yellow[i] and not dribbler:
-                robot_state = frame.robots_yellow[i]
-                if getattr(robot_state, "infrared", False):
-                    speed = self.prev_speed_yellow[i]
-                    if speed >= MIN_RELEASE_SPEED:
-                        release_kick_v_x = min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
+            kick_v_x = KICK_SPD if actions["team_yellow"][i][3] > 0 else 0.0
 
             cmd = Robot(
                 yellow=True,  # Yellow team,
@@ -268,12 +241,63 @@ class SSLStandardEnv(SSLBaseEnv):
                 v_x=v_x,
                 v_y=v_y,
                 v_theta=v_theta,
-                kick_v_x=max(base_kick_v_x, release_kick_v_x),
+                kick_v_x=kick_v_x,
                 dribbler=dribbler,
             )
             commands.append(cmd)
 
         return commands
+
+    def _apply_dribbler_release_kicks(self, commands: list[Robot]) -> None:
+        """Approximate kicks when dribblers turn off for robots that had possession.
+
+        This mutates the provided ``commands`` list in-place, potentially
+        increasing ``kick_v_x`` for robots whose dribbler transitioned from
+        on to off while they were moving with the ball.
+        """
+        prior_frame = self.frame
+        blue_states = prior_frame.robots_blue if prior_frame is not None else None
+        yellow_states = prior_frame.robots_yellow if prior_frame is not None else None
+
+        n_blue = self.n_robots_blue
+        for i in range(n_blue):
+            release = self._dribbler_release_kick(
+                blue_states, self.prev_dribbler_blue, self.prev_speed_blue, i, commands[i].dribbler
+            )
+            if release > 0.0:
+                commands[i].kick_v_x = max(commands[i].kick_v_x, release)
+
+        for j in range(self.n_robots_yellow):
+            cmd_idx = n_blue + j
+            release = self._dribbler_release_kick(
+                yellow_states, self.prev_dribbler_yellow, self.prev_speed_yellow, j, commands[cmd_idx].dribbler
+            )
+            if release > 0.0:
+                commands[cmd_idx].kick_v_x = max(commands[cmd_idx].kick_v_x, release)
+
+    def _update_dribbler_history(self, commands: list[Robot]) -> None:
+        """Update previous dribbler and speed history for all robots."""
+        n_blue = self.n_robots_blue
+        self.prev_dribbler_blue = [cmd.dribbler for cmd in commands[:n_blue]]
+        self.prev_dribbler_yellow = [cmd.dribbler for cmd in commands[n_blue:]]
+
+        self.prev_speed_blue = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[:n_blue]]
+        self.prev_speed_yellow = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[n_blue:]]
+
+    def _dribbler_release_kick(self, robot_states, prev_dribbler, prev_speed, index, dribbler):
+        """Estimate the kick needed to release the ball when the dribbler turns off."""
+        if robot_states is None or not prev_dribbler[index] or dribbler:
+            return 0.0
+
+        robot_state = robot_states[index]
+        if not getattr(robot_state, "infrared", False):
+            return 0.0
+
+        speed = prev_speed[index]
+        if speed < MIN_RELEASE_SPEED:
+            return 0.0
+
+        return min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
 
     def _calculate_reward_and_done(self):
         if self.reward_shaping_total is None:
