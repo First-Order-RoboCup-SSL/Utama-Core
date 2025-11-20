@@ -433,7 +433,7 @@ class StrategyRunner:
 
     def _cleanup(self):
         """Cleanup resources such as profiler, replay writer, fps_monitor, and rsim env."""
-        if self.profiler is not None:
+        if self.profiler:
             self.profiler.disable()
             self.profiler.dump_stats(f"{self.profiler_name}.prof")
         if self.replay_writer:
