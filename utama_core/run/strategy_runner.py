@@ -561,21 +561,22 @@ class StrategyRunner:
             time.sleep(wait_time)
 
         # --- end of frame ---
-        frame_end = time.perf_counter()
-        frame_dt = frame_end - frame_start
+        if self.print_real_fps:
+            frame_end = time.perf_counter()
+            frame_dt = frame_end - frame_start
 
-        self.elapsed_time += frame_dt
-        self.num_frames_elapsed += 1
+            self.elapsed_time += frame_dt
+            self.num_frames_elapsed += 1
 
-        if self.print_real_fps and self.elapsed_time >= FPS_PRINT_INTERVAL:
-            fps = self.num_frames_elapsed / self.elapsed_time
+            if self.elapsed_time >= FPS_PRINT_INTERVAL:
+                fps = self.num_frames_elapsed / self.elapsed_time
 
-            # Update the live FPS area (one line, no box)
-            self._fps_live.update(Text(f"FPS: {fps:.2f}"))
-            self._fps_live.refresh()
+                # Update the live FPS area (one line, no box)
+                self._fps_live.update(Text(f"FPS: {fps:.2f}"))
+                self._fps_live.refresh()
 
-            self.elapsed_time = 0.0
-            self.num_frames_elapsed = 0
+                self.elapsed_time = 0.0
+                self.num_frames_elapsed = 0
 
     def _step_game(
         self,
