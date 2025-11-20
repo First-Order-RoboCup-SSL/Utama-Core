@@ -6,7 +6,7 @@ import gymnasium as gym
 import numpy as np
 
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
-from utama_core.config.robot_params.rsim import KICK_SPD
+from utama_core.config.robot_params import RSIM_PARAMS
 from utama_core.config.settings import TIMESTEP
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
@@ -171,7 +171,7 @@ class SSLStandardEnv(SSLBaseEnv):
                 v_x=v_x,
                 v_y=v_y,
                 v_theta=v_theta,
-                kick_v_x=KICK_SPD if actions["team_blue"][i][3] > 0 else 0.0,
+                kick_v_x=RSIM_PARAMS.KICK_SPD if actions["team_blue"][i][3] > 0 else 0.0,
                 dribbler=True if actions["team_blue"][i][4] > 0 else False,
             )
             commands.append(cmd)
@@ -186,7 +186,7 @@ class SSLStandardEnv(SSLBaseEnv):
                 v_x=v_x,
                 v_y=v_y,
                 v_theta=v_theta,
-                kick_v_x=KICK_SPD if actions["team_yellow"][i][3] > 0 else 0.0,
+                kick_v_x=RSIM_PARAMS.KICK_SPD if actions["team_yellow"][i][3] > 0 else 0.0,
                 dribbler=True if actions["team_yellow"][i][4] > 0 else False,
             )
             commands.append(cmd)

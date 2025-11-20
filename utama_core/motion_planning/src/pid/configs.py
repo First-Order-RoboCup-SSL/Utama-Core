@@ -2,11 +2,7 @@ from dataclasses import dataclass
 from typing import Union
 
 from utama_core.config.enums import Mode
-from utama_core.config.robot_params.grsim import MAX_ANGULAR_VEL, MAX_VEL
-from utama_core.config.robot_params.real import MAX_ANGULAR_VEL as REAL_MAX_ANG
-from utama_core.config.robot_params.real import MAX_VEL as REAL_MAX_VEL
-from utama_core.config.robot_params.rsim import MAX_ANGULAR_VEL as RSIM_MAX_ANG
-from utama_core.config.robot_params.rsim import MAX_VEL as RSIM_MAX_VEL
+from utama_core.config.robot_params import GRSIM_PARAMS, REAL_PARAMS, RSIM_PARAMS
 from utama_core.config.settings import TIMESTEP
 
 
@@ -46,65 +42,65 @@ def get_pid_configs(mode: Mode) -> PIDConfigs:
     if mode == Mode.RSIM:
         return PIDConfigs(
             orientation=OrientationPIDConfigs(
-                max_output=RSIM_MAX_ANG,
-                min_output=-RSIM_MAX_ANG,
+                max_output=RSIM_PARAMS.MAX_ANGULAR_VEL,
+                min_output=-RSIM_PARAMS.MAX_ANGULAR_VEL,
                 kp=4.5,
                 kd=0.02,
                 ki=0.0,
                 integral_min=-10,
                 integral_max=10,
-                max_acceleration=50,
+                max_acceleration=RSIM_PARAMS.MAX_ANGULAR_ACCELERATION,
             ),
             translation=TranslationPIDConfigs(
-                max_velocity=RSIM_MAX_VEL,
+                max_velocity=RSIM_PARAMS.MAX_VEL,
                 kp=1.8,
                 kd=0.025,
                 ki=0.0,
                 integral_min=-5,
                 integral_max=5,
-                max_acceleration=2,
+                max_acceleration=RSIM_PARAMS.MAX_ACCELERATION,
             ),
         )
     if mode == Mode.GRSIM:
         return PIDConfigs(
             orientation=OrientationPIDConfigs(
-                max_output=MAX_ANGULAR_VEL,
-                min_output=-MAX_ANGULAR_VEL,
+                max_output=GRSIM_PARAMS.MAX_ANGULAR_VEL,
+                min_output=-GRSIM_PARAMS.MAX_ANGULAR_VEL,
                 kp=4.5,
                 kd=0.02,
                 ki=0.0,
                 integral_min=-10,
                 integral_max=10,
-                max_acceleration=50,
+                max_acceleration=GRSIM_PARAMS.MAX_ANGULAR_ACCELERATION,
             ),
             translation=TranslationPIDConfigs(
-                max_velocity=MAX_VEL,
+                max_velocity=GRSIM_PARAMS.MAX_VEL,
                 kp=1.8,
                 kd=0.025,
                 ki=0.0,
                 integral_min=-5,
                 integral_max=5,
-                max_acceleration=2,
+                max_acceleration=GRSIM_PARAMS.MAX_ACCELERATION,
             ),
         )
     if mode == Mode.REAL:
         return PIDConfigs(
             orientation=OrientationPIDConfigs(
-                max_output=REAL_MAX_ANG,
-                min_output=-REAL_MAX_ANG,
+                max_output=REAL_PARAMS.MAX_ANGULAR_VEL,
+                min_output=-REAL_PARAMS.MAX_ANGULAR_VEL,
                 kp=0.5,
                 kd=0.075,
                 ki=0.0,
-                max_acceleration=0.2,
+                max_acceleration=REAL_PARAMS.MAX_ANGULAR_ACCELERATION,
             ),
             translation=TranslationPIDConfigs(
-                max_velocity=REAL_MAX_VEL,
+                max_velocity=REAL_PARAMS.MAX_VEL,
                 kp=1.8,
                 kd=0.025,
                 ki=0.0,
                 integral_min=-5,
                 integral_max=5,
-                max_acceleration=2,
+                max_acceleration=REAL_PARAMS.MAX_ACCELERATION,
             ),
         )
     raise ValueError(f"Unknown mode enum: {mode}.")

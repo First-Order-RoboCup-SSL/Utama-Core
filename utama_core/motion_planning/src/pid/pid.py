@@ -1,42 +1,15 @@
 import math
 import time
-from typing import Optional
 
 from utama_core.config.enums import Mode
-from utama_core.config.settings import SENDING_DELAY
 from utama_core.entities.data.vector import Vector2D
 from utama_core.global_utils.math_utils import normalise_heading
 from utama_core.motion_planning.src.pid.configs import (
     OrientationPIDConfigs,
-    PIDConfigs,
     TranslationPIDConfigs,
     get_pid_configs,
 )
 from utama_core.motion_planning.src.pid.pid_abstract import AbstractPID
-from utama_core.motion_planning.src.pid.pid_acceleration_limiter import (
-    PIDAccelerationLimiterWrapper,
-)
-
-
-def get_pids(
-    mode: Mode,
-) -> tuple[PIDAccelerationLimiterWrapper, PIDAccelerationLimiterWrapper]:
-    """Instantiate PID controllers from a configuration."""
-    config = get_pid_configs(mode)
-
-    pid_oren = PID(config.orientation)
-    pid_trans = TwoDPID(config.translation)
-    limited_oren = PIDAccelerationLimiterWrapper(
-        pid_oren,
-        max_acceleration=config.orientation.max_acceleration,
-        dt=config.orientation.dt,
-    )
-    limited_trans = PIDAccelerationLimiterWrapper(
-        pid_trans,
-        max_acceleration=config.translation.max_acceleration,
-        dt=config.translation.dt,
-    )
-    return limited_oren, limited_trans
 
 
 class PID(AbstractPID[float]):
@@ -61,39 +34,11 @@ class PID(AbstractPID[float]):
         self,
         config: OrientationPIDConfigs,
     ):
-        if config.dt <= 0:
-            raise ValueError("dt should be greater than zero")
-        self.dt = config.dt
-        self.delay = SENDING_DELAY / 1000  # Convert to seconds
-
+        super().__init__(config)
         self.max_output = config.max_output
         self.min_output = config.min_output
 
-        self.Kp = config.kp
-        self.Kd = config.kd
-        self.Ki = config.ki
-
-        self.pre_errors = {i: 0.0 for i in range(6)}
-        self.integrals = {i: 0.0 for i in range(6)}
-
-        # Anti-windup limits
-        self.integral_min = config.integral_min
-        self.integral_max = config.integral_max
-
-        self.prev_times = {i: 0.0 for i in range(6)}
-
-        self.first_pass = {i: True for i in range(6)}
-
-    def calculate(
-        self,
-        target: float,
-        current: float,
-        robot_id: int,
-    ) -> float:
-        """Compute the PID output to move a robot towards a target with delay compensation.
-
-        The delay is compensated by predicting the current value using the derivative.
-        """
+    def _calculate(self, target: float, current: float, robot_id: int) -> float:
         call_func_time = time.time()
         # Compute the basic (instantaneous) error
         raw_error = target - current
@@ -159,13 +104,8 @@ class PID(AbstractPID[float]):
         self.pre_errors[robot_id] = error
         self.prev_times[robot_id] = call_func_time
         # print(f"oren PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
-        return output
 
-    def reset(self, robot_id: int):
-        """Reset the error and integral for the specified robot."""
-        self.pre_errors[robot_id] = 0.0
-        self.integrals[robot_id] = 0.0
-        self.first_pass[robot_id] = True
+        return output
 
 
 class TwoDPID(AbstractPID[Vector2D]):
@@ -176,29 +116,10 @@ class TwoDPID(AbstractPID[Vector2D]):
         self,
         config: TranslationPIDConfigs,
     ):
-        if config.dt <= 0:
-            raise ValueError("dt should be greater than zero")
-        self.dt = config.dt
-        self.delay = SENDING_DELAY / 1000  # Delay in seconds
-
+        super().__init__(config)
         self.max_velocity = config.max_velocity
 
-        self.Kp = config.kp
-        self.Kd = config.kd
-        self.Ki = config.ki
-
-        self.pre_errors = {i: 0.0 for i in range(6)}
-        self.integrals = {i: 0.0 for i in range(6)}
-
-        # Anti-windup limits
-        self.integral_min = config.integral_min
-        self.integral_max = config.integral_max
-
-        self.prev_times = {i: 0.0 for i in range(6)}
-
-        self.first_pass = {i: True for i in range(6)}
-
-    def calculate(self, target: Vector2D, current: Vector2D, robot_id: int) -> Vector2D:
+    def _calculate(self, target: Vector2D, current: Vector2D, robot_id: int) -> Vector2D:
         call_func_time = time.time()
 
         dx = target[0] - current[0]
@@ -260,10 +181,9 @@ class TwoDPID(AbstractPID[Vector2D]):
         # print(f"x-y PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
         if error == 0.0:
             return Vector2D(0.0, 0.0)
-        else:
-            x_vel = output * (dx / error)
-            y_vel = output * (dy / error)
-            return self._apply_speed_limits(x_vel, y_vel, self.max_velocity)
+        x_vel = output * (dx / error)
+        y_vel = output * (dy / error)
+        return self._apply_speed_limits(x_vel, y_vel, self.max_velocity)
 
     def _apply_speed_limits(self, x_vel: float, y_vel: float, max_vel: float) -> Vector2D:
         current_vel = math.hypot(x_vel, y_vel)
@@ -273,8 +193,12 @@ class TwoDPID(AbstractPID[Vector2D]):
             y_vel *= scaling_factor
         return Vector2D(x_vel, y_vel)
 
-    def reset(self, robot_id: int):
-        """Reset the error and integral for the specified robot."""
-        self.pre_errors[robot_id] = 0.0
-        self.integrals[robot_id] = 0.0
-        self.first_pass[robot_id] = True
+
+def get_pids(
+    mode: Mode,
+) -> tuple[PID, TwoDPID]:
+    """Instantiate PID controllers from a configuration."""
+    config = get_pid_configs(mode)
+    pid_oren = PID(config.orientation)
+    pid_trans = TwoDPID(config.translation)
+    return pid_oren, pid_trans
