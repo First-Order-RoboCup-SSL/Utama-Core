@@ -1,4 +1,3 @@
-import atexit
 import cProfile
 import logging
 import threading
@@ -146,24 +145,12 @@ class StrategyRunner:
         if print_real_fps:
             self._fps_live = Live(auto_refresh=False)
             self._fps_live.start()  # manually control it so it never overrides prints
+        else:
+            self._fps_live = None
 
         # Profiler setup
-        self.profiler = self._setup_profiler(profiler_name)
-
-    def _setup_profiler(self, profiler_name: Optional[str]):
-        if profiler_name is not None:
-            profiler = cProfile.Profile()
-
-            # Register shutdown hook with a closure capturing self
-            def dump(profiler=profiler, profiler_name=profiler_name):
-                profiler.disable()
-                profiler.dump_stats(f"{profiler_name}.prof")
-
-            atexit.register(dump)
-        else:
-            profiler = None
-
-        return profiler
+        self.profiler_name = profiler_name
+        self.profiler = cProfile.Profile() if profiler_name else None
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -444,6 +431,18 @@ class StrategyRunner:
                 self.opp_strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
             self.opp_strategy.robot_controller.send_robot_commands()
 
+    def _cleanup(self):
+        """Cleanup resources such as profiler, replay writer, fps_monitor, and rsim env."""
+        if self.profiler is not None:
+            self.profiler.disable()
+            self.profiler.dump_stats(f"{self.profiler_name}.prof")
+        if self.replay_writer:
+            self.replay_writer.close()
+        if self.rsim_env:
+            self.rsim_env.close()
+        if self._fps_live:
+            self._fps_live.stop()
+
     def run_test(
         self,
         testManager: AbstractTestManager,
@@ -506,10 +505,7 @@ class StrategyRunner:
         except KeyboardInterrupt:
             self.logger.info("Terminating...")
         finally:
-            if self.replay_writer:
-                self.replay_writer.close()
-            if self.rsim_env:
-                self.rsim_env.close()
+            self._cleanup()
         return passed
 
     def run(self):
@@ -529,10 +525,7 @@ class StrategyRunner:
         except KeyboardInterrupt:
             self.logger.info("Terminating...")
         finally:
-            if self.replay_writer:
-                self.replay_writer.close()
-            if self.rsim_env:
-                self.rsim_env.close()
+            self._cleanup()
 
     def _run_step(self):
         """Perform one tick of the overall game loop.
