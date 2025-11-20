@@ -58,9 +58,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)  # If this is within the class, or define it globally in the module
 logging.captureWarnings(True)
 
-_fps_live = Live(auto_refresh=False)
-_fps_live.start()  # manually control it so it never overrides prints
-
 
 class StrategyRunner:
     """Main class to run the robot controller and strategy.
@@ -146,13 +143,15 @@ class StrategyRunner:
         self.num_frames_elapsed = 0
         self.elapsed_time = 0.0
         self.print_real_fps = print_real_fps
+        if print_real_fps:
+            self._fps_live = Live(auto_refresh=False)
+            self._fps_live.start()  # manually control it so it never overrides prints
 
         # Profiler setup
         self.profiler = self._setup_profiler(profiler_name)
 
     def _setup_profiler(self, profiler_name: Optional[str]):
         if profiler_name is not None:
-            print(profiler_name)
             profiler = cProfile.Profile()
 
             # Register shutdown hook with a closure capturing self
@@ -579,8 +578,8 @@ class StrategyRunner:
             fps = self.num_frames_elapsed / self.elapsed_time
 
             # Update the live FPS area (one line, no box)
-            _fps_live.update(Text(f"FPS: {fps:.2f}"))
-            _fps_live.refresh()
+            self._fps_live.update(Text(f"FPS: {fps:.2f}"))
+            self._fps_live.refresh()
 
             self.elapsed_time = 0.0
             self.num_frames_elapsed = 0
