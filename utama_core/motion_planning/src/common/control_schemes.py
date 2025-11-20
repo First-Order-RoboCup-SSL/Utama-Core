@@ -1,9 +1,9 @@
 from typing import Type
 
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.motion_planning.src.controllers import DWAController, PIDController
+from utama_core.motion_planning.src.controllers import DWAController, PIDController, BisectorController
 
-CONTROL_SCHEME_MAP = {"pid": PIDController, "dwa": DWAController}
+CONTROL_SCHEME_MAP = {"pid": PIDController, "dwa": DWAController, "bisector": BisectorController}
 
 
 def get_control_scheme(scheme_name: str) -> Type[MotionController]:
