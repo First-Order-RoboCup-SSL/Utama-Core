@@ -28,7 +28,7 @@
 1. `pixi run main` runs main.py
 2. `pixi run precommit-install` downloads the precommit hook to ensure that your code is formatted correctly when you commit and push.
 3. `pixi run lint` runs the full suite of precommit checkers on all files (You need to run the precommit install task above first).
-4. `pixi run tests` runs pytest over the `utama_core/tests/` folder
+4. `pixi run test` runs pytest over the `utama_core/tests/` folder
 5. `pixi run replay [-n <file_name>] [-p]` runs the replay file stored in the `./replays` folder.
    - Use `-n/--replay-file` to specify a file name; if not provided, defaults to the latest replay in the folder.
    - Use `-p/--play-by-play` for step-by-step playback.
