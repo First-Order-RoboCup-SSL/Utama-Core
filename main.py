@@ -18,6 +18,7 @@ def main():
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         control_scheme="dwa",
         print_real_fps=True,
+        run_profiler=False,
     )
     runner.my_strategy.render()
     runner.run()
