@@ -1,8 +1,11 @@
 import argparse
 import logging
 import pickle
+import time
 import warnings
 from typing import Generator, Union
+
+import pygame
 
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.entities.game import Ball as GameBall
@@ -76,10 +79,17 @@ def _load_replay(path) -> Generator[Union[ReplayMetadata, GameFrame], None, None
                 break
 
 
-def play_replay(file_name: str):
+def play_replay(file_name: str, play_by_play: bool = False):
     replay_path = REPLAY_BASE_PATH / f"{file_name}.pkl"
-    replay_iter = _load_replay(replay_path)
-    metadata = next(replay_iter)
+
+    # Load all frames into memory
+    frames = list(_load_replay(replay_path))
+    if not frames:
+        print("Replay file is empty!")
+        return
+
+    metadata = frames[0]
+    game_frames = frames[1:]  # skip metadata
     n_yellow, n_blue = map_friendly_enemy_to_colors(
         metadata.my_team_is_yellow,
         metadata.exp_friendly,
@@ -87,11 +97,44 @@ def play_replay(file_name: str):
     )
     replay_env = ReplayStandardSSL(n_robots_yellow=n_yellow, n_robots_blue=n_blue)
 
-    for frame in replay_iter:
+    frame_index = 0
+
+    while frame_index < len(game_frames):
+        frame = game_frames[frame_index]
+
         if not isinstance(frame, GameFrame):
             warnings.warn(f"Invalid frame in replay file (type: {type(frame).__name__}), skipping.")
+            frame_index += 1
             continue
+
         replay_env.step_replay(frame)
+
+        if play_by_play:
+            print(f"Frame {frame_index + 1}/{len(game_frames)}: Press RIGHT/SPACE to advance, LEFT to go back.")
+            waiting = True
+            while waiting:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        return
+
+                keys = pygame.key.get_pressed()
+                step = 0
+
+                # Forward step
+                if keys[pygame.K_SPACE] or keys[pygame.K_RIGHT]:
+                    step = 1
+                # Backward step
+                elif keys[pygame.K_LEFT]:
+                    step = -1
+
+                if step != 0:
+                    frame_index = max(0, min(frame_index + step, len(game_frames) - 1))
+                    waiting = False
+
+                pygame.time.delay(10)
+        else:
+            frame_index += 1
 
 
 def get_latest_replay_name() -> str:
@@ -105,10 +148,18 @@ def get_latest_replay_name() -> str:
 def main():
     parser = argparse.ArgumentParser(description="Read and play a replay file.")
     parser.add_argument(
+        "-n",
         "--replay-file",
         type=str,
         help="The name of the replay file (without extension) stored in ./replays folder.",
     )
+    parser.add_argument(
+        "-p",
+        "--play-by-play",
+        action="store_true",
+        help="Render the replay one frame at a time for step-by-step playback.",
+    )
+
     args = parser.parse_args()
 
     if args.replay_file:
@@ -117,7 +168,7 @@ def main():
         replay_file = get_latest_replay_name()
         logger.info(f"No replay file specified. Using the latest replay: {replay_file}")
 
-    play_replay(replay_file)
+    play_replay(replay_file, play_by_play=args.play_by_play)
 
 
 if __name__ == "__main__":

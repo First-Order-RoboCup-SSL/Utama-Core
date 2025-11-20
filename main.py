@@ -1,7 +1,3 @@
-# profile_main.py
-import atexit
-import cProfile
-
 from utama_core.replay import ReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy import DefenceStrategy, RobotPlacementStrategy, StartupStrategy

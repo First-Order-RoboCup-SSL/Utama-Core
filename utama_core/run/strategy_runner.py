@@ -158,7 +158,7 @@ class StrategyRunner:
             # Register shutdown hook with a closure capturing self
             def dump(profiler=profiler, profiler_name=profiler_name):
                 profiler.disable()
-                profiler.dump_stats(profiler_name)
+                profiler.dump_stats(f"{profiler_name}.prof")
 
             atexit.register(dump)
         else:
