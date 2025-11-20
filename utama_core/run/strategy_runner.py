@@ -61,16 +61,6 @@ logging.captureWarnings(True)
 _fps_live = Live(auto_refresh=False)
 _fps_live.start()  # manually control it so it never overrides prints
 
-profiler = cProfile.Profile()
-
-
-def dump():
-    profiler.disable()
-    profiler.dump_stats("sim_run.prof")
-
-
-atexit.register(dump)
-
 
 class StrategyRunner:
     """Main class to run the robot controller and strategy.
@@ -87,7 +77,7 @@ class StrategyRunner:
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
         control_scheme (str, optional): Name of the motion control scheme to use.
         print_real_fps (bool, optional): Whether to print real FPS. Defaults to False.
-        run_profiler (bool, optional): Whether to run the profiler. Defaults to False.
+        profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
     """
 
     def __init__(
@@ -100,10 +90,10 @@ class StrategyRunner:
         exp_enemy: int,
         field_bounds: FieldBounds = Field.full_field_bounds,
         opp_strategy: Optional[AbstractStrategy] = None,
-        replay_writer_config: Optional[ReplayWriterConfig] = None,
         control_scheme: str = "pid",
+        replay_writer_config: Optional[ReplayWriterConfig] = None,
         print_real_fps: bool = False,  # Turn this on for RSim
-        run_profiler: bool = False,
+        profiler_name: Optional[str] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -115,11 +105,6 @@ class StrategyRunner:
         self.exp_enemy = exp_enemy
         self.field_bounds = field_bounds
         self.opp_strategy = opp_strategy
-        self.replay_writer = (
-            ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
-            if replay_writer_config
-            else None
-        )
 
         self.motion_controller = get_control_scheme(control_scheme)
 
@@ -150,11 +135,36 @@ class StrategyRunner:
 
         self.toggle_opp_first = False  # alternate the order of opp and friendly in run
 
+        # Replay Writer
+        self.replay_writer = (
+            ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
+            if replay_writer_config
+            else None
+        )
+
         # FPS Printing
         self.num_frames_elapsed = 0
         self.elapsed_time = 0.0
         self.print_real_fps = print_real_fps
-        self.run_profiler = run_profiler
+
+        # Profiler setup
+        self.profiler = self._setup_profiler(profiler_name)
+
+    def _setup_profiler(self, profiler_name: Optional[str]):
+        if profiler_name is not None:
+            print(profiler_name)
+            profiler = cProfile.Profile()
+
+            # Register shutdown hook with a closure capturing self
+            def dump(profiler=profiler, profiler_name=profiler_name):
+                profiler.disable()
+                profiler.dump_stats(profiler_name)
+
+            atexit.register(dump)
+        else:
+            profiler = None
+
+        return profiler
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -469,8 +479,8 @@ class StrategyRunner:
                 self._reset_game()
                 episode_start_time = time.time()
                 # for simplicity, we assume rsim is running in real time. May need to change this
-                if self.run_profiler:
-                    profiler.enable()
+                if self.profiler is not None:
+                    self.profiler.enable()
                 while True:
                     if (time.time() - episode_start_time) > episode_timeout:
                         passed = False
@@ -492,7 +502,8 @@ class StrategyRunner:
                     elif status == TestingStatus.SUCCESS:
                         self._reset_robots()
                         break
-                profiler.disable()
+                if self.profiler is not None:
+                    self.profiler.disable()
         except KeyboardInterrupt:
             self.logger.info("Terminating...")
         finally:
@@ -512,8 +523,8 @@ class StrategyRunner:
         if self.rsim_env:
             self.rsim_env.render_mode = "human"
         try:
-            if self.run_profiler:
-                profiler.enable()
+            if self.profiler is not None:
+                self.profiler.enable()
             while True:
                 self._run_step()
         except KeyboardInterrupt:
@@ -533,7 +544,7 @@ class StrategyRunner:
 
         No return value; updates internal game state and controllers.
         """
-        start_time = time.time()
+        frame_start = time.perf_counter()
         if self.mode == Mode.RSIM:
             vision_frames = [self.rsim_env._frame_to_observations()[0]]
         else:
@@ -551,18 +562,19 @@ class StrategyRunner:
                 self._step_game(vision_frames, True)
         self.toggle_opp_first = not self.toggle_opp_first
 
-        end_time = time.time()
+        # --- rate limiting ---
+        if self.mode != Mode.RSIM:
+            processing_time = time.perf_counter() - frame_start
+            wait_time = max(0, TIMESTEP - processing_time)
+            time.sleep(wait_time)
 
-        # processing_time = end_time - start_time
+        # --- end of frame ---
+        frame_end = time.perf_counter()
+        frame_dt = frame_end - frame_start
 
-        # self.logger.log(
-        #     logging.WARNING if processing_time > TIMESTEP else logging.INFO,
-        #     "Game loop took %f secs",
-        #     processing_time,
-        # )
-        delta_t = end_time - start_time
-        self.elapsed_time += delta_t
+        self.elapsed_time += frame_dt
         self.num_frames_elapsed += 1
+
         if self.print_real_fps and self.elapsed_time >= FPS_PRINT_INTERVAL:
             fps = self.num_frames_elapsed / self.elapsed_time
 
@@ -572,12 +584,6 @@ class StrategyRunner:
 
             self.elapsed_time = 0.0
             self.num_frames_elapsed = 0
-
-        # Sleep to maintain FPS
-        wait_time = max(0, TIMESTEP - delta_t)
-        self.logger.info("Sleeping for %f secs", wait_time)
-        if self.mode != Mode.RSIM:
-            time.sleep(wait_time)
 
     def _step_game(
         self,

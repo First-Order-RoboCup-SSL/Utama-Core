@@ -12,13 +12,13 @@ def main():
         strategy=StartupStrategy(),
         my_team_is_yellow=True,
         my_team_is_right=True,
-        mode="rsim",
+        mode="grsim",
         exp_friendly=6,
         exp_enemy=3,
-        replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         control_scheme="dwa",
+        replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         print_real_fps=True,
-        run_profiler=False,
+        profiler_name=None,
     )
     runner.my_strategy.render()
     runner.run()
