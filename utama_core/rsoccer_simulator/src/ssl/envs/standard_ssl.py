@@ -108,6 +108,8 @@ class SSLStandardEnv(SSLBaseEnv):
         self.prev_dribbler_yellow = [False] * self.n_robots_yellow
         self.prev_speed_blue = [0.0] * self.n_robots_blue
         self.prev_speed_yellow = [0.0] * self.n_robots_yellow
+        self.prev_forward_blue = [0.0] * self.n_robots_blue
+        self.prev_forward_yellow = [0.0] * self.n_robots_yellow
 
         logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
@@ -118,6 +120,8 @@ class SSLStandardEnv(SSLBaseEnv):
         self.prev_dribbler_yellow = [False] * self.n_robots_yellow
         self.prev_speed_blue = [0.0] * self.n_robots_blue
         self.prev_speed_yellow = [0.0] * self.n_robots_yellow
+        self.prev_forward_blue = [0.0] * self.n_robots_blue
+        self.prev_forward_yellow = [0.0] * self.n_robots_yellow
         return super().reset(seed=seed, options=options)
 
     def step(self, action):
@@ -257,7 +261,12 @@ class SSLStandardEnv(SSLBaseEnv):
         n_blue = self.n_robots_blue
         for i in range(n_blue):
             release = self._dribbler_release_kick(
-                blue_states, self.prev_dribbler_blue, self.prev_speed_blue, i, commands[i].dribbler
+                blue_states,
+                self.prev_dribbler_blue,
+                self.prev_speed_blue,
+                self.prev_forward_blue,
+                i,
+                commands[i].dribbler,
             )
             if release > 0.0:
                 commands[i].kick_v_x = max(commands[i].kick_v_x, release)
@@ -265,7 +274,12 @@ class SSLStandardEnv(SSLBaseEnv):
         for j in range(self.n_robots_yellow):
             cmd_idx = n_blue + j
             release = self._dribbler_release_kick(
-                yellow_states, self.prev_dribbler_yellow, self.prev_speed_yellow, j, commands[cmd_idx].dribbler
+                yellow_states,
+                self.prev_dribbler_yellow,
+                self.prev_speed_yellow,
+                self.prev_forward_yellow,
+                j,
+                commands[cmd_idx].dribbler,
             )
             if release > 0.0:
                 commands[cmd_idx].kick_v_x = max(commands[cmd_idx].kick_v_x, release)
@@ -279,11 +293,22 @@ class SSLStandardEnv(SSLBaseEnv):
         self.prev_speed_blue = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[:n_blue]]
         self.prev_speed_yellow = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[n_blue:]]
 
+        # Store commanded forward components relative to the current robot headings
+        def forward_component(robot, cmd):
+            heading_rad = math.radians(robot.theta)
+            return cmd.v_x * math.cos(heading_rad) + cmd.v_y * math.sin(heading_rad)
+
+        self.prev_forward_blue = [forward_component(self.frame.robots_blue[i], commands[i]) for i in range(n_blue)]
+        self.prev_forward_yellow = [
+            forward_component(self.frame.robots_yellow[j], commands[n_blue + j]) for j in range(self.n_robots_yellow)
+        ]
+
     def _dribbler_release_kick(
         self,
         robot_states: Optional[Dict[int, Robot]],
         prev_dribbler: List[bool],
         prev_speed: List[float],
+        prev_forward: List[float],
         index: int,
         dribbler: bool,
     ) -> float:
@@ -297,13 +322,16 @@ class SSLStandardEnv(SSLBaseEnv):
         if not getattr(robot_state, "infrared", False):
             return 0.0
 
-        # Only release if the robot is moving forward relative to its heading
-        heading_rad = math.radians(robot_state.theta)
-        forward_speed = robot_state.v_x * math.cos(heading_rad) + robot_state.v_y * math.sin(heading_rad)
-        if forward_speed < MIN_RELEASE_SPEED:
+        # Require forward motion relative to heading to avoid releasing while backing up
+        forward = prev_forward[index]
+        if forward <= 0.0:
             return 0.0
 
-        return min(RELEASE_GAIN * forward_speed, MAX_BALL_SPEED)
+        speed = prev_speed[index]
+        if speed < MIN_RELEASE_SPEED:
+            return 0.0
+
+        return min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
 
     def _calculate_reward_and_done(self):
         return 1, False
