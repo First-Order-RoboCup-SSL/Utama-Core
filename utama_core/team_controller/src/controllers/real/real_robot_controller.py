@@ -5,6 +5,8 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 
+from utama_core.config.robot_params import REAL_PARAMS
+
 # from utama_core.config.robot_params.real import MAX_ANGULAR_VEL, MAX_VEL
 from utama_core.config.settings import (
     BAUD_RATE,
@@ -13,8 +15,6 @@ from utama_core.config.settings import (
     PORT,
     TIMEOUT,
 )
-from utama_core.config.robot_params import REAL_PARAMS
-from utama_core.config.settings import BAUD_RATE, PORT, TIMEOUT
 from utama_core.entities.data.command import (
     RobotCommand,
     RobotPacketCommand,
