@@ -293,7 +293,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         if index not in robot_states:
             return 0.0
-        robot_state = math.hypot(robot_states[index].v_x, robot_states[index].v_y)
+        robot_state = robot_states[index]
         if not getattr(robot_state, "infrared", False):
             return 0.0
 
