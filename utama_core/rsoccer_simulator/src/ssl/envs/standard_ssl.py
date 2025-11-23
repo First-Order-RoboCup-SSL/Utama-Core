@@ -297,14 +297,15 @@ class SSLStandardEnv(SSLBaseEnv):
         if not getattr(robot_state, "infrared", False):
             return 0.0
 
-        speed = prev_speed[index]
+        # Use actual simulated velocity, not last commanded speed, for release
+        speed = math.hypot(robot_state.v_x, robot_state.v_y)
         if speed < MIN_RELEASE_SPEED:
             return 0.0
 
         return min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
 
     def _calculate_reward_and_done(self):
-        return 0, False
+        return 1, False
 
     def _get_initial_positions_frame(self):
         """Returns the position of each robot and ball for the initial frame (random placement)"""
