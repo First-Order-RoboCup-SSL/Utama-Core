@@ -297,11 +297,13 @@ class SSLStandardEnv(SSLBaseEnv):
         if not getattr(robot_state, "infrared", False):
             return 0.0
 
-        speed = prev_speed[index]
-        if speed < MIN_RELEASE_SPEED:
+        # Only release if the robot is moving forward relative to its heading
+        heading_rad = math.radians(robot_state.theta)
+        forward_speed = robot_state.v_x * math.cos(heading_rad) + robot_state.v_y * math.sin(heading_rad)
+        if forward_speed < MIN_RELEASE_SPEED:
             return 0.0
 
-        return min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
+        return min(RELEASE_GAIN * forward_speed, MAX_BALL_SPEED)
 
     def _calculate_reward_and_done(self):
         return 1, False
