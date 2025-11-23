@@ -13,6 +13,8 @@ from utama_core.config.settings import (
     PORT,
     TIMEOUT,
 )
+from utama_core.config.robot_params import REAL_PARAMS
+from utama_core.config.settings import BAUD_RATE, PORT, TIMEOUT
 from utama_core.entities.data.command import (
     RobotCommand,
     RobotPacketCommand,
@@ -27,6 +29,8 @@ logger = logging.getLogger(__name__)
 # NB: A major assumption is that the robot IDs are 0-5 for the friendly team.
 # TODO: fix this assumption in the future, if needed.
 UINT16_MAX = 65535
+MAX_VEL = REAL_PARAMS.MAX_VEL
+MAX_ANGULAR_VEL = REAL_PARAMS.MAX_ANGULAR_VEL
 
 
 class RealRobotController(AbstractRobotController):
