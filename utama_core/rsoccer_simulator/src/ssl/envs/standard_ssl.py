@@ -293,12 +293,11 @@ class SSLStandardEnv(SSLBaseEnv):
 
         if index not in robot_states:
             return 0.0
-        robot_state = robot_states[index]
+        robot_state = math.hypot(robot_states[index].v_x, robot_states[index].v_y)
         if not getattr(robot_state, "infrared", False):
             return 0.0
 
-        # Use actual simulated velocity, not last commanded speed, for release
-        speed = math.hypot(robot_state.v_x, robot_state.v_y)
+        speed = prev_speed[index]
         if speed < MIN_RELEASE_SPEED:
             return 0.0
 
