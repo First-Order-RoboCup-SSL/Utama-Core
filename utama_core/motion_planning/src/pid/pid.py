@@ -38,16 +38,13 @@ class PID(AbstractPID[float]):
         self.max_output = config.max_output
         self.min_output = config.min_output
 
-    def calculate(
+    def _calculate(
         self,
         target: float,
         current: float,
         robot_id: int,
     ) -> float:
-        """Compute the PID output to move a robot towards a target with delay compensation.
-
-        The delay is compensated by predicting the current value using the derivative.
-        """
+        """Compute the PID output to move a robot towards a target with delay compensation."""
         # Compute the basic (instantaneous) error
         raw_error = target - current
         # For angular measurements adjust error
@@ -119,7 +116,7 @@ class TwoDPID(AbstractPID[Vector2D]):
         super().__init__(config)
         self.max_velocity = config.max_velocity
 
-    def calculate(self, target: Vector2D, current: Vector2D, robot_id: int) -> Vector2D:
+    def _calculate(self, target: Vector2D, current: Vector2D, robot_id: int) -> Vector2D:
         dx = target[0] - current[0]
         dy = target[1] - current[1]
 

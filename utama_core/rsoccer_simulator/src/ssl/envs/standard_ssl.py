@@ -7,14 +7,13 @@ import gymnasium as gym
 import numpy as np
 
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
+from utama_core.config.robot_params import RSIM_PARAMS
 from utama_core.config.settings import (
     MAX_BALL_SPEED,
     MIN_RELEASE_SPEED,
     RELEASE_GAIN,
     TIMESTEP,
 )
-from utama_core.config.robot_params import RSIM_PARAMS
-from utama_core.config.settings import TIMESTEP
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.global_utils.math_utils import deg_to_rad, rad_to_deg
@@ -199,7 +198,7 @@ class SSLStandardEnv(SSLBaseEnv):
         robot_info = RobotResponse(robot.id, robot.infrared)
         return robot_pos, robot_info
 
-    def _get_commands(self, actions) -> list[Robot]
+    def _get_commands(self, actions) -> list[Robot]:
         commands = []
 
         # Blue robots
@@ -209,7 +208,7 @@ class SSLStandardEnv(SSLBaseEnv):
             v_theta = actions["team_blue"][i][2]
 
             dribbler = actions["team_blue"][i][4] > 0
-            kick_v_x = RSIM_PARAMS.KICK_SPD  if actions["team_blue"][i][3] > 0 else 0.0
+            kick_v_x = RSIM_PARAMS.KICK_SPD if actions["team_blue"][i][3] > 0 else 0.0
 
             cmd = Robot(
                 yellow=False,  # Blue team
