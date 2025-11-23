@@ -29,7 +29,6 @@ class AbstractPID(ABC, Generic[T]):
         # Error tracking for 6 robots
         self.pre_errors = {i: 0.0 for i in range(6)}
         self.integrals = {i: 0.0 for i in range(6)}
-        self.prev_times = {i: 0.0 for i in range(6)}
         self.first_pass = {i: True for i in range(6)}
 
         # Anti-windup
