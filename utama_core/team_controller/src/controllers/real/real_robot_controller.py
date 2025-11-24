@@ -7,7 +7,6 @@ from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 
 from utama_core.config.robot_params import REAL_PARAMS
 
-# from utama_core.config.robot_params.real import MAX_ANGULAR_VEL, MAX_VEL
 from utama_core.config.settings import (
     BAUD_RATE,
     CMD_MAX_ANGULAR_VELOCITY,
