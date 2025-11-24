@@ -1,16 +1,12 @@
-import logging
 from typing import List, Tuple
 
 import numpy as np  # type: ignore
 
 from utama_core.entities.game import Game
-from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-
-logger = logging.getLogger(__name__)
-
 from utama_core.motion_planning.src.fastpathplanning.config import (
     fastpathplanningconfig as config,
 )
+from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 
 def distance(a, b) -> float:
@@ -84,7 +80,6 @@ class FastPathPlanner:
 
         obstacles = self._get_obstacles(game, robot_id)
         finaltrajectory = self.checksegment((our_pos, target), obstacles)
-
         return finaltrajectory
 
 
