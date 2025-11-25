@@ -7,11 +7,7 @@ from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 
 from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.config.settings import BAUD_RATE, PORT, TIMEOUT
-from utama_core.entities.data.command import (
-    RobotCommand,
-    RobotPacketCommand,
-    RobotResponse,
-)
+from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -90,7 +86,7 @@ class RealRobotController(AbstractRobotController):
     #         self._robots_info[i] = info
     #         data_in = data_in << 1  # shift to the next robot's data
 
-    def _generate_command_buffer(self, robot_id: int, c_command: RobotPacketCommand) -> bytes:
+    def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
         """Generates the command buffer to be sent to the robot."""
         assert robot_id < 6, "Invalid robot_id. Must be between 0 and 5."
 
