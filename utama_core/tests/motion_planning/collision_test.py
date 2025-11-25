@@ -140,83 +140,89 @@ class CollisionAvoidanceTestManager(AbstractTestManager):
         return self.n_episodes
 
 
-# @pytest.mark.parametrize(
-#     "obstacle_config",
-#     [
-#         # Single obstacle in the middle
-#         {
-#             "start": (-3.0, 0.0),
-#             "target": (3.0, 0.0),
-#             "obstacles": [(0.0, 0.0)],
-#         },
-#         # Two obstacles creating a narrow gap
-#         {
-#             "start": (-3.0, 0.0),
-#             "target": (3.0, 0.0),
-#             "obstacles": [(-1.0, 0.3), (1.0, -0.3)],
-#         },
-#         # Three obstacles requiring path planning
-#         {
-#             "start": (-3.0, 0.0),
-#             "target": (3.0, 0.0),
-#             "obstacles": [(-1.5, 0.0), (0.0, 0.0), (1.5, 0.0)],
-#         },
-#     ],
-# )
-# def test_collision_avoidance_goal_to_goal(
-#     my_team_is_yellow: bool,
-#     my_team_is_right: bool,
-#     robot_id: int,
-#     headless: bool,
-#     obstacle_config: dict,
-#     mode: str = "rsim",
-# ):
-#     """
-#     Test that robot navigates from one goal to another while avoiding obstacles.
+@pytest.mark.parametrize(
+    "obstacle_config",
+    [
+        # Single obstacle in the middle
+        {
+            "start": (-3.0, 0.0),
+            "target": (3.0, 0.0),
+            "obstacles": [(0.0, 0.0)],
+        },
+        # Two obstacles creating a narrow gap
+        {
+            "start": (-3.0, 0.0),
+            "target": (3.0, 0.0),
+            "obstacles": [(-1.0, 0.3), (1.0, -0.3)],
+        },
+        # Three obstacles requiring path planning
+        {
+            "start": (-3.0, 0.0),
+            "target": (3.0, 0.0),
+            "obstacles": [(-1.5, 0.0), (0.0, 0.0), (1.5, 0.0)],
+        },
+    ],
+)
+def test_collision_avoidance_goal_to_goal(
+    headless: bool,
+    obstacle_config: dict,
+    mode: str = "rsim",
+):
+    """
+    Test that robot navigates from one goal to another while avoiding obstacles.
 
-#     The robot should:
-#     1. Start near one goal
-#     2. Navigate to the opposite goal
-#     3. Avoid all obstacles along the straight-line path
-#     4. Maintain safe distance from obstacles
-#     5. Successfully reach the target position
-#     """
-#     scenario = CollisionAvoidanceScenario(
-#         start_position=obstacle_config["start"],
-#         target_position=obstacle_config["target"],
-#         obstacle_positions=obstacle_config["obstacles"],
-#     )
+    The robot should:
+    1. Start near one goal
+    2. Navigate to the opposite goal
+    3. Avoid all obstacles along the straight-line path
+    4. Maintain safe distance from obstacles
+    5. Successfully reach the target position
+    """
+    # Hardcoded values to run test only once
+    my_team_is_yellow = True
+    my_team_is_right = True
+    robot_id = 0
 
-#     # Use RobotPlacementStrategy which will move robot to target
-#     # We need to modify it slightly for this test
-#     runner = StrategyRunner(
-#         strategy=RobotPlacementStrategy(robot_id=robot_id),
-#         my_team_is_yellow=my_team_is_yellow,
-#         my_team_is_right=my_team_is_right,
-#         mode=mode,
-#         exp_friendly=1,
-#         exp_enemy=len(obstacle_config["obstacles"]),
-#         control_scheme="dwa",  # Use DWA for obstacle avoidance
-#     )
+    scenario = CollisionAvoidanceScenario(
+        start_position=obstacle_config["start"],
+        target_position=obstacle_config["target"],
+        obstacle_positions=obstacle_config["obstacles"],
+    )
 
-#     test_manager = CollisionAvoidanceTestManager(scenario=scenario)
-#     test_passed = runner.run_test(
-#         testManager=test_manager,
-#         episode_timeout=20.0,  # Give enough time to navigate
-#         rsim_headless=headless,
-#     )
+    # Use RobotPlacementStrategy which will move robot to target
+    # We need to modify it slightly for this test
+    runner = StrategyRunner(
+        strategy=SimpleNavigationStrategy(
+            robot_id=robot_id,
+            target_position=scenario.target_position,
+            target_orientation=0.0,
+        ),
+        my_team_is_yellow=my_team_is_yellow,
+        my_team_is_right=my_team_is_right,
+        mode=mode,
+        exp_friendly=1,
+        exp_enemy=len(obstacle_config["obstacles"]),
+        control_scheme="dwa",  # Use PID for obstacle avoidance
+    )
 
-#     # Assertions
-#     assert test_passed, "Collision avoidance test failed to complete"
-#     assert test_manager.endpoint_reached, f"Robot failed to reach target {scenario.target_position}"
-#     assert not test_manager.collision_detected, (
-#         f"Robot collided with obstacle! Minimum distance: {test_manager.min_obstacle_distance:.3f}m "
-#         f"(threshold: {scenario.collision_threshold:.3f}m)"
-#     )
-#     assert test_manager.min_obstacle_distance >= scenario.collision_threshold, (
-#         f"Robot got too close to obstacles: {test_manager.min_obstacle_distance:.3f}m "
-#         f"(minimum safe distance: {scenario.collision_threshold:.3f}m)"
-#     )
+    test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)
+    test_passed = runner.run_test(
+        testManager=test_manager,
+        episode_timeout=20.0,  # Give enough time to navigate
+        rsim_headless=headless,
+    )
+
+    # Assertions
+    assert test_passed, "Collision avoidance test failed to complete"
+    assert test_manager.endpoint_reached, f"Robot failed to reach target {scenario.target_position}"
+    assert not test_manager.collision_detected, (
+        f"Robot collided with obstacle! Minimum distance: {test_manager.min_obstacle_distance:.3f}m "
+        f"(threshold: {scenario.collision_threshold:.3f}m)"
+    )
+    assert test_manager.min_obstacle_distance >= scenario.collision_threshold, (
+        f"Robot got too close to obstacles: {test_manager.min_obstacle_distance:.3f}m "
+        f"(minimum safe distance: {scenario.collision_threshold:.3f}m)"
+    )
 
 
 def test_simple_straight_line_no_obstacles(
@@ -246,7 +252,7 @@ def test_simple_straight_line_no_obstacles(
         mode=mode,
         exp_friendly=1,
         exp_enemy=0,
-        control_scheme="pid",
+        control_scheme="dwa",
     )
 
     test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)
