@@ -1,5 +1,4 @@
 # import math
-# import time
 
 # from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 # from utama_core.entities.game import Game
@@ -22,7 +21,6 @@
 #     def __init__(self):
 #         super().__init__()
 #         self.n_episodes = 1
-#         self.i = 0
 #         self.ini_pos = self._generate_ini_pos()
 
 #     def reset_field(self, sim_controller: AbstractSimController, game: Game):
@@ -44,12 +42,22 @@
 #         for j in y_robots.keys():
 #             sim_controller.teleport_robot(True, j, ini_yellow[j][0], ini_yellow[j][1], ini_yellow[j][2])
 
+#         # set the target robot position
+#         # ini_pos = self.ini_pos[self.episode_i]
+#         # sim_controller.teleport_robot(
+#         #     game.my_team_is_yellow,
+#         #     self.my_strategy.robot_id,
+#         #     ini_pos[0],
+#         #     ini_pos[1],
+#         # )
+
 #         sim_controller.teleport_ball(0, 0)
 
 #     def eval_status(self, game: Game):
 #         """Evaluate the status of the test episode."""
-#         if self.i >= 100:
-#             return TestingStatus.SUCCESS
+#         # TODO
+#         return TestingStatus.SUCCESS
+#         #return TestingStatus.IN_PROGRESS
 
 #     def get_n_episodes(self):
 #         """Get the number of episodes to run for the test."""
@@ -69,7 +77,7 @@
 #     my_team_is_yellow: bool,
 #     my_team_is_right: bool,
 #     headless: bool,
-#     mode: str = "rsim",
+#     mode: str = "grsim",
 # ):
 #     """Called by pytest to run the GoToBall strategy test."""
 #     runner = StrategyRunner(
@@ -90,6 +98,6 @@
 #         my_team_is_yellow=True,
 #         my_team_is_right=True,
 #         robot_id=0,
-#         mode="rsim",
+#         mode="grsim",
 #         headless=False,
 #     )

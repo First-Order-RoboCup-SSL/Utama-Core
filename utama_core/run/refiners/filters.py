@@ -21,13 +21,13 @@ class FIR_filter:
         Length for boxcar if `taps` is None. Default 20.
     """
 
-    def __init__(self, fs=60.0, taps=None, window_len=20):
+    def __init__(self, fs=60.0, taps=None, window_len=5):
         self.fs = float(fs)
         self.N = window_len
 
         if taps is None:
             assert window_len >= 1, "window_len must be >= 1"
-            self.taps = firwin(window_len, self.approx_boxcar_fc, fs=fs)
+            self.taps = firwin(window_len, self.cutoff, fs=fs)
             #self.taps = np.ones(window_len, dtype=float) / float(window_len)
         else:
             t = np.asarray(taps, dtype=float).ravel()
@@ -41,49 +41,22 @@ class FIR_filter:
         self.buf_th = deque(maxlen=self.N)
 
     @property
-    def group_delay_frames(self):
-        """Group delay in frames: D = (N-1)/2."""
-        return (self.N - 1) / 2.0
-
-    @property
-    def group_delay_seconds(self):
-        """Group delay in seconds: D/fs."""
-        return self.group_delay_frames / self.fs
-
-    @property
-    def approx_boxcar_fc(self):
+    def cutoff(self):
         """
-        Approximate -3 dB cutoff for a boxcar of length N:
-        fc = 0.4 * fs / N.
-        For non-boxcar taps, this is just a reference.
+        Sets cutoff frequency according to the maximum acceleration and velocity
+        of the robots, below the limits dictated by Nyquist's theorem.
         """
-        return 0.4 * self.fs
+        nyquist = 0.4 * self.fs
+        a_max = 50
+        v_max = 5
+        fc = a_max / (2 * np.pi * v_max)
+        
+        return min(nyquist, fc)
 
     @staticmethod
     def wrap_angle(a):
         """Wrap angle to (-pi, pi]."""
         return (a + np.pi) % (2 * np.pi) - np.pi
-
-    def reset(self):
-        """Clear buffers."""
-        self.buf_x.clear()
-        self.buf_y.clear()
-        self.buf_th.clear()
-
-    def set_taps(self, taps):
-        """Update FIR taps (normalized to sum to 1) and reset buffers."""
-        t = np.asarray(taps, dtype=float).ravel()
-        assert t.size >= 1, "taps must have at least 1 element"
-        self.taps = t / np.sum(t)
-        self.N = self.taps.size
-        self.buf_x = deque(maxlen=self.N)
-        self.buf_y = deque(maxlen=self.N)
-        self.buf_th = deque(maxlen=self.N)
-
-    def set_boxcar(self, window_len):
-        """Switch to a boxcar (moving average) of given length."""
-        assert window_len >= 1, "window_len must be >= 1"
-        self.set_taps(np.ones(window_len, dtype=float))
 
     def step(self, z):
         """

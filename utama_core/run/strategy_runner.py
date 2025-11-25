@@ -439,7 +439,6 @@ class StrategyRunner:
                 if self.sim_controller:
                     testManager.reset_field(self.sim_controller, self.my_game)
                     time.sleep(0.1)  # wait for the field to reset
-                    # wait for the field to reset
                 self._reset_game()
                 episode_start_time = time.time()
                 # for simplicity, we assume rsim is running in real time. May need to change this

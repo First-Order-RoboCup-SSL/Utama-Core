@@ -73,11 +73,11 @@ class PositionRefiner(BaseRefiner):
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
         
         # Manually adds noise
-        map(lambda r: r.add_noise, combined_vision_data.yellow_robots)
-        map(lambda r: r.add_noise, combined_vision_data.blue_robots)
+        # map(lambda r: r.add_noise, combined_vision_data.yellow_robots)
+        # map(lambda r: r.add_noise, combined_vision_data.blue_robots)
         
-        with open("noisy-raw.pkl", "ab") as f:
-            pickle.dump(combined_vision_data, f)
+        # with open("noisy-raw.pkl", "ab") as f:
+        #     pickle.dump(combined_vision_data, f)
         
         filtered_vision_data: VisionData = VisionData(
             ts=combined_vision_data.ts,
@@ -94,8 +94,8 @@ class PositionRefiner(BaseRefiner):
             balls=combined_vision_data.balls
         )
         
-        with open("noisy-filtered.pkl", "ab") as f:
-            pickle.dump(filtered_vision_data, f)
+        # with open("noisy-filtered.pkl", "ab") as f:
+        #     pickle.dump(filtered_vision_data, f)
 
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
