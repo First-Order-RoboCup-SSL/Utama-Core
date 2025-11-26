@@ -41,14 +41,15 @@ class FastPathPlanner:
         )
         return [np.array([r.p.x, r.p.y]) for r in robots]
 
-    def _find_subgoal(self, robotpos, target, obstaclepos) -> np.array:
+    def _find_subgoal(self, robotpos, target, obstaclepos, obstacles) -> np.array:
         direction = target - robotpos
         perp_dir = rotate_vector(direction, 90)
         unitvec = perp_dir / np.linalg.norm(perp_dir)
         subgoal = obstaclepos + self.OBSTACLE_CLEARANCE * unitvec * 2
-        subdirection = subgoal - robotpos
-        unitvec2 = subdirection / np.linalg.norm(subdirection)
-        subgoal = unitvec2 * self.OBSTACLE_CLEARANCE + subgoal
+        for o in obstacles:
+            if distance(o, subgoal) < self.OBSTACLE_CLEARANCE:
+                subgoal = obstaclepos - self.OBSTACLE_CLEARANCE * unitvec * 2
+
         return subgoal
 
     def collides(
@@ -68,9 +69,9 @@ class FastPathPlanner:
     ):  # if there are obstacles in the segment, it divdes, the segment into two segments(initial_pos, subgoal) and (subgoal, target_pos), else returns the original segment.
         closestobstacle = self.collides(segment, obstacles)
         if closestobstacle is not None:
-            subgoal = self._find_subgoal(segment[0], segment[1], closestobstacle)
+            subgoal = self._find_subgoal(segment[0], segment[1], closestobstacle, obstacles)
             subseg_1 = self.checksegment((segment[0], subgoal), obstacles)
-            subseg_2 = self.checksegment((subgoal, segment[1]), obstacles)
+            subseg_2 = [(subgoal, segment[1])]
             joined_seg = subseg_1 + subseg_2
             return joined_seg
         else:
