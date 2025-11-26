@@ -34,21 +34,18 @@ class FastPathPlanner:
         self.OBSTACLE_CLEARANCE = self.config.ROBOT_DIAMETER
 
     def _get_obstacles(self, game: Game, robot_id: int) -> List[np.ndarray]:
-        robots = (
-            list(game.friendly_robots.values())[:robot_id]
-            + list(game.friendly_robots.values())[robot_id + 1 :]
-            + list(game.enemy_robots.values())
-        )
+        friendly_obstacles = [robot for robot in game.friendly_robots.values() if robot.id != robot_id]
+        robots = friendly_obstacles + list(game.enemy_robots.values())
         return [np.array([r.p.x, r.p.y]) for r in robots]
 
     def _find_subgoal(self, robotpos, target, obstaclepos, obstacles) -> np.array:
         direction = target - robotpos
         perp_dir = rotate_vector(direction, 90)
         unitvec = perp_dir / np.linalg.norm(perp_dir)
-        subgoal = obstaclepos + self.OBSTACLE_CLEARANCE * unitvec * 2
+        subgoal = obstaclepos + self.OBSTACLE_CLEARANCE * unitvec * 3
         for o in obstacles:
             if distance(o, subgoal) < self.OBSTACLE_CLEARANCE:
-                subgoal = obstaclepos - self.OBSTACLE_CLEARANCE * unitvec * 2
+                subgoal = obstaclepos - self.OBSTACLE_CLEARANCE * unitvec * 3
 
         return subgoal
 
@@ -59,9 +56,11 @@ class FastPathPlanner:
         tempdistance = distance(segment[0], segment[1])
         for o in obstacles:
             if point_to_segment_distance(o, segment[0], segment[1]) < self.OBSTACLE_CLEARANCE:
+                # print('obstavle in path')
                 if closestobstacle is None or distance(0, segment[0]) < tempdistance:
                     tempdistance = distance(segment[0], o)
                     closestobstacle = o
+        # print(segment[0], closestobstacle, segment[1])
         return closestobstacle
 
     def checksegment(

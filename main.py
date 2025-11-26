@@ -14,7 +14,7 @@ def main():
         my_team_is_yellow=False,
         my_team_is_right=True,
         mode="real",
-        exp_friendly=1,
+        exp_friendly=3,
         exp_enemy=1,
         control_scheme="fpp",
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
