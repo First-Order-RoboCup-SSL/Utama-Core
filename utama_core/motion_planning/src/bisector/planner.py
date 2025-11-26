@@ -1,20 +1,13 @@
 import logging
-from math import dist, pi
-
-import numpy as np # type: ignore
-
-from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-
-
-
-from math import exp
+from math import dist, exp, pi
 from typing import List, Tuple
 
+import numpy as np  # type: ignore
+
 from utama_core.config.physical_constants import ROBOT_RADIUS
-
 from utama_core.entities.game import Game
-
 from utama_core.global_utils.math_utils import normalise_heading
+from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +41,6 @@ def distance(a: np.ndarray, b: np.ndarray) -> float:
     return np.linalg.norm(a - b)
 
 
-
 def point_to_segment_distance(point: np.ndarray, seg_start: np.ndarray, seg_end: np.ndarray) -> float:
     """Compute the shortest distance between a point and a line segment."""
     seg_vec = seg_end - seg_start
@@ -59,7 +51,6 @@ def point_to_segment_distance(point: np.ndarray, seg_start: np.ndarray, seg_end:
 
 def segment_to_segment_distance(a1: np.ndarray, a2: np.ndarray, b1: np.ndarray, b2: np.ndarray) -> float:
     """Shortest distance between two line segments in 2D."""
-
 
     u = a2 - a1
     v = b2 - b1
@@ -132,22 +123,22 @@ def intersects_any_polygon(seg_start: np.ndarray, seg_end: np.ndarray, obstacles
     return False
 
 
-   
-
 class BisectorPlanner:
 
     def __init__(self, env: SSLStandardEnv):
-    
+
         self._env = env
         self.config = bisectorplannerconfig
         self.CLOSE_LIMIT = self.config.CLOSE_LIMIT
         self.OBSTACLE_CLEARANCE = self.config.ROBOT_DIAMETER
         self.SAMPLE_SIZE = self.config.SAMPLE_SIZE
         self.MAX_VEL = self.config.MAX_VEL
-    
-    def _get_obstacles(self, game : Game, robot_id: int) -> List[np.ndarray]:
+
+    def _get_obstacles(self, game: Game, robot_id: int) -> List[np.ndarray]:
         robots = (
-            list(game.friendly_robots.values())[:robot_id] + list(game.friendly_robots.values())[robot_id + 1 :] + list(game.enemy_robots.values())
+            list(game.friendly_robots.values())[:robot_id]
+            + list(game.friendly_robots.values())[robot_id + 1 :]
+            + list(game.enemy_robots.values())
         )
         return [np.array([r.p.x, r.p.y]) for r in robots]
 
@@ -196,10 +187,9 @@ class BisectorPlanner:
                 direction /= np.linalg.norm(direction)
                 p1 = h[0] + offset * direction
 
-               
                 seg1_start, seg1_end = our_pos, p1
-                seg2_start, seg2_end = p1, ((p1+target)/2 * 1.25)
-            
+                seg2_start, seg2_end = p1, target
+
                 if all(
                     point_to_segment_distance(o, seg1_start, seg1_end) > self.OBSTACLE_CLEARANCE for o in obstacles
                 ) and all(
