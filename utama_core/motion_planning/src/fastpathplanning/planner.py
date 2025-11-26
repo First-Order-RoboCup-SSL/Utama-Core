@@ -34,11 +34,8 @@ class FastPathPlanner:
         self.OBSTACLE_CLEARANCE = self.config.ROBOT_DIAMETER
 
     def _get_obstacles(self, game: Game, robot_id: int) -> List[np.ndarray]:
-        robots = (
-            list(game.friendly_robots.values())[:robot_id]
-            + list(game.friendly_robots.values())[robot_id + 1 :]
-            + list(game.enemy_robots.values())
-        )
+        friendly_obstacles = [robot for robot in game.friendly_robots.values() if robot.id != robot_id]
+        robots = friendly_obstacles + list(game.enemy_robots.values())
         return [np.array([r.p.x, r.p.y]) for r in robots]
 
     def _find_subgoal(self, robotpos, target, obstaclepos, obstacles) -> np.array:
