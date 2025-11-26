@@ -9,7 +9,7 @@ def main():
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",
-        exp_friendly=3,
+        exp_friendly=6,
         exp_enemy=3,
         control_scheme="fpp",
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
