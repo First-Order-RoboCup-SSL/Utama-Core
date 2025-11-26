@@ -1,3 +1,5 @@
 from utama_core.motion_planning.src.controllers.dwa_controller import DWAController
+from utama_core.motion_planning.src.controllers.fastpathplanning import (
+    FastPathPlanningController,
+)
 from utama_core.motion_planning.src.controllers.pid_controller import PIDController
-from utama_core.motion_planning.src.controllers.fastpathplanning import FastPathPlanningController
