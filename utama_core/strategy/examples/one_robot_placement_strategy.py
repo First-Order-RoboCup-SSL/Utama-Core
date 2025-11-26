@@ -61,20 +61,20 @@ class RobotPlacementStep(AbstractBehaviour):
                 self.tx = 1
                 # self.tx = random.choice([0, 1])
 
-        # changed so the robot tracks the ball while moving
-        oren = np.atan2(by - cy, bx - cx)
-        cmd = move(
-            game,
-            self.blackboard.motion_controller,
-            id,
-            Vector2D(self.tx, self.ty),
-            oren,
-        )
-        if rsim_env:
-            rsim_env.draw_point(self.tx, self.ty, color="red")
-            v = game.friendly_robots[id].v
-            p = game.friendly_robots[id].p
-            rsim_env.draw_point(p.x + v.x * 0.167 * 5, p.y + v.y * 0.167 * 5, color="green")
+            # changed so the robot tracks the ball while moving
+            oren = np.atan2(by - cy, bx - cx)
+            cmd = move(
+                game,
+                self.blackboard.motion_controller,
+                id,
+                Vector2D(self.tx, self.ty),
+                oren,
+            )
+            if rsim_env:
+                rsim_env.draw_point(self.tx, self.ty, color="red")
+                v = game.friendly_robots[id].v
+                p = game.friendly_robots[id].p
+                rsim_env.draw_point(p.x + v.x * 0.0167 * 5, p.y + v.y * 0.0167 * 5, color="green")
 
         self.blackboard.cmd_map[id] = cmd
         return py_trees.common.Status.RUNNING

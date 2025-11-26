@@ -38,7 +38,7 @@ class BlockAttackerStep(AbstractBehaviour):
 
     **Blackboard Interaction:**
         Reads:
-            - `rd_defender_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
+            - `rd_defender_id` (int): The ID of the defending robot that will block the attacker. Typically from the `SetBlackboardVariable` node.
             - `rd_blocking_target` (int): The ID of the enemy robot to block. Typically from the `FindBlockingTarget` node.
 
     **Returns:**
