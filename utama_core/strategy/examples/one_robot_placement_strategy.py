@@ -77,7 +77,7 @@ class RobotPlacementStep(AbstractBehaviour):
                 rsim_env.draw_point(self.tx, self.ty, color="red")
                 v = game.friendly_robots[id].v
                 p = game.friendly_robots[id].p
-                rsim_env.draw_point(p.x + v.x * 0.167 * 5, p.y + v.y * 0.167 * 5, color="green")
+                rsim_env.draw_point(p.x + v.x * 0.0167 * 5, p.y + v.y * 0.0167 * 5, color="green")
 
             self.blackboard.cmd_map[id] = cmd
             return py_trees.common.Status.RUNNING
