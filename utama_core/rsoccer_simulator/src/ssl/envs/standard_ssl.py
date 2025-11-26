@@ -311,12 +311,10 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Require forward motion relative to heading to avoid releasing while backing up
         forward = prev_forward[index]
-        print(forward)
         if not forward:
             return 0.0
 
         speed = prev_speed[index]
-        print(speed)
         if speed < MIN_RELEASE_SPEED:
             return 0.0
 
