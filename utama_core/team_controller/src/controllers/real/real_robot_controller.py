@@ -1,9 +1,19 @@
 import logging
+import sys
+import time
 import warnings
+from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import numpy as np
 from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
+
+PROJECT_ROOT = next(
+    (parent for parent in Path(__file__).parents if (parent / "pyproject.toml").exists()),
+    None,
+)
+if PROJECT_ROOT and str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.config.settings import BAUD_RATE, PORT, TIMEOUT
@@ -153,7 +163,7 @@ class RealRobotController(AbstractRobotController):
             )
             angular_vel = MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
         # TODO put back to max_vel
-        if abs(command.local_forward_vel) > 0.8:
+        if abs(command.local_forward_vel) > MAX_VEL:
             warnings.warn(
                 f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
             )
@@ -238,18 +248,19 @@ class RealRobotController(AbstractRobotController):
 if __name__ == "__main__":
     robot_controller = RealRobotController(is_team_yellow=True, n_friendly=1)
     cmd = RobotCommand(
-        local_forward_vel=0.2,
+        local_forward_vel=0.5,
         local_left_vel=0,
         angular_vel=0,
         kick=0,
         chip=0,
         dribble=False,
     )
-    for _ in range(15):
+    while True:
         robot_controller.add_robot_commands(cmd, 0)
-        # robot_controller.send_robot_commands()
+        robot_controller.send_robot_commands()
+        time.sleep(0.01667)
     # for _ in range(10):
-    #     robot_controller.add_robot_commands(empty_command(), 0)
+    #     robot_controller.add_robot_commands(empty_cmd, 0)
     #     robot_controller.send_robot_commands()
 
     # print(list(robot_controller.out_packet))
