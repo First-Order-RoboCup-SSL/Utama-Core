@@ -190,8 +190,8 @@ class MovingObstacleTestManager(AbstractTestManager):
                 MovingObstacleConfig((-0.5, -0.5), "y", 1.2, False, 2.0),
                 MovingObstacleConfig((0.0, 1.0), "x", 0.8, True, 1.5),
                 MovingObstacleConfig((1.0, 0.0), "y", 1.0, True, 1.3),  # One vertical + 2 horizontal lines near target
-                MovingObstacleConfig((2.2, 0.5), "x", 0.6, False, 0.8),
-                MovingObstacleConfig((2.2, -0.5), "x", 0.6, True, 0.8),
+                MovingObstacleConfig((2.2, 0.5), "x", 0.6, False, 1.3),
+                MovingObstacleConfig((2.2, -0.5), "x", 0.6, True, 1.3),
             ],
         },
     ],

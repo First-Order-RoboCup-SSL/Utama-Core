@@ -149,17 +149,17 @@ class CollisionAvoidanceTestManager(AbstractTestManager):
             "target": (3.0, 0.0),
             "obstacles": [(0.0, 0.0)],
         },
-        # Two obstacles creating a narrow gap
+        # Three obstacles creating a narrow gap
         {
             "start": (-3.0, 0.0),
             "target": (3.0, 0.0),
-            "obstacles": [(-1.0, 0.3), (1.0, -0.3)],
+            "obstacles": [(-1.0, 0.3), (0.0, 0.0), (1.0, -0.3)],
         },
-        # Three obstacles requiring path planning
+        # Six obstacles requiring path planning
         {
             "start": (-3.0, 0.0),
             "target": (3.0, 0.0),
-            "obstacles": [(-1.5, 0.0), (0.0, 0.0), (1.5, 0.0)],
+            "obstacles": [(-1.5, 0.0), (0.0, -0.5), (0.0, 0.5), (1.5, -1.0), (1.5, 0.0), (1.5, 1.0)],
         },
     ],
 )

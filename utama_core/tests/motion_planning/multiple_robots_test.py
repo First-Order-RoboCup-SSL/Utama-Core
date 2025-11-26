@@ -288,3 +288,95 @@ def test_mirror_charge_head_on(
         f"Robots got too close: {test_manager.min_distance:.3f}m "
         f"(minimum safe distance: {scenario.collision_threshold:.3f}m)"
     )
+
+
+def test_diagonal_cross_square(
+    headless: bool,
+    mode: str = "rsim",
+):
+    """
+    Test where 4 robots (2 per team) start at corners of a square and cross diagonally.
+
+    The robots should:
+    1. Start at the 4 corners of a square
+    2. Navigate diagonally to the opposite corner
+    3. Avoid collisions at the center where all paths cross
+    4. Successfully reach their target positions
+    """
+    my_team_is_yellow = True
+    my_team_is_right = False
+
+    # Define square corners (2m x 2m square centered at origin)
+    # Top-left and bottom-right for Yellow team
+    yellow_positions = [
+        (-1.5, 1.5),  # Top-left corner (robot 0)
+        (1.5, -1.5),  # Bottom-right corner (robot 1)
+    ]
+
+    # Top-right and bottom-left for Blue team
+    blue_positions = [
+        (1.5, 1.5),  # Top-right corner (robot 0)
+        (-1.5, -1.5),  # Bottom-left corner (robot 1)
+    ]
+
+    # Each robot goes to the opposite diagonal corner
+    yellow_targets = [
+        (1.5, -1.5),  # Robot 0: top-left → bottom-right
+        (-1.5, 1.5),  # Robot 1: bottom-right → top-left
+    ]
+
+    blue_targets = [
+        (-1.5, -1.5),  # Robot 0: top-right → bottom-left
+        (1.5, 1.5),  # Robot 1: bottom-left → top-right
+    ]
+
+    scenario = MultiRobotScenario(
+        friendly_positions=yellow_positions,
+        enemy_positions=blue_positions,
+        friendly_targets=yellow_targets,
+        enemy_targets=blue_targets,
+        endpoint_tolerance=0.25,
+    )
+
+    from utama_core.tests.motion_planning.strategies.multi_robot_navigation_strategy import (
+        MultiRobotNavigationStrategy,
+    )
+
+    my_strategy = MultiRobotNavigationStrategy(
+        robot_targets={i: yellow_targets[i] for i in range(len(yellow_positions))}
+    )
+
+    opp_strategy = MultiRobotNavigationStrategy(robot_targets={i: blue_targets[i] for i in range(len(blue_positions))})
+
+    runner = StrategyRunner(
+        strategy=my_strategy,
+        my_team_is_yellow=my_team_is_yellow,
+        my_team_is_right=my_team_is_right,
+        mode=mode,
+        exp_friendly=2,
+        exp_enemy=2,
+        opp_strategy=opp_strategy,
+        control_scheme="dwa",  # Use DWA for collision avoidance
+    )
+
+    test_manager = MultiRobotTestManager(scenario=scenario)
+    test_passed = runner.run_test(
+        testManager=test_manager,
+        episode_timeout=30.0,
+        rsim_headless=headless,
+    )
+
+    # Assertions
+    assert test_passed, "Diagonal cross test failed to complete"
+    assert test_manager.all_reached, (
+        f"Not all robots reached their targets. " f"Reached: {len(test_manager.robots_reached)}/4"
+    )
+    assert not test_manager.collision_detected, (
+        f"Robots collided {test_manager.collision_count} time(s) at center crossing! "
+        f"Minimum distance: {test_manager.min_distance:.3f}m "
+        f"(threshold: {scenario.collision_threshold:.3f}m)"
+    )
+    assert test_manager.min_distance >= scenario.collision_threshold, (
+        f"Robots got too close at crossing: {test_manager.min_distance:.3f}m "
+        f"(minimum safe distance: {scenario.collision_threshold:.3f}m)"
+    )
