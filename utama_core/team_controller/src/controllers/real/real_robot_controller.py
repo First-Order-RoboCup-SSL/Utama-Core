@@ -68,7 +68,6 @@ class RealRobotController(AbstractRobotController):
         """
         c_command = self._convert_float16_command(robot_id, command)
         command_buffer = self._generate_command_buffer(robot_id, c_command)
-        print(command_buffer)
         start_idx = robot_id * self._rbt_cmd_size + 1  # account for the start frame byte
         self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = (
             command_buffer  # +1 to account for start frame byte

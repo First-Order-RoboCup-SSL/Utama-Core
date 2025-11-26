@@ -25,7 +25,7 @@ def align_defenders(
     defender_pos = calculate_defense_area(game, defender_parametric_pos)
 
     # logger.debug(f"DEFENDER {dx} {dy}")
-    goal_centre_x = game.field.my_goal_line.coords[0][0]
+    goal_centre_x = game.field.my_goal_line[0][0]
 
     if attacker_orientation is None or attacker_orientation == 0:
         # In case there is no ball velocity or attackers, use centre of goal
@@ -92,7 +92,7 @@ def calculate_defense_area(game: Game, t: float) -> Vector2D:
     )
 
     # This slows everything down sooo much that everything breaks (ask Fred if still confused)
-    # goal_centre_x, _ = game.field.my_goal_line.coords[0]
+    # goal_centre_x, _ = game.field.my_goal_line[0]
 
     if game.my_team_is_right:
         goal_centre_x = 4.5
@@ -111,7 +111,7 @@ def make_relative_to_goal_centre(goal_centre_x: float, p: Vector2D) -> Vector2D:
 
 def predict_goal_y_location(game: Game, shooter_position: Vector2D, orientation: float) -> float:
     dx, dy = np.cos(orientation), np.sin(orientation)
-    gx, _ = game.field.my_goal_line.coords[0]
+    gx, _ = game.field.my_goal_line[0]
     if dx == 0:
         return float("inf")
     t = (gx - shooter_position[0]) / dx
