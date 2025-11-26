@@ -290,18 +290,21 @@ class SSLStandardEnv(SSLBaseEnv):
         self.prev_dribbler_blue = [cmd.dribbler for cmd in commands[:n_blue]]
         self.prev_dribbler_yellow = [cmd.dribbler for cmd in commands[n_blue:]]
 
-        self.prev_speed_blue = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[:n_blue]]
-        self.prev_speed_yellow = [math.hypot(cmd.v_x, cmd.v_y) for cmd in commands[n_blue:]]
-
-        # Store commanded forward components relative to the current robot headings
-        def forward_component(robot, cmd):
-            heading_rad = math.radians(robot.theta)
-            return cmd.v_x * math.cos(heading_rad) + cmd.v_y * math.sin(heading_rad)
-
-        self.prev_forward_blue = [forward_component(self.frame.robots_blue[i], commands[i]) for i in range(n_blue)]
-        self.prev_forward_yellow = [
-            forward_component(self.frame.robots_yellow[j], commands[n_blue + j]) for j in range(self.n_robots_yellow)
+        # Use measured velocities from the simulator frame to avoid drift from commanded speeds.
+        self.prev_speed_blue = [
+            math.hypot(self.frame.robots_blue[i].v_x, self.frame.robots_blue[i].v_y) for i in range(n_blue)
         ]
+        self.prev_speed_yellow = [
+            math.hypot(self.frame.robots_yellow[j].v_x, self.frame.robots_yellow[j].v_y)
+            for j in range(self.n_robots_yellow)
+        ]
+
+        # Store forward components relative to the current robot headings using measured velocity
+        def forward_component(robot):
+            return robot.v_x > 0.0
+
+        self.prev_forward_blue = [forward_component(self.frame.robots_blue[i]) for i in range(n_blue)]
+        self.prev_forward_yellow = [forward_component(self.frame.robots_yellow[j]) for j in range(self.n_robots_yellow)]
 
     def _dribbler_release_kick(
         self,
@@ -324,7 +327,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Require forward motion relative to heading to avoid releasing while backing up
         forward = prev_forward[index]
-        if forward <= 0.0:
+        if not forward:
             return 0.0
 
         speed = prev_speed[index]
