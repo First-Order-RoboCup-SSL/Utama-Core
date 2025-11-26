@@ -46,41 +46,38 @@ class RobotPlacementStep(AbstractBehaviour):
         id: int = self.blackboard.get(self.robot_id_key)
 
         friendly_robots = game.friendly_robots
+        bx, by = game.ball.p.x, game.ball.p.y
+        rp = friendly_robots[id].p
+        cx, cy, _ = rp.x, rp.y, friendly_robots[id].orientation
+        error = math.dist((self.tx, self.ty), (cx, cy))
 
-        if game.friendly_robots and game.ball is not None:
-            friendly_robots = game.friendly_robots
-            bx, by = game.ball.p.x, game.ball.p.y
-            rp = friendly_robots[id].p
-            cx, cy, _ = rp.x, rp.y, friendly_robots[id].orientation
-            error = math.dist((self.tx, self.ty), (cx, cy))
+        switch = error < 0.05
+        if switch:
+            if self.ty == -1:
+                self.ty = 1
+                self.tx = random.choice([0, 1])
+            else:
+                self.ty = -1
+                self.tx = 1
+                # self.tx = random.choice([0, 1])
 
-            switch = error < 0.05
-            if switch:
-                if self.ty == -1:
-                    self.ty = 1
-                    self.tx = random.choice([0, 1])
-                else:
-                    self.ty = -1
-                    self.tx = 1
-                    # self.tx = random.choice([0, 1])
+        # changed so the robot tracks the ball while moving
+        oren = np.atan2(by - cy, bx - cx)
+        cmd = move(
+            game,
+            self.blackboard.motion_controller,
+            id,
+            Vector2D(self.tx, self.ty),
+            oren,
+        )
+        if rsim_env:
+            rsim_env.draw_point(self.tx, self.ty, color="red")
+            v = game.friendly_robots[id].v
+            p = game.friendly_robots[id].p
+            rsim_env.draw_point(p.x + v.x * 0.167 * 5, p.y + v.y * 0.167 * 5, color="green")
 
-            # changed so the robot tracks the ball while moving
-            oren = np.atan2(by - cy, bx - cx)
-            cmd = move(
-                game,
-                self.blackboard.motion_controller,
-                id,
-                Vector2D(self.tx, self.ty),
-                oren,
-            )
-            if rsim_env:
-                rsim_env.draw_point(self.tx, self.ty, color="red")
-                v = game.friendly_robots[id].v
-                p = game.friendly_robots[id].p
-                rsim_env.draw_point(p.x + v.x * 0.167 * 5, p.y + v.y * 0.167 * 5, color="green")
-
-            self.blackboard.cmd_map[id] = cmd
-            return py_trees.common.Status.RUNNING
+        self.blackboard.cmd_map[id] = cmd
+        return py_trees.common.Status.RUNNING
 
 
 class SetBlackboardVariable(AbstractBehaviour):
