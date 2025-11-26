@@ -17,10 +17,6 @@ class DynamicWindowConfig:
     max_speed_for_full_bubble: float = 1.0
     target_tolerance: float = 0.01
     n_directions: int = 8
-    v_resolution = 0.05
-    weight_goal = 1.0
-    weight_obstacle = 1.0
-    weight_speed = 0.1
 
 
 def get_dwa_config(mode: Mode) -> DynamicWindowConfig:
