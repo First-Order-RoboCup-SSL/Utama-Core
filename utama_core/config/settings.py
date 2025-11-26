@@ -32,9 +32,6 @@ BAUD_RATE = 115200
 PORT = "/dev/ttyACM0"
 TIMEOUT = 0.1
 
-CMD_MAX_VELOCITY = 4.0  # m/s
-CMD_MAX_ANGULAR_VELOCITY = 8  # rad/s
-
 MAX_GAME_HISTORY = 20
 
 REPLAY_BASE_PATH = Path.cwd() / "replays"

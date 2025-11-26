@@ -6,19 +6,8 @@ import numpy as np
 from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 
 from utama_core.config.robot_params import REAL_PARAMS
-
-from utama_core.config.settings import (
-    BAUD_RATE,
-    CMD_MAX_ANGULAR_VELOCITY,
-    CMD_MAX_VELOCITY,
-    PORT,
-    TIMEOUT,
-)
-from utama_core.entities.data.command import (
-    RobotCommand,
-    RobotPacketCommand,
-    RobotResponse,
-)
+from utama_core.config.settings import BAUD_RATE, PORT, TIMEOUT
+from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -147,46 +136,7 @@ class RealRobotController(AbstractRobotController):
 
         return packet
 
-    def _convert_uint16_command(self, robot_id, command: RobotCommand) -> RobotPacketCommand:
-        """Prepares the float values in the command to be formatted to binary in the buffer.
-
-        Also converts angular velocity to degrees per second.
-        """
-        angular_vel = command.angular_vel
-        local_forward_vel = command.local_forward_vel
-        local_left_vel = command.local_left_vel
-
-        if abs(command.angular_vel) > CMD_MAX_ANGULAR_VELOCITY:
-            warnings.warn(
-                f"Angular velocity for robot {robot_id} is greater than the maximum angular velocity. Clipping to {CMD_MAX_ANGULAR_VELOCITY}."
-            )
-            angular_vel = CMD_MAX_ANGULAR_VELOCITY if command.angular_vel > 0 else -CMD_MAX_ANGULAR_VELOCITY
-        if abs(command.local_forward_vel) > CMD_MAX_VELOCITY:
-            warnings.warn(
-                f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {CMD_MAX_VELOCITY}."
-            )
-            local_forward_vel = CMD_MAX_VELOCITY if command.local_forward_vel > 0 else -CMD_MAX_VELOCITY
-        if abs(command.local_left_vel) > CMD_MAX_VELOCITY:
-            warnings.warn(
-                f"Local left velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {CMD_MAX_VELOCITY}."
-            )
-            local_left_vel = CMD_MAX_VELOCITY if command.local_left_vel > 0 else -CMD_MAX_VELOCITY
-
-        local_forward_vel = self._encode_signed_to_u16(local_forward_vel, CMD_MAX_VELOCITY)
-        local_left_vel = self._encode_signed_to_u16(local_left_vel, CMD_MAX_VELOCITY)
-        angular_vel = self._encode_signed_to_u16(angular_vel, CMD_MAX_ANGULAR_VELOCITY)
-
-        command = RobotPacketCommand(
-            local_forward_vel=self._uint16_rep(local_forward_vel),
-            local_left_vel=self._uint16_rep(local_left_vel),
-            angular_vel=self._uint16_rep(angular_vel),
-            kick=command.kick,
-            chip=command.chip,
-            dribble=command.dribble,
-        )
-        return command
-
-    def _convert_float_command(self, robot_id, command: RobotCommand) -> RobotCommand:
+    def _convert_float16_command(self, robot_id, command: RobotCommand) -> RobotCommand:
         """Prepares the float values in the command to be formatted to binary in the buffer.
 
         Also converts angular velocity to degrees per second.
@@ -196,23 +146,24 @@ class RealRobotController(AbstractRobotController):
         local_forward_vel = command.local_forward_vel
         local_left_vel = command.local_left_vel
 
-        if abs(command.angular_vel) > CMD_MAX_ANGULAR_VELOCITY:
+        if abs(command.angular_vel) > MAX_ANGULAR_VEL:
             warnings.warn(
-                f"Angular velocity for robot {robot_id} is greater than the maximum angular velocity. Clipping to {CMD_MAX_ANGULAR_VELOCITY}."
+                f"Angular velocity for robot {robot_id} is greater than the maximum angular velocity. Clipping to {MAX_ANGULAR_VEL}."
             )
-            angular_vel = CMD_MAX_ANGULAR_VELOCITY if command.angular_vel > 0 else -CMD_MAX_ANGULAR_VELOCITY
+            angular_vel = MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
+        # TODO put back to max_vel
+        if abs(command.local_forward_vel) > 0.8:
+            warnings.warn(
+                f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
+            )
+            local_forward_vel = MAX_VEL if command.local_forward_vel > 0 else -MAX_VEL
 
-        if abs(command.local_forward_vel) > CMD_MAX_VELOCITY:
+        if abs(command.local_left_vel) > MAX_VEL:
             warnings.warn(
-                f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {CMD_MAX_VELOCITY}."
+                f"Local left velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
             )
-            local_forward_vel = CMD_MAX_VELOCITY if command.local_forward_vel > 0 else -CMD_MAX_VELOCITY
+            local_left_vel = MAX_VEL if command.local_left_vel > 0 else -MAX_VEL
 
-        if abs(command.local_left_vel) > CMD_MAX_VELOCITY:
-            warnings.warn(
-                f"Local left velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {CMD_MAX_VELOCITY}."
-            )
-            local_left_vel = CMD_MAX_VELOCITY if command.local_left_vel > 0 else -CMD_MAX_VELOCITY
         command = RobotCommand(
             local_forward_vel=self._float16_rep(local_forward_vel),
             local_left_vel=self._float16_rep(local_left_vel),
