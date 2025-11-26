@@ -205,9 +205,9 @@ class RealRobotController(AbstractRobotController):
             commands = bytearray()
             for _ in range(self._n_friendly):
                 cmd = bytearray([INVALID_RBT_ID] + [0] * (self._rbt_cmd_size - 1))  # empty command for each robot
-                commands += cmd
+                commands.extend(cmd)
             self._cached_empty_command = bytearray([0xAA]) + commands + bytearray([0x55])
-        return self._cached_empty_command
+        return self._cached_empty_command.copy()
 
     def _init_serial(self) -> Serial:
         """Establish serial connection."""
