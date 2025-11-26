@@ -254,14 +254,9 @@ class SSLStandardEnv(SSLBaseEnv):
         increasing ``kick_v_x`` for robots whose dribbler transitioned from
         on to off while they were moving with the ball.
         """
-        prior_frame = self.frame
-        blue_states = prior_frame.robots_blue if prior_frame is not None else None
-        yellow_states = prior_frame.robots_yellow if prior_frame is not None else None
-
         n_blue = self.n_robots_blue
         for i in range(n_blue):
             release = self._dribbler_release_kick(
-                blue_states,
                 self.prev_dribbler_blue,
                 self.prev_speed_blue,
                 self.prev_forward_blue,
@@ -274,7 +269,6 @@ class SSLStandardEnv(SSLBaseEnv):
         for j in range(self.n_robots_yellow):
             cmd_idx = n_blue + j
             release = self._dribbler_release_kick(
-                yellow_states,
                 self.prev_dribbler_yellow,
                 self.prev_speed_yellow,
                 self.prev_forward_yellow,
@@ -291,24 +285,20 @@ class SSLStandardEnv(SSLBaseEnv):
         self.prev_dribbler_yellow = [cmd.dribbler for cmd in commands[n_blue:]]
 
         # Use measured velocities from the simulator frame to avoid drift from commanded speeds.
-        self.prev_speed_blue = [
-            math.hypot(self.frame.robots_blue[i].v_x, self.frame.robots_blue[i].v_y) for i in range(n_blue)
-        ]
+        self.prev_speed_blue = [math.hypot(commands[i].v_x, commands[i].v_y) for i in range(n_blue)]
         self.prev_speed_yellow = [
-            math.hypot(self.frame.robots_yellow[j].v_x, self.frame.robots_yellow[j].v_y)
-            for j in range(self.n_robots_yellow)
+            math.hypot(commands[n_blue + j].v_x, commands[n_blue + j].v_y) for j in range(self.n_robots_yellow)
         ]
 
         # Store forward components relative to the current robot headings using measured velocity
-        def forward_component(robot):
-            return robot.v_x > 0.0
+        def forward_component(cmd):
+            return cmd.v_x > 0.0
 
-        self.prev_forward_blue = [forward_component(self.frame.robots_blue[i]) for i in range(n_blue)]
-        self.prev_forward_yellow = [forward_component(self.frame.robots_yellow[j]) for j in range(self.n_robots_yellow)]
+        self.prev_forward_blue = [forward_component(commands[i]) for i in range(n_blue)]
+        self.prev_forward_yellow = [forward_component(commands[n_blue + j]) for j in range(self.n_robots_yellow)]
 
     def _dribbler_release_kick(
         self,
-        robot_states: Optional[Dict[int, Robot]],
         prev_dribbler: List[bool],
         prev_speed: List[float],
         prev_forward: List[float],
@@ -316,21 +306,17 @@ class SSLStandardEnv(SSLBaseEnv):
         dribbler: bool,
     ) -> float:
         """Estimate the kick needed to release the ball when the dribbler turns off."""
-        if robot_states is None or not prev_dribbler[index] or dribbler:
-            return 0.0
-
-        if index not in robot_states:
-            return 0.0
-        robot_state = robot_states[index]
-        if not getattr(robot_state, "infrared", False):
+        if not prev_dribbler[index] or dribbler:
             return 0.0
 
         # Require forward motion relative to heading to avoid releasing while backing up
         forward = prev_forward[index]
+        print(forward)
         if not forward:
             return 0.0
 
         speed = prev_speed[index]
+        print(speed)
         if speed < MIN_RELEASE_SPEED:
             return 0.0
 
