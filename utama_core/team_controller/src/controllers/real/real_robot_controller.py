@@ -1,4 +1,5 @@
 import logging
+import time
 import warnings
 from typing import Dict, List, Optional, Union
 
@@ -8,6 +9,7 @@ from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.config.settings import BAUD_RATE, PORT, TIMEOUT
 from utama_core.entities.data.command import RobotCommand, RobotResponse
+from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -36,6 +38,9 @@ class RealRobotController(AbstractRobotController):
         self._robots_info: List[RobotResponse] = [None] * self._n_friendly
 
         logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
+
+    def get_robots_responses(self) -> Optional[List[RobotResponse]]:
+        return None
 
     def send_robot_commands(self) -> None:
         """Sends the robot commands to the appropriate team (yellow or blue)."""
@@ -245,12 +250,14 @@ if __name__ == "__main__":
         chip=0,
         dribble=False,
     )
-    for _ in range(15):
+    for _ in range(100):
         robot_controller.add_robot_commands(cmd, 0)
-        # robot_controller.send_robot_commands()
-    # for _ in range(10):
-    #     robot_controller.add_robot_commands(empty_command(), 0)
-    #     robot_controller.send_robot_commands()
+        robot_controller.send_robot_commands()
+        time.sleep(0.01667)
+    for _ in range(10):
+        robot_controller.add_robot_commands(empty_command(), 0)
+        robot_controller.send_robot_commands()
+        time.sleep(0.01667)
 
     # print(list(robot_controller.out_packet))
     # binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
