@@ -45,7 +45,7 @@ class FastPathPlanner:
         direction = target - robotpos
         perp_dir = rotate_vector(direction, 90)
         unitvec = perp_dir / np.linalg.norm(perp_dir)
-        subgoal = obstaclepos + self.OBSTACLE_CLEARANCE * unitvec * 1.5
+        subgoal = obstaclepos + self.OBSTACLE_CLEARANCE * unitvec * 2
         return subgoal
 
     def collides(
