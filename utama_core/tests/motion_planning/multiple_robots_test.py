@@ -269,7 +269,7 @@ def test_mirror_charge_head_on(
     test_manager = MultiRobotTestManager(scenario=scenario)
     test_passed = runner.run_test(
         testManager=test_manager,
-        episode_timeout=45.0,  # Longer timeout for 12 robots
+        episode_timeout=15.0,  # Longer timeout for 12 robots
         rsim_headless=headless,
     )
 
