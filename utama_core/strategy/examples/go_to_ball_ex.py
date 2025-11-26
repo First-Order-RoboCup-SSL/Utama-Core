@@ -88,13 +88,14 @@ class GoToBallStep(AbstractBehaviour):
     def update(self) -> py_trees.common.Status:
         game = self.blackboard.game
         env = self.blackboard.rsim_env
+        robot_id = self.blackboard.get(self.robot_id_key)
         if env:
-            v = game.friendly_robots[self.blackboard.get(self.robot_id_key)].v
-            p = game.friendly_robots[self.blackboard.get(self.robot_id_key)].p
+            v = game.friendly_robots[robot_id].v
+            p = game.friendly_robots[robot_id].p
             env.draw_point(p.x + v.x * 0.0167 * 5, p.y + v.y * 0.0167 * 5, color="green")
 
-        command = go_to_ball(game, self.blackboard.motion_controller, self.blackboard.get(self.robot_id_key))
-        self.blackboard.cmd_map[self.blackboard.get(self.robot_id_key)] = command
+        command = go_to_ball(game, self.blackboard.motion_controller, robot_id)
+        self.blackboard.cmd_map[robot_id] = command
         return py_trees.common.Status.RUNNING
 
 
