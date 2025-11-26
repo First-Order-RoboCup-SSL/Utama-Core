@@ -40,6 +40,7 @@ class RealRobotController(AbstractRobotController):
         logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
 
     def get_robots_responses(self) -> Optional[List[RobotResponse]]:
+        ### TODO: Not implemented yet
         return None
 
     def send_robot_commands(self) -> None:
