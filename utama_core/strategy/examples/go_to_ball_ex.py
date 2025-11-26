@@ -48,7 +48,7 @@ class HasBall(AbstractBehaviour):
     def _has_ball_visual(self, game: Game, robot_id: int) -> py_trees.common.Status:
         """
         Visual possession: success if the robot is within `ball_capture_radius` of the ball.
-        Uses squared distance (no sqrt) for speed.
+        Success if the robot is within `ball_capture_radius` of the ball (uses Euclidean distance).
         """
         robot = game.friendly_robots[robot_id]
         ball = game.ball
@@ -56,8 +56,8 @@ class HasBall(AbstractBehaviour):
         r_pos = Vector2D(robot.p.x, robot.p.y)
         b_pos = Vector2D(ball.p.x, ball.p.y)
 
-        dist_sq = r_pos.distance_to(b_pos)
-        return py_trees.common.Status.SUCCESS if dist_sq < self.ball_capture_dist else py_trees.common.Status.FAILURE
+        dist = r_pos.distance_to(b_pos)
+        return py_trees.common.Status.SUCCESS if dist < self.ball_capture_dist else py_trees.common.Status.FAILURE
 
     def _has_ball_from_state(self, game: Game, robot_id: int) -> py_trees.common.Status:
         """
