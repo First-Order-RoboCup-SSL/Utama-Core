@@ -33,6 +33,7 @@ from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.run import GameGater
 from utama_core.run.receivers import VisionReceiver
 from utama_core.run.refiners import PositionRefiner, RobotInfoRefiner, VelocityRefiner
+from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import (
     AbstractSimController,
@@ -523,6 +524,10 @@ class StrategyRunner:
             while True:
                 self._run_step()
         except KeyboardInterrupt:
+            for _ in range(10):
+                d = {n: empty_command() for n in range(self.exp_friendly)}
+                self.my_strategy.robot_controller.add_robot_commands(d)
+                self.my_strategy.robot_controller.send_robot_commands()
             self.logger.info("Terminating...")
         finally:
             self._cleanup()

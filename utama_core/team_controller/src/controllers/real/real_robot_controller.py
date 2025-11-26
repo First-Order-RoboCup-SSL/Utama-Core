@@ -50,8 +50,8 @@ class RealRobotController(AbstractRobotController):
     def send_robot_commands(self) -> None:
         """Sends the robot commands to the appropriate team (yellow or blue)."""
         # print(list(self.out_packet))
-        # binary_representation = [f"{byte:08b}" for byte in self.out_packet]
-        # print(binary_representation)
+        binary_representation = [f"{byte:08b}" for byte in self.out_packet]
+        print(binary_representation)
         # print("Sending packet:", list(self.out_packet))
         self._serial_port.write(self.out_packet)
         self._serial_port.read_all()
@@ -68,6 +68,7 @@ class RealRobotController(AbstractRobotController):
         robot_id: Optional[int] = None,
     ) -> None:
         """Adds robot commands to the packet to be sent to the robot."""
+        print(robot_commands)
         super().add_robot_commands(robot_commands, robot_id)
 
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
@@ -84,6 +85,10 @@ class RealRobotController(AbstractRobotController):
         self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = (
             command_buffer  # +1 to account for start frame byte
         )
+
+    def get_robots_responses(self):
+        # temporary placeholder until real robot feedback is implemented
+        return None
 
     # def _populate_robots_info(self, data_in: bytes) -> None:
     #     """
@@ -247,11 +252,11 @@ class RealRobotController(AbstractRobotController):
 
 
 if __name__ == "__main__":
-    robot_controller = RealRobotController(is_team_yellow=True, n_friendly=1)
+    robot_controller = RealRobotController(is_team_yellow=False, n_friendly=1)
     cmd = RobotCommand(
         local_forward_vel=0,
-        local_left_vel=1,
-        angular_vel=0,
+        local_left_vel=0,
+        angular_vel=0.8,
         kick=0,
         chip=0,
         dribble=False,
@@ -265,7 +270,7 @@ if __name__ == "__main__":
         chip=0,
         dribble=False,
     )
-    for _ in range(10):
+    for _ in range(100):
         robot_controller.add_robot_commands(cmd, 0)
         robot_controller.send_robot_commands()
         time.sleep(0.01667)

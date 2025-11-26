@@ -88,8 +88,8 @@ def get_pid_configs(mode: Mode) -> PIDConfigs:
             orientation=OrientationPIDConfigs(
                 max_output=REAL_PARAMS.MAX_ANGULAR_VEL,
                 min_output=-REAL_PARAMS.MAX_ANGULAR_VEL,
-                kp=0.5,
-                kd=0.075,
+                kp=4.5,
+                kd=0.02,
                 ki=0.0,
                 max_acceleration=REAL_PARAMS.MAX_ANGULAR_ACCELERATION,
             ),
