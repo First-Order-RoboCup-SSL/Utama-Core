@@ -47,7 +47,7 @@ def defend_parameter(
         dribbling=True,
     )
 
-    gp = (game.field.my_goal_line.coords[0][0], 0)
+    gp = (game.field.my_goal_line.coords, 0)
     if env:
         env.draw_line(
             [gp, (target_tracking_coord[0], target_tracking_coord[1])],
