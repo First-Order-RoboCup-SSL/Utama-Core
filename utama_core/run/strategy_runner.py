@@ -87,6 +87,7 @@ class StrategyRunner:
         field_bounds: FieldBounds = Field.full_field_bounds,
         opp_strategy: Optional[AbstractStrategy] = None,
         control_scheme: str = "pid",
+        opp_control_scheme: Optional[str] = None,  # For testing
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         print_real_fps: bool = False,  # Turn this on for RSim
         profiler_name: Optional[str] = None,
@@ -103,6 +104,10 @@ class StrategyRunner:
         self.opp_strategy = opp_strategy
 
         self.motion_controller = get_control_scheme(control_scheme)
+        if opp_control_scheme is not None:
+            self.opp_motion_controller = get_control_scheme(opp_control_scheme)
+        else:
+            self.opp_motion_controller = self.motion_controller
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
         if self.opp_strategy:
@@ -356,7 +361,7 @@ class StrategyRunner:
         self.my_strategy.load_motion_controller(self.motion_controller(self.mode, self.rsim_env))
         if self.opp_strategy:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
-            self.opp_strategy.load_motion_controller(self.motion_controller(self.mode, self.rsim_env))
+            self.opp_strategy.load_motion_controller(self.opp_motion_controller(self.mode, self.rsim_env))
 
     def _load_game(self):
         """
