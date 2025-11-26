@@ -6,6 +6,7 @@ import numpy as np
 import py_trees
 from py_trees.composites import Sequence
 
+from utama_core.config.settings import TIMESTEP
 from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.math_utils import Vector2D
 from utama_core.skills.src.utils.move_utils import move
@@ -74,7 +75,7 @@ class RobotPlacementStep(AbstractBehaviour):
                 rsim_env.draw_point(self.tx, self.ty, color="red")
                 v = game.friendly_robots[id].v
                 p = game.friendly_robots[id].p
-                rsim_env.draw_point(p.x + v.x * 0.0167 * 5, p.y + v.y * 0.0167 * 5, color="green")
+                rsim_env.draw_point(p.x + v.x * TIMESTEP * 5, p.y + v.y * TIMESTEP * 5, color="green")
 
         self.blackboard.cmd_map[id] = cmd
         return py_trees.common.Status.RUNNING

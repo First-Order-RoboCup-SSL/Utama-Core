@@ -7,7 +7,7 @@ import numpy as np
 from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 
 from utama_core.config.robot_params import REAL_PARAMS
-from utama_core.config.settings import BAUD_RATE, PORT, TIMEOUT
+from utama_core.config.settings import BAUD_RATE, PORT, TIMEOUT, TIMESTEP
 from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
@@ -263,11 +263,11 @@ if __name__ == "__main__":
     for _ in range(100):
         robot_controller.add_robot_commands(cmd, 0)
         robot_controller.send_robot_commands()
-        time.sleep(0.01667)
+        time.sleep(TIMESTEP)
     for _ in range(10):
         robot_controller.add_robot_commands(empty_command(), 0)
         robot_controller.send_robot_commands()
-        time.sleep(0.01667)
+        time.sleep(TIMESTEP)
 
     # print(list(robot_controller.out_packet))
     # binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]

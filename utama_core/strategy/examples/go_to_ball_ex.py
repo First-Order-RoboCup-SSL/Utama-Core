@@ -4,6 +4,7 @@ import py_trees
 from py_trees.composites import Selector, Sequence
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.settings import TIMESTEP
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.skills.src.go_to_ball import go_to_ball
@@ -92,7 +93,7 @@ class GoToBallStep(AbstractBehaviour):
         if env:
             v = game.friendly_robots[robot_id].v
             p = game.friendly_robots[robot_id].p
-            env.draw_point(p.x + v.x * 0.0167 * 5, p.y + v.y * 0.0167 * 5, color="green")
+            env.draw_point(p.x + v.x * TIMESTEP * 5, p.y + v.y * TIMESTEP * 5, color="green")
 
         command = go_to_ball(game, self.blackboard.motion_controller, robot_id)
         self.blackboard.cmd_map[robot_id] = command
