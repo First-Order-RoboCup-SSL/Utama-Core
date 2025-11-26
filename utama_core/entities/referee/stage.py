@@ -27,9 +27,5 @@ class Stage(Enum):
             raise ValueError(f"Invalid stage ID: {stage_id}")
 
     @property
-    def name(self):
-        return self.name
-
-    @property
     def stage_id(self):
         return self.value
