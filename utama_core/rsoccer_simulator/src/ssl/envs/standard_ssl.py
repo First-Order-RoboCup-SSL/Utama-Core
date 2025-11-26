@@ -10,6 +10,7 @@ from utama_core.config.robot_params import RSIM_PARAMS
 from utama_core.config.settings import TIMESTEP
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
+from utama_core.entities.data.referee import RefereeData
 from utama_core.global_utils.math_utils import deg_to_rad, rad_to_deg
 from utama_core.rsoccer_simulator.src.Entities import Ball, Frame, Robot
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
@@ -101,7 +102,16 @@ class SSLStandardEnv(SSLBaseEnv):
         self.blue_formation = LEFT_START_ONE if not blue_starting_formation else blue_starting_formation
         self.yellow_formation = RIGHT_START_ONE if not yellow_starting_formation else yellow_starting_formation
 
-        logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
+        # Initialize embedded referee state machine
+        from utama_core.rsoccer_simulator.src.ssl.referee_state_machine import (
+            RefereeStateMachine,
+        )
+
+        self.referee_state_machine = RefereeStateMachine(
+            n_robots_blue=n_robots_blue, n_robots_yellow=n_robots_yellow, field=self.field
+        )
+
+        logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized with embedded referee")
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
@@ -110,17 +120,22 @@ class SSLStandardEnv(SSLBaseEnv):
     def step(self, action):
         observation, reward, terminated, truncated, _ = super().step(action)
 
+        # Update referee state
+        current_time = self.time_step * self.steps
+        self.referee_state_machine.update(self.frame, current_time)
+
         return observation, reward, terminated, truncated, self.reward_shaping_total
 
     def _frame_to_observations(
         self,
-    ) -> Tuple[RawVisionData, RobotResponse, RobotResponse]:
+    ) -> Tuple[RawVisionData, RobotResponse, RobotResponse, RefereeData]:
         """Return observation data that aligns with grSim.
 
-        Returns (vision_observation, yellow_robot_feedback, blue_robot_feedback)
+        Returns (vision_observation, yellow_robot_feedback, blue_robot_feedback, referee_data)
         vision_observation: closely aligned to SSLVision that returns a FramData object
         yellow_robots_info: feedback from individual yellow robots that returns a List[RobotInfo]
         blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
+        referee_data: current referee state from embedded referee state machine
         """
         # Ball observation shared by all robots
         ball_obs = RawBallData(self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z, 1.0)
@@ -146,11 +161,16 @@ class SSLStandardEnv(SSLBaseEnv):
         # note that ball_obs stored in list to standardise with SSLVision
         # As there is sometimes multiple possible positions for the ball
 
+        # Get referee data
+        current_time = self.time_step * self.steps
+        referee_data = self.referee_state_machine.get_referee_data(current_time)
+
         # Camera id as 0, only one camera for RSim
         return (
             RawVisionData(self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs], 0),
             yellow_robots_info,
             blue_robots_info,
+            referee_data,
         )
 
     def _get_robot_observation(self, robot):

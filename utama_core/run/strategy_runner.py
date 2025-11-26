@@ -32,7 +32,12 @@ from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.run import GameGater
 from utama_core.run.receivers import VisionReceiver
-from utama_core.run.refiners import PositionRefiner, RobotInfoRefiner, VelocityRefiner
+from utama_core.run.refiners import (
+    PositionRefiner,
+    RefereeRefiner,
+    RobotInfoRefiner,
+    VelocityRefiner,
+)
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import (
     AbstractSimController,
@@ -117,7 +122,7 @@ class StrategyRunner:
         self.position_refiner = PositionRefiner(self.field_bounds)
         self.velocity_refiner = VelocityRefiner()
         self.robot_info_refiner = RobotInfoRefiner()
-        # self.referee_refiner = RefereeRefiner()
+        self.referee_refiner = RefereeRefiner()
         (
             self.my_game_history,
             self.my_current_game_frame,
@@ -538,20 +543,29 @@ class StrategyRunner:
         """
         frame_start = time.perf_counter()
         if self.mode == Mode.RSIM:
-            vision_frames = [self.rsim_env._frame_to_observations()[0]]
+            obs = self.rsim_env._frame_to_observations()
+            if len(obs) == 4:
+                # New format with referee
+                vision_frames = [obs[0]]
+                referee_data = obs[3]
+            else:
+                # Old format without referee (backwards compat)
+                vision_frames = [obs[0]]
+                referee_data = None
+            print(referee_data)
         else:
             vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
-        # referee_frame = ref_buffer.popleft()
+            referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
 
         # alternate between opp and friendly playing
         if self.toggle_opp_first:
             if self.opp_strategy:
-                self._step_game(vision_frames, True)
-            self._step_game(vision_frames, False)
+                self._step_game(vision_frames, referee_data, True)
+            self._step_game(vision_frames, referee_data, False)
         else:
-            self._step_game(vision_frames, False)
+            self._step_game(vision_frames, referee_data, False)
             if self.opp_strategy:
-                self._step_game(vision_frames, True)
+                self._step_game(vision_frames, referee_data, True)
         self.toggle_opp_first = not self.toggle_opp_first
 
         # --- rate limiting ---
@@ -581,12 +595,14 @@ class StrategyRunner:
     def _step_game(
         self,
         vision_frames: List[RawVisionData],
+        referee_data,
         running_opp: bool,
     ):
         """Step the game for the robot controller and strategy.
 
         Args:
             vision_frames (List[RawVisionData]): The vision frames.
+            referee_data: The referee data from RSim or network receiver.
             running_opp (bool): Whether to run the opponent strategy.
         """
         # Select which side to step
@@ -608,7 +624,7 @@ class StrategyRunner:
         new_game_frame = self.position_refiner.refine(current_game_frame, vision_frames)
         new_game_frame = self.velocity_refiner.refine(game_history, new_game_frame)  # , robot_frame.imu_data)
         new_game_frame = self.robot_info_refiner.refine(new_game_frame, responses)
-        # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)
+        new_game_frame = self.referee_refiner.refine(new_game_frame, referee_data)
 
         # Store updated game frame
         if running_opp:
