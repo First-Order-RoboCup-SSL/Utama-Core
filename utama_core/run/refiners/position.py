@@ -148,7 +148,8 @@ class PositionRefiner(BaseRefiner):
                 new_game_robots[robot.id] = PositionRefiner._combine_robot_vision_data(
                     new_game_robots[robot.id], robot, self.angle_smoother
                 )
-        return new_game_robots
+        # Sort by robot id to ensure consistent iteration order
+        return dict(sorted(new_game_robots.items()))
 
     def _combine_both_teams_game_vision_positions(
         self,

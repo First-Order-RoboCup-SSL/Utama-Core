@@ -139,6 +139,34 @@ def test_refine_nones():
         assert fr.orientation == raw_yellow[i].orientation
 
 
+def test_robots_indexed_by_id_when_vision_out_of_order():
+    """Test that robots are indexed by id, not by order of appearance in vision data.
+
+    This tests the fix for the issue where game.friendly_robots[0] could store robot id 1
+    and game.friendly_robots[1] could store robot id 0 when vision data arrived out of order.
+    """
+    # Vision data has robot 1 appearing before robot 0
+    raw_yellow = [RawRobotData(1, -1, -1, 0, 1), RawRobotData(0, -2, -2, 0, 1)]
+    raw_balls = [RawBallData(0, 0, 0, 0)]
+    raw_vision_data = RawVisionData(0, raw_yellow, [], raw_balls, 0)
+
+    p = PositionRefiner(full_field)
+    # Start with empty robots dict (simulates game startup)
+    g = GameFrame(0, True, True, {}, {}, bfac(0, 0))
+    result = p.refine(g, [raw_vision_data])
+
+    # Verify dictionary keys are sorted by robot id
+    assert list(result.friendly_robots.keys()) == [0, 1]
+
+    # Verify direct key access returns correct robot
+    assert result.friendly_robots[0].id == 0
+    assert result.friendly_robots[1].id == 1
+
+    # Verify iteration order matches robot id order
+    robot_ids_in_iteration_order = [r.id for r in result.friendly_robots.values()]
+    assert robot_ids_in_iteration_order == [0, 1]
+
+
 def test_out_of_bounds_does_not_update_existing_robot():
     # Existing friendly robot at origin
     friendly = {0: rfac(0, True, 0, 0)}
