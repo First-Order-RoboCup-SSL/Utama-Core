@@ -38,6 +38,7 @@ class RealRobotController(AbstractRobotController):
     """
 
     def __init__(self, is_team_yellow: bool, n_friendly: int):
+        n_friendly = 1
         super().__init__(is_team_yellow, n_friendly)
         self._serial_port = self._init_serial()
         self._rbt_cmd_size = 10  # packet size for one robot
@@ -270,10 +271,10 @@ if __name__ == "__main__":
         chip=0,
         dribble=False,
     )
-    for _ in range(100):
-        robot_controller.add_robot_commands(cmd, 0)
-        robot_controller.send_robot_commands()
-        time.sleep(0.01667)
+    # for _ in range(100):
+    #     robot_controller.add_robot_commands(cmd, 0)
+    #     robot_controller.send_robot_commands()
+    #     time.sleep(0.01667)
     for _ in range(10):
         robot_controller.add_robot_commands(empty_cmd, 0)
         robot_controller.send_robot_commands()

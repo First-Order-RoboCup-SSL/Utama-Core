@@ -231,13 +231,13 @@ class AbstractStrategy(ABC):
                 self.robot_controller.add_robot_commands(values, robot_id)
 
             # if the robot is not assigned a command, execute the default action
-            else:
-                if robot_id not in self.blackboard.role_map:
-                    role = Role.UNASSIGNED
-                else:
-                    role = self.blackboard.role_map[robot_id]
-                cmd = self.execute_default_action(game, role, robot_id)
-                self.robot_controller.add_robot_commands(cmd, robot_id)
+            # else:
+            #     if robot_id not in self.blackboard.role_map:
+            #         role = Role.UNASSIGNED
+            #     else:
+            #         role = self.blackboard.role_map[robot_id]
+            #     cmd = self.execute_default_action(game, role, robot_id)
+            #     self.robot_controller.add_robot_commands(cmd, robot_id)
         self.robot_controller.send_robot_commands()
 
         # end_time = time.time()
