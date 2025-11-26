@@ -52,6 +52,7 @@ class RealRobotController(AbstractRobotController):
         # print(list(self.out_packet))
         # binary_representation = [f"{byte:08b}" for byte in self.out_packet]
         # print(binary_representation)
+        # print("Sending packet:", list(self.out_packet))
         self._serial_port.write(self.out_packet)
         self._serial_port.read_all()
         # data_in = self._serial.read_all()
@@ -248,20 +249,30 @@ class RealRobotController(AbstractRobotController):
 if __name__ == "__main__":
     robot_controller = RealRobotController(is_team_yellow=True, n_friendly=1)
     cmd = RobotCommand(
-        local_forward_vel=0.5,
+        local_forward_vel=0,
+        local_left_vel=1,
+        angular_vel=0,
+        kick=0,
+        chip=0,
+        dribble=False,
+    )
+
+    empty_cmd = RobotCommand(
+        local_forward_vel=0,
         local_left_vel=0,
         angular_vel=0,
         kick=0,
         chip=0,
         dribble=False,
     )
-    while True:
+    for _ in range(10):
         robot_controller.add_robot_commands(cmd, 0)
         robot_controller.send_robot_commands()
         time.sleep(0.01667)
-    # for _ in range(10):
-    #     robot_controller.add_robot_commands(empty_cmd, 0)
-    #     robot_controller.send_robot_commands()
+    for _ in range(10):
+        robot_controller.add_robot_commands(empty_cmd, 0)
+        robot_controller.send_robot_commands()
+        time.sleep(0.01667)
 
     # print(list(robot_controller.out_packet))
     # binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
