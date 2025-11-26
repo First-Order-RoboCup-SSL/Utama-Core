@@ -12,29 +12,26 @@ class RefereeRefiner(BaseRefiner):
     def __init__(self):
         self._referee_records = []
 
-    def refine(self, game, data: Optional[RefereeData]):
-        """Process referee data and update game state.
+    def refine(self, game_frame, data: Optional[RefereeData]):
+        """Process referee data and update game frame.
 
         Args:
-            game: Current game object
+            game_frame: Current game frame
             data: Referee data to process (None if no referee)
 
         Returns:
-            Updated game object with referee data in frame
+            Updated game frame with referee data
         """
         if data is None:
-            return game
+            return game_frame
 
         # Add to history
         self.add_new_referee_data(data)
 
         # Update game frame with referee data
-        new_frame = dataclasses.replace(game.current_frame, referee=data)
+        new_frame = dataclasses.replace(game_frame, referee=data)
 
-        # Update game with new frame
-        updated_game = game.update_frame(new_frame)
-
-        return updated_game
+        return new_frame
 
     def add_new_referee_data(self, referee_data: RefereeData) -> None:
         if not self._referee_records:

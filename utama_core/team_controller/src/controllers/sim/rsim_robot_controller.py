@@ -60,7 +60,11 @@ class RSimRobotController(AbstractRobotController):
             observation, reward, terminated, truncated, reward_shaping = self._env.step(action)
 
             # note that we should not technically be able to view the opponent's robots_info!!
-            new_frame, yellow_robots_info, blue_robots_info = observation
+            # Handle both 3-tuple (old format) and 4-tuple (new format with referee)
+            if len(observation) == 4:
+                new_frame, yellow_robots_info, blue_robots_info, referee_data = observation
+            else:
+                new_frame, yellow_robots_info, blue_robots_info = observation
             if self.is_team_yellow:
                 self._robots_info.append(yellow_robots_info)
             else:
@@ -199,7 +203,11 @@ class RSimPVPManager:
         if self._pending[other_colour]:
             observation, reward, terminated, truncated, reward_shaping = self._env.step(self._pending)
 
-            new_frame, yellow_robots_info, blue_robots_info = observation
+            # Handle both 3-tuple (old format) and 4-tuple (new format with referee)
+            if len(observation) == 4:
+                new_frame, yellow_robots_info, blue_robots_info, referee_data = observation
+            else:
+                new_frame, yellow_robots_info, blue_robots_info = observation
             self.blue_player.update_robots_info(blue_robots_info)
             self.yellow_player.update_robots_info(yellow_robots_info)
 

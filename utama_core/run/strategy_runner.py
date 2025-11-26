@@ -153,6 +153,13 @@ class StrategyRunner:
         else:
             self._fps_live = None
 
+        # Referee data printing (for RSim)
+        if self.mode == Mode.RSIM:
+            self._referee_live = Live(auto_refresh=False)
+            self._referee_live.start()
+        else:
+            self._referee_live = None
+
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
@@ -552,7 +559,6 @@ class StrategyRunner:
                 # Old format without referee (backwards compat)
                 vision_frames = [obs[0]]
                 referee_data = None
-            print(referee_data)
         else:
             vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
             referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
@@ -591,6 +597,22 @@ class StrategyRunner:
 
                 self.elapsed_time = 0.0
                 self.num_frames_elapsed = 0
+
+        # Update referee data display (for RSim)
+        if self._referee_live and referee_data:
+            yellow_score = referee_data.yellow_team.score
+            blue_score = referee_data.blue_team.score
+            stage_name = referee_data.stage.name
+            command_name = referee_data.referee_command.name
+            stage_time = referee_data.stage_time_left
+
+            referee_text = (
+                f"[REFEREE] Yellow {yellow_score} - {blue_score} Blue | "
+                f"Stage: {stage_name} ({stage_time:.0f}s) | "
+                f"Command: {command_name}"
+            )
+            self._referee_live.update(Text(referee_text))
+            self._referee_live.refresh()
 
     def _step_game(
         self,
