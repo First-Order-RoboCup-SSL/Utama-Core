@@ -1,6 +1,11 @@
 from utama_core.replay import ReplayWriterConfig
 from utama_core.run import StrategyRunner
-from utama_core.strategy import DefenceStrategy, RobotPlacementStrategy, StartupStrategy
+from utama_core.strategy.examples import (
+    DefenceStrategy,
+    GoToBallExampleStrategy,
+    RobotPlacementStrategy,
+    StartupStrategy,
+)
 
 
 def main():
