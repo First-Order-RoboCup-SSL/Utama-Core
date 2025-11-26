@@ -11,7 +11,7 @@ from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.utils.move_utils import face_ball, move
 
 
-def mykeep(
+def goalkeep(
     game: Game,
     motion_controller: MotionController,
     robot_id: int,
