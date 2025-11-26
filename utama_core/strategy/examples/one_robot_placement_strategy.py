@@ -49,7 +49,7 @@ class RobotPlacementStep(AbstractBehaviour):
         friendly_robots = game.friendly_robots
         bx, by = game.ball.p.x, game.ball.p.y
         rp = friendly_robots[id].p
-        cx, cy, _ = rp.x, rp.y, friendly_robots[id].orientation
+        cx, cy = rp.x, rp.y
         error = math.dist((self.tx, self.ty), (cx, cy))
 
         switch = error < 0.05
