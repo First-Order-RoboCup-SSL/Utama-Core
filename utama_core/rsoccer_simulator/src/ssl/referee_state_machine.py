@@ -371,6 +371,78 @@ class RefereeStateMachine:
         else:
             self.stage_duration = 0.0
 
+    def reset(
+        self,
+        initial_stage: Stage = Stage.NORMAL_FIRST_HALF_PRE,
+        initial_command: RefereeCommand = RefereeCommand.HALT,
+    ):
+        """Reset referee state to initial conditions.
+
+        Called when the simulation is reset (between test episodes or matches).
+        This ensures clean state for new episodes without time paradoxes.
+
+        Args:
+            initial_stage: Starting game stage
+            initial_command: Starting referee command
+        """
+        # Reset state tracking
+        self.stage = initial_stage
+        self.command = initial_command
+        self.command_counter = 0
+        self.command_timestamp = 0.0
+
+        # Reset timers
+        self.stage_start_time = 0.0
+        self.stage_duration = 300.0
+        self.action_timeout = None
+
+        # Reset team scores and states (yellow team)
+        self.yellow_team.score = 0
+        self.yellow_team.foul_counter = 0
+        self.yellow_team.yellow_cards = 0
+        self.yellow_team.yellow_card_times = []
+        self.yellow_team.red_cards = 0
+        self.yellow_team.ball_placement_failures = 0
+        self.yellow_team.can_place_ball = True
+        self.yellow_team.max_allowed_bots = self.n_robots_yellow
+
+        # Reset team scores and states (blue team)
+        self.blue_team.score = 0
+        self.blue_team.foul_counter = 0
+        self.blue_team.yellow_cards = 0
+        self.blue_team.yellow_card_times = []
+        self.blue_team.red_cards = 0
+        self.blue_team.ball_placement_failures = 0
+        self.blue_team.can_place_ball = True
+        self.blue_team.max_allowed_bots = self.n_robots_blue
+
+        # Reset game state
+        self.ball_last_touched_by = None
+        self.ball_placement_target = None
+        self.next_command = None
+        self.goal_scored_by = None
+
+        # Reset event detection state
+        self.last_ball_position = None
+        self.last_goal_time = 0.0
+
+        # Reset Phase 2 command transition timers
+        self.stop_command_start_time = None
+        self.kickoff_prep_start_time = None
+        self.free_kick_start_time = None
+        self.action_timer_start = None
+        self.action_timer_duration = None
+
+        # Reset Phase 3 foul detection state
+        self.last_defense_area_violation_time = 0.0
+        self.last_collision_time = 0.0
+        self.ball_holder_team = None
+        self.ball_hold_start_time = None
+        self.ball_placement_start_time = None
+        self.placing_team = None
+
+        logger.info("Referee state machine reset to initial conditions")
+
     # ========== PHASE 2: COMMAND SEQUENCING METHODS ==========
 
     def _update_command_transitions(self, frame: Frame, current_time: float):

@@ -115,7 +115,13 @@ class SSLStandardEnv(SSLBaseEnv):
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
-        return super().reset(seed=seed, options=options)
+        result = super().reset(seed=seed, options=options)
+
+        # Reset referee state machine to initial conditions
+        # This prevents time paradoxes and state persistence across episodes
+        self.referee_state_machine.reset()
+
+        return result
 
     def step(self, action):
         observation, reward, terminated, truncated, _ = super().step(action)
