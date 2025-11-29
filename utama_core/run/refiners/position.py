@@ -3,7 +3,7 @@ from dataclasses import replace
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-import pickle
+# import pickle
 
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -68,6 +68,7 @@ class PositionRefiner(BaseRefiner):
             return game_frame
         
         # Can combine previous position from game with new data to produce new position if desired
+        # class RawVisionData: ts: float; yellow_robots: List[RawRobotData]; blue_robots: List[RawRobotData]; balls: List[RawBallData]; camera_id: int
         # class VisionData: ts: float; yellow_robots: List[VisionRobotData]; blue_robots: List[VisionRobotData]; balls: List[VisionBallData]
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
