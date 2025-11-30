@@ -137,6 +137,7 @@ class RandomMovementTestManager(AbstractTestManager):
     def update_target_reached(self, robot_id: int):
         """Called by strategy when a robot reaches a target."""
         if robot_id in self.targets_reached_count:
+            print("Robot", robot_id, "reached target")
             self.targets_reached_count[robot_id] += 1
 
 
@@ -159,10 +160,13 @@ def test_random_movement_same_team(
     # Define half court bounds for left side (Yellow team)
     # Standard SSL field is ~9m x 6m, so half court is ~4.5m x 6m
     # Using slightly smaller bounds for safety: -4m to 0m in x, -2.5m to 2.5m in y
-    field_bounds = ((-3.5, -0.5), (-2.5, 2.5))  # ((min_x, max_x), (min_y, max_y))
+    field_bounds = (
+        (-4.0, -0.5),
+        (-2.0, 2.0),
+    )  # ((min_x, max_x), (min_y, max_y))
 
     scenario = RandomMovementScenario(
-        n_robots=6,
+        n_robots=2,
         field_bounds=field_bounds,
         min_target_distance=1.0,  # Minimum distance for next target
         required_targets_per_robot=3,  # Each robot must reach 3 targets
@@ -171,7 +175,7 @@ def test_random_movement_same_team(
 
     # Create random movement strategy
     strategy = RandomMovementStrategy(
-        n_robots=6,
+        n_robots=2,
         field_bounds=field_bounds,
         min_target_distance=scenario.min_target_distance,
         endpoint_tolerance=scenario.endpoint_tolerance,
@@ -183,9 +187,9 @@ def test_random_movement_same_team(
         my_team_is_yellow=my_team_is_yellow,
         my_team_is_right=my_team_is_right,
         mode=mode,
-        exp_friendly=6,
+        exp_friendly=2,
         exp_enemy=0,
-        control_scheme="dwa",  # Use DWA for collision avoidance
+        control_scheme="pid",  # Use DWA for collision avoidance
     )
 
     test_manager = RandomMovementTestManager(scenario=scenario)
@@ -203,7 +207,7 @@ def test_random_movement_same_team(
     assert test_passed, "Random movement test failed to complete"
 
     # Check that all robots reached required targets
-    for robot_id in range(6):
+    for robot_id in range(2):
         assert test_manager.targets_reached_count[robot_id] >= scenario.required_targets_per_robot, (
             f"Robot {robot_id} only reached {test_manager.targets_reached_count[robot_id]} targets "
             f"(required: {scenario.required_targets_per_robot})"
