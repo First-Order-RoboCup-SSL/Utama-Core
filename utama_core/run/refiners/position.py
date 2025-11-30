@@ -51,12 +51,8 @@ class PositionRefiner(BaseRefiner):
             blue_count = exp_friendly
         
         # Instantiate a dedicated FIR filter for each robot so buffers can be kept independent.
-        self.fir_filters_yellow = []
-        self.fir_filters_blue = []
-        for _ in range(yellow_count):
-            self.fir_filters_yellow.append(FIR_filter())
-        for _ in range(blue_count):
-            self.fir_filters_blue.append(FIR_filter())
+        self.fir_filters_yellow = [FIR_filter() for _ in range(yellow_count)]
+        self.fir_filters_blue = [FIR_filter() for _ in range(blue_count)]
 
     # Primary function for the Refiner interface
     def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
