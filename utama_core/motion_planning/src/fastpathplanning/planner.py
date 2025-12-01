@@ -119,9 +119,9 @@ class FastPathPlanner:
                 sortedobstacles.append(o)
             if distance(our_pos, o) < self.OBSTACLE_CLEARANCE * 1.5:
                 print("collision")
-                direction = (target - our_pos) * -1
+                direction = (o - our_pos) * -1
                 unitvec = direction / np.linalg.norm(direction)
-                newtarget = our_pos + unitvec * self.OBSTACLE_CLEARANCE * 10
+                newtarget = our_pos + unitvec * self.OBSTACLE_CLEARANCE * 20
                 return [(our_pos, newtarget)]
         finaltrajectory = self.checksegment((our_pos, target), sortedobstacles, 0)
         for subgoal in finaltrajectory:
