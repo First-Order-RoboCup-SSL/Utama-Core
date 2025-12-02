@@ -40,9 +40,9 @@ class FastPathPlanner:
         for r in robots:
             if r.v.x != 0.0 and r.v.y != 0.0:
                 for i in range(0, 2):
-                    velocity = np.array([r.v.x, r.v.y])  # / np.linalg.norm(np.array([r.v.x, r.v.y]))
-
-                    point = np.array([r.p.x, r.p.y]) + i * velocity * 1 / 60
+                    velocity = np.array([r.v.x, r.v.y])
+                    unitvec = velocity / np.linalg.norm(velocity)
+                    point = np.array([r.p.x, r.p.y]) + i * unitvec * self.OBSTACLE_CLEARANCE
                     obstaclelist.append(point)
 
                     self._env.draw_point(point[0], point[1], width=10)
@@ -73,7 +73,10 @@ class FastPathPlanner:
         closestobstacle = None
         tempdistance = distance(segment[0], segment[1])
         for o in obstacles:
-            if point_to_segment_distance(o, segment[0], segment[1]) < self.OBSTACLE_CLEARANCE * 1.1:
+            if (
+                point_to_segment_distance(o, segment[0], segment[1]) < self.OBSTACLE_CLEARANCE * 1.1
+                and distance(o, segment[1]) > self.OBSTACLE_CLEARANCE
+            ):
                 if closestobstacle is None or distance(o, segment[0]) < tempdistance:
                     tempdistance = distance(segment[0], o)
                     closestobstacle = o
@@ -113,19 +116,17 @@ class FastPathPlanner:
         target = np.array(target)
 
         obstacles = self._get_obstacles(game, robot_id)
-        sortedobstacles = []
+
         for o in obstacles:
-            if distance(o, target) > self.OBSTACLE_CLEARANCE:
-                sortedobstacles.append(o)
+
             if distance(our_pos, o) < self.OBSTACLE_CLEARANCE * 1.5:
-                print("collision")
+
                 direction = (o - our_pos) * -1
                 unitvec = direction / np.linalg.norm(direction)
                 newtarget = our_pos + unitvec * self.OBSTACLE_CLEARANCE * 20
                 return [(our_pos, newtarget)]
-        finaltrajectory = self.checksegment((our_pos, target), sortedobstacles, 0)
-        for subgoal in finaltrajectory:
-            self._env.draw_point(subgoal[1][0], subgoal[1][1], width=10)
+        finaltrajectory = self.checksegment((our_pos, target), obstacles, 0)
+
         return finaltrajectory
 
 
