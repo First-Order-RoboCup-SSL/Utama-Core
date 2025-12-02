@@ -31,6 +31,7 @@ class RandomMovementBehaviour(AbstractBehaviour):
         field_bounds: Tuple[Tuple[float, float], Tuple[float, float]],
         min_target_distance: float,
         endpoint_tolerance: float,
+        test_manager,
         speed_range: Tuple[float, float] = (0.5, 2.0),
     ):
         super().__init__(name=f"RandomMovement_{robot_id}")
@@ -43,6 +44,8 @@ class RandomMovementBehaviour(AbstractBehaviour):
         self.current_target = None
         self.current_speed = None
         self.targets_reached = 0
+
+        self.test_manager = test_manager
 
     def _generate_random_target(self, current_pos: Vector2D) -> Vector2D:
         """Generate a random target position within bounds, min distance away from current position."""
@@ -92,9 +95,7 @@ class RandomMovementBehaviour(AbstractBehaviour):
             # Target reached! Generate new target
             self.targets_reached += 1
 
-            # Notify test manager if available
-            if hasattr(self.blackboard, "test_manager") and self.blackboard.test_manager:
-                self.blackboard.test_manager.update_target_reached(self.robot_id)
+            self.test_manager.update_target_reached(self.robot_id)
 
             # Generate new target and speed
             self.current_target = self._generate_random_target(robot_pos)
@@ -105,7 +106,10 @@ class RandomMovementBehaviour(AbstractBehaviour):
             rsim_env.draw_point(self.current_target.x, self.current_target.y, color="green")
             # Draw a line to show path
             rsim_env.draw_line(
-                [(robot_pos.x, robot_pos.y), (self.current_target.x, self.current_target.y)],
+                [
+                    (robot_pos.x, robot_pos.y),
+                    (self.current_target.x, self.current_target.y),
+                ],
                 color="blue",
                 width=1,
             )
@@ -141,6 +145,7 @@ class RandomMovementStrategy(AbstractStrategy):
         field_bounds: Tuple[Tuple[float, float], Tuple[float, float]],
         min_target_distance: float,
         endpoint_tolerance: float,
+        test_manager,
         speed_range: Tuple[float, float] = (0.5, 2.0),
     ):
         self.n_robots = n_robots
@@ -148,18 +153,8 @@ class RandomMovementStrategy(AbstractStrategy):
         self.min_target_distance = min_target_distance
         self.endpoint_tolerance = endpoint_tolerance
         self.speed_range = speed_range
-        self.test_manager = None
-        super().__init__()
-
-    def set_test_manager(self, test_manager):
-        """Set test manager to track targets reached."""
         self.test_manager = test_manager
-
-    def setup_behaviour_tree(self, is_opp_strat: bool = False):
-        """Override to set test_manager in blackboard."""
-        super().setup_behaviour_tree(is_opp_strat)
-        if self.test_manager:
-            self.blackboard.test_manager = self.test_manager
+        super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
         """Requires number of friendly robots to match."""
@@ -188,6 +183,7 @@ class RandomMovementStrategy(AbstractStrategy):
                 min_target_distance=self.min_target_distance,
                 endpoint_tolerance=self.endpoint_tolerance,
                 speed_range=self.speed_range,
+                test_manager=self.test_manager,
             )
 
         # Multiple robots - create parallel behaviours
@@ -199,6 +195,7 @@ class RandomMovementStrategy(AbstractStrategy):
                 min_target_distance=self.min_target_distance,
                 endpoint_tolerance=self.endpoint_tolerance,
                 speed_range=self.speed_range,
+                test_manager=self.test_manager,
             )
             behaviours.append(behaviour)
 

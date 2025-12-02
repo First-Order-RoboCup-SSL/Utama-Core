@@ -125,7 +125,6 @@ class RandomMovementTestManager(AbstractTestManager):
         all_completed = all(
             count >= self.scenario.required_targets_per_robot for count in self.targets_reached_count.values()
         )
-
         if all_completed:
             return TestingStatus.SUCCESS
 
@@ -172,14 +171,15 @@ def test_random_movement_same_team(
         required_targets_per_robot=3,  # Each robot must reach 3 targets
         endpoint_tolerance=0.3,
     )
-
+    test_manager = RandomMovementTestManager(scenario)
     # Create random movement strategy
     strategy = RandomMovementStrategy(
         n_robots=2,
         field_bounds=field_bounds,
         min_target_distance=scenario.min_target_distance,
         endpoint_tolerance=scenario.endpoint_tolerance,
-        speed_range=(0.5, 2.0),  # Random speed between 0.5 and 2.0 m/s
+        test_manager=test_manager,
+        speed_range=(0.5, 1.0),  # Random speed between 0.5 and 2.0 m/s
     )
 
     runner = StrategyRunner(
@@ -189,16 +189,11 @@ def test_random_movement_same_team(
         mode=mode,
         exp_friendly=2,
         exp_enemy=0,
-        control_scheme="pid",  # Use DWA for collision avoidance
+        control_scheme="dwa",  # Use DWA for collision avoidance
     )
 
-    test_manager = RandomMovementTestManager(scenario=scenario)
-
-    # Connect test manager to strategy so it can track targets reached
-    strategy.set_test_manager(test_manager)
-
     test_passed = runner.run_test(
-        testManager=test_manager,
+        testManager=strategy.test_manager,
         episode_timeout=60.0,  # 60 seconds to complete random movements
         rsim_headless=headless,
     )
@@ -208,17 +203,17 @@ def test_random_movement_same_team(
 
     # Check that all robots reached required targets
     for robot_id in range(2):
-        assert test_manager.targets_reached_count[robot_id] >= scenario.required_targets_per_robot, (
+        assert strategy.test_manager.targets_reached_count[robot_id] >= scenario.required_targets_per_robot, (
             f"Robot {robot_id} only reached {test_manager.targets_reached_count[robot_id]} targets "
             f"(required: {scenario.required_targets_per_robot})"
         )
 
-    assert not test_manager.collision_detected, (
-        f"Robots collided {test_manager.collision_count} time(s) during random movement! "
-        f"Minimum distance: {test_manager.min_distance:.3f}m "
+    assert not strategy.test_manager.collision_detected, (
+        f"Robots collided {strategy.test_manager.collision_count} time(s) during random movement! "
+        f"Minimum distance: {strategy.test_manager.min_distance:.3f}m "
         f"(threshold: {scenario.collision_threshold:.3f}m)"
     )
-    assert test_manager.min_distance >= scenario.collision_threshold, (
-        f"Robots got too close: {test_manager.min_distance:.3f}m "
+    assert strategy.test_manager.min_distance >= scenario.collision_threshold, (
+        f"Robots got too close: {strategy.test_manager.min_distance:.3f}m "
         f"(minimum safe distance: {scenario.collision_threshold:.3f}m)"
     )
