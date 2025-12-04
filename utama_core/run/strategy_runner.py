@@ -524,6 +524,9 @@ class StrategyRunner:
                 self._run_step()
         except KeyboardInterrupt:
             self.logger.info("Terminating...")
+            for _ in range(100):
+                self.my_strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, False, False, False), 0)
+                self.my_strategy.robot_controller.send_robot_commands()
         finally:
             self._cleanup()
 

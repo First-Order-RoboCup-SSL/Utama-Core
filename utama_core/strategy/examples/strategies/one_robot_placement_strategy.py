@@ -31,10 +31,8 @@ class RobotPlacementStep(AbstractBehaviour):
 
     def __init__(self, rd_robot_id: str, invert: bool = False):
         super().__init__()
-        self.robot_id_key = rd_robot_id
-
-        self.ty = -1
-        self.tx = -1 if invert else 1
+        self.ty = 0.5
+        self.tx = 1.1
 
     def setup_(self):
         self.blackboard.register_key(key=self.robot_id_key, access=py_trees.common.Access.READ)
@@ -53,16 +51,13 @@ class RobotPlacementStep(AbstractBehaviour):
             rp = friendly_robots[id].p
             cx, cy, _ = rp.x, rp.y, friendly_robots[id].orientation
             error = math.dist((self.tx, self.ty), (cx, cy))
-
-            switch = error < 0.05
+            self.tx = 1.1
+            switch = error < 0.1
             if switch:
-                if self.ty == -1:
-                    self.ty = 1
-                    self.tx = random.choice([0, 1])
+                if self.ty == -0.5:
+                    self.ty = 0.5
                 else:
-                    self.ty = -1
-                    self.tx = 1
-                    # self.tx = random.choice([0, 1])
+                    self.ty = -0.5
 
             # changed so the robot tracks the ball while moving
             oren = np.atan2(by - cy, bx - cx)

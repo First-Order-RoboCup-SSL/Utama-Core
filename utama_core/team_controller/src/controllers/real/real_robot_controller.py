@@ -99,6 +99,11 @@ class RealRobotController(AbstractRobotController):
 
     def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
         """Generates the command buffer to be sent to the robot."""
+        if robot_id > 5:
+            for _ in range(10):
+                self.add_robot_commands(RobotCommand(0, 0, 0, False, False, False), robot_id)
+                self.send_robot_commands()
+                raise ValueError("Invalid robot_id. Must be between 0 and 5.")
         assert robot_id < 6, "Invalid robot_id. Must be between 0 and 5."
 
         # Combine first 6 bytes of velocities
@@ -158,7 +163,7 @@ class RealRobotController(AbstractRobotController):
         local_forward_vel = command.local_forward_vel
         local_left_vel = command.local_left_vel
 
-        if abs(command.angular_vel) > MAX_ANGULAR_VEL:
+        if abs(angular_vel) > MAX_ANGULAR_VEL:
             warnings.warn(
                 f"Angular velocity for robot {robot_id} is greater than the maximum angular velocity. Clipping to {MAX_ANGULAR_VEL}."
             )
@@ -170,7 +175,7 @@ class RealRobotController(AbstractRobotController):
             )
             local_forward_vel = MAX_VEL if command.local_forward_vel > 0 else -MAX_VEL
 
-        if abs(command.local_left_vel) > MAX_VEL:
+        if abs(local_left_vel) > MAX_VEL:
             warnings.warn(
                 f"Local left velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
             )
