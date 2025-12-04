@@ -75,8 +75,9 @@ class PositionRefiner(BaseRefiner):
         # buffer_len = 1000
         # initial_stream = np.zeros(buffer_len)
         # initial_stream.fill(np.nan)
-        # # self._delta_stream = deque(initial_stream, maxlen=buffer_len)
-        # # self._last_coord = np.zeros(2)
+        # self._delta_stream = deque(initial_stream, maxlen=buffer_len)
+        # self._last_coord = np.zeros(2)
+        # self._last_coord.fill(np.nan)
         # self._x_stream = deque(initial_stream, maxlen=buffer_len)
         # self._y_stream = deque(initial_stream, maxlen=buffer_len)
         
@@ -84,8 +85,8 @@ class PositionRefiner(BaseRefiner):
         # self._win = pg.GraphicsLayoutWidget()
         # pg.setConfigOptions(antialias=True)
         # plot = self._win.addPlot()
-        # # plot.setXRange(0, buffer_len)
-        # # plot.setYRange(0, 9)
+        # plot.setXRange(0, buffer_len)
+        # plot.setYRange(0, 0.1)
         # plot.setXRange(-4.5, 4.5)
         # plot.setYRange(-3, 3)
         # self._win.show()
@@ -150,20 +151,28 @@ class PositionRefiner(BaseRefiner):
         #         self.data_collected += 1
                 
         # For live testing:
-        # current_coord = np.array((
-        #     filtered_vision_data.yellow_robots[0].x,
-        #     filtered_vision_data.yellow_robots[0].y
-        # ))
-        # self._delta_stream.append(np.linalg.norm(current_coord - self._last_coord))
-        # self._last_coord = current_coord
+        # try:
+        #     current_coord = np.array((
+        #         filtered_vision_data.yellow_robots[2].x,
+        #         filtered_vision_data.yellow_robots[2].y
+        #     ))
+        #     if not np.isnan(self._last_coord).any():
+        #         self._delta_stream.append(np.linalg.norm(current_coord - self._last_coord))
+        #     self._last_coord = current_coord
+        # except:
+        #     pass
+        # finally:
+        #     self._curve.setData(self._delta_stream)
         
-        # self._curve.setData(self._delta_stream)
+        # try:
+        #     self._x_stream.append(filtered_vision_data.yellow_robots[0].x)
+        #     self._y_stream.append(filtered_vision_data.yellow_robots[0].y)
+        # except:
+        #     pass
+        # finally:
+        #     self._curve.setData(self._x_stream, self._y_stream)
         
-        # self._x_stream.append(filtered_vision_data.yellow_robots[0].x)
-        # self._y_stream.append(filtered_vision_data.yellow_robots[0].y)
-        # self._curve.setData(self._x_stream, self._y_stream)
-        
-        # QtWidgets.QApplication.processEvents()
+        QtWidgets.QApplication.processEvents()
 
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
