@@ -21,9 +21,11 @@ class VisionRobotData:
     y: float
     orientation: float
     
-    def add_noise(self):
-        self.x += normal(loc=0.0, scale=0.05)
-        self.y += normal(loc=0.0, scale=0.05)
+    def add_gaussian_noise(self, sd_in_cm: float=10.0, bias: float=0.0):
+        sd_in_m = sd_in_cm/100
+        
+        self.x += normal(loc=bias, scale=sd_in_m)
+        self.y += normal(loc=bias, scale=sd_in_m)
 
 
 @dataclass

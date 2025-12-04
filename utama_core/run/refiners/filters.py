@@ -1,7 +1,13 @@
 import numpy as np
 from collections import deque
 from scipy.signal import firwin
-from utama_core.entities.data.vision import VisionRobotData
+import sys
+
+try:
+    from utama_core.entities.data.vision import VisionRobotData
+except:
+    sys.path.append("../utama_core/entities/data/")
+    from vision import VisionRobotData
 
 class FIR_filter:
     """
@@ -21,40 +27,41 @@ class FIR_filter:
         Length for boxcar if `taps` is None. Default 20.
     """
 
-    def __init__(self, fs=60.0, taps=None, window_len=5):
-        self.fs = float(fs)
-        self.N = window_len
-
+    def __init__(self, fs=60.0, taps=None, window_len=5, cutoff=None):
+        self._fs = float(fs)
+        self._N = window_len
+        self._nyquist = 0.4 * self._fs
+        
+        if cutoff and cutoff < self._nyquist:
+            self._cutoff = cutoff
+        else:
+            """
+            Sets cutoff frequency according to the maximum acceleration and
+            velocity of robots, below the limits dictated by Nyquist's theorem.
+            """
+            a_max = 50
+            v_max = 5
+            fc = a_max / (2 * np.pi * v_max)
+            
+            self._cutoff = min(self._nyquist, fc)
+            
         if taps is None:
             assert window_len >= 1, "window_len must be >= 1"
-            self.taps = firwin(window_len, self.cutoff, fs=fs)
-            #self.taps = np.ones(window_len, dtype=float) / float(window_len)
+            self._taps = firwin(window_len, self._cutoff, fs=fs)
+            #self._taps = np.ones(window_len, dtype=float) / float(window_len)
         else:
             t = np.asarray(taps, dtype=float).ravel()
             assert t.size >= 1, "taps must have at least 1 element"
             # Normalize taps to sum to 1 for unity DC gain
-            self.taps = t / np.sum(t)
-            self.N = self.taps.size
+            self._taps = t / np.sum(t)
+            self._N = self._taps.size
 
-        self.buf_x = deque(maxlen=self.N)
-        self.buf_y = deque(maxlen=self.N)
-        self.buf_th = deque(maxlen=self.N)
-
-    @property
-    def cutoff(self):
-        """
-        Sets cutoff frequency according to the maximum acceleration and velocity
-        of the robots, below the limits dictated by Nyquist's theorem.
-        """
-        nyquist = 0.4 * self.fs
-        a_max = 50
-        v_max = 5
-        fc = a_max / (2 * np.pi * v_max)
-        
-        return min(nyquist, fc)
+        self._buf_x = deque(maxlen=self._N)
+        self._buf_y = deque(maxlen=self._N)
+        self._buf_th = deque(maxlen=self._N)
 
     @staticmethod
-    def wrap_angle(a):
+    def _wrap_angle(a):
         """Wrap angle to (-pi, pi]."""
         return (a + np.pi) % (2 * np.pi) - np.pi
 
@@ -65,30 +72,30 @@ class FIR_filter:
         Returns: (x_filt, y_filt, theta_filt)
         """
         x, y, theta = map(float, z)
-        theta = self.wrap_angle(theta)
+        # theta = self._wrap_angle(theta)
 
-        self.buf_x.append(x)
-        self.buf_y.append(y)
-        self.buf_th.append(theta)
+        self._buf_x.append(x)
+        self._buf_y.append(y)
+        self._buf_th.append(theta)
 
         # Use only the available samples during warm-up
-        k = len(self.buf_x)  # same as len(buf_y) and len(buf_th)
-        taps_eff = self.taps[-k:]
+        k = len(self._buf_x)  # same as len(buf_y) and len(buf_th)
+        taps_eff = self._taps[-k:]
         taps_eff = taps_eff / np.sum(taps_eff)  # renormalize
 
         # Position FIR
-        x_arr = np.asarray(self.buf_x, dtype=float)
-        y_arr = np.asarray(self.buf_y, dtype=float)
+        x_arr = np.asarray(self._buf_x, dtype=float)
+        y_arr = np.asarray(self._buf_y, dtype=float)
         x_f = float(np.dot(taps_eff, x_arr))
         y_f = float(np.dot(taps_eff, y_arr))
 
-        # Orientation FIR via circular averaging
-        th_arr = np.asarray(self.buf_th, dtype=float)
-        s = np.dot(taps_eff, np.sin(th_arr))
-        c = np.dot(taps_eff, np.cos(th_arr))
-        th_f = float(np.arctan2(s, c))  # already wrapped to (-pi, pi]
+        # Orientation FIR via circular averaging - currently disabled
+        # th_arr = np.asarray(self._buf_th, dtype=float)
+        # s = np.dot(taps_eff, np.sin(th_arr))
+        # c = np.dot(taps_eff, np.cos(th_arr))
+        # th_f = float(np.arctan2(s, c))  # already wrapped to (-pi, pi]
 
-        return x_f, y_f, th_f
+        return x_f, y_f, theta
     
     @staticmethod
     def filter_robot(filter, data: VisionRobotData) -> VisionRobotData:
