@@ -72,32 +72,33 @@ class PositionRefiner(BaseRefiner):
         #     writer.writeheader()
         
         # For live testing:
-        # buffer_len = 500        
+        # buffer_len = 1000
         # initial_stream = np.zeros(buffer_len)
         # initial_stream.fill(np.nan)
-        # self._delta_stream = deque(initial_stream, maxlen=buffer_len)
-        # self._last_coord = np.zeros(2)
+        # # self._delta_stream = deque(initial_stream, maxlen=buffer_len)
+        # # self._last_coord = np.zeros(2)
+        # self._x_stream = deque(initial_stream, maxlen=buffer_len)
+        # self._y_stream = deque(initial_stream, maxlen=buffer_len)
         
         # self._app = QtWidgets.QApplication([])
         # self._win = pg.GraphicsLayoutWidget()
         # pg.setConfigOptions(antialias=True)
         # plot = self._win.addPlot()
-        # plot.setXRange(0, buffer_len)
-        # plot.setYRange(0, 9)
+        # # plot.setXRange(0, buffer_len)
+        # # plot.setYRange(0, 9)
+        # plot.setXRange(-4.5, 4.5)
+        # plot.setYRange(-3, 3)
         # self._win.show()
         # self._curve = plot.plot(pen='y')
 
     # Primary function for the Refiner interface
     def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
-        frames = [frame for frame in data if frame is not None]  # Remove null GameFrames
+        frames = [frame for frame in data if frame is not None]
 
-        # If no information just return the original
         # TODO: this needs to be replaced by an extrapolation function (otherwise we will be using old data forever)
         if not frames:
             return game_frame
         
-        # Can combine previous position from game with new data to produce new position if desired
-        # class RawVisionData: ts: float; yellow_robots: List[RawRobotData]; blue_robots: List[RawRobotData]; balls: List[RawBallData]; camera_id: int
         # class VisionData: ts: float; yellow_robots: List[VisionRobotData]; blue_robots: List[VisionRobotData]; balls: List[VisionBallData]
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
@@ -106,20 +107,20 @@ class PositionRefiner(BaseRefiner):
         # for robot in combined_vision_data.yellow_robots:
         #     robot.add_gaussian_noise()
                 
-        # filtered_vision_data: VisionData = VisionData(
-        #     ts=combined_vision_data.ts,
-        #     yellow_robots=list(
-        #         map(FIR_filter.filter_robot,
-        #         self.fir_filters_yellow,
-        #         sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
-        #         ),
-        #     blue_robots=list(
-        #         map(FIR_filter.filter_robot,
-        #         self.fir_filters_blue,
-        #         sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
-        #         ),
-        #     balls=combined_vision_data.balls
-        # )
+        filtered_vision_data: VisionData = VisionData(
+            ts=combined_vision_data.ts,
+            yellow_robots=list(
+                map(FIR_filter.filter_robot,
+                self.fir_filters_yellow,
+                sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
+                ),
+            blue_robots=list(
+                map(FIR_filter.filter_robot,
+                self.fir_filters_blue,
+                sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
+                ),
+            balls=combined_vision_data.balls
+        )
         
         # For analysis:
         # if self.data_collected < TARGET_SIZE:
@@ -157,6 +158,11 @@ class PositionRefiner(BaseRefiner):
         # self._last_coord = current_coord
         
         # self._curve.setData(self._delta_stream)
+        
+        # self._x_stream.append(filtered_vision_data.yellow_robots[0].x)
+        # self._y_stream.append(filtered_vision_data.yellow_robots[0].y)
+        # self._curve.setData(self._x_stream, self._y_stream)
+        
         # QtWidgets.QApplication.processEvents()
 
         # for robot in combined_vision_data.yellow_robots:
@@ -166,12 +172,12 @@ class PositionRefiner(BaseRefiner):
         # Some processing of robot vision data
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
             game_frame,
-            combined_vision_data.yellow_robots,
-            combined_vision_data.blue_robots,
+            filtered_vision_data.yellow_robots,
+            filtered_vision_data.blue_robots,
         )
 
         # After the balls have been combined, take the most confident
-        new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
+        new_ball: Ball = PositionRefiner._get_most_confident_ball(filtered_vision_data.balls)
         if new_ball is None:
             # If none, take the ball from the last frame of the game
             new_ball = game_frame.ball
@@ -179,7 +185,7 @@ class PositionRefiner(BaseRefiner):
         if game_frame.my_team_is_yellow:
             new_game_frame = replace(
                 game_frame,
-                ts=combined_vision_data.ts,
+                ts=filtered_vision_data.ts,
                 friendly_robots=new_yellow_robots,
                 enemy_robots=new_blue_robots,
                 ball=new_ball,
@@ -187,7 +193,7 @@ class PositionRefiner(BaseRefiner):
         else:
             new_game_frame = replace(
                 game_frame,
-                ts=combined_vision_data.ts,
+                ts=filtered_vision_data.ts,
                 friendly_robots=new_blue_robots,
                 enemy_robots=new_yellow_robots,
                 ball=new_ball,
