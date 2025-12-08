@@ -1,11 +1,10 @@
 from collections import defaultdict, deque
-import csv
+# import csv
 from dataclasses import replace
 import matplotlib.pyplot as plt
 import numpy as np
 import pyqtgraph as pg # type: ignore
-from pyqtgraph.Qt import QtWidgets, QtCore # type: ignore
-import threading
+from pyqtgraph.Qt import QtWidgets # type: ignore
 from typing import Dict, List, Optional, Tuple
 
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
@@ -16,12 +15,12 @@ from utama_core.run.refiners.base_refiner import BaseRefiner
 from utama_core.run.refiners.filters import FIR_filter
 
 # For analysis:
-TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
-X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
-COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
+# TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
+# X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
+# COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 
-OUTPUT_FILE = "noisy-manual-filtered.csv"
-TARGET_SIZE = 1000
+# OUTPUT_FILE = "noisy-manual-filtered.csv"
+# TARGET_SIZE = 1000
 
 
 class AngleSmoother:
@@ -172,7 +171,7 @@ class PositionRefiner(BaseRefiner):
         # finally:
         #     self._curve.setData(self._x_stream, self._y_stream)
         
-        QtWidgets.QApplication.processEvents()
+        # QtWidgets.QApplication.processEvents()
 
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
