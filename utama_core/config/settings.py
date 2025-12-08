@@ -24,10 +24,12 @@ TELEPORT_X_COORDS = [0.4, 0.8, 1.2, 1.6, 2, 2.4]
 
 ### REAL CONTROLLER SETTINGS ###
 BAUD_RATE = 115200
-PORT = "/dev/ttyACM0"
+PORT = "/dev/ttyUSB0"
 TIMEOUT = 0.1
 
 MAX_GAME_HISTORY = 20
 
 REPLAY_BASE_PATH = Path.cwd() / "replays"
 RENDER_BASE_PATH = Path.cwd() / "renders"
+
+FPS_PRINT_INTERVAL = 1.0  # seconds

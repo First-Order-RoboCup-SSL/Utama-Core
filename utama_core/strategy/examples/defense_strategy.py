@@ -38,14 +38,19 @@ class BlockAttackerStep(AbstractBehaviour):
 
     **Blackboard Interaction:**
         Reads:
-            - `rd_defender_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
+            - `rd_defender_id` (int): The ID of the defending robot that will block the attacker. Typically from the `SetBlackboardVariable` node.
             - `rd_blocking_target` (int): The ID of the enemy robot to block. Typically from the `FindBlockingTarget` node.
 
     **Returns:**
         - `py_trees.common.Status.RUNNING`: The behaviour is actively commanding the robot to block the attacker.
     """
 
-    def __init__(self, rd_defender_id: str, rd_locking_target: str, name: Optional[str] = "BlockAttackerStep"):
+    def __init__(
+        self,
+        rd_defender_id: str,
+        rd_locking_target: str,
+        name: Optional[str] = "BlockAttackerStep",
+    ):
         super().__init__(name=name)
         self.defender_id_key = rd_defender_id
         self.locking_target_key = rd_locking_target

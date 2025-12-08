@@ -1,21 +1,11 @@
-# profile_main.py
-import atexit
-import cProfile
-
 from utama_core.replay import ReplayWriterConfig
 from utama_core.run import StrategyRunner
-from utama_core.strategy import DefenceStrategy, RobotPlacementStrategy, StartupStrategy
-
-profiler = cProfile.Profile()
-profiler.enable()
-
-
-def dump():
-    profiler.disable()
-    profiler.dump_stats("sim_run.prof")
-
-
-atexit.register(dump)
+from utama_core.strategy.examples import (
+    DefenceStrategy,
+    GoToBallExampleStrategy,
+    RobotPlacementStrategy,
+    StartupStrategy,
+)
 
 
 def main():
@@ -26,8 +16,10 @@ def main():
         mode="grsim",
         exp_friendly=6,
         exp_enemy=3,
+        control_scheme="dwa",
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
-        control_scheme="pid",
+        print_real_fps=True,
+        profiler_name=None,
     )
     runner.my_strategy.render()
     runner.run()

@@ -95,6 +95,7 @@ class PositionRefiner(BaseRefiner):
     def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
         frames = [frame for frame in data if frame is not None]
 
+        # If no information just return the original
         # TODO: this needs to be replaced by an extrapolation function (otherwise we will be using old data forever)
         if not frames:
             return game_frame
@@ -257,11 +258,10 @@ class PositionRefiner(BaseRefiner):
 
     def _combine_single_team_positions(
         self,
-        game_robots: Dict[int, Robot],
+        new_game_robots: Dict[int, Robot],
         vision_robots: List[VisionRobotData],
         friendly: bool,
     ) -> Dict[int, Robot]:
-        new_game_robots = game_robots.copy()
         for robot in vision_robots:
             new_x, new_y = robot.x, robot.y
 
