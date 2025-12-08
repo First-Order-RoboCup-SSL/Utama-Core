@@ -6,7 +6,7 @@ from utama_core.entities.game.robot import Robot
 from utama_core.run.refiners import PositionRefiner
 
 full_field = Field.full_field_bounds
-position_refiner = PositionRefiner(full_field)
+position_refiner = PositionRefiner(True, 6, 6, full_field)
 
 
 def test_combining_single_team_combines_single_robot():
@@ -76,7 +76,7 @@ def base_refine(is_yellow: bool):
     raw_balls = [RawBallData(0, 0, 0, 0)]
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, raw_blue, raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, raw_blue, raw_balls, 1)
-    p = PositionRefiner(full_field)
+    p = PositionRefiner(True, 6, 6, full_field)
     g = GameFrame(0, is_yellow, True, friendly, enemy, bfac(0, 0))
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2])
     fr = result.friendly_robots[0]
@@ -108,7 +108,7 @@ def test_refine_for_multiple_yellow():
     raw_balls = [RawBallData(0, 0, 0, 0)]
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, [], raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, [], raw_balls, 1)
-    p = PositionRefiner(full_field)
+    p = PositionRefiner(True, 6, 6, full_field)
     g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2])
 
@@ -127,7 +127,7 @@ def test_refine_nones():
     raw_balls = [RawBallData(0, 0, 0, 0)]
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, [], raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, [], raw_balls, 1)
-    p = PositionRefiner(full_field)
+    p = PositionRefiner(True, 6, 6, full_field)
     g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2, None, None])
 
@@ -147,7 +147,7 @@ def test_out_of_bounds_does_not_update_existing_robot():
     raw_balls = [RawBallData(0, 0, 0, 0)]
     frames = [RawVisionData(0, raw_yellow, [], raw_balls, 0)]
 
-    p = PositionRefiner(full_field)
+    p = PositionRefiner(True, 6, 6, full_field)
     g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
     result = p.refine(g, frames)
 
@@ -165,7 +165,7 @@ def test_out_of_bounds_enemy_not_added():
     raw_balls = [RawBallData(0, 0, 0, 0)]
     frames = [RawVisionData(0, [], raw_blue, raw_balls, 0)]
 
-    p = PositionRefiner(full_field)
+    p = PositionRefiner(True, 6, 6, full_field)
     g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
     result = p.refine(g, frames)
 
@@ -179,7 +179,7 @@ def test_out_of_bounds_friendly_not_added():
     raw_balls = [RawBallData(0, 0, 0, 0)]
     frames = [RawVisionData(0, raw_yellow, [], raw_balls, 0)]
 
-    p = PositionRefiner(FieldBounds(top_left=(-1, 1.0), bottom_right=(1.0, -1.0)))
+    p = PositionRefiner(True, 6, 6, FieldBounds(top_left=(-1, 1.0), bottom_right=(1.0, -1.0)))
     g = GameFrame(0, True, True, {}, {}, bfac(0, 0))
     result = p.refine(g, frames)
 

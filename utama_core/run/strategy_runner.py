@@ -114,7 +114,12 @@ class StrategyRunner:
         self._load_robot_controllers()
 
         assert_valid_bounding_box(self.field_bounds)
-        self.position_refiner = PositionRefiner(self.field_bounds)
+        self.position_refiner = PositionRefiner(
+            self.my_team_is_yellow,
+            self.exp_friendly,
+            self.exp_enemy,
+            self.field_bounds
+            )
         self.velocity_refiner = VelocityRefiner()
         self.robot_info_refiner = RobotInfoRefiner()
         # self.referee_refiner = RefereeRefiner()
@@ -473,7 +478,6 @@ class StrategyRunner:
                 if self.sim_controller:
                     testManager.reset_field(self.sim_controller, self.my_game)
                     time.sleep(0.1)  # wait for the field to reset
-                    # wait for the field to reset
                 self._reset_game()
                 episode_start_time = time.time()
                 # for simplicity, we assume rsim is running in real time. May need to change this
