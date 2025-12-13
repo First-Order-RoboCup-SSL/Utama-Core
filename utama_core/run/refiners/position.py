@@ -13,12 +13,12 @@ from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
 from utama_core.run.refiners.filters import FIR_filter
 
-# For analysis:
+# For logging
 # TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
 # X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
 # COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 
-# OUTPUT_FILE = "vanish-0.5-raw.csv"
+# OUTPUT_FILE = "imputed-0.5-raw-2.csv"
 # TARGET_SIZE = 1000
 
 
@@ -52,18 +52,29 @@ class PositionRefiner(BaseRefiner):
         self.y_max = field_bounds.top_left[1] + bounds_buffer  # expand top
         self.BOUNDS_BUFFER = bounds_buffer
         
+        # For filtering
         if my_team_is_yellow:
-            yellow_count = exp_friendly
-            blue_count = exp_enemy
+            self.yellow_count = exp_friendly
+            self.blue_count = exp_enemy
         else:
-            yellow_count = exp_enemy
-            blue_count = exp_friendly
+            self.yellow_count = exp_enemy
+            self.blue_count = exp_friendly
         
         # Instantiate a dedicated FIR filter for each robot so buffers can be kept independent.
-        self.fir_filters_yellow = [FIR_filter() for _ in range(yellow_count)]
-        self.fir_filters_blue   = [FIR_filter() for _ in range(blue_count)]
+        self.fir_filters_yellow = [FIR_filter() for _ in range(self.yellow_count)]
+        self.fir_filters_blue   = [FIR_filter() for _ in range(self.blue_count)]
         
-        # For analysis
+        # For vanishing
+        # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
+        # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
+        self.last_game_frame = None
+        
+        # velocities: meters per second; angular_vel: radians per second
+        # class RobotCommand(NamedTuple): local_forward_vel: float, local_left_vel: float,
+        # angular_vel: float, kick: bool, chip: bool, dribble: bool
+        self.cmd_map = None
+        
+        # For logging
         # self.data_collected = 0
         # with open(OUTPUT_FILE, "w", newline="") as f:
         #     writer = csv.DictWriter(f, COLS)
@@ -103,13 +114,83 @@ class PositionRefiner(BaseRefiner):
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
 
-        # Handle vanishing
+        # For vanishing:
+        # if self.last_game_frame:
+        #     yellows_present = [robot.id for robot in combined_vision_data.yellow_robots]
+        #     # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
+        #     # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
+        #     if game_frame.my_team_is_yellow:  # Dict[int, Robot]
+        #         yellow_past = self.last_game_frame.friendly_robots
+        #     else:
+        #         yellow_past = self.last_game_frame.enemy_robots
+                
+        #     for robot_id in range(self.yellow_count):
+        #         if robot_id not in yellows_present:
+        #             # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D,
+        #             # v: Vector2D, a: Vector2D, orientation: float
+        #             # Vector2D has an x and a y.
+        #             last_frame: Robot = yellow_past[robot_id]
+        #             predicted_x, predicted_y, predicted_th = None, None, None
+                    
+        #             if game_frame.my_team_is_yellow:  # Friendly: predict using cmds (using last observed velocity for now)
+        #                 # velocities: meters per second; angular_vel: radians per second
+        #                 # class RobotCommand(NamedTuple): local_forward_vel: float, local_left_vel: float,
+        #                 # angular_vel: float, kick: bool, chip: bool, dribble: bool
+        #                 predicted_x = last_frame.p.x + last_frame.v.x
+        #                 predicted_y = last_frame.p.y + last_frame.v.y
+        #                 predicted_th = last_frame.orientation
+                        
+        #             else:  # Enemy: predict using last observed velocity
+        #                 predicted_x = last_frame.p.x + last_frame.v.x
+        #                 predicted_y = last_frame.p.y + last_frame.v.y
+        #                 predicted_th = last_frame.orientation
+                        
+        #             combined_vision_data.yellow_robots.append(
+        #                 VisionRobotData(
+        #                     id=robot_id,
+        #                     x=predicted_x,
+        #                     y=predicted_y,
+        #                     orientation=predicted_th
+        #                 )
+        #             )
+                                
+            
+        #     blues_present = [robot.id for robot in combined_vision_data.blue_robots]
+        #     if game_frame.my_team_is_yellow:
+        #         blue_past = self.last_game_frame.enemy_robots
+        #     else:
+        #         blue_past = self.last_game_frame.friendly_robots
+                
+        #     for robot_id in range(self.blue_count):
+        #         if robot_id not in blues_present:
+        #             last_frame: Robot = blue_past[robot_id]
+        #             predicted_x, predicted_y, predicted_th = None, None, None
+                    
+        #             if game_frame.my_team_is_yellow:
+        #                 predicted_x = last_frame.p.x #+ last_frame.v.x
+        #                 predicted_y = last_frame.p.y #+ last_frame.v.y
+        #                 predicted_th = last_frame.orientation
+                        
+        #             else:
+        #                 predicted_x = last_frame.p.x #+ last_frame.v.x
+        #                 predicted_y = last_frame.p.y #+ last_frame.v.y
+        #                 predicted_th = last_frame.orientation
+                        
+        #             combined_vision_data.blue_robots.append(
+        #                 VisionRobotData(
+        #                     id=robot_id,
+        #                     x=predicted_x,
+        #                     y=predicted_y,
+        #                     orientation=predicted_th
+        #                 )
+        #             )
 
 
         # Manually adds noise; do not use a map, Python maps are lazy. 
         # for robot in combined_vision_data.yellow_robots:
         #     robot.add_gaussian_noise()
-                
+        
+        # For filtering        
         # filtered_vision_data: VisionData = VisionData(
         #     ts=combined_vision_data.ts,
         #     yellow_robots=list(
@@ -125,7 +206,7 @@ class PositionRefiner(BaseRefiner):
         #     balls=combined_vision_data.balls
         # )
         
-        # For analysis:
+        # For logging:
         # if self.data_collected < TARGET_SIZE:
         #     with open(OUTPUT_FILE, "a", newline="") as f:
         #         writer = csv.DictWriter(f, COLS)

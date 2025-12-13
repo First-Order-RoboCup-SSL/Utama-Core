@@ -614,6 +614,8 @@ class StrategyRunner:
         new_game_frame = self.robot_info_refiner.refine(new_game_frame, responses)
         # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)
 
+        self.position_refiner.last_game_frame = new_game_frame
+
         # Store updated game frame
         if running_opp:
             self.opp_current_game_frame = new_game_frame
@@ -625,7 +627,7 @@ class StrategyRunner:
             self.replay_writer.write_frame(new_game_frame)
 
         game.add_game_frame(new_game_frame)
-        strategy.step()
+        self.position_refiner.cmd_map = strategy.step()
 
 
 # if __name__ == "__main__":
