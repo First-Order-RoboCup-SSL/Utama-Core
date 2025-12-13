@@ -1,10 +1,9 @@
 from collections import defaultdict, deque
 # import csv
 from dataclasses import replace
-import matplotlib.pyplot as plt
 import numpy as np
-import pyqtgraph as pg # type: ignore
-from pyqtgraph.Qt import QtWidgets # type: ignore
+# import pyqtgraph as pg # type: ignore
+# from pyqtgraph.Qt import QtWidgets # type: ignore
 from typing import Dict, List, Optional, Tuple
 
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
@@ -19,7 +18,7 @@ from utama_core.run.refiners.filters import FIR_filter
 # X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
 # COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 
-# OUTPUT_FILE = "noisy-manual-filtered.csv"
+# OUTPUT_FILE = "vanish-0.5-raw.csv"
 # TARGET_SIZE = 1000
 
 
@@ -64,7 +63,7 @@ class PositionRefiner(BaseRefiner):
         self.fir_filters_yellow = [FIR_filter() for _ in range(yellow_count)]
         self.fir_filters_blue   = [FIR_filter() for _ in range(blue_count)]
         
-        # # For analysis
+        # For analysis
         # self.data_collected = 0
         # with open(OUTPUT_FILE, "w", newline="") as f:
         #     writer = csv.DictWriter(f, COLS)
@@ -104,33 +103,36 @@ class PositionRefiner(BaseRefiner):
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
 
+        # Handle vanishing
+
+
         # Manually adds noise; do not use a map, Python maps are lazy. 
         # for robot in combined_vision_data.yellow_robots:
         #     robot.add_gaussian_noise()
                 
-        filtered_vision_data: VisionData = VisionData(
-            ts=combined_vision_data.ts,
-            yellow_robots=list(
-                map(FIR_filter.filter_robot,
-                self.fir_filters_yellow,
-                sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
-                ),
-            blue_robots=list(
-                map(FIR_filter.filter_robot,
-                self.fir_filters_blue,
-                sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
-                ),
-            balls=combined_vision_data.balls
-        )
+        # filtered_vision_data: VisionData = VisionData(
+        #     ts=combined_vision_data.ts,
+        #     yellow_robots=list(
+        #         map(FIR_filter.filter_robot,
+        #         self.fir_filters_yellow,
+        #         sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
+        #         ),
+        #     blue_robots=list(
+        #         map(FIR_filter.filter_robot,
+        #         self.fir_filters_blue,
+        #         sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
+        #         ),
+        #     balls=combined_vision_data.balls
+        # )
         
         # For analysis:
         # if self.data_collected < TARGET_SIZE:
         #     with open(OUTPUT_FILE, "a", newline="") as f:
         #         writer = csv.DictWriter(f, COLS)
                 
-        #         for y_robot in sorted(filtered_vision_data.yellow_robots, key=lambda r: r.id):
+        #         for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
         #             writer.writerow({
-        #                 TS_COL: filtered_vision_data.ts,
+        #                 TS_COL: combined_vision_data.ts,
         #                 ID_COL: y_robot.id,
         #                 COLOR_COL: "yellow",
         #                 X_COL: y_robot.x,
@@ -181,12 +183,12 @@ class PositionRefiner(BaseRefiner):
         # Some processing of robot vision data
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
             game_frame,
-            filtered_vision_data.yellow_robots,
-            filtered_vision_data.blue_robots,
+            combined_vision_data.yellow_robots,
+            combined_vision_data.blue_robots,
         )
 
         # After the balls have been combined, take the most confident
-        new_ball: Ball = PositionRefiner._get_most_confident_ball(filtered_vision_data.balls)
+        new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
         if new_ball is None:
             # If none, take the ball from the last frame of the game
             new_ball = game_frame.ball
@@ -194,7 +196,7 @@ class PositionRefiner(BaseRefiner):
         if game_frame.my_team_is_yellow:
             new_game_frame = replace(
                 game_frame,
-                ts=filtered_vision_data.ts,
+                ts=combined_vision_data.ts,
                 friendly_robots=new_yellow_robots,
                 enemy_robots=new_blue_robots,
                 ball=new_ball,
@@ -202,7 +204,7 @@ class PositionRefiner(BaseRefiner):
         else:
             new_game_frame = replace(
                 game_frame,
-                ts=filtered_vision_data.ts,
+                ts=combined_vision_data.ts,
                 friendly_robots=new_blue_robots,
                 enemy_robots=new_yellow_robots,
                 ball=new_ball,

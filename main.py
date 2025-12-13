@@ -16,7 +16,7 @@ def main():
         mode="grsim",
         exp_friendly=6,
         exp_enemy=3,
-        control_scheme="dwa",
+        control_scheme="pid",
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         print_real_fps=True,
         profiler_name=None,
