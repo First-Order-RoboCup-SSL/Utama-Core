@@ -3,15 +3,9 @@
 import os
 from dataclasses import dataclass
 
-
-# from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.global_utils.mapping_utils import (
-    map_friendly_enemy_to_colors,
-    map_left_right_to_colors,
-)
 from utama_core.run import StrategyRunner
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
@@ -24,15 +18,6 @@ from utama_core.tests.motion_planning.strategies.simple_navigation_strategy impo
 
 # Fix pygame window position for screen capture
 os.environ["SDL_VIDEO_WINDOW_POS"] = "100,100"
-
-
-@dataclass
-class MirrorChargeConfig:
-    """Configuration for mirror positions where teams charge at each other."""
-
-    positions: list[tuple[float, float]]  # Positions for one team (left side)
-    collision_threshold: float = ROBOT_RADIUS * 2.0
-    endpoint_tolerance: float = 0.2
 
 
 @dataclass
@@ -217,28 +202,6 @@ def test_mirror_charge_head_on(
         enemy_targets=left_positions,  # Blue targets are Yellow's starting positions
         endpoint_tolerance=0.3,
     )
-
-    # Create strategies for both teams
-    # Each robot navigates to its mirror position on the opposite side
-    friendly_strategies = []
-    for robot_id in range(len(left_positions)):
-        friendly_strategies.append(
-            SimpleNavigationStrategy(
-                robot_id=robot_id,
-                target_position=right_positions[robot_id],
-                target_orientation=0.0,
-            )
-        )
-
-    enemy_strategies = []
-    for robot_id in range(len(right_positions)):
-        enemy_strategies.append(
-            SimpleNavigationStrategy(
-                robot_id=robot_id,
-                target_position=left_positions[robot_id],
-                target_orientation=0.0,
-            )
-        )
 
     # For simplicity, use a parallel strategy that runs all robot strategies
     # Since we need a single strategy object, we'll create a custom one
