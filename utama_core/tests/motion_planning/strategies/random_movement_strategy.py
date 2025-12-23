@@ -1,7 +1,6 @@
 """Strategy for random movement within bounded area."""
 
 import random
-import time
 from typing import Dict, Optional, Tuple
 
 import py_trees
