@@ -1,7 +1,7 @@
 """Tests for multiple robots collision avoidance scenarios."""
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
