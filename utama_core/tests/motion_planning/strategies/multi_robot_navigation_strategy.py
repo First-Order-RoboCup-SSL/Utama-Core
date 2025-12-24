@@ -4,9 +4,7 @@ from typing import Dict, Optional
 
 import py_trees
 
-from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import FieldBounds
-from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 from .simple_navigation_strategy import NavigateToTarget

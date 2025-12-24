@@ -3,15 +3,9 @@
 import os
 from dataclasses import dataclass
 
-
-from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.global_utils.mapping_utils import (
-    map_friendly_enemy_to_colors,
-    map_left_right_to_colors,
-)
 from utama_core.run import StrategyRunner
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (

@@ -70,8 +70,9 @@ class StrategyRunner:
         exp_enemy (int): Expected number of enemy robots.
         field_bounds (FieldBounds): Configuration of the field. Defaults to standard field.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
-        replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
         control_scheme (str, optional): Name of the motion control scheme to use.
+        opp_control_scheme (str, optional): Name of the opponent motion control scheme to use. If not set, uses same as friendly.
+        replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
         print_real_fps (bool, optional): Whether to print real FPS. Defaults to False.
         profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
     """
@@ -87,7 +88,7 @@ class StrategyRunner:
         field_bounds: FieldBounds = Field.full_field_bounds,
         opp_strategy: Optional[AbstractStrategy] = None,
         control_scheme: str = "pid",
-        opp_control_scheme: Optional[str] = None,  # For testing
+        opp_control_scheme: Optional[str] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         print_real_fps: bool = False,  # Turn this on for RSim
         profiler_name: Optional[str] = None,
@@ -103,11 +104,11 @@ class StrategyRunner:
         self.field_bounds = field_bounds
         self.opp_strategy = opp_strategy
 
-        self.motion_controller = get_control_scheme(control_scheme)
+        self.my_motion_controller = get_control_scheme(control_scheme)
         if opp_control_scheme is not None:
             self.opp_motion_controller = get_control_scheme(opp_control_scheme)
         else:
-            self.opp_motion_controller = self.motion_controller
+            self.opp_motion_controller = self.my_motion_controller
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
         if self.opp_strategy:
@@ -358,7 +359,7 @@ class StrategyRunner:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
         self.my_strategy.load_robot_controller(my_robot_controller)
-        self.my_strategy.load_motion_controller(self.motion_controller(self.mode, self.rsim_env))
+        self.my_strategy.load_motion_controller(self.my_motion_controller(self.mode, self.rsim_env))
         if self.opp_strategy:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
             self.opp_strategy.load_motion_controller(self.opp_motion_controller(self.mode, self.rsim_env))

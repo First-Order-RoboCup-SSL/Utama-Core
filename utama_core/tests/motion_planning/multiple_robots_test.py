@@ -12,9 +12,6 @@ from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
 )
-from utama_core.tests.motion_planning.strategies.simple_navigation_strategy import (
-    SimpleNavigationStrategy,
-)
 
 # Fix pygame window position for screen capture
 os.environ["SDL_VIDEO_WINDOW_POS"] = "100,100"
