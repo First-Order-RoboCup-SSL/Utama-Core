@@ -15,6 +15,12 @@ def pytest_addoption(parser):
         default=False,
         help="Don't display any graphics (runs faster)",
     )
+    parser.addoption(
+        "--no-headless",
+        action="store_false",
+        dest="headless",
+        help="Run with graphics",
+    )
 
 
 # These parameter names match up with the parameter names for
