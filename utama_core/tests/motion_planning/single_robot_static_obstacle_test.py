@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
