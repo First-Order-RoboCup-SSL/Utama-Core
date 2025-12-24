@@ -2,10 +2,9 @@
 
 from typing import Optional
 
-import numpy as np
 import py_trees
-from py_trees.composites import Sequence
 
+from utama_core.config.settings import TIMESTEP
 from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.math_utils import Vector2D
 from utama_core.skills.src.utils.move_utils import move
@@ -22,7 +21,12 @@ class NavigateToTarget(AbstractBehaviour):
         target_orientation: Optional target orientation in radians (default: 0)
     """
 
-    def __init__(self, robot_id: int, target_position: tuple[float, float], target_orientation: float = 0.0):
+    def __init__(
+        self,
+        robot_id: int,
+        target_position: tuple[float, float],
+        target_orientation: float = 0.0,
+    ):
         super().__init__(name=f"NavigateToTarget_{robot_id}")
         self.robot_id = robot_id
         self.target_position = Vector2D(*target_position)
@@ -44,7 +48,7 @@ class NavigateToTarget(AbstractBehaviour):
             robot = game.friendly_robots[self.robot_id]
             v = robot.v
             p = robot.p
-            rsim_env.draw_point(p.x + v.x * 0.167 * 5, p.y + v.y * 0.167 * 5, color="green")
+            rsim_env.draw_point(p.x + v.x * TIMESTEP * 5, p.y + v.y * TIMESTEP * 5, color="green")
 
         # Generate movement command
         cmd = move(
@@ -69,7 +73,12 @@ class SimpleNavigationStrategy(AbstractStrategy):
         target_orientation: Optional target orientation in radians (default: 0)
     """
 
-    def __init__(self, robot_id: int, target_position: tuple[float, float], target_orientation: float = 0.0):
+    def __init__(
+        self,
+        robot_id: int,
+        target_position: tuple[float, float],
+        target_orientation: float = 0.0,
+    ):
         self.robot_id = robot_id
         self.target_position = target_position
         self.target_orientation = target_orientation
