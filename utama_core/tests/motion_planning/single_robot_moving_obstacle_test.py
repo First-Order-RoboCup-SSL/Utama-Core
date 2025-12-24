@@ -61,17 +61,6 @@ class MovingObstacleTestManager(AbstractTestManager):
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with robot at start position and moving obstacles."""
-        ini_yellow, ini_blue = map_left_right_to_colors(
-            game.my_team_is_yellow,
-            game.my_team_is_right,
-            RIGHT_START_ONE,
-            LEFT_START_ONE,
-        )
-
-        y_robots, b_robots = map_friendly_enemy_to_colors(
-            game.my_team_is_yellow, game.friendly_robots, game.enemy_robots
-        )
-
         # Teleport ALL friendly robots off-field
         for i in range(6):
             if i == self.robot_id:
