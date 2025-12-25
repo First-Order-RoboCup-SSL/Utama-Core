@@ -6,6 +6,7 @@ import numpy as np
 # from pyqtgraph.Qt import QtWidgets # type: ignore
 from typing import Dict, List, Optional, Tuple
 
+from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
@@ -16,9 +17,10 @@ from utama_core.run.refiners.filters import FIR_filter
 # For logging
 # TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
 # X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
-# COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
+# # VX_COL, VY_COL            = "v_x", "v_y"
+# COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL] #+ [VX_COL, VY_COL]
 
-# OUTPUT_FILE = "imputed-0.5-raw-2.csv"
+# OUTPUT_FILE = "imputed-0.5-raw.csv"
 # TARGET_SIZE = 1000
 
 
@@ -67,11 +69,13 @@ class PositionRefiner(BaseRefiner):
         # For vanishing
         # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
         # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
+        # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D, v: Vector2D, a: Vector2D, orientation: float
         self.last_game_frame = None
         
         # velocities: meters per second; angular_vel: radians per second
         # class RobotCommand(NamedTuple): local_forward_vel: float, local_left_vel: float,
         # angular_vel: float, kick: bool, chip: bool, dribble: bool
+        # Dict[int, Union[None, RobotCommand]]
         self.cmd_map = None
         
         # For logging
@@ -115,75 +119,80 @@ class PositionRefiner(BaseRefiner):
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
 
         # For vanishing:
-        # if self.last_game_frame:
-        #     yellows_present = [robot.id for robot in combined_vision_data.yellow_robots]
-        #     # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
-        #     # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
-        #     if game_frame.my_team_is_yellow:  # Dict[int, Robot]
-        #         yellow_past = self.last_game_frame.friendly_robots
-        #     else:
-        #         yellow_past = self.last_game_frame.enemy_robots
+        if self.last_game_frame:
+            time_elapsed = combined_vision_data.ts - self.last_game_frame.ts
+            
+            yellows_present = [robot.id for robot in combined_vision_data.yellow_robots]
+            # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
+            # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
+            if game_frame.my_team_is_yellow:  # Dict[int, Robot]
+                yellow_past = self.last_game_frame.friendly_robots
+            else:
+                yellow_past = self.last_game_frame.enemy_robots
                 
-        #     for robot_id in range(self.yellow_count):
-        #         if robot_id not in yellows_present:
-        #             # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D,
-        #             # v: Vector2D, a: Vector2D, orientation: float
-        #             # Vector2D has an x and a y.
-        #             last_frame: Robot = yellow_past[robot_id]
-        #             predicted_x, predicted_y, predicted_th = None, None, None
+            for robot_id in range(self.yellow_count):
+                if robot_id not in yellows_present:
+                    # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D,
+                    # v: Vector2D, a: Vector2D, orientation: float
+                    # Vector2D has an x and a y.
+                    last_frame: Robot = yellow_past[robot_id]
+                    predicted_x, predicted_y, predicted_th = None, None, None
                     
-        #             if game_frame.my_team_is_yellow:  # Friendly: predict using cmds (using last observed velocity for now)
-        #                 # velocities: meters per second; angular_vel: radians per second
-        #                 # class RobotCommand(NamedTuple): local_forward_vel: float, local_left_vel: float,
-        #                 # angular_vel: float, kick: bool, chip: bool, dribble: bool
-        #                 predicted_x = last_frame.p.x + last_frame.v.x
-        #                 predicted_y = last_frame.p.y + last_frame.v.y
-        #                 predicted_th = last_frame.orientation
+                    if game_frame.my_team_is_yellow:  # Friendly: predict using cmds (using last observed velocity for now)
+                        # last_cmd: RobotCommand = self.cmd_map[robot_id]
+                        # velocities: meters per second; angular_vel: radians per second
+                        # class RobotCommand(NamedTuple): local_forward_vel: float, local_left_vel: float,
+                        # angular_vel: float, kick: bool, chip: bool, dribble: bool
+                        predicted_x  = last_frame.p.x + (last_frame.v.x * time_elapsed)
+                        predicted_y  = last_frame.p.y + (last_frame.v.y * time_elapsed)
+                        # predicted_x  = last_frame.p.x + (last_frame.v.x * time_elapsed)
+                        # predicted_y  = last_frame.p.y + (last_frame.v.y * time_elapsed)
+                        predicted_th = last_frame.orientation
                         
-        #             else:  # Enemy: predict using last observed velocity
-        #                 predicted_x = last_frame.p.x + last_frame.v.x
-        #                 predicted_y = last_frame.p.y + last_frame.v.y
-        #                 predicted_th = last_frame.orientation
+                    else:  # Enemy: predict using last observed velocity
+                        predicted_x  = last_frame.p.x + (last_frame.v.x * time_elapsed)
+                        predicted_y  = last_frame.p.y + (last_frame.v.y * time_elapsed)
+                        predicted_th = last_frame.orientation
                         
-        #             combined_vision_data.yellow_robots.append(
-        #                 VisionRobotData(
-        #                     id=robot_id,
-        #                     x=predicted_x,
-        #                     y=predicted_y,
-        #                     orientation=predicted_th
-        #                 )
-        #             )
+                    combined_vision_data.yellow_robots.append(
+                        VisionRobotData(
+                            id=robot_id,
+                            x=predicted_x,
+                            y=predicted_y,
+                            orientation=predicted_th
+                        )
+                    )
                                 
             
-        #     blues_present = [robot.id for robot in combined_vision_data.blue_robots]
-        #     if game_frame.my_team_is_yellow:
-        #         blue_past = self.last_game_frame.enemy_robots
-        #     else:
-        #         blue_past = self.last_game_frame.friendly_robots
+            # blues_present = [robot.id for robot in combined_vision_data.blue_robots]
+            # if game_frame.my_team_is_yellow:
+            #     blue_past = self.last_game_frame.enemy_robots
+            # else:
+            #     blue_past = self.last_game_frame.friendly_robots
                 
-        #     for robot_id in range(self.blue_count):
-        #         if robot_id not in blues_present:
-        #             last_frame: Robot = blue_past[robot_id]
-        #             predicted_x, predicted_y, predicted_th = None, None, None
+            # for robot_id in range(self.blue_count):
+            #     if robot_id not in blues_present:
+            #         last_frame: Robot = blue_past[robot_id]
+            #         predicted_x, predicted_y, predicted_th = None, None, None
                     
-        #             if game_frame.my_team_is_yellow:
-        #                 predicted_x = last_frame.p.x #+ last_frame.v.x
-        #                 predicted_y = last_frame.p.y #+ last_frame.v.y
-        #                 predicted_th = last_frame.orientation
+            #         if game_frame.my_team_is_yellow:
+            #             predicted_x = last_frame.p.x #+ last_frame.v.x
+            #             predicted_y = last_frame.p.y #+ last_frame.v.y
+            #             predicted_th = last_frame.orientation
                         
-        #             else:
-        #                 predicted_x = last_frame.p.x #+ last_frame.v.x
-        #                 predicted_y = last_frame.p.y #+ last_frame.v.y
-        #                 predicted_th = last_frame.orientation
+            #         else:
+            #             predicted_x = last_frame.p.x #+ last_frame.v.x
+            #             predicted_y = last_frame.p.y #+ last_frame.v.y
+            #             predicted_th = last_frame.orientation
                         
-        #             combined_vision_data.blue_robots.append(
-        #                 VisionRobotData(
-        #                     id=robot_id,
-        #                     x=predicted_x,
-        #                     y=predicted_y,
-        #                     orientation=predicted_th
-        #                 )
-        #             )
+            #         combined_vision_data.blue_robots.append(
+            #             VisionRobotData(
+            #                 id=robot_id,
+            #                 x=predicted_x,
+            #                 y=predicted_y,
+            #                 orientation=predicted_th
+            #             )
+            #         )
 
 
         # Manually adds noise; do not use a map, Python maps are lazy. 
@@ -220,18 +229,33 @@ class PositionRefiner(BaseRefiner):
         #                 Y_COL: y_robot.y,
         #                 TH_COL: y_robot.orientation
         #             })
+                
+                # class GameFrame: ts: float, ..., friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
+                # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D, v: Vector2D, a: Vector2D, orientation: float
+                # if self.last_game_frame:
+                #     for y_robot in range(self.yellow_count):
+                #         writer.writerow({
+                #             TS_COL: self.last_game_frame.ts,
+                #             ID_COL: y_robot,
+                #             COLOR_COL: "yellow",
+                #             X_COL: self.last_game_frame.friendly_robots[y_robot].p.x,
+                #             Y_COL: self.last_game_frame.friendly_robots[y_robot].p.y,
+                #             TH_COL: self.last_game_frame.friendly_robots[y_robot].orientation,
+                #             VX_COL: self.last_game_frame.friendly_robots[y_robot].v.x,
+                #             VY_COL: self.last_game_frame.friend
+                #         })
                     
-        #         # for b_robot in combined_vision_data.blue_robots:
-        #         #     writer.writerow({
-        #         #         TS_COL: combined_vision_data.ts,
-        #         #         ID_COL: b_robot.id,
-        #         #         COLOR_COL: "blue",
-        #         #         X_COL: b_robot.x,
-        #         #         Y_COL: b_robot.y,
-        #         #         TH_COL: b_robot.orientation
-        #         #     })
+                # for b_robot in combined_vision_data.blue_robots:
+                #     writer.writerow({
+                #         TS_COL: combined_vision_data.ts,
+                #         ID_COL: b_robot.id,
+                #         COLOR_COL: "blue",
+                #         X_COL: b_robot.x,
+                #         Y_COL: b_robot.y,
+                #         TH_COL: b_robot.orientation
+                #     })
                     
-        #         self.data_collected += 1
+                # self.data_collected += 1
                 
         # For live testing:
         # try:
