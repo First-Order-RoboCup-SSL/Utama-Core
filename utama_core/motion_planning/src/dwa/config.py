@@ -17,6 +17,11 @@ class DynamicWindowConfig:
     max_speed_for_full_bubble: float = 1.0
     target_tolerance: float = 0.01
     n_directions: int = 8
+    v_resolution = 0.05
+    weight_goal = 50.0
+    weight_obstacle = 1.0  # Increased to match new (0-10) obstacle cost scale
+    weight_speed = 1.0
+    show_debug_rectangles = False  # Enable visualization of bounding boxes for testing
 
 
 def get_dwa_config(mode: Mode) -> DynamicWindowConfig:
