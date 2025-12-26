@@ -379,6 +379,10 @@ class StrategyRunner:
             is_pvp=self.opp_strategy is not None,
             rsim_env=self.rsim_env,
         )
+        
+        self.position_refiner.last_game_frame = my_current_game_frame
+        self.position_refiner.vanishing = True
+        
         my_field = Field(self.my_team_is_right, self.field_bounds)
         my_game_history = GameHistory(MAX_GAME_HISTORY)
         my_game = Game(my_game_history, my_current_game_frame, field=my_field)
@@ -614,7 +618,8 @@ class StrategyRunner:
         new_game_frame = self.robot_info_refiner.refine(new_game_frame, responses)
         # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)
 
-        self.position_refiner.last_game_frame = new_game_frame
+        if new_game_frame:
+            self.position_refiner.last_game_frame = new_game_frame
 
         # Store updated game frame
         if running_opp:

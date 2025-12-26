@@ -17,10 +17,9 @@ from utama_core.run.refiners.filters import FIR_filter
 # For logging
 # TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
 # X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
-# # VX_COL, VY_COL            = "v_x", "v_y"
-# COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL] #+ [VX_COL, VY_COL]
+# COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 
-# OUTPUT_FILE = "imputed-0.5-raw.csv"
+# OUTPUT_FILE = "clean-raw-2.csv"
 # TARGET_SIZE = 1000
 
 
@@ -70,13 +69,15 @@ class PositionRefiner(BaseRefiner):
         # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
         # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
         # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D, v: Vector2D, a: Vector2D, orientation: float
-        self.last_game_frame = None
+        self.vanishing = False  # Imputing is only turned on when the refiner is run from _step_game(), not _load_game()
+        self.last_game_frame = None  # Game gater will initialise
         
         # velocities: meters per second; angular_vel: radians per second
         # class RobotCommand(NamedTuple): local_forward_vel: float, local_left_vel: float,
         # angular_vel: float, kick: bool, chip: bool, dribble: bool
         # Dict[int, Union[None, RobotCommand]]
-        self.cmd_map = None
+        
+        self.cmd_map = { i: RobotCommand(0, 0, 0, False, False, False) for i in range(exp_friendly) }
         
         # For logging
         # self.data_collected = 0
@@ -117,106 +118,33 @@ class PositionRefiner(BaseRefiner):
         # class VisionData: ts: float; yellow_robots: List[VisionRobotData]; blue_robots: List[VisionRobotData]; balls: List[VisionBallData]
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
-
-        # For vanishing:
-        if self.last_game_frame:
-            time_elapsed = combined_vision_data.ts - self.last_game_frame.ts
-            
-            yellows_present = [robot.id for robot in combined_vision_data.yellow_robots]
-            # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
-            # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
-            if game_frame.my_team_is_yellow:  # Dict[int, Robot]
-                yellow_past = self.last_game_frame.friendly_robots
-            else:
-                yellow_past = self.last_game_frame.enemy_robots
-                
-            for robot_id in range(self.yellow_count):
-                if robot_id not in yellows_present:
-                    # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D,
-                    # v: Vector2D, a: Vector2D, orientation: float
-                    # Vector2D has an x and a y.
-                    last_frame: Robot = yellow_past[robot_id]
-                    predicted_x, predicted_y, predicted_th = None, None, None
-                    
-                    if game_frame.my_team_is_yellow:  # Friendly: predict using cmds (using last observed velocity for now)
-                        # last_cmd: RobotCommand = self.cmd_map[robot_id]
-                        # velocities: meters per second; angular_vel: radians per second
-                        # class RobotCommand(NamedTuple): local_forward_vel: float, local_left_vel: float,
-                        # angular_vel: float, kick: bool, chip: bool, dribble: bool
-                        predicted_x  = last_frame.p.x + (last_frame.v.x * time_elapsed)
-                        predicted_y  = last_frame.p.y + (last_frame.v.y * time_elapsed)
-                        # predicted_x  = last_frame.p.x + (last_frame.v.x * time_elapsed)
-                        # predicted_y  = last_frame.p.y + (last_frame.v.y * time_elapsed)
-                        predicted_th = last_frame.orientation
-                        
-                    else:  # Enemy: predict using last observed velocity
-                        predicted_x  = last_frame.p.x + (last_frame.v.x * time_elapsed)
-                        predicted_y  = last_frame.p.y + (last_frame.v.y * time_elapsed)
-                        predicted_th = last_frame.orientation
-                        
-                    combined_vision_data.yellow_robots.append(
-                        VisionRobotData(
-                            id=robot_id,
-                            x=predicted_x,
-                            y=predicted_y,
-                            orientation=predicted_th
-                        )
-                    )
-                                
-            
-            # blues_present = [robot.id for robot in combined_vision_data.blue_robots]
-            # if game_frame.my_team_is_yellow:
-            #     blue_past = self.last_game_frame.enemy_robots
-            # else:
-            #     blue_past = self.last_game_frame.friendly_robots
-                
-            # for robot_id in range(self.blue_count):
-            #     if robot_id not in blues_present:
-            #         last_frame: Robot = blue_past[robot_id]
-            #         predicted_x, predicted_y, predicted_th = None, None, None
-                    
-            #         if game_frame.my_team_is_yellow:
-            #             predicted_x = last_frame.p.x #+ last_frame.v.x
-            #             predicted_y = last_frame.p.y #+ last_frame.v.y
-            #             predicted_th = last_frame.orientation
-                        
-            #         else:
-            #             predicted_x = last_frame.p.x #+ last_frame.v.x
-            #             predicted_y = last_frame.p.y #+ last_frame.v.y
-            #             predicted_th = last_frame.orientation
-                        
-            #         combined_vision_data.blue_robots.append(
-            #             VisionRobotData(
-            #                 id=robot_id,
-            #                 x=predicted_x,
-            #                 y=predicted_y,
-            #                 orientation=predicted_th
-            #             )
-            #         )
-
-
+        
+        # For vanishing: updates combined_vision_data in place.
+        if self.vanishing:
+            self._impute_vanished(game_frame, combined_vision_data, False)
+        
         # Manually adds noise; do not use a map, Python maps are lazy. 
         # for robot in combined_vision_data.yellow_robots:
         #     robot.add_gaussian_noise()
         
         # For filtering        
-        # filtered_vision_data: VisionData = VisionData(
-        #     ts=combined_vision_data.ts,
-        #     yellow_robots=list(
-        #         map(FIR_filter.filter_robot,
-        #         self.fir_filters_yellow,
-        #         sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
-        #         ),
-        #     blue_robots=list(
-        #         map(FIR_filter.filter_robot,
-        #         self.fir_filters_blue,
-        #         sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
-        #         ),
-        #     balls=combined_vision_data.balls
-        # )
+        filtered_vision_data: VisionData = VisionData(
+            ts=combined_vision_data.ts,
+            yellow_robots=list(
+                map(FIR_filter.filter_robot,
+                self.fir_filters_yellow,
+                sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
+                ),
+            blue_robots=list(
+                map(FIR_filter.filter_robot,
+                self.fir_filters_blue,
+                sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
+                ),
+            balls=combined_vision_data.balls
+        )
         
         # For logging:
-        # if self.data_collected < TARGET_SIZE:
+        # if self.data_collected < TARGET_SIZE and self.vanishing:
         #     with open(OUTPUT_FILE, "a", newline="") as f:
         #         writer = csv.DictWriter(f, COLS)
                 
@@ -229,21 +157,6 @@ class PositionRefiner(BaseRefiner):
         #                 Y_COL: y_robot.y,
         #                 TH_COL: y_robot.orientation
         #             })
-                
-                # class GameFrame: ts: float, ..., friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
-                # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D, v: Vector2D, a: Vector2D, orientation: float
-                # if self.last_game_frame:
-                #     for y_robot in range(self.yellow_count):
-                #         writer.writerow({
-                #             TS_COL: self.last_game_frame.ts,
-                #             ID_COL: y_robot,
-                #             COLOR_COL: "yellow",
-                #             X_COL: self.last_game_frame.friendly_robots[y_robot].p.x,
-                #             Y_COL: self.last_game_frame.friendly_robots[y_robot].p.y,
-                #             TH_COL: self.last_game_frame.friendly_robots[y_robot].orientation,
-                #             VX_COL: self.last_game_frame.friendly_robots[y_robot].v.x,
-                #             VY_COL: self.last_game_frame.friend
-                #         })
                     
                 # for b_robot in combined_vision_data.blue_robots:
                 #     writer.writerow({
@@ -288,12 +201,12 @@ class PositionRefiner(BaseRefiner):
         # Some processing of robot vision data
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
             game_frame,
-            combined_vision_data.yellow_robots,
-            combined_vision_data.blue_robots,
+            filtered_vision_data.yellow_robots,
+            filtered_vision_data.blue_robots,
         )
 
         # After the balls have been combined, take the most confident
-        new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
+        new_ball: Ball = PositionRefiner._get_most_confident_ball(filtered_vision_data.balls)
         if new_ball is None:
             # If none, take the ball from the last frame of the game
             new_ball = game_frame.ball
@@ -301,7 +214,7 @@ class PositionRefiner(BaseRefiner):
         if game_frame.my_team_is_yellow:
             new_game_frame = replace(
                 game_frame,
-                ts=combined_vision_data.ts,
+                ts=filtered_vision_data.ts,
                 friendly_robots=new_yellow_robots,
                 enemy_robots=new_blue_robots,
                 ball=new_ball,
@@ -309,7 +222,7 @@ class PositionRefiner(BaseRefiner):
         else:
             new_game_frame = replace(
                 game_frame,
-                ts=combined_vision_data.ts,
+                ts=filtered_vision_data.ts,
                 friendly_robots=new_blue_robots,
                 enemy_robots=new_yellow_robots,
                 ball=new_ball,
@@ -317,7 +230,120 @@ class PositionRefiner(BaseRefiner):
             
         return new_game_frame
 
+        
+    def _impute_vanished(
+        self,
+        game_frame: GameFrame,
+        vision_data: VisionData,
+        commands: bool=True
+    ) -> None:  # Imputes in place
+        time_elapsed = vision_data.ts - self.last_game_frame.ts
+            
+        yellows_present = [robot.id for robot in vision_data.yellow_robots]
+        
+        # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
+        # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
+        if game_frame.my_team_is_yellow:
+            yellow_past = self.last_game_frame.friendly_robots
+        else:
+            yellow_past = self.last_game_frame.enemy_robots
+            
+        for robot_id in range(self.yellow_count):
+            if robot_id not in yellows_present:
+                # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D,
+                # v: Vector2D, a: Vector2D, orientation: float
+                # Vector2D has an x and a y.
+                last_frame: Robot = yellow_past[robot_id]
+                predicted_x, predicted_y, predicted_th = None, None, None
+                
+                if game_frame.my_team_is_yellow:  # Friendly: predict using cmds or last observed velocity
+                    # velocities: meters per second; angular_vel: radians per second
+                    # class RobotCommand(NamedTuple): local_forward_vel: float, local_left_vel: float,
+                    # angular_vel: float, kick: bool, chip: bool, dribble: bool
+                    if commands:
+                        last_cmd: RobotCommand = self.cmd_map[robot_id]
+                        predicted_th = last_frame.orientation + (last_cmd.angular_vel * time_elapsed)
+                        displacement: Vector2D = self._get_displacement_vector(last_cmd, time_elapsed, predicted_th)
+                        predicted_x  = last_frame.p.x + displacement.x
+                        predicted_y  = last_frame.p.y + displacement.y
+                    else:
+                        predicted_x  = last_frame.p.x + (last_frame.v.x * time_elapsed)
+                        predicted_y  = last_frame.p.y + (last_frame.v.y * time_elapsed)
+                        predicted_th = last_frame.orientation
+                    
+                else:  # Enemy: predict using last observed velocity
+                    predicted_x  = last_frame.p.x + (last_frame.v.x * time_elapsed)
+                    predicted_y  = last_frame.p.y + (last_frame.v.y * time_elapsed)
+                    predicted_th = last_frame.orientation
+                    
+                vision_data.yellow_robots.append(
+                    VisionRobotData(
+                        id=robot_id,
+                        x=predicted_x,
+                        y=predicted_y,
+                        orientation=predicted_th
+                    )
+                )
+                            
+        
+        blues_present = [robot.id for robot in vision_data.blue_robots]
+        if game_frame.my_team_is_yellow:
+            blue_past = self.last_game_frame.enemy_robots
+        else:
+            blue_past = self.last_game_frame.friendly_robots
+            
+        for robot_id in range(self.blue_count):
+            if robot_id not in blues_present:
+                last_frame: Robot = blue_past[robot_id]
+                predicted_x, predicted_y, predicted_th = None, None, None
+                
+                if game_frame.my_team_is_yellow:
+                    predicted_x  = last_frame.p.x + (last_frame.v.x * time_elapsed)
+                    predicted_y  = last_frame.p.y + (last_frame.v.y * time_elapsed)
+                    predicted_th = last_frame.orientation
+                    
+                else:
+                    if commands:
+                        last_cmd: RobotCommand = self.cmd_map[robot_id]
+                        predicted_th = last_frame.orientation + (last_cmd.angular_vel * time_elapsed)
+                        displacement: Vector2D = self._get_displacement_vector(last_cmd, time_elapsed, predicted_th)
+                        predicted_x  = last_frame.p.x + displacement.x
+                        predicted_y  = last_frame.p.y + displacement.y
+                    else:
+                        predicted_x  = last_frame.p.x + (last_frame.v.x * time_elapsed)
+                        predicted_y  = last_frame.p.y + (last_frame.v.y * time_elapsed)
+                        predicted_th = last_frame.orientation
+                    
+                vision_data.blue_robots.append(
+                    VisionRobotData(
+                        id=robot_id,
+                        x=predicted_x,
+                        y=predicted_y,
+                        orientation=predicted_th
+                    )
+                )
+                
+    
     # Static methods
+    @staticmethod
+    def _get_displacement_vector(
+        command: RobotCommand,
+        time_elapsed: float,
+        theta: float
+    ) -> Vector2D:
+        rel_displacement = np.array([command.local_forward_vel,
+                                     -1 * command.local_left_vel]) * time_elapsed
+        
+        sin_theta, cos_theta = np.sin(theta), np.cos(theta)
+        
+        basis_change_matrix = np.array([[cos_theta, -1 * sin_theta],
+                                        [sin_theta, cos_theta]])
+        
+        abs_displacement = np.matmul(basis_change_matrix, rel_displacement)
+        
+        return Vector2D(abs_displacement[0],
+                        abs_displacement[1])
+    
     @staticmethod
     def _combine_robot_vision_data(
         old_robot: Robot, robot_data: VisionRobotData, angle_smoother: AngleSmoother
