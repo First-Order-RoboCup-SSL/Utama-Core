@@ -512,9 +512,11 @@ class CameraCombiner:
                         combined_balls.append(b)
         return combined_balls
 
+    @staticmethod
     def ball_merge_predicate(b1: RawBallData, b2: RawBallData) -> bool:
         return abs(b1.x - b2.x) + abs(b1.y - b2.y) < CameraCombiner.BALL_MERGE_THRESHOLD
 
+    @staticmethod
     def ball_merge(b1: RawBallData, b2: RawBallData) -> RawBallData:
         nx = (b1.x + b2.x) / 2
         ny = (b1.y + b2.y) / 2
