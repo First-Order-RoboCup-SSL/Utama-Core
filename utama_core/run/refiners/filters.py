@@ -48,7 +48,7 @@ class FIR_filter:
         if taps is None:
             assert window_len >= 1, "window_len must be >= 1"
             self._taps = firwin(window_len, self._cutoff, fs=fs)
-            #self._taps = np.ones(window_len, dtype=float) / float(window_len)
+            
         else:
             t = np.asarray(taps, dtype=float).ravel()
             assert t.size >= 1, "taps must have at least 1 element"

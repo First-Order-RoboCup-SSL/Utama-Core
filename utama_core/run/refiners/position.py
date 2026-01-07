@@ -103,10 +103,6 @@ class PositionRefiner(BaseRefiner):
         # class VisionData: ts: float; yellow_robots: List[VisionRobotData]; blue_robots: List[VisionRobotData]; balls: List[VisionBallData]
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
-
-        # Manually adds noise; do not use a map, Python maps are lazy. 
-        # for robot in combined_vision_data.yellow_robots:
-        #     robot.add_gaussian_noise()
                 
         filtered_vision_data: VisionData = VisionData(
             ts=combined_vision_data.ts,
