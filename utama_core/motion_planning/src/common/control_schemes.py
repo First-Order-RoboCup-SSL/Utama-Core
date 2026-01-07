@@ -1,7 +1,11 @@
 from typing import Type
 
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.motion_planning.src.controllers import DWAController, PIDController, BisectorController
+from utama_core.motion_planning.src.controllers import (
+    BisectorController,
+    DWAController,
+    PIDController,
+)
 
 CONTROL_SCHEME_MAP = {"pid": PIDController, "dwa": DWAController, "bisector": BisectorController}
 

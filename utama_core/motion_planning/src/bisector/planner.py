@@ -126,7 +126,6 @@ def intersects_any_polygon(seg_start: np.ndarray, seg_end: np.ndarray, obstacles
 class BisectorPlanner:
 
     def __init__(self, env: SSLStandardEnv):
-
         self._env = env
         self.config = bisectorplannerconfig
         self.CLOSE_LIMIT = self.config.CLOSE_LIMIT
