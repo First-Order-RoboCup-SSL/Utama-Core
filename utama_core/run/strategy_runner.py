@@ -153,7 +153,6 @@ class StrategyRunner:
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
         self._stop_event = False
-        signal.signal(signal.SIGINT, self._handle_sigint)
 
     def _handle_sigint(self, sig, frame):
         self._stop_event = True
@@ -464,7 +463,7 @@ class StrategyRunner:
         Args:
             stop_command_mult (int): Number of times to send the stop command to robots.
         """
-        print("Cleaning up resources...")
+        self.logger.info("Cleaning up resources...")
 
         if self.mode == Mode.REAL:
             self._stop_robots(stop_command_mult)
@@ -492,6 +491,8 @@ class StrategyRunner:
             episode_timeout (float): The timeout for each episode in seconds.
             rsim_headless (bool): Whether to run RSim in headless mode. Defaults to False.
         """
+        signal.signal(signal.SIGINT, self._handle_sigint)
+
         passed = True
         n_episodes = testManager.get_n_episodes()
         if not rsim_headless and self.rsim_env:
@@ -560,6 +561,8 @@ class StrategyRunner:
         continues until a KeyboardInterrupt is received, after which resources
         (such as replay writer and rsim env) are closed.
         """
+        signal.signal(signal.SIGINT, self._handle_sigint)
+
         if self.rsim_env:
             self.rsim_env.render_mode = "human"
         if self.profiler:
