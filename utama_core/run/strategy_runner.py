@@ -1,7 +1,6 @@
 import cProfile
 import logging
 import signal
-import sys
 import threading
 import time
 import warnings
@@ -518,6 +517,9 @@ class StrategyRunner:
                 elif status == TestingStatus.SUCCESS:
                     self._reset_robots()
                     break
+
+            if self._stop_event:
+                break
             if self.profiler:
                 self.profiler.disable()
         self._cleanup()
