@@ -11,6 +11,7 @@ from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVi
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
+from utama_core.global_utils.math_utils import get_displacement_vector
 from utama_core.run.refiners.base_refiner import BaseRefiner
 from utama_core.run.refiners.filters import FIR_filter
 
@@ -263,7 +264,7 @@ class PositionRefiner(BaseRefiner):
                     if commands:
                         last_cmd: RobotCommand = self.cmd_map[robot_id]
                         predicted_th = last_frame.orientation + (last_cmd.angular_vel * time_elapsed)
-                        displacement: Vector2D = self._get_displacement_vector(last_cmd, time_elapsed, predicted_th)
+                        displacement: Vector2D = get_displacement_vector(last_cmd, time_elapsed, predicted_th)
                         predicted_x  = last_frame.p.x + displacement.x
                         predicted_y  = last_frame.p.y + displacement.y
                     else:
@@ -306,7 +307,7 @@ class PositionRefiner(BaseRefiner):
                     if commands:
                         last_cmd: RobotCommand = self.cmd_map[robot_id]
                         predicted_th = last_frame.orientation + (last_cmd.angular_vel * time_elapsed)
-                        displacement: Vector2D = self._get_displacement_vector(last_cmd, time_elapsed, predicted_th)
+                        displacement: Vector2D = get_displacement_vector(last_cmd, time_elapsed, predicted_th)
                         predicted_x  = last_frame.p.x + displacement.x
                         predicted_y  = last_frame.p.y + displacement.y
                     else:
@@ -325,25 +326,6 @@ class PositionRefiner(BaseRefiner):
                 
     
     # Static methods
-    @staticmethod
-    def _get_displacement_vector(
-        command: RobotCommand,
-        time_elapsed: float,
-        theta: float
-    ) -> Vector2D:
-        rel_displacement = np.array([command.local_forward_vel,
-                                     -1 * command.local_left_vel]) * time_elapsed
-        
-        sin_theta, cos_theta = np.sin(theta), np.cos(theta)
-        
-        basis_change_matrix = np.array([[cos_theta, -1 * sin_theta],
-                                        [sin_theta, cos_theta]])
-        
-        abs_displacement = np.matmul(basis_change_matrix, rel_displacement)
-        
-        return Vector2D(abs_displacement[0],
-                        abs_displacement[1])
-    
     @staticmethod
     def _combine_robot_vision_data(
         old_robot: Robot, robot_data: VisionRobotData, angle_smoother: AngleSmoother

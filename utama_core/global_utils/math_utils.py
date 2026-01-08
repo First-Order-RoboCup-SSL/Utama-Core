@@ -4,6 +4,7 @@ import numpy as np
 
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.entities.data.command import RobotCommand
 
 
 def rotate_vector(vx_global: float, vy_global: float, theta: float) -> Tuple[float, float]:
@@ -106,3 +107,22 @@ def assert_valid_bounding_box(bb: FieldBounds):
     # Also ensure within full field
     assert -fx <= x0 <= fx and -fx <= x1 <= fx, f"x coordinates out of full field bounds ±{fx}"
     assert -fy <= y0 <= fy and -fy <= y1 <= fy, f"y coordinates out of full field bounds ±{fy}"
+
+
+def get_displacement_vector(
+        command: RobotCommand,
+        time_elapsed: float,
+        theta: float
+    ) -> Vector2D:
+        rel_displacement = np.array([command.local_forward_vel,
+                                     -1 * command.local_left_vel]) * time_elapsed
+        
+        sin_theta, cos_theta = np.sin(theta), np.cos(theta)
+        
+        basis_change_matrix = np.array([[cos_theta, -1 * sin_theta],
+                                        [sin_theta, cos_theta]])
+        
+        abs_displacement = np.matmul(basis_change_matrix, rel_displacement)
+        
+        return Vector2D(abs_displacement[0],
+                        abs_displacement[1])
