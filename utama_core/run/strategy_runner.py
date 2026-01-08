@@ -437,9 +437,37 @@ class StrategyRunner:
                 self.opp_strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
             self.opp_strategy.robot_controller.send_robot_commands()
 
-    def _cleanup(self):
-        """Cleanup resources such as profiler, replay writer, fps_monitor, and rsim env."""
+    def _stop_robots(self, stop_command_mult: int):
+        """
+        Send a series of stop commands to all robots to ensure they come to a halt.
+        Args:
+            stop_command_mult (int): Number of times to send the stop command.
+        """
+        my_stop_commands = {
+            robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.my_game.friendly_robots.keys()
+        }
+        if self.opp_game:
+            opp_stop_commands = {
+                robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.opp_game.friendly_robots.keys()
+            }
+
+        for _ in range(stop_command_mult):
+            self.my_strategy.robot_controller.add_robot_commands(my_stop_commands)
+            self.my_strategy.robot_controller.send_robot_commands()
+            if self.opp_strategy and self.opp_game:
+                self.opp_strategy.robot_controller.add_robot_commands(opp_stop_commands)
+                self.opp_strategy.robot_controller.send_robot_commands()
+
+    def close(self, stop_command_mult: int = 20):
+        """
+        Close resources used by the StrategyRunner and stop robots if in real mode.
+        Args:
+            stop_command_mult (int): Number of times to send the stop command to robots.
+        """
         print("Cleaning up resources...")
+
+        if self.mode == Mode.REAL:
+            self._stop_robots(stop_command_mult)
         if self.profiler:
             self.profiler.disable()
             if self.profiler.getstats():
@@ -522,7 +550,7 @@ class StrategyRunner:
                 break
             if self.profiler:
                 self.profiler.disable()
-        self._cleanup()
+        self.close()
         return passed
 
     def run(self):
@@ -544,7 +572,7 @@ class StrategyRunner:
                     self.logger.info("Stopping run loop due to interrupt.")
                 else:
                     raise e
-        self._cleanup()
+        self.close()
 
     def _run_step(self):
         """Perform one tick of the overall game loop.
