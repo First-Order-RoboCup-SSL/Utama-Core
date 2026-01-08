@@ -59,11 +59,7 @@ class FIR_filter:
         self._buf_x = deque(maxlen=self._N)
         self._buf_y = deque(maxlen=self._N)
         self._buf_th = deque(maxlen=self._N)
-
-    @staticmethod
-    def _wrap_angle(a):
-        """Wrap angle to (-pi, pi]."""
-        return (a + np.pi) % (2 * np.pi) - np.pi
+        
 
     def step(self, z):
         """
@@ -72,7 +68,7 @@ class FIR_filter:
         Returns: (x_filt, y_filt, theta_filt)
         """
         x, y, theta = map(float, z)
-        # theta = self._wrap_angle(theta)
+        # theta = normalise_heading(theta) (from utama_core.global_utils.math_utils)
 
         self._buf_x.append(x)
         self._buf_y.append(y)
