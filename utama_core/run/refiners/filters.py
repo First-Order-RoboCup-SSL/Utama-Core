@@ -1,13 +1,10 @@
-import numpy as np
 from collections import deque
-from scipy.signal import firwin
-import sys
 
-try:
-    from utama_core.entities.data.vision import VisionRobotData
-except ModuleNotFoundError:
-    sys.path.append("../utama_core/entities/data/")
-    from vision import VisionRobotData
+import numpy as np
+from scipy.signal import firwin
+
+from utama_core.entities.data.vision import VisionRobotData
+
 
 class FIR_filter:
     """
@@ -31,7 +28,7 @@ class FIR_filter:
         self._fs = float(fs)
         self._N = window_len
         self._nyquist = 0.4 * self._fs
-        
+
         if cutoff and cutoff < self._nyquist:
             self._cutoff = cutoff
         else:
@@ -42,13 +39,13 @@ class FIR_filter:
             a_max = 50
             v_max = 5
             fc = a_max / (2 * np.pi * v_max)
-            
+
             self._cutoff = min(self._nyquist, fc)
-            
+
         if taps is None:
             assert window_len >= 1, "window_len must be >= 1"
             self._taps = firwin(window_len, self._cutoff, fs=fs)
-            
+
         else:
             t = np.asarray(taps, dtype=float).ravel()
             assert t.size >= 1, "taps must have at least 1 element"
@@ -59,7 +56,6 @@ class FIR_filter:
         self._buf_x = deque(maxlen=self._N)
         self._buf_y = deque(maxlen=self._N)
         self._buf_th = deque(maxlen=self._N)
-        
 
     def step(self, z):
         """
@@ -68,7 +64,7 @@ class FIR_filter:
         Returns: (x_filt, y_filt, theta_filt)
         """
         x, y, theta = map(float, z)
-        # theta = normalise_heading(theta) (from utama_core.global_utils.math_utils)
+        # theta = normalise_heading(theta)
 
         self._buf_x.append(x)
         self._buf_y.append(y)
@@ -92,15 +88,10 @@ class FIR_filter:
         # th_f = float(np.arctan2(s, c))  # already wrapped to (-pi, pi]
 
         return x_f, y_f, theta
-    
+
     @staticmethod
     def filter_robot(filter, data: VisionRobotData) -> VisionRobotData:
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         (x_f, y_f, th_f) = filter.step([data.x, data.y, data.orientation])
-        
-        return VisionRobotData(
-            id=data.id,
-            x=x_f,
-            y=y_f,
-            orientation=th_f
-        )
+
+        return VisionRobotData(id=data.id, x=x_f, y=y_f, orientation=th_f)
