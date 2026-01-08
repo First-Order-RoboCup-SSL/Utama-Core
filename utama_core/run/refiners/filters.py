@@ -2,8 +2,14 @@ from collections import deque
 
 import numpy as np
 from scipy.signal import firwin
+import sys
 
-from utama_core.entities.data.vision import VisionRobotData
+# For running analytics from Jupyter notebook
+try:
+    from utama_core.entities.data.vision import VisionRobotData
+except ModuleNotFoundError:
+    sys.path.append("../utama_core/entities/data/")
+    from vision import VisionRobotData
 
 
 class FIR_filter:
