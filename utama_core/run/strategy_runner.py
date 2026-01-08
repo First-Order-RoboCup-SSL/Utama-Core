@@ -153,11 +153,11 @@ class StrategyRunner:
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
+        self._stop_event = False
         signal.signal(signal.SIGINT, self._handle_sigint)
 
     def _handle_sigint(self, sig, frame):
-        self._cleanup()
-        sys.exit(0)
+        self._stop_event = True
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -487,7 +487,9 @@ class StrategyRunner:
             # for simplicity, we assume rsim is running in real time. May need to change this
             if self.profiler:
                 self.profiler.enable()
-            while True:
+            while not self._stop_event:
+
+                # time out episode
                 if (time.time() - episode_start_time) > episode_timeout:
                     passed = False
                     self.logger.log(
@@ -497,7 +499,15 @@ class StrategyRunner:
                         episode_timeout,
                     )
                     break
-                self._run_step()
+
+                try:
+                    self._run_step()
+                except Exception as e:
+                    if self._stop_event:
+                        self.logger.info("Stopping run loop due to interrupt.")
+                        break
+                    else:
+                        raise e
 
                 status = testManager.eval_status(self.my_game)
 
@@ -510,6 +520,7 @@ class StrategyRunner:
                     break
             if self.profiler:
                 self.profiler.disable()
+        self._cleanup()
         return passed
 
     def run(self):
@@ -523,8 +534,15 @@ class StrategyRunner:
             self.rsim_env.render_mode = "human"
         if self.profiler:
             self.profiler.enable()
-        while True:
-            self._run_step()
+        while not self._stop_event:
+            try:
+                self._run_step()
+            except Exception as e:
+                if self._stop_event:
+                    self.logger.info("Stopping run loop due to interrupt.")
+                else:
+                    raise e
+        self._cleanup()
 
     def _run_step(self):
         """Perform one tick of the overall game loop.
