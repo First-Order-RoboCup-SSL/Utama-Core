@@ -1,4 +1,5 @@
 import logging
+import time
 import warnings
 from typing import Dict, List, Optional, Union
 
@@ -6,8 +7,9 @@ import numpy as np
 from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 
 from utama_core.config.robot_params import REAL_PARAMS
-from utama_core.config.settings import BAUD_RATE, PORT, TIMEOUT
+from utama_core.config.settings import BAUD_RATE, PORT, TIMEOUT, TIMESTEP
 from utama_core.entities.data.command import RobotCommand, RobotResponse
+from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -34,14 +36,22 @@ class RealRobotController(AbstractRobotController):
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the feedback packet received from the robots
         self._robots_info: List[RobotResponse] = [None] * self._n_friendly
-
+        self._n_robots_unassigned = self._n_friendly
         logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
+
+    def get_robots_responses(self) -> Optional[List[RobotResponse]]:
+        ### TODO: Not implemented yet
+        return None
 
     def send_robot_commands(self) -> None:
         """Sends the robot commands to the appropriate team (yellow or blue)."""
         # print(list(self.out_packet))
         # binary_representation = [f"{byte:08b}" for byte in self.out_packet]
         # print(binary_representation)
+        if self._n_robots_unassigned != 0:
+            warnings.warn(
+                f"Not all robot commands have been assigned. {self._n_robots_unassigned} robots left unassigned. Sending empty commands for them."
+            )
         self._serial_port.write(self.out_packet)
         self._serial_port.read_all()
         # data_in = self._serial.read_all()
@@ -50,6 +60,7 @@ class RealRobotController(AbstractRobotController):
         # TODO: add receiving feedback from the robots
 
         self._out_packet = self._empty_command()  # flush the out_packet
+        self._n_robots_unassigned = self._n_friendly
 
     def add_robot_commands(
         self,
@@ -66,13 +77,17 @@ class RealRobotController(AbstractRobotController):
             robot_id (int): The ID of the robot.
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
+        if self._n_robots_unassigned <= 0:
+            raise RuntimeError(f"All {self._n_friendly} robot command slots are already assigned this frame.")
         c_command = self._convert_float16_command(robot_id, command)
         command_buffer = self._generate_command_buffer(robot_id, c_command)
-        print(command_buffer)
-        start_idx = robot_id * self._rbt_cmd_size + 1  # account for the start frame byte
+        start_idx = (
+            self._n_friendly - self._n_robots_unassigned
+        ) * self._rbt_cmd_size + 1  # account for the start frame byte
         self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = (
             command_buffer  # +1 to account for start frame byte
         )
+        self._n_robots_unassigned -= 1
 
     # def _populate_robots_info(self, data_in: bytes) -> None:
     #     """
@@ -187,12 +202,13 @@ class RealRobotController(AbstractRobotController):
 
     def _empty_command(self) -> bytearray:
         if not hasattr(self, "_cached_empty_command"):
+            INVALID_RBT_ID = 0xFF
             commands = bytearray()
-            for robot_id in range(self._n_friendly):
-                cmd = bytearray([robot_id] + [0] * (self._rbt_cmd_size - 1))  # empty command for each robot
-                commands += cmd
+            for _ in range(self._n_friendly):
+                cmd = bytearray([INVALID_RBT_ID] + [0] * (self._rbt_cmd_size - 1))  # empty command for each robot
+                commands.extend(cmd)
             self._cached_empty_command = bytearray([0xAA]) + commands + bytearray([0x55])
-        return self._cached_empty_command
+        return self._cached_empty_command.copy()
 
     def _init_serial(self) -> Serial:
         """Establish serial connection."""
@@ -245,12 +261,14 @@ if __name__ == "__main__":
         chip=0,
         dribble=False,
     )
-    for _ in range(15):
+    for _ in range(100):
         robot_controller.add_robot_commands(cmd, 0)
-        # robot_controller.send_robot_commands()
-    # for _ in range(10):
-    #     robot_controller.add_robot_commands(empty_command(), 0)
-    #     robot_controller.send_robot_commands()
+        robot_controller.send_robot_commands()
+        time.sleep(TIMESTEP)
+    for _ in range(10):
+        robot_controller.add_robot_commands(empty_command(), 0)
+        robot_controller.send_robot_commands()
+        time.sleep(TIMESTEP)
 
     # print(list(robot_controller.out_packet))
     # binary_representation = [f"{byte:08b}" for byte in robot_controller.out_packet]
