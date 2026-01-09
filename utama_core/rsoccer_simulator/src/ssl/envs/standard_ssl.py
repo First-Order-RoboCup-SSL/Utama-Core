@@ -111,6 +111,10 @@ class SSLStandardEnv(SSLBaseEnv):
         self.prev_forward_blue = [0.0] * self.n_robots_blue
         self.prev_forward_yellow = [0.0] * self.n_robots_yellow
 
+        # Kick persistence state: List of (kick_speed, frames_remaining)
+        self.kick_persist_blue = [(0.0, 0)] * self.n_robots_blue
+        self.kick_persist_yellow = [(0.0, 0)] * self.n_robots_yellow
+
         logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
     def reset(self, *, seed=None, options=None):
@@ -122,6 +126,8 @@ class SSLStandardEnv(SSLBaseEnv):
         self.prev_speed_yellow = [0.0] * self.n_robots_yellow
         self.prev_forward_blue = [0.0] * self.n_robots_blue
         self.prev_forward_yellow = [0.0] * self.n_robots_yellow
+        self.kick_persist_blue = [(0.0, 0)] * self.n_robots_blue
+        self.kick_persist_yellow = [(0.0, 0)] * self.n_robots_yellow
         return super().reset(seed=seed, options=options)
 
     def step(self, action):
@@ -254,8 +260,16 @@ class SSLStandardEnv(SSLBaseEnv):
         increasing ``kick_v_x`` for robots whose dribbler transitioned from
         on to off while they were moving with the ball.
         """
+        KICK_PERSISTENCE_FRAMES = 3
+
         n_blue = self.n_robots_blue
         for i in range(n_blue):
+            # Update persistence
+            spd, frames = self.kick_persist_blue[i]
+            if frames > 0:
+                self.kick_persist_blue[i] = (spd, frames - 1)
+                commands[i].kick_v_x = max(commands[i].kick_v_x, spd)
+
             release = self._dribbler_release_kick(
                 self.prev_dribbler_blue,
                 self.prev_speed_blue,
@@ -264,10 +278,18 @@ class SSLStandardEnv(SSLBaseEnv):
                 commands[i].dribbler,
             )
             if release > 0.0:
+                # Trigger new persistence
+                self.kick_persist_blue[i] = (release, KICK_PERSISTENCE_FRAMES)
                 commands[i].kick_v_x = max(commands[i].kick_v_x, release)
 
         for j in range(self.n_robots_yellow):
             cmd_idx = n_blue + j
+            # Update persistence
+            spd, frames = self.kick_persist_yellow[j]
+            if frames > 0:
+                self.kick_persist_yellow[j] = (spd, frames - 1)
+                commands[cmd_idx].kick_v_x = max(commands[cmd_idx].kick_v_x, spd)
+
             release = self._dribbler_release_kick(
                 self.prev_dribbler_yellow,
                 self.prev_speed_yellow,
@@ -276,6 +298,7 @@ class SSLStandardEnv(SSLBaseEnv):
                 commands[cmd_idx].dribbler,
             )
             if release > 0.0:
+                self.kick_persist_yellow[j] = (release, KICK_PERSISTENCE_FRAMES)
                 commands[cmd_idx].kick_v_x = max(commands[cmd_idx].kick_v_x, release)
 
     def _update_dribbler_history(self, commands: list[Robot]) -> None:
@@ -292,7 +315,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Store forward components relative to the current robot headings using measured velocity
         def forward_component(cmd):
-            return cmd.v_x > 0.0
+            return cmd.v_x
 
         self.prev_forward_blue = [forward_component(commands[i]) for i in range(n_blue)]
         self.prev_forward_yellow = [forward_component(commands[n_blue + j]) for j in range(self.n_robots_yellow)]
@@ -311,14 +334,13 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Require forward motion relative to heading to avoid releasing while backing up
         forward = prev_forward[index]
-        if not forward:
+        if forward <= 0:
             return 0.0
 
-        speed = prev_speed[index]
-        if speed < MIN_RELEASE_SPEED:
+        if forward < MIN_RELEASE_SPEED:
             return 0.0
 
-        return min(RELEASE_GAIN * speed, MAX_BALL_SPEED)
+        return min(RELEASE_GAIN * forward, MAX_BALL_SPEED)
 
     def _calculate_reward_and_done(self):
         return 1, False
