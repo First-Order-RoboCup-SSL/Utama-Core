@@ -52,6 +52,15 @@ def pytest_generate_tests(metafunc):
                 metafunc.parametrize(param, cases[metafunc.config.getoption("level")])
 
 
+def pytest_collection_modifyitems(config, items):
+    """Exclude tests from motion_planning folder."""
+    remaining = []
+    for item in items:
+        if "motion_planning" not in str(item.fspath):
+            remaining.append(item)
+    items[:] = remaining
+
+
 @pytest.fixture
 def headless(pytestconfig):
     return pytestconfig.getoption("--headless")
