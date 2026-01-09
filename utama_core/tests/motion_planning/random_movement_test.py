@@ -129,7 +129,6 @@ class RandomMovementTestManager(AbstractTestManager):
     def update_target_reached(self, robot_id: int):
         """Called by strategy when a robot reaches a target."""
         if robot_id in self.targets_reached_count:
-            print("Robot", robot_id, "reached target")
             self.targets_reached_count[robot_id] += 1
 
 
