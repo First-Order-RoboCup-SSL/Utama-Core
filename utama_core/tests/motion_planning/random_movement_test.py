@@ -155,9 +155,10 @@ def test_random_movement_same_team(
         (-4.0, -0.5),
         (-2.0, 2.0),
     )  # ((min_x, max_x), (min_y, max_y))
+    n_robots = 2
 
     scenario = RandomMovementScenario(
-        n_robots=2,
+        n_robots=n_robots,
         field_bounds=field_bounds,
         min_target_distance=1.0,  # Minimum distance for next target
         required_targets_per_robot=3,  # Each robot must reach 3 targets
@@ -166,7 +167,7 @@ def test_random_movement_same_team(
 
     # Create random movement strategy
     strategy = RandomMovementStrategy(
-        n_robots=2,
+        n_robots=n_robots,
         field_bounds=field_bounds,
         min_target_distance=scenario.min_target_distance,
         endpoint_tolerance=scenario.endpoint_tolerance,
@@ -179,7 +180,7 @@ def test_random_movement_same_team(
         my_team_is_yellow=my_team_is_yellow,
         my_team_is_right=my_team_is_right,
         mode=mode,
-        exp_friendly=2,
+        exp_friendly=n_robots,
         exp_enemy=0,
         control_scheme="dwa",  # Use DWA for collision avoidance
     )
@@ -194,7 +195,7 @@ def test_random_movement_same_team(
     assert test_passed, "Random movement test failed to complete"
 
     # Check that all robots reached required targets
-    for robot_id in range(2):
+    for robot_id in range(n_robots):
         assert strategy.test_manager.targets_reached_count[robot_id] >= scenario.required_targets_per_robot, (
             f"Robot {robot_id} only reached {strategy.test_manager.targets_reached_count[robot_id]} targets "
             f"(required: {scenario.required_targets_per_robot})"
