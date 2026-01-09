@@ -2,6 +2,7 @@
 
 import os
 from dataclasses import dataclass
+from typing import Dict
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
@@ -42,7 +43,7 @@ class RandomMovementTestManager(AbstractTestManager):
         self.collision_detected = False
         self.min_distance = float("inf")
         self.collision_count = 0
-        self.targets_reached_count = {}  # Track how many targets each robot has reached
+        self.targets_reached_count: Dict[int, int] = {}  # Track how many targets each robot has reached
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with robots in random starting positions within bounds."""
