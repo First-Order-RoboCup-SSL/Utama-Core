@@ -84,8 +84,8 @@ class SSLStandardEnv(SSLBaseEnv):
         self.prev_forward_yellow = [0.0] * self.n_robots_yellow
 
         # Kick persistence state: List of (kick_speed, frames_remaining)
-        self.kick_persist_blue = [(0.0, 0)] * self.n_robots_blue
-        self.kick_persist_yellow = [(0.0, 0)] * self.n_robots_yellow
+        self.kick_persist_blue = [(0.0, 0) for _ in range(self.n_robots_blue)]
+        self.kick_persist_yellow = [(0.0, 0) for _ in range(self.n_robots_yellow)]
 
         # Saving latest observation for the step (step, observation)
         self.latest_observation = (-1, None)
