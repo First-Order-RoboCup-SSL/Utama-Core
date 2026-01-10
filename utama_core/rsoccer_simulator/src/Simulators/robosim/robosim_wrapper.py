@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 import subprocess
 from pathlib import Path
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 class RSimSubprocessWrapper:
@@ -97,7 +100,7 @@ class RSimSubprocessWrapper:
         except Exception as e:
             import traceback
 
-            os.write(1, f"Error in close(): {e}\n".encode())
+            logger.error(f"Error while terminating RSim subprocess: {e}")
             traceback.print_exc()
         finally:
-            os.write(1, b"RsimSubprocessWrapper cleanup finished\n")
+            logger.info("RsimSubprocessWrapper cleanup finished.")

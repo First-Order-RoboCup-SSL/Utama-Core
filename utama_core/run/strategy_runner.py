@@ -1,5 +1,6 @@
 import cProfile
 import logging
+import signal
 import threading
 import time
 import warnings
@@ -151,6 +152,10 @@ class StrategyRunner:
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
+        self._stop_event = False
+
+    def _handle_sigint(self, sig, frame):
+        self._stop_event = True
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -431,11 +436,41 @@ class StrategyRunner:
                 self.opp_strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
             self.opp_strategy.robot_controller.send_robot_commands()
 
-    def _cleanup(self):
-        """Cleanup resources such as profiler, replay writer, fps_monitor, and rsim env."""
+    def _stop_robots(self, stop_command_mult: int):
+        """
+        Send a series of stop commands to all robots to ensure they come to a halt.
+        Args:
+            stop_command_mult (int): Number of times to send the stop command.
+        """
+        my_stop_commands = {
+            robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.my_game.friendly_robots.keys()
+        }
+        if self.opp_game:
+            opp_stop_commands = {
+                robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.opp_game.friendly_robots.keys()
+            }
+
+        for _ in range(stop_command_mult):
+            self.my_strategy.robot_controller.add_robot_commands(my_stop_commands)
+            self.my_strategy.robot_controller.send_robot_commands()
+            if self.opp_strategy and self.opp_game:
+                self.opp_strategy.robot_controller.add_robot_commands(opp_stop_commands)
+                self.opp_strategy.robot_controller.send_robot_commands()
+
+    def close(self, stop_command_mult: int = 20):
+        """
+        Close resources used by the StrategyRunner and stop robots if in real mode.
+        Args:
+            stop_command_mult (int): Number of times to send the stop command to robots.
+        """
+        self.logger.info("Cleaning up resources...")
+
+        if self.mode == Mode.REAL:
+            self._stop_robots(stop_command_mult)
         if self.profiler:
             self.profiler.disable()
-            self.profiler.dump_stats(f"{self.profiler_name}.prof")
+            if self.profiler.getstats():
+                self.profiler.dump_stats(f"{self.profiler_name}.prof")
         if self.replay_writer:
             self.replay_writer.close()
         if self.rsim_env:
@@ -456,6 +491,8 @@ class StrategyRunner:
             episode_timeout (float): The timeout for each episode in seconds.
             rsim_headless (bool): Whether to run RSim in headless mode. Defaults to False.
         """
+        signal.signal(signal.SIGINT, self._handle_sigint)
+
         passed = True
         n_episodes = testManager.get_n_episodes()
         if not rsim_headless and self.rsim_env:
@@ -466,46 +503,55 @@ class StrategyRunner:
 
         testManager.load_strategies(self.my_strategy, self.opp_strategy)
 
-        try:
-            for i in range(n_episodes):
-                testManager.update_episode_n(i)
+        for i in range(n_episodes):
+            testManager.update_episode_n(i)
 
-                if self.sim_controller:
-                    testManager.reset_field(self.sim_controller, self.my_game)
-                    time.sleep(0.1)  # wait for the field to reset
-                    # wait for the field to reset
-                self._reset_game()
-                episode_start_time = time.time()
-                # for simplicity, we assume rsim is running in real time. May need to change this
-                if self.profiler:
-                    self.profiler.enable()
-                while True:
-                    if (time.time() - episode_start_time) > episode_timeout:
-                        passed = False
-                        self.logger.log(
-                            logging.WARNING,
-                            "Episode %d timed out after %f secs",
-                            i,
-                            episode_timeout,
-                        )
-                        break
+            if self.sim_controller:
+                testManager.reset_field(self.sim_controller, self.my_game)
+                time.sleep(0.1)  # wait for the field to reset
+                # wait for the field to reset
+            self._reset_game()
+            episode_start_time = time.time()
+            # for simplicity, we assume rsim is running in real time. May need to change this
+            if self.profiler:
+                self.profiler.enable()
+            while not self._stop_event:
+
+                # time out episode
+                if (time.time() - episode_start_time) > episode_timeout:
+                    passed = False
+                    self.logger.log(
+                        logging.WARNING,
+                        "Episode %d timed out after %f secs",
+                        i,
+                        episode_timeout,
+                    )
+                    break
+
+                try:
                     self._run_step()
-
-                    status = testManager.eval_status(self.my_game)
-
-                    if status == TestingStatus.FAILURE:
-                        passed = False
-                        self._reset_robots()
+                except Exception as e:
+                    if self._stop_event:
+                        self.logger.info("Stopping run loop due to interrupt.")
                         break
-                    elif status == TestingStatus.SUCCESS:
-                        self._reset_robots()
-                        break
-                if self.profiler:
-                    self.profiler.disable()
-        except KeyboardInterrupt:
-            self.logger.info("Terminating...")
-        finally:
-            self._cleanup()
+                    else:
+                        raise e
+
+                status = testManager.eval_status(self.my_game)
+
+                if status == TestingStatus.FAILURE:
+                    passed = False
+                    self._reset_robots()
+                    break
+                elif status == TestingStatus.SUCCESS:
+                    self._reset_robots()
+                    break
+
+            if self._stop_event:
+                break
+            if self.profiler:
+                self.profiler.disable()
+        self.close()
         return passed
 
     def run(self):
@@ -515,17 +561,21 @@ class StrategyRunner:
         continues until a KeyboardInterrupt is received, after which resources
         (such as replay writer and rsim env) are closed.
         """
+        signal.signal(signal.SIGINT, self._handle_sigint)
+
         if self.rsim_env:
             self.rsim_env.render_mode = "human"
-        try:
-            if self.profiler:
-                self.profiler.enable()
-            while True:
+        if self.profiler:
+            self.profiler.enable()
+        while not self._stop_event:
+            try:
                 self._run_step()
-        except KeyboardInterrupt:
-            self.logger.info("Terminating...")
-        finally:
-            self._cleanup()
+            except Exception as e:
+                if self._stop_event:
+                    self.logger.info("Stopping run loop due to interrupt.")
+                else:
+                    raise e
+        self.close()
 
     def _run_step(self):
         """Perform one tick of the overall game loop.
