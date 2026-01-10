@@ -1,8 +1,8 @@
 import logging
+from dataclasses import replace
 from typing import Dict, Tuple, Union  # Added List for type hinting
 
 import numpy as np  # Import NumPy
-from lenses import UnboundLens, lens
 
 from utama_core.entities.data.object import ObjectKey, TeamType
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -39,7 +39,7 @@ class VelocityRefiner(BaseRefiner):
             current_game_ts,
             game_frame.friendly_robots,
             TeamType.FRIENDLY,
-            lens.friendly_robots,
+            "friendly_robots",
             twod=True,
         )
 
@@ -50,7 +50,7 @@ class VelocityRefiner(BaseRefiner):
             current_game_ts,
             game_frame.enemy_robots,
             TeamType.ENEMY,
-            lens.enemy_robots,
+            "enemy_robots",
             twod=True,
         )
         return game_frame
@@ -62,7 +62,7 @@ class VelocityRefiner(BaseRefiner):
         current_ts: float,
         robots_to_process_dict: Dict[int, Robot],
         team_type: TeamType,
-        group_lens: UnboundLens,
+        field_name: str,
         twod: bool,
     ) -> GameFrame:
         updated_robots_dict = {}
@@ -74,7 +74,7 @@ class VelocityRefiner(BaseRefiner):
 
             if robot_instance.p is None:
                 logger.warning(f"{team_type.name} robot {robot_id} has no position. Setting zero v/a.")
-                updated_robot = robot_instance & lens.v.set(zero_vector(twod)) & lens.a.set(zero_vector(twod))
+                updated_robot = replace(robot_instance, v=zero_vector(twod), a=zero_vector(twod))
                 updated_robots_dict[robot_id] = updated_robot
                 continue
 
@@ -94,10 +94,10 @@ class VelocityRefiner(BaseRefiner):
             #         f"Could not calculate acceleration for {team_type.name} robot {robot_id} (key: {robot_obj_key}), setting to zero: {e}"
             #     )
 
-            updated_robot = robot_instance & lens.v.set(new_v) & lens.a.set(new_a)
+            updated_robot = replace(robot_instance, v=new_v, a=new_a)
             updated_robots_dict[robot_id] = updated_robot
 
-        return game_state & group_lens.set(updated_robots_dict)
+        return replace(game_state, **{field_name: updated_robots_dict})
 
     def _refine_ball_kinematics(self, game_history: GameHistory, game_state: GameFrame, current_ts: float) -> GameFrame:
         if not game_state.ball:
@@ -105,7 +105,8 @@ class VelocityRefiner(BaseRefiner):
 
         if game_state.ball.p is None:
             logger.warning("Ball exists but has no position data; setting zero velocity and acceleration.")
-            return game_state & lens.ball.v.set(zero_vector(twod=False)) & lens.ball.a.set(zero_vector(twod=False))
+            new_ball = replace(game_state.ball, v=zero_vector(twod=False), a=zero_vector(twod=False))
+            return replace(game_state, ball=new_ball)
 
         ball_obj_key = get_structured_object_key(game_state.ball, TeamType.NEUTRAL)
         if not ball_obj_key:
@@ -115,16 +116,15 @@ class VelocityRefiner(BaseRefiner):
         new_ball_v = self._calculate_object_velocity(
             game_history, game_state.ball.p, ball_obj_key, current_ts, twod=False
         )
-        game_state &= lens.ball.v.set(new_ball_v)
 
         new_ball_a = zero_vector(twod=False)  # Default to zero
         try:
             new_ball_a = self._calculate_object_acceleration(game_history, ball_obj_key, twod=False)
         except Exception as e:
             logger.warning(f"Could not calculate acceleration for ball (key: {ball_obj_key}), setting to zero: {e}")
-        game_state &= lens.ball.a.set(new_ball_a)
 
-        return game_state
+        new_ball = replace(game_state.ball, v=new_ball_v, a=new_ball_a)
+        return replace(game_state, ball=new_ball)
 
     def _calculate_object_velocity(
         self,
