@@ -265,8 +265,8 @@ class SSLBaseEnv:
             overlay = RenderOverlay(self.overlay, self.field_renderer.scale)
             overlay.draw(self.window_surface)
 
-        for i in range(self.n_robots_blue):
-            robot = self.frame.robots_blue[i]
+        for blue_rb in self.frame.robots_blue.values():
+            robot = blue_rb
             x, y = self._pos_transform(robot.x, robot.y)
             rbt = RenderSSLRobot(
                 x,
@@ -278,8 +278,8 @@ class SSLBaseEnv:
             )
             rbt.draw(self.window_surface)
 
-        for i in range(self.n_robots_yellow):
-            robot = self.frame.robots_yellow[i]
+        for yellow_rb in self.frame.robots_yellow.values():
+            robot = yellow_rb
             x, y = self._pos_transform(robot.x, robot.y)
             rbt = RenderSSLRobot(
                 x,
