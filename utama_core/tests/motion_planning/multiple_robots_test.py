@@ -309,8 +309,8 @@ def test_diagonal_cross_square(
     # Define square corners (2m x 2m square centered at origin)
     # Top-left and bottom-right for Yellow team
     yellow_positions = [
-        (-1.5, 1.5),  # Top-left corner (robot 0)
-        (1.5, -1.5),  # Bottom-right corner (robot 1)
+        (-1, 1),  # Top-left corner (robot 0)
+        (1, -1),  # Bottom-right corner (robot 1)
     ]
 
     # Top-right and bottom-left for Blue team
