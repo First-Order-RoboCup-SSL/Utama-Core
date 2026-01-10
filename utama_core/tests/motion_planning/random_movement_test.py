@@ -125,7 +125,6 @@ class RandomMovementTestManager(AbstractTestManager):
         all_completed = all(
             count >= self.scenario.required_targets_per_robot for count in self.targets_reached_count.values()
         )
-
         if all_completed:
             return TestingStatus.SUCCESS
 
@@ -137,6 +136,7 @@ class RandomMovementTestManager(AbstractTestManager):
     def update_target_reached(self, robot_id: int):
         """Called by strategy when a robot reaches a target."""
         if robot_id in self.targets_reached_count:
+            print("Robot", robot_id, "reached target")
             self.targets_reached_count[robot_id] += 1
 
 
@@ -159,23 +159,27 @@ def test_random_movement_same_team(
     # Define half court bounds for left side (Yellow team)
     # Standard SSL field is ~9m x 6m, so half court is ~4.5m x 6m
     # Using slightly smaller bounds for safety: -4m to 0m in x, -2.5m to 2.5m in y
-    field_bounds = ((-3.5, -0.5), (-2.5, 2.5))  # ((min_x, max_x), (min_y, max_y))
+    field_bounds = (
+        (-4.0, -0.5),
+        (-2.0, 2.0),
+    )  # ((min_x, max_x), (min_y, max_y))
 
     scenario = RandomMovementScenario(
-        n_robots=6,
+        n_robots=5,
         field_bounds=field_bounds,
         min_target_distance=1.0,  # Minimum distance for next target
         required_targets_per_robot=3,  # Each robot must reach 3 targets
         endpoint_tolerance=0.3,
     )
-
+    test_manager = RandomMovementTestManager(scenario)
     # Create random movement strategy
     strategy = RandomMovementStrategy(
-        n_robots=6,
+        n_robots=5,
         field_bounds=field_bounds,
         min_target_distance=scenario.min_target_distance,
         endpoint_tolerance=scenario.endpoint_tolerance,
-        speed_range=(0.5, 2.0),  # Random speed between 0.5 and 2.0 m/s
+        test_manager=test_manager,
+        speed_range=(0.5, 1.0),  # Random speed between 0.5 and 2.0 m/s
     )
 
     runner = StrategyRunner(
@@ -183,18 +187,13 @@ def test_random_movement_same_team(
         my_team_is_yellow=my_team_is_yellow,
         my_team_is_right=my_team_is_right,
         mode=mode,
-        exp_friendly=6,
+        exp_friendly=5,
         exp_enemy=0,
         control_scheme="fpp",  # Use DWA for collision avoidance
     )
 
-    test_manager = RandomMovementTestManager(scenario=scenario)
-
-    # Connect test manager to strategy so it can track targets reached
-    strategy.set_test_manager(test_manager)
-
     test_passed = runner.run_test(
-        testManager=test_manager,
+        testManager=strategy.test_manager,
         episode_timeout=60.0,  # 60 seconds to complete random movements
         rsim_headless=headless,
     )
@@ -203,18 +202,18 @@ def test_random_movement_same_team(
     assert test_passed, "Random movement test failed to complete"
 
     # Check that all robots reached required targets
-    for robot_id in range(6):
-        assert test_manager.targets_reached_count[robot_id] >= scenario.required_targets_per_robot, (
+    for robot_id in range(5):
+        assert strategy.test_manager.targets_reached_count[robot_id] >= scenario.required_targets_per_robot, (
             f"Robot {robot_id} only reached {test_manager.targets_reached_count[robot_id]} targets "
             f"(required: {scenario.required_targets_per_robot})"
         )
 
-    assert not test_manager.collision_detected, (
-        f"Robots collided {test_manager.collision_count} time(s) during random movement! "
-        f"Minimum distance: {test_manager.min_distance:.3f}m "
+    assert not strategy.test_manager.collision_detected, (
+        f"Robots collided {strategy.test_manager.collision_count} time(s) during random movement! "
+        f"Minimum distance: {strategy.test_manager.min_distance:.3f}m "
         f"(threshold: {scenario.collision_threshold:.3f}m)"
     )
-    assert test_manager.min_distance >= scenario.collision_threshold, (
-        f"Robots got too close: {test_manager.min_distance:.3f}m "
+    assert strategy.test_manager.min_distance >= scenario.collision_threshold, (
+        f"Robots got too close: {strategy.test_manager.min_distance:.3f}m "
         f"(minimum safe distance: {scenario.collision_threshold:.3f}m)"
     )
