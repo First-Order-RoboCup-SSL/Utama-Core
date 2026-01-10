@@ -242,7 +242,7 @@ def test_single_robot_moving_obstacles(
         exp_enemy=len(scenario.moving_obstacles),
         opp_strategy=opp_strategy,
         control_scheme="fpp",
-        opp_control_scheme="pid",  # Use PID so obstacles follow exact paths without avoiding the robot
+        opp_control_scheme="fpp",  # Use PID so obstacles follow exact paths without avoiding the robot
     )
 
     test_manager = MovingObstacleTestManager(scenario=scenario, robot_id=robot_id)
