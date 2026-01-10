@@ -124,10 +124,6 @@ class PositionRefiner(BaseRefiner):
         if self.vanishing:
             self._impute_vanished(game_frame, combined_vision_data, False)
         
-        # Manually adds noise; do not use a map, Python maps are lazy. 
-        # for robot in combined_vision_data.yellow_robots:
-        #     robot.add_gaussian_noise()
-        
         # For filtering        
         filtered_vision_data: VisionData = VisionData(
             ts=combined_vision_data.ts,
