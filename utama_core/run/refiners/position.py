@@ -128,11 +128,10 @@ class PositionRefiner(BaseRefiner):
 
     def _combine_single_team_positions(
         self,
-        game_robots: Dict[int, Robot],
+        new_game_robots: Dict[int, Robot],
         vision_robots: List[VisionRobotData],
         friendly: bool,
     ) -> Dict[int, Robot]:
-        new_game_robots = game_robots.copy()
         for robot in vision_robots:
             new_x, new_y = robot.x, robot.y
 
