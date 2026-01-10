@@ -202,7 +202,7 @@ def test_collision_avoidance_goal_to_goal(
         mode=mode,
         exp_friendly=1,
         exp_enemy=len(obstacle_config["obstacles"]),
-        control_scheme="dwa",  # Use PID for obstacle avoidance
+        control_scheme="fpp",  # Use PID for obstacle avoidance
     )
 
     test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)
@@ -252,7 +252,7 @@ def test_simple_straight_line_no_obstacles(
         mode=mode,
         exp_friendly=1,
         exp_enemy=0,
-        control_scheme="dwa",
+        control_scheme="fpp",
     )
 
     test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)

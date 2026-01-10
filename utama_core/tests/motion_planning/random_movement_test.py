@@ -185,7 +185,7 @@ def test_random_movement_same_team(
         mode=mode,
         exp_friendly=6,
         exp_enemy=0,
-        control_scheme="dwa",  # Use DWA for collision avoidance
+        control_scheme="fpp",  # Use DWA for collision avoidance
     )
 
     test_manager = RandomMovementTestManager(scenario=scenario)
