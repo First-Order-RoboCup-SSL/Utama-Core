@@ -1,10 +1,6 @@
 import logging
-import math
 import random
-from typing import Dict, List, Optional, Tuple
-
-import gymnasium as gym
-import numpy as np
+from typing import List, Tuple
 
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.config.robot_params import RSIM_PARAMS
@@ -74,29 +70,7 @@ class SSLStandardEnv(SSLBaseEnv):
             time_step=time_step,
             render_mode=render_mode,
         )
-        # Shared observation space for all robots:
-        self.observation_space = gym.spaces.Box(
-            low=-self.NORM_BOUNDS,
-            high=self.NORM_BOUNDS,
-            shape=(4 + (self.n_robots_blue + self.n_robots_yellow) * 8,),
-            dtype=np.float32,
-        )
-
-        # Action space for one robot:
-        robot_action_space = gym.spaces.Box(
-            low=np.array([-1.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float32),
-            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float32),
-            dtype=np.float32,
-        )
-
-        # Team action space:
-        # Define action space for 6 robots in both teams
-        self.action_space = gym.spaces.Dict(
-            {
-                "team_blue": gym.spaces.Tuple([robot_action_space for _ in range(self.n_robots_blue)]),
-                "team_yellow": gym.spaces.Tuple([robot_action_space for _ in range(self.n_robots_yellow)]),
-            }
-        )
+        # Note: observation_space and action_space removed - not needed for non-RL use
 
         # set starting formation style for
         self.blue_formation = LEFT_START_ONE if not blue_starting_formation else blue_starting_formation
@@ -106,8 +80,6 @@ class SSLStandardEnv(SSLBaseEnv):
         # the dribbler turns off in a way that depends on robot speed.
         self.prev_dribbler_blue = [False] * self.n_robots_blue
         self.prev_dribbler_yellow = [False] * self.n_robots_yellow
-        self.prev_speed_blue = [0.0] * self.n_robots_blue
-        self.prev_speed_yellow = [0.0] * self.n_robots_yellow
         self.prev_forward_blue = [0.0] * self.n_robots_blue
         self.prev_forward_yellow = [0.0] * self.n_robots_yellow
 
@@ -115,19 +87,24 @@ class SSLStandardEnv(SSLBaseEnv):
         self.kick_persist_blue = [(0.0, 0)] * self.n_robots_blue
         self.kick_persist_yellow = [(0.0, 0)] * self.n_robots_yellow
 
+        # Saving latest observation for the step (step, observation)
+        self.latest_observation = (-1, None)
+
         logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
         # Reset dribbler tracking state
-        self.prev_dribbler_blue = [False] * self.n_robots_blue
-        self.prev_dribbler_yellow = [False] * self.n_robots_yellow
-        self.prev_speed_blue = [0.0] * self.n_robots_blue
-        self.prev_speed_yellow = [0.0] * self.n_robots_yellow
-        self.prev_forward_blue = [0.0] * self.n_robots_blue
-        self.prev_forward_yellow = [0.0] * self.n_robots_yellow
-        self.kick_persist_blue = [(0.0, 0)] * self.n_robots_blue
-        self.kick_persist_yellow = [(0.0, 0)] * self.n_robots_yellow
+        for i in range(self.n_robots_blue):
+            self.prev_dribbler_blue[i] = False
+            self.prev_forward_blue[i] = 0.0
+            self.kick_persist_blue[i] = (0.0, 0)
+        for i in range(self.n_robots_yellow):
+            self.prev_dribbler_yellow[i] = False
+            self.prev_forward_yellow[i] = 0.0
+            self.kick_persist_yellow[i] = (0.0, 0)
+
+        self.latest_observation = (-1, None)
         return super().reset(seed=seed, options=options)
 
     def step(self, action):
@@ -172,6 +149,9 @@ class SSLStandardEnv(SSLBaseEnv):
         yellow_robots_info: feedback from individual yellow robots that returns a List[RobotInfo]
         blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
         """
+        if self.latest_observation[0] == self.steps:
+            return self.latest_observation[1]
+
         # Ball observation shared by all robots
         ball_obs = RawBallData(self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z, 1.0)
 
@@ -197,11 +177,13 @@ class SSLStandardEnv(SSLBaseEnv):
         # As there is sometimes multiple possible positions for the ball
 
         # Camera id as 0, only one camera for RSim
-        return (
+        result = (
             RawVisionData(self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs], 0),
             yellow_robots_info,
             blue_robots_info,
         )
+        self.latest_observation = (self.steps, result)
+        return result
 
     def _get_robot_observation(self, robot):
         robot_pos = RawRobotData(robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1)
@@ -272,7 +254,6 @@ class SSLStandardEnv(SSLBaseEnv):
 
             release = self._dribbler_release_kick(
                 self.prev_dribbler_blue,
-                self.prev_speed_blue,
                 self.prev_forward_blue,
                 i,
                 commands[i].dribbler,
@@ -292,7 +273,6 @@ class SSLStandardEnv(SSLBaseEnv):
 
             release = self._dribbler_release_kick(
                 self.prev_dribbler_yellow,
-                self.prev_speed_yellow,
                 self.prev_forward_yellow,
                 j,
                 commands[cmd_idx].dribbler,
@@ -302,28 +282,19 @@ class SSLStandardEnv(SSLBaseEnv):
                 commands[cmd_idx].kick_v_x = max(commands[cmd_idx].kick_v_x, release)
 
     def _update_dribbler_history(self, commands: list[Robot]) -> None:
-        """Update previous dribbler and speed history for all robots."""
+        """Update previous dribbler and forward velocity history for all robots."""
         n_blue = self.n_robots_blue
-        self.prev_dribbler_blue = [cmd.dribbler for cmd in commands[:n_blue]]
-        self.prev_dribbler_yellow = [cmd.dribbler for cmd in commands[n_blue:]]
-
-        # Use measured velocities from the simulator frame to avoid drift from commanded speeds.
-        self.prev_speed_blue = [math.hypot(commands[i].v_x, commands[i].v_y) for i in range(n_blue)]
-        self.prev_speed_yellow = [
-            math.hypot(commands[n_blue + j].v_x, commands[n_blue + j].v_y) for j in range(self.n_robots_yellow)
-        ]
-
-        # Store forward components relative to the current robot headings using measured velocity
-        def forward_component(cmd):
-            return cmd.v_x
-
-        self.prev_forward_blue = [forward_component(commands[i]) for i in range(n_blue)]
-        self.prev_forward_yellow = [forward_component(commands[n_blue + j]) for j in range(self.n_robots_yellow)]
+        # Update in-place to avoid list allocation
+        for i in range(n_blue):
+            self.prev_dribbler_blue[i] = commands[i].dribbler
+            self.prev_forward_blue[i] = commands[i].v_x
+        for j in range(self.n_robots_yellow):
+            self.prev_dribbler_yellow[j] = commands[n_blue + j].dribbler
+            self.prev_forward_yellow[j] = commands[n_blue + j].v_x
 
     def _dribbler_release_kick(
         self,
         prev_dribbler: List[bool],
-        prev_speed: List[float],
         prev_forward: List[float],
         index: int,
         dribbler: bool,
@@ -334,10 +305,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Require forward motion relative to heading to avoid releasing while backing up
         forward = prev_forward[index]
-        if forward <= 0:
-            return 0.0
-
-        if forward < MIN_RELEASE_SPEED:
+        if forward <= 0 or forward < MIN_RELEASE_SPEED:
             return 0.0
 
         return min(RELEASE_GAIN * forward, MAX_BALL_SPEED)
