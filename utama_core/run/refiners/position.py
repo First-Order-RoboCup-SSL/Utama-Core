@@ -70,7 +70,7 @@ class PositionRefiner(BaseRefiner):
         # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
         # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
         # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D, v: Vector2D, a: Vector2D, orientation: float
-        self.vanishing = False  # Imputing is only turned on when the refiner is run from _step_game(), not _load_game()
+        self.running = False  # Imputing is only turned on when the refiner is run from _step_game(), not _load_game()
         self.last_game_frame = None  # Game gater will initialise
         
         # velocities: meters per second; angular_vel: radians per second
@@ -120,80 +120,84 @@ class PositionRefiner(BaseRefiner):
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
         
-        # For vanishing: updates combined_vision_data in place.
-        if self.vanishing:
+        # Checks if the first valid game frame has been received.
+        if self.running:
+            # For vanishing: updates combined_vision_data in place.
             self._impute_vanished(game_frame, combined_vision_data, False)
         
-        # For filtering        
-        filtered_vision_data: VisionData = VisionData(
-            ts=combined_vision_data.ts,
-            yellow_robots=list(
-                map(FIR_filter.filter_robot,
-                self.fir_filters_yellow,
-                sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
-                ),
-            blue_robots=list(
-                map(FIR_filter.filter_robot,
-                self.fir_filters_blue,
-                sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
-                ),
-            balls=combined_vision_data.balls
-        )
-        
-        # For logging:
-        # if self.data_collected < TARGET_SIZE and self.vanishing:
-        #     with open(OUTPUT_FILE, "a", newline="") as f:
-        #         writer = csv.DictWriter(f, COLS)
-                
-        #         for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
-        #             writer.writerow({
-        #                 TS_COL: combined_vision_data.ts,
-        #                 ID_COL: y_robot.id,
-        #                 COLOR_COL: "yellow",
-        #                 X_COL: y_robot.x,
-        #                 Y_COL: y_robot.y,
-        #                 TH_COL: y_robot.orientation
-        #             })
+            # For filtering
+            filtered_vision_data: VisionData = VisionData(
+                ts=combined_vision_data.ts,
+                yellow_robots=list(
+                    map(FIR_filter.filter_robot,
+                    self.fir_filters_yellow,
+                    sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
+                    ),
+                blue_robots=list(
+                    map(FIR_filter.filter_robot,
+                    self.fir_filters_blue,
+                    sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
+                    ),
+                balls=combined_vision_data.balls
+            )
+            
+            # For logging:
+            # if self.data_collected < TARGET_SIZE:
+            #     with open(OUTPUT_FILE, "a", newline="") as f:
+            #         writer = csv.DictWriter(f, COLS)
                     
-                # for b_robot in combined_vision_data.blue_robots:
-                #     writer.writerow({
-                #         TS_COL: combined_vision_data.ts,
-                #         ID_COL: b_robot.id,
-                #         COLOR_COL: "blue",
-                #         X_COL: b_robot.x,
-                #         Y_COL: b_robot.y,
-                #         TH_COL: b_robot.orientation
-                #     })
+            #         for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
+            #             writer.writerow({
+            #                 TS_COL: combined_vision_data.ts,
+            #                 ID_COL: y_robot.id,
+            #                 COLOR_COL: "yellow",
+            #                 X_COL: y_robot.x,
+            #                 Y_COL: y_robot.y,
+            #                 TH_COL: y_robot.orientation
+            #             })
+                        
+                    # for b_robot in combined_vision_data.blue_robots:
+                    #     writer.writerow({
+                    #         TS_COL: combined_vision_data.ts,
+                    #         ID_COL: b_robot.id,
+                    #         COLOR_COL: "blue",
+                    #         X_COL: b_robot.x,
+                    #         Y_COL: b_robot.y,
+                    #         TH_COL: b_robot.orientation
+                    #     })
+                        
+                    # self.data_collected += 1
                     
-                # self.data_collected += 1
-                
-        # For live testing:
-        # try:
-        #     current_coord = np.array((
-        #         filtered_vision_data.yellow_robots[2].x,
-        #         filtered_vision_data.yellow_robots[2].y
-        #     ))
-        #     if not np.isnan(self._last_coord).any():
-        #         self._delta_stream.append(np.linalg.norm(current_coord - self._last_coord))
-        #     self._last_coord = current_coord
-        # except:
-        #     pass
-        # finally:
-        #     self._curve.setData(self._delta_stream)
-        
-        # try:
-        #     self._x_stream.append(filtered_vision_data.yellow_robots[0].x)
-        #     self._y_stream.append(filtered_vision_data.yellow_robots[0].y)
-        # except:
-        #     pass
-        # finally:
-        #     self._curve.setData(self._x_stream, self._y_stream)
-        
-        # QtWidgets.QApplication.processEvents()
+            # For live testing:
+            # try:
+            #     current_coord = np.array((
+            #         filtered_vision_data.yellow_robots[2].x,
+            #         filtered_vision_data.yellow_robots[2].y
+            #     ))
+            #     if not np.isnan(self._last_coord).any():
+            #         self._delta_stream.append(np.linalg.norm(current_coord - self._last_coord))
+            #     self._last_coord = current_coord
+            # except:
+            #     pass
+            # finally:
+            #     self._curve.setData(self._delta_stream)
+            
+            # try:
+            #     self._x_stream.append(filtered_vision_data.yellow_robots[0].x)
+            #     self._y_stream.append(filtered_vision_data.yellow_robots[0].y)
+            # except:
+            #     pass
+            # finally:
+            #     self._curve.setData(self._x_stream, self._y_stream)
+            
+            # QtWidgets.QApplication.processEvents()
 
-        # for robot in combined_vision_data.yellow_robots:
-        #         if robot.id == 0:
-        #             print(f"robot orientation: {robot.orientation}")
+            # for robot in combined_vision_data.yellow_robots:
+            #         if robot.id == 0:
+            #             print(f"robot orientation: {robot.orientation}")
+        
+        else:
+            filtered_vision_data = combined_vision_data
 
         # Some processing of robot vision data
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(

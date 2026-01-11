@@ -381,7 +381,7 @@ class StrategyRunner:
         )
         
         self.position_refiner.last_game_frame = my_current_game_frame
-        self.position_refiner.vanishing = True
+        self.position_refiner.running = True
         
         my_field = Field(self.my_team_is_right, self.field_bounds)
         my_game_history = GameHistory(MAX_GAME_HISTORY)
