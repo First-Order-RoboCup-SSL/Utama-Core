@@ -13,7 +13,7 @@ def main():
         strategy=StartupStrategy(),
         my_team_is_yellow=True,
         my_team_is_right=True,
-        mode="rsim",
+        mode="grsim",
         exp_friendly=6,
         exp_enemy=3,
         control_scheme="pid",

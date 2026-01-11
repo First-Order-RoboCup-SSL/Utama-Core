@@ -1,7 +1,7 @@
 from collections import deque
 import numpy as np
 import sys
-from typing import Dict, List
+from typing import Dict
 
 # For running analytics from Jupyter notebook
 try:
@@ -27,11 +27,11 @@ class Kalman_filter:
         Sampling rate (Hz). Default 60.0.
     """
 
-    def __init__(self, id):
+    def __init__(self, id, noise=0.01):
         self.id = id
         
         self.state = None  # s; to be initialised by strategy runner with 1st GameFrame
-        self.var_x = 0.01  # sigma squared x; assume standard deviation of 10 cm
+        self.var_x = noise  # sigma squared x; assume standard deviation of 10 cm
         self.var_y = self.var_x  # sigma squared y
         self.covariance_xy = 0  # sigma xy; assume their errors are uncorrelated
         self.dimensions = 2
@@ -44,18 +44,23 @@ class Kalman_filter:
         # Observation matrix H and state transition matrix F are just the identity matrix.
         # Multiplications with them are omitted.
 
-    def step(self, new_data: List[float], last_robot: Robot, time_elapsed: float) -> List[float]:
+    def step(self, new_data: list[float], last_robot: Robot, time_elapsed: float) -> tuple[float]:
         """
         Push a new measurement and return filtered output.
         """
+        # class Robot: id: int; is_friendly: bool; has_ball: bool
+        # p: Vector2D; v: Vector2D; a: Vector2D; orientation: float
+        
+        # TODO: Vanishing
         x, y, theta = new_data
         # theta = normalise_heading(theta)
-        
+
+        if self.state is None:  # Initialised with the 1st GameFrame
+            self.state = np.array([last_robot.p.x, last_robot.p.y])
+            
         measurement = np.array([x, y])  # z
-        control_velocities = np.array(u)  # u
-        
+        control_velocities = np.array([last_robot.v.x, last_robot.v.y])  # u
         control_mat = time_elapsed * self.identity  # G
-        
         
         # Phase 1: Predicting the current state given the last state.
         pred_state = self.state + np.matmul(control_mat, control_velocities)  # s_n,n-1
@@ -64,17 +69,14 @@ class Kalman_filter:
         # Phase 2: Adjust this prediction based on new data
         kalman_gain = np.matmul(pred_cov, np.linalg.inv(pred_cov + self.measurement_cov))  # K_n
         
-        if self.state is None:
-            pass
-        elif measurement is None:
-            pass
-        else:
-            self.state = pred_state + np.matmul(kalman_gain, (measurement - pred_state))  # s_n,n
+        self.state = pred_state + np.matmul(kalman_gain, (measurement - pred_state))  # s_n,n
         
         ident_less_kalman = self.identity - kalman_gain
         ident_less_kalman_T = np.transpose(ident_less_kalman)
-        measurement_uncertainty = np.matmul(kalman_gain, np.matmul(self.measurement_cov, np.transpose(kalman_gain)))
-        self.covariance_mat = np.matmul(ident_less_kalman, np.matmul(pred_cov, ident_less_kalman_T)) + measurement_uncertainty  # P_n,n
+        measurement_uncertainty = np.matmul(kalman_gain,
+                                            np.matmul(self.measurement_cov, np.transpose(kalman_gain)))
+        self.covariance_mat = np.matmul(ident_less_kalman,
+                                        np.matmul(pred_cov, ident_less_kalman_T)) + measurement_uncertainty  # P_n,n
 
         return self.state[0], self.state[1], theta
 

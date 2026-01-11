@@ -1,6 +1,7 @@
-from collections import defaultdict, deque
-# import csv
+from collections import defaultdict
+import csv
 from dataclasses import replace
+from functools import partial
 import numpy as np
 # import pyqtgraph as pg # type: ignore
 # from pyqtgraph.Qt import QtWidgets # type: ignore
@@ -14,12 +15,12 @@ from utama_core.run.refiners.base_refiner import BaseRefiner
 from utama_core.run.refiners.kalman import Kalman_filter
 
 # For logging
-# TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
-# X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
-# COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
+TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
+X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
+COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 
-# OUTPUT_FILE = "clean-raw-2.csv"
-# TARGET_SIZE = 1000
+OUTPUT_FILE = "noisy-kalman-pid.csv"
+TARGET_SIZE = 1000
 
 
 class AngleSmoother:
@@ -61,8 +62,8 @@ class PositionRefiner(BaseRefiner):
             self.blue_count = exp_friendly
         
         # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
-        self.kalman_filters_yellow = [Kalman_filter(id) for id in range(self.yellow_count)]
-        self.kalman_filters_blue   = [Kalman_filter(id) for id in range(self.blue_count)]
+        self.kalman_filters_yellow = [Kalman_filter(id, 0.001) for id in range(self.yellow_count)]
+        self.kalman_filters_blue   = [Kalman_filter(id, 0.001) for id in range(self.blue_count)]
         
         # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
         # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
@@ -71,10 +72,10 @@ class PositionRefiner(BaseRefiner):
         self.last_game_frame = None  # Game gater will initialise
         
         # For logging
-        # self.data_collected = 0
-        # with open(OUTPUT_FILE, "w", newline="") as f:
-        #     writer = csv.DictWriter(f, COLS)
-        #     writer.writeheader()
+        self.data_collected = 0
+        with open(OUTPUT_FILE, "w", newline="") as f:
+            writer = csv.DictWriter(f, COLS)
+            writer.writeheader()
         
         # For live testing:
         # buffer_len = 1000
@@ -112,6 +113,7 @@ class PositionRefiner(BaseRefiner):
         
         # For filtering
         if self.running:  # Checks if the first valid game frame has been received.
+            # filtered_vision_data = combined_vision_data
             time_elapsed = combined_vision_data.ts - self.last_game_frame.ts
             
             if game_frame.my_team_is_yellow:
@@ -119,15 +121,17 @@ class PositionRefiner(BaseRefiner):
                     ts=combined_vision_data.ts,
                     
                     yellow_robots=list(
-                        map(Kalman_filter.filter_robot(last_gameframe=self.last_game_frame.friendly_robots,
-                                                       time_elapsed=time_elapsed),
+                        map(partial(Kalman_filter.filter_robot,
+                                    last_frame=self.last_game_frame.friendly_robots,
+                                    time_elapsed=time_elapsed),
                         self.kalman_filters_yellow,
                         sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
                         ),
                     
                     blue_robots=list(
-                        map(Kalman_filter.filter_robot(last_gameframe=self.last_game_frame.enemy_robots,
-                                                       time_elapsed=time_elapsed),
+                        map(partial(Kalman_filter.filter_robot,
+                                    last_frame=self.last_game_frame.enemy_robots,
+                                    time_elapsed=time_elapsed),
                         self.kalman_filters_blue,
                         sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
                         ),
@@ -140,15 +144,17 @@ class PositionRefiner(BaseRefiner):
                     ts=combined_vision_data.ts,
                     
                     yellow_robots=list(
-                        map(Kalman_filter.filter_robot(last_gameframe=self.last_game_frame.enemy_robots,
-                                                       time_elapsed=time_elapsed),
+                        map(partial(Kalman_filter.filter_robot,
+                                    last_frame=self.last_game_frame.enemy_robots,
+                                    time_elapsed=time_elapsed),
                         self.kalman_filters_yellow,
                         sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
                         ),
                     
                     blue_robots=list(
-                        map(Kalman_filter.filter_robot(last_gameframe=self.last_game_frame.friendly_robots,
-                                                       time_elapsed=time_elapsed),
+                        map(partial(Kalman_filter.filter_robot,
+                                    last_frame=self.last_game_frame.friendly_robots,
+                                    time_elapsed=time_elapsed),
                         self.kalman_filters_blue,
                         sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
                         ),
@@ -157,19 +163,19 @@ class PositionRefiner(BaseRefiner):
                 )
             
             # For logging:
-            # if self.data_collected < TARGET_SIZE:
-            #     with open(OUTPUT_FILE, "a", newline="") as f:
-            #         writer = csv.DictWriter(f, COLS)
+            if self.data_collected < TARGET_SIZE:
+                with open(OUTPUT_FILE, "a", newline="") as f:
+                    writer = csv.DictWriter(f, COLS)
                     
-            #         for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
-            #             writer.writerow({
-            #                 TS_COL: combined_vision_data.ts,
-            #                 ID_COL: y_robot.id,
-            #                 COLOR_COL: "yellow",
-            #                 X_COL: y_robot.x,
-            #                 Y_COL: y_robot.y,
-            #                 TH_COL: y_robot.orientation
-            #             })
+                    for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
+                        writer.writerow({
+                            TS_COL: combined_vision_data.ts,
+                            ID_COL: y_robot.id,
+                            COLOR_COL: "yellow",
+                            X_COL: y_robot.x,
+                            Y_COL: y_robot.y,
+                            TH_COL: y_robot.orientation
+                        })
                         
                     # for b_robot in combined_vision_data.blue_robots:
                     #     writer.writerow({
@@ -180,8 +186,8 @@ class PositionRefiner(BaseRefiner):
                     #         Y_COL: b_robot.y,
                     #         TH_COL: b_robot.orientation
                     #     })
-                        
-                    # self.data_collected += 1
+                    
+                    self.data_collected += 1
                     
             # For live testing:
             # try:
