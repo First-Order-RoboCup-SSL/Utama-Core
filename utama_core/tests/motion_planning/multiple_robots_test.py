@@ -325,9 +325,9 @@ def test_diagonal_cross_square(
 
     # Assertions
     assert test_passed, "Diagonal cross test failed to complete"
-    assert test_manager.all_reached, (
-        f"Not all robots reached their targets. " f"Reached: {len(test_manager.robots_reached)}/4"
-    )
+    assert (
+        test_manager.all_reached
+    ), f"Not all robots reached their targets. Reached: {len(test_manager.robots_reached)}/4"
     assert not test_manager.collision_detected, (
         f"Robots collided {test_manager.collision_count} time(s) at center crossing! "
         f"Minimum distance: {test_manager.min_distance:.3f}m "
