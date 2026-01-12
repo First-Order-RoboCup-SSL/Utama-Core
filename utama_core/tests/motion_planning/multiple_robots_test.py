@@ -226,7 +226,7 @@ def test_mirror_swap(
 
     test_manager = MultiRobotTestManager(scenario=scenario)
     test_passed = runner.run_test(
-        testManager=test_manager,
+        test_manager=test_manager,
         episode_timeout=45.0,  # Longer timeout for 12 robots
         rsim_headless=headless,
     )
