@@ -155,12 +155,12 @@ class MultiRobotTestManager(AbstractTestManager):
         return self.n_episodes
 
 
-def test_mirror_charge_head_on(
+def test_mirror_swap(
     headless: bool,
     mode: str = "rsim",
 ):
     """
-    Test where two teams of 6 robots charge straight at each other from mirror positions.
+    Test where two teams of 6 robots start in mirror formations and swap positions across the field.
 
     The robots should:
     1. Start at mirror positions on opposite sides of the field
