@@ -36,8 +36,7 @@ class TimedSwitchController:
         self._exit_strategy = exit_strategy
         self._slow_planner = BisectorPlanner(game, friendly_colour, env)
         self._game = game
-        # self._fast_planner = DynamicWindowPlanner(game)
-        self._fast_planner = OmnidirectionalMPC()  # Wrapper might be needed to match .path_to() signature
+        self._fast_planner = OmnidirectionalMPC()
         self._real_targets = [None for _ in range(num_robots)]
         self._intermediate_target = [None for _ in range(num_robots)]
         self._exit_points = [None for _ in range(num_robots)]
