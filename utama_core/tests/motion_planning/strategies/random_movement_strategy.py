@@ -10,6 +10,7 @@ from utama_core.entities.game.field import FieldBounds
 from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.tests.common.abstract_test_manager import AbstractTestManager
 
 
 class RandomMovementBehaviour(AbstractBehaviour):
@@ -30,7 +31,7 @@ class RandomMovementBehaviour(AbstractBehaviour):
         field_bounds: Tuple[Tuple[float, float], Tuple[float, float]],
         min_target_distance: float,
         endpoint_tolerance: float,
-        test_manager,
+        test_manager: AbstractTestManager,
         speed_range: Tuple[float, float] = (0.5, 2.0),
     ):
         super().__init__(name=f"RandomMovement_{robot_id}")
