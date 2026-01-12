@@ -2,6 +2,7 @@
 import atexit
 import cProfile
 
+from utama_core.motion_planning.src.common.control_schemes import ControlScheme
 from utama_core.replay import ReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy import DefenceStrategy, RobotPlacementStrategy, StartupStrategy
@@ -31,7 +32,7 @@ def main():
             replay_name="test-replay",
             overwrite_existing=True,
         ),
-        control_scheme="mpc-cpp",
+        control_scheme=ControlScheme.MPC_CPP,
     )
     runner.my_strategy.render()
     runner.run()

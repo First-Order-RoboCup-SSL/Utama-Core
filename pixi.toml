@@ -25,12 +25,14 @@ pre-commit = ">=3.8.0"
 hatch = ">=1.14.1,<2"
 graphviz = ">=13.1.2,<14"
 snakeviz = ">=2.2.2,<3"
-cmake = ">=3.20"
+cmake = "3.26.*"                # Force v3.26 because it's compatible with everything
 ninja = "*"
 cxx-compiler = "*" 
 eigen = "*"
-osqp = "*"
+# osqp = "*"
 nanobind = "*" 
+pip = ">=25.3,<26"
+scikit-build-core = ">=0.11.6,<0.12"
 
 [package]
 name = "Utama-Core"

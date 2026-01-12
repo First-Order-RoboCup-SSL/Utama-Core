@@ -6,10 +6,10 @@ set(CMAKE_CXX_STANDARD 17)
 # 1. Find Eigen
 find_package(Eigen3 REQUIRED)
 
-# 2. Find Python (CRITICAL: MUST BE BEFORE NANOBIND)
+# 2. Find Python
 find_package(Python 3.11 COMPONENTS Interpreter Development.Module REQUIRED)
 
-# 3. Fetch Nanobind (instead of find_package)
+# 3. Fetch Nanobind
 include(FetchContent)
 FetchContent_Declare(
   nanobind
@@ -24,9 +24,13 @@ nanobind_add_module(mpc_cpp_extension
     src/OmniMPC.cpp
 )
 
-# Link (nanobind is already linked by nanobind_add_module)
+# Link
 target_link_libraries(mpc_cpp_extension PRIVATE
     Eigen3::Eigen
 )
 
 target_include_directories(mpc_cpp_extension PRIVATE src)
+
+# --- THE MISSING LINK ---
+# This tells CMake to copy the compiled .so file into the python package folder
+install(TARGETS mpc_cpp_extension DESTINATION .)

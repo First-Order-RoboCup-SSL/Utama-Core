@@ -8,11 +8,17 @@ from utama_core.motion_planning.src.controllers.pid_controller import PIDControl
 
 # Try to import your new C++ module
 try:
+    # --- ADD THIS TRACKER ---
+    import os
+
     import mpc_cpp_extension
 
+    print(f"\n[DEBUG] 🕵️‍♂️ C++ MODULE LOADED FROM: {mpc_cpp_extension.__file__}")
+    print(f"[DEBUG] 🕒 FILE TIMESTAMP: {os.path.getmtime(mpc_cpp_extension.__file__)}\n")
+    # ------------------------
     CPP_AVAILABLE = True
-except ImportError:
-    print("[MPCCppController] ⚠️ CRITICAL: C++ Extension not found. Did you run 'pip install -e ...'?")
+except ImportError as e:
+    print(f"[MPCCppController] ⚠️ IMPORT ERROR: {e}")
     CPP_AVAILABLE = False
 
 

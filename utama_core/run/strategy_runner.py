@@ -18,7 +18,7 @@ from utama_core.global_utils.mapping_utils import (
     map_left_right_to_colors,
 )
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
-from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
+from utama_core.motion_planning.src.common.control_schemes import ControlScheme
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.run import GameGater
@@ -62,7 +62,7 @@ class StrategyRunner:
         field_bounds (FieldBounds): Configuration of the field. Defaults to standard field.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
-        control_scheme (str, optional): Name of the motion control scheme to use.
+        control_scheme (ControlScheme, optional): Motion control scheme to use.
     """
 
     def __init__(
@@ -76,7 +76,7 @@ class StrategyRunner:
         field_bounds: FieldBounds = Field.full_field_bounds,
         opp_strategy: Optional[AbstractStrategy] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
-        control_scheme: str = "pid",
+        control_scheme: ControlScheme = ControlScheme.PID,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ class StrategyRunner:
             else None
         )
 
-        self.motion_controller = get_control_scheme(control_scheme)
+        self.motion_controller = control_scheme.get_controller()
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
         if self.opp_strategy:

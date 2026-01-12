@@ -107,7 +107,9 @@ class OmnidirectionalMPC:
         for k in range(T):
             # Dynamics & Limits
             constraints += [X[:, k + 1] == self.A @ X[:, k] + self.B @ U[:, k]]
-            constraints += [cp.norm(X[2:4, k], 2) <= self.config.max_vel]
+            constraints += [
+                cp.norm(X[2:4, k], 2) <= self.config.max_vel
+            ]  # this is a circle constraint // CLARABEL <-- conic solver ++ understands circles natively...
             constraints += [cp.norm(U[:, k], 2) <= self.config.max_accel]
 
             # Soft Obstacle Constraints
