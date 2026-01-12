@@ -22,6 +22,7 @@ class RandomMovementBehaviour(AbstractBehaviour):
         field_bounds: ((min_x, max_x), (min_y, max_y)) bounds for movement
         min_target_distance: Minimum distance for selecting next target
         endpoint_tolerance: Distance to consider target reached
+        test_manager: Manager used to record test-related metrics such as targets reached
         speed_range: (min_speed, max_speed) for random speed selection
     """
 
