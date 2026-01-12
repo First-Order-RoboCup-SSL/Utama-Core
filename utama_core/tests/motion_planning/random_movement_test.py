@@ -138,7 +138,7 @@ def test_random_movement_same_team(
     mode: str = "rsim",
 ):
     """
-    Test where 6 robots from the same team move randomly within half court.
+    Test where 2 robots from the same team move randomly within half court.
 
     The robots should:
     1. Start at random positions within their half court
