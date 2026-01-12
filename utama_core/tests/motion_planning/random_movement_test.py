@@ -188,7 +188,7 @@ def test_random_movement_same_team(
     )
 
     test_passed = runner.run_test(
-        testManager=strategy.test_manager,
+        test_manager=strategy.test_manager,
         episode_timeout=60.0,  # 60 seconds to complete random movements
         rsim_headless=headless,
     )

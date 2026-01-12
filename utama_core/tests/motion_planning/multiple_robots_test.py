@@ -318,7 +318,7 @@ def test_diagonal_cross_square(
 
     test_manager = MultiRobotTestManager(scenario=scenario)
     test_passed = runner.run_test(
-        testManager=test_manager,
+        test_manager=test_manager,  # Changed to snake_case
         episode_timeout=30.0,
         rsim_headless=headless,
     )

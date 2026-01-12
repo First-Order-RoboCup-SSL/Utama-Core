@@ -486,34 +486,34 @@ class StrategyRunner:
 
     def run_test(
         self,
-        testManager: AbstractTestManager,
+        test_manager: AbstractTestManager,  # Changed to snake_case
         episode_timeout: float = 10.0,
         rsim_headless: bool = False,
     ) -> bool:
         """Run a test with the given test manager and episode timeout.
 
         Args:
-            testManager (AbstractTestManager): The test manager to run the test.
+            test_manager (AbstractTestManager): The test manager to run the test.
             episode_timeout (float): The timeout for each episode in seconds.
             rsim_headless (bool): Whether to run RSim in headless mode. Defaults to False.
         """
         signal.signal(signal.SIGINT, self._handle_sigint)
 
         passed = True
-        n_episodes = testManager.get_n_episodes()
+        n_episodes = test_manager.get_n_episodes()
         if not rsim_headless and self.rsim_env:
             self.rsim_env.render_mode = "human"
         if self.sim_controller is None:
             warnings.warn("Running test in real, defaulting to 1 episode.")
             n_episodes = 1
 
-        testManager.load_strategies(self.my_strategy, self.opp_strategy)
+        test_manager.load_strategies(self.my_strategy, self.opp_strategy)
 
         for i in range(n_episodes):
-            testManager.update_episode_n(i)
+            test_manager.update_episode_n(i)
 
             if self.sim_controller:
-                testManager.reset_field(self.sim_controller, self.my_game)
+                test_manager.reset_field(self.sim_controller, self.my_game)
                 time.sleep(0.1)  # wait for the field to reset
                 # wait for the field to reset
             self._reset_game()
@@ -543,7 +543,7 @@ class StrategyRunner:
                     else:
                         raise e
 
-                status = testManager.eval_status(self.my_game)
+                status = test_manager.eval_status(self.my_game)
 
                 if status == TestingStatus.FAILURE:
                     passed = False

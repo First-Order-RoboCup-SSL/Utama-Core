@@ -31,7 +31,7 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
         center_position: tuple[float, float],
         oscillation_axis: str,
         amplitude: float,
-        directionUpOrRight: bool,
+        direction_up_or_right: bool,
         speed: float,
     ):
         super().__init__(name=f"OscillatingObstacle_{obstacle_id}")
@@ -39,7 +39,7 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
         self.center_x, self.center_y = center_position
         self.oscillation_axis = oscillation_axis.lower()
         self.amplitude = amplitude
-        self.directionUpOrRight = directionUpOrRight
+        self.direction_up_or_right = direction_up_or_right
         self.speed = speed
         self.start_time = None
 
@@ -60,7 +60,7 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
 
         # Calculate oscillation based on elapsed time
         elapsed_time = time.time() - self.start_time
-        if self.directionUpOrRight:
+        if self.direction_up_or_right:
             offset = self.amplitude * math.sin(self.speed * elapsed_time)
         else:
             offset = self.amplitude * math.cos(self.speed * elapsed_time)
@@ -176,7 +176,7 @@ class OscillatingObstacleStrategy(AbstractStrategy):
                 center_position=config.center_position,
                 oscillation_axis=config.oscillation_axis,
                 amplitude=config.amplitude,
-                directionUpOrRight=config.directionUpOrRight,
+                direction_up_or_right=config.directionUpOrRight,
                 speed=config.speed,
             )
 
@@ -188,7 +188,7 @@ class OscillatingObstacleStrategy(AbstractStrategy):
                 center_position=config.center_position,
                 oscillation_axis=config.oscillation_axis,
                 amplitude=config.amplitude,
-                directionUpOrRight=config.directionUpOrRight,
+                direction_up_or_right=config.directionUpOrRight,
                 speed=config.speed,
             )
             behaviours.append(behaviour)
