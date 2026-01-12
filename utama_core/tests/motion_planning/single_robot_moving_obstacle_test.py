@@ -235,7 +235,7 @@ def test_single_robot_moving_obstacles(
 
     test_manager = MovingObstacleTestManager(scenario=scenario, robot_id=robot_id)
     test_passed = runner.run_test(
-        testManager=test_manager,
+        test_manager=test_manager,
         episode_timeout=30.0,  # Longer timeout for moving obstacles
         rsim_headless=headless,
     )

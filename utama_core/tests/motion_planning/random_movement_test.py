@@ -1,6 +1,7 @@
 """Tests for random movement collision avoidance with multiple robots."""
 
 import os
+import random
 from dataclasses import dataclass
 from typing import Dict
 
@@ -47,8 +48,6 @@ class RandomMovementTestManager(AbstractTestManager):
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with robots in random starting positions within bounds."""
-        import random
-
         (min_x, max_x), (min_y, max_y) = self.scenario.field_bounds
 
         # Place robots at random positions within bounds

@@ -486,7 +486,7 @@ class StrategyRunner:
 
     def run_test(
         self,
-        test_manager: AbstractTestManager,  # Changed to snake_case
+        test_manager: AbstractTestManager,
         episode_timeout: float = 10.0,
         rsim_headless: bool = False,
     ) -> bool:

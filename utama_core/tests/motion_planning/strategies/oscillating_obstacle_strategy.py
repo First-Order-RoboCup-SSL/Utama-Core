@@ -1,10 +1,17 @@
 """Strategy for controlling moving obstacles that oscillate back and forth."""
 
+from __future__ import annotations
+
 import math
 import time
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 import py_trees
+
+if TYPE_CHECKING:
+    from utama_core.tests.motion_planning.single_robot_moving_obstacle_test import (
+        MovingObstacleConfig,
+    )
 
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import FieldBounds
@@ -123,7 +130,7 @@ class OscillatingObstacleStrategy(AbstractStrategy):
         obstacle_configs: List of MovingObstacleConfig objects defining each obstacle's behavior
     """
 
-    def __init__(self, obstacle_configs: List):
+    def __init__(self, obstacle_configs: List["MovingObstacleConfig"]):
         self.obstacle_configs = obstacle_configs
         super().__init__()
 

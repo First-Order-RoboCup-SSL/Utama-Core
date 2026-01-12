@@ -52,6 +52,7 @@ def pytest_generate_tests(metafunc):
                 metafunc.parametrize(param, cases[metafunc.config.getoption("level")])
 
 
+# temporary exludes the motion planning tests until the motion planning algoriths are working
 def pytest_collection_modifyitems(config, items):
     """Exclude tests from motion_planning folder."""
     remaining = []

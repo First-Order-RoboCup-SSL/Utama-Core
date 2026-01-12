@@ -197,7 +197,7 @@ def test_collision_avoidance_goal_to_goal(
 
     test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)
     test_passed = runner.run_test(
-        testManager=test_manager,
+        test_manager=test_manager,
         episode_timeout=20.0,  # Give enough time to navigate
         rsim_headless=headless,
     )
@@ -246,7 +246,7 @@ def test_simple_straight_line_no_obstacles(
 
     test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)
     test_passed = runner.run_test(
-        testManager=test_manager,
+        test_manager=test_manager,
         episode_timeout=15.0,
         rsim_headless=headless,
     )
