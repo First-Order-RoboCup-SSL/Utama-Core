@@ -80,6 +80,5 @@ std::tuple<double, double, bool> OmniMPC::get_control_velocities(
         next_vel = next_vel.normalized() * config.max_vel;
     }
 
-    // return {0.0, 0.0, true};
     return {next_vel.x(), next_vel.y(), true};
 }
