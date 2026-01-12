@@ -156,6 +156,8 @@ def test_random_movement_same_team(
         (-4.0, -0.5),
         (-2.0, 2.0),
     )  # ((min_x, max_x), (min_y, max_y))
+
+    # Max is 6 robots
     n_robots = 2
 
     scenario = RandomMovementScenario(
