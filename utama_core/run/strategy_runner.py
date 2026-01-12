@@ -87,7 +87,7 @@ class StrategyRunner:
         exp_enemy: int,
         field_bounds: FieldBounds = Field.full_field_bounds,
         opp_strategy: Optional[AbstractStrategy] = None,
-        control_scheme: str = "pid",
+        control_scheme: str = "pid",  # This is also the default control scheme used in the motion planning tests
         opp_control_scheme: Optional[str] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         print_real_fps: bool = False,  # Turn this on for RSim

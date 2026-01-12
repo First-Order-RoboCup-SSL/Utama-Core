@@ -185,7 +185,6 @@ def test_random_movement_same_team(
         mode=mode,
         exp_friendly=n_robots,
         exp_enemy=0,
-        control_scheme="dwa",  # Use DWA for collision avoidance
     )
 
     test_passed = runner.run_test(

@@ -222,7 +222,6 @@ def test_mirror_swap(
         exp_friendly=6,
         exp_enemy=6,
         opp_strategy=opp_strategy,
-        control_scheme="dwa",  # Both teams use DWA for collision avoidance
     )
 
     test_manager = MultiRobotTestManager(scenario=scenario)
@@ -315,7 +314,6 @@ def test_diagonal_cross_square(
         exp_friendly=2,
         exp_enemy=2,
         opp_strategy=opp_strategy,
-        control_scheme="dwa",  # Use DWA for collision avoidance
     )
 
     test_manager = MultiRobotTestManager(scenario=scenario)

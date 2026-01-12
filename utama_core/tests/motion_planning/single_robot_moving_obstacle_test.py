@@ -230,7 +230,6 @@ def test_single_robot_moving_obstacles(
         exp_friendly=1,
         exp_enemy=len(scenario.moving_obstacles),
         opp_strategy=opp_strategy,
-        control_scheme="dwa",
         opp_control_scheme="pid",  # Use PID so obstacles follow exact paths without avoiding the robot
     )
 
