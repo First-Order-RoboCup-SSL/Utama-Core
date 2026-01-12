@@ -42,7 +42,6 @@ class RandomMovementBehaviour(AbstractBehaviour):
 
         self.current_target = None
         self.current_speed = None
-        self.targets_reached = 0
 
         self.test_manager = test_manager
 
@@ -92,8 +91,6 @@ class RandomMovementBehaviour(AbstractBehaviour):
         distance_to_target = robot_pos.distance_to(self.current_target)
         if distance_to_target <= self.endpoint_tolerance:
             # Target reached! Generate new target
-            self.targets_reached += 1
-
             self.test_manager.update_target_reached(self.robot_id)
 
             # Generate new target and speed
