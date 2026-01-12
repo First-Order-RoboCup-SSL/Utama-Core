@@ -29,7 +29,6 @@ cmake = "3.26.*"                # Force v3.26 because it's compatible with every
 ninja = "*"
 cxx-compiler = "*" 
 eigen = "*"
-# osqp = "*"
 nanobind = "*" 
 pip = ">=25.3,<26"
 scikit-build-core = ">=0.11.6,<0.12"
