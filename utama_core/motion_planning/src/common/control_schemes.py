@@ -7,6 +7,7 @@ from utama_core.motion_planning.src.controllers import (
     MPCCppController,
     PIDController,
 )
+from utama_core.motion_planning.src.controllers.mpc_controller import MPCController
 
 
 class ControlScheme(Enum):
@@ -24,10 +25,6 @@ class ControlScheme(Enum):
         elif self == ControlScheme.DWA:
             return DWAController
         elif self == ControlScheme.MPC:
-            from utama_core.motion_planning.src.controllers.mpc_controller import (
-                MPCController,
-            )
-
             return MPCController
         elif self == ControlScheme.MPC_CPP:
             return MPCCppController

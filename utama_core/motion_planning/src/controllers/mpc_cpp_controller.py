@@ -15,7 +15,6 @@ try:
 
     print(f"\n[DEBUG] 🕵️‍♂️ C++ MODULE LOADED FROM: {mpc_cpp_extension.__file__}")
     print(f"[DEBUG] 🕒 FILE TIMESTAMP: {os.path.getmtime(mpc_cpp_extension.__file__)}\n")
-    # ------------------------
     CPP_AVAILABLE = True
 except ImportError as e:
     print(f"[MPCCppController] ⚠️ IMPORT ERROR: {e}")
