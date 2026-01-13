@@ -26,7 +26,7 @@ class MovingObstacleConfig:
     center_position: tuple[float, float]
     oscillation_axis: str  # 'x' or 'y'
     amplitude: float  # How far to move from center
-    directionUpOrRight: bool  # True for going up/right first, False for going down/left first
+    direction_up_or_right: bool  # True for going up/right first, False for going down/left first
     speed: float  # Speed of oscillation (higher = faster)
 
 

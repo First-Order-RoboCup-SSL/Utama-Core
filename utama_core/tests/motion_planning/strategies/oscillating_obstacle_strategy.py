@@ -187,7 +187,7 @@ class OscillatingObstacleStrategy(AbstractStrategy):
                 center_position=config.center_position,
                 oscillation_axis=config.oscillation_axis,
                 amplitude=config.amplitude,
-                direction_up_or_right=config.directionUpOrRight,
+                direction_up_or_right=config.direction_up_or_right,
                 speed=config.speed,
             )
 
@@ -199,7 +199,7 @@ class OscillatingObstacleStrategy(AbstractStrategy):
                 center_position=config.center_position,
                 oscillation_axis=config.oscillation_axis,
                 amplitude=config.amplitude,
-                direction_up_or_right=config.directionUpOrRight,
+                direction_up_or_right=config.direction_up_or_right,
                 speed=config.speed,
             )
             behaviours.append(behaviour)

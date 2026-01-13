@@ -3,7 +3,7 @@
 import os
 from dataclasses import dataclass
 
-from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.run import StrategyRunner
@@ -46,7 +46,7 @@ class MultiRobotTestManager(AbstractTestManager):
         """Reset field with all robots at their starting positions."""
         # Teleport friendly robots to starting positions
         for i, (x, y) in enumerate(self.scenario.friendly_positions):
-            if i < 6:  # Max 6 robots per team
+            if i < MAX_ROBOTS:  # Max MAX_ROBOTS robots per team
                 sim_controller.teleport_robot(
                     game.my_team_is_yellow,
                     i,
@@ -56,7 +56,7 @@ class MultiRobotTestManager(AbstractTestManager):
                 )
 
         # Teleport remaining friendly robots far away
-        for i in range(len(self.scenario.friendly_positions), 6):
+        for i in range(len(self.scenario.friendly_positions), MAX_ROBOTS):
             sim_controller.teleport_robot(
                 game.my_team_is_yellow,
                 i,
@@ -67,7 +67,7 @@ class MultiRobotTestManager(AbstractTestManager):
 
         # Teleport enemy robots to starting positions
         for i, (x, y) in enumerate(self.scenario.enemy_positions):
-            if i < 6:
+            if i < MAX_ROBOTS:
                 sim_controller.teleport_robot(
                     not game.my_team_is_yellow,
                     i,
@@ -77,7 +77,7 @@ class MultiRobotTestManager(AbstractTestManager):
                 )
 
         # Teleport remaining enemy robots far away
-        for i in range(len(self.scenario.enemy_positions), 6):
+        for i in range(len(self.scenario.enemy_positions), MAX_ROBOTS):
             sim_controller.teleport_robot(
                 not game.my_team_is_yellow,
                 i,
@@ -160,7 +160,7 @@ def test_mirror_swap(
     mode: str = "rsim",
 ):
     """
-    Test where two teams of 6 robots start in mirror formations and swap positions across the field.
+    Test where two teams of MAX_ROBOTS robots start in mirror formations and swap positions across the field.
 
     The robots should:
     1. Start at mirror positions on opposite sides of the field
