@@ -93,7 +93,6 @@ class RandomMovementTestManager(AbstractTestManager):
         """Reset tracking metrics for new episode."""
         self.collision_detected = False
         self.min_distance = float("inf")
-        self.targets_reached_count = {}
 
     def eval_status(self, game: Game):
         """Evaluate collision status and target achievement."""
