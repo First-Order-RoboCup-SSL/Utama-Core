@@ -29,6 +29,7 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
         center_position: Center point of oscillation (x, y)
         oscillation_axis: 'x' or 'y' - which axis to oscillate along
         amplitude: How far to move from center
+        direction_up_or_right: True for going up/right first, False for going down/left first
         speed: Speed of oscillation (radians per second in sin wave)
     """
 
@@ -58,9 +59,6 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
         """Command robot to oscillate along specified axis."""
         game = self.blackboard.game
         rsim_env = self.blackboard.rsim_env
-
-        if self.start_time is None:
-            self.start_time = time.time()
 
         if not game.friendly_robots or self.obstacle_id not in game.friendly_robots:
             return py_trees.common.Status.RUNNING
@@ -97,13 +95,19 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
             # Draw oscillation range
             if self.oscillation_axis == "x":
                 rsim_env.draw_line(
-                    [(self.center_x - self.amplitude, self.center_y), (self.center_x + self.amplitude, self.center_y)],
+                    [
+                        (self.center_x - self.amplitude, self.center_y),
+                        (self.center_x + self.amplitude, self.center_y),
+                    ],
                     color="green",
                     width=1,
                 )
             else:
                 rsim_env.draw_line(
-                    [(self.center_x, self.center_y - self.amplitude), (self.center_x, self.center_y + self.amplitude)],
+                    [
+                        (self.center_x, self.center_y - self.amplitude),
+                        (self.center_x, self.center_y + self.amplitude),
+                    ],
                     color="green",
                     width=1,
                 )

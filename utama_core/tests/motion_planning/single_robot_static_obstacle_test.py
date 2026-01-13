@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.run import StrategyRunner
@@ -42,7 +42,7 @@ class CollisionAvoidanceTestManager(AbstractTestManager):
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with robot at start position and obstacles along the path."""
         # Teleport ALL friendly robots off-field first (to clean up from previous tests)
-        for i in range(6):  # SSL has max 6 robots per team
+        for i in range(MAX_ROBOTS):
             if i == self.robot_id:
                 # Place the test robot at start position
                 sim_controller.teleport_robot(
@@ -63,7 +63,7 @@ class CollisionAvoidanceTestManager(AbstractTestManager):
                 )
 
         # Place enemy robots as obstacles
-        for i in range(6):  # Handle all possible enemy robots
+        for i in range(MAX_ROBOTS):  # Handle all possible enemy robots
             if i < len(self.scenario.obstacle_positions):
                 x, y = self.scenario.obstacle_positions[i]
                 sim_controller.teleport_robot(
