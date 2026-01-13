@@ -1,4 +1,4 @@
-# Utama
+# Utama Core
 First Order Robotics core software stack for [RoboCup SSL](https://ssl.robocup.org/), an international league where teams build autonomous robotic teams to play football competitively.
 
 ## Table of Contents
