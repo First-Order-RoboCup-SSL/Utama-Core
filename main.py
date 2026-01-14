@@ -1,4 +1,3 @@
-from utama_core.entities.game import FieldBounds
 from utama_core.replay import ReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy.examples import (
@@ -14,10 +13,10 @@ def main():
         strategy=StartupStrategy(),
         my_team_is_yellow=True,
         my_team_is_right=True,
-        mode="real",
-        exp_friendly=1,
-        exp_enemy=0,
-        control_scheme="pid",
+        mode="rsim",
+        exp_friendly=6,
+        exp_enemy=3,
+        control_scheme="dwa",
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         print_real_fps=True,
         profiler_name=None,
