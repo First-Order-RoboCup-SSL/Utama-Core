@@ -34,18 +34,17 @@ class MPCCppController(PIDController):
 
         if CPP_AVAILABLE:
             # Configure C++ MPC
-            # These values match your "Overdamped" Python tuning
             config = mpc_cpp_extension.MPCConfig()
-            # """
-            config.T = 20
-            config.DT = 0.025
-            config.max_vel = 2.0
-            config.max_accel = 3.0
-            config.Q_pos = 200.0
-            config.Q_vel = 20.0
-            config.R_accel = 1.0
-            config.obstacle_buffer_ratio = 1.1
-            config.safety_vel_coeff = 0.25
+            config.T = 20  # Prediction horizon (number of future timesteps to consider)
+            config.DT = 0.05  # Time step duration in seconds (40Hz control rate)
+            config.max_vel = 2.0  # Maximum velocity in m/s
+            config.max_accel = 3.0  # Maximum acceleration in m/s²
+            config.Q_pos = 200.0  # Position error weight (unused in heuristic solver)
+            config.Q_vel = 20.0  # Velocity error weight (unused in heuristic solver)
+            config.R_accel = 0.1  # Acceleration penalty weight (unused in heuristic solver)
+            config.robot_radius = 0.09
+            config.obstacle_buffer_ratio = 1.5  # Safety margin multiplier for obstacles (1.1 = 10% extra buffer)
+            config.safety_vel_coeff = 0.5  # Velocity-dependent safety margin (higher speed = larger buffer)
             """
             config.T = 12
             config.DT = 0.05

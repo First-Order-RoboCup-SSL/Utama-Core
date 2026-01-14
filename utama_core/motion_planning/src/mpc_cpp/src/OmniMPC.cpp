@@ -51,16 +51,38 @@ std::tuple<double, double, bool> OmniMPC::get_control_velocities(
         Eigen::Vector2d obs_vel(obs[2], obs[3]);
         double radius = obs[4];
 
+        // Predict obstacle future pos (0.1s ahead)
         Eigen::Vector2d obs_future = obs_pos + obs_vel * 0.1;
         Eigen::Vector2d diff = current_state.head<2>() - obs_future;
         double dist = diff.norm();
+        
+        // --- CRASH FIX 1: Prevent Division by Zero ---
+        // If robots overlap perfectly, 'dist' is 0. Normalizing (diff/dist) creates NaN.
+        // We force a tiny distance to keep the math valid.
+        if (dist < 1e-5) {
+            dist = 1e-5;
+            diff << 1.0, 0.0; // Arbitrary push direction
+        }
+        // ---------------------------------------------
         
         double safety = config.robot_radius * config.obstacle_buffer_ratio + radius;
         safety += current_speed * config.safety_vel_coeff;
         
         if (dist < safety * 1.2) {
             double violation = std::max(0.0, safety * 1.2 - dist);
+            
+            // Exponential force is good, but dangerous if violation is large
             double force_mag = 50.0 * std::exp(violation * 10.0); 
+            
+            // --- CRASH FIX 2: Clamp the Force ---
+            // Never allow the force to exceed 2x the maximum acceleration.
+            // This prevents the "Explosion" that kills your simulator.
+            double max_allowed_force = config.max_accel * 2.0;
+            if (std::isinf(force_mag) || std::isnan(force_mag) || force_mag > max_allowed_force) {
+                force_mag = max_allowed_force;
+            }
+            // ------------------------------------
+            
             repulsion += diff.normalized() * force_mag;
         }
     }

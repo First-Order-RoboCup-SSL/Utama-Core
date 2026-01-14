@@ -1,5 +1,7 @@
 import pytest
 
+from utama_core.motion_planning.src.common.control_schemes import ControlScheme
+
 
 def pytest_addoption(parser):
     parser.addoption(
@@ -26,6 +28,13 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="Include motion planning tests (disabled by default)",
+    )
+    parser.addoption(
+        "--control-scheme",
+        action="store",
+        default="MPC_CPP",
+        choices=["PID", "MPC", "MPC_CPP", "DWA"],
+        help="Control scheme to use for motion planning tests (default: MPC_CPP)",
     )
 
 
@@ -72,3 +81,9 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture
 def headless(pytestconfig):
     return pytestconfig.getoption("--headless")
+
+
+@pytest.fixture
+def control_scheme(pytestconfig) -> ControlScheme:
+    scheme_name = pytestconfig.getoption("--control-scheme")
+    return ControlScheme[scheme_name]

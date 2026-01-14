@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.motion_planning.src.common.control_schemes import ControlScheme
 from utama_core.run import StrategyRunner
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
@@ -157,6 +158,7 @@ class MultiRobotTestManager(AbstractTestManager):
 
 def test_mirror_swap(
     headless: bool,
+    control_scheme: ControlScheme,
     mode: str = "rsim",
 ):
     """
@@ -222,6 +224,8 @@ def test_mirror_swap(
         exp_friendly=6,
         exp_enemy=6,
         opp_strategy=opp_strategy,
+        control_scheme=control_scheme,
+        opp_control_scheme=control_scheme,  # Both teams use same controller
     )
 
     test_manager = MultiRobotTestManager(scenario=scenario)
@@ -250,6 +254,7 @@ def test_mirror_swap(
 
 def test_diagonal_cross_square(
     headless: bool,
+    control_scheme: ControlScheme,
     mode: str = "rsim",
 ):
     """
@@ -314,6 +319,8 @@ def test_diagonal_cross_square(
         exp_friendly=2,
         exp_enemy=2,
         opp_strategy=opp_strategy,
+        control_scheme=control_scheme,
+        opp_control_scheme=control_scheme,  # Both teams use same controller
     )
 
     test_manager = MultiRobotTestManager(scenario=scenario)

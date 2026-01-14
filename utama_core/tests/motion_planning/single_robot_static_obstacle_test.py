@@ -5,6 +5,7 @@ import pytest
 from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.motion_planning.src.common.control_schemes import ControlScheme
 from utama_core.run import StrategyRunner
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
@@ -156,6 +157,7 @@ class CollisionAvoidanceTestManager(AbstractTestManager):
 )
 def test_collision_avoidance_goal_to_goal(
     headless: bool,
+    control_scheme: ControlScheme,
     obstacle_config: dict,
     mode: str = "rsim",
 ):
@@ -193,6 +195,7 @@ def test_collision_avoidance_goal_to_goal(
         mode=mode,
         exp_friendly=1,
         exp_enemy=len(obstacle_config["obstacles"]),
+        control_scheme=control_scheme,
     )
 
     test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)
@@ -217,6 +220,7 @@ def test_collision_avoidance_goal_to_goal(
 
 def test_simple_straight_line_no_obstacles(
     headless: bool,
+    control_scheme: ControlScheme,
     mode: str = "rsim",
 ):
     """Baseline test: robot should reach goal with no obstacles."""
@@ -242,6 +246,7 @@ def test_simple_straight_line_no_obstacles(
         mode=mode,
         exp_friendly=1,
         exp_enemy=0,
+        control_scheme=control_scheme,
     )
 
     test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)

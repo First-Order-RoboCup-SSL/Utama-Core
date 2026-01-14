@@ -21,7 +21,7 @@ def main():
         exp_friendly=6,
         exp_enemy=3,
         replay_writer_config=ReplayWriterConfig(replay_name="test-replay", overwrite_existing=True),
-        control_scheme=ControlScheme.PID,
+        control_scheme=ControlScheme.MPC_CPP,
         print_real_fps=True,
         profiler_name=None,
     )
