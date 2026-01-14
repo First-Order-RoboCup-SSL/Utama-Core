@@ -3,7 +3,7 @@ import warnings
 from typing import Dict, List, Optional, Union
 
 from utama_core.config.physical_constants import MAX_ROBOTS
-from utama_core.config.robot_params.grsim import CHIP_ANGLE, DRIBBLE_SPD, KICK_SPD
+from utama_core.config.robot_params import GRSIM_PARAMS
 from utama_core.config.settings import (
     BLUE_TEAM_SIM_PORT,
     LOCAL_HOST,
@@ -26,6 +26,10 @@ from utama_core.team_controller.src.generated_code.ssl_simulation_robot_feedback
 from utama_core.team_controller.src.utils import network_manager
 
 logger = logging.getLogger(__name__)
+
+KICK_SPD = GRSIM_PARAMS.KICK_SPD
+CHIP_ANGLE = GRSIM_PARAMS.CHIP_ANGLE
+DRIBBLE_SPD = GRSIM_PARAMS.DRIBBLE_SPD
 
 
 class GRSimRobotController(AbstractRobotController):

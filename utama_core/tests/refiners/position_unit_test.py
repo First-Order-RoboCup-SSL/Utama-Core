@@ -5,7 +5,7 @@ from utama_core.entities.game import Ball, Field, FieldBounds, GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.run.refiners import PositionRefiner
 
-full_field = Field.full_field_bounds
+full_field = Field.FULL_FIELD_BOUNDS
 position_refiner = PositionRefiner(full_field)
 
 

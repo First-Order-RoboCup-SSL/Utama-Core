@@ -1,13 +1,15 @@
 import logging
 import random
-from typing import Tuple
-
-import gymnasium as gym
-import numpy as np
+from typing import List, Tuple
 
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
-from utama_core.config.robot_params.rsim import KICK_SPD
-from utama_core.config.settings import TIMESTEP
+from utama_core.config.robot_params import RSIM_PARAMS
+from utama_core.config.settings import (
+    MAX_BALL_SPEED,
+    MIN_RELEASE_SPEED,
+    RELEASE_GAIN,
+    TIMESTEP,
+)
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.global_utils.math_utils import deg_to_rad, rad_to_deg
@@ -68,49 +70,74 @@ class SSLStandardEnv(SSLBaseEnv):
             time_step=time_step,
             render_mode=render_mode,
         )
-        # Shared observation space for all robots:
-        self.observation_space = gym.spaces.Box(
-            low=-self.NORM_BOUNDS,
-            high=self.NORM_BOUNDS,
-            shape=(4 + (self.n_robots_blue + self.n_robots_yellow) * 8,),
-            dtype=np.float32,
-        )
-
-        # Action space for one robot:
-        robot_action_space = gym.spaces.Box(
-            low=np.array([-1.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float32),
-            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float32),
-            dtype=np.float32,
-        )
-
-        # Team action space:
-        # Define action space for 6 robots in both teams
-        self.action_space = gym.spaces.Dict(
-            {
-                "team_blue": gym.spaces.Tuple([robot_action_space for _ in range(self.n_robots_blue)]),
-                "team_yellow": gym.spaces.Tuple([robot_action_space for _ in range(self.n_robots_yellow)]),
-            }
-        )
-
-        # Set scales for rewards
-        self.ball_dist_scale = np.linalg.norm([self.field.width, self.field.length / 2])
-        self.ball_grad_scale = np.linalg.norm([self.field.width / 2, self.field.length / 2]) / 4
-        self.energy_scale = (160 * 4) * 1000  # max wheel speed (rad/s) * 4 wheels * steps
+        # Note: observation_space and action_space removed - not needed for non-RL use
 
         # set starting formation style for
         self.blue_formation = LEFT_START_ONE if not blue_starting_formation else blue_starting_formation
         self.yellow_formation = RIGHT_START_ONE if not yellow_starting_formation else yellow_starting_formation
 
+        # Track dribbler state across steps so we can model ball release when
+        # the dribbler turns off in a way that depends on robot speed.
+        self.prev_dribbler_blue = [False] * self.n_robots_blue
+        self.prev_dribbler_yellow = [False] * self.n_robots_yellow
+        self.prev_forward_blue = [0.0] * self.n_robots_blue
+        self.prev_forward_yellow = [0.0] * self.n_robots_yellow
+
+        # Kick persistence state: List of (kick_speed, frames_remaining)
+        self.kick_persist_blue = [(0.0, 0) for _ in range(self.n_robots_blue)]
+        self.kick_persist_yellow = [(0.0, 0) for _ in range(self.n_robots_yellow)]
+
+        # Saving latest observation for the step (step, observation)
+        self.latest_observation = (-1, None)
+
         logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
+        # Reset dribbler tracking state
+        for i in range(self.n_robots_blue):
+            self.prev_dribbler_blue[i] = False
+            self.prev_forward_blue[i] = 0.0
+            self.kick_persist_blue[i] = (0.0, 0)
+        for i in range(self.n_robots_yellow):
+            self.prev_dribbler_yellow[i] = False
+            self.prev_forward_yellow[i] = 0.0
+            self.kick_persist_yellow[i] = (0.0, 0)
+
+        self.latest_observation = (-1, None)
         return super().reset(seed=seed, options=options)
 
     def step(self, action):
-        observation, reward, terminated, truncated, _ = super().step(action)
+        """
+        Advance the simulation by one step while modelling ball release when the
+        dribbler turns off. The ball's release speed is proportional to the
+        robot's current speed and capped to a realistic maximum.
+        """
+        # Increment step counter and build low-level simulator commands
+        self.steps += 1
+        commands = self._get_commands(action)
 
-        return observation, reward, terminated, truncated, self.reward_shaping_total
+        # Apply any implicit kicks caused by dribbler state transitions.
+        self._apply_dribbler_release_kicks(commands)
+
+        # Send command to simulator
+        self.rsim.send_commands(commands)
+        self.sent_commands = commands
+
+        # Get Frame from simulator and update dribbler/speed history
+        self.last_frame = self.frame
+        self.frame = self.rsim.get_frame()
+        self._update_dribbler_history(commands)
+
+        # Calculate environment observation, reward and done condition
+        observation = self._frame_to_observations()
+        reward, done = self._calculate_reward_and_done()
+        if self.render_mode == "human":
+            self.render()
+
+        # Expose reward shaping totals via the info dict (for compatibility
+        # with existing callers of SSLStandardEnv)
+        return observation, reward, done, False, self.reward_shaping_total
 
     def _frame_to_observations(
         self,
@@ -122,6 +149,9 @@ class SSLStandardEnv(SSLBaseEnv):
         yellow_robots_info: feedback from individual yellow robots that returns a List[RobotInfo]
         blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
         """
+        if self.latest_observation[0] == self.steps:
+            return self.latest_observation[1]
+
         # Ball observation shared by all robots
         ball_obs = RawBallData(self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z, 1.0)
 
@@ -147,11 +177,13 @@ class SSLStandardEnv(SSLBaseEnv):
         # As there is sometimes multiple possible positions for the ball
 
         # Camera id as 0, only one camera for RSim
-        return (
+        result = (
             RawVisionData(self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs], 0),
             yellow_robots_info,
             blue_robots_info,
         )
+        self.latest_observation = (self.steps, result)
+        return result
 
     def _get_robot_observation(self, robot):
         robot_pos = RawRobotData(robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1)
@@ -161,137 +193,125 @@ class SSLStandardEnv(SSLBaseEnv):
     def _get_commands(self, actions) -> list[Robot]:
         commands = []
 
+        # Blue robots
         for i in range(self.n_robots_blue):
             v_x = actions["team_blue"][i][0]
             v_y = actions["team_blue"][i][1]
             v_theta = actions["team_blue"][i][2]
+
+            dribbler = actions["team_blue"][i][4] > 0
+            kick_v_x = RSIM_PARAMS.KICK_SPD if actions["team_blue"][i][3] > 0 else 0.0
+
             cmd = Robot(
                 yellow=False,  # Blue team
                 id=i,  # ID of the robot
                 v_x=v_x,
                 v_y=v_y,
                 v_theta=v_theta,
-                kick_v_x=KICK_SPD if actions["team_blue"][i][3] > 0 else 0.0,
-                dribbler=True if actions["team_blue"][i][4] > 0 else False,
+                kick_v_x=kick_v_x,
+                dribbler=dribbler,
             )
             commands.append(cmd)
 
+        # Yellow robots
         for i in range(self.n_robots_yellow):
             v_x = actions["team_yellow"][i][0]
             v_y = actions["team_yellow"][i][1]
             v_theta = actions["team_yellow"][i][2]
+
+            dribbler = actions["team_yellow"][i][4] > 0
+            kick_v_x = RSIM_PARAMS.KICK_SPD if actions["team_yellow"][i][3] > 0 else 0.0
+
             cmd = Robot(
                 yellow=True,  # Yellow team
                 id=i,  # ID of the robot
                 v_x=v_x,
                 v_y=v_y,
                 v_theta=v_theta,
-                kick_v_x=KICK_SPD if actions["team_yellow"][i][3] > 0 else 0.0,
-                dribbler=True if actions["team_yellow"][i][4] > 0 else False,
+                kick_v_x=kick_v_x,
+                dribbler=dribbler,
             )
             commands.append(cmd)
 
         return commands
 
+    def _apply_dribbler_release_kicks(self, commands: list[Robot]) -> None:
+        """Approximate kicks when dribblers turn off for robots that had possession.
+
+        This mutates the provided ``commands`` list in-place, potentially
+        increasing ``kick_v_x`` for robots whose dribbler transitioned from
+        on to off while they were moving with the ball.
+        """
+        KICK_PERSISTENCE_FRAMES = 3
+
+        n_blue = self.n_robots_blue
+        for i in range(n_blue):
+            # Update persistence
+            spd, frames = self.kick_persist_blue[i]
+            if frames > 0:
+                self.kick_persist_blue[i] = (spd, frames - 1)
+                commands[i].kick_v_x = max(commands[i].kick_v_x, spd)
+
+            release = self._dribbler_release_kick(
+                self.prev_dribbler_blue,
+                self.prev_forward_blue,
+                i,
+                commands[i].dribbler,
+            )
+            if release > 0.0:
+                # Trigger new persistence
+                self.kick_persist_blue[i] = (release, KICK_PERSISTENCE_FRAMES)
+                commands[i].kick_v_x = max(commands[i].kick_v_x, release)
+
+        for j in range(self.n_robots_yellow):
+            cmd_idx = n_blue + j
+            # Update persistence
+            spd, frames = self.kick_persist_yellow[j]
+            if frames > 0:
+                self.kick_persist_yellow[j] = (spd, frames - 1)
+                commands[cmd_idx].kick_v_x = max(commands[cmd_idx].kick_v_x, spd)
+
+            release = self._dribbler_release_kick(
+                self.prev_dribbler_yellow,
+                self.prev_forward_yellow,
+                j,
+                commands[cmd_idx].dribbler,
+            )
+            if release > 0.0:
+                self.kick_persist_yellow[j] = (release, KICK_PERSISTENCE_FRAMES)
+                commands[cmd_idx].kick_v_x = max(commands[cmd_idx].kick_v_x, release)
+
+    def _update_dribbler_history(self, commands: list[Robot]) -> None:
+        """Update previous dribbler and forward velocity history for all robots."""
+        n_blue = self.n_robots_blue
+        # Update in-place to avoid list allocation
+        for i in range(n_blue):
+            self.prev_dribbler_blue[i] = commands[i].dribbler
+            self.prev_forward_blue[i] = commands[i].v_x
+        for j in range(self.n_robots_yellow):
+            self.prev_dribbler_yellow[j] = commands[n_blue + j].dribbler
+            self.prev_forward_yellow[j] = commands[n_blue + j].v_x
+
+    def _dribbler_release_kick(
+        self,
+        prev_dribbler: List[bool],
+        prev_forward: List[float],
+        index: int,
+        dribbler: bool,
+    ) -> float:
+        """Estimate the kick needed to release the ball when the dribbler turns off."""
+        if not prev_dribbler[index] or dribbler:
+            return 0.0
+
+        # Require forward motion relative to heading to avoid releasing while backing up
+        forward = prev_forward[index]
+        if forward < MIN_RELEASE_SPEED:
+            return 0.0
+
+        return min(RELEASE_GAIN * forward, MAX_BALL_SPEED)
+
     def _calculate_reward_and_done(self):
-        if self.reward_shaping_total is None:
-            # Initialize reward shaping dictionary (info)
-            self.reward_shaping_total = {
-                "blue_team": {
-                    "goal": 0,
-                    "rbt_in_gk_area": 0,
-                    "done_ball_out": 0,
-                    "done_ball_out_right": 0,
-                    "done_rbt_out": 0,
-                    "energy": 0,
-                },
-                "yellow_team": {
-                    "conceded_goal": 0,
-                    "rbt_in_gk_area": 0,
-                    "done_ball_out": 0,
-                    "done_ball_out_right": 0,
-                    "done_rbt_out": 0,
-                    "energy": 0,
-                },
-            }
-
-        # reward_blue = 0
-        # reward_yellow = 0
-        done = False
-
-        # Field parameters
-        half_len = self.field.length / 2
-        half_wid = self.field.width / 2
-        pen_len = self.field.penalty_length
-        half_pen_wid = self.field.penalty_width / 2
-        half_goal_wid = self.field.goal_width / 2
-
-        ball = self.frame.ball
-
-        def robot_in_gk_area(rbt):
-            return abs(rbt.x) > half_len - pen_len and abs(rbt.y) < half_pen_wid
-
-        # Check if any robot on the blue team exited field or violated rules (for info)
-        for (_, robot_b), (_, robot_y) in zip(self.frame.robots_blue.items(), self.frame.robots_yellow.items()):
-            if abs(robot_y.y) > half_wid or abs(robot_y.x) > half_len:
-                done = True
-                self.reward_shaping_total["blue_team"]["done_rbt_out"] += 1
-            elif abs(robot_y.y) > half_wid or abs(robot_y.x) > half_len:
-                done = True
-                self.reward_shaping_total["yellow_team"]["done_rbt_out"] += 1
-            elif robot_in_gk_area(robot_b):
-                done = True
-                self.reward_shaping_total["blue_team"]["rbt_in_gk_area"] += 1
-            elif robot_in_gk_area(robot_y):
-                done = True
-                self.reward_shaping_total["yellow_team"]["rbt_in_gk_area"] += 1
-
-        # Check if ball exited field or a goal was made (if blue was attacking)
-        # TODO: Add reward shaping for yellow team (obtaining possession of the ball)
-        if abs(ball.y) > half_wid or abs(ball.x) > half_len:
-            done = True
-            self.reward_shaping_total["blue_team"]["done_ball_out"] += 1
-        # if the ball is outside the attacking half for blue team (right half of the field)
-        elif ball.x > half_len:
-            done = True
-            # if the ball is inside the goal area otherwise it is a ball out from goalie line
-            if abs(ball.y) < half_goal_wid:
-                # reward_blue = 5
-                # reward_yellow = -5
-                self.reward_shaping_total["blue_team"]["goal"] += 1
-                self.reward_shaping_total["yellow_team"]["conceded_goal"] += 1
-            else:
-                # reward = 0
-                self.reward_shaping_total["team_blue"]["done_ball_out_right"] += 1
-        # elif self.last_frame is not None:
-
-        # Example: Energy penalty for all blue robots
-        # total_energy_rw_b = 0
-        # total_energy_rw_y = 0
-        # for (_, robot_b), (_, robot_y) in zip(
-        #     self.frame.robots_blue.items(), self.frame.robots_yellow.items()
-        # ):
-        #     total_energy_rw_b += self.__energy_pen(robot_b)
-        #     total_energy_rw_y += self.__energy_pen(robot_y)
-
-        # avg_energy_rw_b = total_energy_rw_b / len(self.frame.robots_blue)
-        # avg_energy_rw_y = total_energy_rw_y / len(self.frame.robots_yellow)
-
-        # energy_rw_b = -(avg_energy_rw_b / self.energy_scale)
-        # energy_rw_y = -(avg_energy_rw_y / self.energy_scale)
-
-        # self.reward_shaping_total["blue_team"]["energy"] += energy_rw_b
-        # self.reward_shaping_total["yellow_team"]["energy"] += energy_rw_y
-
-        # # Total reward (Scoring reward + Energy penalty v )
-        # reward_blue = reward_blue + energy_rw_b
-        # reward_yellow = reward_yellow + energy_rw_y
-
-        # reward = {"blue_team": reward_blue, "yellow_team": reward_yellow}
-
-        reward = 0  # NB: We are not using reward for now
-
-        return reward, done
+        return 1, False
 
     def _get_initial_positions_frame(self):
         """Returns the position of each robot and ball for the initial frame (random placement)"""
@@ -358,14 +378,3 @@ class SSLStandardEnv(SSLBaseEnv):
             pos_frame.robots_yellow[i] = Robot(id=i, x=pos[0], y=pos[1], theta=theta())
 
         return pos_frame
-
-    # def __energy_pen(self, robot):
-    #     # Sum of abs each wheel speed sent
-    #     energy = (
-    #         abs(robot.v_wheel0)
-    #         + abs(robot.v_wheel1)
-    #         + abs(robot.v_wheel2)
-    #         + abs(robot.v_wheel3)
-    #     )
-
-    #     return energy

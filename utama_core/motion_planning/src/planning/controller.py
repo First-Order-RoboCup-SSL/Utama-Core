@@ -13,9 +13,9 @@ from utama_core.motion_planning.src.planning.other_path_planners import (
 
 class TempObstacleType(Enum):
     NONE = []
-    FIELD = [Field.full_field]
-    DEFENCE_ZONES = [Field.left_defense_area, Field.right_defense_area]
-    ALL = [Field.left_defense_area, Field.right_defense_area, Field.full_field]
+    FIELD = [Field.FULL_FIELD]
+    DEFENCE_ZONES = [Field.LEFT_DEFENSE_AREA, Field.RIGHT_DEFENSE_AREA]
+    ALL = [Field.LEFT_DEFENSE_AREA, Field.RIGHT_DEFENSE_AREA, Field.FULL_FIELD]
 
 
 class TimedSwitchController:

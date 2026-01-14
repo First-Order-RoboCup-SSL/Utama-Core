@@ -23,9 +23,9 @@ class GameFrame:
         ball_pos = self.ball.p
         return (
             ball_pos.x < -self.field.half_length
-            and (ball_pos.y < self.field.half_goal_width and ball_pos.y > -self.field.half_goal_width)
+            and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH)
             and not right_goal
             or ball_pos.x > self.field.half_length
-            and (ball_pos.y < self.field.half_goal_width and ball_pos.y > -self.field.half_goal_width)
+            and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH)
             and right_goal
         )

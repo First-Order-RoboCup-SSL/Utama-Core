@@ -6,7 +6,6 @@
 
 from typing import List
 
-import gymnasium as gym
 import numpy as np
 import pygame
 
@@ -26,7 +25,7 @@ from utama_core.rsoccer_simulator.src.Render.overlay import (
 from utama_core.rsoccer_simulator.src.Simulators.rsim import RSimSSL
 
 
-class SSLBaseEnv(gym.Env):
+class SSLBaseEnv:
     metadata = {
         "render.modes": ["human", "rgb_array"],
         "render_modes": ["human", "rgb_array"],
@@ -43,7 +42,6 @@ class SSLBaseEnv(gym.Env):
         time_step: float,
         render_mode=None,
     ):
-        super().__init__()
         # Initialize Simulator
         self.render_mode = render_mode
         self.time_step = time_step
@@ -98,7 +96,6 @@ class SSLBaseEnv(gym.Env):
         return observation, reward, done, False, {}
 
     def reset(self, *, seed=None, options=None):
-        super().reset(seed=seed, options=options)
         self.steps = 0
         self.last_frame = None
         self.sent_commands = None
@@ -268,8 +265,8 @@ class SSLBaseEnv(gym.Env):
             overlay = RenderOverlay(self.overlay, self.field_renderer.scale)
             overlay.draw(self.window_surface)
 
-        for i in range(self.n_robots_blue):
-            robot = self.frame.robots_blue[i]
+        for blue_rb in self.frame.robots_blue.values():
+            robot = blue_rb
             x, y = self._pos_transform(robot.x, robot.y)
             rbt = RenderSSLRobot(
                 x,
@@ -281,8 +278,8 @@ class SSLBaseEnv(gym.Env):
             )
             rbt.draw(self.window_surface)
 
-        for i in range(self.n_robots_yellow):
-            robot = self.frame.robots_yellow[i]
+        for yellow_rb in self.frame.robots_yellow.values():
+            robot = yellow_rb
             x, y = self._pos_transform(robot.x, robot.y)
             rbt = RenderSSLRobot(
                 x,
