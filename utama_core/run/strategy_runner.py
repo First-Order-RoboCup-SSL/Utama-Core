@@ -92,6 +92,7 @@ class StrategyRunner:
         print_real_fps: bool = False,  # Turn this on for RSim
         profiler_name: Optional[str] = None,
         control_scheme: ControlScheme = ControlScheme.PID,
+        opp_control_scheme: Optional[ControlScheme] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -109,7 +110,10 @@ class StrategyRunner:
             else None
         )
 
-        self.motion_controller = control_scheme.get_controller()
+        self.my_motion_controller = control_scheme.get_controller()
+        self.opp_motion_controller = (
+            opp_control_scheme.get_controller() if opp_control_scheme else self.my_motion_controller
+        )
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
         if self.opp_strategy:

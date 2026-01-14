@@ -65,8 +65,9 @@ def move(
             current_time = time.time()
             time_diff = current_time - _last_log_time
 
-            # Avoid division by zero
-            fps = 60.0 / time_diff if time_diff > 0 else 0.0
+            # Avoid division by zero - divide by num robots since each frame calls once per robot
+            num_robots = max(len(_robot_speeds), 1)
+            fps = (60.0 / time_diff) / num_robots if time_diff > 0 else 0.0
             avg_latency_ms = (_total_compute_time / 60) * 1000
 
             # Reset counters
