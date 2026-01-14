@@ -27,7 +27,7 @@ class Kalman_filter:
         Sampling rate (Hz). Default 60.0.
     """
 
-    def __init__(self, id, noise=0.01):
+    def __init__(self, id, noise=5):
         self.id = id
         
         self.state = None  # s; to be initialised by strategy runner with 1st GameFrame
@@ -95,3 +95,131 @@ class Kalman_filter:
                                        time_elapsed)
 
         return VisionRobotData(id=data.id, x=x_f, y=y_f, orientation=th_f)
+
+
+class Kalman_filter_2:
+    def __init__(self, dt=1/60):
+        self.dt = dt
+
+        # [x, y, theta, v, omega]
+        self.x = np.zeros((5, 1))
+
+        self.P = np.eye(5) * 5.0
+
+        # [x, y, theta, v, omega]
+        self.Q = np.diag([1e-2, 1e-2, 1, 1e-2, 1e-1])
+
+        self.R = np.diag([0.1, 0.1, 0.001])
+
+        self.I = np.eye(5)
+
+    def predict(self):
+        theta = self.x[2, 0]
+        v = self.x[3, 0]
+        omega = self.x[4, 0]
+
+        self.x[0, 0] += v * np.cos(theta) * self.dt
+        self.x[1, 0] += v * np.sin(theta) * self.dt
+        self.x[2, 0] += omega * self.dt
+        self.x[2, 0] = self._wrap_angle(self.x[2, 0])
+
+        F = np.eye(5)
+        F[0, 2] = -v * np.sin(theta) * self.dt
+        F[0, 3] = np.cos(theta) * self.dt
+        F[1, 2] = v * np.cos(theta) * self.dt
+        F[1, 3] = np.sin(theta) * self.dt
+        F[2, 4] = self.dt
+
+        self.P = F @ self.P @ F.T + self.Q
+
+    def update(self, z_x, z_y, z_theta):
+        z = np.array([[z_x], [z_y], [z_theta]])
+        h_x = self.x[:3]
+        y = z - h_x
+        y[2, 0] = self._wrap_angle(y[2, 0])
+
+        H = np.zeros((3, 5))
+        H[0, 0] = 1.0 # x measurement
+        H[1, 1] = 1.0 # y measurement
+        H[2, 2] = 1.0 # theta measurement
+
+        S = H @ self.P @ H.T + self.R
+        K = self.P @ H.T @ np.linalg.inv(S)
+
+        self.x = self.x + (K @ y)
+        self.P = (self.I - (K @ H)) @ self.P
+
+        self.x[2, 0] = self._wrap_angle(self.x[2, 0])
+
+    def _wrap_angle(self, angle):
+        """Helper to keep angles between -pi and pi"""
+        return (angle + np.pi) % (2 * np.pi) - np.pi
+
+    def step(self, dfSeries):
+        z_x, z_y, z_theta = dfSeries
+        self.predict()
+        self.update(z_x, z_y, z_theta)
+        return self.x[:3, 0]
+    
+
+    @staticmethod
+    def filter_robot(
+        filter,
+        data: VisionRobotData,
+    ) -> VisionRobotData:
+        
+        # class VisionRobotData: id: int; x: float; y: float; orientation: float
+        (x_f, y_f, th_f) = filter.step([data.x, data.y, data.orientation])
+
+        return VisionRobotData(id=data.id, x=x_f, y=y_f, orientation=th_f)
+
+
+class Kalman_filter_3:
+    def __init__(self, dt=1/60):
+        self.dt = dt
+        self.x = np.array([[0.0],
+                           [0.0]])
+        self.P = np.eye(2)
+        self.F = np.array([[1, self.dt],
+                           [0,1]])
+        self.H = np.array([[1.0, 0.0]])
+        self.Q = np.array([[1e-2, 0.0],
+                           [0.0, 1e-2]])
+
+        self.R = np.array([[0.05]])
+        self.I = np.eye(2)
+
+    def predict(self):
+        self.x = np.dot(self.F, self.x)
+        self.P = np.dot(np.dot(self.F, self.P), self.F.T) + self.Q
+
+    def update(self, z): # z observing value
+        self.S = np.dot(self.H, np.dot(self.P, self.H.T)) + self.R
+        self.K = np.dot(np.dot(self.P, self.H.T), np.linalg.inv(self.S))
+        self.x = self.x + np.dot(self.K, z - np.dot(self.H, self.x))
+        self.P = np.dot(self.I - np.dot(self.K, self.H), self.P)
+
+    def step(self, z):
+        self.predict()
+        self.update(z)
+        return self.x[0, 0]
+    
+
+class Kalman_filter_2D:
+    def __init__(self, dt=1/60):
+        self.kalmanY = Kalman_filter_3(dt)
+        self.kalmanX = Kalman_filter_3(dt)
+
+    def step(self, x, y):
+        return self.kalmanX.step(x), self.kalmanY.step(y)
+
+    @staticmethod
+    def filter_robot(
+        filter,
+        data: VisionRobotData,
+    ) -> VisionRobotData:
+        
+        # class VisionRobotData: id: int; x: float; y: float; orientation: float
+        x_f, y_f = filter.step(data.x, data.y)
+
+        return VisionRobotData(id=data.id, x=x_f, y=y_f, orientation=data.orientation)

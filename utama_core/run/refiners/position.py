@@ -12,15 +12,16 @@ from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
-from utama_core.run.refiners.kalman import Kalman_filter
+from utama_core.run.refiners.filters import FIR_filter
+from utama_core.run.refiners.kalman import Kalman_filter, Kalman_filter_2, Kalman_filter_3, Kalman_filter_2D
 
 # For logging
 TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
 X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
 COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 
-OUTPUT_FILE = "noisy-kalman-pid.csv"
-TARGET_SIZE = 1000
+OUTPUT_FILE = "clean-fir-dwa.csv"
+TARGET_SIZE = 4000
 
 
 class AngleSmoother:
@@ -62,8 +63,11 @@ class PositionRefiner(BaseRefiner):
             self.blue_count = exp_friendly
         
         # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
-        self.kalman_filters_yellow = [Kalman_filter(id, 0.001) for id in range(self.yellow_count)]
-        self.kalman_filters_blue   = [Kalman_filter(id, 0.001) for id in range(self.blue_count)]
+        # self.kalman_filters_yellow = [Kalman_filter(id) for id in range(self.yellow_count)]
+        # self.kalman_filters_blue   = [Kalman_filter(id) for id in range(self.blue_count)]
+        
+        self.kalman_filters_yellow = [FIR_filter() for _ in range(self.yellow_count)]
+        self.kalman_filters_blue   = [FIR_filter() for _ in range(self.blue_count)]
         
         # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
         # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
@@ -114,62 +118,78 @@ class PositionRefiner(BaseRefiner):
         # For filtering
         if self.running:  # Checks if the first valid game frame has been received.
             # filtered_vision_data = combined_vision_data
-            time_elapsed = combined_vision_data.ts - self.last_game_frame.ts
             
-            if game_frame.my_team_is_yellow:
-                filtered_vision_data = VisionData(
-                    ts=combined_vision_data.ts,
-                    
-                    yellow_robots=list(
-                        map(partial(Kalman_filter.filter_robot,
-                                    last_frame=self.last_game_frame.friendly_robots,
-                                    time_elapsed=time_elapsed),
-                        self.kalman_filters_yellow,
-                        sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
-                        ),
-                    
-                    blue_robots=list(
-                        map(partial(Kalman_filter.filter_robot,
-                                    last_frame=self.last_game_frame.enemy_robots,
-                                    time_elapsed=time_elapsed),
-                        self.kalman_filters_blue,
-                        sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
-                        ),
-                    
-                    balls=combined_vision_data.balls
-                )
+            filtered_vision_data: VisionData = VisionData(
+                ts=combined_vision_data.ts,
+                yellow_robots=list(
+                    map(FIR_filter.filter_robot,
+                    self.kalman_filters_yellow,
+                    sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
+                    ),
+                blue_robots=list(
+                    map(FIR_filter.filter_robot,
+                    self.kalman_filters_blue,
+                    sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
+                    ),
+                balls=combined_vision_data.balls
+            )
             
-            else:
-                filtered_vision_data = VisionData(
-                    ts=combined_vision_data.ts,
+            # time_elapsed = combined_vision_data.ts - self.last_game_frame.ts
+            
+            # if game_frame.my_team_is_yellow:
+            #     filtered_vision_data = VisionData(
+            #         ts=combined_vision_data.ts,
                     
-                    yellow_robots=list(
-                        map(partial(Kalman_filter.filter_robot,
-                                    last_frame=self.last_game_frame.enemy_robots,
-                                    time_elapsed=time_elapsed),
-                        self.kalman_filters_yellow,
-                        sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
-                        ),
+            #         yellow_robots=list(
+            #             map(partial(Kalman_filter.filter_robot,
+            #                         last_frame=self.last_game_frame.friendly_robots,
+            #                         time_elapsed=time_elapsed),
+            #             self.kalman_filters_yellow,
+            #             sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
+            #             ),
                     
-                    blue_robots=list(
-                        map(partial(Kalman_filter.filter_robot,
-                                    last_frame=self.last_game_frame.friendly_robots,
-                                    time_elapsed=time_elapsed),
-                        self.kalman_filters_blue,
-                        sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
-                        ),
+            #         blue_robots=list(
+            #             map(partial(Kalman_filter.filter_robot,
+            #                         last_frame=self.last_game_frame.enemy_robots,
+            #                         time_elapsed=time_elapsed),
+            #             self.kalman_filters_blue,
+            #             sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
+            #             ),
                     
-                    balls=combined_vision_data.balls
-                )
+            #         balls=combined_vision_data.balls
+            #     )
+            
+            # else:
+            #     filtered_vision_data = VisionData(
+            #         ts=combined_vision_data.ts,
+                    
+            #         yellow_robots=list(
+            #             map(partial(Kalman_filter.filter_robot,
+            #                         last_frame=self.last_game_frame.enemy_robots,
+            #                         time_elapsed=time_elapsed),
+            #             self.kalman_filters_yellow,
+            #             sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
+            #             ),
+                    
+            #         blue_robots=list(
+            #             map(partial(Kalman_filter.filter_robot,
+            #                         last_frame=self.last_game_frame.friendly_robots,
+            #                         time_elapsed=time_elapsed),
+            #             self.kalman_filters_blue,
+            #             sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
+            #             ),
+                    
+            #         balls=combined_vision_data.balls
+            #     )
             
             # For logging:
             if self.data_collected < TARGET_SIZE:
                 with open(OUTPUT_FILE, "a", newline="") as f:
                     writer = csv.DictWriter(f, COLS)
                     
-                    for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
+                    for y_robot in sorted(filtered_vision_data.yellow_robots, key=lambda r: r.id):
                         writer.writerow({
-                            TS_COL: combined_vision_data.ts,
+                            TS_COL: filtered_vision_data.ts,
                             ID_COL: y_robot.id,
                             COLOR_COL: "yellow",
                             X_COL: y_robot.x,
@@ -177,9 +197,9 @@ class PositionRefiner(BaseRefiner):
                             TH_COL: y_robot.orientation
                         })
                         
-                    # for b_robot in combined_vision_data.blue_robots:
+                    # for b_robot in filtered_vision_data.blue_robots:
                     #     writer.writerow({
-                    #         TS_COL: combined_vision_data.ts,
+                    #         TS_COL: filtered_vision_data.ts,
                     #         ID_COL: b_robot.id,
                     #         COLOR_COL: "blue",
                     #         X_COL: b_robot.x,
