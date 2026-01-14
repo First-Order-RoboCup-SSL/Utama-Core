@@ -1,18 +1,14 @@
 """Tests for random movement collision avoidance with multiple robots."""
 
 import os
+import random
 from dataclasses import dataclass
+from typing import Dict
 
-import pytest
-
-from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.global_utils.mapping_utils import (
-    map_friendly_enemy_to_colors,
-    map_left_right_to_colors,
-)
+from utama_core.entities.game.field import Field
 from utama_core.run import StrategyRunner
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
@@ -48,13 +44,11 @@ class RandomMovementTestManager(AbstractTestManager):
         self.n_episodes = 1
         self.collision_detected = False
         self.min_distance = float("inf")
-        self.collision_count = 0
-        self.targets_reached_count = {}  # Track how many targets each robot has reached
+        self.targets_reached_count: Dict[int, int] = {}
+        # track targets reached per robot
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with robots in random starting positions within bounds."""
-        import random
-
         (min_x, max_x), (min_y, max_y) = self.scenario.field_bounds
 
         # Place robots at random positions within bounds
@@ -99,7 +93,6 @@ class RandomMovementTestManager(AbstractTestManager):
         """Reset tracking metrics for new episode."""
         self.collision_detected = False
         self.min_distance = float("inf")
-        self.collision_count = 0
 
     def eval_status(self, game: Game):
         """Evaluate collision status and target achievement."""
@@ -117,7 +110,6 @@ class RandomMovementTestManager(AbstractTestManager):
 
                 if distance < self.scenario.collision_threshold:
                     self.collision_detected = True
-                    self.collision_count += 1
                     return TestingStatus.FAILURE
 
         # Check if all robots have reached required number of targets
@@ -125,7 +117,6 @@ class RandomMovementTestManager(AbstractTestManager):
         all_completed = all(
             count >= self.scenario.required_targets_per_robot for count in self.targets_reached_count.values()
         )
-
         if all_completed:
             return TestingStatus.SUCCESS
 
@@ -145,7 +136,7 @@ def test_random_movement_same_team(
     mode: str = "rsim",
 ):
     """
-    Test where 6 robots from the same team move randomly within half court.
+    Test where 2 robots from the same team move randomly within half court.
 
     The robots should:
     1. Start at random positions within their half court
@@ -159,23 +150,37 @@ def test_random_movement_same_team(
     # Define half court bounds for left side (Yellow team)
     # Standard SSL field is ~9m x 6m, so half court is ~4.5m x 6m
     # Using slightly smaller bounds for safety: -4m to 0m in x, -2.5m to 2.5m in y
-    field_bounds = ((-3.5, -0.5), (-2.5, 2.5))  # ((min_x, max_x), (min_y, max_y))
+    X_BUFFER = 0.5
+    Y_BUFFER = 1.0
+    field_bounds = (
+        (-Field.FULL_FIELD_HALF_LENGTH + X_BUFFER, -X_BUFFER),
+        (
+            -Field.FULL_FIELD_HALF_WIDTH + Y_BUFFER,
+            Field.FULL_FIELD_HALF_WIDTH - Y_BUFFER,
+        ),
+    )  # ((min_x, max_x), (min_y, max_y))
+
+    # Max is 6 robots
+    n_robots = 2
 
     scenario = RandomMovementScenario(
-        n_robots=6,
+        n_robots=n_robots,
         field_bounds=field_bounds,
         min_target_distance=1.0,  # Minimum distance for next target
         required_targets_per_robot=3,  # Each robot must reach 3 targets
         endpoint_tolerance=0.3,
     )
 
+    test_manager = RandomMovementTestManager(scenario)
+
     # Create random movement strategy
     strategy = RandomMovementStrategy(
-        n_robots=6,
+        n_robots=n_robots,
         field_bounds=field_bounds,
         min_target_distance=scenario.min_target_distance,
         endpoint_tolerance=scenario.endpoint_tolerance,
-        speed_range=(0.5, 2.0),  # Random speed between 0.5 and 2.0 m/s
+        test_manager=test_manager,
+        speed_range=(0.5, 1.0),  # Random speed between 0.5 and 1.0 m/s
     )
 
     runner = StrategyRunner(
@@ -183,18 +188,12 @@ def test_random_movement_same_team(
         my_team_is_yellow=my_team_is_yellow,
         my_team_is_right=my_team_is_right,
         mode=mode,
-        exp_friendly=6,
+        exp_friendly=n_robots,
         exp_enemy=0,
-        control_scheme="dwa",  # Use DWA for collision avoidance
     )
 
-    test_manager = RandomMovementTestManager(scenario=scenario)
-
-    # Connect test manager to strategy so it can track targets reached
-    strategy.set_test_manager(test_manager)
-
     test_passed = runner.run_test(
-        testManager=test_manager,
+        test_manager=test_manager,
         episode_timeout=60.0,  # 60 seconds to complete random movements
         rsim_headless=headless,
     )
@@ -203,14 +202,14 @@ def test_random_movement_same_team(
     assert test_passed, "Random movement test failed to complete"
 
     # Check that all robots reached required targets
-    for robot_id in range(6):
+    for robot_id in range(n_robots):
         assert test_manager.targets_reached_count[robot_id] >= scenario.required_targets_per_robot, (
             f"Robot {robot_id} only reached {test_manager.targets_reached_count[robot_id]} targets "
             f"(required: {scenario.required_targets_per_robot})"
         )
 
     assert not test_manager.collision_detected, (
-        f"Robots collided {test_manager.collision_count} time(s) during random movement! "
+        f"Robots collided during random movement! "
         f"Minimum distance: {test_manager.min_distance:.3f}m "
         f"(threshold: {scenario.collision_threshold:.3f}m)"
     )

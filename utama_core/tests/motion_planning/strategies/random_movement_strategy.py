@@ -1,8 +1,9 @@
 """Strategy for random movement within bounded area."""
 
+from __future__ import annotations
+
 import random
-import time
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import py_trees
 
@@ -11,6 +12,7 @@ from utama_core.entities.game.field import FieldBounds
 from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.tests.common.abstract_test_manager import AbstractTestManager
 
 
 class RandomMovementBehaviour(AbstractBehaviour):
@@ -22,6 +24,7 @@ class RandomMovementBehaviour(AbstractBehaviour):
         field_bounds: ((min_x, max_x), (min_y, max_y)) bounds for movement
         min_target_distance: Minimum distance for selecting next target
         endpoint_tolerance: Distance to consider target reached
+        test_manager: Manager used to record test-related metrics such as targets reached
         speed_range: (min_speed, max_speed) for random speed selection
     """
 
@@ -31,6 +34,7 @@ class RandomMovementBehaviour(AbstractBehaviour):
         field_bounds: Tuple[Tuple[float, float], Tuple[float, float]],
         min_target_distance: float,
         endpoint_tolerance: float,
+        test_manager: AbstractTestManager,
         speed_range: Tuple[float, float] = (0.5, 2.0),
     ):
         super().__init__(name=f"RandomMovement_{robot_id}")
@@ -42,16 +46,19 @@ class RandomMovementBehaviour(AbstractBehaviour):
 
         self.current_target = None
         self.current_speed = None
-        self.targets_reached = 0
+
+        self.test_manager = test_manager
 
     def _generate_random_target(self, current_pos: Vector2D) -> Vector2D:
         """Generate a random target position within bounds, min distance away from current position."""
+        MAX_ATTEMPTS = 50
+        PADDING = 0.3
+
         (min_x, max_x), (min_y, max_y) = self.field_bounds
 
-        max_attempts = 50
-        for _ in range(max_attempts):
-            x = random.uniform(min_x + 0.3, max_x - 0.3)
-            y = random.uniform(min_y + 0.3, max_y - 0.3)
+        for _ in range(MAX_ATTEMPTS):
+            x = random.uniform(min_x + PADDING, max_x - PADDING)
+            y = random.uniform(min_y + PADDING, max_y - PADDING)
             target = Vector2D(x, y)
 
             # Check if target is far enough from current position
@@ -60,8 +67,8 @@ class RandomMovementBehaviour(AbstractBehaviour):
                 return target
 
         # Fallback: just return a random position even if too close
-        x = random.uniform(min_x + 0.3, max_x - 0.3)
-        y = random.uniform(min_y + 0.3, max_y - 0.3)
+        x = random.uniform(min_x + PADDING, max_x - PADDING)
+        y = random.uniform(min_y + PADDING, max_y - PADDING)
         return Vector2D(x, y)
 
     def initialise(self):
@@ -90,11 +97,7 @@ class RandomMovementBehaviour(AbstractBehaviour):
         distance_to_target = robot_pos.distance_to(self.current_target)
         if distance_to_target <= self.endpoint_tolerance:
             # Target reached! Generate new target
-            self.targets_reached += 1
-
-            # Notify test manager if available
-            if hasattr(self.blackboard, "test_manager") and self.blackboard.test_manager:
-                self.blackboard.test_manager.update_target_reached(self.robot_id)
+            self.test_manager.update_target_reached(self.robot_id)
 
             # Generate new target and speed
             self.current_target = self._generate_random_target(robot_pos)
@@ -105,7 +108,10 @@ class RandomMovementBehaviour(AbstractBehaviour):
             rsim_env.draw_point(self.current_target.x, self.current_target.y, color="green")
             # Draw a line to show path
             rsim_env.draw_line(
-                [(robot_pos.x, robot_pos.y), (self.current_target.x, self.current_target.y)],
+                [
+                    (robot_pos.x, robot_pos.y),
+                    (self.current_target.x, self.current_target.y),
+                ],
                 color="blue",
                 width=1,
             )
@@ -132,6 +138,7 @@ class RandomMovementStrategy(AbstractStrategy):
         field_bounds: ((min_x, max_x), (min_y, max_y)) bounds for movement
         min_target_distance: Minimum distance for selecting next target
         endpoint_tolerance: Distance to consider target reached
+        test_manager: Manager used to record test-related metrics such as targets reached
         speed_range: (min_speed, max_speed) for random speed selection
     """
 
@@ -141,6 +148,7 @@ class RandomMovementStrategy(AbstractStrategy):
         field_bounds: Tuple[Tuple[float, float], Tuple[float, float]],
         min_target_distance: float,
         endpoint_tolerance: float,
+        test_manager: AbstractTestManager,
         speed_range: Tuple[float, float] = (0.5, 2.0),
     ):
         self.n_robots = n_robots
@@ -148,18 +156,8 @@ class RandomMovementStrategy(AbstractStrategy):
         self.min_target_distance = min_target_distance
         self.endpoint_tolerance = endpoint_tolerance
         self.speed_range = speed_range
-        self.test_manager = None
-        super().__init__()
-
-    def set_test_manager(self, test_manager):
-        """Set test manager to track targets reached."""
         self.test_manager = test_manager
-
-    def setup_behaviour_tree(self, is_opp_strat: bool = False):
-        """Override to set test_manager in blackboard."""
-        super().setup_behaviour_tree(is_opp_strat)
-        if self.test_manager:
-            self.blackboard.test_manager = self.test_manager
+        super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
         """Requires number of friendly robots to match."""
@@ -172,10 +170,10 @@ class RandomMovementStrategy(AbstractStrategy):
         """Return the movement bounds."""
         (min_x, max_x), (min_y, max_y) = self.field_bounds
 
-        padding = 0.5
+        PADDING = 0.5
         return FieldBounds(
-            top_left=(min_x - padding, max_y + padding),
-            bottom_right=(max_x + padding, min_y - padding),
+            top_left=(min_x - PADDING, max_y + PADDING),
+            bottom_right=(max_x + PADDING, min_y - PADDING),
         )
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
@@ -188,6 +186,7 @@ class RandomMovementStrategy(AbstractStrategy):
                 min_target_distance=self.min_target_distance,
                 endpoint_tolerance=self.endpoint_tolerance,
                 speed_range=self.speed_range,
+                test_manager=self.test_manager,
             )
 
         # Multiple robots - create parallel behaviours
@@ -199,6 +198,7 @@ class RandomMovementStrategy(AbstractStrategy):
                 min_target_distance=self.min_target_distance,
                 endpoint_tolerance=self.endpoint_tolerance,
                 speed_range=self.speed_range,
+                test_manager=self.test_manager,
             )
             behaviours.append(behaviour)
 
