@@ -443,9 +443,6 @@ class DynamicWindowPlanner:
                     for i in range(4):
                         self.env.draw_line([corners[i], corners[(i + 1) % 4]], color="green", width=1)
 
-        print("Our velocity", our_velocity_vector.mag())
-        print("obstacle factor:", obstacle_factor)
-        print("target_distance_factor:", target_progress_factor)
         # Use configured weights
         score = (
             self._w_goal * target_progress_factor
