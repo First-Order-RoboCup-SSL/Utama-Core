@@ -38,26 +38,24 @@ class PID(AbstractPID[float]):
         self.max_output = config.max_output
         self.min_output = config.min_output
 
-    def _calculate(self, target: float, current: float, robot_id: int) -> float:
-        call_func_time = time.time()
+    def _calculate(
+        self,
+        target: float,
+        current: float,
+        robot_id: int,
+    ) -> float:
+        """Compute the PID output to move a robot towards a target with delay compensation."""
         # Compute the basic (instantaneous) error
         raw_error = target - current
         # For angular measurements adjust error
         error = normalise_heading(raw_error)
         # For very small errors, return zero
         if abs(error) < 0.001:
-            self.prev_times[robot_id] = call_func_time
             return 0.0
-
-        # Compute time difference
-        dt = self.dt  # Default
-        if self.prev_times[robot_id] != 0:
-            measured_dt = call_func_time - self.prev_times[robot_id]
-            dt = measured_dt if measured_dt > 0 else self.dt
 
         # Compute derivative term using the previous stored error
         if not self.first_pass[robot_id]:
-            derivative = (error - self.pre_errors[robot_id]) / dt
+            derivative = (error - self.pre_errors[robot_id]) / self.dt
         else:
             derivative = 0.0
             self.first_pass[robot_id] = False
@@ -102,7 +100,6 @@ class PID(AbstractPID[float]):
 
         # Store the error and update the time for the next iteration
         self.pre_errors[robot_id] = error
-        self.prev_times[robot_id] = call_func_time
         # print(f"oren PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
 
         return output
@@ -120,27 +117,17 @@ class TwoDPID(AbstractPID[Vector2D]):
         self.max_velocity = config.max_velocity
 
     def _calculate(self, target: Vector2D, current: Vector2D, robot_id: int) -> Vector2D:
-        call_func_time = time.time()
-
         dx = target[0] - current[0]
         dy = target[1] - current[1]
 
         error = math.hypot(dx, dy)
 
         if abs(error) < 3 / 1000:
-            self.prev_times[robot_id] = call_func_time
             return Vector2D(0.0, 0.0)
-
-        # Compute time difference
-        dt = self.dt
-        if self.prev_times[robot_id] != 0:
-            measured_dt = call_func_time - self.prev_times[robot_id]
-            # Use the measured dt if nonzero; otherwise fall back to self.dt.
-            dt = measured_dt if measured_dt > 0 else self.dt
 
         # Compute derivative term using the previous stored error
         if not self.first_pass[robot_id]:
-            derivative = (error - self.pre_errors[robot_id]) / dt
+            derivative = (error - self.pre_errors[robot_id]) / self.dt
         else:
             derivative = 0.0
             self.first_pass[robot_id] = False
@@ -176,7 +163,6 @@ class TwoDPID(AbstractPID[Vector2D]):
 
         # Store the error and update the time for the next iteration
         self.pre_errors[robot_id] = error
-        self.prev_times[robot_id] = call_func_time
 
         # print(f"x-y PID: {robot_id}, current:{current}, target: {target}, error: {error}, output: {output}")
         if error == 0.0:
