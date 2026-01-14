@@ -59,6 +59,8 @@ main = "python -m main"
 replay = "python -m utama_core.replay.replay_player"
 precommit-install = "pre-commit install && pixi run pre-commit install --hook-type pre-commit"
 precommit-uninstall = "pre-commit uninstall"
+build-mpc-cpp = "pip install -e utama_core/motion_planning/src/mpc_cpp --no-build-isolation"
+main-cpp = { cmd = "python -m main", depends-on = ["build-mpc-cpp"] }
 
 [environments]
 robosim = { features = ["robosim"], no-default-feature = true }

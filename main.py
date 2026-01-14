@@ -28,7 +28,7 @@ def main():
         exp_friendly=6,
         exp_enemy=3,
         replay_writer_config=ReplayWriterConfig(replay_name="test-replay", overwrite_existing=True),
-        control_scheme=ControlScheme.MPC,
+        control_scheme=ControlScheme.MPC_CPP,
     )
     runner.my_strategy.render()
     runner.run()
