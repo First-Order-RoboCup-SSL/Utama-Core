@@ -1,0 +1,1 @@
+When doing a code review, keep your suggestions focused on real issues in readability, maintainability, performance, security, and adherence to best practices. Avoid suggesting trivial minor issues like unused imports, American vs British spelling or minor formatting tweaks unless they significantly impact the quality of the code.
