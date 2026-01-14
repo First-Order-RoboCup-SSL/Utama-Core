@@ -4,7 +4,11 @@ from typing import List, Tuple
 import numpy as np  # type: ignore
 
 from utama_core.entities.game import Game
-from utama_core.global_utils.math_utils import distance, rotate_vector
+from utama_core.global_utils.math_utils import (
+    distance,
+    distance_between_line_segments,
+    rotate_vector,
+)
 from utama_core.motion_planning.src.fastpathplanning.config import (
     fastpathplanningconfig as config,
 )
@@ -26,27 +30,31 @@ class FastPathPlanner:
         self.OBSTACLE_CLEARANCE = self.config.OBSTACLE_CLEARANCE
         self.LOOK_AHEAD_RANGE = self.config.LOOK_AHEAD_RANGE
         self.SUBGOAL_DISTANCE = self.config.SUBGOAL_DISTANCE
+        self.MAXRECURSIONLENGTH = self.config.MAXRECURSION_LENGTH
+        self.PROJECTEDFRAMES = self.config.PROJECTEDFRAMES
 
-    def _get_obstacles(self, game: Game, robot_id: int, robotpos, target) -> List[np.ndarray]:
+    def _get_obstacles(self, game: Game, robot_id: int, ourpos, target):
         friendly_obstacles = [robot for robot in game.friendly_robots.values() if robot.id != robot_id]
         robots = friendly_obstacles + list(game.enemy_robots.values())
         obstaclelist = []
         for r in robots:
-            if r.v.x != 0.0 and r.v.y != 0.0:
-                for i in range(0, 2):
+            robotpos = np.array([r.p.x, r.p.y])
+            if (
+                distance(ourpos, robotpos) < self.LOOK_AHEAD_RANGE
+                and distance(robotpos, ourpos) > self.OBSTACLE_CLEARANCE
+                and distance(robotpos, target) > self.OBSTACLE_CLEARANCE
+            ):
+                if abs(r.v.x) > 10e-10 and abs(r.v.y) > 10e-10:
                     velocity = np.array([r.v.x, r.v.y])
-                    unitvec = velocity / np.linalg.norm(velocity)
-                    point = np.array([r.p.x, r.p.y]) + i * unitvec * self.OBSTACLE_CLEARANCE
-                    if (
-                        distance(point, robotpos) < self.LOOK_AHEAD_RANGE
-                        and distance(point, robotpos) > self.OBSTACLE_CLEARANCE
-                        and distance(point, target) > self.OBSTACLE_CLEARANCE
-                    ):
-                        self._env.draw_point(point[0], point[1], width=20)
-                        obstaclelist.append(point)
+                    # unitvec = velocity/np.linalg.norm(velocity)
+                    point = np.array([r.p.x, r.p.y]) + velocity * self.PROJECTEDFRAMES / 60
+                    obstalcesegment = (robotpos, point)
+                    obstaclelist.append(obstalcesegment)
+                else:
+                    obstaclelist.append((robotpos, robotpos))
         return obstaclelist
 
-    def _find_subgoal(self, robotpos, target, obstaclepos, obstacles, recursionfactor, multiple) -> np.array:
+    def _find_subgoal(self, robotpos, target, closestobstacle, obstacles, recursionfactor, multiple) -> np.array:
         direction = target - robotpos
 
         if recursionfactor % 2 == 1:
@@ -55,11 +63,13 @@ class FastPathPlanner:
             perp_dir = rotate_vector(direction[0], direction[1], math.pi * 3 / 2)
 
         unitvec = perp_dir / np.linalg.norm(perp_dir)
+        obstaclepos = (closestobstacle[0] + closestobstacle[1]) / 2
         subgoal = obstaclepos + self.SUBGOAL_DISTANCE * unitvec * multiple
+
         for o in obstacles:
-            if distance(o, subgoal) < self.OBSTACLE_CLEARANCE:
+            if point_to_segment_distance(subgoal, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
                 subgoal = self._find_subgoal(
-                    robotpos, target, obstaclepos, obstacles, recursionfactor + 1, multiple + 1
+                    robotpos, target, closestobstacle, obstacles, recursionfactor + 1, multiple + 1
                 )
         return subgoal
 
@@ -69,13 +79,13 @@ class FastPathPlanner:
         closestobstacle = None
         tempdistance = distance(segment[0], segment[1])
         for o in obstacles:
-            if point_to_segment_distance(o, segment[0], segment[1]) < self.OBSTACLE_CLEARANCE:
-                if (closestobstacle is None or distance(o, segment[0]) < tempdistance) and distance(
-                    o, segment[1]
-                ) > self.OBSTACLE_CLEARANCE:
-                    tempdistance = distance(segment[0], o)
+            # print('hello',o,segment)
+            if distance_between_line_segments(o, segment) < self.OBSTACLE_CLEARANCE:
+                obstacledistance = point_to_segment_distance(segment[0], o[0], o[1])
+                if closestobstacle is None or obstacledistance < tempdistance:
+                    tempdistance = obstacledistance
                     closestobstacle = o
-        print(closestobstacle)
+
         return closestobstacle
 
     def _trajectory_length(self, trajectory):
@@ -88,7 +98,7 @@ class FastPathPlanner:
         self, segment: Tuple, obstacles, recursionlength, target
     ):  # if there are obstacles in the segment, it divdes, the segment into two segments(initial_pos, subgoal) and (subgoal, target_pos), else returns the original segment.
         closestobstacle = self.collides(segment, obstacles, target)
-        if closestobstacle is not None and recursionlength < 5:
+        if closestobstacle is not None and recursionlength < self.MAXRECURSIONLENGTH:
             subgoal = []
             subgoal.append(self._find_subgoal(segment[0], segment[1], closestobstacle, obstacles, 1, 1))
             subgoal.append(self._find_subgoal(segment[0], segment[1], closestobstacle, obstacles, 0, 1))
