@@ -46,7 +46,7 @@ class RealRobotController(AbstractRobotController):
     def send_robot_commands(self) -> None:
         """Sends the robot commands to the appropriate team (yellow or blue)."""
         # print(list(self.out_packet))
-        # binary_representation = [f"{byte:08b}" for byte in self.out_packet]
+        # binary_representation = [f"{byte:02x}" for byte in self.out_packet]
         # print(binary_representation)
         if self._n_robots_unassigned != 0:
             warnings.warn(
@@ -81,12 +81,10 @@ class RealRobotController(AbstractRobotController):
             raise RuntimeError(f"All {self._n_friendly} robot command slots are already assigned this frame.")
         c_command = self._convert_float16_command(robot_id, command)
         command_buffer = self._generate_command_buffer(robot_id, c_command)
-        start_idx = (
-            self._n_friendly - self._n_robots_unassigned
-        ) * self._rbt_cmd_size + 1  # account for the start frame byte
-        self._out_packet[start_idx : start_idx + self._rbt_cmd_size] = (
-            command_buffer  # +1 to account for start frame byte
-        )
+        start_idx = (self._n_friendly - self._n_robots_unassigned) * (
+            self._rbt_cmd_size + 2
+        )  # account for start and end bytes per robot
+        self._out_packet[start_idx + 1 : start_idx + self._rbt_cmd_size + 1] = command_buffer
         self._n_robots_unassigned -= 1
 
     # def _populate_robots_info(self, data_in: bytes) -> None:
@@ -168,7 +166,7 @@ class RealRobotController(AbstractRobotController):
             )
             angular_vel = MAX_ANGULAR_VEL if command.angular_vel > 0 else -MAX_ANGULAR_VEL
         # TODO put back to max_vel
-        if abs(command.local_forward_vel) > 0.8:
+        if abs(command.local_forward_vel) > MAX_VEL:
             warnings.warn(
                 f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
             )
@@ -205,9 +203,11 @@ class RealRobotController(AbstractRobotController):
             INVALID_RBT_ID = 0xFF
             commands = bytearray()
             for _ in range(self._n_friendly):
-                cmd = bytearray([INVALID_RBT_ID] + [0] * (self._rbt_cmd_size - 1))  # empty command for each robot
+                cmd = bytearray(
+                    [0xAA] + [INVALID_RBT_ID] + [0] * (self._rbt_cmd_size - 1) + [0x55]
+                )  # empty command for each robot
                 commands.extend(cmd)
-            self._cached_empty_command = bytearray([0xAA]) + commands + bytearray([0x55])
+            self._cached_empty_command = commands
         return self._cached_empty_command.copy()
 
     def _init_serial(self) -> Serial:

@@ -48,7 +48,6 @@ class PositionRefiner(BaseRefiner):
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
         #             print(f"robot orientation: {robot.orientation}")
-
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
             game_frame,
             combined_vision_data.yellow_robots,
@@ -77,7 +76,6 @@ class PositionRefiner(BaseRefiner):
                 enemy_robots=new_yellow_robots,
                 ball=new_ball,
             )
-
         return new_game_frame
 
     # Static methods
@@ -177,7 +175,7 @@ class PositionRefiner(BaseRefiner):
 
 
 class CameraCombiner:
-    BALL_CONFIDENCE_THRESHOLD = 0.1
+    BALL_CONFIDENCE_THRESHOLD = 0.001
     BALL_MERGE_THRESHOLD = 0.05
 
     def combine_cameras(self, frames: List[RawVisionData]) -> VisionData:

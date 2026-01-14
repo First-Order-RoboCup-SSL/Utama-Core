@@ -74,6 +74,6 @@ class StartupStrategy(AbstractStrategy):
 
         ### Assemble the tree ###
 
-        coach_root.add_children([StartupFormationStep()])
+        # coach_root.add_children([StartupFormationStep()])
 
         return coach_root

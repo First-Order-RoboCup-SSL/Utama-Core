@@ -664,6 +664,7 @@ class StrategyRunner:
         new_game_frame = self.velocity_refiner.refine(game_history, new_game_frame)  # , robot_frame.imu_data)
         new_game_frame = self.robot_info_refiner.refine(new_game_frame, responses)
         # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)
+        print(new_game_frame.ball.p)
 
         # Store updated game frame
         if running_opp:
