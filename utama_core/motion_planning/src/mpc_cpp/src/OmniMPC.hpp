@@ -5,7 +5,7 @@
 
 struct MPCConfig {
     int T = 5;
-    double DT = 0.05;
+    double DT = 0.5;
     double max_vel = 2.0;
     double max_accel = 3.0;
     double Q_pos = 200.0;
