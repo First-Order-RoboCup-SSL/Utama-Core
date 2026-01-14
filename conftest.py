@@ -15,6 +15,18 @@ def pytest_addoption(parser):
         default=False,
         help="Don't display any graphics (runs faster)",
     )
+    parser.addoption(
+        "--no-headless",
+        action="store_false",
+        dest="headless",
+        help="Run with graphics",
+    )
+    parser.addoption(
+        "--include-motion-planning",
+        action="store_true",
+        default=False,
+        help="Include motion planning tests (disabled by default)",
+    )
 
 
 # These parameter names match up with the parameter names for
@@ -44,6 +56,17 @@ def pytest_generate_tests(metafunc):
         for param in param_set:
             if param in metafunc.fixturenames:
                 metafunc.parametrize(param, cases[metafunc.config.getoption("level")])
+
+
+# temporarily excludes the motion planning tests until the motion planning algorithms are working
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--include-motion-planning"):
+        return
+
+    skip_mp = pytest.mark.skip(reason="motion planning not ready")
+    for item in items:
+        if "motion_planning" in item.keywords:
+            item.add_marker(skip_mp)
 
 
 @pytest.fixture

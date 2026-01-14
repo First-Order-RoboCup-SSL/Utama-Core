@@ -166,39 +166,39 @@ class Field:
     ### Class Properties for standard field dimensions ###
 
     @ClassProperty
-    def half_goal_width(cls) -> float:
+    def HALF_GOAL_WIDTH(cls) -> float:
         return cls._HALF_GOAL_WIDTH
 
     @ClassProperty
-    def left_goal_line(cls) -> np.ndarray:
+    def LEFT_GOAL_LINE(cls) -> np.ndarray:
         return cls._LEFT_GOAL_LINE
 
     @ClassProperty
-    def right_goal_line(cls) -> np.ndarray:
+    def RIGHT_GOAL_LINE(cls) -> np.ndarray:
         return cls._RIGHT_GOAL_LINE
 
     @ClassProperty
-    def left_defense_area(cls) -> np.ndarray:
+    def LEFT_DEFENSE_AREA(cls) -> np.ndarray:
         return cls._LEFT_DEFENSE_AREA
 
     @ClassProperty
-    def right_defense_area(cls) -> np.ndarray:
+    def RIGHT_DEFENSE_AREA(cls) -> np.ndarray:
         return cls._RIGHT_DEFENSE_AREA
 
     @ClassProperty
-    def full_field_half_length(cls) -> float:
+    def FULL_FIELD_HALF_LENGTH(cls) -> float:
         return cls._FULL_FIELD_HALF_LENGTH
 
     @ClassProperty
-    def full_field_half_width(cls) -> float:
+    def FULL_FIELD_HALF_WIDTH(cls) -> float:
         return cls._FULL_FIELD_HALF_WIDTH
 
     @ClassProperty
-    def full_field(cls) -> np.ndarray:
+    def FULL_FIELD(cls) -> np.ndarray:
         return cls._FULL_FIELD
 
     @ClassProperty
-    def full_field_bounds(cls) -> FieldBounds:
+    def FULL_FIELD_BOUNDS(cls) -> FieldBounds:
         return FieldBounds(
             top_left=(-cls._FULL_FIELD_HALF_LENGTH, cls._FULL_FIELD_HALF_WIDTH),
             bottom_right=(cls._FULL_FIELD_HALF_LENGTH, -cls._FULL_FIELD_HALF_WIDTH),
