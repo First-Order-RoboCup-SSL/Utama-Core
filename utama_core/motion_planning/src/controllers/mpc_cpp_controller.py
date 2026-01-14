@@ -36,15 +36,27 @@ class MPCCppController(PIDController):
             # Configure C++ MPC
             # These values match your "Overdamped" Python tuning
             config = mpc_cpp_extension.MPCConfig()
-            config.T = 5
+            # """
+            config.T = 20
+            config.DT = 0.025
+            config.max_vel = 2.0
+            config.max_accel = 3.0
+            config.Q_pos = 200.0
+            config.Q_vel = 20.0
+            config.R_accel = 1.0
+            config.obstacle_buffer_ratio = 1.1
+            config.safety_vel_coeff = 0.25
+            """
+            config.T = 12
             config.DT = 0.05
             config.max_vel = 2.0
             config.max_accel = 3.0
             config.Q_pos = 200.0
             config.Q_vel = 20.0
-            config.R_accel = 0.5
-            config.obstacle_buffer_ratio = 1.25
-            config.safety_vel_coeff = 0.15
+            config.R_accel = 1.0
+            config.obstacle_buffer_ratio = 1.1
+            config.safety_vel_coeff = 0.3
+            """
 
             self.mpc = mpc_cpp_extension.OmniMPC(config)
             print("[MPCCppController] 🚀 C++ MPC Engine Loaded")

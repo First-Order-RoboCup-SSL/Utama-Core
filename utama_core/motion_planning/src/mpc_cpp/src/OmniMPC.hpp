@@ -3,18 +3,19 @@
 #include <vector>
 #include <tuple>
 
+// Empty because values are configured in mpc_cpp_controller.py
 struct MPCConfig {
-    int T = 5;
-    double DT = 0.5;
-    double max_vel = 2.0;
-    double max_accel = 3.0;
-    double Q_pos = 200.0;
-    double Q_vel = 20.0;
-    double R_accel = 0.5;
-    double Q_slack = 5000000.0;
-    double robot_radius = 0.09;
-    double obstacle_buffer_ratio = 1.25;
-    double safety_vel_coeff = 0.15;
+    int    T;
+    double DT;
+    double max_vel;
+    double max_accel;
+    double Q_pos;
+    double Q_vel;
+    double R_accel;
+    double Q_slack;
+    double robot_radius;
+    double obstacle_buffer_ratio;
+    double safety_vel_coeff;
 };
 
 class OmniMPC {
