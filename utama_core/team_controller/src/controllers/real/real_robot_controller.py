@@ -56,11 +56,10 @@ class RealRobotController(AbstractRobotController):
         self._serial_port.read_all()
         # data_in = self._serial.read_all()
         # print(data_in)
-
         # TODO: add receiving feedback from the robots
 
         self._out_packet = self._empty_command()  # flush the out_packet
-        self._n_robots_unassigned = self._n_friendly
+        self._assigned_mapping = {}  # reset assigned mapping
 
     def add_robot_commands(
         self,
@@ -91,13 +90,13 @@ class RealRobotController(AbstractRobotController):
             )
             return
         else:
-            start_idx = len(self._assigned_mapping) * (
-                self._rbt_cmd_size + 2
-            )  # account for start and end bytes per robot
+            assigned_idx = len(self._assigned_mapping)
+            start_idx = assigned_idx * (self._rbt_cmd_size + 2)  # account for start and end bytes per robot
+            self._assigned_mapping[robot_id] = assigned_idx
+
         c_command = self._convert_float16_command(robot_id, command)
         command_buffer = self._generate_command_buffer(robot_id, c_command)
         self._out_packet[start_idx + 1 : start_idx + self._rbt_cmd_size + 1] = command_buffer
-        self._assigned_mapping[robot_id] = len(self._assigned_mapping)
 
     # def _populate_robots_info(self, data_in: bytes) -> None:
     #     """

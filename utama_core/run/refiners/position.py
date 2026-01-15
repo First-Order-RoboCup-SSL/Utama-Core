@@ -48,6 +48,7 @@ class PositionRefiner(BaseRefiner):
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
         #             print(f"robot orientation: {robot.orientation}")
+
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
             game_frame,
             combined_vision_data.yellow_robots,
