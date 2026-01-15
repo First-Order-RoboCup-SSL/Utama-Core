@@ -114,7 +114,7 @@ class RealRobotController(AbstractRobotController):
         """Generates the command buffer to be sent to the robot."""
         assert robot_id < 6, "Invalid robot_id. Must be between 0 and 5."
 
-        # endianess: little endian
+        # endianness: little endian
         packet = bytearray(
             [
                 robot_id & 0xFF,  # Robot ID

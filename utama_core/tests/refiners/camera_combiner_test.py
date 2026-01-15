@@ -63,8 +63,17 @@ def test_combine_with_both_camera_empty_gives_empty():
     assert combined_data.balls == []
 
 
+def test_combine_filters_low_confidence():
+    balls = {
+        0: [RawBallData(0, 0, 0, 0.05), RawBallData(5, 5, 0, 0.05)],
+        1: [RawBallData(0.02, 0.02, 0, 0.05)],
+    }
+    assert len(CameraCombiner()._combine_balls_by_proximity(balls)) == 2
+
+
 if __name__ == "__main__":
     test_combine_same_robots_produces_same()
     test_combine_with_one_camera_empty()
     test_combine_with_both_camera_empty_gives_empty()
     test_combine_proximity_multiple_balls()
+    test_combine_filters_low_confidence()
