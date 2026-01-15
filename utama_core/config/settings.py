@@ -32,9 +32,12 @@ BAUD_RATE = 115200
 PORT = "/dev/ttyUSB0"
 TIMEOUT = 0.1
 
-MAX_GAME_HISTORY = 20
+MAX_GAME_HISTORY = 20  # number of previous game states to keep in Game
 
 REPLAY_BASE_PATH = Path.cwd() / "replays"
 RENDER_BASE_PATH = Path.cwd() / "renders"
 
 FPS_PRINT_INTERVAL = 1.0  # seconds
+
+### Refiners ###
+BALL_MERGE_THRESHOLD = 0.05  # CameraCombiner: distance threshold to merge balls (m)
