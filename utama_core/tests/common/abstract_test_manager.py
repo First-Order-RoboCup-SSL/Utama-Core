@@ -17,6 +17,17 @@ class TestingStatus(Enum):
 
 
 class AbstractTestManager(ABC):
+    """Abstract base class for test managers to run strategy tests."""
+
+    ### Specify in subclass ###
+    n_episodes: int  # number of episodes for the test
+    ##############################
+
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+        if not hasattr(cls, "n_episodes"):
+            raise NotImplementedError(f"Subclass {cls.__name__} must define 'n_episodes' class attribute.")
+
     def __init__(self):
         self.current_episode_number = 0
         self.my_strategy: AbstractStrategy = None
@@ -53,17 +64,6 @@ class AbstractTestManager(ABC):
         - TestingStatus.SUCCESS: test passed (terminate the episode with success)
         - TestingStatus.FAILURE: test failed (terminate the episode with failure)
         - TestingStatus.IN_PROGRESS: test still ongoing (continue running the episode)
-        """
-        ...
-
-    @abstractmethod
-    @property
-    def n_episodes(self) -> int:
-        """
-        Specify here the number of episodes the test manager should run.
-
-        Returns:
-            int: Number of episodes to run.
         """
         ...
 

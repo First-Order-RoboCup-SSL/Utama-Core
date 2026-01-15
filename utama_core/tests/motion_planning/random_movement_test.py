@@ -38,10 +38,11 @@ class RandomMovementScenario:
 class RandomMovementTestManager(AbstractTestManager):
     """Test manager for random movement with collision detection."""
 
+    n_episodes = 1
+
     def __init__(self, scenario: RandomMovementScenario):
         super().__init__()
         self.scenario = scenario
-        self.n_episodes = 1
         self.collision_detected = False
         self.min_distance = float("inf")
         self.targets_reached_count: Dict[int, int] = {}
@@ -121,9 +122,6 @@ class RandomMovementTestManager(AbstractTestManager):
             return TestingStatus.SUCCESS
 
         return TestingStatus.IN_PROGRESS
-
-    def get_n_episodes(self):
-        return self.n_episodes
 
     def update_target_reached(self, robot_id: int):
         """Called by strategy when a robot reaches a target."""
