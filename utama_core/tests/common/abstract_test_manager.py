@@ -19,9 +19,9 @@ class TestingStatus(Enum):
 class AbstractTestManager(ABC):
     """Abstract base class for test managers to run strategy tests."""
 
-    ### Specify in subclass ###
+    ### To be specified in your test manager ###
     n_episodes: int  # number of episodes for the test
-    ##############################
+    ############################################
 
     def __init_subclass__(cls):
         super().__init_subclass__()
