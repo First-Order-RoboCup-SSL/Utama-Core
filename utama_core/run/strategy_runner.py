@@ -502,7 +502,7 @@ class StrategyRunner:
         signal.signal(signal.SIGINT, self._handle_sigint)
 
         passed = True
-        n_episodes = test_manager.get_n_episodes()
+        n_episodes = test_manager.n_episodes
         if not rsim_headless and self.rsim_env:
             self.rsim_env.render_mode = "human"
         if self.sim_controller is None:

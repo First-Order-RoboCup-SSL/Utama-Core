@@ -30,11 +30,12 @@ class CollisionAvoidanceScenario:
 class CollisionAvoidanceTestManager(AbstractTestManager):
     """Test manager that validates obstacle avoidance and target completion."""
 
+    n_episodes = 1
+
     def __init__(self, scenario: CollisionAvoidanceScenario, robot_id: int):
         super().__init__()
         self.scenario = scenario
         self.robot_id = robot_id
-        self.n_episodes = 1
         self.endpoint_reached = False
         self.collision_detected = False
         self.min_obstacle_distance = float("inf")
@@ -119,9 +120,6 @@ class CollisionAvoidanceTestManager(AbstractTestManager):
             return TestingStatus.SUCCESS
 
         return TestingStatus.IN_PROGRESS
-
-    def get_n_episodes(self):
-        return self.n_episodes
 
 
 @pytest.mark.parametrize(
