@@ -493,6 +493,12 @@ class StrategyRunner:
         episode_timeout: float = 10.0,
         rsim_headless: bool = False,
     ) -> bool:
+        """Run a test with the given test manager and episode timeout.
+        Args:
+            test_manager (AbstractTestManager): The test manager to run the test.
+            episode_timeout (float): The timeout for each episode in seconds.
+            rsim_headless (bool): Whether to run RSim in headless mode. Defaults to False.
+        """
         signal.signal(signal.SIGINT, self._handle_sigint)
 
         passed = True
