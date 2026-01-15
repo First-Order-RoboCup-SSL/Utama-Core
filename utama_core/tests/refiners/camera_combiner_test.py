@@ -53,23 +53,6 @@ def test_combine_proximity_multiple_balls():
     assert len(balls) == 4
 
 
-def test_combine_filters_low_confidence():
-    balls = {
-        0: [RawBallData(0, 0, 0, 0.05), RawBallData(5, 5, 0, 0.05)],
-        1: [RawBallData(0.02, 0.03, 0, 0.05)],
-    }
-    assert len(CameraCombiner()._combine_balls_by_proximity(balls)) == 0
-
-
-def test_combine_filters_removing_one_low_confidence_correctly():
-    # Filtered ball should not contribute to result
-    original = RawBallData(0, 0, 0, 1)
-    balls = {0: [original], 1: [RawBallData(0.02, 0.03, 0, 0.05)]}
-    result = CameraCombiner()._combine_balls_by_proximity(balls)
-    assert len(result) == 1
-    assert result[0] == original
-
-
 def test_combine_with_both_camera_empty_gives_empty():
     raw_vision_data_cam2 = RawVisionData(0, [], [], [], 1)
     raw_vision_data_cam1 = RawVisionData(0, [], [], [], 0)
@@ -85,4 +68,3 @@ if __name__ == "__main__":
     test_combine_with_one_camera_empty()
     test_combine_with_both_camera_empty_gives_empty()
     test_combine_proximity_multiple_balls()
-    test_combine_filters_low_confidence()

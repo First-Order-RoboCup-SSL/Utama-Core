@@ -175,7 +175,6 @@ class PositionRefiner(BaseRefiner):
 
 
 class CameraCombiner:
-    BALL_CONFIDENCE_THRESHOLD = 0.001
     BALL_MERGE_THRESHOLD = 0.05
 
     def combine_cameras(self, frames: List[RawVisionData]) -> VisionData:
@@ -234,17 +233,16 @@ class CameraCombiner:
         combined_balls: List[VisionBallData] = []
         for ball_list in bs.values():
             for b in ball_list:
-                if b.confidence > CameraCombiner.BALL_CONFIDENCE_THRESHOLD:
-                    found = False
-                    for i, cb in enumerate(combined_balls):
-                        if CameraCombiner.ball_merge_predicate(b, cb):
-                            found = True
-                            combined_balls[i] = CameraCombiner.ball_merge(cb, b)
-                            break
+                found = False
+                for i, cb in enumerate(combined_balls):
+                    if CameraCombiner.ball_merge_predicate(b, cb):
+                        found = True
+                        combined_balls[i] = CameraCombiner.ball_merge(cb, b)
+                        break
 
-                    if not found:
-                        # If no ball close enough, must have found a new separate ball
-                        combined_balls.append(b)
+                if not found:
+                    # If no ball close enough, must have found a new separate ball
+                    combined_balls.append(b)
         return combined_balls
 
     def ball_merge_predicate(b1: RawBallData, b2: RawBallData) -> bool:
