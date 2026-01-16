@@ -47,6 +47,9 @@ class PositionRefiner(BaseRefiner):
         combined_vision_data = CameraCombiner().combine_cameras(frames)
 
         # for robot in combined_vision_data.yellow_robots:
+        #     robot.add_gaussian_noise()
+        
+        # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
         #             print(f"robot orientation: {robot.orientation}")
 

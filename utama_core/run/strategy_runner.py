@@ -76,6 +76,7 @@ class StrategyRunner:
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
         print_real_fps (bool, optional): Whether to print real FPS. Defaults to False.
         profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
+        rsim_noise (float, optional): When running in rsim, add Gaussian noise with the given standard deviation. Defaults to 0.
     """
 
     def __init__(
@@ -93,6 +94,7 @@ class StrategyRunner:
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         print_real_fps: bool = False,  # Turn this on for RSim
         profiler_name: Optional[str] = None,
+        rsim_noise: float = 0
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -116,7 +118,7 @@ class StrategyRunner:
             self.opp_strategy.setup_behaviour_tree(is_opp_strat=True)
 
         self._assert_exp_robots()
-        self.rsim_env, self.sim_controller = self._load_sim()
+        self.rsim_env, self.sim_controller = self._load_sim(rsim_noise)
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
         self._load_robot_controllers()
 
@@ -217,10 +219,14 @@ class StrategyRunner:
 
     def _load_sim(
         self,
+        rsim_noise=0
     ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
         """Mode RSIM: Loads the RSim environment with the expected number of robots and corresponding sim controller.
         Mode GRSIM: Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of
         robots is met.
+        
+        Args:
+            rsim_noise (float, optional): When running in rsim, add Gaussian noise with the given standard deviation. Defaults to 0.
 
         Returns:
             SSLBaseEnv: The RSim environment (Otherwise None).
@@ -228,7 +234,7 @@ class StrategyRunner:
         """
         if self.mode == Mode.RSIM:
             n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
-            rsim_env = SSLStandardEnv(n_robots_yellow=n_yellow, n_robots_blue=n_blue, render_mode=None)
+            rsim_env = SSLStandardEnv(n_robots_yellow=n_yellow, n_robots_blue=n_blue, render_mode=None, gaussian_noise=rsim_noise)
 
             if self.opp_strategy:
                 self.opp_strategy.load_rsim_env(rsim_env)
