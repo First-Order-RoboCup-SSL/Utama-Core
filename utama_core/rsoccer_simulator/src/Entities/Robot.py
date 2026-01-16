@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from numpy.random import normal
 
 
 @dataclass()
@@ -21,3 +22,10 @@ class Robot:
     v_wheel1: float = 0  # rad/s
     v_wheel2: float = 0  # rad/s
     v_wheel3: float = 0  # rad/s
+    
+    
+    def add_gaussian_noise(self, sd_in_cm: float=10.0, bias: float=0):
+        sd_in_m = sd_in_cm / 100
+        
+        self.x += normal(loc=bias, scale=sd_in_m)
+        self.y += normal(loc=bias, scale=sd_in_m)
