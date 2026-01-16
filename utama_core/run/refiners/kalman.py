@@ -27,7 +27,7 @@ class Kalman_filter:
         Sampling rate (Hz). Default 60.0.
     """
 
-    def __init__(self, id, noise=5):
+    def __init__(self, id, noise=0.1):
         self.id = id
         
         self.state = None  # s; to be initialised by strategy runner with 1st GameFrame
