@@ -30,6 +30,17 @@ def defend_parameter(
         y4 = y1 + t * (y2 - y1)
 
         target_pos = np.array([x4, y4])
+        if target_pos[0] > 4.0:
+            if target_pos[1] < 1.0 and target_pos[1] >= 0:
+                if 4.5 - target_pos[0] < target_pos[1] - 1.0:
+                    target_pos[0] = 4.0
+                else:
+                    target_pos[1] = 1.0
+            elif target_pos[1] > -1.0 and target_pos[1] < 0:
+                if 4.5 - target_pos[0] < -1.0 - target_pos[1]:
+                    target_pos[0] = 4.0
+                else:
+                    target_pos[1] = -1.0
         return go_to_point(
                 game,
                 motion_controller,
@@ -37,8 +48,6 @@ def defend_parameter(
                 Vector2D(target_pos[0], target_pos[1]),
                 dribbling=True,
             )
-        
-    shooting_enemy = game.enemy_robots[0]
 
     robot_rad = 0.09 
 
@@ -62,6 +71,17 @@ def defend_parameter(
     target_pos = np.array([x4, y4]) - vec_dir * robot_rad
 
     target_oren = np.pi if game.my_team_is_right else 0
+    if target_pos[0] > 4.0:
+        if target_pos[1] < 1.0 and target_pos[1] >= 0:
+            if 4.5 - target_pos[0] < target_pos[1] - 1.0:
+                target_pos[0] = 4.0
+            else:
+                target_pos[1] = 1.0
+        elif target_pos[1] > -1.0 and target_pos[1] < 0:
+            if 4.5 - target_pos[0] < -1.0 - target_pos[1]:
+                target_pos[0] = 4.0
+            else:
+                target_pos[1] = -1.0
     return move(
         game,
         motion_controller,
