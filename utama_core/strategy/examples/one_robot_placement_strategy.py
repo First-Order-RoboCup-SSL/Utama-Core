@@ -34,6 +34,7 @@ class RobotPlacementStep(AbstractBehaviour):
         super().__init__()
         self.ty = 0.5
         self.tx = 1.1
+        self.robot_id_key = rd_robot_id
 
     def setup_(self):
         self.blackboard.register_key(key=self.robot_id_key, access=py_trees.common.Access.READ)

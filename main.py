@@ -10,11 +10,11 @@ from utama_core.strategy.examples import (
 
 def main():
     runner = StrategyRunner(
-        strategy=RobotPlacementStrategy(robot_id=0),
-        my_team_is_yellow=False,
+        strategy=RobotPlacementStrategy(robot_id=1),
+        my_team_is_yellow=True,
         my_team_is_right=True,
         mode="real",
-        exp_friendly=1,
+        exp_friendly=2,
         exp_enemy=0,
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         print_real_fps=True,
