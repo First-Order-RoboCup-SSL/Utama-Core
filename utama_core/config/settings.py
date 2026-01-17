@@ -33,3 +33,6 @@ REPLAY_BASE_PATH = Path.cwd() / "replays"
 RENDER_BASE_PATH = Path.cwd() / "renders"
 
 FPS_PRINT_INTERVAL = 1.0  # seconds
+
+### Refiners ###
+BALL_MERGE_THRESHOLD = 0.05  # CameraCombiner: distance threshold to merge balls (m)
