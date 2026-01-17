@@ -3,14 +3,14 @@ from utama_core.run import StrategyRunner
 from utama_core.strategy.examples import (
     DefenceStrategy,
     GoToBallExampleStrategy,
-    RobotPlacementStrategy,
     StartupStrategy,
+    TwoRobotPlacementStrategy,
 )
 
 
 def main():
     runner = StrategyRunner(
-        strategy=RobotPlacementStrategy(robot_id=1),
+        strategy=TwoRobotPlacementStrategy(robot_id=0),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="real",
