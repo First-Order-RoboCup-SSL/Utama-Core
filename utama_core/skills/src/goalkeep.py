@@ -17,34 +17,6 @@ def goalkeep(
     robot_id: int,
     env: Optional[SSLStandardEnv] = None,
 ):
-    shooting_enemy = game.enemy_robots[robot_id]
-    defenseing_friendly = game.friendly_robots[robot_id]
-    if shooting_enemy.has_ball:
-        robot_rad = 0.09  # radius of robot in meters
-        # Calculate the perpendicular projection point from the robot to the goal line
-        x1 = shooting_enemy.x
-        y1 = shooting_enemy.y
-        x2 = 4.5
-        y2 = -0.5
-        x3 = defenseing_friendly.x
-        y3 = defenseing_friendly.y
-        t = (x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)
-        t /= (x2 - x1) ** 2 + (y2 - y1) ** 2
-        x4 = x1 + t * (x2 - x1)
-        y4 = y1 + t * (y2 - y1)
-        target_pos = Vector2D(x4, y4) - Vector2D(x4 - x3, y4 - y3).normalized() * robot_rad
-        target_oren = Vector2D(x3 - x1, y3 - y1).angle()
-
-        target_oren = np.pi if game.my_team_is_right else 0
-        return move(
-            game,
-            motion_controller,
-            robot_id,
-            target_pos,
-            target_oren,
-            True,
-        )
-
     if game.my_team_is_right:
         target = predict_ball_pos_at_x(game, 4.5)
     else:
