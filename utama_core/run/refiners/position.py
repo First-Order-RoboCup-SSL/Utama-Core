@@ -21,9 +21,9 @@ TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
 X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
 COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 
-OUTPUT_FILE   = "before.csv"
-OUTPUT_FILE_2 = "after.csv"
-TARGET_SIZE = 1000
+OUTPUT_FILE   = "noisy-10-kalman3-dwa-ss-r-before.csv"
+OUTPUT_FILE_2 = "noisy-10-kalman3-dwa-ss-r-after.csv"
+TARGET_SIZE = 2000
 
 
 class AngleSmoother:
@@ -68,8 +68,8 @@ class PositionRefiner(BaseRefiner):
         # self.kalman_filters_yellow = [Kalman_filter(id) for id in range(self.yellow_count)]
         # self.kalman_filters_blue   = [Kalman_filter(id) for id in range(self.blue_count)]
         
-        self.kalman_filters_yellow = [FIR_filter() for _ in range(self.yellow_count)]
-        self.kalman_filters_blue   = [FIR_filter() for _ in range(self.blue_count)]
+        self.kalman_filters_yellow = [Kalman_filter_2D() for _ in range(self.yellow_count)]
+        self.kalman_filters_blue   = [Kalman_filter_2D() for _ in range(self.blue_count)]
         
         # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
         # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
@@ -123,29 +123,29 @@ class PositionRefiner(BaseRefiner):
             
         # For filtering
         if self.running:  # Checks if the first valid game frame has been received.            
-            # if self.data_collected < TARGET_SIZE:
-            #     with open(OUTPUT_FILE, "a", newline="") as f:
-            #         writer = csv.DictWriter(f, COLS)
+            if self.data_collected < TARGET_SIZE:
+                with open(OUTPUT_FILE, "a", newline="") as f:
+                    writer = csv.DictWriter(f, COLS)
                     
-            #         for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
-            #             writer.writerow({
-            #                 TS_COL: combined_vision_data.ts,
-            #                 ID_COL: y_robot.id,
-            #                 COLOR_COL: "yellow",
-            #                 X_COL: y_robot.x,
-            #                 Y_COL: y_robot.y,
-            #                 TH_COL: y_robot.orientation
-            #             })
+                    for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
+                        writer.writerow({
+                            TS_COL: combined_vision_data.ts,
+                            ID_COL: y_robot.id,
+                            COLOR_COL: "yellow",
+                            X_COL: y_robot.x,
+                            Y_COL: y_robot.y,
+                            TH_COL: y_robot.orientation
+                        })
         
             combined_vision_data: VisionData = VisionData(
                 ts=combined_vision_data.ts,
                 yellow_robots=list(
-                    map(FIR_filter.filter_robot,
+                    map(Kalman_filter_2D.filter_robot,
                     self.kalman_filters_yellow,
                     sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
                     ),
                 blue_robots=list(
-                    map(FIR_filter.filter_robot,
+                    map(Kalman_filter_2D.filter_robot,
                     self.kalman_filters_blue,
                     sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
                     ),
