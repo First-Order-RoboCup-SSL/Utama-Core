@@ -11,7 +11,7 @@ from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVi
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
-from utama_core.global_utils.math_utils import get_displacement_vector
+from utama_core.global_utils.math_utils import get_displacement_vector, normalise_heading
 from utama_core.run.refiners.base_refiner import BaseRefiner
 from utama_core.run.refiners.filters import FIR_filter
 
@@ -263,7 +263,7 @@ class PositionRefiner(BaseRefiner):
                     # angular_vel: float, kick: bool, chip: bool, dribble: bool
                     if commands:
                         last_cmd: RobotCommand = self.cmd_map[robot_id]
-                        predicted_th = last_frame.orientation + (last_cmd.angular_vel * time_elapsed)
+                        predicted_th = normalise_heading(last_frame.orientation + (last_cmd.angular_vel * time_elapsed))
                         displacement: Vector2D = get_displacement_vector(last_cmd, time_elapsed, predicted_th)
                         predicted_x  = last_frame.p.x + displacement.x
                         predicted_y  = last_frame.p.y + displacement.y
@@ -306,7 +306,7 @@ class PositionRefiner(BaseRefiner):
                 else:
                     if commands:
                         last_cmd: RobotCommand = self.cmd_map[robot_id]
-                        predicted_th = last_frame.orientation + (last_cmd.angular_vel * time_elapsed)
+                        predicted_th = normalise_heading(last_frame.orientation + (last_cmd.angular_vel * time_elapsed))
                         displacement: Vector2D = get_displacement_vector(last_cmd, time_elapsed, predicted_th)
                         predicted_x  = last_frame.p.x + displacement.x
                         predicted_y  = last_frame.p.y + displacement.y
