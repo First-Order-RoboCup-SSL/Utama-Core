@@ -27,11 +27,11 @@ class Kalman_filter:
         Sampling rate (Hz). Default 60.0.
     """
 
-    def __init__(self, id, noise=0.1):
+    def __init__(self, id, noise_sd=0.00001):
         self.id = id
         
         self.state = None  # s; to be initialised by strategy runner with 1st GameFrame
-        self.var_x = noise  # sigma squared x; assume standard deviation of 10 cm
+        self.var_x = noise_sd  # sigma squared x
         self.var_y = self.var_x  # sigma squared y
         self.covariance_xy = 0  # sigma xy; assume their errors are uncorrelated
         self.dimensions = 2
@@ -43,6 +43,7 @@ class Kalman_filter:
         self.process_noise = (2 * self.var_x) * self.identity  # Q
         # Observation matrix H and state transition matrix F are just the identity matrix.
         # Multiplications with them are omitted.
+
 
     def step(self, new_data: list[float], last_robot: Robot, time_elapsed: float) -> tuple[float]:
         """

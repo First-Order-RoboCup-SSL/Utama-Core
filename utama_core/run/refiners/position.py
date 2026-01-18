@@ -21,8 +21,9 @@ TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
 X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
 COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 
-OUTPUT_FILE = "clean-kalman-dwa-ss-r.csv"
-TARGET_SIZE = 2000
+OUTPUT_FILE   = "noisy-25-kalman-pid-ss-r-before.csv"
+OUTPUT_FILE_2 = "noisy-25-kalman-pid-ss-r-after.csv"
+TARGET_SIZE = 1000
 
 
 class AngleSmoother:
@@ -46,7 +47,7 @@ class PositionRefiner(BaseRefiner):
         exp_enemy: int,
         field_bounds: FieldBounds,
         bounds_buffer: float = 1.0
-        ):
+    ):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
         self.x_min = field_bounds.top_left[0] - bounds_buffer  # expand left
@@ -67,8 +68,8 @@ class PositionRefiner(BaseRefiner):
         self.kalman_filters_yellow = [Kalman_filter(id) for id in range(self.yellow_count)]
         self.kalman_filters_blue   = [Kalman_filter(id) for id in range(self.blue_count)]
         
-        # self.kalman_filters_yellow = [Kalman_filter_2D() for _ in range(self.yellow_count)]
-        # self.kalman_filters_blue   = [Kalman_filter_2D() for _ in range(self.blue_count)]
+        # self.kalman_filters_yellow = [FIR_filter() for _ in range(self.yellow_count)]
+        # self.kalman_filters_blue   = [FIR_filter() for _ in range(self.blue_count)]
         
         # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
         # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
@@ -79,6 +80,10 @@ class PositionRefiner(BaseRefiner):
         # For logging
         self.data_collected = 0
         with open(OUTPUT_FILE, "w", newline="") as f:
+            writer = csv.DictWriter(f, COLS)
+            writer.writeheader()
+            
+        with open(OUTPUT_FILE_2, "w", newline="") as f:
             writer = csv.DictWriter(f, COLS)
             writer.writeheader()
         
@@ -115,15 +120,24 @@ class PositionRefiner(BaseRefiner):
         # class VisionData: ts: float; yellow_robots: List[VisionRobotData]; blue_robots: List[VisionRobotData]; balls: List[VisionBallData]
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
-        
-        # for robot in combined_vision_data.yellow_robots:
-        #     robot.add_gaussian_noise()
-        
-        # For filtering
-        if self.running:  # Checks if the first valid game frame has been received.
-            # filtered_vision_data = combined_vision_data
             
-            # filtered_vision_data: VisionData = VisionData(
+        # For filtering
+        if self.running:  # Checks if the first valid game frame has been received.            
+            if self.data_collected < TARGET_SIZE:
+                with open(OUTPUT_FILE, "a", newline="") as f:
+                    writer = csv.DictWriter(f, COLS)
+                    
+                    for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
+                        writer.writerow({
+                            TS_COL: combined_vision_data.ts,
+                            ID_COL: y_robot.id,
+                            COLOR_COL: "yellow",
+                            X_COL: y_robot.x,
+                            Y_COL: y_robot.y,
+                            TH_COL: y_robot.orientation
+                        })
+        
+            # combined_vision_data: VisionData = VisionData(
             #     ts=combined_vision_data.ts,
             #     yellow_robots=list(
             #         map(FIR_filter.filter_robot,
@@ -141,7 +155,7 @@ class PositionRefiner(BaseRefiner):
             time_elapsed = combined_vision_data.ts - self.last_game_frame.ts
             
             if game_frame.my_team_is_yellow:
-                filtered_vision_data = VisionData(
+                combined_vision_data = VisionData(
                     ts=combined_vision_data.ts,
                     
                     yellow_robots=list(
@@ -164,7 +178,7 @@ class PositionRefiner(BaseRefiner):
                 )
             
             else:
-                filtered_vision_data = VisionData(
+                combined_vision_data = VisionData(
                     ts=combined_vision_data.ts,
                     
                     yellow_robots=list(
@@ -188,12 +202,12 @@ class PositionRefiner(BaseRefiner):
             
             # For logging:
             if self.data_collected < TARGET_SIZE:
-                with open(OUTPUT_FILE, "a", newline="") as f:
+                with open(OUTPUT_FILE_2, "a", newline="") as f:
                     writer = csv.DictWriter(f, COLS)
                     
-                    for y_robot in sorted(filtered_vision_data.yellow_robots, key=lambda r: r.id):
+                    for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
                         writer.writerow({
-                            TS_COL: filtered_vision_data.ts,
+                            TS_COL: combined_vision_data.ts,
                             ID_COL: y_robot.id,
                             COLOR_COL: "yellow",
                             X_COL: y_robot.x,
@@ -201,9 +215,9 @@ class PositionRefiner(BaseRefiner):
                             TH_COL: y_robot.orientation
                         })
                         
-                    # for b_robot in filtered_vision_data.blue_robots:
+                    # for b_robot in combined_vision_data.blue_robots:
                     #     writer.writerow({
-                    #         TS_COL: filtered_vision_data.ts,
+                    #         TS_COL: combined_vision_data.ts,
                     #         ID_COL: b_robot.id,
                     #         COLOR_COL: "blue",
                     #         X_COL: b_robot.x,
@@ -216,8 +230,8 @@ class PositionRefiner(BaseRefiner):
             # For live testing:
             # try:
             #     current_coord = np.array((
-            #         filtered_vision_data.yellow_robots[2].x,
-            #         filtered_vision_data.yellow_robots[2].y
+            #         combined_vision_data.yellow_robots[2].x,
+            #         combined_vision_data.yellow_robots[2].y
             #     ))
             #     if not np.isnan(self._last_coord).any():
             #         self._delta_stream.append(np.linalg.norm(current_coord - self._last_coord))
@@ -228,8 +242,8 @@ class PositionRefiner(BaseRefiner):
             #     self._curve.setData(self._delta_stream)
             
             # try:
-            #     self._x_stream.append(filtered_vision_data.yellow_robots[0].x)
-            #     self._y_stream.append(filtered_vision_data.yellow_robots[0].y)
+            #     self._x_stream.append(combined_vision_data.yellow_robots[0].x)
+            #     self._y_stream.append(combined_vision_data.yellow_robots[0].y)
             # except:
             #     pass
             # finally:
@@ -240,19 +254,16 @@ class PositionRefiner(BaseRefiner):
             # for robot in combined_vision_data.yellow_robots:
             #         if robot.id == 0:
             #             print(f"robot orientation: {robot.orientation}")
-        
-        else:
-            filtered_vision_data = combined_vision_data
 
         # Some processing of robot vision data
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
             game_frame,
-            filtered_vision_data.yellow_robots,
-            filtered_vision_data.blue_robots,
+            combined_vision_data.yellow_robots,
+            combined_vision_data.blue_robots,
         )
 
         # After the balls have been combined, take the most confident
-        new_ball: Ball = PositionRefiner._get_most_confident_ball(filtered_vision_data.balls)
+        new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
         if new_ball is None:
             # If none, take the ball from the last frame of the game
             new_ball = game_frame.ball
@@ -260,7 +271,7 @@ class PositionRefiner(BaseRefiner):
         if game_frame.my_team_is_yellow:
             new_game_frame = replace(
                 game_frame,
-                ts=filtered_vision_data.ts,
+                ts=combined_vision_data.ts,
                 friendly_robots=new_yellow_robots,
                 enemy_robots=new_blue_robots,
                 ball=new_ball,
@@ -268,7 +279,7 @@ class PositionRefiner(BaseRefiner):
         else:
             new_game_frame = replace(
                 game_frame,
-                ts=filtered_vision_data.ts,
+                ts=combined_vision_data.ts,
                 friendly_robots=new_blue_robots,
                 enemy_robots=new_yellow_robots,
                 ball=new_ball,
