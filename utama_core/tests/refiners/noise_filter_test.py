@@ -7,9 +7,9 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-DATA_PATH = "vision_data"  # Tests are run from UTAMA-CORE
-NOISY = join(DATA_PATH, "noisy-grsim-raw.csv")
-CLEAN = join(DATA_PATH, "clean-raw.csv")
+DATA_PATH = "utama_core/tests/refiners/datasets"  # Tests are run from UTAMA-CORE
+NOISY = join(DATA_PATH, "noisy.csv")
+CLEAN = join(DATA_PATH, "clean.csv")
 
 ID_COL, X_COL, Y_COL, TH_COL = "id", "x", "y", "orientation"
 COLS = [X_COL, Y_COL, TH_COL]
