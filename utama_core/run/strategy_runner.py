@@ -71,8 +71,9 @@ class StrategyRunner:
         exp_enemy (int): Expected number of enemy robots.
         field_bounds (FieldBounds): Configuration of the field. Defaults to standard field.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
-        replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
         control_scheme (str, optional): Name of the motion control scheme to use.
+        opp_control_scheme (str, optional): Name of the opponent motion control scheme to use. If not set, uses same as friendly.
+        replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
         print_real_fps (bool, optional): Whether to print real FPS. Defaults to False.
         profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
     """
@@ -85,9 +86,10 @@ class StrategyRunner:
         mode: str,
         exp_friendly: int,
         exp_enemy: int,
-        field_bounds: FieldBounds = Field.full_field_bounds,
+        field_bounds: FieldBounds = Field.FULL_FIELD_BOUNDS,
         opp_strategy: Optional[AbstractStrategy] = None,
-        control_scheme: str = "pid",
+        control_scheme: str = "pid",  # This is also the default control scheme used in the motion planning tests
+        opp_control_scheme: Optional[str] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         print_real_fps: bool = False,  # Turn this on for RSim
         profiler_name: Optional[str] = None,
@@ -103,7 +105,11 @@ class StrategyRunner:
         self.field_bounds = field_bounds
         self.opp_strategy = opp_strategy
 
-        self.motion_controller = get_control_scheme(control_scheme)
+        self.my_motion_controller = get_control_scheme(control_scheme)
+        if opp_control_scheme is not None:
+            self.opp_motion_controller = get_control_scheme(opp_control_scheme)
+        else:
+            self.opp_motion_controller = self.my_motion_controller
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
         if self.opp_strategy:
@@ -154,10 +160,10 @@ class StrategyRunner:
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
-        self._stop_event = False
+        self._stop_event = threading.Event()
 
     def _handle_sigint(self, sig, frame):
-        self._stop_event = True
+        self._stop_event.set()
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -360,10 +366,10 @@ class StrategyRunner:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
         self.my_strategy.load_robot_controller(my_robot_controller)
-        self.my_strategy.load_motion_controller(self.motion_controller(self.mode, self.rsim_env))
+        self.my_strategy.load_motion_controller(self.my_motion_controller(self.mode, self.rsim_env))
         if self.opp_strategy:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
-            self.opp_strategy.load_motion_controller(self.motion_controller(self.mode, self.rsim_env))
+            self.opp_strategy.load_motion_controller(self.opp_motion_controller(self.mode, self.rsim_env))
 
     def _load_game(self):
         """
@@ -468,7 +474,10 @@ class StrategyRunner:
         self.logger.info("Cleaning up resources...")
 
         if self.mode == Mode.REAL:
-            self._stop_robots(stop_command_mult)
+            try:
+                self._stop_robots(stop_command_mult)
+            except Exception:
+                self.logger.exception("Was unable to stop robots cleanly.")
         if self.profiler:
             self.profiler.disable()
             if self.profiler.getstats():
@@ -482,79 +491,82 @@ class StrategyRunner:
 
     def run_test(
         self,
-        testManager: AbstractTestManager,
+        test_manager: AbstractTestManager,
         episode_timeout: float = 10.0,
         rsim_headless: bool = False,
     ) -> bool:
         """Run a test with the given test manager and episode timeout.
-
         Args:
-            testManager (AbstractTestManager): The test manager to run the test.
+            test_manager (AbstractTestManager): The test manager to run the test.
             episode_timeout (float): The timeout for each episode in seconds.
             rsim_headless (bool): Whether to run RSim in headless mode. Defaults to False.
         """
         signal.signal(signal.SIGINT, self._handle_sigint)
 
         passed = True
-        n_episodes = testManager.get_n_episodes()
+        n_episodes = test_manager.n_episodes
         if not rsim_headless and self.rsim_env:
             self.rsim_env.render_mode = "human"
         if self.sim_controller is None:
             warnings.warn("Running test in real, defaulting to 1 episode.")
             n_episodes = 1
 
-        testManager.load_strategies(self.my_strategy, self.opp_strategy)
+        test_manager.load_strategies(self.my_strategy, self.opp_strategy)
 
-        for i in range(n_episodes):
-            testManager.update_episode_n(i)
+        try:
+            for i in range(n_episodes):
+                test_manager.update_episode_n(i)
 
-            if self.sim_controller:
-                testManager.reset_field(self.sim_controller, self.my_game)
-                time.sleep(0.1)  # wait for the field to reset
-                # wait for the field to reset
-            self._reset_game()
-            episode_start_time = time.time()
-            # for simplicity, we assume rsim is running in real time. May need to change this
-            if self.profiler:
-                self.profiler.enable()
-            while not self._stop_event:
+                if self.sim_controller:
+                    test_manager.reset_field(self.sim_controller, self.my_game)
+                    time.sleep(0.1)
 
-                # time out episode
-                if (time.time() - episode_start_time) > episode_timeout:
-                    passed = False
-                    self.logger.log(
-                        logging.WARNING,
-                        "Episode %d timed out after %f secs",
-                        i,
-                        episode_timeout,
-                    )
-                    break
+                self._reset_game()
+                episode_start_time = time.time()
 
-                try:
-                    self._run_step()
-                except Exception as e:
-                    if self._stop_event:
-                        self.logger.info("Stopping run loop due to interrupt.")
+                if self.profiler:
+                    self.profiler.enable()
+
+                while not self._stop_event.is_set():
+
+                    if (time.time() - episode_start_time) > episode_timeout:
+                        passed = False
+                        self.logger.warning(
+                            "Episode %d timed out after %f secs",
+                            i,
+                            episode_timeout,
+                        )
                         break
-                    else:
-                        raise e
 
-                status = testManager.eval_status(self.my_game)
+                    try:
+                        self._run_step()
+                    except Exception:
+                        if self._stop_event.is_set():
+                            self.logger.info("Stopping run loop due to interrupt.")
+                            break
+                        else:
+                            raise
 
-                if status == TestingStatus.FAILURE:
-                    passed = False
-                    self._reset_robots()
+                    status = test_manager.eval_status(self.my_game)
+
+                    if status == TestingStatus.FAILURE:
+                        passed = False
+                        self._reset_robots()
+                        break
+                    elif status == TestingStatus.SUCCESS:
+                        self._reset_robots()
+                        break
+
+                if self._stop_event.is_set():
                     break
-                elif status == TestingStatus.SUCCESS:
-                    self._reset_robots()
-                    break
 
-            if self._stop_event:
-                break
-            if self.profiler:
-                self.profiler.disable()
-        self.close()
-        return passed
+                if self.profiler:
+                    self.profiler.disable()
+
+            return passed
+
+        finally:
+            self.close()
 
     def run(self):
         """Run the main loop, stepping the game until interrupted.
@@ -569,15 +581,17 @@ class StrategyRunner:
             self.rsim_env.render_mode = "human"
         if self.profiler:
             self.profiler.enable()
-        while not self._stop_event:
-            try:
+        try:
+            while not self._stop_event.is_set():
                 self._run_step()
-            except Exception as e:
-                if self._stop_event:
-                    self.logger.info("Stopping run loop due to interrupt.")
-                else:
-                    raise e
-        self.close()
+        except Exception:
+            if self._stop_event.is_set():
+                self.logger.info("Stopping run loop due to interrupt.")
+            else:
+                self.logger.exception("Exception occurred during run loop:")
+                raise
+        finally:
+            self.close()
 
     def _run_step(self):
         """Perform one tick of the overall game loop.

@@ -152,7 +152,7 @@ class AbstractStrategy(ABC):
         Returns:
             A `RobotCommand` to send to the controller.
         """
-        return empty_command(True)
+        return empty_command(False)
 
     ### END OF STRATEGY IMPLEMENTATION ###
 
