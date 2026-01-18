@@ -15,6 +15,7 @@ from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVi
 from utama_core.global_utils.math_utils import deg_to_rad, rad_to_deg
 from utama_core.rsoccer_simulator.src.Entities import Ball, Frame, Robot
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
+from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.rsoccer_simulator.src.Utils import KDTree
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ class SSLStandardEnv(SSLBaseEnv):
         time_step: float = TIMESTEP,
         blue_starting_formation: list[tuple] = None,
         yellow_starting_formation: list[tuple] = None,
-        gaussian_noise: float = 0
+        gaussian_noise: RsimGaussianNoise = RsimGaussianNoise()
     ):
         super().__init__(
             field_type=field_type,
@@ -174,7 +175,6 @@ class SSLStandardEnv(SSLBaseEnv):
             robot = self.frame.robots_yellow[i]
             robot_pos, robot_info = self._get_robot_observation(robot)
             yellow_obs.append(robot_pos)
-            print(robot_pos)
             yellow_robots_info.append(robot_info)
 
         # Return the complete shared observation
@@ -191,8 +191,7 @@ class SSLStandardEnv(SSLBaseEnv):
         return result
 
     def _get_robot_observation(self, robot):
-        if self.gaussian_noise:
-            robot.add_gaussian_noise(self.gaussian_noise)
+        robot.add_gaussian_noise(self.gaussian_noise)
         
         robot_pos = RawRobotData(robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1)
         robot_info = RobotResponse(robot.id, robot.infrared)
