@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from numpy.random import normal
-from utama_core.global_utils.math_utils import deg_to_rad, normalise_heading
+from utama_core.global_utils.math_utils import normalise_heading_deg
+from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 
 @dataclass()
 class Robot:
@@ -9,7 +10,7 @@ class Robot:
     x: float = None
     y: float = None
     z: float = None
-    theta: float = None
+    theta: float = None  # degrees
     v_x: float = 0
     v_y: float = 0
     v_theta: float = 0
@@ -24,9 +25,15 @@ class Robot:
     v_wheel3: float = 0  # rad/s
     
     
-    def add_gaussian_noise(self, x_sd_cm, y_sd_cm, th_sd_deg):
+    def add_gaussian_noise(self, noise: RsimGaussianNoise):
         bias = 0
         
-        self.x += normal(loc=bias, scale= x_sd_cm / 100)
-        self.y += normal(loc=bias, scale= y_sd_cm / 100)
-        self.theta = normalise_heading(self.theta + normal(loc=bias, scale= deg_to_rad(th_sd_deg)))
+        if noise.x_stddev:
+            self.x += normal(loc=bias, scale= noise.x_stddev)
+            
+        if noise.y_stddev:
+            self.y += normal(loc=bias, scale= noise.y_stddev)
+            
+        if noise.th_stddev_deg:
+            self.theta = normalise_heading_deg(self.theta + normal(loc=bias, scale=noise.th_stddev_deg))
+        

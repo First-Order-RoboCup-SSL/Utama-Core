@@ -31,6 +31,7 @@ from utama_core.global_utils.math_utils import assert_valid_bounding_box
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
+from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import GameGater
 from utama_core.run.receivers import VisionReceiver
 from utama_core.run.refiners import PositionRefiner, RobotInfoRefiner, VelocityRefiner
@@ -76,8 +77,8 @@ class StrategyRunner:
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
         print_real_fps (bool, optional): Whether to print real FPS. Defaults to False.
         profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
-        rsim_noise (tuple[float, float, float], optional): When running in rsim, add Gaussian noise with the given standard deviation.
-            The 3 values are for x (in cm), y (in cm), and orientation (in degrees) respectively. Defaults to (0, 0, 0).
+        rsim_noise (RsimGaussianNoise, optional): When running in rsim, add Gaussian noise with the given standard deviation.
+            The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively. Defaults to 0 for each.
     """
 
     def __init__(
@@ -95,7 +96,7 @@ class StrategyRunner:
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         print_real_fps: bool = False,  # Turn this on for RSim
         profiler_name: Optional[str] = None,
-        rsim_noise: tuple[float, float, float] = (0, 0, 0)
+        rsim_noise: RsimGaussianNoise = RsimGaussianNoise()
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -220,15 +221,15 @@ class StrategyRunner:
 
     def _load_sim(
         self,
-        rsim_noise: tuple[float, float, float]
+        rsim_noise: RsimGaussianNoise
     ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
         """Mode RSIM: Loads the RSim environment with the expected number of robots and corresponding sim controller.
         Mode GRSIM: Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of
         robots is met.
         
         Args:
-            rsim_noise (tuple[float, float, float]): When running in rsim, add Gaussian noise with the given standard deviation.
-                 The 3 values are for x (in cm), y (in cm), and orientation (in degrees) respectively.
+            rsim_noise (RsimGaussianNoise): When running in rsim, add Gaussian noise with the given standard deviation.
+                 The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
 
         Returns:
             SSLBaseEnv: The RSim environment (Otherwise None).
