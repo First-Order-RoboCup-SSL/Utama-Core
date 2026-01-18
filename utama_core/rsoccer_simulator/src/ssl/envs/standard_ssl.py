@@ -174,7 +174,6 @@ class SSLStandardEnv(SSLBaseEnv):
             robot = self.frame.robots_yellow[i]
             robot_pos, robot_info = self._get_robot_observation(robot)
             yellow_obs.append(robot_pos)
-            print(robot_pos)
             yellow_robots_info.append(robot_info)
 
         # Return the complete shared observation
