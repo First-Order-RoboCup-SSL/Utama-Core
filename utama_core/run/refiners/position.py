@@ -1,10 +1,6 @@
-from collections import defaultdict, deque
-# import csv
+from collections import defaultdict
 from dataclasses import replace
-import matplotlib.pyplot as plt
 import numpy as np
-import pyqtgraph as pg # type: ignore
-from pyqtgraph.Qt import QtWidgets # type: ignore
 from typing import Dict, List, Optional, Tuple
 
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
