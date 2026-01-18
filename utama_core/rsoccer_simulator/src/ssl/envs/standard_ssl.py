@@ -62,7 +62,7 @@ class SSLStandardEnv(SSLBaseEnv):
         time_step: float = TIMESTEP,
         blue_starting_formation: list[tuple] = None,
         yellow_starting_formation: list[tuple] = None,
-        gaussian_noise: float = 0
+        gaussian_noise: tuple[float, float, float] = (0, 0, 0)
     ):
         super().__init__(
             field_type=field_type,
@@ -190,8 +190,8 @@ class SSLStandardEnv(SSLBaseEnv):
         return result
 
     def _get_robot_observation(self, robot):
-        if self.gaussian_noise:
-            robot.add_gaussian_noise(self.gaussian_noise)
+        if any(self.gaussian_noise):
+            robot.add_gaussian_noise(*self.gaussian_noise)
         
         robot_pos = RawRobotData(robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1)
         robot_info = RobotResponse(robot.id, robot.infrared)

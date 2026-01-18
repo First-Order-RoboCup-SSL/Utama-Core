@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from numpy.random import normal
-
+from utama_core.global_utils.math_utils import deg_to_rad, normalise_heading
 
 @dataclass()
 class Robot:
@@ -24,8 +24,9 @@ class Robot:
     v_wheel3: float = 0  # rad/s
     
     
-    def add_gaussian_noise(self, sd_in_cm: float=10.0, bias: float=0):
-        sd_in_m = sd_in_cm / 100
+    def add_gaussian_noise(self, x_sd_cm, y_sd_cm, th_sd_deg):
+        bias = 0
         
-        self.x += normal(loc=bias, scale=sd_in_m)
-        self.y += normal(loc=bias, scale=sd_in_m)
+        self.x += normal(loc=bias, scale= 0 / 100)
+        self.y += normal(loc=bias, scale= 0 / 100)
+        self.theta = normalise_heading(self.theta + normal(loc=bias, scale= deg_to_rad(0)))
