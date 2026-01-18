@@ -28,7 +28,7 @@ from utama_core.global_utils.mapping_utils import (
     map_left_right_to_colors,
 )
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
-from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
+from utama_core.motion_planning.src.common.control_schemes import ControlScheme
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.run import GameGater
@@ -71,11 +71,11 @@ class StrategyRunner:
         exp_enemy (int): Expected number of enemy robots.
         field_bounds (FieldBounds): Configuration of the field. Defaults to standard field.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
-        control_scheme (str, optional): Name of the motion control scheme to use.
         opp_control_scheme (str, optional): Name of the opponent motion control scheme to use. If not set, uses same as friendly.
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
         print_real_fps (bool, optional): Whether to print real FPS. Defaults to False.
         profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
+        control_scheme (str, optional): Name of the motion control scheme to use.
     """
 
     def __init__(
@@ -88,11 +88,11 @@ class StrategyRunner:
         exp_enemy: int,
         field_bounds: FieldBounds = Field.FULL_FIELD_BOUNDS,
         opp_strategy: Optional[AbstractStrategy] = None,
-        control_scheme: str = "pid",  # This is also the default control scheme used in the motion planning tests
-        opp_control_scheme: Optional[str] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         print_real_fps: bool = False,  # Turn this on for RSim
         profiler_name: Optional[str] = None,
+        control_scheme: ControlScheme = ControlScheme.PID,
+        opp_control_scheme: Optional[ControlScheme] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -104,12 +104,16 @@ class StrategyRunner:
         self.exp_enemy = exp_enemy
         self.field_bounds = field_bounds
         self.opp_strategy = opp_strategy
+        self.replay_writer = (
+            ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
+            if replay_writer_config
+            else None
+        )
 
-        self.my_motion_controller = get_control_scheme(control_scheme)
-        if opp_control_scheme is not None:
-            self.opp_motion_controller = get_control_scheme(opp_control_scheme)
-        else:
-            self.opp_motion_controller = self.my_motion_controller
+        self.my_motion_controller = control_scheme.get_controller()
+        self.opp_motion_controller = (
+            opp_control_scheme.get_controller() if opp_control_scheme else self.my_motion_controller
+        )
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
         if self.opp_strategy:

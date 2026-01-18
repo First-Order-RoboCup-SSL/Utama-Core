@@ -5,6 +5,7 @@ import pytest
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.motion_planning.src.common.control_schemes import ControlScheme
 from utama_core.run import StrategyRunner
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
@@ -180,6 +181,7 @@ class MovingObstacleTestManager(AbstractTestManager):
 )
 def test_single_robot_moving_obstacles(
     headless: bool,
+    control_scheme: ControlScheme,
     obstacle_scenario: dict,
     mode: str = "rsim",
 ):
@@ -223,7 +225,8 @@ def test_single_robot_moving_obstacles(
         exp_friendly=1,
         exp_enemy=len(scenario.moving_obstacles),
         opp_strategy=opp_strategy,
-        opp_control_scheme="pid",  # Use PID so obstacles follow exact paths without avoiding the robot
+        control_scheme=control_scheme,
+        opp_control_scheme=ControlScheme.PID,  # Use PID so obstacles follow exact paths without avoiding the robot
     )
 
     test_manager = MovingObstacleTestManager(scenario=scenario, robot_id=robot_id)

@@ -4,6 +4,7 @@
 #    - To create your wrapper from env to communcation, use inherit from this class!
 """
 
+import math
 from typing import List
 
 import numpy as np
@@ -198,6 +199,9 @@ class SSLBaseEnv:
         width : float, optional
             The radius of the point. Default is 1. Cannot be less than 1.
         """
+        # Skip drawing if coordinates are NaN (can happen during initialization)
+        if math.isnan(x) or math.isnan(y):
+            return
         width = width if width >= 1 else 1
         point_data = OverlayObject(
             type=OverlayType.POINT,

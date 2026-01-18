@@ -3,6 +3,7 @@ from typing import Tuple
 
 from utama_core.entities.game.field import Field
 from utama_core.entities.game.game_frame import GameFrame
+from utama_core.motion_planning.src.mpc.omni_mpc import OmnidirectionalMPC
 from utama_core.motion_planning.src.planning.exit_strategies import ExitStrategy
 from utama_core.motion_planning.src.planning.other_path_planners import (
     BisectorPlanner,
@@ -35,7 +36,7 @@ class TimedSwitchController:
         self._exit_strategy = exit_strategy
         self._slow_planner = BisectorPlanner(game, friendly_colour, env)
         self._game = game
-        self._fast_planner = DynamicWindowPlanner(game)
+        self._fast_planner = OmnidirectionalMPC()
         self._real_targets = [None for _ in range(num_robots)]
         self._intermediate_target = [None for _ in range(num_robots)]
         self._exit_points = [None for _ in range(num_robots)]

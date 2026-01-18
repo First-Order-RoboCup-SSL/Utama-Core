@@ -8,6 +8,9 @@ version = "1.5.18"
 [pypi-dependencies]
 lenses = ">=1.2.0"
 py-trees = ">=2.3.0"
+casadi = ">=3.7.2, <4"
+cvxpy = ">=1.5.0"
+clarabel = ">=0.7.0"
 
 [dependencies]  # shared deps
 python = "3.11.*"
@@ -23,6 +26,13 @@ hatch = ">=1.14.1,<2"
 graphviz = ">=13.1.2,<14"
 snakeviz = ">=2.2.2,<3"
 rich = ">=14.2.0,<15"
+cmake = "3.26.*"                # Force v3.26 because it's compatible with everything
+ninja = "*"
+cxx-compiler = "*" 
+eigen = "*"
+nanobind = "*" 
+pip = ">=25.3,<26"
+scikit-build-core = ">=0.11.6,<0.12"
 
 [package]
 name = "Utama-Core"
@@ -36,12 +46,14 @@ hatchling = "*"
 
 [feature.robosim.dependencies]
 python = "3.10.*"
-cmake = "<3.27"
 libode = ">=0.16.2,<0.17"
 
 [feature.robosim.pypi-dependencies]
 rc-robosim = "<2"
 numpy = "<=2.0.2"
+
+[activation]
+scripts = ["scripts/ensure_mpc_cpp.sh"]
 
 [tasks]
 lint = "pre-commit run --all-files"
@@ -50,6 +62,7 @@ main = "python -m main"
 replay = "python -m utama_core.replay.replay_player"
 precommit-install = "pre-commit install && pixi run pre-commit install --hook-type pre-commit"
 precommit-uninstall = "pre-commit uninstall"
+rebuild-mpc-cpp = "pip install -e utama_core/motion_planning/src/mpc_cpp --no-build-isolation --force-reinstall"
 
 [environments]
 robosim = { features = ["robosim"], no-default-feature = true }

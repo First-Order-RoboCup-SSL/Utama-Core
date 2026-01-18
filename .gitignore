@@ -208,3 +208,9 @@ renders/
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# Profiling files
+*.prof
+
+# MacOS Security Files
+.DS_Store
