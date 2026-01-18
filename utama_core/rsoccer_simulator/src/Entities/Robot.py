@@ -27,6 +27,6 @@ class Robot:
     def add_gaussian_noise(self, x_sd_cm, y_sd_cm, th_sd_deg):
         bias = 0
         
-        self.x += normal(loc=bias, scale= 0 / 100)
-        self.y += normal(loc=bias, scale= 0 / 100)
-        self.theta = normalise_heading(self.theta + normal(loc=bias, scale= deg_to_rad(0)))
+        self.x += normal(loc=bias, scale= x_sd_cm / 100)
+        self.y += normal(loc=bias, scale= y_sd_cm / 100)
+        self.theta = normalise_heading(self.theta + normal(loc=bias, scale= deg_to_rad(th_sd_deg)))
