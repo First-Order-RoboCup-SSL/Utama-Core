@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from utama_core.config.enums import Mode
-from utama_core.entities.data.command import RobotCommand
 
 
 @pytest.fixture

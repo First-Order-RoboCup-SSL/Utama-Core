@@ -11,7 +11,8 @@ from utama_core.strategy.examples import (
 
 
 def main():
-    # Define custom field bounds (e.g., a smaller region centered at 2, 2)
+    # Setup for real testing
+    # Custom field size based setup in real
     custom_bounds = FieldBounds(top_left=(2.25, 1.5), bottom_right=(4.5, -1.5))
 
     runner = StrategyRunner(

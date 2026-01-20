@@ -1,6 +1,5 @@
 import math
-import random
-from typing import Any, Optional
+from typing import Optional
 
 import numpy as np
 import py_trees
@@ -11,33 +10,11 @@ from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.global_utils.math_utils import Vector2D
 from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
-
-# from robot_control.src.tests.utils import one_robot_placement
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
-
-
-class CalculateFieldCenter(AbstractBehaviour):
-    """
-    Calculates the center of the provided field bounds and writes it to the blackboard.
-    """
-
-    def __init__(self, field_bounds: FieldBounds, output_key: str = "FieldCenter"):
-        super().__init__(name="CalculateFieldCenter")
-        self.output_key = output_key
-        self.field_bounds = field_bounds
-        self.calculated = False
-
-    def setup_(self):
-        self.blackboard.register_key(key=self.output_key, access=py_trees.common.Access.WRITE)
-
-    def update(self) -> py_trees.common.Status:
-        if self.calculated:
-            return py_trees.common.Status.SUCCESS
-
-        center = self.field_bounds.center
-        self.blackboard.set(self.output_key, center, overwrite=True)
-        self.calculated = True
-        return py_trees.common.Status.SUCCESS
+from utama_core.strategy.examples.utils import (
+    CalculateFieldCenter,
+    SetBlackboardVariable,
+)
 
 
 class RobotPlacementStep(AbstractBehaviour):
@@ -168,23 +145,6 @@ class RobotPlacementStep(AbstractBehaviour):
         return py_trees.common.Status.RUNNING
 
 
-class SetBlackboardVariable(AbstractBehaviour):
-    """A generic behaviour to set a variable on the blackboard."""
-
-    def __init__(self, name: str, variable_name: str, value: Any):
-        super().__init__(name=name)
-        self.variable_name = variable_name
-        self.value = value
-
-    def setup_(self):
-        self.blackboard.register_key(key=self.variable_name, access=py_trees.common.Access.WRITE)
-
-    def update(self) -> py_trees.common.Status:
-        # print(f"Setting {self.variable_name} to {self.value} on the blackboard.")
-        self.blackboard.set(self.variable_name, self.value, overwrite=True)
-        return py_trees.common.Status.SUCCESS
-
-
 class TwoRobotPlacementStrategy(AbstractStrategy):
     def __init__(
         self,
@@ -193,7 +153,7 @@ class TwoRobotPlacementStrategy(AbstractStrategy):
         field_bounds: Optional[FieldBounds] = None,
     ):
         """
-        Initializes the TwoRobotPlacementStrategy with a specific robot ID (though this handles two robots).
+        Initialize the TwoRobotPlacementStrategy with two robot IDs and optional field bounds.
         """
         self.first_robot_id = first_robot_id
         self.second_robot_id = second_robot_id
@@ -201,7 +161,7 @@ class TwoRobotPlacementStrategy(AbstractStrategy):
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if 2 == n_runtime_friendly:
+        if n_runtime_friendly == 2:
             return True
         return False
 
