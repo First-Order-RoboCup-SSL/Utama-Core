@@ -156,7 +156,11 @@ class RobotPlacementStep(AbstractBehaviour):
                     rsim_env.draw_point(tx, ty, color="red")
                     v = game.friendly_robots[id].v
                     p = game.friendly_robots[id].p
-                    rsim_env.draw_point(p.x + v.x * TIMESTEP * 5, p.y + v.y * TIMESTEP * 5, color="green")
+                    rsim_env.draw_point(
+                        p.x + v.x * TIMESTEP * 5,
+                        p.y + v.y * TIMESTEP * 5,
+                        color="green",
+                    )
 
         if cmd:
             self.blackboard.cmd_map[id] = cmd
@@ -253,7 +257,8 @@ class TwoRobotPlacementStrategy(AbstractStrategy):
 
         # Use Parallel to allow both robots to be ticked
         action_parallel = Parallel(
-            name="RobotActions", policy=py_trees.common.ParallelPolicy.SuccessOnAll(synchronise=False)
+            name="RobotActions",
+            policy=py_trees.common.ParallelPolicy.SuccessOnAll(synchronise=False),
         )
         action_parallel.add_children([move_robot1, move_robot2])
 
