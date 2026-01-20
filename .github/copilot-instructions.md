@@ -5,4 +5,4 @@
 - Assume Black and Ruff enforce formatting
 - Ignore trivial, non functional changes, namely unused imports and formatting 
 changes.
-- Ignore ununsed imports.
+- Ignore unused imports.
