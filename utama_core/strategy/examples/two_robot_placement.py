@@ -7,13 +7,14 @@ import py_trees
 from py_trees.composites import Parallel, Sequence
 
 from utama_core.config.settings import TIMESTEP
-from utama_core.entities.game.field import FieldBounds
+from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.global_utils.math_utils import Vector2D
 from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
 
 # from robot_control.src.tests.utils import one_robot_placement
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.strategy.common.field_behaviours import CalculateFieldCenter
 
 
 class RobotPlacementStep(AbstractBehaviour):
@@ -32,32 +33,61 @@ class RobotPlacementStep(AbstractBehaviour):
     def __init__(
         self,
         rd_robot_id: str,
-        start_point: tuple[float, float],
-        end_point: tuple[float, float],
+        role: str,
         turn_key: str,
         my_turn_idx: int,
         next_turn_idx: int,
+        field_center_key: str = "FieldCenter",
     ):
         super().__init__()
         self.robot_id_key = rd_robot_id
-        self.start_point = start_point
-        self.end_point = end_point
-        self.current_target = end_point  # Start moving towards end point
-
+        self.role = role
         self.turn_key = turn_key
         self.my_turn_idx = my_turn_idx
         self.next_turn_idx = next_turn_idx
+        self.field_center_key = field_center_key
+
+        # State management
+        self.current_target = None
+        self.initialized = False
+        self.start_point = None
+        self.end_point = None
 
     def setup_(self):
         self.blackboard.register_key(key=self.robot_id_key, access=py_trees.common.Access.READ)
         self.blackboard.register_key(key=self.turn_key, access=py_trees.common.Access.READ)
         self.blackboard.register_key(key=self.turn_key, access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key(key=self.field_center_key, access=py_trees.common.Access.READ)
 
     def update(self) -> py_trees.common.Status:
         """Closure which advances the simulation by one step."""
         game = self.blackboard.game
         rsim_env = self.blackboard.rsim_env
         id: int = self.blackboard.get(self.robot_id_key)
+
+        # Initialize targets if not ready
+        if not self.initialized:
+            try:
+                center = self.blackboard.get(self.field_center_key)
+                if center:
+                    cx, cy = center
+                    if self.role == "horizontal":
+                        self.start_point = (cx - 0.5, cy)
+                        self.end_point = (cx + 0.5, cy)
+                    elif self.role == "vertical":
+                        self.start_point = (cx, cy - 0.5)
+                        self.end_point = (cx, cy + 0.5)
+                    else:
+                        return py_trees.common.Status.FAILURE
+
+                    self.current_target = self.end_point
+                    self.initialized = True
+            except KeyError:
+                # Center not yet available
+                return py_trees.common.Status.FAILURE
+
+        if not self.initialized:
+            return py_trees.common.Status.FAILURE
 
         # Check whose turn it is
         current_turn = self.blackboard.get(self.turn_key)
@@ -129,15 +159,22 @@ class SetBlackboardVariable(AbstractBehaviour):
 
 
 class TwoRobotPlacementStrategy(AbstractStrategy):
-    def __init__(self, robot_id: int):
+    def __init__(
+        self,
+        first_robot_id: int,
+        second_robot_id: int,
+        field_bounds: Optional[FieldBounds] = None,
+    ):
         """
         Initializes the TwoRobotPlacementStrategy with a specific robot ID (though this handles two robots).
         """
-        self.robot_id = robot_id
+        self.first_robot_id = first_robot_id
+        self.second_robot_id = second_robot_id
+        self.field_bounds = field_bounds if field_bounds else Field.FULL_FIELD_BOUNDS
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if 1 <= n_runtime_friendly <= 6:
+        if 2 == n_runtime_friendly:
             return True
         return False
 
@@ -145,50 +182,50 @@ class TwoRobotPlacementStrategy(AbstractStrategy):
         return True  # No specific goal line requirements
 
     def get_min_bounding_zone(self) -> Optional[FieldBounds]:
+        # toggles robot between (1, -1) and (1, 1)
+        # Using full field bounds logic now, but maybe should return specific bounds if needed.
+        # For now, keeping consistent with previous simple bounds or updating if needed.
         return FieldBounds(top_left=(-1, 1), bottom_right=(1, -1))
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete behaviour tree."""
 
-        robot1_key = "robot1_id"
-        robot2_key = "robot2_id"
+        first_robot_key = "first_robot_id"
+        second_robot_key = "second_robot_id"
         turn_key = "CrossMovementTurn"
+        field_center_key = "FieldCenter"
 
         coach_root = Sequence(name="CoachRoot", memory=True)
 
-        # We assume the user wants to use the first available robots or distinct ones.
-        # Since the strategy is init with one robot_id from main, we might need to assume
-        # specific logic for two robots. Ideally main.py or strategy runner assigns IDs.
-        # However, typically 'robot_id' passed here is just one.
-        # For this specific "TwoRobot" request, we'll hardcode using robot 0 and 1,
-        # or use the passed robot_id and robot_id + 1 if available.
-        # Let's assume 0 and 1 for simplicity of this standalone example in `examples/`.
-
-        set_robot1 = SetBlackboardVariable(name="SetR1", variable_name=robot1_key, value=0)
-        set_robot2 = SetBlackboardVariable(name="SetR2", variable_name=robot2_key, value=1)
+        set_first_robot = SetBlackboardVariable(name="SetR1", variable_name=first_robot_key, value=self.first_robot_id)
+        set_second_robot = SetBlackboardVariable(
+            name="SetR2", variable_name=second_robot_key, value=self.second_robot_id
+        )
 
         # Initialize turn to 0 (Robot 1 starts)
         set_turn = SetBlackboardVariable(name="InitTurn", variable_name=turn_key, value=0)
 
-        # Robot 1 (X-mover): Center (3.375, 0), Length 1m -> X range [2.875, 3.875]
-        # Starts moving towards end point.
+        # Calculate Field Center from custom field_bounds
+        calc_center = CalculateFieldCenter(field_bounds=self.field_bounds, output_key=field_center_key)
+
+        # Robot 1 (X-mover): Centered at (center_x, center_y), move range +/- 0.5 in X
         move_robot1 = RobotPlacementStep(
-            rd_robot_id=robot1_key,
-            start_point=(2.875, 0.0),
-            end_point=(3.875, 0.0),
+            rd_robot_id=first_robot_key,
+            role="horizontal",
             turn_key=turn_key,
             my_turn_idx=0,
             next_turn_idx=1,
+            field_center_key=field_center_key,
         )
 
-        # Robot 2 (Y-mover): Center (3.375, 0), Length 1m -> Y range [-0.5, 0.5]
+        # Robot 2 (Y-mover): Centered at (center_x, center_y), move range +/- 0.5 in Y
         move_robot2 = RobotPlacementStep(
-            rd_robot_id=robot2_key,
-            start_point=(3.375, -0.5),
-            end_point=(3.375, 0.5),
+            rd_robot_id=second_robot_key,
+            role="vertical",
             turn_key=turn_key,
             my_turn_idx=1,
             next_turn_idx=0,
+            field_center_key=field_center_key,
         )
 
         # Use Parallel to allow both robots to be ticked
@@ -197,6 +234,6 @@ class TwoRobotPlacementStrategy(AbstractStrategy):
         )
         action_parallel.add_children([move_robot1, move_robot2])
 
-        coach_root.add_children([set_robot1, set_robot2, set_turn, action_parallel])
+        coach_root.add_children([set_first_robot, set_second_robot, set_turn, calc_center, action_parallel])
 
         return coach_root

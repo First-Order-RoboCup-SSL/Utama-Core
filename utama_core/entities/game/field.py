@@ -16,6 +16,13 @@ class FieldBounds:
     top_left: tuple[float, float]
     bottom_right: tuple[float, float]
 
+    @property
+    def center(self) -> tuple[float, float]:
+        """Calculates the geometric center of the field bounds."""
+        cx = (self.top_left[0] + self.bottom_right[0]) / 2.0
+        cy = (self.top_left[1] + self.bottom_right[1]) / 2.0
+        return (cx, cy)
+
 
 class Field:
     """Field class that contains all the information about the field.
@@ -162,6 +169,10 @@ class Field:
     @property
     def field_bounds(self) -> FieldBounds:
         return self._field_bounds
+
+    @property
+    def center(self) -> tuple[float, float]:
+        return self._field_bounds.center
 
     ### Class Properties for standard field dimensions ###
 
