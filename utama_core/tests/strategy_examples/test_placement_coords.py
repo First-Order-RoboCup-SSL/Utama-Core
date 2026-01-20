@@ -7,6 +7,7 @@ These tests verify that:
 """
 
 import math
+from typing import Optional
 
 import pytest
 
@@ -81,13 +82,9 @@ class RobotPlacementTestManager(AbstractTestManager):
         return TestingStatus.IN_PROGRESS
 
 
-def _run_placement_test(field_bounds: FieldBounds | None, expected_center: tuple[float, float]):
+def _run_placement_test(field_bounds: Optional[FieldBounds], expected_center: tuple[float, float]):
     """Helper to run a placement strategy test with given bounds."""
-    strategy = (
-        RobotPlacementStrategy(robot_id=0, field_bounds=field_bounds)
-        if field_bounds
-        else RobotPlacementStrategy(robot_id=0)
-    )
+    strategy = RobotPlacementStrategy(robot_id=0, field_bounds=field_bounds)
 
     runner = StrategyRunner(
         strategy=strategy,

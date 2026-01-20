@@ -9,6 +9,7 @@ These tests verify that:
 """
 
 import math
+from typing import Optional
 
 import pytest
 
@@ -111,7 +112,7 @@ class TwoRobotPlacementTestManager(AbstractTestManager):
 
 
 def _run_two_robot_placement_test(
-    field_bounds: FieldBounds | None,
+    field_bounds: Optional[FieldBounds],
     expected_center: tuple[float, float],
     first_robot_id: int = 0,
     second_robot_id: int = 1,
