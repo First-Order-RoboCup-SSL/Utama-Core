@@ -35,7 +35,7 @@ def goalkeep(
         target = predict_ball_pos_at_x(game, -4.5)
 
     if not target or abs(target[1]) > 0.5:
-        target = Vector2D(4.5 if game.my_team_is_right else -4.5, 0)
+        target = Vector2D(4.2 if game.my_team_is_right else -4.2, 0)
 
     # shooters_data = find_likely_enemy_shooter(game.enemy_robots, game.ball)
 

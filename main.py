@@ -19,7 +19,7 @@ def main():
         strategy=TwoRobotPlacementStrategy(first_robot_id=0, second_robot_id=1, field_bounds=custom_bounds),
         my_team_is_yellow=True,
         my_team_is_right=True,
-        mode="rsim",
+        mode="real",
         exp_friendly=2,
         exp_enemy=0,
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),

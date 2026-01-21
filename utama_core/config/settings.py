@@ -29,7 +29,7 @@ MAX_BALL_SPEED = 3.0  # m/s
 
 ### REAL CONTROLLER SETTINGS ###
 BAUD_RATE = 115200
-PORT = "/dev/ttyUSB0"
+PORT = "/dev/ttyACM0"
 TIMEOUT = 0.1
 
 MAX_GAME_HISTORY = 20  # number of previous game states to keep in Game

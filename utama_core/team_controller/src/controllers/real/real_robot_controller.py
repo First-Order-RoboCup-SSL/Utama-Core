@@ -67,6 +67,7 @@ class RealRobotController(AbstractRobotController):
         robot_id: Optional[int] = None,
     ) -> None:
         """Adds robot commands to the packet to be sent to the robot."""
+        print(f"Adding robot commands: {robot_commands} for robot_id: {robot_id}")
         super().add_robot_commands(robot_commands, robot_id)
 
     def _add_robot_command(self, command: RobotCommand, robot_id: int) -> None:
