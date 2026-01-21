@@ -207,9 +207,7 @@ class RealRobotController(AbstractRobotController):
                 #      * first byte is robot ID (here INVALID_RBT_ID)
                 #      * remaining (self._rbt_cmd_size - 1) bytes are zeros
                 #  - 0x55: end byte
-                cmd = bytearray(
-                    [0xAA] + [INVALID_RBT_ID] + [0] * (self._rbt_cmd_size - 1) + [0x55]
-                )
+                cmd = bytearray([0xAA] + [INVALID_RBT_ID] + [0] * (self._rbt_cmd_size - 1) + [0x55])
                 commands.extend(cmd)
             self._cached_empty_command = commands
         return self._cached_empty_command.copy()
