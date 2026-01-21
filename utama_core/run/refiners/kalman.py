@@ -45,39 +45,59 @@ class Kalman_filter:
         # Multiplications with them are omitted.
 
 
-    def step(self, new_data: list[float], last_robot: Robot, time_elapsed: float) -> tuple[float]:
+    def step(self, new_data: tuple[float], last_robot: Robot, time_elapsed: float) -> tuple[float]:
         """
         Push a new measurement and return filtered output.
         """
         # class Robot: id: int; is_friendly: bool; has_ball: bool
         # p: Vector2D; v: Vector2D; a: Vector2D; orientation: float
         
-        # TODO: Vanishing
-        x, y, theta = new_data
-        # theta = normalise_heading(theta)
-
-        if self.state is None:  # Initialised with the 1st GameFrame
+        # Phase 0: Initialised with the 1st valid GameFrame (only on initialisation)
+        if self.state is None:
             self.state = np.array([last_robot.p.x, last_robot.p.y])
             
-        measurement = np.array([x, y])  # z
+        # Phase 1: Predicting the current state given the last state.
         control_velocities = np.array([last_robot.v.x, last_robot.v.y])  # u
         control_mat = time_elapsed * self.identity  # G
         
-        # Phase 1: Predicting the current state given the last state.
         pred_state = self.state + np.matmul(control_mat, control_velocities)  # s_n,n-1
         pred_cov = self.covariance_mat + self.process_noise  # P_n,n-1
         
         # Phase 2: Adjust this prediction based on new data
-        kalman_gain = np.matmul(pred_cov, np.linalg.inv(pred_cov + self.measurement_cov))  # K_n
         
-        self.state = pred_state + np.matmul(kalman_gain, (measurement - pred_state))  # s_n,n
+        x, y, theta = new_data
+        # theta = normalise_heading(theta)
         
-        ident_less_kalman = self.identity - kalman_gain
-        ident_less_kalman_T = np.transpose(ident_less_kalman)
-        measurement_uncertainty = np.matmul(kalman_gain,
-                                            np.matmul(self.measurement_cov, np.transpose(kalman_gain)))
-        self.covariance_mat = np.matmul(ident_less_kalman,
-                                        np.matmul(pred_cov, ident_less_kalman_T)) + measurement_uncertainty  # P_n,n
+        if x is not None:  # Received frame.
+            measurement = np.array([x, y])  # z
+            
+            kalman_gain = np.matmul(
+                pred_cov, np.linalg.inv(pred_cov + self.measurement_cov)
+            )  # K_n
+            
+            self.state = pred_state + np.matmul(
+                kalman_gain, (measurement - pred_state)
+            )  # s_n,n
+            
+            ident_less_kalman = self.identity - kalman_gain
+            ident_less_kalman_T = np.transpose(ident_less_kalman)
+            measurement_uncertainty = np.matmul(
+                kalman_gain, np.matmul(
+                    self.measurement_cov,
+                    np.transpose(kalman_gain)
+                )
+            )
+            
+            self.covariance_mat = np.matmul(
+                ident_less_kalman,
+                np.matmul(pred_cov, ident_less_kalman_T)
+            ) + measurement_uncertainty  # P_n,n
+        
+        # We can rely on the invariant that vanished frames have null x values
+        # as they are imputed with a null VisionRobotData
+        else:  # Vanished frame: use predicted values.
+            self.state = pred_state
+            self.covariance_mat = pred_cov
 
         return self.state[0], self.state[1], theta
 
@@ -91,9 +111,11 @@ class Kalman_filter:
     ) -> VisionRobotData:
         
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
-        (x_f, y_f, th_f) = filter.step([data.x, data.y, data.orientation],
-                                       last_frame[filter.id],
-                                       time_elapsed)
+        (x_f, y_f, th_f) = filter.step(
+            (data.x, data.y, data.orientation),
+            last_frame[filter.id],
+            time_elapsed
+        )
 
         return VisionRobotData(id=data.id, x=x_f, y=y_f, orientation=th_f)
 
@@ -214,6 +236,82 @@ class Kalman_filter_2D:
     def step(self, x, y):
         return self.kalmanX.step(x), self.kalmanY.step(y)
 
+    @staticmethod
+    def filter_robot(
+        filter,
+        data: VisionRobotData,
+    ) -> VisionRobotData:
+        
+        # class VisionRobotData: id: int; x: float; y: float; orientation: float
+        x_f, y_f = filter.step(data.x, data.y)
+
+        return VisionRobotData(id=data.id, x=x_f, y=y_f, orientation=data.orientation)
+    
+    
+class KalmanFilter6D:
+    def _init_(self, dt, std_acc=4.0, std_meas=0.1):
+        self.dt = dt
+        
+        # 1. State Vector [x, vx, ax, y, vy, ay]
+        self.x = np.zeros((6, 1))
+        
+        # 2. State Transition Matrix (F)
+        self.F = np.array([
+            [1, dt, 0.5*dt**2, 0,  0,       0],
+            [0, 1,  dt,        0,  0,       0],
+            [0, 0,  1,         0,  0,       0],
+            [0, 0,  0,         1,  dt, 0.5*dt**2],
+            [0, 0,  0,         0,  1,       dt],
+            [0, 0,  0,         0,  0,       1]
+        ])
+        
+        # 3. Measurement Matrix (H) - Mapping 6D state to 2D observation
+        self.H = np.array([
+            [1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0]
+        ])
+        
+        # 4. Process Noise Covariance (Q) 
+        # Tuning this higher makes the filter follow the data more closely (less lag)
+        G = np.array([[0.5*dt**2], [dt], [1]])
+        Q_block = G @ G.T * (std_acc**2)
+        self.Q = np.block([
+            [Q_block,           np.zeros((3,3))],
+            [np.zeros((3,3)),   Q_block]
+        ])
+        
+        # 5. Measurement Noise Covariance (R)
+        self.R = np.eye(2) * (std_meas**2)
+        
+        # 6. Error Covariance Matrix (P)
+        self.P = np.eye(6) * 500.0
+
+    def predict(self):
+        # x = F * x
+        self.x = np.dot(self.F, self.x)
+        # P = F * P * Ft + Q
+        self.P = np.dot(np.dot(self.F, self.P), self.F.T) + self.Q
+        return self.x
+
+    def update(self, z):
+        # z is the [x, y] measurement
+        # y = z - H * x (Innovation)
+        y = z - np.dot(self.H, self.x)
+        # S = H * P * Ht + R
+        S = np.dot(self.H, np.dot(self.P, self.H.T)) + self.R
+        # K = P * Ht * inv(S) (Kalman Gain)
+        K = np.dot(np.dot(self.P, self.H.T), np.linalg.inv(S))
+        
+        # Update state and covariance
+        self.x = self.x + np.dot(K, y)
+        I = np.eye(self.P.shape[0])
+        self.P = np.dot(I - np.dot(K, self.H), self.P)
+    
+    def step(self, x, y):
+        self.predict()
+        self.update(np.array([x, y]))
+        return self.x[0, 0], self[3, 0]
+    
     @staticmethod
     def filter_robot(
         filter,
