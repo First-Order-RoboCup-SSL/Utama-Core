@@ -22,12 +22,16 @@ class RobotPlacementStep(AbstractBehaviour):
     A behaviour that commands a robot to move between two specific positions on the field.
 
     **Args:**
-        rd_robot_id (str): Blackboard key for the robot ID.
-        start_point (tuple): Starting coordinate (x, y).
-        end_point (tuple): Ending coordinate (x, y).
-        turn_key (str): Blackboard key for synchronization turn.
-        my_turn_idx (int): The turn index for this robot.
-        next_turn_idx (int): The turn index to set when movement is complete.
+        `role` (str): Role of the robot (horizontal or vertical).
+        `my_turn_idx` (int): The turn index for this robot.
+        `next_turn_idx` (int): The turn index to set when movement is complete.
+
+    **Blackboard Interaction:**
+        Reads:
+            - `rd_robot_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
+            - `field_center_key` (str): Blackboard key for field center coordinates.
+        Writes:
+            - `turn_key` (int): The turn index for this robot.
     """
 
     def __init__(
