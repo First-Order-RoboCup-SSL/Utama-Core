@@ -1,6 +1,7 @@
 import copy
 import math
-from math import exp, hypot
+import random
+from math import exp
 from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
@@ -159,6 +160,28 @@ class OrientedRectangle:
 
         return min(intersection_score, 1.0)
 
+    def contains_point(self, point: Vector2D) -> bool:
+        """
+        Check if a point is inside this oriented rectangle.
+
+        Args:
+            point: The point to test
+
+        Returns:
+            True if the point is inside the rectangle, False otherwise
+        """
+        # Transform point to local rectangle coordinates
+        # Translate to origin
+        dx = point.x - self.center.x
+        dy = point.y - self.center.y
+
+        # Rotate by -heading to align with rectangle's local axes
+        local_x = dx * self.cos_heading + dy * self.sin_heading
+        local_y = -dx * self.sin_heading + dy * self.cos_heading
+
+        # Check if within bounds
+        return abs(local_x) <= self.half_length and abs(local_y) <= self.half_width
+
 
 class DynamicWindowPlanner:
     """Stateless local planner backing the DWA translation controller."""
@@ -172,7 +195,7 @@ class DynamicWindowPlanner:
         self._simulate_timestep = self._config.simulate_frames * TIMESTEP
         self._control_period = TIMESTEP
         self._max_acceleration = self._config.max_acceleration
-        self._max_safety_radius = self._config.max_safety_radius
+        self._max_safety_radius = self._config.max_safety_radius  #
         self._safety_penalty_distance_sq = self._config.safety_penalty_distance_sq
         self._max_speed_for_full_bubble = self._config.max_speed_for_full_bubble
         self.env = env
@@ -265,9 +288,6 @@ class DynamicWindowPlanner:
             or None if no valid path is found.
         """
         velocity = robot.v
-        current_speed = velocity.mag()
-        safety_radius = self._dynamic_safety_radius(current_speed)
-        safety_radius_sq = safety_radius * safety_radius
 
         delta_max_vel = self._control_period * self._max_acceleration
         best_score = float("-inf")
@@ -276,97 +296,80 @@ class DynamicWindowPlanner:
 
         dx, dy = target - start
         ang0 = math.atan2(dy, dx)
-        step = 2 * math.pi / self._config.n_directions
-        ordered_angles = [normalise_heading(ang0 + k * step) for k in range(self._config.n_directions)]
+        scales = self._random_candidate_scales(start.distance_to(target))
 
-        for scale in self._candidate_scales():
-            for ang in ordered_angles:
-                segment_start, segment_end = self._get_motion_segment(
-                    start,
-                    velocity,
-                    delta_max_vel * scale,
-                    ang,
-                )
+        best_collides = False
+        for scale in scales:
+            segment_start, segment_end = self._get_motion_segment(
+                start,
+                velocity,
+                delta_max_vel * scale,
+                ang0,
+            )
 
-                # traj = self.predict_trajectory(start_pos, vx, vy)
+            if self.env is not None:
+                self.env.draw_line([segment_start, segment_end], color="red", width=2)
 
-                # obs_cost = self.calc_obstacle_cost(traj, rect_obstacles)
-                # goal_cost = self.calc_to_goal_cost(traj, target)
-                # speed_cost = self.calc_speed_cost(speed)
+            score = self._evaluate_segment(game, robot, segment_start, segment_end, target)
+            collides = self._segment_collides(game, robot, segment_start, segment_end)
 
-                # score = self._w_goal * goal_cost - self._w_obstacle * obs_cost + self._w_speed * speed_cost
+            if score > best_score:
+                best_score = score
+                best_move = segment_end
+                best_collides = collides
 
-                # if score > best_score:
-                #     best_score = score
-                #     best_endpoint = traj[-1] if len(traj) else start_pos
+        if best_collides:
+            for ang in self._random_candidate_angles(ang0, 5):
+                for scale in scales:
+                    segment_start, segment_end = self._get_motion_segment(
+                        start,
+                        velocity,
+                        delta_max_vel * scale,
+                        ang,
+                    )
 
-                if self.env is not None:
-                    self.env.draw_line([segment_start, segment_end], color="red", width=2)
+                    if self.env is not None:
+                        self.env.draw_line([segment_start, segment_end], color="red", width=2)
 
-                # if self._segment_too_close(segment_start, segment_end, rect_obstacles, safety_radius):
-                #     continue
+                    score = self._evaluate_segment(game, robot, segment_start, segment_end, target)
 
-                score = self._evaluate_segment(
-                    game,
-                    robot,
-                    segment_start,
-                    segment_end,
-                    target,
-                    safety_radius_sq,
-                )
+                    if score > best_score:
+                        best_score = score
+                        best_move = segment_end
 
-                if score > best_score:
-                    best_score = score
-                    best_move = segment_end
-
-        if best_score == float("-inf"):  # best move is not ot move at all lol
+        if best_score == float("-inf"):  # best move is not to move at all lol
             return None
-
-        # clamp endpoint if overshooting
-        # if best_endpoint.distance_to(target) < self._config.target_tolerance:
-        #     best_endpoint = target
-
-        # return best_endpoint, best_score
 
         if self._segment_overshoots_target(start, best_move, target):
             best_move = copy.copy(target)
 
         return best_move, best_score
 
-    def calc_dynamic_window(self, cur_v: Vector2D) -> Tuple[float, float, float, float]:
-        """Computes dynamic window in (vx, vy) space
-        - clamps velocities component-wise here BEFORE filtering in sampling loop"""
-
-        dt = self._simulate_timestep
-        a = self._max_acceleration
-
-        vx_min = cur_v.x - a * dt
-        vx_max = cur_v.x + a * dt
-        vy_min = cur_v.y - a * dt
-        vy_max = cur_v.y + a * dt
-
-        vlimit = getattr(self._config, "max_speed")
-        vx_min = max(vx_min, -vlimit)
-        vx_max = min(vx_max, vlimit)
-        vy_min = max(vy_min, -vlimit)
-        vy_max = min(vy_max, vlimit)
-
-        return vx_min, vx_max, vy_min, vy_max
-
     def _get_obstacles(self, game: Game, robot_id: int) -> List[Robot]:
         friendly = [r for rid, r in game.friendly_robots.items() if rid != robot_id]
         enemies = list(game.enemy_robots.values())
         return friendly + enemies
 
-    def _obstacle_penalty(self, value: float) -> float:
-        return exp(-8 * (value - self._safety_penalty_distance_sq))
+    def _segment_collides(self, game: Game, robot: Robot, start: Vector2D, end: Vector2D) -> bool:
+        seg_vec = end - start
+        our_velocity_vector = seg_vec / self._simulate_timestep
+        our_safety_rect = self._create_safety_rectangle(robot.p, our_velocity_vector)
 
-    # line here is the optimal aim (straight line to target)
-    # the larger the distance_to_line, the more off we are
-    # No bonus for large distance_to_line
-    @staticmethod
-    def _aiming_accuracy(distance_to_line: float) -> float:
-        return 4 * exp(-8 * distance_to_line)
+        for obstacle in self._get_obstacles(game, robot.id):
+            obstacle_safety_rect = self._create_safety_rectangle(obstacle.p, obstacle.v)
+            if our_safety_rect.intersects(obstacle_safety_rect):
+                return True
+
+        return False
+
+    def _random_candidate_angles(self, base_angle: float, count: int) -> List[float]:
+        if count <= 0:
+            return []
+        bin_width = 2 * math.pi / count
+        return [
+            normalise_heading(base_angle + random.uniform(-math.pi + i * bin_width, -math.pi + (i + 1) * bin_width))
+            for i in range(count)
+        ]
 
     def _evaluate_segment(
         self,
@@ -375,7 +378,6 @@ class DynamicWindowPlanner:
         start: Vector2D,
         end: Vector2D,
         target: Vector2D,
-        safety_radius_sq: float,
     ) -> float:
         """Evaluate a candidate motion segment; higher score is better."""
         seg_vec = end - start
@@ -385,17 +387,11 @@ class DynamicWindowPlanner:
         target_progress_factor = start_dist - end_dist
 
         our_velocity_vector = seg_vec / self._simulate_timestep
+        resulting_speed = our_velocity_vector.mag()
         our_position = robot.p
 
         # Create our safety rectangle based on candidate velocity
         our_safety_rect = self._create_safety_rectangle(our_position, our_velocity_vector)
-
-        # Visualize safety rectangle if environment available
-        if self.env is not None and self._config.show_debug_rectangles:
-            corners = our_safety_rect.get_corners()
-            # Draw rectangle outline
-            for i in range(4):
-                self.env.draw_line([corners[i], corners[(i + 1) % 4]], color="blue", width=1)
 
         obstacle_factor = 0.0
         for obstacle in self._get_obstacles(game, robot.id):
@@ -416,13 +412,9 @@ class DynamicWindowPlanner:
 
                 obstacle_factor = max(obstacle_factor, penalty)
 
-                if self.env is not None and self._config.show_debug_rectangles:
-                    # Visualize collision with intensity based on overlap
-                    # Light overlap = yellow, heavy overlap = red
-                    color = "red" if intersection_ratio > 0.5 else "orange"
-                    corners = obstacle_safety_rect.get_corners()
-                    for i in range(4):
-                        self.env.draw_line([corners[i], corners[(i + 1) % 4]], color=color, width=2)
+                # This should be commented out in real execution to speed up further
+                self._draw_collision_box(obstacle_safety_rect, "red" if intersection_ratio > 0.5 else "orange", 2)
+
             else:
                 # Calculate distance between rectangles
                 dist = our_safety_rect.distance_to(obstacle_safety_rect)
@@ -437,30 +429,21 @@ class DynamicWindowPlanner:
                     penalty = 1.0 * math.exp(-4.0 * dist)
                     obstacle_factor = max(obstacle_factor, penalty)
 
-                if self.env is not None and self._config.show_debug_rectangles:
-                    # Visualize safe obstacles in green
-                    corners = obstacle_safety_rect.get_corners()
-                    for i in range(4):
-                        self.env.draw_line([corners[i], corners[(i + 1) % 4]], color="green", width=1)
+                # This should be commented out in real execution to speed up further
+                self._draw_collision_box(obstacle_safety_rect, "green", 1)
 
         # Use configured weights
         score = (
-            self._w_goal * target_progress_factor
-            + self._w_speed * our_velocity_vector.mag()
-            - self._w_obstacle * obstacle_factor
+            self._w_goal * target_progress_factor + self._w_speed * resulting_speed - self._w_obstacle * obstacle_factor
         )
         return score
 
-    def _dynamic_safety_radius(self, speed: float) -> float:
-        """Interpolate the clearance radius between the physical robot radius and the nominal DWA bubble."""
-        min_radius = ROBOT_RADIUS
-        max_radius = self._max_safety_radius
-        if max_radius <= min_radius:
-            return max_radius
-        if self._max_speed_for_full_bubble <= 1e-6:
-            return max_radius
-        ratio = min(max(speed / self._max_speed_for_full_bubble, 0.0), 1.0)
-        return min_radius + (max_radius - min_radius) * ratio
+    def _draw_collision_box(self, collision_box: OrientedRectangle, color: str, width: int):
+        if self.env is not None and self._config.show_debug_rectangles:
+            # Visualize safe obstacles in green
+            corners = collision_box.get_corners()
+            for i in range(4):
+                self.env.draw_line([corners[i], corners[(i + 1) % 4]], color=color, width=width)
 
     def _get_motion_segment(
         self,
@@ -475,12 +458,17 @@ class DynamicWindowPlanner:
         end = rpos + displacement
         return rpos, end
 
-    def _candidate_scales(self) -> Iterable[float]:
-        """Yield velocity scale factors from fast to slow until the window shrinks."""
-        scale = 1.0
-        while scale > 0.05:
-            yield scale
-            scale /= 4
+    def _random_candidate_scales(self, distance: float, count: int = 3) -> List[float]:
+        min_scale = 0.05
+        max_scale = min(1.0, max(min_scale, distance))
+        if count <= 0:
+            return []
+        if max_scale - min_scale <= 1e-9:
+            return [min_scale] * count
+
+        bin_width = (max_scale - min_scale) / count
+        samples = [random.uniform(min_scale + i * bin_width, min_scale + (i + 1) * bin_width) for i in range(count)]
+        return sorted(samples, reverse=True)
 
     def _segment_overshoots_target(self, start: Vector2D, end: Vector2D, target: Vector2D) -> bool:
         """Return True when the candidate segment would pass through the target."""
@@ -490,21 +478,27 @@ class DynamicWindowPlanner:
             return False
 
         to_target = target - start
+        dist_start = to_target.mag()
+        dist_end = end.distance_to(target)
+        overshoot_tolerance = getattr(self._config, "overshoot_tolerance", self._config.target_tolerance * 3.0)
+        overshoot_tolerance = max(overshoot_tolerance, self._config.target_tolerance)
+
+        if dist_start <= overshoot_tolerance and dist_end > dist_start:
+            return True
+
         projection = to_target.dot(segment)
-        if projection <= 0.0 or projection >= seg_len_sq:
-            return False
-
-        distance = point_segment_distance(target, start, end)
-        return distance <= self._config.target_tolerance
-
-    def _segment_too_close(
-        self,
-        start: Vector2D,
-        end: Vector2D,
-        obstacles: List[AxisAlignedRectangle],
-        clearance: float,
-    ) -> bool:
-        for obstacle in obstacles:
-            if obstacle.distance_to_segment(start, end) < clearance:
+        if 0.0 < projection < seg_len_sq:
+            distance = point_segment_distance(target, start, end)
+            if distance <= overshoot_tolerance:
                 return True
+
+        if dist_start > 1e-9:
+            direction_to_target = to_target / dist_start
+            end_offset = end - start
+            along = end_offset.dot(direction_to_target)
+            if along > dist_start:
+                lateral = end_offset - direction_to_target * along
+                if lateral.mag() <= overshoot_tolerance:
+                    return True
+
         return False
