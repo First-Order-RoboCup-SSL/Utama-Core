@@ -40,7 +40,7 @@ def defend_parameter(
         def distance(x1, y1, x2, y2):
             return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
 
-        if abs(x2 - x4) < 1 or abs(y2 - y4) < 2:
+        if abs(x2 - x4) < 1 and -1 < y4 < 1:
             hori_x, hori_y = cal_xy5(x2, y2, x1, y1, 1.0, x4, y4)
             ver_x, ver_y = cal_xy5(y2, x2, y1, x1, 2.0, x4, y4)
             if distance(x4, y4, hori_x, hori_y) < distance(x4, y4, ver_x, ver_y):
@@ -50,32 +50,19 @@ def defend_parameter(
 
         return x3, y3, x4, y4
 
-    # def modified_pos(target_pos):
-    #     if target_pos[0] > 4.0:
-    #         if target_pos[1] < 1.0 and target_pos[1] >= 0:
-    #             if 4.5 - target_pos[0] < target_pos[1] - 1.0:
-    #                 target_pos[0] = 4.0
-    #             else:
-    #                 target_pos[1] = 1.0
-    #         elif target_pos[1] > -1.0 and target_pos[1] < 0:
-    #             if 4.5 - target_pos[0] < -1.0 - target_pos[1]:
-    #                 target_pos[0] = 4.0
-    #             else:
-    #                 target_pos[1] = -1.0
-    #     return target_pos
-
     if vel[0] ** 2 + vel[1] ** 2 > 0.05:
         x2, y2 = 4.5, 0.5
-        # target_pos = modified_pos(np.array([positions_to_defend_parameter(x2, y2)[2], positions_to_defend_parameter(x2, y2)[3]]))
-        target_pos = np.array([positions_to_defend_parameter(x2, y2)[2], positions_to_defend_parameter(x2, y2)[3]])
+        x3, y3, x4, y4 = positions_to_defend_parameter(x2, y2)
+        target_pos = np.array([x4, y4])
 
     else:
         robot_rad = 0.09
         x2, y2 = 4.5, -0.5
+        x3, y3, x4, y4 = positions_to_defend_parameter(x2, y2)
         vec_to_target = np.array(
             [
-                positions_to_defend_parameter(x2, y2)[2] - positions_to_defend_parameter(x2, y2)[0],
-                positions_to_defend_parameter(x2, y2)[3] - positions_to_defend_parameter(x2, y2)[1],
+                x4 - x3,
+                y4 - y3,
             ]
         )
         dist_to_target = np.linalg.norm(vec_to_target)
@@ -85,9 +72,6 @@ def defend_parameter(
         else:
             vec_dir = np.array([0.0, 0.0])
         # target_pos = modified_pos(np.array([positions_to_defend_parameter(x2, y2)[2], positions_to_defend_parameter(x2, y2)[3]]) - vec_dir * robot_rad)
-        target_pos = (
-            np.array([positions_to_defend_parameter(x2, y2)[2], positions_to_defend_parameter(x2, y2)[3]])
-            - vec_dir * robot_rad
-        )
+        target_pos = np.array([x4, y4]) - vec_dir * robot_rad
 
     return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]), dribbling=True)
