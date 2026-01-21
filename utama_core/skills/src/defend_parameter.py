@@ -47,14 +47,6 @@ def defend_parameter(
     if vel[0] ** 2 + vel[1] ** 2 > 0.05:
         target_pos = modified_pos(np.array([x4, y4]))
 
-        return go_to_point(
-            game,
-            motion_controller,
-            robot_id,
-            Vector2D(target_pos[0], target_pos[1]),
-            dribbling=True,
-        )
-
     else:
         robot_rad = 0.09
 
@@ -65,8 +57,6 @@ def defend_parameter(
             vec_dir = vec_to_target / dist_to_target
         else:
             vec_dir = np.array([0.0, 0.0])
-
         target_pos = modified_pos(np.array([x4, y4]) - vec_dir * robot_rad)
-        target_oren = np.pi if game.my_team_is_right else 0
 
-        return move(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]), target_oren, True)
+    return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]), dribbling=True)
