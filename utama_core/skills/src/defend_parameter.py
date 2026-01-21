@@ -29,7 +29,7 @@ def defend_parameter(
         y4 = y1 + t * (y2 - y1)
 
         def cal_xy5(xa, ya, xb, yb, w, x4, y4):
-            x5 = xa + w
+            x5 = xa - w
             dx = xb - xa
             if abs(dx) < 1e-12:
                 return x4, y4
