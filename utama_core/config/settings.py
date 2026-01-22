@@ -22,14 +22,22 @@ ADD_Y_COORD = -3.15
 REMOVAL_Y_COORD = -10
 TELEPORT_X_COORDS = [0.4, 0.8, 1.2, 1.6, 2, 2.4]
 
+### RSIM Dribbler Settings ###
+MIN_RELEASE_SPEED = 0.1  # m/s
+RELEASE_GAIN = 0.1
+MAX_BALL_SPEED = 3.0  # m/s
+
 ### REAL CONTROLLER SETTINGS ###
 BAUD_RATE = 115200
 PORT = "/dev/ttyUSB0"
 TIMEOUT = 0.1
 
-MAX_GAME_HISTORY = 20
+MAX_GAME_HISTORY = 20  # number of previous game states to keep in Game
 
 REPLAY_BASE_PATH = Path.cwd() / "replays"
 RENDER_BASE_PATH = Path.cwd() / "renders"
 
 FPS_PRINT_INTERVAL = 1.0  # seconds
+
+### Refiners ###
+BALL_MERGE_THRESHOLD = 0.05  # CameraCombiner: distance threshold to merge balls (m)

@@ -2,14 +2,9 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.global_utils.mapping_utils import (
-    map_friendly_enemy_to_colors,
-    map_left_right_to_colors,
-)
 from utama_core.run import StrategyRunner
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
@@ -31,7 +26,7 @@ class MovingObstacleConfig:
     center_position: tuple[float, float]
     oscillation_axis: str  # 'x' or 'y'
     amplitude: float  # How far to move from center
-    directionUpOrRight: bool  # True for going up/right first, False for going down/left first
+    direction_up_or_right: bool  # True for going up/right first, False for going down/left first
     speed: float  # Speed of oscillation (higher = faster)
 
 
@@ -49,11 +44,12 @@ class MovingObstacleScenario:
 class MovingObstacleTestManager(AbstractTestManager):
     """Test manager that validates dynamic obstacle avoidance and target completion."""
 
+    n_episodes = 1
+
     def __init__(self, scenario: MovingObstacleScenario, robot_id: int):
         super().__init__()
         self.scenario = scenario
         self.robot_id = robot_id
-        self.n_episodes = 1
         self.endpoint_reached = False
         self.collision_detected = False
         self.min_obstacle_distance = float("inf")
@@ -61,17 +57,6 @@ class MovingObstacleTestManager(AbstractTestManager):
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with robot at start position and moving obstacles."""
-        ini_yellow, ini_blue = map_left_right_to_colors(
-            game.my_team_is_yellow,
-            game.my_team_is_right,
-            RIGHT_START_ONE,
-            LEFT_START_ONE,
-        )
-
-        y_robots, b_robots = map_friendly_enemy_to_colors(
-            game.my_team_is_yellow, game.friendly_robots, game.enemy_robots
-        )
-
         # Teleport ALL friendly robots off-field
         for i in range(6):
             if i == self.robot_id:
@@ -152,9 +137,6 @@ class MovingObstacleTestManager(AbstractTestManager):
             return TestingStatus.SUCCESS
 
         return TestingStatus.IN_PROGRESS
-
-    def get_n_episodes(self):
-        return self.n_episodes
 
 
 @pytest.mark.parametrize(
@@ -241,13 +223,12 @@ def test_single_robot_moving_obstacles(
         exp_friendly=1,
         exp_enemy=len(scenario.moving_obstacles),
         opp_strategy=opp_strategy,
-        control_scheme="fpp",
-        opp_control_scheme="fpp",  # Use PID so obstacles follow exact paths without avoiding the robot
+        opp_control_scheme="pid",  # Use PID so obstacles follow exact paths without avoiding the robot
     )
 
     test_manager = MovingObstacleTestManager(scenario=scenario, robot_id=robot_id)
     test_passed = runner.run_test(
-        testManager=test_manager,
+        test_manager=test_manager,
         episode_timeout=30.0,  # Longer timeout for moving obstacles
         rsim_headless=headless,
     )

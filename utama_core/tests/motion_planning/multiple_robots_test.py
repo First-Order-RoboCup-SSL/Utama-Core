@@ -1,39 +1,20 @@
 """Tests for multiple robots collision avoidance scenarios."""
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-import pytest
-
-from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
-from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.global_utils.mapping_utils import (
-    map_friendly_enemy_to_colors,
-    map_left_right_to_colors,
-)
 from utama_core.run import StrategyRunner
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
 )
-from utama_core.tests.motion_planning.strategies.simple_navigation_strategy import (
-    SimpleNavigationStrategy,
-)
 
 # Fix pygame window position for screen capture
 os.environ["SDL_VIDEO_WINDOW_POS"] = "100,100"
-
-
-@dataclass
-class MirrorChargeConfig:
-    """Configuration for mirror positions where teams charge at each other."""
-
-    positions: list[tuple[float, float]]  # Positions for one team (left side)
-    collision_threshold: float = ROBOT_RADIUS * 2.0
-    endpoint_tolerance: float = 0.2
 
 
 @dataclass
@@ -51,10 +32,11 @@ class MultiRobotScenario:
 class MultiRobotTestManager(AbstractTestManager):
     """Test manager for multiple robots with collision detection."""
 
+    n_episodes = 1
+
     def __init__(self, scenario: MultiRobotScenario):
         super().__init__()
         self.scenario = scenario
-        self.n_episodes = 1
         self.all_reached = False
         self.collision_detected = False
         self.min_distance = float("inf")
@@ -65,7 +47,7 @@ class MultiRobotTestManager(AbstractTestManager):
         """Reset field with all robots at their starting positions."""
         # Teleport friendly robots to starting positions
         for i, (x, y) in enumerate(self.scenario.friendly_positions):
-            if i < 6:  # Max 6 robots per team
+            if i < MAX_ROBOTS:  # Max MAX_ROBOTS robots per team
                 sim_controller.teleport_robot(
                     game.my_team_is_yellow,
                     i,
@@ -75,7 +57,7 @@ class MultiRobotTestManager(AbstractTestManager):
                 )
 
         # Teleport remaining friendly robots far away
-        for i in range(len(self.scenario.friendly_positions), 6):
+        for i in range(len(self.scenario.friendly_positions), MAX_ROBOTS):
             sim_controller.teleport_robot(
                 game.my_team_is_yellow,
                 i,
@@ -86,7 +68,7 @@ class MultiRobotTestManager(AbstractTestManager):
 
         # Teleport enemy robots to starting positions
         for i, (x, y) in enumerate(self.scenario.enemy_positions):
-            if i < 6:
+            if i < MAX_ROBOTS:
                 sim_controller.teleport_robot(
                     not game.my_team_is_yellow,
                     i,
@@ -96,7 +78,7 @@ class MultiRobotTestManager(AbstractTestManager):
                 )
 
         # Teleport remaining enemy robots far away
-        for i in range(len(self.scenario.enemy_positions), 6):
+        for i in range(len(self.scenario.enemy_positions), MAX_ROBOTS):
             sim_controller.teleport_robot(
                 not game.my_team_is_yellow,
                 i,
@@ -170,16 +152,13 @@ class MultiRobotTestManager(AbstractTestManager):
 
         return TestingStatus.IN_PROGRESS
 
-    def get_n_episodes(self):
-        return self.n_episodes
 
-
-def test_mirror_charge_head_on(
+def test_mirror_swap(
     headless: bool,
     mode: str = "rsim",
 ):
     """
-    Test where two teams of 6 robots charge straight at each other from mirror positions.
+    Test where two teams of MAX_ROBOTS robots start in mirror formations and swap positions across the field.
 
     The robots should:
     1. Start at mirror positions on opposite sides of the field
@@ -219,28 +198,6 @@ def test_mirror_charge_head_on(
         endpoint_tolerance=0.3,
     )
 
-    # Create strategies for both teams
-    # Each robot navigates to its mirror position on the opposite side
-    friendly_strategies = []
-    for robot_id in range(len(left_positions)):
-        friendly_strategies.append(
-            SimpleNavigationStrategy(
-                robot_id=robot_id,
-                target_position=right_positions[robot_id],
-                target_orientation=0.0,
-            )
-        )
-
-    enemy_strategies = []
-    for robot_id in range(len(right_positions)):
-        enemy_strategies.append(
-            SimpleNavigationStrategy(
-                robot_id=robot_id,
-                target_position=left_positions[robot_id],
-                target_orientation=0.0,
-            )
-        )
-
     # For simplicity, use a parallel strategy that runs all robot strategies
     # Since we need a single strategy object, we'll create a custom one
     from utama_core.tests.motion_planning.strategies.multi_robot_navigation_strategy import (
@@ -263,12 +220,11 @@ def test_mirror_charge_head_on(
         exp_friendly=6,
         exp_enemy=6,
         opp_strategy=opp_strategy,
-        control_scheme="fpp",  # Both teams use DWA for collision avoidance
     )
 
     test_manager = MultiRobotTestManager(scenario=scenario)
     test_passed = runner.run_test(
-        testManager=test_manager,
+        test_manager=test_manager,
         episode_timeout=45.0,  # Longer timeout for 12 robots
         rsim_headless=headless,
     )
@@ -309,8 +265,8 @@ def test_diagonal_cross_square(
     # Define square corners (2m x 2m square centered at origin)
     # Top-left and bottom-right for Yellow team
     yellow_positions = [
-        (-1, 1),  # Top-left corner (robot 0)
-        (1, -1),  # Bottom-right corner (robot 1)
+        (-1.5, 1.5),  # Top-left corner (robot 0)
+        (1.5, -1.5),  # Bottom-right corner (robot 1)
     ]
 
     # Top-right and bottom-left for Blue team
@@ -356,21 +312,20 @@ def test_diagonal_cross_square(
         exp_friendly=2,
         exp_enemy=2,
         opp_strategy=opp_strategy,
-        control_scheme="fpp",  # Use DWA for collision avoidance
     )
 
     test_manager = MultiRobotTestManager(scenario=scenario)
     test_passed = runner.run_test(
-        testManager=test_manager,
+        test_manager=test_manager,  # Changed to snake_case
         episode_timeout=30.0,
         rsim_headless=headless,
     )
 
     # Assertions
     assert test_passed, "Diagonal cross test failed to complete"
-    assert test_manager.all_reached, (
-        f"Not all robots reached their targets. " f"Reached: {len(test_manager.robots_reached)}/4"
-    )
+    assert (
+        test_manager.all_reached
+    ), f"Not all robots reached their targets. Reached: {len(test_manager.robots_reached)}/4"
     assert not test_manager.collision_detected, (
         f"Robots collided {test_manager.collision_count} time(s) at center crossing! "
         f"Minimum distance: {test_manager.min_distance:.3f}m "

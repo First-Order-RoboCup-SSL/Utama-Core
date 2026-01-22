@@ -2,14 +2,9 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
-from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.global_utils.mapping_utils import (
-    map_friendly_enemy_to_colors,
-    map_left_right_to_colors,
-)
 from utama_core.run import StrategyRunner
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
@@ -35,30 +30,20 @@ class CollisionAvoidanceScenario:
 class CollisionAvoidanceTestManager(AbstractTestManager):
     """Test manager that validates obstacle avoidance and target completion."""
 
+    n_episodes = 1
+
     def __init__(self, scenario: CollisionAvoidanceScenario, robot_id: int):
         super().__init__()
         self.scenario = scenario
         self.robot_id = robot_id
-        self.n_episodes = 1
         self.endpoint_reached = False
         self.collision_detected = False
         self.min_obstacle_distance = float("inf")
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with robot at start position and obstacles along the path."""
-        ini_yellow, ini_blue = map_left_right_to_colors(
-            game.my_team_is_yellow,
-            game.my_team_is_right,
-            RIGHT_START_ONE,
-            LEFT_START_ONE,
-        )
-
-        y_robots, b_robots = map_friendly_enemy_to_colors(
-            game.my_team_is_yellow, game.friendly_robots, game.enemy_robots
-        )
-
         # Teleport ALL friendly robots off-field first (to clean up from previous tests)
-        for i in range(6):  # SSL has max 6 robots per team
+        for i in range(MAX_ROBOTS):
             if i == self.robot_id:
                 # Place the test robot at start position
                 sim_controller.teleport_robot(
@@ -79,7 +64,7 @@ class CollisionAvoidanceTestManager(AbstractTestManager):
                 )
 
         # Place enemy robots as obstacles
-        for i in range(6):  # Handle all possible enemy robots
+        for i in range(MAX_ROBOTS):  # Handle all possible enemy robots
             if i < len(self.scenario.obstacle_positions):
                 x, y = self.scenario.obstacle_positions[i]
                 sim_controller.teleport_robot(
@@ -136,9 +121,6 @@ class CollisionAvoidanceTestManager(AbstractTestManager):
 
         return TestingStatus.IN_PROGRESS
 
-    def get_n_episodes(self):
-        return self.n_episodes
-
 
 @pytest.mark.parametrize(
     "obstacle_config",
@@ -159,7 +141,14 @@ class CollisionAvoidanceTestManager(AbstractTestManager):
         {
             "start": (-3.0, 0.0),
             "target": (3.0, 0.0),
-            "obstacles": [(-1.5, 0.0), (0.0, -0.5), (0.0, 0.5), (1.5, -1.0), (1.5, 0.0), (1.5, 1.0)],
+            "obstacles": [
+                (-1.5, 0.0),
+                (0.0, -0.5),
+                (0.0, 0.5),
+                (1.5, -1.0),
+                (1.5, 0.0),
+                (1.5, 1.0),
+            ],
         },
     ],
 )
@@ -202,12 +191,11 @@ def test_collision_avoidance_goal_to_goal(
         mode=mode,
         exp_friendly=1,
         exp_enemy=len(obstacle_config["obstacles"]),
-        control_scheme="fpp",  # Use PID for obstacle avoidance
     )
 
     test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)
     test_passed = runner.run_test(
-        testManager=test_manager,
+        test_manager=test_manager,
         episode_timeout=20.0,  # Give enough time to navigate
         rsim_headless=headless,
     )
@@ -252,12 +240,11 @@ def test_simple_straight_line_no_obstacles(
         mode=mode,
         exp_friendly=1,
         exp_enemy=0,
-        control_scheme="fpp",
     )
 
     test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)
     test_passed = runner.run_test(
-        testManager=test_manager,
+        test_manager=test_manager,
         episode_timeout=15.0,
         rsim_headless=headless,
     )

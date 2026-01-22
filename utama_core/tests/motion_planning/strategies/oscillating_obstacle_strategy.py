@@ -1,10 +1,17 @@
 """Strategy for controlling moving obstacles that oscillate back and forth."""
 
+from __future__ import annotations
+
 import math
 import time
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 import py_trees
+
+if TYPE_CHECKING:
+    from utama_core.tests.motion_planning.single_robot_moving_obstacle_test import (
+        MovingObstacleConfig,
+    )
 
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import FieldBounds
@@ -22,6 +29,7 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
         center_position: Center point of oscillation (x, y)
         oscillation_axis: 'x' or 'y' - which axis to oscillate along
         amplitude: How far to move from center
+        direction_up_or_right: True for going up/right first, False for going down/left first
         speed: Speed of oscillation (radians per second in sin wave)
     """
 
@@ -31,7 +39,7 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
         center_position: tuple[float, float],
         oscillation_axis: str,
         amplitude: float,
-        directionUpOrRight: bool,
+        direction_up_or_right: bool,
         speed: float,
     ):
         super().__init__(name=f"OscillatingObstacle_{obstacle_id}")
@@ -39,7 +47,7 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
         self.center_x, self.center_y = center_position
         self.oscillation_axis = oscillation_axis.lower()
         self.amplitude = amplitude
-        self.directionUpOrRight = directionUpOrRight
+        self.direction_up_or_right = direction_up_or_right
         self.speed = speed
         self.start_time = None
 
@@ -52,15 +60,12 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
         game = self.blackboard.game
         rsim_env = self.blackboard.rsim_env
 
-        if self.start_time is None:
-            self.start_time = time.time()
-
         if not game.friendly_robots or self.obstacle_id not in game.friendly_robots:
             return py_trees.common.Status.RUNNING
 
         # Calculate oscillation based on elapsed time
         elapsed_time = time.time() - self.start_time
-        if self.directionUpOrRight:
+        if self.direction_up_or_right:
             offset = self.amplitude * math.sin(self.speed * elapsed_time)
         else:
             offset = self.amplitude * math.cos(self.speed * elapsed_time)
@@ -90,13 +95,19 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
             # Draw oscillation range
             if self.oscillation_axis == "x":
                 rsim_env.draw_line(
-                    [(self.center_x - self.amplitude, self.center_y), (self.center_x + self.amplitude, self.center_y)],
+                    [
+                        (self.center_x - self.amplitude, self.center_y),
+                        (self.center_x + self.amplitude, self.center_y),
+                    ],
                     color="green",
                     width=1,
                 )
             else:
                 rsim_env.draw_line(
-                    [(self.center_x, self.center_y - self.amplitude), (self.center_x, self.center_y + self.amplitude)],
+                    [
+                        (self.center_x, self.center_y - self.amplitude),
+                        (self.center_x, self.center_y + self.amplitude),
+                    ],
                     color="green",
                     width=1,
                 )
@@ -123,7 +134,7 @@ class OscillatingObstacleStrategy(AbstractStrategy):
         obstacle_configs: List of MovingObstacleConfig objects defining each obstacle's behavior
     """
 
-    def __init__(self, obstacle_configs: List):
+    def __init__(self, obstacle_configs: List["MovingObstacleConfig"]):
         self.obstacle_configs = obstacle_configs
         super().__init__()
 
@@ -176,7 +187,7 @@ class OscillatingObstacleStrategy(AbstractStrategy):
                 center_position=config.center_position,
                 oscillation_axis=config.oscillation_axis,
                 amplitude=config.amplitude,
-                directionUpOrRight=config.directionUpOrRight,
+                direction_up_or_right=config.direction_up_or_right,
                 speed=config.speed,
             )
 
@@ -188,7 +199,7 @@ class OscillatingObstacleStrategy(AbstractStrategy):
                 center_position=config.center_position,
                 oscillation_axis=config.oscillation_axis,
                 amplitude=config.amplitude,
-                directionUpOrRight=config.directionUpOrRight,
+                direction_up_or_right=config.direction_up_or_right,
                 speed=config.speed,
             )
             behaviours.append(behaviour)
