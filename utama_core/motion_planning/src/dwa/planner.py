@@ -1,10 +1,7 @@
 import copy
 import math
 import random
-from math import exp
-from typing import Iterable, List, Optional, Tuple
-
-import numpy as np
+from typing import List, Optional
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.config.settings import TIMESTEP
@@ -12,14 +9,8 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game, Robot
 from utama_core.global_utils.math_utils import normalise_heading
 from utama_core.motion_planning.src.dwa.config import DynamicWindowConfig
-from utama_core.motion_planning.src.planning.geometry import (
-    AxisAlignedRectangle,
-    point_segment_distance,
-)
-from utama_core.motion_planning.src.planning.obstacles import (
-    ObstacleRegion,
-    to_rectangles,
-)
+from utama_core.motion_planning.src.planning.geometry import point_segment_distance
+from utama_core.motion_planning.src.planning.obstacles import ObstacleRegion
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 
@@ -195,11 +186,7 @@ class DynamicWindowPlanner:
         self._simulate_timestep = self._config.simulate_frames * TIMESTEP
         self._control_period = TIMESTEP
         self._max_acceleration = self._config.max_acceleration
-        self._max_safety_radius = self._config.max_safety_radius  #
-        self._safety_penalty_distance_sq = self._config.safety_penalty_distance_sq
-        self._max_speed_for_full_bubble = self._config.max_speed_for_full_bubble
         self.env = env
-        self._v_resolution = getattr(self._config, "v_resolution")
         self._w_goal = getattr(self._config, "weight_goal")
         self._w_obstacle = getattr(self._config, "weight_obstacle")
         self._w_speed = getattr(self._config, "weight_speed")
@@ -298,6 +285,7 @@ class DynamicWindowPlanner:
         ang0 = math.atan2(dy, dx)
         scales = self._random_candidate_scales(start.distance_to(target))
 
+        # check the direction facing the target first
         best_collides = False
         for scale in scales:
             segment_start, segment_end = self._get_motion_segment(
@@ -460,11 +448,12 @@ class DynamicWindowPlanner:
 
     def _random_candidate_scales(self, distance: float, count: int = 3) -> List[float]:
         min_scale = 0.05
-        max_scale = min(1.0, max(min_scale, distance))
+        # linear scaling: distance=2 → 1.0, distance=0 → min_scale
+        max_scale = min_scale + (1.0 - min_scale) * min(distance / 2.0, 1.0)
         if count <= 0:
             return []
         if max_scale - min_scale <= 1e-9:
-            return [min_scale] * count
+            return [min_scale]
 
         bin_width = (max_scale - min_scale) / count
         samples = [random.uniform(min_scale + i * bin_width, min_scale + (i + 1) * bin_width) for i in range(count)]
