@@ -7,20 +7,13 @@ from utama_core.entities.game import Game
 from utama_core.global_utils.math_utils import (
     distance,
     distance_between_line_segments,
+    distance_point_to_segment,
     rotate_vector,
 )
 from utama_core.motion_planning.src.fastpathplanning.config import (
     fastpathplanningconfig as config,
 )
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-
-
-def point_to_segment_distance(point: np.ndarray, seg_start: np.ndarray, seg_end: np.ndarray) -> float:
-    """Compute the shortest distance between a point and a line segment."""
-    seg_vec = seg_end - seg_start
-    t = np.clip(np.dot(point - seg_start, seg_vec) / np.dot(seg_vec, seg_vec), 0, 1)
-    proj = seg_start + t * seg_vec
-    return np.linalg.norm(point - proj)
 
 
 class FastPathPlanner:
@@ -54,7 +47,15 @@ class FastPathPlanner:
                     obstaclelist.append((robotpos, robotpos))
         return obstaclelist
 
-    def _find_subgoal(self, robotpos, target, closestobstacle, obstacles, recursionfactor, multiple) -> np.array:
+    def _find_subgoal(
+        self,
+        robotpos,
+        target,
+        closestobstacle,
+        obstacles,
+        recursionfactor,
+        multiple,
+    ) -> np.array:
         direction = target - robotpos
 
         if recursionfactor % 2 == 1:
@@ -67,9 +68,14 @@ class FastPathPlanner:
         subgoal = obstaclepos + self.SUBGOAL_DISTANCE * unitvec * multiple
 
         for o in obstacles:
-            if point_to_segment_distance(subgoal, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
+            if distance_point_to_segment(subgoal, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
                 subgoal = self._find_subgoal(
-                    robotpos, target, closestobstacle, obstacles, recursionfactor + 1, multiple + 1
+                    robotpos,
+                    target,
+                    closestobstacle,
+                    obstacles,
+                    recursionfactor + 1,
+                    multiple + 1,
                 )
         return subgoal
 
@@ -80,8 +86,8 @@ class FastPathPlanner:
         tempdistance = distance(segment[0], segment[1])
         for o in obstacles:
             # print('hello',o,segment)
-            if distance_between_line_segments(o, segment) < self.OBSTACLE_CLEARANCE:
-                obstacledistance = point_to_segment_distance(segment[0], o[0], o[1])
+            if distance_between_line_segments(o[0], o[1], segment[0], segment[1]) < self.OBSTACLE_CLEARANCE:
+                obstacledistance = distance_between_line_segments(o[0], o[1], segment[0], segment[1])
                 if closestobstacle is None or obstacledistance < tempdistance:
                     tempdistance = obstacledistance
                     closestobstacle = o
