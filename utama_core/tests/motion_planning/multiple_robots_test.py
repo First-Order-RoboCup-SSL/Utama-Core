@@ -32,10 +32,11 @@ class MultiRobotScenario:
 class MultiRobotTestManager(AbstractTestManager):
     """Test manager for multiple robots with collision detection."""
 
+    n_episodes = 1
+
     def __init__(self, scenario: MultiRobotScenario):
         super().__init__()
         self.scenario = scenario
-        self.n_episodes = 1
         self.all_reached = False
         self.collision_detected = False
         self.min_distance = float("inf")
@@ -150,9 +151,6 @@ class MultiRobotTestManager(AbstractTestManager):
             return TestingStatus.SUCCESS
 
         return TestingStatus.IN_PROGRESS
-
-    def get_n_episodes(self):
-        return self.n_episodes
 
 
 def test_mirror_swap(
