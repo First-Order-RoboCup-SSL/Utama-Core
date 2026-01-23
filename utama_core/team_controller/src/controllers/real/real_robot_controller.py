@@ -162,7 +162,7 @@ class RealRobotController(AbstractRobotController):
         )
 
         dribbler_speed = 0
-        if c_command.dribble or robot_id in self._chip_tracker:
+        if c_command.dribble:
             dribbler_speed = 0xC000  # set bits 15:14 to 11
             dribbler_speed |= 4095 & 0x3FFF  # set bits 13:0 to 4095
 
@@ -176,7 +176,7 @@ class RealRobotController(AbstractRobotController):
         kicker_byte = 0
         if c_command.kick or robot_id in self._kick_tracker:
             kicker_byte |= 0xF0  # upper kicker full power
-        if c_command.chip:
+        if c_command.chip or robot_id in self._chip_tracker:
             kicker_byte |= 0x0F
         packet.append(kicker_byte)  # Kicker controls  # Frame end
 
