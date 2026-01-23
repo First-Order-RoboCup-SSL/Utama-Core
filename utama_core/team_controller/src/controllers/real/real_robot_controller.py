@@ -179,10 +179,12 @@ class RealRobotController(AbstractRobotController):
 
         kicker_byte = 0
         # check kick and chip command but also check the kicker tracker to see if we need to persist the command
+        # elif needed here to ensure the persistance command doesnt cause us to kick and chip at the same time
         if c_command.kick or (robot_id in self._kicker_tracker and self._kicker_tracker[robot_id].is_kick):
             kicker_byte |= 0xF0  # upper kicker full power
-        if c_command.chip or (robot_id in self._kicker_tracker and not self._kicker_tracker[robot_id].is_kick):
+        elif c_command.chip or (robot_id in self._kicker_tracker and not self._kicker_tracker[robot_id].is_kick):
             kicker_byte |= 0x0F
+
         packet.append(kicker_byte)  # Kicker controls  # Frame end
 
         # packet_str = " ".join(f"{byte:08b}" for byte in packet)
