@@ -10,6 +10,7 @@ from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.config.settings import (
     BAUD_RATE,
+    KICKER_COOLDOWN_TIMESTEPS,
     KICKER_PERSIST_TIMESTEPS,
     PORT,
     TIMEOUT,
@@ -30,7 +31,8 @@ MAX_ANGULAR_VEL = REAL_PARAMS.MAX_ANGULAR_VEL
 
 @dataclasses.dataclass
 class KickTrackerEntry:
-    remaining_timesteps: int
+    remaining_persist: int
+    remaining_cooldown: int
     is_kick: bool  # True for kick, False for chip
 
 
@@ -80,8 +82,11 @@ class RealRobotController(AbstractRobotController):
         # TODO: this logic has to be reconsidered. Solution for qualification now.
 
         for robot_id in list(self._kicker_tracker.keys()):
-            if self._kicker_tracker[robot_id].remaining_timesteps > 1:
-                self._kicker_tracker[robot_id].remaining_timesteps -= 1
+            if self._kicker_tracker[robot_id].remaining_cooldown > 1:
+                self._kicker_tracker[robot_id].remaining_cooldown -= 1
+
+                if self._kicker_tracker[robot_id].remaining_persist > 0:
+                    self._kicker_tracker[robot_id].remaining_persist -= 1
             else:
                 # reset kick command to 0 in the out_packet
                 del self._kicker_tracker[robot_id]
@@ -128,12 +133,16 @@ class RealRobotController(AbstractRobotController):
 
         if command.kick and robot_id not in self._kicker_tracker:
             self._kicker_tracker[robot_id] = KickTrackerEntry(
-                remaining_timesteps=KICKER_PERSIST_TIMESTEPS, is_kick=True
+                remaining_persist=KICKER_PERSIST_TIMESTEPS,
+                remaining_cooldown=KICKER_COOLDOWN_TIMESTEPS,
+                is_kick=True,
             )
         # if for some reason we are kicking and chipping at the same time, we prioritise kick
         if command.chip and robot_id not in self._kicker_tracker:
             self._kicker_tracker[robot_id] = KickTrackerEntry(
-                remaining_timesteps=KICKER_PERSIST_TIMESTEPS, is_kick=False
+                remaining_persist=KICKER_PERSIST_TIMESTEPS,
+                remaining_cooldown=KICKER_COOLDOWN_TIMESTEPS,
+                is_kick=False,
             )
 
     # def _populate_robots_info(self, data_in: bytes) -> None:
@@ -177,15 +186,32 @@ class RealRobotController(AbstractRobotController):
             ]
         )
 
+        #### KICKER LOGIC ####
+        # cooldown ensures that we do not resend kick/chip command within cooldown period
+        # persist ensures that we resend kick/chip command for n timesteps after initial command
+        # embedded detects rising edge of kick/chip command only
+        ######################
+
         kicker_byte = 0
-        # check kick and chip command but also check the kicker tracker to see if we need to persist the command
-        # elif needed here to ensure the persistance command doesnt cause us to kick and chip at the same time
-        if c_command.kick or (robot_id in self._kicker_tracker and self._kicker_tracker[robot_id].is_kick):
+        tracker = self._kicker_tracker.get(robot_id)
+
+        # If tracker_entry exists but persistence expired → send empty kicker byte and return
+        if tracker and tracker.remaining_persist <= 0:
+            packet.append(kicker_byte)
+            return packet
+
+        # Decide whether we're kicking or chipping
+        kick_active = c_command.kick or (tracker and tracker.remaining_persist > 0 and tracker.is_kick)
+
+        chip_active = c_command.chip or (tracker and tracker.remaining_persist > 0 and not tracker.is_kick)
+
+        if kick_active:
             kicker_byte |= 0xF0  # upper kicker full power
-        elif c_command.chip or (robot_id in self._kicker_tracker and not self._kicker_tracker[robot_id].is_kick):
+        elif chip_active:
             kicker_byte |= 0x0F
 
-        packet.append(kicker_byte)  # Kicker controls  # Frame end
+        packet.append(kicker_byte)
+        return packet
 
         # packet_str = " ".join(f"{byte:08b}" for byte in packet)
 
