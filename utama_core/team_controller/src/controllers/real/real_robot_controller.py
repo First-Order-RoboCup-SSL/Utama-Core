@@ -47,6 +47,7 @@ class RealRobotController(AbstractRobotController):
 
         # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
         self._kick_tracker = {}
+        self._chip_tracker = {}
 
     def get_robots_responses(self) -> Optional[List[RobotResponse]]:
         ### TODO: Not implemented yet
@@ -67,12 +68,24 @@ class RealRobotController(AbstractRobotController):
         # print(data_in)
         # TODO: add receiving feedback from the robots
 
+        ### update kick and chip trackers. We persist the kick/chip command for KICK_PERSIST_TIMESTEPS
+        ### this feature is to combat packet loss and to ensure the robot does not kick within its cooldown period
+        ### Embedded only registers rising edge of kick/chip command
+        # TODO: this logic has to be reconsidered. Solution for qualification now.
+
         for robot_id in list(self._kick_tracker.keys()):
             if self._kick_tracker[robot_id] > 1:
                 self._kick_tracker[robot_id] -= 1
             else:
                 # reset kick command to 0 in the out_packet
                 del self._kick_tracker[robot_id]
+
+        for robot_id in list(self._chip_tracker.keys()):
+            if self._chip_tracker[robot_id] > 1:
+                self._chip_tracker[robot_id] -= 1
+            else:
+                # reset chip command to 0 in the out_packet
+                del self._chip_tracker[robot_id]
 
         self._out_packet = self._empty_command()  # flush the out_packet
         self._assigned_mapping = {}  # reset assigned mapping
@@ -116,6 +129,8 @@ class RealRobotController(AbstractRobotController):
 
         if command.kick and robot_id not in self._kick_tracker:
             self._kick_tracker[robot_id] = KICK_PERSIST_TIMESTEPS
+        if command.chip and robot_id not in self._chip_tracker:
+            self._chip_tracker[robot_id] = KICK_PERSIST_TIMESTEPS
 
     # def _populate_robots_info(self, data_in: bytes) -> None:
     #     """
@@ -147,7 +162,7 @@ class RealRobotController(AbstractRobotController):
         )
 
         dribbler_speed = 0
-        if c_command.dribble:
+        if c_command.dribble or robot_id in self._chip_tracker:
             dribbler_speed = 0xC000  # set bits 15:14 to 11
             dribbler_speed |= 4095 & 0x3FFF  # set bits 13:0 to 4095
 
