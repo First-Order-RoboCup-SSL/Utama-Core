@@ -11,7 +11,7 @@ class DynamicWindowConfig:
     max_speed: float
     max_acceleration: float
     simulate_frames: int = 3
-    target_tolerance: float = 0.01
+    target_tolerance: float = 0.1
     weight_goal = 50.0
     weight_obstacle = 1.5  # Increased to match new (0-10) obstacle cost scale
     weight_speed = 1.0

@@ -32,7 +32,7 @@ class RandomMovementScenario:
     min_target_distance: float
     required_targets_per_robot: int
     collision_threshold: float = ROBOT_RADIUS * 2.0
-    endpoint_tolerance: float = 0.25
+    endpoint_tolerance: float = 0.1
 
 
 class RandomMovementTestManager(AbstractTestManager):

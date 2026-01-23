@@ -151,28 +151,6 @@ class OrientedRectangle:
 
         return min(intersection_score, 1.0)
 
-    def contains_point(self, point: Vector2D) -> bool:
-        """
-        Check if a point is inside this oriented rectangle.
-
-        Args:
-            point: The point to test
-
-        Returns:
-            True if the point is inside the rectangle, False otherwise
-        """
-        # Transform point to local rectangle coordinates
-        # Translate to origin
-        dx = point.x - self.center.x
-        dy = point.y - self.center.y
-
-        # Rotate by -heading to align with rectangle's local axes
-        local_x = dx * self.cos_heading + dy * self.sin_heading
-        local_y = -dx * self.sin_heading + dy * self.cos_heading
-
-        # Check if within bounds
-        return abs(local_x) <= self.half_length and abs(local_y) <= self.half_width
-
 
 class DynamicWindowPlanner:
     """Stateless local planner backing the DWA translation controller."""
@@ -192,9 +170,9 @@ class DynamicWindowPlanner:
         self._w_speed = getattr(self._config, "weight_speed")
 
         # Safety area dimensions (configurable)
-        self._side_clearance = 0.15  # Clearance on left/right sides (m)
-        self._back_clearance = 0.12  # Clearance behind robot (m)
-        self._base_front_clearance = 0.2  # Minimum forward clearance at zero speed (m)
+        self._side_clearance = ROBOT_RADIUS * 1.5  # Clearance on left/right sides (m)
+        self._back_clearance = ROBOT_RADIUS * 1.5  # Clearance behind robot (m)
+        self._base_front_clearance = ROBOT_RADIUS * 2  # Minimum forward clearance at zero speed (m)
         self._forward_lookahead_time = 0.5  # How many seconds to look ahead (s)
 
     def _create_safety_rectangle(self, position: Vector2D, velocity: Vector2D) -> OrientedRectangle:
@@ -276,6 +254,7 @@ class DynamicWindowPlanner:
         """
         velocity = robot.v
 
+        # Max change of velocity in 1 control period
         delta_max_vel = self._control_period * self._max_acceleration
         best_score = float("-inf")
         start = robot.p
@@ -448,8 +427,8 @@ class DynamicWindowPlanner:
 
     def _random_candidate_scales(self, distance: float, count: int = 3) -> List[float]:
         min_scale = 0.05
-        # linear scaling: distance=2 → 1.0, distance=0 → min_scale
-        max_scale = min_scale + (1.0 - min_scale) * min(distance / 2.0, 1.0)
+        # linear scaling: distance=1 → 1.0, distance=0 → min_scale
+        max_scale = min_scale + (1.0 - min_scale) * min(distance / 4.0, 1.0)
         if count <= 0:
             return []
         if max_scale - min_scale <= 1e-9:
