@@ -7,7 +7,13 @@ import numpy as np
 from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 
 from utama_core.config.robot_params import REAL_PARAMS
-from utama_core.config.settings import BAUD_RATE, PORT, TIMEOUT, TIMESTEP
+from utama_core.config.settings import (
+    BAUD_RATE,
+    KICK_PERSIST_TIMESTEPS,
+    PORT,
+    TIMEOUT,
+    TIMESTEP,
+)
 from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
@@ -39,6 +45,9 @@ class RealRobotController(AbstractRobotController):
         logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
         self._assigned_mapping = {}  # mapping of robot_id to index in the out_packet
 
+        # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
+        self._kick_tracker = {}
+
     def get_robots_responses(self) -> Optional[List[RobotResponse]]:
         ### TODO: Not implemented yet
         return None
@@ -57,6 +66,13 @@ class RealRobotController(AbstractRobotController):
         # data_in = self._serial.read_all()
         # print(data_in)
         # TODO: add receiving feedback from the robots
+
+        for robot_id in list(self._kick_tracker.keys()):
+            if self._kick_tracker[robot_id] > 1:
+                self._kick_tracker[robot_id] -= 1
+            else:
+                # reset kick command to 0 in the out_packet
+                del self._kick_tracker[robot_id]
 
         self._out_packet = self._empty_command()  # flush the out_packet
         self._assigned_mapping = {}  # reset assigned mapping
@@ -97,6 +113,9 @@ class RealRobotController(AbstractRobotController):
         c_command = self._convert_float16_command(robot_id, command)
         command_buffer = self._generate_command_buffer(robot_id, c_command)
         self._out_packet[start_idx + 1 : start_idx + self._rbt_cmd_size + 1] = command_buffer
+
+        if command.kick and robot_id not in self._kick_tracker:
+            self._kick_tracker[robot_id] = KICK_PERSIST_TIMESTEPS
 
     # def _populate_robots_info(self, data_in: bytes) -> None:
     #     """
@@ -140,7 +159,7 @@ class RealRobotController(AbstractRobotController):
         )
 
         kicker_byte = 0
-        if c_command.kick:
+        if c_command.kick or robot_id in self._kick_tracker:
             kicker_byte |= 0xF0  # upper kicker full power
         if c_command.chip:
             kicker_byte |= 0x0F
