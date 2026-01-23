@@ -189,7 +189,6 @@ class RealRobotController(AbstractRobotController):
 
         Also converts angular velocity to degrees per second.
         """
-
         angular_vel = self._sanitise_float(command.angular_vel)
         local_forward_vel = self._sanitise_float(command.local_forward_vel)
         local_left_vel = self._sanitise_float(command.local_left_vel)
