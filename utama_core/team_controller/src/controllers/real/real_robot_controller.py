@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 import time
 import warnings
@@ -9,7 +10,7 @@ from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.config.settings import (
     BAUD_RATE,
-    KICK_PERSIST_TIMESTEPS,
+    KICKER_PERSIST_TIMESTEPS,
     PORT,
     TIMEOUT,
     TIMESTEP,
@@ -25,6 +26,12 @@ logger = logging.getLogger(__name__)
 # NB: A major assumption is that the robot IDs are 0-5 for the friendly team.
 MAX_VEL = REAL_PARAMS.MAX_VEL
 MAX_ANGULAR_VEL = REAL_PARAMS.MAX_ANGULAR_VEL
+
+
+@dataclasses.dataclass
+class KickTrackerEntry:
+    remaining_timesteps: int
+    is_kick: bool  # True for kick, False for chip
 
 
 class RealRobotController(AbstractRobotController):
@@ -46,8 +53,7 @@ class RealRobotController(AbstractRobotController):
         self._assigned_mapping = {}  # mapping of robot_id to index in the out_packet
 
         # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
-        self._kick_tracker = {}
-        self._chip_tracker = {}
+        self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
 
     def get_robots_responses(self) -> Optional[List[RobotResponse]]:
         ### TODO: Not implemented yet
@@ -68,24 +74,17 @@ class RealRobotController(AbstractRobotController):
         # print(data_in)
         # TODO: add receiving feedback from the robots
 
-        ### update kick and chip trackers. We persist the kick/chip command for KICK_PERSIST_TIMESTEPS
+        ### update kick and chip trackers. We persist the kick/chip command for KICKER_PERSIST_TIMESTEPS
         ### this feature is to combat packet loss and to ensure the robot does not kick within its cooldown period
         ### Embedded only registers rising edge of kick/chip command
         # TODO: this logic has to be reconsidered. Solution for qualification now.
 
-        for robot_id in list(self._kick_tracker.keys()):
-            if self._kick_tracker[robot_id] > 1:
-                self._kick_tracker[robot_id] -= 1
+        for robot_id in list(self._kicker_tracker.keys()):
+            if self._kicker_tracker[robot_id].remaining_timesteps > 1:
+                self._kicker_tracker[robot_id].remaining_timesteps -= 1
             else:
                 # reset kick command to 0 in the out_packet
-                del self._kick_tracker[robot_id]
-
-        for robot_id in list(self._chip_tracker.keys()):
-            if self._chip_tracker[robot_id] > 1:
-                self._chip_tracker[robot_id] -= 1
-            else:
-                # reset chip command to 0 in the out_packet
-                del self._chip_tracker[robot_id]
+                del self._kicker_tracker[robot_id]
 
         self._out_packet = self._empty_command()  # flush the out_packet
         self._assigned_mapping = {}  # reset assigned mapping
@@ -127,10 +126,15 @@ class RealRobotController(AbstractRobotController):
         command_buffer = self._generate_command_buffer(robot_id, c_command)
         self._out_packet[start_idx + 1 : start_idx + self._rbt_cmd_size + 1] = command_buffer
 
-        if command.kick and robot_id not in self._kick_tracker:
-            self._kick_tracker[robot_id] = KICK_PERSIST_TIMESTEPS
-        if command.chip and robot_id not in self._chip_tracker:
-            self._chip_tracker[robot_id] = KICK_PERSIST_TIMESTEPS
+        if command.kick and robot_id not in self._kicker_tracker:
+            self._kicker_tracker[robot_id] = KickTrackerEntry(
+                remaining_timesteps=KICKER_PERSIST_TIMESTEPS, is_kick=True
+            )
+        # if for some reason we are kicking and chipping at the same time, we prioritise kick
+        if command.chip and robot_id not in self._kicker_tracker:
+            self._kicker_tracker[robot_id] = KickTrackerEntry(
+                remaining_timesteps=KICKER_PERSIST_TIMESTEPS, is_kick=False
+            )
 
     # def _populate_robots_info(self, data_in: bytes) -> None:
     #     """
@@ -174,9 +178,10 @@ class RealRobotController(AbstractRobotController):
         )
 
         kicker_byte = 0
-        if c_command.kick or robot_id in self._kick_tracker:
+        # check kick and chip command but also check the kicker tracker to see if we need to persist the command
+        if c_command.kick or (robot_id in self._kicker_tracker and self._kicker_tracker[robot_id].is_kick):
             kicker_byte |= 0xF0  # upper kicker full power
-        if c_command.chip or robot_id in self._chip_tracker:
+        if c_command.chip or (robot_id in self._kicker_tracker and not self._kicker_tracker[robot_id].is_kick):
             kicker_byte |= 0x0F
         packet.append(kicker_byte)  # Kicker controls  # Frame end
 

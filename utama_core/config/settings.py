@@ -31,8 +31,8 @@ MAX_BALL_SPEED = 3.0  # m/s
 BAUD_RATE = 115200
 PORT = "/dev/ttyUSB0"
 TIMEOUT = 0.1
-KICK_PERSIST_TIME = 10  # in seconds to keep kick HIGH after command
-KICK_PERSIST_TIMESTEPS = KICK_PERSIST_TIME * CONTROL_FREQUENCY
+KICKER_PERSIST_TIME = 10  # in seconds to keep kick HIGH after command
+KICKER_PERSIST_TIMESTEPS = KICKER_PERSIST_TIME * CONTROL_FREQUENCY
 
 MAX_GAME_HISTORY = 20  # number of previous game states to keep in Game
 
