@@ -26,7 +26,7 @@ class MultiRobotScenario:
     friendly_targets: list[tuple[float, float]]
     enemy_targets: list[tuple[float, float]]
     collision_threshold: float = ROBOT_RADIUS * 2.0
-    endpoint_tolerance: float = 0.2
+    endpoint_tolerance: float = 0.1
 
 
 class MultiRobotTestManager(AbstractTestManager):
@@ -197,7 +197,7 @@ def test_mirror_swap(
         enemy_positions=right_positions,  # Blue starts on right
         friendly_targets=right_positions,  # Yellow targets are Blue's starting positions
         enemy_targets=left_positions,  # Blue targets are Yellow's starting positions
-        endpoint_tolerance=0.3,
+        endpoint_tolerance=0.1,
     )
 
     # For simplicity, use a parallel strategy that runs all robot strategies
@@ -293,7 +293,7 @@ def test_diagonal_cross_square(
         enemy_positions=blue_positions,
         friendly_targets=yellow_targets,
         enemy_targets=blue_targets,
-        endpoint_tolerance=0.25,
+        endpoint_tolerance=0.1,
     )
 
     from utama_core.tests.motion_planning.strategies.multi_robot_navigation_strategy import (

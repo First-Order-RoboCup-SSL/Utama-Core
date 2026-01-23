@@ -23,7 +23,7 @@ class CollisionAvoidanceScenario:
     start_position: tuple[float, float]
     target_position: tuple[float, float]
     obstacle_positions: list[tuple[float, float]] = field(default_factory=list)
-    endpoint_tolerance: float = 0.15
+    endpoint_tolerance: float = 0.1
     collision_threshold: float = ROBOT_RADIUS * 2.0  # Two robot radii for safety margin
 
 

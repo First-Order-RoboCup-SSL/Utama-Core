@@ -173,7 +173,7 @@ class DynamicWindowPlanner:
         self._side_clearance = ROBOT_RADIUS * 1.5  # Clearance on left/right sides (m)
         self._back_clearance = ROBOT_RADIUS * 1.5  # Clearance behind robot (m)
         self._base_front_clearance = ROBOT_RADIUS * 2  # Minimum forward clearance at zero speed (m)
-        self._forward_lookahead_time = 0.5  # How many seconds to look ahead (s)
+        self._forward_lookahead_time = 0.6  # How many seconds to look ahead (s)
 
     def _create_safety_rectangle(self, position: Vector2D, velocity: Vector2D) -> OrientedRectangle:
         """
@@ -201,7 +201,7 @@ class DynamicWindowPlanner:
         # Length: back clearance + front clearance (speed-dependent)
         # Forward extension = base + speed × lookahead_time
         forward_extension = self._base_front_clearance + speed * self._forward_lookahead_time
-        total_length = self._back_clearance + ROBOT_RADIUS + forward_extension
+        total_length = self._back_clearance + 2 * ROBOT_RADIUS + forward_extension
 
         # Center the rectangle: shift forward by (forward - back) / 2
         # In local frame: center is at (forward - back) / 2
@@ -307,9 +307,6 @@ class DynamicWindowPlanner:
         if best_score == float("-inf"):  # best move is not to move at all lol
             return None
 
-        if self._segment_overshoots_target(start, best_move, target):
-            best_move = copy.copy(target)
-
         return best_move, best_score
 
     def _get_obstacles(self, game: Game, robot_id: int) -> List[Robot]:
@@ -359,6 +356,8 @@ class DynamicWindowPlanner:
 
         # Create our safety rectangle based on candidate velocity
         our_safety_rect = self._create_safety_rectangle(our_position, our_velocity_vector)
+
+        self._draw_collision_box(our_safety_rect, "blue", 1)
 
         obstacle_factor = 0.0
         for obstacle in self._get_obstacles(game, robot.id):
@@ -427,7 +426,7 @@ class DynamicWindowPlanner:
 
     def _random_candidate_scales(self, distance: float, count: int = 3) -> List[float]:
         min_scale = 0.05
-        # linear scaling: distance=1 → 1.0, distance=0 → min_scale
+        # linear scaling: distance=4 → 1.0, distance=0 → min_scale
         max_scale = min_scale + (1.0 - min_scale) * min(distance / 4.0, 1.0)
         if count <= 0:
             return []
@@ -437,36 +436,3 @@ class DynamicWindowPlanner:
         bin_width = (max_scale - min_scale) / count
         samples = [random.uniform(min_scale + i * bin_width, min_scale + (i + 1) * bin_width) for i in range(count)]
         return sorted(samples, reverse=True)
-
-    def _segment_overshoots_target(self, start: Vector2D, end: Vector2D, target: Vector2D) -> bool:
-        """Return True when the candidate segment would pass through the target."""
-        segment = end - start
-        seg_len_sq = segment.dot(segment)
-        if seg_len_sq <= 1e-9:
-            return False
-
-        to_target = target - start
-        dist_start = to_target.mag()
-        dist_end = end.distance_to(target)
-        overshoot_tolerance = getattr(self._config, "overshoot_tolerance", self._config.target_tolerance * 3.0)
-        overshoot_tolerance = max(overshoot_tolerance, self._config.target_tolerance)
-
-        if dist_start <= overshoot_tolerance and dist_end > dist_start:
-            return True
-
-        projection = to_target.dot(segment)
-        if 0.0 < projection < seg_len_sq:
-            distance = point_segment_distance(target, start, end)
-            if distance <= overshoot_tolerance:
-                return True
-
-        if dist_start > 1e-9:
-            direction_to_target = to_target / dist_start
-            end_offset = end - start
-            along = end_offset.dot(direction_to_target)
-            if along > dist_start:
-                lateral = end_offset - direction_to_target * along
-                if lateral.mag() <= overshoot_tolerance:
-                    return True
-
-        return False

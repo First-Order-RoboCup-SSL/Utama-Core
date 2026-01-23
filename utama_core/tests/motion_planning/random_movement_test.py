@@ -180,7 +180,7 @@ def test_random_movement_same_team(
         field_bounds=field_bounds,
         min_target_distance=1.0,  # Minimum distance for next target
         required_targets_per_robot=3,  # Each robot must reach 3 targets
-        endpoint_tolerance=0.3,
+        endpoint_tolerance=0.1,
     )
 
     test_manager = RandomMovementTestManager(scenario)

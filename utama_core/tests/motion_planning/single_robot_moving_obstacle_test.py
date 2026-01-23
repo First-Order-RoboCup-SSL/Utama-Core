@@ -37,7 +37,7 @@ class MovingObstacleScenario:
     start_position: tuple[float, float]
     target_position: tuple[float, float]
     moving_obstacles: list[MovingObstacleConfig] = field(default_factory=list)
-    endpoint_tolerance: float = 0.15
+    endpoint_tolerance: float = 0.1
     collision_threshold: float = ROBOT_RADIUS * 2.0
 
 

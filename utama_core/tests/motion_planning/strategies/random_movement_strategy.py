@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
 import py_trees
 
@@ -12,7 +12,11 @@ from utama_core.entities.game.field import FieldBounds
 from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
-from utama_core.tests.common.abstract_test_manager import AbstractTestManager
+
+if TYPE_CHECKING:
+    from utama_core.tests.motion_planning.random_movement_test import (
+        RandomMovementTestManager,
+    )
 
 
 class RandomMovementBehaviour(AbstractBehaviour):
@@ -34,7 +38,7 @@ class RandomMovementBehaviour(AbstractBehaviour):
         field_bounds: Tuple[Tuple[float, float], Tuple[float, float]],
         min_target_distance: float,
         endpoint_tolerance: float,
-        test_manager: AbstractTestManager,
+        test_manager: "RandomMovementTestManager",
         speed_range: Tuple[float, float] = (0.5, 2.0),
     ):
         super().__init__(name=f"RandomMovement_{robot_id}")
@@ -148,7 +152,7 @@ class RandomMovementStrategy(AbstractStrategy):
         field_bounds: Tuple[Tuple[float, float], Tuple[float, float]],
         min_target_distance: float,
         endpoint_tolerance: float,
-        test_manager: AbstractTestManager,
+        test_manager: "RandomMovementTestManager",
         speed_range: Tuple[float, float] = (0.5, 2.0),
     ):
         self.n_robots = n_robots
