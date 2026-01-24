@@ -88,7 +88,7 @@ class RealRobotController(AbstractRobotController):
                 if self._kicker_tracker[robot_id].remaining_persist > 0:
                     self._kicker_tracker[robot_id].remaining_persist -= 1
             else:
-                # reset kick command to 0 in the out_packet
+                # remove kicker tracker entry once cooldown is over
                 del self._kicker_tracker[robot_id]
 
         self._out_packet = self._empty_command()  # flush the out_packet
@@ -211,7 +211,6 @@ class RealRobotController(AbstractRobotController):
             kicker_byte |= 0x0F
 
         packet.append(kicker_byte)
-        return packet
 
         # packet_str = " ".join(f"{byte:08b}" for byte in packet)
 
