@@ -42,7 +42,7 @@ def goalkeep(
     if len(game.friendly_robots) == 2:
         _, yy = intersection_with_vertical_line((game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1))
         stop_y = (yy + 0.5) / 2
-    if len(game.friendly_robots) > 2:
+    if len(game.friendly_robots) == 3:
         _, yy1 = intersection_with_vertical_line((game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1))
         _, yy2 = intersection_with_vertical_line((game.ball.p.x, game.ball.p.y), (game.friendly_robots[2].p.x, game.friendly_robots[2].p.y - 0.1))
         stop_y = (yy1 + yy2) / 2
