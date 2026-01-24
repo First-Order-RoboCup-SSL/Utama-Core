@@ -21,7 +21,7 @@ def main():
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         print_real_fps=True,
         profiler_name=None,
-        rsim_noise=RsimGaussianNoise(0.01, 0.01)
+        # rsim_noise=RsimGaussianNoise(0.01, 0.01)
     )
     runner.my_strategy.render()
     runner.run()

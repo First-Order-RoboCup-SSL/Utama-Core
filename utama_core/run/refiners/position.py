@@ -13,16 +13,15 @@ from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
-from utama_core.run.refiners.filters import FIR_filter
-from utama_core.run.refiners.kalman import Kalman_filter, Kalman_filter_2, Kalman_filter_3, Kalman_filter_2D
+from utama_core.run.refiners.kalman import Kalman_filter
 
 # For logging
 TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
 X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
 COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 
-OUTPUT_FILE   = "noisy-10-kalman3-dwa-ss-r-before.csv"
-OUTPUT_FILE_2 = "noisy-10-kalman3-dwa-ss-r-after.csv"
+OUTPUT_FILE   = "clean-kalman-dwa-ss-r-before-2.csv"
+OUTPUT_FILE_2 = "clean-kalman-dwa-ss-r-after-2.csv"
 TARGET_SIZE = 2000
 
 
@@ -70,9 +69,6 @@ class PositionRefiner(BaseRefiner):
         # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
         self.kalman_filters_yellow = [Kalman_filter(id) for id in self.yellow_range]
         self.kalman_filters_blue   = [Kalman_filter(id) for id in self.blue_range]
-        
-        # self.kalman_filters_yellow = [Kalman_filter_2() for _ in self.yellow_range]
-        # self.kalman_filters_blue   = [Kalman_filter_2() for _ in self.blue_range]
         
         # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
         # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
@@ -143,21 +139,6 @@ class PositionRefiner(BaseRefiner):
             self._impute_vanished(combined_vision_data)
             
             # For filtering
-            # combined_vision_data: VisionData = VisionData(
-            #     ts=combined_vision_data.ts,
-            #     yellow_robots=list(
-            #         map(Kalman_filter.filter_robot,
-            #         self.kalman_filters_yellow,
-            #         sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
-            #         ),
-            #     blue_robots=list(
-            #         map(Kalman_filter.filter_robot,
-            #         self.kalman_filters_blue,
-            #         sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
-            #         ),
-            #     balls=combined_vision_data.balls
-            # )
-            
             time_elapsed = combined_vision_data.ts - self.last_game_frame.ts
             
             if game_frame.my_team_is_yellow:
