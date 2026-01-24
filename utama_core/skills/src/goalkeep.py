@@ -39,18 +39,26 @@ def goalkeep(
         return (x_line, y_intersect)
 
     if len(game.friendly_robots) == 2:
-        _, yy = intersection_with_vertical_line(
-            (game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1)
-        )
-        stop_y = (yy + 0.5) / 2
-    if len(game.friendly_robots) == 3:
-        _, yy1 = intersection_with_vertical_line(
-            (game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1)
-        )
-        _, yy2 = intersection_with_vertical_line(
-            (game.ball.p.x, game.ball.p.y), (game.friendly_robots[2].p.x, game.friendly_robots[2].p.y - 0.1)
-        )
-        stop_y = (yy1 + yy2) / 2
+        try:
+            _, yy = intersection_with_vertical_line(
+                (game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1)
+            )
+            stop_y = (yy + 0.5) / 2
+        except (IndexError, KeyError):
+            # If robot with ID 1 is not available, keep default stop_y
+            pass
+    elif len(game.friendly_robots) >= 3:
+        try:
+            _, yy1 = intersection_with_vertical_line(
+                (game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1)
+            )
+            _, yy2 = intersection_with_vertical_line(
+                (game.ball.p.x, game.ball.p.y), (game.friendly_robots[2].p.x, game.friendly_robots[2].p.y - 0.1)
+            )
+            stop_y = (yy1 + yy2) / 2
+        except (IndexError, KeyError):
+            # If robots with IDs 1 or 2 are not available, keep existing stop_y
+            pass
     if not target or abs(target[1]) > 0.5:
         target = Vector2D(4.5 if game.my_team_is_right else -4.5, stop_y)
 
