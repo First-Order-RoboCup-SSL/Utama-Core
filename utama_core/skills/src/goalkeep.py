@@ -47,7 +47,7 @@ def goalkeep(
         except (IndexError, KeyError):
             # If robot with ID 1 is not available, keep default stop_y
             pass
-    if len(game.friendly_robots) == 3:
+    elif len(game.friendly_robots) >= 3:
         try:
             _, yy1 = intersection_with_vertical_line(
                 (game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1)
