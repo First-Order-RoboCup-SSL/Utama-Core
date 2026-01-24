@@ -22,10 +22,12 @@ def defend_parameter(
     vel = game.ball.v.to_2d()
     if len(game.friendly_robots) > 2:
         if game.ball.p.y >= -0.5 and robot_id == 1:
-            target_pos = [3.0, -1.2]
+            side_multiplier = 1.0 if getattr(game, "my_team_is_right", True) else -1.0
+            target_pos = [3.0 * side_multiplier, -1.2]
             return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]))
         elif game.ball.p.y < -0.5 and robot_id == 2:
-            target_pos = [3.0, 1.2]
+            side_multiplier = 1.0 if getattr(game, "my_team_is_right", True) else -1.0
+            target_pos = [3.0 * side_multiplier, 1.2]
             return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]))
     if robot_id == 1:
         goal_frame = 0.5
