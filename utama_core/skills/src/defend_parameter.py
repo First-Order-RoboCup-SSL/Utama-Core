@@ -23,24 +23,15 @@ def defend_parameter(
     if len(game.friendly_robots) > 2:
         if game.ball.p.y >= -0.5 and robot_id == 1:
             target_pos = [3.0, -1.2]
-            return go_to_point(
-                game,
-                motion_controller,
-                robot_id,
-                Vector2D(target_pos[0], target_pos[1])
-            )
+            return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]))
         elif game.ball.p.y < -0.5 and robot_id == 2:
             target_pos = [3.0, 1.2]
-            return go_to_point(
-                game,
-                motion_controller,
-                robot_id,
-                Vector2D(target_pos[0], target_pos[1])
-            )
+            return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]))
     if robot_id == 1:
         goal_frame = 0.5
     else:
         goal_frame = -0.5
+
     def positions_to_defend_parameter(x2, y2):
         x1, y1 = game.ball.p.x, game.ball.p.y
         x3, y3 = defenseing_friendly.p.x, defenseing_friendly.p.y
