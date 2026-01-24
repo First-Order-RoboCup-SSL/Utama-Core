@@ -37,7 +37,7 @@ class FastPathPlanner:
                 and distance(robot_pos, our_pos) > self.OBSTACLE_CLEARANCE
                 and distance(robot_pos, target) > self.OBSTACLE_CLEARANCE
             ):
-                if abs(r.v.x) > 10e-10 and abs(r.v.y) > 10e-10:
+                if np.hypot(r.v.x, r.v.y) > 10e-10:
                     velocity = np.array([r.v.x, r.v.y])
                     point = np.array([r.p.x, r.p.y]) + velocity * self.PROJECTEDFRAMES / 60
                     obstalcesegment = (robot_pos, point)
@@ -79,7 +79,9 @@ class FastPathPlanner:
         return subgoal
 
     def collides(
-        self, segment: Tuple, obstacles, target
+        self,
+        segment: Tuple,
+        obstacles,
     ):  # returns None if no obstacles, else it returns the closest obstacle.
         closest_obstacle = None
         tempdistance = distance(segment[0], segment[1])
@@ -102,7 +104,7 @@ class FastPathPlanner:
     def checksegment(
         self, segment: Tuple, obstacles, recursionlength, target
     ):  # if there are obstacles in the segment, it divdes, the segment into two segments(initial_pos, subgoal) and (subgoal, target_pos), else returns the original segment.
-        closest_obstacle = self.collides(segment, obstacles, target)
+        closest_obstacle = self.collides(segment, obstacles)
         if closest_obstacle is not None and recursionlength < self.MAXRECURSIONLENGTH:
             subgoal = []
             subgoal.append(self._find_subgoal(segment[0], segment[1], closest_obstacle, obstacles, 1, 1))
