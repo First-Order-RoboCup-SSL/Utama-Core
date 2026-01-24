@@ -22,8 +22,24 @@ def goalkeep(
     else:
         target = predict_ball_pos_at_x(game, -4.5)
 
+    stop_y = 0.0
+
+    def intersection_with_vertical_line(a, b, x_line=4.5):
+        xa, ya = a
+        xb, yb = b
+        if xb < xa:
+            return a
+
+        k = (yb - ya) / (xb - xa)
+        y_intersect = ya + k * (x_line - xa)
+        return (x_line, y_intersect)
+    
+    x = game.friendly_robots[robot_id]
+    if len(game.friendly_robots) == 2:
+        _, yy = intersection_with_vertical_line((game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1))
+        stop_y = (yy + 0.5) / 2
     if not target or abs(target[1]) > 0.5:
-        target = Vector2D(4.5 if game.my_team_is_right else -4.5, 0)
+        target = Vector2D(4.5 if game.my_team_is_right else -4.5, stop_y)
 
     # shooters_data = find_likely_enemy_shooter(game.enemy_robots, game.ball)
 
