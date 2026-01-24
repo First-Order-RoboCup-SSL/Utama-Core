@@ -8,7 +8,6 @@ from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import face_ball, move
 
 
 def defend_parameter(
