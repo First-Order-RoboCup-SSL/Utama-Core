@@ -231,6 +231,7 @@ class DynamicWindowPlanner:
 
         if robot.p.distance_to(target) < 1.5 * ROBOT_RADIUS:
             return target, float("inf")
+
         obstacles = temporary_obstacles or []
         return self._plan_local(game, robot, target, obstacles)
 

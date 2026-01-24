@@ -106,3 +106,145 @@ def assert_valid_bounding_box(bb: FieldBounds):
     # Also ensure within full field
     assert -fx <= x0 <= fx and -fx <= x1 <= fx, f"x coordinates out of full field bounds ±{fx}"
     assert -fy <= y0 <= fy and -fy <= y1 <= fy, f"y coordinates out of full field bounds ±{fy}"
+
+
+def distance_between_line_segments(
+    seg1_start: np.ndarray,
+    seg1_end: np.ndarray,
+    seg2_start: np.ndarray,
+    seg2_end: np.ndarray,
+) -> float:
+    """Calculate the minimum distance between two line segments in 2D space.
+
+    Args:
+        seg1_start (tuple): A tuple representing the start of the first line segment (x1, y1).
+        seg1_end (tuple): A tuple representing the end of the first line segment (x2, y2).
+        seg2_start (tuple): A tuple representing the start of the second line segment (x3, y3).
+        seg2_end (tuple): A tuple representing the end of the second line segment (x4, y4).
+    Returns:
+        float: The minimum distance between the two line segments.
+    """
+    if segments_intersect(seg1_start, seg1_end, seg2_start, seg2_end):
+        return 0.0
+
+    return min(
+        distance_point_to_segment(seg1_start, seg2_start, seg2_end),
+        distance_point_to_segment(seg1_end, seg2_start, seg2_end),
+        distance_point_to_segment(seg2_start, seg1_start, seg1_end),
+        distance_point_to_segment(seg2_end, seg1_start, seg1_end),
+    )
+
+
+def distance_point_to_segment(point: np.ndarray, seg_start: np.ndarray, seg_end: np.ndarray) -> float:
+    """Calculate the minimum distance from a point to a line segment in 2D space.
+
+    Args:
+        point (tuple): A tuple representing the point (px, py).
+        seg_start (tuple): A tuple representing the start of the segment (x1, y1).
+        seg_end (tuple): A tuple representing the end of the segment (x2, y2).
+    Returns:
+        float: The minimum distance from the point to the line segment.
+    """
+    x_1, y_1 = point
+    (x_2, y_2), (x_3, y_3) = seg_start, seg_end
+
+    dx = x_3 - x_2
+    dy = y_3 - y_2
+
+    if dx == dy == 0:  # e.g. for static object the segment will be a point
+        return np.hypot(x_1 - x_2, y_1 - y_2)
+
+    # Now assume the segment is a line, calculate minimum distance to the line
+    # t describes the point on this line closest to point, in the form
+    # p_closest = (x_2 + t*dx, y_2 + t*dy),
+    # where (dx, dy) is the line direction vector
+    t = ((x_1 - x_2) * dx + (y_1 - y_2) * dy) / (dx * dx + dy * dy)
+
+    if t < 0:
+        # Closest point is the start of the segment
+        closest_x, closest_y = x_2, y_2
+    elif t > 1:
+        # Closest point is the end of the segment
+        closest_x, closest_y = x_3, y_3
+    else:
+        # Closest point is within the segment
+        closest_x = x_2 + t * dx
+        closest_y = y_2 + t * dy
+
+    return np.hypot(x_1 - closest_x, y_1 - closest_y)
+
+
+def segments_intersect(
+    seg1_start: np.ndarray,
+    seg1_end: np.ndarray,
+    seg2_start: np.ndarray,
+    seg2_end: np.ndarray,
+):
+    """Check if two line segments intersect.
+
+    Args:
+        seg1_start (tuple): ((x1, y1), (x2, y2))
+        seg1_end (tuple): ((x3, y3), (x4, y4))
+        seg2_start (tuple): ((x5, y5), (x6, y6))
+        seg2_end (tuple): ((x7, y7), (x8, y8))
+    Returns:
+        bool: True if the segments intersect, False otherwise.
+    """
+    (p1, q1) = seg1_start, seg1_end
+    (p2, q2) = seg2_start, seg2_end
+
+    o1 = orientation(p1, q1, p2)
+    o2 = orientation(p1, q1, q2)
+    o3 = orientation(p2, q2, p1)
+    o4 = orientation(p2, q2, q1)
+
+    # General case
+    if o1 != o2 and o3 != o4:
+        return True
+
+    # Special Cases (collinear cases where they touch/overlap)
+    if o1 == 0 and on_segment(p1, p2, q1):
+        return True
+    if o2 == 0 and on_segment(p1, q2, q1):
+        return True
+    if o3 == 0 and on_segment(p2, p1, q2):
+        return True
+    if o4 == 0 and on_segment(p2, q1, q2):
+        return True
+
+    return False
+
+
+def orientation(p_1: np.ndarray, p_2: np.ndarray, p_3: np.ndarray) -> int:
+    """Calculate the orientation of 3 points (e.g. on a line or in a triangle).
+
+    Args:
+        p_1 (np.ndarray): First point as (x, y).
+        p_2 (np.ndarray): Second point as (x, y).
+        p_3 (np.ndarray): Third point as (x, y).
+
+    Returns:
+        int: 0 if collinear, 1 if clockwise, 2 if counterclockwise.
+    """
+    val = (p_2[1] - p_1[1]) * (p_3[0] - p_2[0]) - (p_2[0] - p_1[0]) * (p_3[1] - p_2[1])
+    if val == 0:
+        return 0  # collinear
+
+    return 1 if val > 0 else 2  # 1: clockwise, 2: counterclockwise
+
+
+def on_segment(p: np.ndarray, q: np.ndarray, r: np.ndarray) -> bool:
+    """Check if point q lies on line segment 'pr'.
+
+    Args:
+        p (np.ndarray): Start point of segment as (x, y).
+        q (np.ndarray): Point to check as (x, y).
+        r (np.ndarray): End point of segment as (x, y).
+
+    Returns:
+        bool: True if q lies on segment pr, False otherwise.
+    """
+    if min(p[0], r[0]) <= q[0] <= max(p[0], r[0]) and min(p[1], r[1]) <= q[1] <= max(p[1], r[1]):
+        return True
+
+    return False
