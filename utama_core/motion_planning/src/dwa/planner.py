@@ -425,7 +425,7 @@ class DynamicWindowPlanner:
         return rpos, end
 
     def _random_candidate_scales(self, distance: float, count: int = 3) -> List[float]:
-        min_scale = 0.05
+        min_scale = 0.1
         # linear scaling: distance=4 → 1.0, distance=0 → min_scale
         max_scale = min_scale + (1.0 - min_scale) * min(distance / 4.0, 1.0)
         if count <= 0:
