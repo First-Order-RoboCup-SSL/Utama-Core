@@ -31,32 +31,31 @@ class FastPathPlanner:
         robots = friendly_obstacles + list(game.enemy_robots.values())
         obstaclelist = []
         for r in robots:
-            robotpos = np.array([r.p.x, r.p.y])
+            robot_pos = np.array([r.p.x, r.p.y])
             if (
-                distance(our_pos, robotpos) < self.LOOK_AHEAD_RANGE
-                and distance(robotpos, our_pos) > self.OBSTACLE_CLEARANCE
-                and distance(robotpos, target) > self.OBSTACLE_CLEARANCE
+                distance(our_pos, robot_pos) < self.LOOK_AHEAD_RANGE
+                and distance(robot_pos, our_pos) > self.OBSTACLE_CLEARANCE
+                and distance(robot_pos, target) > self.OBSTACLE_CLEARANCE
             ):
                 if abs(r.v.x) > 10e-10 and abs(r.v.y) > 10e-10:
                     velocity = np.array([r.v.x, r.v.y])
-                    # unitvec = velocity/np.linalg.norm(velocity)
                     point = np.array([r.p.x, r.p.y]) + velocity * self.PROJECTEDFRAMES / 60
-                    obstalcesegment = (robotpos, point)
+                    obstalcesegment = (robot_pos, point)
                     obstaclelist.append(obstalcesegment)
                 else:
-                    obstaclelist.append((robotpos, robotpos))
+                    obstaclelist.append((robot_pos, robot_pos))
         return obstaclelist
 
     def _find_subgoal(
         self,
-        robotpos,
+        robot_pos,
         target,
-        closestobstacle,
+        closest_obstacle,
         obstacles,
         recursionfactor,
         multiple,
     ) -> np.array:
-        direction = target - robotpos
+        direction = target - robot_pos
 
         if recursionfactor % 2 == 1:
             perp_dir = rotate_vector(direction[0], direction[1], math.pi / 2)
@@ -64,15 +63,15 @@ class FastPathPlanner:
             perp_dir = rotate_vector(direction[0], direction[1], math.pi * 3 / 2)
 
         unitvec = perp_dir / np.linalg.norm(perp_dir)
-        obstaclepos = (closestobstacle[0] + closestobstacle[1]) / 2
+        obstaclepos = (closest_obstacle[0] + closest_obstacle[1]) / 2
         subgoal = obstaclepos + self.SUBGOAL_DISTANCE * unitvec * multiple
 
         for o in obstacles:
             if distance_point_to_segment(subgoal, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
                 subgoal = self._find_subgoal(
-                    robotpos,
+                    robot_pos,
                     target,
-                    closestobstacle,
+                    closest_obstacle,
                     obstacles,
                     recursionfactor + 1,
                     multiple + 1,
@@ -82,17 +81,17 @@ class FastPathPlanner:
     def collides(
         self, segment: Tuple, obstacles, target
     ):  # returns None if no obstacles, else it returns the closest obstacle.
-        closestobstacle = None
+        closest_obstacle = None
         tempdistance = distance(segment[0], segment[1])
         for o in obstacles:
             # print('hello',o,segment)
             if distance_between_line_segments(o[0], o[1], segment[0], segment[1]) < self.OBSTACLE_CLEARANCE:
                 obstacledistance = distance_between_line_segments(o[0], o[1], segment[0], segment[1])
-                if closestobstacle is None or obstacledistance < tempdistance:
+                if closest_obstacle is None or obstacledistance < tempdistance:
                     tempdistance = obstacledistance
-                    closestobstacle = o
+                    closest_obstacle = o
 
-        return closestobstacle
+        return closest_obstacle
 
     def _trajectory_length(self, trajectory):
         trajectory_legnth = 0
@@ -103,11 +102,11 @@ class FastPathPlanner:
     def checksegment(
         self, segment: Tuple, obstacles, recursionlength, target
     ):  # if there are obstacles in the segment, it divdes, the segment into two segments(initial_pos, subgoal) and (subgoal, target_pos), else returns the original segment.
-        closestobstacle = self.collides(segment, obstacles, target)
-        if closestobstacle is not None and recursionlength < self.MAXRECURSIONLENGTH:
+        closest_obstacle = self.collides(segment, obstacles, target)
+        if closest_obstacle is not None and recursionlength < self.MAXRECURSIONLENGTH:
             subgoal = []
-            subgoal.append(self._find_subgoal(segment[0], segment[1], closestobstacle, obstacles, 1, 1))
-            subgoal.append(self._find_subgoal(segment[0], segment[1], closestobstacle, obstacles, 0, 1))
+            subgoal.append(self._find_subgoal(segment[0], segment[1], closest_obstacle, obstacles, 1, 1))
+            subgoal.append(self._find_subgoal(segment[0], segment[1], closest_obstacle, obstacles, 0, 1))
             subseg_a1 = self.checksegment((segment[0], subgoal[0]), obstacles, recursionlength + 1, target)
             subseg_a2 = self.checksegment((subgoal[0], segment[1]), obstacles, recursionlength + 1, target)
             subseg_b1 = self.checksegment((segment[0], subgoal[1]), obstacles, recursionlength + 1, target)
