@@ -20,7 +20,25 @@ def defend_parameter(
 ):
     defenseing_friendly = game.friendly_robots[robot_id]
     vel = game.ball.v.to_2d()
-
+    if len(game.friendly_robots) > 2:
+        if game.ball.p.y >= 0 and robot_id == 1:
+            return go_to_point(
+                game,
+                motion_controller,
+                robot_id,
+                Vector2D(2, -2)
+            )
+        elif game.ball.p.y < 0 and robot_id == 2:
+            return go_to_point(
+                game,
+                motion_controller,
+                robot_id,
+                Vector2D(2, 2)
+            )
+    if robot_id == 1:
+        goal_frame = 0.5
+    else:
+        goal_frame = -0.5
     def positions_to_defend_parameter(x2, y2):
         x1, y1 = game.ball.p.x, game.ball.p.y
         x3, y3 = defenseing_friendly.p.x, defenseing_friendly.p.y
@@ -51,13 +69,13 @@ def defend_parameter(
         return x3, y3, x4, y4
 
     if vel[0] ** 2 + vel[1] ** 2 > 0.05:
-        x2, y2 = 4.5, 0.5
+        x2, y2 = 4.5, goal_frame
         x3, y3, x4, y4 = positions_to_defend_parameter(x2, y2)
         target_pos = np.array([x4, y4])
 
     else:
         robot_rad = 0.09
-        x2, y2 = 4.5, -0.5
+        x2, y2 = 4.5, -goal_frame
         x3, y3, x4, y4 = positions_to_defend_parameter(x2, y2)
         vec_to_target = np.array(
             [
@@ -71,7 +89,6 @@ def defend_parameter(
             vec_dir = vec_to_target / dist_to_target
         else:
             vec_dir = np.array([0.0, 0.0])
-        # target_pos = modified_pos(np.array([positions_to_defend_parameter(x2, y2)[2], positions_to_defend_parameter(x2, y2)[3]]) - vec_dir * robot_rad)
         target_pos = np.array([x4, y4]) - vec_dir * robot_rad
 
     return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]), dribbling=True)
