@@ -26,15 +26,15 @@ class FastPathPlanner:
         self.MAXRECURSIONLENGTH = self.config.MAXRECURSION_LENGTH
         self.PROJECTEDFRAMES = self.config.PROJECTEDFRAMES
 
-    def _get_obstacles(self, game: Game, robot_id: int, ourpos, target):
+    def _get_obstacles(self, game: Game, robot_id: int, our_pos, target):
         friendly_obstacles = [robot for robot in game.friendly_robots.values() if robot.id != robot_id]
         robots = friendly_obstacles + list(game.enemy_robots.values())
         obstaclelist = []
         for r in robots:
             robotpos = np.array([r.p.x, r.p.y])
             if (
-                distance(ourpos, robotpos) < self.LOOK_AHEAD_RANGE
-                and distance(robotpos, ourpos) > self.OBSTACLE_CLEARANCE
+                distance(our_pos, robotpos) < self.LOOK_AHEAD_RANGE
+                and distance(robotpos, our_pos) > self.OBSTACLE_CLEARANCE
                 and distance(robotpos, target) > self.OBSTACLE_CLEARANCE
             ):
                 if abs(r.v.x) > 10e-10 and abs(r.v.y) > 10e-10:
