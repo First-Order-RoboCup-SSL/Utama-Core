@@ -170,8 +170,8 @@ class DynamicWindowPlanner:
         self._w_speed = getattr(self._config, "weight_speed")
 
         # Safety area dimensions (configurable)
-        self._side_clearance = ROBOT_RADIUS * 1.5  # Clearance on left/right sides (m)
-        self._back_clearance = ROBOT_RADIUS * 1.5  # Clearance behind robot (m)
+        self._side_clearance = ROBOT_RADIUS  # Clearance on left/right sides (m)
+        self._back_clearance = ROBOT_RADIUS  # Clearance behind robot (m)
         self._base_front_clearance = ROBOT_RADIUS * 2  # Minimum forward clearance at zero speed (m)
         self._forward_lookahead_time = 0.6  # How many seconds to look ahead (s)
 
@@ -428,7 +428,7 @@ class DynamicWindowPlanner:
     def _random_candidate_scales(self, distance: float, count: int = 3) -> List[float]:
         min_scale = 0.1
         # linear scaling: distance=4 → 1.0, distance=0 → min_scale
-        max_scale = min_scale + (1.0 - min_scale) * min(distance / 4.0, 1.0)
+        max_scale = min_scale + (1.0 - min_scale) * min(distance / 2.0, 1.0)
         if count <= 0:
             return []
         if max_scale - min_scale <= 1e-9:
