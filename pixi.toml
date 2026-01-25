@@ -27,6 +27,7 @@ seaborn = ">=0.13.2,<0.14"
 pyqtgraph = ">=0.14.0,<0.15"
 pyside6 = ">=6.9.3,<7"
 rich = ">=14.2.0,<15"
+pyyaml = ">=6.0.3,<7"
 
 [package]
 name = "Utama-Core"

@@ -3,6 +3,8 @@ import csv
 from dataclasses import replace
 from functools import partial
 import numpy as np
+import itertools
+import copy
 # import pyqtgraph as pg # type: ignore
 # from pyqtgraph.Qt import QtWidgets # type: ignore
 from typing import Dict, List, Optional, Tuple
@@ -14,16 +16,36 @@ from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRo
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
 from utama_core.run.refiners.filters import FIR_filter
-from utama_core.run.refiners.kalman import Kalman_filter, Kalman_filter_2, Kalman_filter_3, Kalman_filter_2D
+from utama_core.run.refiners.kalman import Kalman_filter, Kalman_filter_2, Kalman_filter_3, Kalman_filter_2D, KalmanFilter6D
+from utama_core.run.refiners.helper import filter_robot, no_filter
+import os
+import tomllib
 
 # For logging
+def load_config(config_path="filter_config.toml"):
+    with open(config_path, "rb") as f:
+        print("Config Loaded")
+        # Load the YAML file into a Python dictionary
+        return tomllib.load(f)
+
+config = load_config()
+
 TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
 X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
 COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 
-OUTPUT_FILE   = "noisy-10-kalman3-dwa-ss-r-before.csv"
-OUTPUT_FILE_2 = "noisy-10-kalman3-dwa-ss-r-after.csv"
-TARGET_SIZE = 2000
+OUTPUT_FILE   = config["OUTPUT_FILE"]
+OUTPUT_FILE_2 = config["OUTPUT_FILE_2"]
+if config["FILTER"] == "FIR":
+    FILTER = FIR_filter()
+elif config["FILTER"] == "KALMAN":
+    FILTER = Kalman_filter_2D()
+if config["CLEAN"]:
+    FILTER_METHOD = no_filter
+else:
+    FILTER_METHOD = filter_robot
+TARGET_SIZE = config["TARGET_SIZE"]
+PROGRAM_EXIT_WORD = config["PROGRAM_EXIT_WORD"]
 
 
 class AngleSmoother:
@@ -68,8 +90,8 @@ class PositionRefiner(BaseRefiner):
         # self.kalman_filters_yellow = [Kalman_filter(id) for id in range(self.yellow_count)]
         # self.kalman_filters_blue   = [Kalman_filter(id) for id in range(self.blue_count)]
         
-        self.kalman_filters_yellow = [Kalman_filter_2D() for _ in range(self.yellow_count)]
-        self.kalman_filters_blue   = [Kalman_filter_2D() for _ in range(self.blue_count)]
+        self.kalman_filters_yellow = [copy.deepcopy(FILTER) for _ in range(self.yellow_count)]
+        self.kalman_filters_blue   = [copy.deepcopy(FILTER) for _ in range(self.blue_count)]
         
         # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
         # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
@@ -140,15 +162,15 @@ class PositionRefiner(BaseRefiner):
             combined_vision_data: VisionData = VisionData(
                 ts=combined_vision_data.ts,
                 yellow_robots=list(
-                    map(Kalman_filter_2D.filter_robot,
+                    map(FILTER_METHOD,
                     self.kalman_filters_yellow,
-                    sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
-                    ),
+                    list(zip(sorted(combined_vision_data.yellow_robots, key=lambda r: r.id), itertools.repeat(combined_vision_data.ts)))
+                    )),
                 blue_robots=list(
-                    map(Kalman_filter_2D.filter_robot,
+                    map(FILTER_METHOD,
                     self.kalman_filters_blue,
-                    sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
-                    ),
+                    list(zip(sorted(combined_vision_data.blue_robots, key=lambda r: r.id), itertools.repeat(combined_vision_data.ts)))
+                    )),
                 balls=combined_vision_data.balls
             )
             
@@ -226,6 +248,8 @@ class PositionRefiner(BaseRefiner):
                     #     })
                     
                     self.data_collected += 1
+                    if self.data_collected == TARGET_SIZE:
+                        print(PROGRAM_EXIT_WORD)
                     
             # For live testing:
             # try:

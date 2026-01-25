@@ -175,17 +175,91 @@ class Kalman_filter_2:
         return VisionRobotData(id=data.id, x=x_f, y=y_f, orientation=th_f)
 
 
+class KalmanFilter6D:
+    def __init__(self, dt=1/60, std_acc=2, std_meas=0.5):
+        self.dt = dt
+        
+        # 1. State Vector [x, vx, ax, y, vy, ay]
+        self.x = np.zeros((6, 1))
+        
+        # 2. State Transition Matrix (F)
+        self.F = np.array([
+            [1, dt, 0.5*dt**2, 0,  0,       0],
+            [0, 1,  dt,        0,  0,       0],
+            [0, 0,  0.92,         0,  0,       0],
+            [0, 0,  0,         1,  dt, 0.5*dt**2],
+            [0, 0,  0,         0,  1,       dt],
+            [0, 0,  0,         0,  0,       0.92]
+        ])
+        
+        # 3. Measurement Matrix (H) - Mapping 6D state to 2D observation
+        self.H = np.array([
+            [1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0]
+        ])
+        
+        # 4. Process Noise Covariance (Q) 
+        # Tuning this higher makes the filter follow the data more closely (less lag)
+        G = np.array([[0.5*dt**2], [dt], [1]])
+        Q_block = G @ G.T * (std_acc**2)
+        self.Q = np.block([
+            [Q_block,           np.zeros((3,3))],
+            [np.zeros((3,3)),   Q_block]
+        ])
+        
+        # 5. Measurement Noise Covariance (R)
+        self.R = np.eye(2) * (std_meas**2)
+        
+        # 6. Error Covariance Matrix (P)
+        self.P = np.eye(6) * 1000
+
+        self.is_initialized = False
+
+    def predict(self):
+        # x = F * x
+        self.x = np.dot(self.F, self.x)
+        # P = F * P * Ft + Q
+        self.P = np.dot(np.dot(self.F, self.P), self.F.T) + self.Q
+        return self.x
+
+    def update(self, z):
+        # z is the [x, y] measurement
+        # y = z - H * x (Innovation)
+
+        y = z - np.dot(self.H, self.x)
+        # S = H * P * Ht + R
+        S = np.dot(self.H, np.dot(self.P, self.H.T)) + self.R
+        # K = P * Ht * inv(S) (Kalman Gain)
+        K = np.dot(np.dot(self.P, self.H.T), np.linalg.inv(S))
+        
+        # Update state and covariance
+        self.x = self.x + np.dot(K, y)
+        I = np.eye(self.P.shape[0])
+        self.P = np.dot(I - np.dot(K, self.H), self.P)
+    
+    def step(self, x, y):
+        if not self.is_initialized:
+            self.x[0, 0] = x
+            self.x[3, 0] = y
+            self.is_initialized = True
+            return x, y
+        self.predict()
+        self.update(np.array([x, y]))
+        return self.x[0, 0], self.x[3, 0]
+    
+
 class Kalman_filter_3:
     def __init__(self, dt=1/60):
         self.dt = dt
         self.x = np.array([[0.0],
                            [0.0]])
-        self.P = np.eye(2)
+        self.P = np.eye(2) * 500
         self.F = np.array([[1, self.dt],
-                           [0,1]])
+                           [0, 0.75]])
         self.H = np.array([[1.0, 0.0]])
-        self.Q = np.array([[1e-2, 0.0],
-                           [0.0, 1e-2]])
+
+        self.Q = np.array([[1e-5, 0.0],
+                   [0.0, 1.0]])
 
         self.R = np.array([[0.05]])
         self.I = np.eye(2)
@@ -200,7 +274,9 @@ class Kalman_filter_3:
         self.x = self.x + np.dot(self.K, z - np.dot(self.H, self.x))
         self.P = np.dot(self.I - np.dot(self.K, self.H), self.P)
 
-    def step(self, z):
+    def step(self, z, dt=None):
+        if dt is not None:
+            self.dt = dt
         self.predict()
         self.update(z)
         return self.x[0, 0]
@@ -211,16 +287,132 @@ class Kalman_filter_2D:
         self.kalmanY = Kalman_filter_3(dt)
         self.kalmanX = Kalman_filter_3(dt)
 
-    def step(self, x, y):
-        return self.kalmanX.step(x), self.kalmanY.step(y)
+    def step(self, x, y, dt=None):
+        return self.kalmanX.step(x, dt), self.kalmanY.step(y, dt)
 
-    @staticmethod
-    def filter_robot(
-        filter,
-        data: VisionRobotData,
-    ) -> VisionRobotData:
-        
-        # class VisionRobotData: id: int; x: float; y: float; orientation: float
-        x_f, y_f = filter.step(data.x, data.y)
+    
+class Robot2DEKF:
 
-        return VisionRobotData(id=data.id, x=x_f, y=y_f, orientation=data.orientation)
+    def __init__(self, dt=1/60):
+
+        self.dt = dt
+
+
+
+        # [x, y, theta, v, omega]
+
+        self.x = np.zeros((5, 1))
+
+
+
+        self.P = np.eye(5) * 5.0
+
+
+
+        # [x, y, theta, v, omega]
+
+        self.Q = np.diag([1e-2, 1e-2, 1, 1e-2, 1e-1])
+
+
+
+        self.R = np.diag([0.1, 0.1, 0.001])
+
+
+
+        self.I = np.eye(5)
+
+
+
+    def predict(self):
+
+        theta = self.x[2, 0]
+
+        v = self.x[3, 0]
+
+        omega = self.x[4, 0]
+
+
+
+        self.x[0, 0] += v * np.cos(theta) * self.dt
+
+        self.x[1, 0] += v * np.sin(theta) * self.dt
+
+        self.x[2, 0] += omega * self.dt
+
+        self.x[2, 0] = self._wrap_angle(self.x[2, 0])
+
+
+
+        F = np.eye(5)
+
+        F[0, 2] = -v * np.sin(theta) * self.dt
+
+        F[0, 3] = np.cos(theta) * self.dt
+
+        F[1, 2] = v * np.cos(theta) * self.dt
+
+        F[1, 3] = np.sin(theta) * self.dt
+
+        F[2, 4] = self.dt
+
+
+
+        self.P = F @ self.P @ F.T + self.Q
+
+
+
+    def update(self, z_x, z_y, z_theta):
+
+        z = np.array([[z_x], [z_y], [z_theta]])
+
+        h_x = self.x[:3]
+
+        y = z - h_x
+
+        y[2, 0] = self._wrap_angle(y[2, 0])
+
+
+
+        H = np.zeros((3, 5))
+
+        H[0, 0] = 1.0 # x measurement
+
+        H[1, 1] = 1.0 # y measurement
+
+        H[2, 2] = 1.0 # theta measurement
+
+
+
+        S = H @ self.P @ H.T + self.R
+
+        K = self.P @ H.T @ np.linalg.inv(S)
+
+
+
+        self.x = self.x + (K @ y)
+
+        self.P = (self.I - (K @ H)) @ self.P
+
+
+
+        self.x[2, 0] = self._wrap_angle(self.x[2, 0])
+
+
+
+    def _wrap_angle(self, angle):
+
+        """Helper to keep angles between -pi and pi"""
+
+        return (angle + np.pi) % (2 * np.pi) - np.pi
+
+
+
+    def step(self, dfSeries):
+
+        z_x, z_y, z_theta = dfSeries
+
+        self.predict()
+
+        self.update(z_x, z_y, z_theta)
+
+        return pd.Series(self.x[:3, 0], index=['x', 'y', 'orientation'])

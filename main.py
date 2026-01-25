@@ -6,12 +6,18 @@ from utama_core.strategy.examples import (
     GoToBallExampleStrategy,
     RobotPlacementStrategy,
     StartupStrategy,
+    RandomStrategy,
 )
-
+import argparse
 
 def main():
+    parser = argparse.ArgumentParser(description="Testing Seed")
+    parser.add_argument("--seed", type=int, default=42, help="Random Seed")
+    parser.add_argument("--noisy_x", type=float, default=0.0, help="Random Seed")
+    parser.add_argument("--noisy_y", type=float, default=0.0, help="Random Seed")
+    args = parser.parse_args()
     runner = StrategyRunner(
-        strategy=StartupStrategy(),
+        strategy=RandomStrategy(seed=args.seed),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",
@@ -21,7 +27,7 @@ def main():
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         print_real_fps=True,
         profiler_name=None,
-        rsim_noise=RsimGaussianNoise(0.01, 0.01)
+        rsim_noise=RsimGaussianNoise(args.noisy_x, args.noisy_y)
     )
     runner.my_strategy.render()
     runner.run()
