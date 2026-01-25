@@ -20,9 +20,10 @@ TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
 X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
 COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 
-OUTPUT_FILE   = "clean-kalman-dwa-ss-r-before-2.csv"
-OUTPUT_FILE_2 = "clean-kalman-dwa-ss-r-after-2.csv"
-TARGET_SIZE = 2000
+OUTPUT_FILE   = "clean-dwa-pc-r.csv"
+OUTPUT_FILE_2 = "noisy-10-dwa-pc-r.csv"
+OUTPUT_FILE_3 = "noisy-10-kalman-dwa-pc-r.csv"
+TARGET_SIZE = 8000
 
 
 class AngleSmoother:
@@ -78,11 +79,16 @@ class PositionRefiner(BaseRefiner):
         
         # For logging
         self.data_collected = 0
+        
         with open(OUTPUT_FILE, "w", newline="") as f:
             writer = csv.DictWriter(f, COLS)
             writer.writeheader()
             
         with open(OUTPUT_FILE_2, "w", newline="") as f:
+            writer = csv.DictWriter(f, COLS)
+            writer.writeheader()
+            
+        with open(OUTPUT_FILE_3, "w", newline="") as f:
             writer = csv.DictWriter(f, COLS)
             writer.writeheader()
         
@@ -120,9 +126,28 @@ class PositionRefiner(BaseRefiner):
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
             
-        if self.running:  # Checks if the first valid game frame has been received.            
+        if self.running:  # Checks if the first valid game frame has been received.
+            # For logging:
             if self.data_collected < TARGET_SIZE:
                 with open(OUTPUT_FILE, "a", newline="") as f:
+                    writer = csv.DictWriter(f, COLS)
+                    
+                    for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
+                        writer.writerow({
+                            TS_COL: combined_vision_data.ts,
+                            ID_COL: y_robot.id,
+                            COLOR_COL: "yellow",
+                            X_COL: y_robot.x,
+                            Y_COL: y_robot.y,
+                            TH_COL: y_robot.orientation
+                        })
+                        
+            for robot in combined_vision_data.yellow_robots:
+                robot.add_gaussian_noise()
+            
+            # For logging:
+            if self.data_collected < TARGET_SIZE:
+                with open(OUTPUT_FILE_2, "a", newline="") as f:
                     writer = csv.DictWriter(f, COLS)
                     
                     for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
@@ -172,7 +197,7 @@ class PositionRefiner(BaseRefiner):
             
             # For logging:
             if self.data_collected < TARGET_SIZE:
-                with open(OUTPUT_FILE_2, "a", newline="") as f:
+                with open(OUTPUT_FILE_3, "a", newline="") as f:
                     writer = csv.DictWriter(f, COLS)
                     
                     for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
