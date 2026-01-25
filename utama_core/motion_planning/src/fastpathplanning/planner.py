@@ -1,5 +1,5 @@
 import math
-from typing import Tuple
+from typing import List, Tuple
 
 import numpy as np  # type: ignore
 
@@ -102,25 +102,49 @@ class FastPathPlanner:
         return trajectory_legnth
 
     def checksegment(
-        self, segment: Tuple, obstacles, recursionlength, target
-    ):  # if there are obstacles in the segment, it divdes, the segment into two segments(initial_pos, subgoal) and (subgoal, target_pos), else returns the original segment.
-        closest_obstacle = self.collides(segment, obstacles)
-        if closest_obstacle is not None and recursionlength < self.MAXRECURSIONLENGTH:
-            subgoal = []
-            subgoal.append(self._find_subgoal(segment[0], segment[1], closest_obstacle, obstacles, 1, 1))
-            subgoal.append(self._find_subgoal(segment[0], segment[1], closest_obstacle, obstacles, 0, 1))
-            subseg_a1 = self.checksegment((segment[0], subgoal[0]), obstacles, recursionlength + 1, target)
-            subseg_a2 = self.checksegment((subgoal[0], segment[1]), obstacles, recursionlength + 1, target)
-            subseg_b1 = self.checksegment((segment[0], subgoal[1]), obstacles, recursionlength + 1, target)
-            subseg_b2 = self.checksegment((subgoal[1], segment[1]), obstacles, recursionlength + 1, target)
-            joined_sega = subseg_a1 + subseg_a2
-            joined_segb = subseg_b1 + subseg_b2
-            if self._trajectory_length(joined_sega) <= self._trajectory_length(joined_segb):
-                return joined_sega
+        self, segment: Tuple, obstacles, recursionlength: int, target
+    ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float]:
+        """
+        If there are obstacles in the segment, divide the segment and return subsegments
+        along with the total trajectory length.
+        """
+
+        closestobstacle = self.collides(segment, obstacles, target)
+        if closestobstacle is not None and recursionlength < self.MAXRECURSIONLENGTH:
+            # compute left and right subgoals explicitly
+            subgoal_left = self._find_subgoal(
+                (segment[0], segment[1]), closestobstacle, obstacles, recursionfactor=1, multiple=1
+            )
+            subgoal_right = self._find_subgoal(
+                (segment[0], segment[1]), closestobstacle, obstacles, recursionfactor=0, multiple=1
+            )
+
+            # recursively check subsegments for left side
+            left_seg1, left_len1 = self.checksegment((segment[0], subgoal_left), obstacles, recursionlength + 1, target)
+            left_seg2, left_len2 = self.checksegment((subgoal_left, segment[1]), obstacles, recursionlength + 1, target)
+            left_segments = left_seg1 + left_seg2
+            left_length = left_len1 + left_len2
+
+            # recursively check subsegments for right side
+            right_seg1, right_len1 = self.checksegment(
+                (segment[0], subgoal_right), obstacles, recursionlength + 1, target
+            )
+            right_seg2, right_len2 = self.checksegment(
+                (subgoal_right, segment[1]), obstacles, recursionlength + 1, target
+            )
+            right_segments = right_seg1 + right_seg2
+            right_length = right_len1 + right_len2
+
+            # choose shorter path
+            if left_length <= right_length:
+                return left_segments, left_length
             else:
-                return joined_segb
+                return right_segments, right_length
+
         else:
-            return [segment]
+            # base case: no obstacle, return segment with its length
+            segment_length = distance(segment[0], segment[1])
+            return [segment], segment_length
 
     def _path_to(self, game: Game, robot_id: int, target: Tuple[float, float]):
         robot = game.friendly_robots[robot_id]
