@@ -119,5 +119,5 @@ def main(seed: int, noisy_x: float = None, noisy_y: float = None):
 
 
 if __name__ == "__main__":
-    main(32, 0.01, 0.01)
+    main(42, 0.01, 0.01)
     print("Test Ends")

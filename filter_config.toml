@@ -1,5 +1,5 @@
-OUTPUT_FILE = "vision_data/32/kalman_filtered_dwa.csv"
-OUTPUT_FILE_2 = "vision_data/32/kalman_filtered_dwa.csv"
+OUTPUT_FILE = "vision_data/42/kalman_filtered_dwa.csv"
+OUTPUT_FILE_2 = "vision_data/42/kalman_filtered_dwa.csv"
 CLEAN = false
 FILTER = "KALMAN"
 PROGRAM_EXIT_WORD = "Data Collect Done"
