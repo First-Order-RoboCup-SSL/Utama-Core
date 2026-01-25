@@ -67,7 +67,7 @@ class FastPathPlanner:
         subgoal = obstaclepos + self.SUBGOAL_DISTANCE * unitvec * multiple
 
         for o in obstacles:
-            if distance_point_to_segment(subgoal, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
+            if distance_point_to_segment(subgoal, (o[0], o[1])) < self.OBSTACLE_CLEARANCE:
                 subgoal = self._find_subgoal(
                     robot_pos,
                     target,
@@ -87,8 +87,8 @@ class FastPathPlanner:
         tempdistance = distance(segment[0], segment[1])
         for o in obstacles:
             # print('hello',o,segment)
-            if distance_between_line_segments(o[0], o[1], segment[0], segment[1]) < self.OBSTACLE_CLEARANCE:
-                obstacledistance = distance_between_line_segments(o[0], o[1], segment[0], segment[1])
+            if distance_between_line_segments([o[0], o[1]], [segment[0], segment[1]]) < self.OBSTACLE_CLEARANCE:
+                obstacledistance = distance_between_line_segments([o[0], o[1]], [segment[0], segment[1]])
                 if closest_obstacle is None or obstacledistance < tempdistance:
                     tempdistance = obstacledistance
                     closest_obstacle = o
@@ -109,14 +109,14 @@ class FastPathPlanner:
         along with the total trajectory length.
         """
 
-        closestobstacle = self.collides(segment, obstacles, target)
+        closestobstacle = self.collides(segment, obstacles)
         if closestobstacle is not None and recursionlength < self.MAXRECURSIONLENGTH:
             # compute left and right subgoals explicitly
             subgoal_left = self._find_subgoal(
-                (segment[0], segment[1]), closestobstacle, obstacles, recursionfactor=1, multiple=1
+                segment[0], segment[1], closestobstacle, obstacles, recursionfactor=1, multiple=1
             )
             subgoal_right = self._find_subgoal(
-                (segment[0], segment[1]), closestobstacle, obstacles, recursionfactor=0, multiple=1
+                segment[0], segment[1], closestobstacle, obstacles, recursionfactor=0, multiple=1
             )
 
             # recursively check subsegments for left side
@@ -151,9 +151,8 @@ class FastPathPlanner:
         our_pos = np.array([robot.p.x, robot.p.y])
         target = np.array(target)
         obstacles = self._get_obstacles(game, robot_id, our_pos, target)
-        finaltrajectory = self.checksegment((our_pos, target), obstacles, 0, target)
-        # for i in finaltrajectory:
-        #      self._env.draw_point(i[1][0], i[1][1], width=10)
+        finaltrajectory = self.checksegment((our_pos, target), obstacles, 0, target)[0]
+        print(finaltrajectory)
         return finaltrajectory
 
 
