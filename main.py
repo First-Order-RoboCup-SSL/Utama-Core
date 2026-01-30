@@ -1,4 +1,4 @@
-from utama_core.entities.game.field import Field
+from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.replay import ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import StrategyRunner
@@ -7,7 +7,7 @@ from utama_core.strategy.examples import (
     GoToBallExampleStrategy,
     RobotPlacementStrategy,
     StartupStrategy,
-    PointCycleStrategy
+    PointCycleStrategy,
     TwoRobotPlacementStrategy,
 )
 
