@@ -186,7 +186,8 @@ class SSLStandardEnv(SSLBaseEnv):
         blue_obs = []
         blue_robots_info = []
         for i in range(len(self.frame.robots_blue)):
-            if self._vanishing(): continue
+            if self._vanishing():
+                continue
             
             robot = self.frame.robots_blue[i]
             robot_pos, robot_info = self._get_robot_observation(robot)
@@ -196,7 +197,8 @@ class SSLStandardEnv(SSLBaseEnv):
         yellow_obs = []
         yellow_robots_info = []
         for i in range(len(self.frame.robots_yellow)):
-            if self._vanishing(): continue
+            if self._vanishing():
+                continue
                 
             robot = self.frame.robots_yellow[i]
             robot_pos, robot_info = self._get_robot_observation(robot)
