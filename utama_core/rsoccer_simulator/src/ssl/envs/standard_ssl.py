@@ -37,6 +37,19 @@ class SSLStandardEnv(SSLBaseEnv):
         Description:
             list of (x, y, theta) coords for each robot to spawn in (in meters and radians).
             See the default BLUE_START_ONE/YELLOW_START_ONE for reference.
+        
+        gaussian_noise
+        Type: RsimGaussianNoise
+        Description:
+            When running in rsim, add Gaussian noise to ball and robots with the given standard deviations.
+            Mutates the Robot object in place. The 3 parameters are for x (in m), y (in m), and orientation (in degrees)
+            respectively. Defaults to 0 for each.
+            
+        vanishing
+        Type: float
+        Description:
+            When running in rsim, cause robots and ball to vanish with the given probability. Defaults to 0.
+            
     Observation:
         Type: Tuple[FrameData, List[RobotInfo], List[RobotInfo]]
         Num     Item
@@ -63,7 +76,8 @@ class SSLStandardEnv(SSLBaseEnv):
         time_step: float = TIMESTEP,
         blue_starting_formation: list[tuple] = None,
         yellow_starting_formation: list[tuple] = None,
-        gaussian_noise: RsimGaussianNoise = RsimGaussianNoise()
+        gaussian_noise: RsimGaussianNoise = RsimGaussianNoise(),
+        vanishing: float = 0
     ):
         super().__init__(
             field_type=field_type,
@@ -94,8 +108,11 @@ class SSLStandardEnv(SSLBaseEnv):
 
         logger.info(f"{n_robots_blue}v{n_robots_yellow} SSL Environment Initialized")
         
-        # Adding Gaussian noise
+        # Adding Gaussian noise and vanishing. Refer to StrategyRunner
         self.gaussian_noise = gaussian_noise
+        
+        assert vanishing >= 0
+        self.vanishing = vanishing
 
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
@@ -147,23 +164,31 @@ class SSLStandardEnv(SSLBaseEnv):
     def _frame_to_observations(
         self,
     ) -> Tuple[RawVisionData, RobotResponse, RobotResponse]:
-        """Return observation data that aligns with grSim.
+        """Return observation data that aligns with grSim. There may be Gaussian noise and vanishing added.
 
         Returns (vision_observation, yellow_robot_feedback, blue_robot_feedback)
         vision_observation: closely aligned to SSLVision that returns a FramData object
         yellow_robots_info: feedback from individual yellow robots that returns a List[RobotInfo]
         blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
         """
+        
         if self.latest_observation[0] == self.steps:
             return self.latest_observation[1]
 
         # Ball observation shared by all robots
-        ball_obs = RawBallData(self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z, 1.0)
+        if self._vanishing():
+            ball_obs = []
+        else:
+            self.frame.ball.add_gaussian_noise(self.gaussian_noise)
+            ball_obs = [RawBallData(self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z, 1.0)]
 
         # Robots observation (Blue + Yellow)
         blue_obs = []
         blue_robots_info = []
         for i in range(len(self.frame.robots_blue)):
+            if self._vanishing():
+                continue
+            
             robot = self.frame.robots_blue[i]
             robot_pos, robot_info = self._get_robot_observation(robot)
             blue_obs.append(robot_pos)
@@ -172,6 +197,9 @@ class SSLStandardEnv(SSLBaseEnv):
         yellow_obs = []
         yellow_robots_info = []
         for i in range(len(self.frame.robots_yellow)):
+            if self._vanishing():
+                continue
+                
             robot = self.frame.robots_yellow[i]
             robot_pos, robot_info = self._get_robot_observation(robot)
             yellow_obs.append(robot_pos)
@@ -183,7 +211,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Camera id as 0, only one camera for RSim
         result = (
-            RawVisionData(self.time_step * self.steps, yellow_obs, blue_obs, [ball_obs], 0),
+            RawVisionData(self.time_step * self.steps, yellow_obs, blue_obs, ball_obs, 0),
             yellow_robots_info,
             blue_robots_info,
         )
@@ -385,3 +413,7 @@ class SSLStandardEnv(SSLBaseEnv):
             pos_frame.robots_yellow[i] = Robot(id=i, x=pos[0], y=pos[1], theta=theta())
 
         return pos_frame
+
+    def _vanishing(self) -> bool:
+        """Determines whether a frame should vanish. Only runs after Game Gater is passed"""
+        return self.steps > 0 and self.vanishing and (random.random() < self.vanishing)

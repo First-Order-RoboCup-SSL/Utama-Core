@@ -26,14 +26,21 @@ class Robot:
     
     
     def add_gaussian_noise(self, noise: RsimGaussianNoise):
-        bias = 0
+        """
+        When running in rsim, add Gaussian noise to robot with the given standard deviations.
+        Mutates the Robot object in place.
+        
+        Args:
+            noise (RsimGaussianNoise): The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
+                Defaults to 0 for each.
+        """
         
         if noise.x_stddev:
-            self.x += normal(loc=bias, scale= noise.x_stddev)
+            self.x += normal(scale=noise.x_stddev)
             
         if noise.y_stddev:
-            self.y += normal(loc=bias, scale= noise.y_stddev)
+            self.y += normal(scale=noise.y_stddev)
             
         if noise.th_stddev_deg:
-            self.theta = normalise_heading_deg(self.theta + normal(loc=bias, scale=noise.th_stddev_deg))
+            self.theta = normalise_heading_deg(self.theta + normal(scale=noise.th_stddev_deg))
         

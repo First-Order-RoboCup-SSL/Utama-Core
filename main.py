@@ -8,10 +8,15 @@ from utama_core.strategy.examples import (
     RobotPlacementStrategy,
     StartupStrategy,
     PointCycleStrategy
+    TwoRobotPlacementStrategy,
 )
 
 
 def main():
+    # Setup for real testing
+    # Custom field size based setup in real
+    custom_bounds = FieldBounds(top_left=(2.25, 1.5), bottom_right=(4.5, -1.5))
+
     runner = StrategyRunner(
         strategy=PointCycleStrategy(1, Field.FULL_FIELD_BOUNDS, 0.1),
         my_team_is_yellow=True,
