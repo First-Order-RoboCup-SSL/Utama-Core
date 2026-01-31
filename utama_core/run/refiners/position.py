@@ -13,7 +13,7 @@ from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
-from utama_core.run.refiners.kalman import Kalman_filter
+from utama_core.run.refiners.kalman import Kalman_filter, Kalman_filter_ball
 
 # For logging
 TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
@@ -70,6 +70,7 @@ class PositionRefiner(BaseRefiner):
         # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
         self.kalman_filters_yellow = [Kalman_filter(id) for id in self.yellow_range]
         self.kalman_filters_blue   = [Kalman_filter(id) for id in self.blue_range]
+        self.kalman_filter_ball    = Kalman_filter_ball()
         
         # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
         # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
@@ -142,8 +143,8 @@ class PositionRefiner(BaseRefiner):
                             TH_COL: y_robot.orientation
                         })
                         
-            for robot in combined_vision_data.yellow_robots:
-                robot.add_gaussian_noise()
+            # for robot in combined_vision_data.yellow_robots:
+            #     robot.add_gaussian_noise()
             
             # For logging:
             if self.data_collected < TARGET_SIZE:
@@ -177,7 +178,7 @@ class PositionRefiner(BaseRefiner):
                 ts=combined_vision_data.ts,
                 
                 yellow_robots = list(
-                    map(partial(Kalman_filter.filter_robot,
+                    map(partial(Kalman_filter.filter_data,
                                 last_frame=yellow_last,
                                 time_elapsed=time_elapsed),
                     self.kalman_filters_yellow,
@@ -185,7 +186,7 @@ class PositionRefiner(BaseRefiner):
                     ),
                 
                 blue_robots = list(
-                    map(partial(Kalman_filter.filter_robot,
+                    map(partial(Kalman_filter.filter_data,
                                 last_frame=blue_last,
                                 time_elapsed=time_elapsed),
                     self.kalman_filters_blue,
@@ -259,7 +260,9 @@ class PositionRefiner(BaseRefiner):
 
         # After the balls have been combined, take the most confident
         new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
-        if new_ball is None:
+        if self.running:
+            new_ball = Kalman_filter_ball.filter_data(self.kalman_filter_ball, new_ball, self.last_game_frame.ball, time_elapsed)
+        elif new_ball is None:
             # If none, take the ball from the last frame of the game
             new_ball = game_frame.ball
 
@@ -287,6 +290,15 @@ class PositionRefiner(BaseRefiner):
         self,
         vision_data: VisionData
     ) -> None:  # Imputes in place
+        """
+        Just to impute a placeholder, so that the Kalman filter knows that data
+        vanished.
+
+        Args:
+            vision_data (VisionData): The vision data with missing robots to be
+                imputed in place
+        """
+        
         yellows_present = { robot.id for robot in vision_data.yellow_robots }
         yellows_vanished = self.yellow_range - yellows_present
             
