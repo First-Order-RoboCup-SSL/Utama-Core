@@ -9,7 +9,6 @@ from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
-from utama_core.run.refiners.filters import FIR_filter
 
 
 class AngleSmoother:
@@ -34,7 +33,7 @@ class PositionRefiner(BaseRefiner):
         field_bounds: FieldBounds,
         bounds_buffer: float = 1.0,
         filtering: bool = False
-        ):
+    ):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
         self.x_min = field_bounds.top_left[0] - bounds_buffer  # expand left
@@ -43,19 +42,6 @@ class PositionRefiner(BaseRefiner):
         self.y_max = field_bounds.top_left[1] + bounds_buffer  # expand top
         self.BOUNDS_BUFFER = bounds_buffer
         self.filtering = filtering
-        
-        if self.filtering:
-            if my_team_is_yellow:
-                yellow_count = exp_friendly
-                blue_count = exp_enemy
-            else:
-                yellow_count = exp_enemy
-                blue_count = exp_friendly
-            
-            # Instantiate a dedicated FIR filter for each robot so buffers can be kept independent.
-            self.fir_filters_yellow = [FIR_filter() for _ in range(yellow_count)]
-            self.fir_filters_blue   = [FIR_filter() for _ in range(blue_count)]
-        
 
     # Primary function for the Refiner interface
     def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
@@ -69,22 +55,6 @@ class PositionRefiner(BaseRefiner):
         # class VisionData: ts: float; yellow_robots: List[VisionRobotData]; blue_robots: List[VisionRobotData]; balls: List[VisionBallData]
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
-                
-        if self.filtering:
-            combined_vision_data: VisionData = VisionData(
-                ts=combined_vision_data.ts,
-                yellow_robots=list(
-                    map(FIR_filter.filter_robot,
-                    self.fir_filters_yellow,
-                    sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
-                    ),
-                blue_robots=list(
-                    map(FIR_filter.filter_robot,
-                    self.fir_filters_blue,
-                    sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
-                    ),
-                balls=combined_vision_data.balls
-            )
 
         # Some processing of robot vision data
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
