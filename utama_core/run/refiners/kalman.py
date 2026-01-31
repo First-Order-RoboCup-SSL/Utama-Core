@@ -131,7 +131,7 @@ class Kalman_filter:
         # Phase 2: Adjust this prediction based on new data
         if new_data[0] is not None:  # Received frame.
             # z
-            measurement_xy = np.array(*new_data)
+            measurement_xy = np.array(new_data)
             
             # K_n
             kalman_gain_xy = np.matmul(pred_cov_xy, np.linalg.inv(pred_cov_xy + self.measurement_cov_xy))

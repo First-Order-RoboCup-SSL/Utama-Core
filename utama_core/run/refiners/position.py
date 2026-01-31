@@ -13,15 +13,23 @@ from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
 from utama_core.run.refiners.kalman import Kalman_filter, Kalman_filter_ball
 
+from numpy.random import normal
+from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
+from utama_core.global_utils.math_utils import normalise_heading_deg
+
 # For logging
 TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
-X_COL, Y_COL, TH_COL      = "x", "y", "orientation"
+X_COL, Y_COL, Z_COL, TH_COL      = "x", "y", "z", "orientation"
 COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
+BALL_COLS = [TS_COL, X_COL, Y_COL, Z_COL]
 
-OUTPUT_FILE   = "clean-dwa-pc-r.csv"
-OUTPUT_FILE_2 = "noisy-10-dwa-pc-r.csv"
-OUTPUT_FILE_3 = "noisy-10-kalman-dwa-pc-r.csv"
-TARGET_SIZE = 8000
+OUTPUT_FILE   = "clean-dwa-pc-r-2.csv"
+OUTPUT_FILE_2 = "noisy-10-dwa-pc-r-2.csv"
+OUTPUT_FILE_3 = "noisy-10-kalman-dwa-pc-r-2.csv"
+BALL_FILE     = "clean-dwa-pc-r-ball.csv"
+BALL_FILE_2   = "noisy-10-dwa-pc-r-ball.csv"
+BALL_FILE_3   = "noisy-10-kalman-dwa-pc-r-ball.csv"
+TARGET_SIZE   = 8000
 
 
 class AngleSmoother:
@@ -90,6 +98,18 @@ class PositionRefiner(BaseRefiner):
         with open(OUTPUT_FILE_3, "w", newline="") as f:
             writer = csv.DictWriter(f, COLS)
             writer.writeheader()
+        
+        with open(BALL_FILE, "w", newline="") as f:
+            writer = csv.DictWriter(f, BALL_COLS)
+            writer.writeheader()
+            
+        with open(BALL_FILE_2, "w", newline="") as f:
+            writer = csv.DictWriter(f, BALL_COLS)
+            writer.writeheader()
+            
+        with open(BALL_FILE_3, "w", newline="") as f:
+            writer = csv.DictWriter(f, BALL_COLS)
+            writer.writeheader()
 
     # Primary function for the Refiner interface
     def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
@@ -120,8 +140,8 @@ class PositionRefiner(BaseRefiner):
                             TH_COL: y_robot.orientation
                         })
                         
-            # for robot in combined_vision_data.yellow_robots:
-            #     robot.add_gaussian_noise()
+            for robot in combined_vision_data.yellow_robots:
+                PositionRefiner._add_gaussian_noise_robot(robot, x_stddev=0.01, y_stddev=0.01, th_stddev_deg=0)
             
             # For logging:
             if self.data_collected < TARGET_SIZE:
@@ -141,7 +161,7 @@ class PositionRefiner(BaseRefiner):
             # For vanishing: imputes combined_vision_data with null vision frames in place.
             self._impute_vanished(combined_vision_data)
             
-            # For filtering
+            # # For filtering
             time_elapsed = combined_vision_data.ts - self.last_game_frame.ts
             
             if game_frame.my_team_is_yellow:
@@ -151,27 +171,27 @@ class PositionRefiner(BaseRefiner):
                 yellow_last = self.last_game_frame.enemy_robot
                 blue_last = self.last_game_frame.friendly_robots
                 
-            combined_vision_data = VisionData(
-                ts=combined_vision_data.ts,
+            # combined_vision_data = VisionData(
+            #     ts=combined_vision_data.ts,
                 
-                yellow_robots = list(
-                    map(partial(Kalman_filter.filter_data,
-                                last_frame=yellow_last,
-                                time_elapsed=time_elapsed),
-                    self.kalman_filters_yellow,
-                    sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
-                    ),
+            #     yellow_robots = list(
+            #         map(partial(Kalman_filter.filter_data,
+            #                     last_frame=yellow_last,
+            #                     time_elapsed=time_elapsed),
+            #         self.kalman_filters_yellow,
+            #         sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
+            #         ),
                 
-                blue_robots = list(
-                    map(partial(Kalman_filter.filter_data,
-                                last_frame=blue_last,
-                                time_elapsed=time_elapsed),
-                    self.kalman_filters_blue,
-                    sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
-                    ),
+            #     blue_robots = list(
+            #         map(partial(Kalman_filter.filter_data,
+            #                     last_frame=blue_last,
+            #                     time_elapsed=time_elapsed),
+            #         self.kalman_filters_blue,
+            #         sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
+            #         ),
                 
-                balls=combined_vision_data.balls
-            )
+            #     balls=combined_vision_data.balls
+            # )
             
             # For logging:
             if self.data_collected < TARGET_SIZE:
@@ -197,8 +217,6 @@ class PositionRefiner(BaseRefiner):
                     #         Y_COL: b_robot.y,
                     #         TH_COL: b_robot.orientation
                     #     })
-                    
-                    self.data_collected += 1
 
         # Some processing of robot vision data
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
@@ -210,7 +228,46 @@ class PositionRefiner(BaseRefiner):
         # After the balls have been combined, take the most confident
         new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
         if self.running:
+            # For logging:
+            if self.data_collected < TARGET_SIZE:
+                with open(BALL_FILE, "a", newline="") as f:
+                    writer = csv.DictWriter(f, BALL_COLS)
+                    
+                    writer.writerow({
+                        TS_COL: combined_vision_data.ts,
+                        X_COL: new_ball.p.x,
+                        Y_COL: new_ball.p.y,
+                        Z_COL: new_ball.p.z
+                    })
+                    
+            PositionRefiner._add_gaussian_noise_ball(new_ball, x_stddev=0.01, y_stddev=0.01)
+            
+            if self.data_collected < TARGET_SIZE:
+                with open(BALL_FILE_2, "a", newline="") as f:
+                    writer = csv.DictWriter(f, BALL_COLS)
+                    
+                    writer.writerow({
+                        TS_COL: combined_vision_data.ts,
+                        X_COL: new_ball.p.x,
+                        Y_COL: new_ball.p.y,
+                        Z_COL: new_ball.p.z
+                    })
+            
             new_ball = Kalman_filter_ball.filter_data(self.kalman_filter_ball, new_ball, self.last_game_frame.ball, time_elapsed)
+            
+            if self.data_collected < TARGET_SIZE:
+                with open(BALL_FILE_3, "a", newline="") as f:
+                    writer = csv.DictWriter(f, BALL_COLS)
+                    
+                    writer.writerow({
+                        TS_COL: combined_vision_data.ts,
+                        X_COL: new_ball.p.x,
+                        Y_COL: new_ball.p.y,
+                        Z_COL: new_ball.p.z
+                    })
+                    
+            self.data_collected += 1
+            
         elif new_ball is None:
             # If none, take the ball from the last frame of the game
             new_ball = game_frame.ball
@@ -358,6 +415,46 @@ class PositionRefiner(BaseRefiner):
         )
 
         return new_yellow_robots, new_blue_robots
+
+
+    @staticmethod
+    def _add_gaussian_noise_ball(ball: Ball, x_stddev: float=0.1, y_stddev: float=0.1):
+        """
+        When running in rsim, add Gaussian noise to ball with the given standard deviations.
+        Mutates the Robot object in place.
+        
+        Args:
+            noise (RsimGaussianNoise): The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
+                Defaults to 0 for each.
+        """
+        
+        if x_stddev:
+            ball.p.x += normal(scale=x_stddev)
+            
+        if y_stddev:
+            ball.p.y += normal(scale=y_stddev)
+            
+        # No noise addition for z, since rSim is 2-D
+        
+    @staticmethod
+    def _add_gaussian_noise_robot(robot: VisionRobotData, x_stddev: float=0.1, y_stddev: float=0.1, th_stddev_deg: float=5):
+        """
+        When running in rsim, add Gaussian noise to robot with the given standard deviations.
+        Mutates the Robot object in place.
+        
+        Args:
+            noise (RsimGaussianNoise): The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
+                Defaults to 0 for each.
+        """
+        
+        if x_stddev:
+            robot.x += normal(scale=x_stddev)
+            
+        if y_stddev:
+            robot.y += normal(scale=y_stddev)
+            
+        if th_stddev_deg:
+            robot.orientation = normalise_heading_deg(robot.orientation + normal(scale=th_stddev_deg))
 
 
 class CameraCombiner:
