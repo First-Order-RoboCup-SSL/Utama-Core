@@ -9,6 +9,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
+from utama_core.strategy.examples.utils import SetBlackboardVariable
 
 
 class HasBall(AbstractBehaviour):
@@ -98,29 +99,6 @@ class GoToBallStep(AbstractBehaviour):
         command = go_to_ball(game, self.blackboard.motion_controller, robot_id)
         self.blackboard.cmd_map[robot_id] = command
         return py_trees.common.Status.RUNNING
-
-
-class SetBlackboardVariable(AbstractBehaviour):
-    """
-    Writes a constant `value` onto the blackboard with the key `variable_name`.
-    **Blackboard Interaction:**
-        - Writes:
-            - `variable_name` (Any): The name of the blackboard variable to be set.
-    **Returns:**
-        - `py_trees.common.Status.SUCCESS`: The variable has been set.
-    """
-
-    def __init__(self, name: str, variable_name: str, value: Any):
-        super().__init__(name=name)
-        self.variable_name = variable_name
-        self.value = value
-
-    def setup_(self):
-        self.blackboard.register_key(key=self.variable_name, access=py_trees.common.Access.WRITE)
-
-    def update(self) -> py_trees.common.Status:
-        self.blackboard.set(self.variable_name, self.value, overwrite=True)
-        return py_trees.common.Status.SUCCESS
 
 
 def go_to_ball_subtree(rd_robot_id: str) -> py_trees.behaviour.Behaviour:
