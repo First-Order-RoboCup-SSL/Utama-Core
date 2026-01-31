@@ -112,7 +112,7 @@ class SSLStandardEnv(SSLBaseEnv):
         # Adding Gaussian noise and vanishing. Refer to StrategyRunner
         self.gaussian_noise = gaussian_noise
         
-        assert vanishing >= 0
+        assert vanishing >= 0, "Negative vanishing probability not allowed"
         self.vanishing = vanishing
 
     def reset(self, *, seed=None, options=None):

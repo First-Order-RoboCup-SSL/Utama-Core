@@ -1,4 +1,4 @@
-from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.entities.game.field import FieldBounds
 from utama_core.replay import ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import StrategyRunner
@@ -21,12 +21,11 @@ def main():
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",
-        exp_friendly=1,
+        exp_friendly=2,
         exp_enemy=0,
-        control_scheme="dwa",
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         print_real_fps=True,
-        profiler_name=None
+        profiler_name=None,
     )
     runner.my_strategy.render()
     runner.run()

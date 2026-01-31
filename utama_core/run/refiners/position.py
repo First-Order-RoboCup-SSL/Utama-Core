@@ -92,7 +92,7 @@ class PositionRefiner(BaseRefiner):
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
 
         # For filtering and vanishing
-        if self.running and self.filtering:  # Checks if the first valid game frame has been received.
+        if self.filtering and self.running:  # Checks if the first valid game frame has been received.
             # For vanishing: imputes combined_vision_data with null vision frames in place.
             self._impute_vanished_robots(combined_vision_data)
             
@@ -139,7 +139,7 @@ class PositionRefiner(BaseRefiner):
         new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
         
         # For filtering and vanishing
-        if self.running and self.filtering:            
+        if self.filtering and self.running:            
             new_ball = Kalman_filter_ball.filter_data(
                 self.kalman_filter_ball,
                 new_ball,
