@@ -1,4 +1,5 @@
 import logging
+from numpy.random import normal
 import random
 from typing import List, Tuple
 
@@ -12,7 +13,7 @@ from utama_core.config.settings import (
 )
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
-from utama_core.global_utils.math_utils import deg_to_rad, rad_to_deg
+from utama_core.global_utils.math_utils import deg_to_rad, rad_to_deg, normalise_heading_deg
 from utama_core.rsoccer_simulator.src.Entities import Ball, Frame, Robot
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
@@ -179,7 +180,7 @@ class SSLStandardEnv(SSLBaseEnv):
         if self._vanishing():
             ball_obs = []
         else:
-            self.frame.ball.add_gaussian_noise(self.gaussian_noise)
+            SSLStandardEnv._add_gaussian_noise_ball(self.frame.ball, self.gaussian_noise)
             ball_obs = [RawBallData(self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z, 1.0)]
 
         # Robots observation (Blue + Yellow)
@@ -219,7 +220,7 @@ class SSLStandardEnv(SSLBaseEnv):
         return result
 
     def _get_robot_observation(self, robot):
-        robot.add_gaussian_noise(self.gaussian_noise)
+        SSLStandardEnv._add_gaussian_noise_robot(robot, self.gaussian_noise)
         
         robot_pos = RawRobotData(robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1)
         robot_info = RobotResponse(robot.id, robot.infrared)
@@ -414,6 +415,47 @@ class SSLStandardEnv(SSLBaseEnv):
 
         return pos_frame
 
+
     def _vanishing(self) -> bool:
         """Determines whether a frame should vanish. Only runs after Game Gater is passed"""
         return self.steps > 0 and self.vanishing and (random.random() < self.vanishing)
+
+    
+    @staticmethod
+    def _add_gaussian_noise_ball(ball: Ball, noise: RsimGaussianNoise):
+        """
+        When running in rsim, add Gaussian noise to ball with the given standard deviations.
+        Mutates the Robot object in place.
+        
+        Args:
+            noise (RsimGaussianNoise): The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
+                Defaults to 0 for each.
+        """
+        
+        if noise.x_stddev:
+            ball.x += normal(scale=noise.x_stddev)
+            
+        if noise.y_stddev:
+            ball.y += normal(scale=noise.y_stddev)
+            
+        # No noise addition for z, since rSim is 2-D
+        
+    @staticmethod
+    def _add_gaussian_noise_robot(robot: Robot, noise: RsimGaussianNoise):
+        """
+        When running in rsim, add Gaussian noise to robot with the given standard deviations.
+        Mutates the Robot object in place.
+        
+        Args:
+            noise (RsimGaussianNoise): The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
+                Defaults to 0 for each.
+        """
+        
+        if noise.x_stddev:
+            robot.x += normal(scale=noise.x_stddev)
+            
+        if noise.y_stddev:
+            robot.y += normal(scale=noise.y_stddev)
+            
+        if noise.th_stddev_deg:
+            robot.theta = normalise_heading_deg(robot.theta + normal(scale=noise.th_stddev_deg))
