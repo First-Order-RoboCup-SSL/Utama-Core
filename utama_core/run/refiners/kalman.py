@@ -51,7 +51,10 @@ class Kalman_filter:
             Conversion to radians is done internally.
     """
 
-    def __init__(self, id: int=0, noise_xy_sd: float=0.1, noise_th_sd_deg: float=5):
+    def __init__(self, id: int=0, noise_xy_sd: float=0.01, noise_th_sd_deg: float=1):
+        assert noise_xy_sd > 0
+        assert noise_th_sd_deg > 0
+        
         self.id = id
         
         # For position
@@ -254,7 +257,7 @@ class Kalman_filter_ball():
             Defaults to 0.1 (but should be adjusted based on real-world conditions).
     """
 
-    def __init__(self, noise_sd: float=0.1):
+    def __init__(self, noise_sd: float=0.01):
         # s; to be initialised by strategy runner with 1st GameFrame
         self.state = None
         

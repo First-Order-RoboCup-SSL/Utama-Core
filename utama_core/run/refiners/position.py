@@ -15,17 +15,17 @@ from utama_core.run.refiners.kalman import Kalman_filter, Kalman_filter_ball
 
 from numpy.random import normal
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
-from utama_core.global_utils.math_utils import normalise_heading_deg
+from utama_core.global_utils.math_utils import normalise_heading_deg, deg_to_rad
 
 # For logging
 TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
-X_COL, Y_COL, Z_COL, TH_COL      = "x", "y", "z", "orientation"
+X_COL, Y_COL, Z_COL, TH_COL = "x", "y", "z", "orientation"
 COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 BALL_COLS = [TS_COL, X_COL, Y_COL, Z_COL]
 
-OUTPUT_FILE   = "clean-dwa-pc-r-2.csv"
-OUTPUT_FILE_2 = "noisy-10-dwa-pc-r-2.csv"
-OUTPUT_FILE_3 = "noisy-10-kalman-dwa-pc-r-2.csv"
+OUTPUT_FILE   = "clean-dwa-pc-r-3.csv"
+OUTPUT_FILE_2 = "noisy-10-dwa-pc-r-3.csv"
+OUTPUT_FILE_3 = "noisy-10-kalman-dwa-pc-r-3.csv"
 BALL_FILE     = "clean-dwa-pc-r-ball.csv"
 BALL_FILE_2   = "noisy-10-dwa-pc-r-ball.csv"
 BALL_FILE_3   = "noisy-10-kalman-dwa-pc-r-ball.csv"
@@ -141,7 +141,7 @@ class PositionRefiner(BaseRefiner):
                         })
                         
             for robot in combined_vision_data.yellow_robots:
-                PositionRefiner._add_gaussian_noise_robot(robot, x_stddev=0.01, y_stddev=0.01, th_stddev_deg=0)
+                PositionRefiner._add_gaussian_noise_robot(robot, x_stddev=0, y_stddev=0, th_stddev_deg=1)
             
             # For logging:
             if self.data_collected < TARGET_SIZE:
@@ -171,27 +171,27 @@ class PositionRefiner(BaseRefiner):
                 yellow_last = self.last_game_frame.enemy_robot
                 blue_last = self.last_game_frame.friendly_robots
                 
-            # combined_vision_data = VisionData(
-            #     ts=combined_vision_data.ts,
+            combined_vision_data = VisionData(
+                ts=combined_vision_data.ts,
                 
-            #     yellow_robots = list(
-            #         map(partial(Kalman_filter.filter_data,
-            #                     last_frame=yellow_last,
-            #                     time_elapsed=time_elapsed),
-            #         self.kalman_filters_yellow,
-            #         sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
-            #         ),
+                yellow_robots = list(
+                    map(partial(Kalman_filter.filter_data,
+                                last_frame=yellow_last,
+                                time_elapsed=time_elapsed),
+                    self.kalman_filters_yellow,
+                    sorted(combined_vision_data.yellow_robots, key=lambda r: r.id))
+                    ),
                 
-            #     blue_robots = list(
-            #         map(partial(Kalman_filter.filter_data,
-            #                     last_frame=blue_last,
-            #                     time_elapsed=time_elapsed),
-            #         self.kalman_filters_blue,
-            #         sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
-            #         ),
+                blue_robots = list(
+                    map(partial(Kalman_filter.filter_data,
+                                last_frame=blue_last,
+                                time_elapsed=time_elapsed),
+                    self.kalman_filters_blue,
+                    sorted(combined_vision_data.blue_robots, key=lambda r: r.id))
+                    ),
                 
-            #     balls=combined_vision_data.balls
-            # )
+                balls=combined_vision_data.balls
+            )
             
             # For logging:
             if self.data_collected < TARGET_SIZE:
@@ -240,7 +240,7 @@ class PositionRefiner(BaseRefiner):
                         Z_COL: new_ball.p.z
                     })
                     
-            PositionRefiner._add_gaussian_noise_ball(new_ball, x_stddev=0.01, y_stddev=0.01)
+            PositionRefiner._add_gaussian_noise_ball(new_ball, x_stddev=0, y_stddev=0)
             
             if self.data_collected < TARGET_SIZE:
                 with open(BALL_FILE_2, "a", newline="") as f:
@@ -454,7 +454,7 @@ class PositionRefiner(BaseRefiner):
             robot.y += normal(scale=y_stddev)
             
         if th_stddev_deg:
-            robot.orientation = normalise_heading_deg(robot.orientation + normal(scale=th_stddev_deg))
+            robot.orientation = normalise_heading_deg(robot.orientation + normal(scale=deg_to_rad(th_stddev_deg)))
 
 
 class CameraCombiner:
