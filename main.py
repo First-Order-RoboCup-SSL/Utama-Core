@@ -27,7 +27,8 @@ def main():
         control_scheme="dwa",
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         print_real_fps=True,
-        profiler_name=None
+        profiler_name=None,
+        rsim_vanishing=0.5
     )
     runner.my_strategy.render()
     runner.run()

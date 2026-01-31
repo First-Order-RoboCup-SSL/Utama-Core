@@ -458,4 +458,4 @@ class SSLStandardEnv(SSLBaseEnv):
             robot.y += normal(scale=noise.y_stddev)
             
         if noise.th_stddev_deg:
-            robot.theta = normalise_heading_deg(robot.theta + normal(scale=deg_to_rad(noise.th_stddev_deg)))
+            robot.theta = normalise_heading_deg(robot.theta + normal(scale=noise.th_stddev_deg))

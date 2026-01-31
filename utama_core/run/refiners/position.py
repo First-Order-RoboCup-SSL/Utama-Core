@@ -14,8 +14,9 @@ from utama_core.run.refiners.base_refiner import BaseRefiner
 from utama_core.run.refiners.kalman import Kalman_filter, Kalman_filter_ball
 
 from numpy.random import normal
+import random
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
-from utama_core.global_utils.math_utils import normalise_heading_deg, deg_to_rad
+from utama_core.global_utils.math_utils import normalise_heading, deg_to_rad
 
 # For logging
 TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
@@ -23,12 +24,12 @@ X_COL, Y_COL, Z_COL, TH_COL = "x", "y", "z", "orientation"
 COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
 BALL_COLS = [TS_COL, X_COL, Y_COL, Z_COL]
 
-OUTPUT_FILE   = "clean-dwa-pc-r-3.csv"
-OUTPUT_FILE_2 = "noisy-10-dwa-pc-r-3.csv"
-OUTPUT_FILE_3 = "noisy-10-kalman-dwa-pc-r-3.csv"
-BALL_FILE     = "clean-dwa-pc-r-ball.csv"
-BALL_FILE_2   = "noisy-10-dwa-pc-r-ball.csv"
-BALL_FILE_3   = "noisy-10-kalman-dwa-pc-r-ball.csv"
+OUTPUT_FILE   = "clean-dwa-pc-r-nofilter.csv"
+OUTPUT_FILE_2 = "vanish-50-dwa-pc-r.csv"
+OUTPUT_FILE_3 = "vanish-50-kalman-dwa-pc-r.csv"
+BALL_FILE     = "clean-dwa-pc-r-ball-nofilter.csv"
+BALL_FILE_2   = "vanish-50-dwa-pc-r-ball.csv"
+BALL_FILE_3   = "vanish-50-kalman-dwa-pc-r-ball.csv"
 TARGET_SIZE   = 8000
 
 
@@ -140,23 +141,23 @@ class PositionRefiner(BaseRefiner):
                             TH_COL: y_robot.orientation
                         })
                         
-            for robot in combined_vision_data.yellow_robots:
-                PositionRefiner._add_gaussian_noise_robot(robot, x_stddev=0, y_stddev=0, th_stddev_deg=1)
+            # for robot in combined_vision_data.yellow_robots:
+            #     PositionRefiner._add_gaussian_noise_robot(robot, x_stddev=0, y_stddev=0, th_stddev_deg=0)
             
             # For logging:
-            if self.data_collected < TARGET_SIZE:
-                with open(OUTPUT_FILE_2, "a", newline="") as f:
-                    writer = csv.DictWriter(f, COLS)
+            # if self.data_collected < TARGET_SIZE:
+            #     with open(OUTPUT_FILE_2, "a", newline="") as f:
+            #         writer = csv.DictWriter(f, COLS)
                     
-                    for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
-                        writer.writerow({
-                            TS_COL: combined_vision_data.ts,
-                            ID_COL: y_robot.id,
-                            COLOR_COL: "yellow",
-                            X_COL: y_robot.x,
-                            Y_COL: y_robot.y,
-                            TH_COL: y_robot.orientation
-                        })
+            #         for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
+            #             writer.writerow({
+            #                 TS_COL: combined_vision_data.ts,
+            #                 ID_COL: y_robot.id,
+            #                 COLOR_COL: "yellow",
+            #                 X_COL: y_robot.x,
+            #                 Y_COL: y_robot.y,
+            #                 TH_COL: y_robot.orientation
+            #             })
         
             # For vanishing: imputes combined_vision_data with null vision frames in place.
             self._impute_vanished(combined_vision_data)
@@ -229,29 +230,29 @@ class PositionRefiner(BaseRefiner):
         new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
         if self.running:
             # For logging:
-            if self.data_collected < TARGET_SIZE:
-                with open(BALL_FILE, "a", newline="") as f:
-                    writer = csv.DictWriter(f, BALL_COLS)
+            # if self.data_collected < TARGET_SIZE:
+            #     with open(BALL_FILE, "a", newline="") as f:
+            #         writer = csv.DictWriter(f, BALL_COLS)
                     
-                    writer.writerow({
-                        TS_COL: combined_vision_data.ts,
-                        X_COL: new_ball.p.x,
-                        Y_COL: new_ball.p.y,
-                        Z_COL: new_ball.p.z
-                    })
+            #         writer.writerow({
+            #             TS_COL: combined_vision_data.ts,
+            #             X_COL: new_ball.p.x,
+            #             Y_COL: new_ball.p.y,
+            #             Z_COL: new_ball.p.z
+            #         })
                     
-            PositionRefiner._add_gaussian_noise_ball(new_ball, x_stddev=0, y_stddev=0)
+            # PositionRefiner._add_gaussian_noise_ball(new_ball, x_stddev=0, y_stddev=0)
             
-            if self.data_collected < TARGET_SIZE:
-                with open(BALL_FILE_2, "a", newline="") as f:
-                    writer = csv.DictWriter(f, BALL_COLS)
+            # if self.data_collected < TARGET_SIZE:
+            #     with open(BALL_FILE_2, "a", newline="") as f:
+            #         writer = csv.DictWriter(f, BALL_COLS)
                     
-                    writer.writerow({
-                        TS_COL: combined_vision_data.ts,
-                        X_COL: new_ball.p.x,
-                        Y_COL: new_ball.p.y,
-                        Z_COL: new_ball.p.z
-                    })
+            #         writer.writerow({
+            #             TS_COL: combined_vision_data.ts,
+            #             X_COL: new_ball.p.x,
+            #             Y_COL: new_ball.p.y,
+            #             Z_COL: new_ball.p.z
+            #         })
             
             new_ball = Kalman_filter_ball.filter_data(self.kalman_filter_ball, new_ball, self.last_game_frame.ball, time_elapsed)
             
@@ -454,7 +455,7 @@ class PositionRefiner(BaseRefiner):
             robot.y += normal(scale=y_stddev)
             
         if th_stddev_deg:
-            robot.orientation = normalise_heading_deg(robot.orientation + normal(scale=deg_to_rad(th_stddev_deg)))
+            robot.orientation = normalise_heading(robot.orientation + normal(scale=deg_to_rad(th_stddev_deg)))
 
 
 class CameraCombiner:

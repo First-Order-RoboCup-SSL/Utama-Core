@@ -51,7 +51,7 @@ class Kalman_filter:
             Conversion to radians is done internally.
     """
 
-    def __init__(self, id: int=0, noise_xy_sd: float=0.01, noise_th_sd_deg: float=1):
+    def __init__(self, id: int=0, noise_xy_sd: float=0.01, noise_th_sd_deg: float=0.01):
         assert noise_xy_sd > 0
         assert noise_th_sd_deg > 0
         
@@ -371,10 +371,13 @@ class Kalman_filter_ball():
         # class Ball: p: Vector3D, v: Vector3D, a: Vector3D
         if data is not None:
             new_data = (data.p.x, data.p.y, data.p.z)
+            velocity, acceleration = data.v, data.a
         else:
             # If the ball data vanished, PositionRefiner._get_most_confident_ball returns null.
             new_data = None
+            zero_vector = Vector3D(0, 0, 0)
+            velocity, acceleration = zero_vector, zero_vector
                     
         filtered_data = filter._step(new_data, last_frame, time_elapsed)
 
-        return Ball(Vector3D(*filtered_data), data.v, data.a)
+        return Ball(Vector3D(*filtered_data), velocity, acceleration)
