@@ -34,12 +34,16 @@ class Kalman_filter:
         noise_xy_sd (float): A hyper-parameter, used to weigh the filter's
             predictions and the vision data received during the "update" phase.
             Unit is metres.
-            Defaults to 0.01 (but should be adjusted based on real-world conditions).
+            Defaults to 0.01 (In simulation, this should match the argument
+            passed to the rsim noise generator, but should be adjusted based on
+            real-world conditions when live robots are used).
             
         noise_th_sd_deg (float): A hyper-parameter, used to weigh the filter's
             predictions and the vision data received during the "update" phase.
             Unit is degrees. Conversion to radians is done internally.
-            Defaults to 5 (but should be adjusted based on real-world conditions).
+            Defaults to 5 (In simulation, this should match the argument
+            passed to the rsim noise generator, but should be adjusted based on
+            real-world conditions when live robots are used).
     """
 
     def __init__(self, id: int=0, noise_xy_sd: float=0.01, noise_th_sd_deg: float=5):
@@ -240,7 +244,9 @@ class Kalman_filter_ball():
         noise_sd (float): A hyper-parameter, used to weigh the filter's
             predictions and the vision data received during the "update" phase.
             Unit is metres.
-            Defaults to 0.01 (but should be adjusted based on real-world conditions).
+            Defaults to 0.01 (In simulation, this should match the argument
+            passed to the rsim noise generator, but should be adjusted based on
+            real-world conditions when live robots are used).
     """
 
     def __init__(self, noise_sd: float=0.01):
