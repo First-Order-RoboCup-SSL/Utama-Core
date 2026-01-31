@@ -82,6 +82,7 @@ class StrategyRunner:
             Defaults to 0 for each.
         rsim_vanishing (float, optional): When running in rsim, cause robots and ball to vanish with the given probability.
             Defaults to 0.
+        filtering (bool, optional): Turn on Kalman filtering. Defaults to true.
     """
 
     def __init__(
@@ -100,7 +101,8 @@ class StrategyRunner:
         print_real_fps: bool = False,  # Turn this on for RSim
         profiler_name: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
-        rsim_vanishing: float = 0
+        rsim_vanishing: float = 0,
+        filtering: bool = True
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -133,8 +135,9 @@ class StrategyRunner:
             self.my_team_is_yellow,
             self.exp_friendly,
             self.exp_enemy,
-            self.field_bounds
-            )
+            self.field_bounds,
+            filtering=filtering
+        )
         self.velocity_refiner = VelocityRefiner()
         self.robot_info_refiner = RobotInfoRefiner()
         # self.referee_refiner = RefereeRefiner()

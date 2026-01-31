@@ -1,5 +1,4 @@
 from collections import defaultdict
-import csv
 from dataclasses import replace
 from functools import partial
 import numpy as np
@@ -12,25 +11,6 @@ from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRo
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
 from utama_core.run.refiners.kalman import Kalman_filter, Kalman_filter_ball
-
-from numpy.random import normal
-import random
-from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
-from utama_core.global_utils.math_utils import normalise_heading, deg_to_rad
-
-# For logging
-TS_COL, ID_COL, COLOR_COL = "ts", "id", "color"
-X_COL, Y_COL, Z_COL, TH_COL = "x", "y", "z", "orientation"
-COLS = [TS_COL, ID_COL, COLOR_COL, X_COL, Y_COL, TH_COL]
-BALL_COLS = [TS_COL, X_COL, Y_COL, Z_COL]
-
-OUTPUT_FILE   = "clean-dwa-pc-r-nofilter.csv"
-OUTPUT_FILE_2 = "vanish-50-dwa-pc-r.csv"
-OUTPUT_FILE_3 = "vanish-50-kalman-dwa-pc-r.csv"
-BALL_FILE     = "clean-dwa-pc-r-ball-nofilter.csv"
-BALL_FILE_2   = "vanish-50-dwa-pc-r-ball.csv"
-BALL_FILE_3   = "vanish-50-kalman-dwa-pc-r-ball.csv"
-TARGET_SIZE   = 8000
 
 
 class AngleSmoother:
@@ -53,7 +33,8 @@ class PositionRefiner(BaseRefiner):
         exp_friendly: int,
         exp_enemy: int,
         field_bounds: FieldBounds,
-        bounds_buffer: float = 1.0
+        bounds_buffer: float = 1.0,
+        filtering: bool = True
     ):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
@@ -63,54 +44,39 @@ class PositionRefiner(BaseRefiner):
         self.y_max = field_bounds.top_left[1] + bounds_buffer  # expand top
         self.BOUNDS_BUFFER = bounds_buffer
         
-        # For Kalman filtering
-        if my_team_is_yellow:
-            self.yellow_count = exp_friendly
-            self.blue_count = exp_enemy
-        else:
-            self.yellow_count = exp_enemy
-            self.blue_count = exp_friendly
+        # For Kalman filtering and imputing vanished values.
+        self.filtering = filtering
         
-        self.yellow_range = set(range(self.yellow_count))
-        self.blue_range = set(range(self.blue_count))
-        
-        # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
-        self.kalman_filters_yellow = [Kalman_filter(id) for id in self.yellow_range]
-        self.kalman_filters_blue   = [Kalman_filter(id) for id in self.blue_range]
-        self.kalman_filter_ball    = Kalman_filter_ball()
-        
-        # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
-        # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
-        # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D, v: Vector2D, a: Vector2D, orientation: float
-        self.running = False  # Imputing is only turned on when the refiner is run from _step_game(), not _load_game()
-        self.last_game_frame = None  # Game gater will initialise
-        
-        # For logging
-        self.data_collected = 0
-        
-        with open(OUTPUT_FILE, "w", newline="") as f:
-            writer = csv.DictWriter(f, COLS)
-            writer.writeheader()
+        if self.filtering:
+            # Kalman filter and imputing of vanished values is only turned on
+            # when the refiner is run from _step_game(), not _load_game()
+            self.running = False
             
-        with open(OUTPUT_FILE_2, "w", newline="") as f:
-            writer = csv.DictWriter(f, COLS)
-            writer.writeheader()
+            # Game gater will initialise
+            self.last_game_frame = None
             
-        with open(OUTPUT_FILE_3, "w", newline="") as f:
-            writer = csv.DictWriter(f, COLS)
-            writer.writeheader()
-        
-        with open(BALL_FILE, "w", newline="") as f:
-            writer = csv.DictWriter(f, BALL_COLS)
-            writer.writeheader()
+            if my_team_is_yellow:
+                self.yellow_count = exp_friendly
+                self.blue_count = exp_enemy
+            else:
+                self.yellow_count = exp_enemy
+                self.blue_count = exp_friendly
             
-        with open(BALL_FILE_2, "w", newline="") as f:
-            writer = csv.DictWriter(f, BALL_COLS)
-            writer.writeheader()
+            self.yellow_range = set(range(self.yellow_count))
+            self.blue_range = set(range(self.blue_count))
             
-        with open(BALL_FILE_3, "w", newline="") as f:
-            writer = csv.DictWriter(f, BALL_COLS)
-            writer.writeheader()
+            # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
+            self.kalman_filters_yellow = [Kalman_filter(id) for id in self.yellow_range]
+            self.kalman_filters_blue   = [Kalman_filter(id) for id in self.blue_range]
+            self.kalman_filter_ball    = Kalman_filter_ball()
+            
+            # Helpful reference:
+            # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
+            # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
+            
+            # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D,
+            # v: Vector2D, a: Vector2D, orientation: float
+
 
     # Primary function for the Refiner interface
     def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
@@ -124,45 +90,12 @@ class PositionRefiner(BaseRefiner):
         # class VisionData: ts: float; yellow_robots: List[VisionRobotData]; blue_robots: List[VisionRobotData]; balls: List[VisionBallData]
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
-            
-        if self.running:  # Checks if the first valid game frame has been received.
-            # For logging:
-            if self.data_collected < TARGET_SIZE:
-                with open(OUTPUT_FILE, "a", newline="") as f:
-                    writer = csv.DictWriter(f, COLS)
-                    
-                    for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
-                        writer.writerow({
-                            TS_COL: combined_vision_data.ts,
-                            ID_COL: y_robot.id,
-                            COLOR_COL: "yellow",
-                            X_COL: y_robot.x,
-                            Y_COL: y_robot.y,
-                            TH_COL: y_robot.orientation
-                        })
-                        
-            # for robot in combined_vision_data.yellow_robots:
-            #     PositionRefiner._add_gaussian_noise_robot(robot, x_stddev=0, y_stddev=0, th_stddev_deg=0)
-            
-            # For logging:
-            # if self.data_collected < TARGET_SIZE:
-            #     with open(OUTPUT_FILE_2, "a", newline="") as f:
-            #         writer = csv.DictWriter(f, COLS)
-                    
-            #         for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
-            #             writer.writerow({
-            #                 TS_COL: combined_vision_data.ts,
-            #                 ID_COL: y_robot.id,
-            #                 COLOR_COL: "yellow",
-            #                 X_COL: y_robot.x,
-            #                 Y_COL: y_robot.y,
-            #                 TH_COL: y_robot.orientation
-            #             })
-        
+
+        # For filtering and vanishing
+        if self.running and self.filtering:  # Checks if the first valid game frame has been received.
             # For vanishing: imputes combined_vision_data with null vision frames in place.
-            self._impute_vanished(combined_vision_data)
+            self._impute_vanished_robots(combined_vision_data)
             
-            # # For filtering
             time_elapsed = combined_vision_data.ts - self.last_game_frame.ts
             
             if game_frame.my_team_is_yellow:
@@ -194,30 +127,6 @@ class PositionRefiner(BaseRefiner):
                 balls=combined_vision_data.balls
             )
             
-            # For logging:
-            if self.data_collected < TARGET_SIZE:
-                with open(OUTPUT_FILE_3, "a", newline="") as f:
-                    writer = csv.DictWriter(f, COLS)
-                    
-                    for y_robot in sorted(combined_vision_data.yellow_robots, key=lambda r: r.id):
-                        writer.writerow({
-                            TS_COL: combined_vision_data.ts,
-                            ID_COL: y_robot.id,
-                            COLOR_COL: "yellow",
-                            X_COL: y_robot.x,
-                            Y_COL: y_robot.y,
-                            TH_COL: y_robot.orientation
-                        })
-                        
-                    # for b_robot in combined_vision_data.blue_robots:
-                    #     writer.writerow({
-                    #         TS_COL: combined_vision_data.ts,
-                    #         ID_COL: b_robot.id,
-                    #         COLOR_COL: "blue",
-                    #         X_COL: b_robot.x,
-                    #         Y_COL: b_robot.y,
-                    #         TH_COL: b_robot.orientation
-                    #     })
 
         # Some processing of robot vision data
         new_yellow_robots, new_blue_robots = self._combine_both_teams_game_vision_positions(
@@ -228,47 +137,15 @@ class PositionRefiner(BaseRefiner):
 
         # After the balls have been combined, take the most confident
         new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
-        if self.running:
-            # For logging:
-            # if self.data_collected < TARGET_SIZE:
-            #     with open(BALL_FILE, "a", newline="") as f:
-            #         writer = csv.DictWriter(f, BALL_COLS)
-                    
-            #         writer.writerow({
-            #             TS_COL: combined_vision_data.ts,
-            #             X_COL: new_ball.p.x,
-            #             Y_COL: new_ball.p.y,
-            #             Z_COL: new_ball.p.z
-            #         })
-                    
-            # PositionRefiner._add_gaussian_noise_ball(new_ball, x_stddev=0, y_stddev=0)
-            
-            # if self.data_collected < TARGET_SIZE:
-            #     with open(BALL_FILE_2, "a", newline="") as f:
-            #         writer = csv.DictWriter(f, BALL_COLS)
-                    
-            #         writer.writerow({
-            #             TS_COL: combined_vision_data.ts,
-            #             X_COL: new_ball.p.x,
-            #             Y_COL: new_ball.p.y,
-            #             Z_COL: new_ball.p.z
-            #         })
-            
-            new_ball = Kalman_filter_ball.filter_data(self.kalman_filter_ball, new_ball, self.last_game_frame.ball, time_elapsed)
-            
-            if self.data_collected < TARGET_SIZE:
-                with open(BALL_FILE_3, "a", newline="") as f:
-                    writer = csv.DictWriter(f, BALL_COLS)
-                    
-                    writer.writerow({
-                        TS_COL: combined_vision_data.ts,
-                        X_COL: new_ball.p.x,
-                        Y_COL: new_ball.p.y,
-                        Z_COL: new_ball.p.z
-                    })
-                    
-            self.data_collected += 1
-            
+        
+        # For filtering and vanishing
+        if self.running and self.filtering:            
+            new_ball = Kalman_filter_ball.filter_data(
+                self.kalman_filter_ball,
+                new_ball,
+                self.last_game_frame.ball,
+                time_elapsed
+            )
         elif new_ball is None:
             # If none, take the ball from the last frame of the game
             new_ball = game_frame.ball
@@ -293,7 +170,7 @@ class PositionRefiner(BaseRefiner):
         return new_game_frame
                 
     
-    def _impute_vanished(
+    def _impute_vanished_robots(
         self,
         vision_data: VisionData
     ) -> None:  # Imputes in place
@@ -416,46 +293,6 @@ class PositionRefiner(BaseRefiner):
         )
 
         return new_yellow_robots, new_blue_robots
-
-
-    @staticmethod
-    def _add_gaussian_noise_ball(ball: Ball, x_stddev: float=0.1, y_stddev: float=0.1):
-        """
-        When running in rsim, add Gaussian noise to ball with the given standard deviations.
-        Mutates the Robot object in place.
-        
-        Args:
-            noise (RsimGaussianNoise): The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
-                Defaults to 0 for each.
-        """
-        
-        if x_stddev:
-            ball.p.x += normal(scale=x_stddev)
-            
-        if y_stddev:
-            ball.p.y += normal(scale=y_stddev)
-            
-        # No noise addition for z, since rSim is 2-D
-        
-    @staticmethod
-    def _add_gaussian_noise_robot(robot: VisionRobotData, x_stddev: float=0.1, y_stddev: float=0.1, th_stddev_deg: float=5):
-        """
-        When running in rsim, add Gaussian noise to robot with the given standard deviations.
-        Mutates the Robot object in place.
-        
-        Args:
-            noise (RsimGaussianNoise): The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
-                Defaults to 0 for each.
-        """
-        
-        if x_stddev:
-            robot.x += normal(scale=x_stddev)
-            
-        if y_stddev:
-            robot.y += normal(scale=y_stddev)
-            
-        if th_stddev_deg:
-            robot.orientation = normalise_heading(robot.orientation + normal(scale=deg_to_rad(th_stddev_deg)))
 
 
 class CameraCombiner:

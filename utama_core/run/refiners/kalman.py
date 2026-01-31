@@ -1,19 +1,9 @@
 import numpy as np
-import sys
 
-# For running analytics from Jupyter notebook: TODO: REMOVE BEFORE PR
-try:
-    from utama_core.entities.data.vision import VisionRobotData
-    from utama_core.entities.game import Robot, Ball
-    from utama_core.entities.data.vector import Vector3D
-    from utama_core.global_utils.math_utils import deg_to_rad, normalise_heading
-except ModuleNotFoundError:
-    sys.path.append("../utama_core/entities/")
-    from data.vision import VisionRobotData
-    from game import Robot, Ball
-    from data.vector import Vector3D
-    sys.path.append("../utama_core/global_utils/")
-    from math_utils import deg_to_rad, normalise_heading
+from utama_core.entities.data.vision import VisionRobotData
+from utama_core.entities.game import Robot, Ball
+from utama_core.entities.data.vector import Vector3D
+from utama_core.global_utils.math_utils import deg_to_rad, normalise_heading
     
 
 class Kalman_filter:
@@ -43,15 +33,16 @@ class Kalman_filter:
             
         noise_xy_sd (float): A hyper-parameter, used to weigh the filter's
             predictions and the vision data received during the "update" phase.
-            Defaults to 0.1 (but should be adjusted based on real-world conditions).
+            Unit is metres.
+            Defaults to 0.01 (but should be adjusted based on real-world conditions).
             
         noise_th_sd_deg (float): A hyper-parameter, used to weigh the filter's
             predictions and the vision data received during the "update" phase.
+            Unit is degrees. Conversion to radians is done internally.
             Defaults to 5 (but should be adjusted based on real-world conditions).
-            Conversion to radians is done internally.
     """
 
-    def __init__(self, id: int=0, noise_xy_sd: float=0.01, noise_th_sd_deg: float=0.01):
+    def __init__(self, id: int=0, noise_xy_sd: float=0.01, noise_th_sd_deg: float=5):
         assert noise_xy_sd > 0
         assert noise_th_sd_deg > 0
         
@@ -102,7 +93,7 @@ class Kalman_filter:
         A single iteration of the filter for x and y coordinates.
         
         Args:
-            new_data (tuple[float]): New vision data received (x coordinates, y coordinates),
+            new_data (tuple[float]): New vision data received (x coordinates in metres, y coordinates in metres),
                 passed by the externally callable function filter_data.
             last_robot (Robot): An object storing the robot's last known position and velocity, among others.
             time_elapsed (float): Time since last vision data was received.
@@ -167,7 +158,7 @@ class Kalman_filter:
         A single iteration of the filter for orientation.
         
         Args:
-            new_data (float): New vision data received (orientation),
+            new_data (float): New vision data received (orientation in radians),
                 passed by the externally callable function filter_data.
             last_th (float): The robot's last known orientation
         
@@ -215,18 +206,13 @@ class Kalman_filter:
     
 
     @staticmethod
-    def filter_data(
-        filter,
-        data: VisionRobotData,
-        last_frame: dict[int, Robot],
-        time_elapsed: float,
-    ) -> VisionRobotData:
+    def filter_data(filter, data: VisionRobotData, last_frame: dict[int, Robot], time_elapsed: float) -> VisionRobotData:
         """
         An externally-callable function for the position refiner to pass data into the filter.
         
         Args:
             data (VisionRobotData): An object representing the new vision data
-                received (x coordinates, y coordinates, orientation).
+                received (x coordinates in metres, y coordinates in metres, orientation in radians).
             last_frame (Dict[int, Robot]): An object storing the last known
                 position and velocity of all robots, among others.
             time_elapsed (float): Time since last vision data was received.
@@ -238,7 +224,6 @@ class Kalman_filter:
         """
         
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
-        
         x_f, y_f = filter._step_xy((data.x, data.y), last_frame[filter.id], time_elapsed)
         th_f = filter._step_th(data.orientation, last_frame[filter.id].orientation)
 
@@ -254,7 +239,8 @@ class Kalman_filter_ball():
     Args:
         noise_sd (float): A hyper-parameter, used to weigh the filter's
             predictions and the vision data received during the "update" phase.
-            Defaults to 0.1 (but should be adjusted based on real-world conditions).
+            Unit is metres.
+            Defaults to 0.01 (but should be adjusted based on real-world conditions).
     """
 
     def __init__(self, noise_sd: float=0.01):
@@ -290,7 +276,7 @@ class Kalman_filter_ball():
         A single iteration of the filter.
         
         Args:
-            new_data (tuple[float]): New vision data received (xyz coordinates),
+            new_data (tuple[float]): New vision data received (xyz coordinates in metres),
                 passed by the externally callable function filter_data.
             last_ball (Ball): An object storing the ball's last known position and velocity.
             time_elapsed (float): Time since last vision data was received.
@@ -348,17 +334,12 @@ class Kalman_filter_ball():
 
 
     @staticmethod
-    def filter_data(
-        filter,
-        data: Ball,
-        last_frame: Ball,
-        time_elapsed: float,
-    ) -> Ball:
+    def filter_data(filter, data: Ball, last_frame: Ball, time_elapsed: float) -> Ball:
         """
         An externally-callable function for the position refiner to pass data into the filter.
         
         Args:
-            data (Ball): An object representing the new vision data received (xyz coordinates).
+            data (Ball): An object representing the new vision data received (xyz coordinates in metres).
             last_frame (Ball): An object storing the last known positon and velocity of the ball, among others.
             time_elapsed (float): Time since last vision data was received.
         
