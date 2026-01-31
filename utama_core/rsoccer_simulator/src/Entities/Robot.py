@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-
 @dataclass()
 class Robot:
     yellow: bool = None
@@ -8,7 +7,7 @@ class Robot:
     x: float = None
     y: float = None
     z: float = None
-    theta: float = None
+    theta: float = None  # degrees
     v_x: float = 0
     v_y: float = 0
     v_theta: float = 0
@@ -20,4 +19,4 @@ class Robot:
     v_wheel0: float = 0  # rad/s
     v_wheel1: float = 0  # rad/s
     v_wheel2: float = 0  # rad/s
-    v_wheel3: float = 0  # rad/s
+    v_wheel3: float = 0  # rad/s       

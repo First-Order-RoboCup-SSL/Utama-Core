@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import List
 
+from numpy.random import normal
+
 # position data: meters
 # orientation: radians
 

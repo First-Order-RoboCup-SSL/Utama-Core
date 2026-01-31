@@ -1,58 +1,85 @@
+import math
 from typing import Optional
 
-from utama_core.entities.data.command import RobotCommand
+import numpy as np
+
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.defense_utils import (
-    align_defenders,
-    find_likely_enemy_shooter,
-    to_defense_parametric,
-    velocity_to_orientation,
-)
 
 
 def defend_parameter(
     game: Game,
     motion_controller: MotionController,
-    defender_id: int,
+    robot_id: int,
     env: Optional[SSLStandardEnv] = None,
-) -> RobotCommand:
-    _, enemy, ball = game.friendly_robots, game.enemy_robots, game.ball
-    shooters_data = find_likely_enemy_shooter(enemy, ball)
-    orientation = None
-    tracking_ball = False
-
-    if not shooters_data:
-        target_tracking_coord = ball.p.to_2d()
-        if ball.v is not None and None not in ball.v:
-            orientation = velocity_to_orientation(ball.v.to_2d())
-            tracking_ball = True
+):
+    defenseing_friendly = game.friendly_robots[robot_id]
+    vel = game.ball.v.to_2d()
+    if len(game.friendly_robots) > 2:
+        if game.ball.p.y >= -0.5 and robot_id == 1:
+            target_pos = [3.0 if game.my_team_is_right else -3.0, -1.2]
+            return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]))
+        elif game.ball.p.y < -0.5 and robot_id == 2:
+            target_pos = [3.0 if game.my_team_is_right else -3.0, 1.2]
+            return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]))
+    if robot_id == 1:
+        goal_frame = 0.5
     else:
-        # TODO (deploy more defenders, or find closest shooter?)
-        sd = shooters_data[0]
-        target_tracking_coord = Vector2D(sd.p.x, sd.p.y)
-        orientation = sd.orientation
+        goal_frame = -0.5
 
-    real_def_pos = game.friendly_robots[defender_id].p
-    current_def_parametric = to_defense_parametric(game, real_def_pos)
-    target = align_defenders(game, current_def_parametric, target_tracking_coord, orientation, env)
-    cmd = go_to_point(
-        game,
-        motion_controller,
-        defender_id,
-        target,
-        dribbling=True,
-    )
+    def positions_to_defend_parameter(x2, y2):
+        x1, y1 = game.ball.p.x, game.ball.p.y
+        x3, y3 = defenseing_friendly.p.x, defenseing_friendly.p.y
+        t = ((x3 - x1) * (x2 - x1) + (y3 - y1) * (y2 - y1)) / ((x2 - x1) ** 2 + (y2 - y1) ** 2)
+        x4 = x1 + t * (x2 - x1)
+        y4 = y1 + t * (y2 - y1)
 
-    gp = (game.field.my_goal_line[0][0], 0)
-    if env:
-        env.draw_line(
-            [gp, (target_tracking_coord[0], target_tracking_coord[1])],
-            width=5,
-            color="RED" if tracking_ball else "PINK",
+        def cal_xy5(xa, ya, xb, yb, w, x4, y4):
+            x5 = xa - w
+            dx = xb - xa
+            if abs(dx) < 1e-12:
+                return x4, y4
+            t = (x5 - xa) / dx
+            y5 = ya + t * (yb - ya)
+            return x5, y5
+
+        def distance(x1, y1, x2, y2):
+            return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+        if abs(x2 - x4) < 1 and -1 < y4 < 1:
+            hori_x, hori_y = cal_xy5(x2, y2, x1, y1, 1.0, x4, y4)
+            ver_x, ver_y = cal_xy5(y2, x2, y1, x1, 2.0, x4, y4)
+            if distance(x4, y4, hori_x, hori_y) < distance(x4, y4, ver_x, ver_y):
+                x4, y4 = hori_x, hori_y
+            else:
+                x4, y4 = ver_y, ver_x
+
+        return x3, y3, x4, y4
+
+    if vel[0] ** 2 + vel[1] ** 2 > 0.05:
+        x2, y2 = 4.5 if game.my_team_is_right else -4.5, goal_frame + 0.2 if robot_id == 1 else goal_frame - 0.2
+        x3, y3, x4, y4 = positions_to_defend_parameter(x2, y2)
+        target_pos = np.array([x4, y4])
+
+    else:
+        robot_rad = 0.09
+        x2, y2 = 4.5 if game.my_team_is_right else -4.5, -goal_frame
+        x3, y3, x4, y4 = positions_to_defend_parameter(x2, y2)
+        vec_to_target = np.array(
+            [
+                x4 - x3,
+                y4 - y3,
+            ]
         )
+        dist_to_target = np.linalg.norm(vec_to_target)
 
-    return cmd
+        if dist_to_target > 0:
+            vec_dir = vec_to_target / dist_to_target
+        else:
+            vec_dir = np.array([0.0, 0.0])
+        target_pos = np.array([x4, y4]) - vec_dir * robot_rad
+
+    return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]), dribbling=True)
