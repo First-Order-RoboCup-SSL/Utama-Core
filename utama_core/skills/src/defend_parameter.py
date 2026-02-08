@@ -82,7 +82,7 @@ def defend_parameter(
         vec_to_target = np.array(
             [
                 x4 - x3,
-                y4 - y3,
+                y4 + y3,
             ]
         )
         dist_to_target = np.linalg.norm(vec_to_target)
