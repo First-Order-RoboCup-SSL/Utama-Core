@@ -60,8 +60,17 @@ def defend_parameter(
 
         return x3, y3, x4, y4
 
-    ball_y = predict_ball_pos_at_x(game, 4.5 if game.my_team_is_right else -4.5)
-    if vel[0] ** 2 + vel[1] ** 2 > 0.05 and (ball_y is not None and ball_y[1] < 0.5 and ball_y[1] > -0.5):
+    ball_y_at_baseline = predict_ball_pos_at_x(game, 4.5 if game.my_team_is_right else -4.5)
+    ball_y_at_robo = predict_ball_pos_at_x(game, defenseing_friendly.p.x)
+    if (
+        vel[0] ** 2 + vel[1] ** 2 > 0.05
+        and (ball_y_at_baseline is not None and ball_y_at_baseline[1] < 0.5 and ball_y_at_baseline[1] > -0.5)
+        and (
+            ball_y_at_robo is not None
+            and ball_y_at_robo[1] > defenseing_friendly.p.y + 0.1
+            or ball_y_at_robo[1] < defenseing_friendly.p.y - 0.1
+        )
+    ):
         x2, y2 = 4.5 if game.my_team_is_right else -4.5, goal_frame + 0.2 if robot_id == 1 else goal_frame - 0.2
         x3, y3, x4, y4 = positions_to_defend_parameter(x2, y2)
         target_pos = np.array([x4, y4])
