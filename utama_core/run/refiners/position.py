@@ -45,7 +45,7 @@ class PositionRefiner(BaseRefiner):
             return game_frame
         # Can combine previous position from game with new data to produce new position if desired
         combined_vision_data = CameraCombiner().combine_cameras(frames)
-
+        
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
         #             print(f"robot orientation: {robot.orientation}")
