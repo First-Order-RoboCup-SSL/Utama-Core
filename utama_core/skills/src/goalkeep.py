@@ -40,7 +40,12 @@ def goalkeep(
 
     if len(game.friendly_robots) == 2:
         try:
-            if game.friendly_robots[1].p.x > game.ball.p.x:
+            # Check if defender is between ball and goal (side-aware)
+            defender_between = (
+                (game.my_team_is_right and game.friendly_robots[1].p.x > game.ball.p.x) or
+                (not game.my_team_is_right and game.friendly_robots[1].p.x < game.ball.p.x)
+            )
+            if defender_between:
                 _, yy = intersection_with_vertical_line(
                     (game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1)
                 )
@@ -50,7 +55,16 @@ def goalkeep(
             pass
     elif len(game.friendly_robots) >= 3:
         try:
-            if game.friendly_robots[1].p.x > game.ball.p.x and game.friendly_robots[2].p.x > game.ball.p.x:
+            # Check if both defenders are between ball and goal (side-aware)
+            defender1_between = (
+                (game.my_team_is_right and game.friendly_robots[1].p.x > game.ball.p.x) or
+                (not game.my_team_is_right and game.friendly_robots[1].p.x < game.ball.p.x)
+            )
+            defender2_between = (
+                (game.my_team_is_right and game.friendly_robots[2].p.x > game.ball.p.x) or
+                (not game.my_team_is_right and game.friendly_robots[2].p.x < game.ball.p.x)
+            )
+            if defender1_between and defender2_between:
                 _, yy1 = intersection_with_vertical_line(
                     (game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1)
                 )
