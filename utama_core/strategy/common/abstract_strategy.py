@@ -61,7 +61,20 @@ class AbstractStrategy(ABC):
     """
 
     def __init__(self):
-        self.behaviour_tree = py_trees.trees.BehaviourTree(self.create_behaviour_tree())
+        # Lazy import to break the circular dependency:
+        # abstract_strategy → referee.tree → referee.conditions → abstract_behaviour
+        #                                                        → strategy.common.__init__ → abstract_strategy
+        from utama_core.strategy.referee.tree import build_referee_override_tree
+
+        strategy_subtree = self.create_behaviour_tree()
+
+        # Wrap the user's strategy tree with the referee override layer (Option B).
+        # The root Selector checks referee commands first; if none match (e.g. NORMAL_START
+        # or FORCE_START), it falls through to the strategy subtree.
+        root = py_trees.composites.Selector(name="Root", memory=False)
+        root.add_children([build_referee_override_tree(), strategy_subtree])
+
+        self.behaviour_tree = py_trees.trees.BehaviourTree(root)
 
         ### These attributes are set by the StrategyRunner before the strategy is run. ###
         self.robot_controller: AbstractRobotController = None
