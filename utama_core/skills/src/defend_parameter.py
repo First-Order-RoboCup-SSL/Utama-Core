@@ -67,8 +67,7 @@ def defend_parameter(
         and (ball_y_at_baseline is not None and ball_y_at_baseline[1] < 0.5 and ball_y_at_baseline[1] > -0.5)
         and (
             ball_y_at_robo is not None
-            and ball_y_at_robo[1] > defenseing_friendly.p.y + 0.1
-            or ball_y_at_robo[1] < defenseing_friendly.p.y - 0.1
+            and abs(ball_y_at_robo[1] - defenseing_friendly.p.y) > 0.1
         )
     ):
         x2, y2 = 4.5 if game.my_team_is_right else -4.5, goal_frame + 0.2 if robot_id == 1 else goal_frame - 0.2
