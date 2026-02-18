@@ -1,5 +1,6 @@
 import cProfile
 import logging
+import signal
 import threading
 import time
 import warnings
@@ -30,6 +31,7 @@ from utama_core.global_utils.math_utils import assert_valid_bounding_box
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
+from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import GameGater
 from utama_core.run.receivers import VisionReceiver
 from utama_core.run.refiners import (
@@ -75,10 +77,16 @@ class StrategyRunner:
         exp_enemy (int): Expected number of enemy robots.
         field_bounds (FieldBounds): Configuration of the field. Defaults to standard field.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
-        replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
         control_scheme (str, optional): Name of the motion control scheme to use.
+        opp_control_scheme (str, optional): Name of the opponent motion control scheme to use. If not set, uses same as friendly.
+        replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
         print_real_fps (bool, optional): Whether to print real FPS. Defaults to False.
         profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
+        rsim_noise (RsimGaussianNoise, optional): When running in rsim, add Gaussian noise to balls and robots with the
+            given standard deviation. The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
+            Defaults to 0 for each.
+        rsim_vanishing (float, optional): When running in rsim, cause robots and ball to vanish with the given probability.
+            Defaults to 0.
     """
 
     def __init__(
@@ -89,12 +97,15 @@ class StrategyRunner:
         mode: str,
         exp_friendly: int,
         exp_enemy: int,
-        field_bounds: FieldBounds = Field.full_field_bounds,
+        field_bounds: FieldBounds = Field.FULL_FIELD_BOUNDS,
         opp_strategy: Optional[AbstractStrategy] = None,
-        control_scheme: str = "pid",
+        control_scheme: str = "pid",  # This is also the default control scheme used in the motion planning tests
+        opp_control_scheme: Optional[str] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         print_real_fps: bool = False,  # Turn this on for RSim
         profiler_name: Optional[str] = None,
+        rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
+        rsim_vanishing: float = 0,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -107,14 +118,18 @@ class StrategyRunner:
         self.field_bounds = field_bounds
         self.opp_strategy = opp_strategy
 
-        self.motion_controller = get_control_scheme(control_scheme)
+        self.my_motion_controller = get_control_scheme(control_scheme)
+        if opp_control_scheme is not None:
+            self.opp_motion_controller = get_control_scheme(opp_control_scheme)
+        else:
+            self.opp_motion_controller = self.my_motion_controller
 
         self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
         if self.opp_strategy:
             self.opp_strategy.setup_behaviour_tree(is_opp_strat=True)
 
         self._assert_exp_robots()
-        self.rsim_env, self.sim_controller = self._load_sim()
+        self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
         self._load_robot_controllers()
 
@@ -156,6 +171,10 @@ class StrategyRunner:
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
+        self._stop_event = threading.Event()
+
+    def _handle_sigint(self, sig, frame):
+        self._stop_event.set()
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -210,11 +229,18 @@ class StrategyRunner:
         # referee_thread.start()
 
     def _load_sim(
-        self,
+        self, rsim_noise: RsimGaussianNoise, rsim_vanishing: float
     ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
         """Mode RSIM: Loads the RSim environment with the expected number of robots and corresponding sim controller.
         Mode GRSIM: Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of
         robots is met.
+
+        Args:
+            rsim_noise (RsimGaussianNoise, optional): When running in rsim, add Gaussian noise to balls and robots with the
+                given standard deviation. The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
+                Defaults to 0 for each.
+            rsim_vanishing (float, optional): When running in rsim, cause robots and ball to vanish with the given probability.
+                Defaults to 0.
 
         Returns:
             SSLBaseEnv: The RSim environment (Otherwise None).
@@ -222,7 +248,13 @@ class StrategyRunner:
         """
         if self.mode == Mode.RSIM:
             n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
-            rsim_env = SSLStandardEnv(n_robots_yellow=n_yellow, n_robots_blue=n_blue, render_mode=None)
+            rsim_env = SSLStandardEnv(
+                n_robots_yellow=n_yellow,
+                n_robots_blue=n_blue,
+                render_mode=None,
+                gaussian_noise=rsim_noise,
+                vanishing=rsim_vanishing,
+            )
 
             if self.opp_strategy:
                 self.opp_strategy.load_rsim_env(rsim_env)
@@ -358,10 +390,10 @@ class StrategyRunner:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
         self.my_strategy.load_robot_controller(my_robot_controller)
-        self.my_strategy.load_motion_controller(self.motion_controller(self.mode, self.rsim_env))
+        self.my_strategy.load_motion_controller(self.my_motion_controller(self.mode, self.rsim_env))
         if self.opp_strategy:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
-            self.opp_strategy.load_motion_controller(self.motion_controller(self.mode, self.rsim_env))
+            self.opp_strategy.load_motion_controller(self.opp_motion_controller(self.mode, self.rsim_env))
 
     def _load_game(self):
         """
@@ -436,11 +468,44 @@ class StrategyRunner:
                 self.opp_strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
             self.opp_strategy.robot_controller.send_robot_commands()
 
-    def _cleanup(self):
-        """Cleanup resources such as profiler, replay writer, fps_monitor, and rsim env."""
+    def _stop_robots(self, stop_command_mult: int):
+        """
+        Send a series of stop commands to all robots to ensure they come to a halt.
+        Args:
+            stop_command_mult (int): Number of times to send the stop command.
+        """
+        my_stop_commands = {
+            robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.my_game.friendly_robots.keys()
+        }
+        if self.opp_game:
+            opp_stop_commands = {
+                robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.opp_game.friendly_robots.keys()
+            }
+
+        for _ in range(stop_command_mult):
+            self.my_strategy.robot_controller.add_robot_commands(my_stop_commands)
+            self.my_strategy.robot_controller.send_robot_commands()
+            if self.opp_strategy and self.opp_game:
+                self.opp_strategy.robot_controller.add_robot_commands(opp_stop_commands)
+                self.opp_strategy.robot_controller.send_robot_commands()
+
+    def close(self, stop_command_mult: int = 20):
+        """
+        Close resources used by the StrategyRunner and stop robots if in real mode.
+        Args:
+            stop_command_mult (int): Number of times to send the stop command to robots.
+        """
+        self.logger.info("Cleaning up resources...")
+
+        if self.mode == Mode.REAL:
+            try:
+                self._stop_robots(stop_command_mult)
+            except Exception:
+                self.logger.exception("Was unable to stop robots cleanly.")
         if self.profiler:
             self.profiler.disable()
-            self.profiler.dump_stats(f"{self.profiler_name}.prof")
+            if self.profiler.getstats():
+                self.profiler.dump_stats(f"{self.profiler_name}.prof")
         if self.replay_writer:
             self.replay_writer.close()
         if self.rsim_env:
@@ -450,53 +515,63 @@ class StrategyRunner:
 
     def run_test(
         self,
-        testManager: AbstractTestManager,
+        test_manager: AbstractTestManager,
         episode_timeout: float = 10.0,
         rsim_headless: bool = False,
     ) -> bool:
         """Run a test with the given test manager and episode timeout.
-
         Args:
-            testManager (AbstractTestManager): The test manager to run the test.
+            test_manager (AbstractTestManager): The test manager to run the test.
             episode_timeout (float): The timeout for each episode in seconds.
             rsim_headless (bool): Whether to run RSim in headless mode. Defaults to False.
         """
+        signal.signal(signal.SIGINT, self._handle_sigint)
+
         passed = True
-        n_episodes = testManager.get_n_episodes()
+        n_episodes = test_manager.n_episodes
         if not rsim_headless and self.rsim_env:
             self.rsim_env.render_mode = "human"
         if self.sim_controller is None:
             warnings.warn("Running test in real, defaulting to 1 episode.")
             n_episodes = 1
 
-        testManager.load_strategies(self.my_strategy, self.opp_strategy)
+        test_manager.load_strategies(self.my_strategy, self.opp_strategy)
 
         try:
             for i in range(n_episodes):
-                testManager.update_episode_n(i)
+                test_manager.update_episode_n(i)
 
                 if self.sim_controller:
-                    testManager.reset_field(self.sim_controller, self.my_game)
-                    time.sleep(0.1)  # wait for the field to reset
-                    # wait for the field to reset
+                    test_manager.reset_field(self.sim_controller, self.my_game)
+                    time.sleep(0.1)
+
                 self._reset_game()
                 episode_start_time = time.time()
-                # for simplicity, we assume rsim is running in real time. May need to change this
+
                 if self.profiler:
                     self.profiler.enable()
-                while True:
+
+                while not self._stop_event.is_set():
+
                     if (time.time() - episode_start_time) > episode_timeout:
                         passed = False
-                        self.logger.log(
-                            logging.WARNING,
+                        self.logger.warning(
                             "Episode %d timed out after %f secs",
                             i,
                             episode_timeout,
                         )
                         break
-                    self._run_step()
 
-                    status = testManager.eval_status(self.my_game)
+                    try:
+                        self._run_step()
+                    except Exception:
+                        if self._stop_event.is_set():
+                            self.logger.info("Stopping run loop due to interrupt.")
+                            break
+                        else:
+                            raise
+
+                    status = test_manager.eval_status(self.my_game)
 
                     if status == TestingStatus.FAILURE:
                         passed = False
@@ -505,13 +580,17 @@ class StrategyRunner:
                     elif status == TestingStatus.SUCCESS:
                         self._reset_robots()
                         break
+
+                if self._stop_event.is_set():
+                    break
+
                 if self.profiler:
                     self.profiler.disable()
-        except KeyboardInterrupt:
-            self.logger.info("Terminating...")
+
+            return passed
+
         finally:
-            self._cleanup()
-        return passed
+            self.close()
 
     def run(self):
         """Run the main loop, stepping the game until interrupted.
@@ -520,17 +599,23 @@ class StrategyRunner:
         continues until a KeyboardInterrupt is received, after which resources
         (such as replay writer and rsim env) are closed.
         """
+        signal.signal(signal.SIGINT, self._handle_sigint)
+
         if self.rsim_env:
             self.rsim_env.render_mode = "human"
+        if self.profiler:
+            self.profiler.enable()
         try:
-            if self.profiler:
-                self.profiler.enable()
-            while True:
+            while not self._stop_event.is_set():
                 self._run_step()
-        except KeyboardInterrupt:
-            self.logger.info("Terminating...")
+        except Exception:
+            if self._stop_event.is_set():
+                self.logger.info("Stopping run loop due to interrupt.")
+            else:
+                self.logger.exception("Exception occurred during run loop:")
+                raise
         finally:
-            self._cleanup()
+            self.close()
 
     def _run_step(self):
         """Perform one tick of the overall game loop.

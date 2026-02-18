@@ -3,6 +3,7 @@ import threading
 import time
 from collections import deque
 
+from utama_core.config.settings import TIMESTEP
 from utama_core.entities.game import Field
 from utama_core.run import GameGater
 from utama_core.run.receivers.vision_receiver import VisionReceiver
@@ -27,7 +28,7 @@ def main():
     # Runs the vision receiver,
     vision_buffers = [deque(maxlen=1) for _ in range(4)]
     vision_receiver = VisionReceiver(vision_buffers)
-    position_refiner = PositionRefiner(Field.full_field_bounds)
+    position_refiner = PositionRefiner(Field.FULL_FIELD_BOUNDS)
 
     start_threads(vision_receiver)
     NUM_FRIENDLY = 1
@@ -50,7 +51,7 @@ def main():
         print(game)
         assert len(game.friendly_robots) == NUM_FRIENDLY
         assert len(game.enemy_robots) == NUM_ENEMY
-        time.sleep(0.0167)
+        time.sleep(TIMESTEP)
 
 
 if __name__ == "__main__":

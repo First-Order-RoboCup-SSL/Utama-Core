@@ -30,7 +30,7 @@ def block_attacker(
         # ========== Prioritize blocking the shot line ==========
         ax, ay = attacker.p.x, attacker.p.y
 
-        gx, gy = -game.field.enemy_goal_line.coords[0][0], 0
+        gx, gy = -game.field.enemy_goal_line[0][0], 0
 
         agx, agy = (gx - ax), (gy - ay)
         dist_ag = math.hypot(agx, agy)

@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from utama_core.config.settings import BALL_MERGE_THRESHOLD
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
@@ -44,7 +45,7 @@ class PositionRefiner(BaseRefiner):
             return game_frame
         # Can combine previous position from game with new data to produce new position if desired
         combined_vision_data = CameraCombiner().combine_cameras(frames)
-
+        
         # for robot in combined_vision_data.yellow_robots:
         #         if robot.id == 0:
         #             print(f"robot orientation: {robot.orientation}")
@@ -77,7 +78,6 @@ class PositionRefiner(BaseRefiner):
                 enemy_robots=new_yellow_robots,
                 ball=new_ball,
             )
-
         return new_game_frame
 
     # Static methods
@@ -128,11 +128,10 @@ class PositionRefiner(BaseRefiner):
 
     def _combine_single_team_positions(
         self,
-        game_robots: Dict[int, Robot],
+        new_game_robots: Dict[int, Robot],
         vision_robots: List[VisionRobotData],
         friendly: bool,
     ) -> Dict[int, Robot]:
-        new_game_robots = game_robots.copy()
         for robot in vision_robots:
             new_x, new_y = robot.x, robot.y
 
@@ -178,9 +177,6 @@ class PositionRefiner(BaseRefiner):
 
 
 class CameraCombiner:
-    BALL_CONFIDENCE_THRESHOLD = 0.1
-    BALL_MERGE_THRESHOLD = 0.05
-
     def combine_cameras(self, frames: List[RawVisionData]) -> VisionData:
         # Now we have access to the game we can do more sophisticated things
         # Such as ignoring outlier cameras etc
@@ -237,21 +233,20 @@ class CameraCombiner:
         combined_balls: List[VisionBallData] = []
         for ball_list in bs.values():
             for b in ball_list:
-                if b.confidence > CameraCombiner.BALL_CONFIDENCE_THRESHOLD:
-                    found = False
-                    for i, cb in enumerate(combined_balls):
-                        if CameraCombiner.ball_merge_predicate(b, cb):
-                            found = True
-                            combined_balls[i] = CameraCombiner.ball_merge(cb, b)
-                            break
+                found = False
+                for i, cb in enumerate(combined_balls):
+                    if CameraCombiner.ball_merge_predicate(b, cb):
+                        found = True
+                        combined_balls[i] = CameraCombiner.ball_merge(cb, b)
+                        break
 
-                    if not found:
-                        # If no ball close enough, must have found a new separate ball
-                        combined_balls.append(b)
+                if not found:
+                    # If no ball close enough, must have found a new separate ball
+                    combined_balls.append(b)
         return combined_balls
 
     def ball_merge_predicate(b1: RawBallData, b2: RawBallData) -> bool:
-        return abs(b1.x - b2.x) + abs(b1.y - b2.y) < CameraCombiner.BALL_MERGE_THRESHOLD
+        return abs(b1.x - b2.x) + abs(b1.y - b2.y) < BALL_MERGE_THRESHOLD
 
     def ball_merge(b1: RawBallData, b2: RawBallData) -> RawBallData:
         nx = (b1.x + b2.x) / 2

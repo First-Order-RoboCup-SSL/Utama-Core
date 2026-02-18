@@ -44,17 +44,17 @@ if [ $? -ne 0 ]; then
 fi
 
 # Change to the ssl-game-controller directory and run the game controller, suppressing output
-echo "Starting game controller..."
-cd ssl-game-controller/
-./ssl-game-controller > /dev/null 2>&1 &
-GAME_CONTROLLER_PID=$!
-cd ..
+# echo "Starting game controller..."
+# cd ssl-game-controller/
+# ./ssl-game-controller > /dev/null 2>&1 &
+# GAME_CONTROLLER_PID=$!
+# cd ..
 
 # Check if the game controller started successfully
-if [ $? -ne 0 ]; then
-    echo "Failed to start game controller. Exiting."
-    cleanup
-fi
+# if [ $? -ne 0 ]; then
+#     echo "Failed to start game controller. Exiting."
+#     cleanup
+# fi
 
 # Change to the AutoReferee directory and run the run.sh script, suppressing output
 echo "Starting AutoReferee..."

@@ -55,11 +55,10 @@ def turn_on_spot(
     target_oren: float,
     dribbling: bool = False,
 ) -> RobotCommand:
-    """Turns the robot on the spot to face the target orientation.
-
-    pivot_on_ball: If True, the robot will pivot on the ball, otherwise it will pivot on its own centre.
     """
-    RADIUS_MODIFIER = 1.8
+    Turns the robot on the spot to face the target orientation. If the robot has the ball, it will pivot on the ball.
+    """
+    RADIUS_MODIFIER = 1.35
 
     turn = move(
         game=game,
