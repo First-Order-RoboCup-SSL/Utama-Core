@@ -1,4 +1,4 @@
-from typing import NamedTuple, Optional, Tuple
+from typing import List, NamedTuple, Optional, Tuple
 
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
@@ -36,9 +36,23 @@ class RefereeData(NamedTuple):
     #  * ball placement
     current_action_time_remaining: Optional[int] = None
 
+    # All game events detected since the last RUNNING state (e.g. foul type, ball-out side).
+    # Stored as raw protobuf GameEvent objects. Cleared when the game resumes.
+    # Useful for logging and future decision-making; not required for basic compliance.
+    game_events: List = []
+
+    # Meta information about the match type:
+    # 0 = UNKNOWN_MATCH, 1 = GROUP_PHASE, 2 = ELIMINATION_PHASE, 3 = FRIENDLY
+    match_type: int = 0
+
+    # Human-readable message from the referee UI (e.g. reason for a stoppage).
+    status_message: Optional[str] = None
+
     def __eq__(self, other):
         if not isinstance(other, RefereeData):
             return NotImplemented
+        # game_events, match_type, and status_message are intentionally excluded
+        # from equality so they do not trigger spurious re-records in RefereeRefiner.
         return (
             self.stage == other.stage
             and self.referee_command == other.referee_command
