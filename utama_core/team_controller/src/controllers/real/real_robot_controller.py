@@ -13,7 +13,6 @@ from utama_core.config.settings import (
     KICKER_COOLDOWN_TIMESTEPS,
     KICKER_PERSIST_TIMESTEPS,
     PORT,
-    TIMEOUT,
     TIMESTEP,
 )
 from utama_core.entities.data.command import RobotCommand, RobotResponse
@@ -52,7 +51,7 @@ class RealRobotController(AbstractRobotController):
         self._robot_info_size = 2  # number of bytes in feedback packet for all robots
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the feedback packet received from the robots
-        logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
+        logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE}.")
         self._assigned_mapping = {}  # mapping of robot_id to index in the out_packet
 
         # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
