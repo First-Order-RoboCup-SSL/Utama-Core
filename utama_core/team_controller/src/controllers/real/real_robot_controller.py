@@ -47,10 +47,10 @@ class RealRobotController(AbstractRobotController):
     def __init__(self, is_team_yellow: bool, n_friendly: int):
         super().__init__(is_team_yellow, n_friendly)
         self._serial_port = self._init_serial()
-        self._rbt_cmd_size = 10  # packet size for one robot
+        self._rbt_cmd_size = 10  # packet size (bytes) for one robot
+        self._robot_info_size = 2  # number of bytes in feedback packet for all robots
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the feedback packet received from the robots
-        self._robots_info: List[RobotResponse] = [None] * self._n_friendly
         logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
         self._assigned_mapping = {}  # mapping of robot_id to index in the out_packet
 
@@ -58,8 +58,21 @@ class RealRobotController(AbstractRobotController):
         self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
 
     def get_robots_responses(self) -> Optional[List[RobotResponse]]:
-        ### TODO: Not implemented yet
-        return None
+        # Check if anything is available (instant, non-blocking)
+        waiting = self._serial_port.in_waiting
+        if waiting < self._robot_info_size:
+            return None
+
+        data_in = self._serial_port.read(waiting)
+
+        if len(data_in) < self._robot_info_size:
+            return None
+
+        # TODO: complete implementation
+        # Take the newest 2 bytes only
+        # packet = data_in[-self._robot_info_size :]
+
+        # return packet
 
     def send_robot_commands(self) -> None:
         """Sends the robot commands to the appropriate team (yellow or blue)."""
@@ -71,10 +84,6 @@ class RealRobotController(AbstractRobotController):
                 f"Only {len(self._assigned_mapping)} out of {self._n_friendly} robots have been assigned commands. Sending incomplete command packet."
             )
         self._serial_port.write(self._out_packet)
-        self._serial_port.read_all()
-        # data_in = self._serial.read_all()
-        # print(data_in)
-        # TODO: add receiving feedback from the robots
 
         ### update kick and chip trackers. We persist the kick/chip command for KICKER_PERSIST_TIMESTEPS
         ### this feature is to combat packet loss and to ensure the robot does not kick within its cooldown period
@@ -144,18 +153,6 @@ class RealRobotController(AbstractRobotController):
                 remaining_cooldown=KICKER_COOLDOWN_TIMESTEPS,
                 is_kick=False,
             )
-
-    # def _populate_robots_info(self, data_in: bytes) -> None:
-    #     """
-    #     Populates the robots_info list with the data received from the robots.
-    #     """
-    #     for i in range(self._n_friendly):
-    #         has_ball = False
-    #         if data_in[0] & 0b10000000:
-    #             has_ball = True
-    #         info = RobotInfo(has_ball=has_ball)
-    #         self._robots_info[i] = info
-    #         data_in = data_in << 1  # shift to the next robot's data
 
     def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
         """Generates the command buffer to be sent to the robot."""
@@ -287,7 +284,7 @@ class RealRobotController(AbstractRobotController):
                 bytesize=EIGHTBITS,  # 8 data bits
                 parity=PARITY_EVEN,  # Even parity (makes it 9 bits total)
                 stopbits=STOPBITS_TWO,  # 2 stop bits
-                timeout=0.1,
+                timeout=0,
             )
             return serial_port
         except Exception as e:
