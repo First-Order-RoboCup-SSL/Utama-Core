@@ -47,6 +47,7 @@ class RealRobotController(AbstractRobotController):
     def __init__(self, is_team_yellow: bool, n_friendly: int):
         super().__init__(is_team_yellow, n_friendly)
         self._serial_port = self._init_serial()
+        self._rx_buffer = bytearray()
         self._rbt_cmd_size = 10  # packet size (bytes) for one robot
         self._robot_info_size = 2  # number of bytes in feedback packet for all robots
         self._out_packet = self._empty_command()
@@ -58,21 +59,28 @@ class RealRobotController(AbstractRobotController):
         self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
 
     def get_robots_responses(self) -> Optional[List[RobotResponse]]:
-        # Check if anything is available (instant, non-blocking)
-        waiting = self._serial_port.in_waiting
-        if waiting < self._robot_info_size:
+        # Non-blocking read
+        data = self._serial_port.read(self._serial_port.in_waiting)
+
+        if data:
+            self._rx_buffer.extend(data)
+
+        if len(self._rx_buffer) < self._robot_info_size:
             return None
 
-        data_in = self._serial_port.read(waiting)
+        # Keep only the last complete packet
+        packet_count = len(self._rx_buffer) // self._robot_info_size
+        start = (packet_count - 1) * self._robot_info_size
+        end = start + self._robot_info_size
 
-        if len(data_in) < self._robot_info_size:
-            return None
+        packet = self._rx_buffer[start:end]
 
-        # TODO: complete implementation
-        # Take the newest 2 bytes only
-        # packet = data_in[-self._robot_info_size :]
+        # Clear buffer after last full packet
+        self._rx_buffer = bytearray()
 
-        # return packet
+        # TODO complete implementation to parse packet into RobotResponse.
+        packet
+        return None
 
     def send_robot_commands(self) -> None:
         """Sends the robot commands to the appropriate team (yellow or blue)."""
