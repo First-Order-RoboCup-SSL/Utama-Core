@@ -28,7 +28,7 @@ def main():
         print_real_fps=True,
         profiler_name=None,
     )
-    runner.my_strategy.render()
+    runner.my.strategy.render()
     runner.run()
 
 
