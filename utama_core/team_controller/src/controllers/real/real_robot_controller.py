@@ -23,7 +23,6 @@ from utama_core.team_controller.src.controllers.common.robot_controller_abstract
 
 logger = logging.getLogger(__name__)
 
-# NB: A major assumption is that the robot IDs are 0-5 for the friendly team.
 MAX_VEL = REAL_PARAMS.MAX_VEL
 MAX_ANGULAR_VEL = REAL_PARAMS.MAX_ANGULAR_VEL
 
@@ -43,6 +42,9 @@ class RealRobotController(AbstractRobotController):
         n_robots (int): The number of robots in the team. Directly affects output buffer size. Default is 6.
     """
 
+    HEADER = 0xAA
+    TAIL = 0x55
+
     def __init__(self, is_team_yellow: bool, n_friendly: int):
         super().__init__(is_team_yellow, n_friendly)
         self._serial_port = self._init_serial()
@@ -57,29 +59,59 @@ class RealRobotController(AbstractRobotController):
         # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
         self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
 
-    def get_robots_responses(self) -> Optional[List[RobotResponse]]:
-        # Non-blocking read
-        data = self._serial_port.read(self._serial_port.in_waiting)
-
-        if data:
-            self._rx_buffer.extend(data)
-
-        if len(self._rx_buffer) < self._robot_info_size:
-            return None
-
-        # Keep only the last complete packet
-        packet_count = len(self._rx_buffer) // self._robot_info_size
-        start = (packet_count - 1) * self._robot_info_size
-        end = start + self._robot_info_size
-
-        packet = self._rx_buffer[start:end]
-
-        # Clear buffer after last full packet
-        self._rx_buffer = bytearray()
-
-        # TODO complete implementation to parse packet into RobotResponse.
-        packet
+    def get_robots_responses(self) -> Optional[Dict[int, RobotResponse]]:
+        """Reads the robot responses from the serial port and returns a dictionary mapping robot IDs to their responses."""
+        # For now, we are not processing feedback from the robots, but this method can be implemented similarly to the GRSimRobotController if needed in the future.
+        self._serial_port.read_all()  # Clear the input buffer to avoid overflow
         return None
+
+    # TODO: implement when feedback is actually working
+    def get_robots_responses_real(self) -> Optional[Dict[int, RobotResponse]]:
+        FRAME_SIZE = 1 + self._robot_info_size + 1
+
+        # --- Step 1: Non-blocking read ---
+        waiting = self._serial_port.in_waiting
+        if waiting:
+            self._rx_buffer.extend(self._serial_port.read(waiting))
+
+        latest_payload = None
+
+        # --- Step 2: Forward scan to find the newest COMPLETE frame ---
+        while len(self._rx_buffer) >= FRAME_SIZE:
+            if self._rx_buffer[0] != self.HEADER:
+                # Fast-forward to the next possible header to save CPU cycles
+                next_header = self._rx_buffer.find(bytes([self.HEADER]))
+                if next_header == -1:
+                    self._rx_buffer.clear()
+                    break
+                self._rx_buffer = self._rx_buffer[next_header:]
+                continue
+
+            # We have a header and enough bytes. Validate tail.
+            if self._rx_buffer[FRAME_SIZE - 1] == self.TAIL:
+                # Valid frame found! Save it, but keep looping to see if there's a newer one.
+                latest_payload = self._rx_buffer[1 : FRAME_SIZE - 1]
+                self._rx_buffer = self._rx_buffer[FRAME_SIZE:]
+            else:
+                # Fake header. Drop it so we don't get stuck, and resync.
+                self._rx_buffer.pop(0)
+
+        # --- Step 3: If no complete frames were found, check for a partial one to block for ---
+        if not latest_payload and len(self._rx_buffer) > 0 and self._rx_buffer[0] == self.HEADER:
+            remaining = FRAME_SIZE - len(self._rx_buffer)
+            chunk = self._serial_port.read(remaining)  # Blocks
+            if chunk:
+                self._rx_buffer.extend(chunk)
+
+            # Validate the newly completed frame
+            if len(self._rx_buffer) == FRAME_SIZE and self._rx_buffer[FRAME_SIZE - 1] == self.TAIL:
+                latest_payload = self._rx_buffer[1 : FRAME_SIZE - 1]
+                self._rx_buffer.clear()
+            else:
+                # Fake header or timeout. Drop the bad byte.
+                self._rx_buffer.pop(0)
+
+        return None  # Placeholder until we implement actual parsing of latest_payload
 
     def send_robot_commands(self) -> None:
         """Sends the robot commands to the appropriate team (yellow or blue)."""
@@ -276,7 +308,7 @@ class RealRobotController(AbstractRobotController):
                 #      * first byte is robot ID (here INVALID_RBT_ID)
                 #      * remaining (self._rbt_cmd_size - 1) bytes are zeros
                 #  - 0x55: end byte
-                cmd = bytearray([0xAA] + [INVALID_RBT_ID] + [0] * (self._rbt_cmd_size - 1) + [0x55])
+                cmd = bytearray([self.HEADER] + [INVALID_RBT_ID] + [0] * (self._rbt_cmd_size - 1) + [self.TAIL])
                 commands.extend(cmd)
             self._cached_empty_command = commands
         return self._cached_empty_command.copy()
