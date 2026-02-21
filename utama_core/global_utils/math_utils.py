@@ -2,9 +2,9 @@ from typing import Tuple
 
 import numpy as np
 
+from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import Field, FieldBounds
-from utama_core.entities.data.command import RobotCommand
 
 
 def rotate_vector(vx_global: float, vy_global: float, theta: float) -> Tuple[float, float]:
@@ -57,7 +57,7 @@ def normalise_heading_deg(angle):
         The normalized angle in the range [-180, 180] degrees.
     """
     half_rev = 180
-    
+
     return (angle + half_rev) % (2 * half_rev) - half_rev
 
 
@@ -127,20 +127,45 @@ def assert_valid_bounding_box(bb: FieldBounds):
     assert -fy <= y0 <= fy and -fy <= y1 <= fy, f"y coordinates out of full field bounds ±{fy}"
 
 
-def get_displacement_vector(
-        command: RobotCommand,
-        time_elapsed: float,
-        theta: float
-    ) -> Vector2D:
-        rel_displacement = np.array([command.local_forward_vel,
-                                     -1 * command.local_left_vel]) * time_elapsed
-        
-        sin_theta, cos_theta = np.sin(theta), np.cos(theta)
-        
-        basis_change_matrix = np.array([[cos_theta, -1 * sin_theta],
-                                        [sin_theta, cos_theta]])
-        
-        abs_displacement = np.matmul(basis_change_matrix, rel_displacement)
-        
-        return Vector2D(abs_displacement[0],
-                        abs_displacement[1])
+def get_displacement_vector(command: RobotCommand, time_elapsed: float, theta: float) -> Vector2D:
+    """
+    Compute the robot's displacement in the global frame over a time interval.
+
+    This function converts commanded velocities expressed in the robot's
+    local coordinate frame into an absolute (world-frame) displacement
+    vector, given the robot's current heading.
+
+    Parameters
+    ----------
+    command : RobotCommand
+        Command containing local frame velocities:
+        - local_forward_vel: forward velocity (robot x-axis)
+        - local_left_vel: leftward velocity (robot y-axis)
+    time_elapsed : float
+        Duration over which the command is applied (seconds).
+    theta : float
+        Robot heading in radians, measured counterclockwise from the
+        global x-axis.
+
+    Returns
+    -------
+    Vector2D
+        Displacement vector in global coordinates over the given
+        time interval.
+
+    Notes
+    -----
+    - Assumes constant velocity over `time_elapsed`.
+    - Performs a standard 2D rotation using the rotation matrix:
+        [[cos(theta), -sin(theta)],
+        [sin(theta),  cos(theta)]]
+    """
+    rel_displacement = np.array([command.local_forward_vel, -1 * command.local_left_vel]) * time_elapsed
+
+    sin_theta, cos_theta = np.sin(theta), np.cos(theta)
+
+    basis_change_matrix = np.array([[cos_theta, -1 * sin_theta], [sin_theta, cos_theta]])
+
+    abs_displacement = np.matmul(basis_change_matrix, rel_displacement)
+
+    return Vector2D(abs_displacement[0], abs_displacement[1])
