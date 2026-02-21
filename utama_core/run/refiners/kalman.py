@@ -208,24 +208,27 @@ class KalmanFilter:
 
         return self.state_th
 
-    @staticmethod
-    def filter_data(
-        filter, data: VisionRobotData, last_frame: dict[int, Robot], time_elapsed: float
-    ) -> VisionRobotData:
+    def filter_data(self, data: VisionRobotData, last_frame: dict[int, Robot], time_elapsed: float) -> VisionRobotData:
         """
-        An externally-callable function for the position refiner to pass data into the filter.
+        Performs one prediction–update cycle of the Kalman filter for the
+        associated robot.
+
+        The robot's state is first predicted using its last known velocity and
+        the elapsed time. If new vision data is available, the prediction is
+        corrected using the Kalman gain. If the vision frame is missing, the
+        predicted state is used directly.
 
         Args:
-            data (VisionRobotData): An object representing the new vision data
-                received (x coordinates in metres, y coordinates in metres, orientation in radians).
-            last_frame (Dict[int, Robot]): An object storing the last known
-                position and velocity of all robots, among others.
-            time_elapsed (float): Time since last vision data was received.
+            data (VisionRobotData): New vision measurement containing position
+                (x, y) in metres and orientation in radians.
+            last_frame (dict[int, Robot]): Mapping of robot IDs to their last
+                known state (position, velocity, orientation), used for motion
+                prediction.
+            time_elapsed (float): Time in seconds since the previous update.
 
         Returns:
-            VisionRobotData: Filtered vision data x coordinates, y coordinates, orientation),
-                re-packaged into the object representing vision data.
-
+            VisionRobotData: Filtered estimate of the robot's position (x, y)
+                and orientation, packaged as a VisionRobotData object.
         """
 
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
@@ -347,20 +350,26 @@ class KalmanFilterBall:
 
         return tuple(self.state)
 
-    @staticmethod
-    def filter_data(filter, data: Ball, last_frame: Ball, time_elapsed: float) -> Ball:
+    def filter_data(self, data: Ball, last_frame: Ball, time_elapsed: float) -> Ball:
         """
-        An externally-callable function for the position refiner to pass data into the filter.
+        Performs one prediction–update cycle of the Kalman filter for the ball.
+
+        The ball's position is first predicted using its last known velocity
+        and the elapsed time. If new vision data is available, the prediction
+        is corrected using the Kalman gain. If the vision frame is missing,
+        the predicted state is used directly.
 
         Args:
-            data (Ball): An object representing the new vision data received (xyz coordinates in metres).
-            last_frame (Ball): An object storing the last known positon and velocity of the ball, among others.
-            time_elapsed (float): Time since last vision data was received.
+            data (Ball): New vision measurement containing the ball's position
+                (x, y, z) in metres. May be None if the ball is not detected.
+            last_frame (Ball): The ball's last known state, including position,
+                velocity, and acceleration, used for motion prediction.
+            time_elapsed (float): Time in seconds since the previous update.
 
         Returns:
-            VisionRobotData: Filtered vision data x coordinates, y coordinates, orientation),
-                re-packaged into the object representing vision data.
-
+            Ball: Filtered estimate of the ball's position, returned as a Ball
+                object with updated position and preserved velocity and
+                acceleration.
         """
 
         # class Ball: p: Vector3D, v: Vector3D, a: Vector3D

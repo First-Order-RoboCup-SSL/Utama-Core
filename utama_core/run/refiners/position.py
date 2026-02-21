@@ -107,28 +107,20 @@ class PositionRefiner(BaseRefiner):
 
             combined_vision_data = VisionData(
                 ts=combined_vision_data.ts,
-                yellow_robots=list(
-                    map(
-                        partial(
-                            KalmanFilter.filter_data,
-                            last_frame=yellow_last,
-                            time_elapsed=time_elapsed,
-                        ),
+                yellow_robots=[
+                    f.filter_data(data, yellow_last, time_elapsed)
+                    for f, data in zip(
                         self.kalman_filters_yellow,
                         sorted(combined_vision_data.yellow_robots, key=lambda r: r.id),
                     )
-                ),
-                blue_robots=list(
-                    map(
-                        partial(
-                            KalmanFilter.filter_data,
-                            last_frame=blue_last,
-                            time_elapsed=time_elapsed,
-                        ),
+                ],
+                blue_robots=[
+                    f.filter_data(data, blue_last, time_elapsed)
+                    for f, data in zip(
                         self.kalman_filters_blue,
                         sorted(combined_vision_data.blue_robots, key=lambda r: r.id),
                     )
-                ),
+                ],
                 balls=combined_vision_data.balls,
             )
 
@@ -144,8 +136,7 @@ class PositionRefiner(BaseRefiner):
 
         # For filtering and vanishing
         if self.filtering and self.running:
-            new_ball = KalmanFilterBall.filter_data(
-                self.kalman_filter_ball,
+            new_ball = self.kalman_filter_ball.filter_data(
                 new_ball,
                 self.last_game_frame.ball,
                 time_elapsed,
