@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 
 from utama_core.entities.data.vector import Vector3D
@@ -85,7 +87,12 @@ class KalmanFilter:
         # q
         self.process_noise_th = noise_th_var
 
-    def _step_xy(self, new_data: tuple[float, float], last_robot: Robot, time_elapsed: float) -> tuple[float, float]:
+    def _step_xy(
+        self,
+        new_data: Optional[tuple[float, float]],
+        last_robot: Robot,
+        time_elapsed: float,
+    ) -> tuple[float, float]:
         """
         A single iteration of the filter for x and y coordinates.
 
@@ -120,7 +127,7 @@ class KalmanFilter:
         pred_cov_xy = self.covariance_mat_xy + self.process_noise_xy
 
         # Phase 2: Adjust this prediction based on new data
-        if new_data[0] is not None:  # Received frame.
+        if new_data is not None:  # Received frame.
             # z
             measurement_xy = np.array(new_data)
 
@@ -150,7 +157,7 @@ class KalmanFilter:
 
         return tuple(self.state_xy)
 
-    def _step_th(self, new_data: float, last_th: float) -> float:
+    def _step_th(self, new_data: Optional[float], last_th: float) -> float:
         """
         A single iteration of the filter for orientation.
 
@@ -201,7 +208,12 @@ class KalmanFilter:
 
         return self.state_th
 
-    def filter_data(self, data: VisionRobotData, last_frame: Robot, time_elapsed: float) -> VisionRobotData:
+    def filter_data(
+        self,
+        data: Optional[VisionRobotData],
+        last_frame: Robot,
+        time_elapsed: float,
+    ) -> VisionRobotData:
         """
         Performs one prediction–update cycle of the Kalman filter for the
         associated robot.
@@ -225,10 +237,14 @@ class KalmanFilter:
         """
 
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
-        x_f, y_f = self._step_xy((data.x, data.y), last_frame, time_elapsed)
-        th_f = self._step_th(data.orientation, last_frame.orientation)
+        xy_tuple = (data.x, data.y) if data is not None else None
+        x_f, y_f = self._step_xy(xy_tuple, last_frame, time_elapsed)
+        th_f = self._step_th(
+            data.orientation if data is not None else None,
+            last_frame.orientation,
+        )
 
-        return VisionRobotData(data.id, x_f, y_f, th_f)
+        return VisionRobotData(last_frame.id, x_f, y_f, th_f)
 
 
 class KalmanFilterBall:
@@ -284,20 +300,23 @@ class KalmanFilterBall:
         # Multiplications with them are omitted.
 
     def _step(
-        self, new_data: tuple[float, float, float], last_ball: Ball, time_elapsed: float
+        self,
+        new_data: Optional[tuple[float, float, float]],
+        last_ball: Ball,
+        time_elapsed: float,
     ) -> tuple[float, float, float]:
         """
         A single iteration of the filter.
 
         Args:
-            new_data (tuple[float, float, float]): New vision data received (xyz coordinates in metres),
-                passed by the externally callable function filter_data.
+            new_data (Optional[tuple[float, float, float]]): New vision data received (xyz coordinates in metres),
+                passed by the filter_data function. None if the ball is not detected.
             last_ball (Ball): An object storing the ball's last known position and velocity.
             time_elapsed (float): Time since last vision data was received.
 
         Returns:
             tuple[float, float, float]: Filtered vision data (xyz coordinates),
-                returned to the externally callable function filter_data for packaging.
+                returned to the filter_data function for packaging.
         """
 
         # class Ball: p: Vector3D; v: Vector3D; a: Vector3D
@@ -343,7 +362,7 @@ class KalmanFilterBall:
 
         return tuple(self.state)
 
-    def filter_data(self, data: Ball, last_frame: Ball, time_elapsed: float) -> Ball:
+    def filter_data(self, data: Optional[Ball], last_frame: Ball, time_elapsed: float) -> Ball:
         """
         Performs one prediction–update cycle of the Kalman filter for the ball.
 
@@ -353,7 +372,7 @@ class KalmanFilterBall:
         the predicted state is used directly.
 
         Args:
-            data (Ball): New vision measurement containing the ball's position
+            data (Optional[Ball]): New vision measurement containing the ball's position
                 (x, y, z) in metres. May be None if the ball is not detected.
             last_frame (Ball): The ball's last known state, including position,
                 velocity, and acceleration, used for motion prediction.

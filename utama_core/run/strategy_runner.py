@@ -448,9 +448,9 @@ class StrategyRunner:
             rsim_env=self.rsim_env,
         )
 
-        self.my_position_refiner.filter_running = True
+        self.my_position_refiner.start_filtering()
         if self.opp_strategy:
-            self.opp_position_refiner.filter_running = True
+            self.opp_position_refiner.start_filtering()
 
         my_field = Field(self.my_team_is_right, self.field_bounds)
         my_game_history = GameHistory(MAX_GAME_HISTORY)
@@ -485,6 +485,9 @@ class StrategyRunner:
         """
         _ = self.my_strategy.robot_controller.get_robots_responses()
 
+        self.my_position_refiner.reset()
+        if self.opp_strategy:
+            self.opp_position_refiner.reset()
         (
             self.my_game_history,
             self.my_current_game_frame,
@@ -759,16 +762,3 @@ class StrategyRunner:
 
         game.add_game_frame(new_game_frame)
         strategy.step()
-
-
-# if __name__ == "__main__":
-# runner = StrategyRunner(
-#     strategy=RobotPlacementStrategy(id=3),
-#     my_team_is_yellow=True,
-#     my_team_is_right=True,
-#     mode="grsim",
-#     exp_friendly=6,
-#     exp_enemy=6,
-#     opp_strategy=RobotPlacementStrategy(id=3, invert=True),
-# )
-# runner.run()
