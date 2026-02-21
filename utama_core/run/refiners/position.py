@@ -45,12 +45,11 @@ class PositionRefiner(BaseRefiner):
 
         # For Kalman filtering and imputing vanished values.
         self.filtering = filtering
+        self._filter_running = (
+            False  # Only start filtering once we have valid data to filter (i.e. after the first valid game frame)
+        )
 
         if self.filtering:
-            # Kalman filter and imputing of vanished values is only turned on
-            # don't run the filter during GameGater startup
-            self.filter_running = False
-
             # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
             self.kalman_filters_yellow: dict[int, KalmanFilter] = {}
             self.kalman_filters_blue: dict[int, KalmanFilter] = {}
@@ -71,7 +70,7 @@ class PositionRefiner(BaseRefiner):
         time_elapsed = combined_vision_data.ts - game_frame.ts
 
         # For filtering and vanishing
-        if self.filtering and self.filter_running:  # Checks if the first valid game frame has been received.
+        if self.filtering and self._filter_running:  # Checks if the first valid game frame has been received.
             # For vanishing: imputes combined_vision_data with null vision frames in place.
             vision_yellow, vision_blue = self._include_vanished_robots(combined_vision_data, game_frame)
 
@@ -129,7 +128,7 @@ class PositionRefiner(BaseRefiner):
         new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
 
         # For filtering and vanishing
-        if self.filtering and self.filter_running:
+        if self.filtering and self._filter_running:
             new_ball = self.kalman_filter_ball.filter_data(
                 new_ball,
                 game_frame.ball,
@@ -157,6 +156,23 @@ class PositionRefiner(BaseRefiner):
             )
 
         return new_game_frame
+
+    def reset(self):
+        """
+        Resets the internal state of the refiner, including Kalman filters and vanishing trackers.
+        Should be called at the start of each game to ensure no leakage of information between games.
+        """
+        self._filter_running = False
+        if self.filtering:
+            self.kalman_filters_yellow = {}
+            self.kalman_filters_blue = {}
+            self.kalman_filter_ball = KalmanFilterBall()
+
+    def start_filtering(self):
+        """
+        Start filtering after first valid frame is received from GameGater.
+        """
+        self._filter_running = True
 
     def _include_vanished_robots(
         self, vision_data: VisionData, game_frame: GameFrame
@@ -286,6 +302,10 @@ class PositionRefiner(BaseRefiner):
         )
 
         return new_yellow_robots, new_blue_robots
+
+    @property
+    def filter_running(self) -> bool:
+        return self._filter_running
 
 
 class CameraCombiner:
