@@ -130,14 +130,12 @@ class KalmanFilter:
             measurement_xy = np.array(new_data)
 
             # K_n
-            s = pred_cov_xy + self.measurement_cov_xy
-            kalman_gain_xy = np.linalg.solve(s.T, pred_cov_xy.T).T
+            kalman_gain_xy = np.linalg.solve((pred_cov_xy + self.measurement_cov_xy).T, pred_cov_xy.T).T
 
             # s_n,n
             self.state_xy = pred_state_xy + np.matmul(kalman_gain_xy, (measurement_xy - pred_state_xy))
 
             ident_less_kalman_xy = self.identity_xy - kalman_gain_xy
-            ident_less_kalman_xy_T = ident_less_kalman_xy.T
             measurement_uncertainty_xy = np.matmul(
                 kalman_gain_xy,
                 np.matmul(self.measurement_cov_xy, kalman_gain_xy.T),
@@ -145,7 +143,7 @@ class KalmanFilter:
 
             # P_n,n
             self.covariance_mat_xy = (
-                np.matmul(ident_less_kalman_xy, np.matmul(pred_cov_xy, ident_less_kalman_xy_T))
+                np.matmul(ident_less_kalman_xy, np.matmul(pred_cov_xy, ident_less_kalman_xy.T))
                 + measurement_uncertainty_xy
             )
 
@@ -184,21 +182,21 @@ class KalmanFilter:
         # Phase 2: Adjust this prediction based on new data
         if new_data is not None:  # Received frame.
             # z
-            measurement = normalise_heading(new_data)
+            measurement_th = normalise_heading(new_data)
 
             # K_n
-            kalman_gain = pred_cov_th / (pred_cov_th + self.measurement_cov_th)
+            kalman_gain_th = pred_cov_th / (pred_cov_th + self.measurement_cov_th)
 
             # Taking a circular weighted average
-            weights = (kalman_gain, 1 - kalman_gain)
-            values = (measurement, self.state_th)
-            sines = np.dot(weights, np.sin(values))
-            cosines = np.dot(weights, np.cos(values))
+            weights_th = (kalman_gain_th, 1 - kalman_gain_th)
+            values_th = (measurement_th, self.state_th)
+            sines_th = np.dot(weights_th, np.sin(values_th))
+            cosines_th = np.dot(weights_th, np.cos(values_th))
             # s_n,n; already wrapped to (-pi, pi] as we're taking a circular average
-            self.state_th = float(np.arctan2(sines, cosines))
+            self.state_th = float(np.arctan2(sines_th, cosines_th))
 
             # P_n,n
-            self.covariance_th = (1 - kalman_gain) * pred_cov_th
+            self.covariance_th = (1 - kalman_gain_th) * pred_cov_th
 
         # We can rely on the invariant that vanished frames have null x values
         # as they are imputed with a null VisionRobotData in the Position Refiner.
@@ -329,19 +327,17 @@ class KalmanFilterBall:
             measurement = np.array(new_data)
 
             # K_n
-            s = pred_cov + self.measurement_cov
-            kalman_gain = np.linalg.solve(s.T, pred_cov.T).T
+            kalman_gain = np.linalg.solve((pred_cov + self.measurement_cov).T, pred_cov.T).T
 
             # s_n,n
             self.state = pred_state + np.matmul(kalman_gain, (measurement - pred_state))
 
             ident_less_kalman = self.identity - kalman_gain
-            ident_less_kalman_T = ident_less_kalman.T
             measurement_uncertainty = np.matmul(kalman_gain, np.matmul(self.measurement_cov, kalman_gain.T))
 
             # P_n,n
             self.covariance_mat = (
-                np.matmul(ident_less_kalman, np.matmul(pred_cov, ident_less_kalman_T)) + measurement_uncertainty
+                np.matmul(ident_less_kalman, np.matmul(pred_cov, ident_less_kalman.T)) + measurement_uncertainty
             )
 
         # We can rely on the invariant that vanished frames have null x values
