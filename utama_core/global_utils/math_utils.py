@@ -42,6 +42,24 @@ def normalise_heading(angle):
     return (angle + np.pi) % (2 * np.pi) - np.pi
 
 
+def normalise_heading_deg(angle):
+    """Normalize an angle to the range [-180, 180] degrees, where 0 faces along positive x-axis.
+
+    Parameters
+    ----------
+    angle : float
+        The angle in degrees to be normalized. The input angle can be any real number.
+
+    Returns
+    -------
+    float
+        The normalized angle in the range [-180, 180] degrees.
+    """
+    half_rev = 180
+
+    return (angle + half_rev) % (2 * half_rev) - half_rev
+
+
 def deg_to_rad(degrees: float):
     """Convert degrees to radians, then normalise to range [-π, π]"""
     radians = np.deg2rad(degrees)

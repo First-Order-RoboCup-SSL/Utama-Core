@@ -1,3 +1,4 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/First-Order-RoboCup-SSL/Utama-Core)
 # Utama Core
 First Order Robotics core software stack for [RoboCup SSL](https://ssl.robocup.org/), an international league where teams build autonomous robotic teams to play football competitively.
 

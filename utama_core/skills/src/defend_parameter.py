@@ -7,6 +7,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+from utama_core.run.predictors.position import predict_ball_pos_at_x
 from utama_core.skills.src.go_to_point import go_to_point
 
 
@@ -59,7 +60,16 @@ def defend_parameter(
 
         return x3, y3, x4, y4
 
-    if vel[0] ** 2 + vel[1] ** 2 > 0.05:
+    ball_y_at_baseline = predict_ball_pos_at_x(game, 4.5 if game.my_team_is_right else -4.5)
+    ball_y_at_robo = predict_ball_pos_at_x(game, defenseing_friendly.p.x)
+    if (
+        vel[0] ** 2 + vel[1] ** 2 > 0.05
+        and (ball_y_at_baseline is not None and ball_y_at_baseline[1] < 0.5 and ball_y_at_baseline[1] > -0.5)
+        and (
+            ball_y_at_robo is not None
+            and abs(ball_y_at_robo[1] - defenseing_friendly.p.y) > 0.1
+        )
+    ):
         x2, y2 = 4.5 if game.my_team_is_right else -4.5, goal_frame + 0.2 if robot_id == 1 else goal_frame - 0.2
         x3, y3, x4, y4 = positions_to_defend_parameter(x2, y2)
         target_pos = np.array([x4, y4])
@@ -71,7 +81,7 @@ def defend_parameter(
         vec_to_target = np.array(
             [
                 x4 - x3,
-                y4 - y3,
+                y4 + y3,
             ]
         )
         dist_to_target = np.linalg.norm(vec_to_target)
