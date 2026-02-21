@@ -130,8 +130,8 @@ class KalmanFilter:
             measurement_xy = np.array(new_data)
 
             # K_n
-            S = pred_cov_xy + self.measurement_cov_xy
-            kalman_gain_xy = np.linalg.solve(S.T, pred_cov_xy.T).T
+            s = pred_cov_xy + self.measurement_cov_xy
+            kalman_gain_xy = np.linalg.solve(s.T, pred_cov_xy.T).T
 
             # s_n,n
             self.state_xy = pred_state_xy + np.matmul(kalman_gain_xy, (measurement_xy - pred_state_xy))
@@ -329,8 +329,8 @@ class KalmanFilterBall:
             measurement = np.array(new_data)
 
             # K_n
-            S = pred_cov + self.measurement_cov
-            kalman_gain = np.linalg.solve(S.T, pred_cov.T).T
+            s = pred_cov + self.measurement_cov
+            kalman_gain = np.linalg.solve(s.T, pred_cov.T).T
 
             # s_n,n
             self.state = pred_state + np.matmul(kalman_gain, (measurement - pred_state))
