@@ -463,8 +463,9 @@ class StrategyRunner:
             rsim_env=self.rsim_env,
         )
 
-        self.my_position_refiner.last_game_frame = my_current_game_frame
         self.my_position_refiner.running = True
+        if self.opp_strategy:
+            self.opp_position_refiner.running = True
 
         my_field = Field(self.my_team_is_right, self.field_bounds)
         my_game_history = GameHistory(MAX_GAME_HISTORY)
