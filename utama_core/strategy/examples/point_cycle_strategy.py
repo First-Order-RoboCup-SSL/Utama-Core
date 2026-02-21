@@ -17,21 +17,21 @@ from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 class PointCycleBehaviour(AbstractBehaviour):
     """
-    Behaviour that makes a robot move to random targets within bounds.
+    Behaviour that makes a robot move to randomly sampled targets within bounds.
 
     Args:
-        robot_id: The robot ID to control
-        field_bounds: ((min_x, max_x), (min_y, max_y)) bounds for movement
-        min_target_distance: Minimum distance for selecting next target
-        endpoint_tolerance: Distance to consider target reached
-        speed_range: (min_speed, max_speed) for random speed selection
+        robot_id (int): The robot ID to control.
+        field_bounds (FieldBounds): ((min_x, max_x), (min_y, max_y)) bounds for movement.
+        endpoint_tolerance (float): Distance to consider target reached.
+        seed (Optional[int]): Seed for deterministic random sampling.
     """
 
     def __init__(
         self,
         robot_id: int,
         field_bounds: FieldBounds,
-        endpoint_tolerance: float
+        endpoint_tolerance: float,
+        seed: Optional[int] = None,
     ):
         super().__init__(name=f"RandomPoint_{robot_id}")
         self.robot_id = robot_id
@@ -39,14 +39,12 @@ class PointCycleBehaviour(AbstractBehaviour):
         self.endpoint_tolerance = endpoint_tolerance
 
         self.current_target = None
-        self.points = PointCycle()
-
+        self.points = RandomPointSampler(field_bounds, seed=seed)
 
     def initialise(self):
         """Initialize with a random target and speed."""
         # Will set target on first update when we have robot position
         pass
-
 
     def update(self) -> py_trees.common.Status:
         """Command robot to move to random targets."""
@@ -93,16 +91,18 @@ class PointCycleBehaviour(AbstractBehaviour):
 
         self.blackboard.cmd_map[self.robot_id] = cmd
         return py_trees.common.Status.RUNNING
-    
+
 
 class PointCycleStrategy(AbstractStrategy):
     """
-    Strategy that controls multiple robots moving between a set of points within bounds.
+    Strategy that instantiates one PointCycleBehaviour per friendly robot
+    and executes them in parallel within specified field bounds.
 
     Args:
-        n_robots: Number of robots to control
-        field_bounds: ((min_x, max_x), (min_y, max_y)) bounds for movement
-        endpoint_tolerance: Distance to consider target reached
+        n_robots (int): Number of robots to control.
+        field_bounds (FieldBounds): Movement bounds.
+        endpoint_tolerance (float): Distance to consider target reached.
+        seed (Optional[int]): Base seed for deterministic behaviour.
     """
 
     def __init__(
@@ -110,48 +110,45 @@ class PointCycleStrategy(AbstractStrategy):
         n_robots: int,
         field_bounds: FieldBounds,
         endpoint_tolerance: float,
+        seed: Optional[int] = None,
     ):
         self.n_robots = n_robots
         self.field_bounds = field_bounds
         self.endpoint_tolerance = endpoint_tolerance
+        self.seed = seed
         super().__init__()
-
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
         """Requires number of friendly robots to match."""
         return n_runtime_friendly >= self.n_robots
 
-
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True
-
 
     def get_min_bounding_zone(self) -> Optional[FieldBounds]:
         """Return the movement bounds."""
         return self.field_bounds
 
-
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Create parallel behaviour tree with all robot random movement behaviours."""
         if self.n_robots == 1:
-            # Single robot
             return PointCycleBehaviour(
                 robot_id=0,
                 field_bounds=self.field_bounds,
                 endpoint_tolerance=self.endpoint_tolerance,
+                seed=self.seed,
             )
 
-        # Multiple robots - create parallel behaviours
         behaviours = []
         for robot_id in range(self.n_robots):
             behaviour = PointCycleBehaviour(
                 robot_id=robot_id,
                 field_bounds=self.field_bounds,
                 endpoint_tolerance=self.endpoint_tolerance,
+                seed=None if self.seed is None else self.seed + robot_id,
             )
             behaviours.append(behaviour)
 
-        # Run all robot behaviours in parallel
         return py_trees.composites.Parallel(
             name="RandomPoint",
             policy=py_trees.common.ParallelPolicy.SuccessOnAll(),
@@ -159,23 +156,27 @@ class PointCycleStrategy(AbstractStrategy):
         )
 
 
-class PointCycle:
-    def __init__(self):
-        self.pointqueue = deque([
-            Vector2D(x=-0.8788985666614408, y=1.833059669991835),
-            Vector2D(x=1.9214130018502678, y=-1.8036117772036704),
-            Vector2D(x=-2.9433944382347486, y=0.6953808069339509),
-            Vector2D(x=-3.4181903822441044, y=-2.56652611346848),
-            Vector2D(x=-2.5460022017253, y=0.7045762098821444),
-            Vector2D(x=-4.155487299825273, y=-1.2398233473829672),
-            Vector2D(x=3.5298532254117605, y=-1.9554006897411762),
-            Vector2D(x=-1.2978745719981406, y=0.5846383006608473),
-            Vector2D(x=-3.5955893359815656, y=-2.6009526656219326),
-            Vector2D(x=-2.7151516250314636, y=0.9617686362412114)
-        ])
-    
+class RandomPointSampler:
+    """
+    Uniform random point sampler within rectangular field bounds.
+
+    Args:
+        field_bounds (FieldBounds): ((min_x, max_x), (min_y, max_y))
+        seed (Optional[int]): Random seed for deterministic sampling.
+    """
+
+    def __init__(self, field_bounds: FieldBounds, seed: int = 42):
+        self.field_bounds = field_bounds
+        self.rng = random.Random(seed)
+
     @property
-    def next_point(self):
-        next = self.pointqueue.pop()
-        self.pointqueue.appendleft(next)
-        return next
+    def next_point(self) -> Vector2D:
+        min_x = self.field_bounds.bottom_right[0]
+        max_x = self.field_bounds.top_left[0]
+        min_y = self.field_bounds.bottom_right[1]
+        max_y = self.field_bounds.top_left[1]
+
+        x = self.rng.uniform(min_x, max_x)
+        y = self.rng.uniform(min_y, max_y)
+
+        return Vector2D(x=x, y=y)
