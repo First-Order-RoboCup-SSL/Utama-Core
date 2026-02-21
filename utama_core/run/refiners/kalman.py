@@ -90,19 +90,19 @@ class KalmanFilter:
         # q
         self.process_noise_th = noise_th_var
 
-    def _step_xy(self, new_data: tuple[float], last_robot: Robot, time_elapsed: float) -> tuple[float]:
+    def _step_xy(self, new_data: tuple[float, float], last_robot: Robot, time_elapsed: float) -> tuple[float, float]:
         """
         A single iteration of the filter for x and y coordinates.
 
         Args:
-            new_data (tuple[float]): New vision data received (x coordinates in metres, y coordinates in metres),
-                passed by the externally callable function filter_data.
+            new_data (tuple[float, float]): New vision data received (x coordinates in metres, y coordinates in metres),
+                passed by filter_data.
             last_robot (Robot): An object storing the robot's last known position and velocity, among others.
             time_elapsed (float): Time since last vision data was received.
 
         Returns:
-            tuple[float]: Filtered vision data (x coordinates, y coordinates),
-                returned to the externally callable function filter_data for packaging.
+            tuple[float, float]: Filtered vision data (x coordinates, y coordinates),
+                returned to filter_data for packaging.
 
         """
 
@@ -168,7 +168,7 @@ class KalmanFilter:
 
         Returns:
             float: Filtered vision data orientation,
-                returned to the externally callable function filter_data for packaging.
+                returned to filter_data for packaging.
 
         """
 
@@ -290,18 +290,20 @@ class KalmanFilterBall:
         # Observation matrix H and state transition matrix F are just the identity matrix.
         # Multiplications with them are omitted.
 
-    def _step(self, new_data: tuple[float], last_ball: Ball, time_elapsed: float) -> tuple[float]:
+    def _step(
+        self, new_data: tuple[float, float, float], last_ball: Ball, time_elapsed: float
+    ) -> tuple[float, float, float]:
         """
         A single iteration of the filter.
 
         Args:
-            new_data (tuple[float]): New vision data received (xyz coordinates in metres),
+            new_data (tuple[float, float, float]): New vision data received (xyz coordinates in metres),
                 passed by the externally callable function filter_data.
             last_ball (Ball): An object storing the ball's last known position and velocity.
             time_elapsed (float): Time since last vision data was received.
 
         Returns:
-            tuple[float]: Filtered vision data (xyz coordinates),
+            tuple[float, float, float]: Filtered vision data (xyz coordinates),
                 returned to the externally callable function filter_data for packaging.
         """
 
@@ -338,7 +340,7 @@ class KalmanFilterBall:
             measurement_uncertainty = np.matmul(kalman_gain, np.matmul(self.measurement_cov, np.transpose(kalman_gain)))
 
             # P_n,n
-            self.covariance_mat_xy = (
+            self.covariance_mat = (
                 np.matmul(ident_less_kalman, np.matmul(pred_cov, ident_less_kalman_T)) + measurement_uncertainty
             )
 
