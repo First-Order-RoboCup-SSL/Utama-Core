@@ -1,5 +1,5 @@
+from utama_core.data_processing.refiners.position import CameraCombiner
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
-from utama_core.run.refiners.position import CameraCombiner
 
 
 def test_combine_same_robots_produces_same():

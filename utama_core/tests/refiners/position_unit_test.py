@@ -1,9 +1,9 @@
+from utama_core.data_processing.refiners import PositionRefiner
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.data.vision import VisionBallData, VisionRobotData
 from utama_core.entities.game import Ball, Field, FieldBounds, GameFrame
 from utama_core.entities.game.robot import Robot
-from utama_core.run.refiners import PositionRefiner
 
 full_field = Field.FULL_FIELD_BOUNDS
 position_refiner = PositionRefiner(full_field)

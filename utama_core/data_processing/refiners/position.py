@@ -6,13 +6,16 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from utama_core.config.settings import BALL_MERGE_THRESHOLD
+from utama_core.data_processing.refiners.base_refiner import BaseRefiner
+from utama_core.data_processing.refiners.filters.kalman import (
+    KalmanFilter,
+    KalmanFilterBall,
+)
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.global_utils.mapping_utils import map_friendly_enemy_to_colors
-from utama_core.run.refiners.base_refiner import BaseRefiner
-from utama_core.run.refiners.kalman import KalmanFilter, KalmanFilterBall
 
 
 class AngleSmoother:

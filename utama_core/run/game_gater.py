@@ -1,10 +1,10 @@
 import time
 from typing import Deque, List, Optional, Tuple
 
+from utama_core.data_processing.refiners import PositionRefiner
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
-from utama_core.run.refiners import PositionRefiner
 
 
 class GameGater:

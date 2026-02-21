@@ -4,7 +4,7 @@ import time
 from collections import deque
 
 from utama_core.config.settings import MAX_CAMERAS, TIMESTEP
-from utama_core.run.receivers import VisionReceiver
+from utama_core.data_processing.receivers import VisionReceiver
 
 logging.basicConfig(
     filename="Utama.log",

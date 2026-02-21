@@ -1,6 +1,6 @@
 import time
 
-from utama_core.run.receivers.referee_receiver import RefereeMessageReceiver
+from utama_core.data_processing.receivers.referee_receiver import RefereeMessageReceiver
 
 """ TODO: Traceback (most recent call last):
   File "/home/fredh/robocup_ssl/Robocup/src/tests/referee_receiver_test.py", line 25, in <module>
