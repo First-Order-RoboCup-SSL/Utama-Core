@@ -2,7 +2,6 @@ from typing import Tuple
 
 import numpy as np
 
-from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import Field, FieldBounds
 
