@@ -23,9 +23,7 @@ hatch = ">=1.14.1,<2"
 graphviz = ">=13.1.2,<14"
 snakeviz = ">=2.2.2,<3"
 scipy = ">=1.16.3,<2"
-seaborn = ">=0.13.2,<0.14"
-pyqtgraph = ">=0.14.0,<0.15"
-pyside6 = ">=6.9.3,<7"
+pandas = "==3.0.1"
 rich = ">=14.2.0,<15"
 
 [package]

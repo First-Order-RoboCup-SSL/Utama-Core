@@ -1,7 +1,8 @@
 from collections import deque
+from typing import Union
+
 import numpy as np
 from scipy.signal import firwin
-from typing import Union
 
 from utama_core.entities.data.vision import VisionRobotData
 
@@ -10,7 +11,7 @@ class FIR_filter:
     """
     Finite Impulse Response (FIR) filter for 2D position and orientation.
     This is essentially a weighted average of the past n data points.
-    
+
     More about the methodology:
     https://youtube.com/playlist?list=PLbqhA-NKGP6Afr_KbPUuy_yIBpPR4jzWo&si=7l2BVnsN_jSKq2JL.
 
@@ -23,10 +24,10 @@ class FIR_filter:
 
     def __init__(
         self,
-        fs: float=60.0,
-        taps: Union[np.array, None]=None,
-        window_len: int=5,
-        cutoff: Union[float, None]=None
+        fs: float = 60.0,
+        taps: Union[np.array, None] = None,
+        window_len: int = 5,
+        cutoff: Union[float, None] = None,
     ):
         self._fs = float(fs)
         self._N = window_len
@@ -37,7 +38,7 @@ class FIR_filter:
         else:
             # Sets cutoff frequency according to the maximum acceleration and
             # velocity of robots, below the limits dictated by Nyquist's theorem.
-            
+
             a_max = 50
             v_max = 5
             fc = a_max / (2 * np.pi * v_max)
@@ -62,15 +63,15 @@ class FIR_filter:
     def step(self, data: tuple[float]):
         """
         A single iteration of the filter
-        
-        Args: 
+
+        Args:
             data (tuple[float]): The new vision data received (x and y coordinates
                 in metres, orientation in radians).
-        
+
         Returns:
             tuple[float]: The filtered data
         """
-        
+
         x, y, th = map(float, data)
         # theta = normalise_heading(theta)
 
@@ -111,7 +112,7 @@ class FIR_filter:
         Returns:
             VisionRobotData: The filtered vision data.
         """
-        
+
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
         (x_f, y_f, th_f) = filter.step((data.x, data.y, data.orientation))
 
