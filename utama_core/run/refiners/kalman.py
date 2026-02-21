@@ -30,6 +30,9 @@ class KalmanFilter:
     More about the methodology and formulae used can be found at https://kalmanfilter.net/.
 
     Args:
+        id (int): The associated robot's ID, used for associating the filter
+            with the robot. Defaults to 0.
+
         noise_xy_sd (float): A hyper-parameter, used to weigh the filter's
             predictions and the vision data received during the "update" phase.
             Unit is metres.
@@ -45,9 +48,11 @@ class KalmanFilter:
             real-world conditions when live robots are used).
     """
 
-    def __init__(self, noise_xy_sd: float = 0.01, noise_th_sd_deg: float = 5):
+    def __init__(self, id: int = 0, noise_xy_sd: float = 0.01, noise_th_sd_deg: float = 5):
         assert noise_xy_sd > 0, "The standard deviation must be greater than 0"
         assert noise_th_sd_deg > 0, "The standard deviation must be greater than 0"
+
+        self.id = id
 
         # For position
         # s; to be initialised by strategy runner with 1st GameFrame

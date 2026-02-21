@@ -68,6 +68,14 @@ def make_vision(x: float | None, y: float | None, orientation: float | None, rob
 
 
 class TestKalmanFilterInit:
+    def test_default_construction(self):
+        kf = KalmanFilter()
+        assert kf.id == 0
+
+    def test_custom_id(self):
+        kf = KalmanFilter(id=3)
+        assert kf.id == 3
+
     def test_zero_noise_xy_raises(self):
         with pytest.raises(AssertionError):
             KalmanFilter(noise_xy_sd=0)
@@ -225,6 +233,20 @@ class TestKalmanFilterFilterData:
         robot = make_robot()
         result = kf.filter_data(make_vision(1.0, 2.0, 0.5), self._last_frame(robot)[robot.id], 0.1)
         assert isinstance(result, VisionRobotData)
+
+    def test_id_preserved(self):
+        kf = KalmanFilter(id=2)
+        robot = Robot(
+            id=2,
+            is_friendly=True,
+            has_ball=False,
+            p=Vector2D(0, 0),
+            v=Vector2D(0, 0),
+            a=Vector2D(0, 0),
+            orientation=0.0,
+        )
+        result = kf.filter_data(make_vision(1.0, 2.0, 0.3, robot_id=2), robot, 0.1)
+        assert result.id == 2
 
     def test_valid_data_returns_finite_values(self):
         kf = KalmanFilter()
@@ -413,7 +435,7 @@ class TestKalmanFilterBallFilterData:
         assert np.all(np.diag(kf.covariance_mat) < np.diag(initial_cov))
 
     def test_robot_xy_covariance_shrinks_with_repeated_measurement(self):
-        kf = KalmanFilter(noise_xy_sd=0.001, noise_th_sd_deg=5)
+        kf = KalmanFilter(id=1, noise_xy_sd=0.001, noise_th_sd_deg=5)
 
         robot = make_robot(x=1.0, y=2.0, orientation=0.0)
 
