@@ -10,6 +10,7 @@ from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVi
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
+from utama_core.global_utils.mapping_utils import map_friendly_enemy_to_colors
 from utama_core.run.refiners.base_refiner import BaseRefiner
 from utama_core.run.refiners.kalman import KalmanFilter, KalmanFilterBall
 
@@ -30,9 +31,6 @@ class AngleSmoother:
 class PositionRefiner(BaseRefiner):
     def __init__(
         self,
-        my_team_is_yellow: bool,
-        exp_friendly: int,
-        exp_enemy: int,
         field_bounds: FieldBounds,
         bounds_buffer: float = 1.0,
         filtering: bool = True,
@@ -50,37 +48,19 @@ class PositionRefiner(BaseRefiner):
 
         if self.filtering:
             # Kalman filter and imputing of vanished values is only turned on
-            # when the refiner is run from _step_game(), not _load_game()
-            self.running = False
-
-            if my_team_is_yellow:
-                self.yellow_count = exp_friendly
-                self.blue_count = exp_enemy
-            else:
-                self.yellow_count = exp_enemy
-                self.blue_count = exp_friendly
-
-            self.yellow_range = set(range(self.yellow_count))
-            self.blue_range = set(range(self.blue_count))
+            # don't run the filter during GameGater startup
+            self.filter_running = False
 
             # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
-            self.kalman_filters_yellow = [KalmanFilter(id) for id in self.yellow_range]
-            self.kalman_filters_blue = [KalmanFilter(id) for id in self.blue_range]
+            self.kalman_filters_yellow = {}
+            self.kalman_filters_blue = {}
             self.kalman_filter_ball = KalmanFilterBall()
-
-            # Helpful reference:
-            # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
-            # friendly_robots: Dict[int, Robot], enemy_robots: Dict[int, Robot], ball: Optional[Ball]
-
-            # class Robot: id: int, is_friendly: bool, has_ball: bool, p: Vector2D,
-            # v: Vector2D, a: Vector2D, orientation: float
 
     # Primary function for the Refiner interface
     def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
         frames = [frame for frame in data if frame is not None]
 
         # If no information just return the original
-        # TODO: this needs to be replaced by an extrapolation function (otherwise we will be using old data forever)
         if not frames:
             return game_frame
 
@@ -89,35 +69,38 @@ class PositionRefiner(BaseRefiner):
         combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
 
         # For filtering and vanishing
-        if self.filtering and self.running:  # Checks if the first valid game frame has been received.
+        if self.filtering and self.filter_running:  # Checks if the first valid game frame has been received.
             # For vanishing: imputes combined_vision_data with null vision frames in place.
             self._impute_vanished_robots(combined_vision_data)
 
             time_elapsed = combined_vision_data.ts - game_frame.ts
 
-            if game_frame.my_team_is_yellow:
-                yellow_last = game_frame.friendly_robots
-                blue_last = game_frame.enemy_robots
-            else:
-                yellow_last = game_frame.enemy_robots
-                blue_last = game_frame.friendly_robots
+            yellow_last, blue_last = map_friendly_enemy_to_colors(
+                game_frame.friendly_robots,
+                game_frame.enemy_robots,
+                game_frame.my_team_is_yellow,
+            )
+
+            filtered_yellow_robots = []
+            for y_rbt in yellow_last.values():
+                if y_rbt.id not in self.kalman_filters_yellow:
+                    self.kalman_filters_yellow[y_rbt.id] = KalmanFilter(id=y_rbt.id)
+                filtered_yellow_robots.append(
+                    self.kalman_filters_yellow[y_rbt.id].filter_data(y_rbt, combined_vision_data.ts, time_elapsed)
+                )
+
+            filtered_blue_robots = []
+            for b_rbt in blue_last.values():
+                if b_rbt.id not in self.kalman_filters_blue:
+                    self.kalman_filters_blue[b_rbt.id] = KalmanFilter(id=b_rbt.id)
+                filtered_blue_robots.append(
+                    self.kalman_filters_blue[b_rbt.id].filter_data(b_rbt, combined_vision_data.ts, time_elapsed)
+                )
 
             combined_vision_data = VisionData(
                 ts=combined_vision_data.ts,
-                yellow_robots=[
-                    f.filter_data(data, yellow_last, time_elapsed)
-                    for f, data in zip(
-                        self.kalman_filters_yellow,
-                        sorted(combined_vision_data.yellow_robots, key=lambda r: r.id),
-                    )
-                ],
-                blue_robots=[
-                    f.filter_data(data, blue_last, time_elapsed)
-                    for f, data in zip(
-                        self.kalman_filters_blue,
-                        sorted(combined_vision_data.blue_robots, key=lambda r: r.id),
-                    )
-                ],
+                yellow_robots=filtered_yellow_robots,
+                blue_robots=filtered_blue_robots,
                 balls=combined_vision_data.balls,
             )
 
@@ -132,7 +115,7 @@ class PositionRefiner(BaseRefiner):
         new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
 
         # For filtering and vanishing
-        if self.filtering and self.running:
+        if self.filtering and self.filter_running:
             new_ball = self.kalman_filter_ball.filter_data(
                 new_ball,
                 game_frame.ball,

@@ -137,9 +137,6 @@ class StrategyRunner:
             self.my_velocity_refiner,
             self.my_robot_info_refiner,
         ) = self._init_refiners(
-            my_team_is_yellow,
-            exp_friendly,
-            exp_enemy,
             field_bounds,
             filtering,
         )
@@ -150,9 +147,6 @@ class StrategyRunner:
                 self.opp_velocity_refiner,
                 self.opp_robot_info_refiner,
             ) = self._init_refiners(
-                not my_team_is_yellow,
-                exp_enemy,
-                exp_friendly,
                 field_bounds,
                 filtering,
             )
@@ -417,27 +411,18 @@ class StrategyRunner:
 
     def _init_refiners(
         self,
-        my_team_is_yellow: bool,
-        exp_friendly: int,
-        exp_enemy: int,
         field_bounds: FieldBounds,
         filtering: bool,
     ) -> tuple[PositionRefiner, VelocityRefiner, RobotInfoRefiner]:
         """
         Initialize the position, velocity, and robot info refiners.
         Args:
-            my_team_is_yellow (bool): Whether our team is yellow.
-            exp_friendly (int): Expected number of friendly robots.
-            exp_enemy (int): Expected number of enemy robots.
             field_bounds (FieldBounds): The bounds of the field.
             filtering (bool): Whether to use filtering in the position refiner.
         Returns:
             tuple: The initialized PositionRefiner, VelocityRefiner, and RobotInfoRefiner.
         """
         position_refiner = PositionRefiner(
-            my_team_is_yellow,
-            exp_friendly,
-            exp_enemy,
             field_bounds,
             filtering=filtering,
         )
