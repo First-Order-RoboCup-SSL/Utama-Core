@@ -3,11 +3,11 @@ from typing import Optional
 
 import numpy as np
 
+from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from utama_core.run.predictors.position import predict_ball_pos_at_x
 from utama_core.skills.src.go_to_point import go_to_point
 
 
@@ -22,10 +22,20 @@ def defend_parameter(
     if len(game.friendly_robots) > 2:
         if game.ball.p.y >= -0.5 and robot_id == 1:
             target_pos = [3.0 if game.my_team_is_right else -3.0, -1.2]
-            return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]))
+            return go_to_point(
+                game,
+                motion_controller,
+                robot_id,
+                Vector2D(target_pos[0], target_pos[1]),
+            )
         elif game.ball.p.y < -0.5 and robot_id == 2:
             target_pos = [3.0 if game.my_team_is_right else -3.0, 1.2]
-            return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]))
+            return go_to_point(
+                game,
+                motion_controller,
+                robot_id,
+                Vector2D(target_pos[0], target_pos[1]),
+            )
     if robot_id == 1:
         goal_frame = 0.5
     else:
@@ -65,12 +75,9 @@ def defend_parameter(
     if (
         vel[0] ** 2 + vel[1] ** 2 > 0.05
         and (ball_y_at_baseline is not None and ball_y_at_baseline[1] < 0.5 and ball_y_at_baseline[1] > -0.5)
-        and (
-            ball_y_at_robo is not None
-            and abs(ball_y_at_robo[1] - defenseing_friendly.p.y) > 0.1
-        )
+        and (ball_y_at_robo is not None and abs(ball_y_at_robo[1] - defenseing_friendly.p.y) > 0.1)
     ):
-        x2, y2 = 4.5 if game.my_team_is_right else -4.5, goal_frame + 0.2 if robot_id == 1 else goal_frame - 0.2
+        x2, y2 = 4.5 if game.my_team_is_right else -4.5, (goal_frame + 0.2 if robot_id == 1 else goal_frame - 0.2)
         x3, y3, x4, y4 = positions_to_defend_parameter(x2, y2)
         target_pos = np.array([x4, y4])
 
@@ -92,4 +99,10 @@ def defend_parameter(
             vec_dir = np.array([0.0, 0.0])
         target_pos = np.array([x4, y4]) - vec_dir * robot_rad
 
-    return go_to_point(game, motion_controller, robot_id, Vector2D(target_pos[0], target_pos[1]), dribbling=True)
+    return go_to_point(
+        game,
+        motion_controller,
+        robot_id,
+        Vector2D(target_pos[0], target_pos[1]),
+        dribbling=True,
+    )

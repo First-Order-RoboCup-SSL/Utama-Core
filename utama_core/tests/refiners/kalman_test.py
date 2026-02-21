@@ -14,11 +14,14 @@ import math
 import numpy as np
 import pytest
 
+from utama_core.data_processing.refiners.filters.kalman import (
+    KalmanFilter,
+    KalmanFilterBall,
+)
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionRobotData
 from utama_core.entities.game import Ball
 from utama_core.entities.game.robot import Robot
-from utama_core.run.refiners.kalman import KalmanFilter, KalmanFilterBall
 
 # ---------------------------------------------------------------------------
 # Helpers
