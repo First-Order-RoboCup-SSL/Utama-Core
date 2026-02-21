@@ -145,11 +145,11 @@ class TestKalmanFilterStepXY:
         kf = KalmanFilter()
         vx, vy = 1.0, 0.5
         robot = make_robot(x=0.0, y=0.0, vx=vx, vy=vy)
-        kf._step_xy((None, None), robot, time_elapsed=0.1)  # init (no Kalman update)
+        kf._step_xy(None, robot, time_elapsed=0.1)  # init (no Kalman update)
 
         dt = 0.1
-        result1 = kf._step_xy((None, None), robot, time_elapsed=dt)
-        result2 = kf._step_xy((None, None), robot, time_elapsed=dt)
+        result1 = kf._step_xy(None, robot, time_elapsed=dt)
+        result2 = kf._step_xy(None, robot, time_elapsed=dt)
         # Each vanished step should advance by v * dt
         assert abs((result2[0] - result1[0]) - vx * dt) < 1e-6
         assert abs((result2[1] - result1[1]) - vy * dt) < 1e-6
@@ -163,7 +163,7 @@ class TestKalmanFilterStepXY:
         dt = 0.1
         steps = 5
         for _ in range(steps):
-            result = kf._step_xy((None, None), robot, time_elapsed=dt)
+            result = kf._step_xy(None, robot, time_elapsed=dt)
 
         # After n vanished steps starting from 0 the position grows monotonically
         assert result[0] > 0.0
@@ -262,7 +262,7 @@ class TestKalmanFilterFilterData:
         # First call to initialise
         kf.filter_data(make_vision(1.0, 1.0, 0.0), self._last_frame(robot), 0.1)
         # Second call with vanished data
-        result = kf.filter_data(make_vision(None, None, None), self._last_frame(robot), 0.1)
+        result = kf.filter_data(None, self._last_frame(robot), 0.1)
         assert math.isfinite(result.x)
         assert math.isfinite(result.y)
         assert math.isfinite(result.orientation)

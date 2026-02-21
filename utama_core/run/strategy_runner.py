@@ -448,9 +448,9 @@ class StrategyRunner:
             rsim_env=self.rsim_env,
         )
 
-        self.my_position_refiner.running = True
+        self.my_position_refiner.filter_running = True
         if self.opp_strategy:
-            self.opp_position_refiner.running = True
+            self.opp_position_refiner.filter_running = True
 
         my_field = Field(self.my_team_is_right, self.field_bounds)
         my_game_history = GameHistory(MAX_GAME_HISTORY)
@@ -484,6 +484,10 @@ class StrategyRunner:
         current game and history objects (useful between episodes or after resets).
         """
         _ = self.my_strategy.robot_controller.get_robots_responses()
+
+        self.my_position_refiner.filter_running = False
+        if self.opp_strategy:
+            self.opp_position_refiner.filter_running = False
 
         (
             self.my_game_history,

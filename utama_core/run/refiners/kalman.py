@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 
 from utama_core.entities.data.vector import Vector3D
@@ -90,7 +92,12 @@ class KalmanFilter:
         # q
         self.process_noise_th = noise_th_var
 
-    def _step_xy(self, new_data: tuple[float, float], last_robot: Robot, time_elapsed: float) -> tuple[float, float]:
+    def _step_xy(
+        self,
+        new_data: Optional[tuple[float, float]],
+        last_robot: Robot,
+        time_elapsed: float,
+    ) -> tuple[float, float]:
         """
         A single iteration of the filter for x and y coordinates.
 
@@ -125,7 +132,7 @@ class KalmanFilter:
         pred_cov_xy = self.covariance_mat_xy + self.process_noise_xy
 
         # Phase 2: Adjust this prediction based on new data
-        if new_data[0] is not None:  # Received frame.
+        if new_data is not None:  # Received frame.
             # z
             measurement_xy = np.array(new_data)
 
@@ -155,7 +162,7 @@ class KalmanFilter:
 
         return tuple(self.state_xy)
 
-    def _step_th(self, new_data: float, last_th: float) -> float:
+    def _step_th(self, new_data: Optional[float], last_th: float) -> float:
         """
         A single iteration of the filter for orientation.
 
@@ -206,7 +213,12 @@ class KalmanFilter:
 
         return self.state_th
 
-    def filter_data(self, data: VisionRobotData, last_frame: dict[int, Robot], time_elapsed: float) -> VisionRobotData:
+    def filter_data(
+        self,
+        data: Optional[VisionRobotData],
+        last_frame: dict[int, Robot],
+        time_elapsed: float,
+    ) -> VisionRobotData:
         """
         Performs one prediction–update cycle of the Kalman filter for the
         associated robot.
@@ -230,10 +242,14 @@ class KalmanFilter:
         """
 
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
-        x_f, y_f = self._step_xy((data.x, data.y), last_frame[self.id], time_elapsed)
-        th_f = self._step_th(data.orientation, last_frame[self.id].orientation)
+        xy_tuple = (data.x, data.y) if data is not None else None
+        x_f, y_f = self._step_xy(xy_tuple, last_frame[self.id], time_elapsed)
+        th_f = self._step_th(
+            data.orientation if data is not None else None,
+            last_frame[self.id].orientation,
+        )
 
-        return VisionRobotData(data.id, x_f, y_f, th_f)
+        return VisionRobotData(self.id, x_f, y_f, th_f)
 
 
 class KalmanFilterBall:
