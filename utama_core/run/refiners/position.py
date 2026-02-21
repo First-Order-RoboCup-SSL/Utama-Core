@@ -74,37 +74,36 @@ class PositionRefiner(BaseRefiner):
             # For vanishing: imputes combined_vision_data with null vision frames in place.
             vision_yellow, vision_blue = self._include_vanished_robots(combined_vision_data, game_frame)
 
-            yellow_last, blue_last = map_friendly_enemy_to_colors(
+            yellow_rbt_last_frame, blue_rbt_last_frame = map_friendly_enemy_to_colors(
                 game_frame.my_team_is_yellow,
                 game_frame.friendly_robots,
                 game_frame.enemy_robots,
             )
 
             filtered_yellow_robots = []
-            for vision_y_robot in vision_yellow:
-                robot_id = vision_y_robot.id
+            for y_rbt_id, vision_y_rbt in vision_yellow.items():
+                if y_rbt_id not in self.kalman_filters_yellow:
+                    self.kalman_filters_yellow[y_rbt_id] = KalmanFilter(id=y_rbt_id)
 
-                if robot_id not in self.kalman_filters_yellow:
-                    self.kalman_filters_yellow[robot_id] = KalmanFilter(id=robot_id)
-
-                filtered_robot = self.kalman_filters_yellow[robot_id].filter_data(
-                    vision_y_robot,  # new measurement
-                    yellow_last,  # last frame dict
+                filtered_robot = self.kalman_filters_yellow[y_rbt_id].filter_data(
+                    vision_y_rbt,  # new measurement
+                    yellow_rbt_last_frame,  # last frame dict
                     time_elapsed,
                 )
 
                 filtered_yellow_robots.append(filtered_robot)
 
             filtered_blue_robots = []
-            for vision_b_robot in vision_blue:
-                robot_id = vision_b_robot.id
+            for b_rbt_id, vision_b_rbt in vision_blue.items():
+                if b_rbt_id not in self.kalman_filters_blue:
+                    self.kalman_filters_blue[b_rbt_id] = KalmanFilter(id=b_rbt_id)
 
-                if robot_id not in self.kalman_filters_blue:
-                    self.kalman_filters_blue[robot_id] = KalmanFilter(id=robot_id)
+                if b_rbt_id not in self.kalman_filters_blue:
+                    self.kalman_filters_blue[b_rbt_id] = KalmanFilter(id=b_rbt_id)
 
-                filtered_robot = self.kalman_filters_blue[robot_id].filter_data(
-                    vision_b_robot,  # new measurement
-                    blue_last,  # last frame dict
+                filtered_robot = self.kalman_filters_blue[b_rbt_id].filter_data(
+                    vision_b_rbt,  # new measurement
+                    blue_rbt_last_frame,  # last frame dict
                     time_elapsed,
                 )
 
@@ -176,16 +175,16 @@ class PositionRefiner(BaseRefiner):
 
     def _include_vanished_robots(
         self, vision_data: VisionData, game_frame: GameFrame
-    ) -> Tuple[List[Optional[VisionRobotData]], List[Optional[VisionRobotData]]]:
+    ) -> Tuple[dict[int, Optional[VisionRobotData]], dict[int, Optional[VisionRobotData]]]:
         """
         Augment the VisionData lists with None for vanished robots so that the Kalman filter
         knows that data vanished.
 
         Returns:
-            Tuple of (yellow_list, blue_list) where vanished robots are represented as None.
+            Tuple of (yellow_vision_dict, blue_vision_dict) where vanished robots are represented as None.
         """
 
-        yellow_last, blue_last = map_friendly_enemy_to_colors(
+        yellow_ids_last_frame, blue_ids_last_frame = map_friendly_enemy_to_colors(
             game_frame.my_team_is_yellow,
             set(game_frame.friendly_robots.keys()),
             set(game_frame.enemy_robots.keys()),
@@ -196,17 +195,16 @@ class PositionRefiner(BaseRefiner):
         blue_present = {r.id for r in vision_data.blue_robots}
 
         # Start with current measurements
-        yellow_list: List[Optional[VisionRobotData]] = list(vision_data.yellow_robots)
-        blue_list: List[Optional[VisionRobotData]] = list(vision_data.blue_robots)
+        yellow_vision_dict: dict[int, Optional[VisionRobotData]] = {r.id: r for r in vision_data.yellow_robots}
+        blue_vision_dict: dict[int, Optional[VisionRobotData]] = {r.id: r for r in vision_data.blue_robots}
 
         # Add None for vanished robots
-        for robot_id in yellow_last - yellow_present:
-            yellow_list.append(None)
+        for robot_id in yellow_ids_last_frame - yellow_present:
+            yellow_vision_dict[robot_id] = None
+        for robot_id in blue_ids_last_frame - blue_present:
+            blue_vision_dict[robot_id] = None
 
-        for robot_id in blue_last - blue_present:
-            blue_list.append(None)
-
-        return yellow_list, blue_list
+        return yellow_vision_dict, blue_vision_dict
 
     # Static methods
     @staticmethod

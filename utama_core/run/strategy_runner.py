@@ -762,16 +762,3 @@ class StrategyRunner:
 
         game.add_game_frame(new_game_frame)
         strategy.step()
-
-
-# if __name__ == "__main__":
-# runner = StrategyRunner(
-#     strategy=RobotPlacementStrategy(id=3),
-#     my_team_is_yellow=True,
-#     my_team_is_right=True,
-#     mode="grsim",
-#     exp_friendly=6,
-#     exp_enemy=6,
-#     opp_strategy=RobotPlacementStrategy(id=3, invert=True),
-# )
-# runner.run()
