@@ -181,6 +181,11 @@ class PositionRefiner(BaseRefiner):
             Tuple of (yellow_vision_dict, blue_vision_dict) where vanished robots are represented as None.
         """
 
+        # TODO: major issue is that if we do a robot substitution, the
+        # Kalman filter will think the old robot vanished and a new robot appeared.
+        # needs to be adjusted when referee system is in place.
+        # see issue #107 on GitHub for more details.
+
         yellow_ids_last_frame, blue_ids_last_frame = map_friendly_enemy_to_colors(
             game_frame.my_team_is_yellow,
             game_frame.friendly_robots.keys(),
