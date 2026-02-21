@@ -1,5 +1,3 @@
-from typing import Optional
-
 from utama_core.config.settings import TIMESTEP
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -14,6 +12,17 @@ from .planner import DynamicWindowPlanner
 
 class DWATranslationController:
     """Compute global linear velocities using a Dynamic Window Approach."""
+
+    _TARGET_COLORS = (
+        "RED",
+        "ORANGE",
+        "YELLOW",
+        "GREEN",
+        "BLUE",
+        "PURPLE",
+        "PINK",
+        "WHITE",
+    )
 
     def __init__(
         self,
@@ -44,6 +53,9 @@ class DWATranslationController:
 
         if target is None:
             return Vector2D(0.0, 0.0)
+
+        if self.env is not None:
+            self.env.draw_point(target.x, target.y, color=self._target_color(robot_id), width=2)
 
         if current.distance_to(target) <= self._planner_config.target_tolerance:
             zero_velocity = Vector2D(0.0, 0.0)
@@ -78,6 +90,9 @@ class DWATranslationController:
 
     def reset(self, robot_id: int):
         self._acceleration_limiter.reset(robot_id)
+
+    def _target_color(self, robot_id: int) -> str:
+        return self._TARGET_COLORS[robot_id % len(self._TARGET_COLORS)]
 
     def _apply_speed_limits(self, velocity: Vector2D) -> Vector2D:
         speed = velocity.mag()

@@ -32,7 +32,7 @@ class RandomMovementScenario:
     min_target_distance: float
     required_targets_per_robot: int
     collision_threshold: float = ROBOT_RADIUS * 2.0
-    endpoint_tolerance: float = 0.25
+    endpoint_tolerance: float = 0.1
 
 
 class RandomMovementTestManager(AbstractTestManager):
@@ -52,10 +52,22 @@ class RandomMovementTestManager(AbstractTestManager):
         """Reset field with robots in random starting positions within bounds."""
         (min_x, max_x), (min_y, max_y) = self.scenario.field_bounds
 
-        # Place robots at random positions within bounds
+        # Place robots at random positions within bounds without overlaps.
+        positions: list[Vector2D] = []
+        max_attempts_per_robot = 200
+        min_spacing = self.scenario.collision_threshold
         for i in range(self.scenario.n_robots):
-            x = random.uniform(min_x + 0.5, max_x - 0.5)
-            y = random.uniform(min_y + 0.5, max_y - 0.5)
+            for _ in range(max_attempts_per_robot):
+                x = random.uniform(min_x + 0.5, max_x - 0.5)
+                y = random.uniform(min_y + 0.5, max_y - 0.5)
+                candidate = Vector2D(x, y)
+                if all(candidate.distance_to(pos) >= min_spacing for pos in positions):
+                    positions.append(candidate)
+                    break
+            else:
+                raise RuntimeError(
+                    "Unable to find non-colliding start positions; " "consider widening bounds or reducing robot count."
+                )
             sim_controller.teleport_robot(
                 game.my_team_is_yellow,
                 i,
@@ -159,14 +171,14 @@ def test_random_movement_same_team(
     )  # ((min_x, max_x), (min_y, max_y))
 
     # Max is 6 robots
-    n_robots = 2
+    n_robots = 6
 
     scenario = RandomMovementScenario(
         n_robots=n_robots,
         field_bounds=field_bounds,
         min_target_distance=1.0,  # Minimum distance for next target
         required_targets_per_robot=3,  # Each robot must reach 3 targets
-        endpoint_tolerance=0.3,
+        endpoint_tolerance=0.1,
     )
 
     test_manager = RandomMovementTestManager(scenario)
