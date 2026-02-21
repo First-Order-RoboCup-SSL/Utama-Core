@@ -137,10 +137,10 @@ class KalmanFilter:
             self.state_xy = pred_state_xy + np.matmul(kalman_gain_xy, (measurement_xy - pred_state_xy))
 
             ident_less_kalman_xy = self.identity_xy - kalman_gain_xy
-            ident_less_kalman_xy_T = np.transpose(ident_less_kalman_xy)
+            ident_less_kalman_xy_T = ident_less_kalman_xy.T
             measurement_uncertainty_xy = np.matmul(
                 kalman_gain_xy,
-                np.matmul(self.measurement_cov_xy, np.transpose(kalman_gain_xy)),
+                np.matmul(self.measurement_cov_xy, kalman_gain_xy.T),
             )
 
             # P_n,n
@@ -336,8 +336,8 @@ class KalmanFilterBall:
             self.state = pred_state + np.matmul(kalman_gain, (measurement - pred_state))
 
             ident_less_kalman = self.identity - kalman_gain
-            ident_less_kalman_T = np.transpose(ident_less_kalman)
-            measurement_uncertainty = np.matmul(kalman_gain, np.matmul(self.measurement_cov, np.transpose(kalman_gain)))
+            ident_less_kalman_T = ident_less_kalman.T
+            measurement_uncertainty = np.matmul(kalman_gain, np.matmul(self.measurement_cov, kalman_gain.T))
 
             # P_n,n
             self.covariance_mat = (
