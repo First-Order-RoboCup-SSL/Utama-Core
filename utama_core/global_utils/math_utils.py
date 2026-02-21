@@ -56,7 +56,6 @@ def normalise_heading_deg(angle):
         The normalized angle in the range [-180, 180] degrees.
     """
     half_rev = 180
-
     return (angle + half_rev) % (2 * half_rev) - half_rev
 
 
