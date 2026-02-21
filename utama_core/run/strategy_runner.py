@@ -19,6 +19,12 @@ from utama_core.config.settings import (
     MAX_GAME_HISTORY,
     TIMESTEP,
 )
+from utama_core.data_processing.receivers import VisionReceiver
+from utama_core.data_processing.refiners import (
+    PositionRefiner,
+    RobotInfoRefiner,
+    VelocityRefiner,
+)
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameHistory
@@ -33,8 +39,6 @@ from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import GameGater
-from utama_core.run.receivers import VisionReceiver
-from utama_core.run.refiners import PositionRefiner, RobotInfoRefiner, VelocityRefiner
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import (
     AbstractSimController,
@@ -82,6 +86,7 @@ class StrategyRunner:
             Defaults to 0 for each.
         rsim_vanishing (float, optional): When running in rsim, cause robots and ball to vanish with the given probability.
             Defaults to 0.
+        filtering (bool, optional): Turn on Kalman filtering. Defaults to true.
     """
 
     def __init__(
@@ -101,6 +106,7 @@ class StrategyRunner:
         profiler_name: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
         rsim_vanishing: float = 0,
+        filtering: bool = True,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -129,9 +135,26 @@ class StrategyRunner:
         self._load_robot_controllers()
 
         assert_valid_bounding_box(self.field_bounds)
-        self.position_refiner = PositionRefiner(self.field_bounds)
-        self.velocity_refiner = VelocityRefiner()
-        self.robot_info_refiner = RobotInfoRefiner()
+
+        (
+            self.my_position_refiner,
+            self.my_velocity_refiner,
+            self.my_robot_info_refiner,
+        ) = self._init_refiners(
+            field_bounds,
+            filtering,
+        )
+
+        if self.opp_strategy:
+            (
+                self.opp_position_refiner,
+                self.opp_velocity_refiner,
+                self.opp_robot_info_refiner,
+            ) = self._init_refiners(
+                field_bounds,
+                filtering,
+            )
+
         # self.referee_refiner = RefereeRefiner()
         (
             self.my_game_history,
@@ -390,6 +413,28 @@ class StrategyRunner:
             self.opp_strategy.load_robot_controller(opp_robot_controller)
             self.opp_strategy.load_motion_controller(self.opp_motion_controller(self.mode, self.rsim_env))
 
+    def _init_refiners(
+        self,
+        field_bounds: FieldBounds,
+        filtering: bool,
+    ) -> tuple[PositionRefiner, VelocityRefiner, RobotInfoRefiner]:
+        """
+        Initialize the position, velocity, and robot info refiners.
+        Args:
+            field_bounds (FieldBounds): The bounds of the field.
+            filtering (bool): Whether to use filtering in the position refiner.
+        Returns:
+            tuple: The initialized PositionRefiner, VelocityRefiner, and RobotInfoRefiner.
+        """
+        position_refiner = PositionRefiner(
+            field_bounds,
+            filtering=filtering,
+        )
+        velocity_refiner = VelocityRefiner()
+        robot_info_refiner = RobotInfoRefiner()
+
+        return position_refiner, velocity_refiner, robot_info_refiner
+
     def _load_game(self):
         """
         Load the game state for both friendly and opponent strategies after waiting for valid game data with GameGater.
@@ -402,10 +447,15 @@ class StrategyRunner:
             self.exp_friendly,
             self.exp_enemy,
             self.vision_buffers,
-            self.position_refiner,
+            self.my_position_refiner,
             is_pvp=self.opp_strategy is not None,
             rsim_env=self.rsim_env,
         )
+
+        self.my_position_refiner.start_filtering()
+        if self.opp_strategy:
+            self.opp_position_refiner.start_filtering()
+
         my_field = Field(self.my_team_is_right, self.field_bounds)
         my_game_history = GameHistory(MAX_GAME_HISTORY)
         my_game = Game(my_game_history, my_current_game_frame, field=my_field)
@@ -438,6 +488,10 @@ class StrategyRunner:
         current game and history objects (useful between episodes or after resets).
         """
         _ = self.my_strategy.robot_controller.get_robots_responses()
+
+        self.my_position_refiner.reset()
+        if self.opp_strategy:
+            self.opp_position_refiner.reset()
         (
             self.my_game_history,
             self.my_current_game_frame,
@@ -679,19 +733,25 @@ class StrategyRunner:
             current_game_frame = self.opp_current_game_frame
             game_history = self.opp_game_history
             game = self.opp_game
+            position_refiner = self.opp_position_refiner
+            velocity_refiner = self.opp_velocity_refiner
+            robot_info_refiner = self.opp_robot_info_refiner
         else:
             strategy = self.my_strategy
             current_game_frame = self.my_current_game_frame
             game_history = self.my_game_history
             game = self.my_game
+            position_refiner = self.my_position_refiner
+            velocity_refiner = self.my_velocity_refiner
+            robot_info_refiner = self.my_robot_info_refiner
 
         # Pull responses from robot controller
         responses = strategy.robot_controller.get_robots_responses()
 
         # Update game frame with refined information
-        new_game_frame = self.position_refiner.refine(current_game_frame, vision_frames)
-        new_game_frame = self.velocity_refiner.refine(game_history, new_game_frame)  # , robot_frame.imu_data)
-        new_game_frame = self.robot_info_refiner.refine(new_game_frame, responses)
+        new_game_frame = position_refiner.refine(current_game_frame, vision_frames)
+        new_game_frame = velocity_refiner.refine(game_history, new_game_frame)  # , robot_frame.imu_data)
+        new_game_frame = robot_info_refiner.refine(new_game_frame, responses)
         # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)
 
         # Store updated game frame
@@ -706,16 +766,3 @@ class StrategyRunner:
 
         game.add_game_frame(new_game_frame)
         strategy.step()
-
-
-# if __name__ == "__main__":
-# runner = StrategyRunner(
-#     strategy=RobotPlacementStrategy(id=3),
-#     my_team_is_yellow=True,
-#     my_team_is_right=True,
-#     mode="grsim",
-#     exp_friendly=6,
-#     exp_enemy=6,
-#     opp_strategy=RobotPlacementStrategy(id=3, invert=True),
-# )
-# runner.run()

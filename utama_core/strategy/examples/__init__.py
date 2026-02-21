@@ -5,3 +5,4 @@ from utama_core.strategy.examples.one_robot_placement_strategy import (
 )
 from utama_core.strategy.examples.startup_strategy import StartupStrategy
 from utama_core.strategy.examples.two_robot_placement import TwoRobotPlacementStrategy
+from utama_core.strategy.examples.point_cycle_strategy import PointCycleStrategy
