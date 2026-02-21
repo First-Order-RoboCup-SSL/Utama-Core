@@ -249,7 +249,7 @@ class KalmanFilter:
             last_frame.orientation,
         )
 
-        return VisionRobotData(last_frame.id, x_f, y_f, th_f)
+        return VisionRobotData(self.id, x_f, y_f, th_f)
 
 
 class KalmanFilterBall:
