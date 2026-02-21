@@ -232,8 +232,8 @@ class KalmanFilter:
         """
 
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
-        x_f, y_f = filter._step_xy((data.x, data.y), last_frame[filter.id], time_elapsed)
-        th_f = filter._step_th(data.orientation, last_frame[filter.id].orientation)
+        x_f, y_f = self._step_xy((data.x, data.y), last_frame[self.id], time_elapsed)
+        th_f = self._step_th(data.orientation, last_frame[self.id].orientation)
 
         return VisionRobotData(data.id, x_f, y_f, th_f)
 
@@ -384,6 +384,6 @@ class KalmanFilterBall:
             zero_vector = Vector3D(0, 0, 0)
             velocity, acceleration = zero_vector, zero_vector
 
-        filtered_data = filter._step(new_data, last_frame, time_elapsed)
+        filtered_data = self._step(new_data, last_frame, time_elapsed)
 
         return Ball(Vector3D(*filtered_data), velocity, acceleration)
