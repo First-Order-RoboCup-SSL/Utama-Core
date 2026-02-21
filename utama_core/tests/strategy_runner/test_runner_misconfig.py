@@ -39,7 +39,6 @@ def test_assert_exp_robots_too_many_friendly(base_runner):
 
 
 def test_assert_exp_robots_too_few_friendly(base_runner):
-    base_runner.exp_friendly = 0
     with pytest.raises(AssertionError):
         base_runner._assert_exp_robots(DummyStrategy(), None, 0, 3)
 
