@@ -102,7 +102,7 @@ class StrategyRunner:
         profiler_name: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
         rsim_vanishing: float = 0,
-        filtering: bool = True
+        filtering: bool = True,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ class StrategyRunner:
             self.exp_friendly,
             self.exp_enemy,
             self.field_bounds,
-            filtering=filtering
+            filtering=filtering,
         )
         self.velocity_refiner = VelocityRefiner()
         self.robot_info_refiner = RobotInfoRefiner()
@@ -232,14 +232,12 @@ class StrategyRunner:
         # referee_thread.start()
 
     def _load_sim(
-        self,
-        rsim_noise: RsimGaussianNoise,
-        rsim_vanishing: float
+        self, rsim_noise: RsimGaussianNoise, rsim_vanishing: float
     ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
         """Mode RSIM: Loads the RSim environment with the expected number of robots and corresponding sim controller.
         Mode GRSIM: Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of
         robots is met.
-        
+
         Args:
             rsim_noise (RsimGaussianNoise, optional): When running in rsim, add Gaussian noise to balls and robots with the
                 given standard deviation. The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
@@ -253,7 +251,13 @@ class StrategyRunner:
         """
         if self.mode == Mode.RSIM:
             n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
-            rsim_env = SSLStandardEnv(n_robots_yellow=n_yellow, n_robots_blue=n_blue, render_mode=None, gaussian_noise=rsim_noise, vanishing=rsim_vanishing)
+            rsim_env = SSLStandardEnv(
+                n_robots_yellow=n_yellow,
+                n_robots_blue=n_blue,
+                render_mode=None,
+                gaussian_noise=rsim_noise,
+                vanishing=rsim_vanishing,
+            )
 
             if self.opp_strategy:
                 self.opp_strategy.load_rsim_env(rsim_env)
@@ -410,10 +414,10 @@ class StrategyRunner:
             is_pvp=self.opp_strategy is not None,
             rsim_env=self.rsim_env,
         )
-        
+
         self.position_refiner.last_game_frame = my_current_game_frame
         self.position_refiner.running = True
-        
+
         my_field = Field(self.my_team_is_right, self.field_bounds)
         my_game_history = GameHistory(MAX_GAME_HISTORY)
         my_game = Game(my_game_history, my_current_game_frame, field=my_field)
