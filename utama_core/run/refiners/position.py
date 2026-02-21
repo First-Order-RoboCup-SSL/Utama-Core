@@ -53,9 +53,6 @@ class PositionRefiner(BaseRefiner):
             # when the refiner is run from _step_game(), not _load_game()
             self.running = False
 
-            # Game gater will initialise
-            self.last_game_frame = None
-
             if my_team_is_yellow:
                 self.yellow_count = exp_friendly
                 self.blue_count = exp_enemy
@@ -96,14 +93,14 @@ class PositionRefiner(BaseRefiner):
             # For vanishing: imputes combined_vision_data with null vision frames in place.
             self._impute_vanished_robots(combined_vision_data)
 
-            time_elapsed = combined_vision_data.ts - self.last_game_frame.ts
+            time_elapsed = combined_vision_data.ts - game_frame.ts
 
             if game_frame.my_team_is_yellow:
-                yellow_last = self.last_game_frame.friendly_robots
-                blue_last = self.last_game_frame.enemy_robots
+                yellow_last = game_frame.friendly_robots
+                blue_last = game_frame.enemy_robots
             else:
-                yellow_last = self.last_game_frame.enemy_robot
-                blue_last = self.last_game_frame.friendly_robots
+                yellow_last = game_frame.enemy_robots
+                blue_last = game_frame.friendly_robots
 
             combined_vision_data = VisionData(
                 ts=combined_vision_data.ts,
@@ -138,7 +135,7 @@ class PositionRefiner(BaseRefiner):
         if self.filtering and self.running:
             new_ball = self.kalman_filter_ball.filter_data(
                 new_ball,
-                self.last_game_frame.ball,
+                game_frame.ball,
                 time_elapsed,
             )
         elif new_ball is None:

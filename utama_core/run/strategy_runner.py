@@ -761,9 +761,6 @@ class StrategyRunner:
         new_game_frame = robot_info_refiner.refine(new_game_frame, responses)
         # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)
 
-        if new_game_frame:
-            position_refiner.last_game_frame = new_game_frame
-
         # Store updated game frame
         if running_opp:
             self.opp_current_game_frame = new_game_frame
