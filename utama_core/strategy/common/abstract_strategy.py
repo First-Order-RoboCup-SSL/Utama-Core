@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, cast, Dict
+from typing import Optional, cast
 
 import py_trees
 import pydot
@@ -218,16 +218,13 @@ class AbstractStrategy(ABC):
         self.blackboard.set("game", game, overwrite=True)
         self.assert_field_requirements()
 
-    def step(self) -> Dict[int, RobotCommand]:
+    def step(self):
         # start_time = time.time()
         game = self.blackboard.game
-        
-        # Dict[int, Union[None, RobotCommand]]. Initialise empty Dict.
+
         self.blackboard.cmd_map = {robot_id: None for robot_id in game.friendly_robots}
 
         self.behaviour_tree.tick()
-        
-        sent_cmds = self.blackboard.cmd_map
 
         for robot_id, values in self.blackboard.cmd_map.items():
             if values is not None:
@@ -235,18 +232,13 @@ class AbstractStrategy(ABC):
 
             # if the robot is not assigned a command, execute the default action
             else:
-                # Dict[int, Role]
                 if robot_id not in self.blackboard.role_map:
                     role = Role.UNASSIGNED
                 else:
                     role = self.blackboard.role_map[robot_id]
-                    
                 cmd = self.execute_default_action(game, role, robot_id)
-                sent_cmds[robot_id] = cmd
                 self.robot_controller.add_robot_commands(cmd, robot_id)
         self.robot_controller.send_robot_commands()
-        
-        return sent_cmds
 
         # end_time = time.time()
         # logger.info(

@@ -721,7 +721,7 @@ class StrategyRunner:
             self.replay_writer.write_frame(new_game_frame)
 
         game.add_game_frame(new_game_frame)
-        self.position_refiner.cmd_map = strategy.step()
+        strategy.step()
 
 
 # if __name__ == "__main__":
