@@ -68,14 +68,6 @@ def make_vision(x: float | None, y: float | None, orientation: float | None, rob
 
 
 class TestKalmanFilterInit:
-    def test_default_construction(self):
-        kf = KalmanFilter()
-        assert kf.id == 0
-
-    def test_custom_id(self):
-        kf = KalmanFilter(id=3)
-        assert kf.id == 3
-
     def test_zero_noise_xy_raises(self):
         with pytest.raises(AssertionError):
             KalmanFilter(noise_xy_sd=0)
@@ -229,49 +221,35 @@ class TestKalmanFilterFilterData:
         return {robot.id: robot}
 
     def test_returns_vision_robot_data(self):
-        kf = KalmanFilter(id=0)
+        kf = KalmanFilter()
         robot = make_robot()
-        result = kf.filter_data(make_vision(1.0, 2.0, 0.5), self._last_frame(robot), 0.1)
+        result = kf.filter_data(make_vision(1.0, 2.0, 0.5), self._last_frame(robot)[robot.id], 0.1)
         assert isinstance(result, VisionRobotData)
 
-    def test_id_preserved(self):
-        kf = KalmanFilter(id=2)
-        robot = Robot(
-            id=2,
-            is_friendly=True,
-            has_ball=False,
-            p=Vector2D(0, 0),
-            v=Vector2D(0, 0),
-            a=Vector2D(0, 0),
-            orientation=0.0,
-        )
-        result = kf.filter_data(make_vision(1.0, 2.0, 0.3, robot_id=2), {2: robot}, 0.1)
-        assert result.id == 2
-
     def test_valid_data_returns_finite_values(self):
-        kf = KalmanFilter(id=0)
+        kf = KalmanFilter()
         robot = make_robot(x=0.0, y=0.0)
-        result = kf.filter_data(make_vision(1.0, 1.0, 0.2), self._last_frame(robot), 0.1)
+        result = kf.filter_data(make_vision(1.0, 1.0, 0.2), self._last_frame(robot)[robot.id], 0.1)
         assert math.isfinite(result.x)
         assert math.isfinite(result.y)
         assert math.isfinite(result.orientation)
 
     def test_vanished_data_returns_finite_values(self):
-        kf = KalmanFilter(id=0)
+        kf = KalmanFilter()
         robot = make_robot(x=1.0, y=1.0)
         # First call to initialise
-        kf.filter_data(make_vision(1.0, 1.0, 0.0), self._last_frame(robot), 0.1)
+        kf.filter_data(make_vision(1.0, 1.0, 0.0), self._last_frame(robot)[robot.id], 0.1)
         # Second call with vanished data
-        result = kf.filter_data(None, self._last_frame(robot), 0.1)
+        result = kf.filter_data(None, self._last_frame(robot)[robot.id], 0.1)
         assert math.isfinite(result.x)
         assert math.isfinite(result.y)
         assert math.isfinite(result.orientation)
 
     def test_convergence_with_repeated_measurement(self):
-        kf = KalmanFilter(id=0)
+        kf = KalmanFilter()
         robot = make_robot(x=5.0, y=3.0)
         for _ in range(50):
-            result = kf.filter_data(make_vision(5.0, 3.0, 1.0), self._last_frame(robot), 0.1)
+            result = kf.filter_data(make_vision(5.0, 3.0, 1.0), self._last_frame(robot)[robot.id], 0.1)
         assert abs(result.x - 5.0) < 1e-3
         assert abs(result.y - 3.0) < 1e-3
         assert abs(result.orientation - 1.0) < 1e-2
@@ -435,7 +413,7 @@ class TestKalmanFilterBallFilterData:
         assert np.all(np.diag(kf.covariance_mat) < np.diag(initial_cov))
 
     def test_robot_xy_covariance_shrinks_with_repeated_measurement(self):
-        kf = KalmanFilter(id=1, noise_xy_sd=0.001, noise_th_sd_deg=5)
+        kf = KalmanFilter(noise_xy_sd=0.001, noise_th_sd_deg=5)
 
         robot = make_robot(x=1.0, y=2.0, orientation=0.0)
 
