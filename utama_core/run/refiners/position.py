@@ -11,7 +11,7 @@ from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.run.refiners.base_refiner import BaseRefiner
-from utama_core.run.refiners.kalman import Kalman_filter, Kalman_filter_ball
+from utama_core.run.refiners.kalman import KalmanFilter, KalmanFilterBall
 
 
 class AngleSmoother:
@@ -67,9 +67,9 @@ class PositionRefiner(BaseRefiner):
             self.blue_range = set(range(self.blue_count))
 
             # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
-            self.kalman_filters_yellow = [Kalman_filter(id) for id in self.yellow_range]
-            self.kalman_filters_blue = [Kalman_filter(id) for id in self.blue_range]
-            self.kalman_filter_ball = Kalman_filter_ball()
+            self.kalman_filters_yellow = [KalmanFilter(id) for id in self.yellow_range]
+            self.kalman_filters_blue = [KalmanFilter(id) for id in self.blue_range]
+            self.kalman_filter_ball = KalmanFilterBall()
 
             # Helpful reference:
             # class GameFrame: ts: float, my_team_is_yellow: bool, my_team_is_right: bool
@@ -110,7 +110,7 @@ class PositionRefiner(BaseRefiner):
                 yellow_robots=list(
                     map(
                         partial(
-                            Kalman_filter.filter_data,
+                            KalmanFilter.filter_data,
                             last_frame=yellow_last,
                             time_elapsed=time_elapsed,
                         ),
@@ -121,7 +121,7 @@ class PositionRefiner(BaseRefiner):
                 blue_robots=list(
                     map(
                         partial(
-                            Kalman_filter.filter_data,
+                            KalmanFilter.filter_data,
                             last_frame=blue_last,
                             time_elapsed=time_elapsed,
                         ),
@@ -144,7 +144,7 @@ class PositionRefiner(BaseRefiner):
 
         # For filtering and vanishing
         if self.filtering and self.running:
-            new_ball = Kalman_filter_ball.filter_data(
+            new_ball = KalmanFilterBall.filter_data(
                 self.kalman_filter_ball,
                 new_ball,
                 self.last_game_frame.ball,
