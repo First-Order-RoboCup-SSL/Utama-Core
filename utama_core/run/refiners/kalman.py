@@ -305,20 +305,23 @@ class KalmanFilterBall:
         # Multiplications with them are omitted.
 
     def _step(
-        self, new_data: tuple[float, float, float], last_ball: Ball, time_elapsed: float
+        self,
+        new_data: Optional[tuple[float, float, float]],
+        last_ball: Ball,
+        time_elapsed: float,
     ) -> tuple[float, float, float]:
         """
         A single iteration of the filter.
 
         Args:
-            new_data (tuple[float, float, float]): New vision data received (xyz coordinates in metres),
-                passed by the externally callable function filter_data.
+            new_data (Optional[tuple[float, float, float]]): New vision data received (xyz coordinates in metres),
+                passed by the filter_data function. None if the ball is not detected.
             last_ball (Ball): An object storing the ball's last known position and velocity.
             time_elapsed (float): Time since last vision data was received.
 
         Returns:
             tuple[float, float, float]: Filtered vision data (xyz coordinates),
-                returned to the externally callable function filter_data for packaging.
+                returned to the filter_data function for packaging.
         """
 
         # class Ball: p: Vector3D; v: Vector3D; a: Vector3D
