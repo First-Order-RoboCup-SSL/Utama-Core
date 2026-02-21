@@ -76,25 +76,25 @@ class PositionRefiner(BaseRefiner):
             time_elapsed = combined_vision_data.ts - game_frame.ts
 
             yellow_last, blue_last = map_friendly_enemy_to_colors(
+                game_frame.my_team_is_yellow,
                 game_frame.friendly_robots,
                 game_frame.enemy_robots,
-                game_frame.my_team_is_yellow,
             )
 
             filtered_yellow_robots = []
-            for y_rbt in yellow_last.values():
+            for y_rbt in combined_vision_data.yellow_robots:
                 if y_rbt.id not in self.kalman_filters_yellow:
-                    self.kalman_filters_yellow[y_rbt.id] = KalmanFilter(id=y_rbt.id)
+                    self.kalman_filters_yellow[y_rbt.id] = KalmanFilter()
                 filtered_yellow_robots.append(
-                    self.kalman_filters_yellow[y_rbt.id].filter_data(y_rbt, combined_vision_data.ts, time_elapsed)
+                    self.kalman_filters_yellow[y_rbt.id].filter_data(y_rbt, yellow_last[y_rbt.id], time_elapsed)
                 )
 
             filtered_blue_robots = []
-            for b_rbt in blue_last.values():
+            for b_rbt in combined_vision_data.blue_robots:
                 if b_rbt.id not in self.kalman_filters_blue:
-                    self.kalman_filters_blue[b_rbt.id] = KalmanFilter(id=b_rbt.id)
+                    self.kalman_filters_blue[b_rbt.id] = KalmanFilter()
                 filtered_blue_robots.append(
-                    self.kalman_filters_blue[b_rbt.id].filter_data(b_rbt, combined_vision_data.ts, time_elapsed)
+                    self.kalman_filters_blue[b_rbt.id].filter_data(b_rbt, blue_last[b_rbt.id], time_elapsed)
                 )
 
             combined_vision_data = VisionData(
@@ -155,13 +155,13 @@ class PositionRefiner(BaseRefiner):
         """
 
         yellows_present = {robot.id for robot in vision_data.yellow_robots}
-        yellows_vanished = self.yellow_range - yellows_present
+        yellows_vanished = self.kalman_filters_yellow.keys() - yellows_present
 
         for robot_id in yellows_vanished:
             vision_data.yellow_robots.append(VisionRobotData(id=robot_id, x=None, y=None, orientation=None))
 
         blues_present = {robot.id for robot in vision_data.blue_robots}
-        blues_vanished = self.blue_range - blues_present
+        blues_vanished = self.kalman_filters_blue.keys() - blues_present
 
         for robot_id in blues_vanished:
             vision_data.blue_robots.append(VisionRobotData(id=robot_id, x=None, y=None, orientation=None))

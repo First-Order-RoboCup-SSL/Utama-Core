@@ -28,9 +28,6 @@ class KalmanFilter:
     More about the methodology and formulae used can be found at https://kalmanfilter.net/.
 
     Args:
-        id (int): The associated robot's ID, used for associating the filter
-            with the robot. Defaults to 0.
-
         noise_xy_sd (float): A hyper-parameter, used to weigh the filter's
             predictions and the vision data received during the "update" phase.
             Unit is metres.
@@ -46,11 +43,9 @@ class KalmanFilter:
             real-world conditions when live robots are used).
     """
 
-    def __init__(self, id: int = 0, noise_xy_sd: float = 0.01, noise_th_sd_deg: float = 5):
+    def __init__(self, noise_xy_sd: float = 0.01, noise_th_sd_deg: float = 5):
         assert noise_xy_sd > 0, "The standard deviation must be greater than 0"
         assert noise_th_sd_deg > 0, "The standard deviation must be greater than 0"
-
-        self.id = id
 
         # For position
         # s; to be initialised by strategy runner with 1st GameFrame
@@ -206,7 +201,7 @@ class KalmanFilter:
 
         return self.state_th
 
-    def filter_data(self, data: VisionRobotData, last_frame: dict[int, Robot], time_elapsed: float) -> VisionRobotData:
+    def filter_data(self, data: VisionRobotData, last_frame: Robot, time_elapsed: float) -> VisionRobotData:
         """
         Performs one prediction–update cycle of the Kalman filter for the
         associated robot.
@@ -230,8 +225,8 @@ class KalmanFilter:
         """
 
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
-        x_f, y_f = self._step_xy((data.x, data.y), last_frame[self.id], time_elapsed)
-        th_f = self._step_th(data.orientation, last_frame[self.id].orientation)
+        x_f, y_f = self._step_xy((data.x, data.y), last_frame, time_elapsed)
+        th_f = self._step_th(data.orientation, last_frame.orientation)
 
         return VisionRobotData(data.id, x_f, y_f, th_f)
 
