@@ -414,8 +414,7 @@ class StrategyRunner:
             is_pvp=self.opp_strategy is not None,
             rsim_env=self.rsim_env,
         )
-
-        self.position_refiner.last_game_frame = my_current_game_frame
+        
         self.position_refiner.running = True
 
         my_field = Field(self.my_team_is_right, self.field_bounds)
@@ -706,9 +705,6 @@ class StrategyRunner:
         new_game_frame = self.velocity_refiner.refine(game_history, new_game_frame)  # , robot_frame.imu_data)
         new_game_frame = self.robot_info_refiner.refine(new_game_frame, responses)
         # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)
-
-        if new_game_frame:
-            self.position_refiner.last_game_frame = new_game_frame
 
         # Store updated game frame
         if running_opp:
