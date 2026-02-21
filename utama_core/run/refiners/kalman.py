@@ -364,7 +364,7 @@ class KalmanFilterBall:
 
         return tuple(self.state)
 
-    def filter_data(self, data: Ball, last_frame: Ball, time_elapsed: float) -> Ball:
+    def filter_data(self, data: Optional[Ball], last_frame: Ball, time_elapsed: float) -> Ball:
         """
         Performs one prediction–update cycle of the Kalman filter for the ball.
 
@@ -374,7 +374,7 @@ class KalmanFilterBall:
         the predicted state is used directly.
 
         Args:
-            data (Ball): New vision measurement containing the ball's position
+            data (Optional[Ball]): New vision measurement containing the ball's position
                 (x, y, z) in metres. May be None if the ball is not detected.
             last_frame (Ball): The ball's last known state, including position,
                 velocity, and acceleration, used for motion prediction.
