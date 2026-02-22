@@ -17,6 +17,11 @@ from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEn
 
 
 class FastPathPlanner:
+    """A path planner that uses a recursive approach to find a collision-free
+    path from the robot's current position to a target position
+    while avoiding obstacles.
+    """
+
     def __init__(self, env: SSLStandardEnv):
         self._env = env
         self.config = config
@@ -52,28 +57,28 @@ class FastPathPlanner:
         target,
         closest_obstacle,
         obstacles,
-        recursionfactor,
+        recursion_factor,
         multiple,
     ) -> np.array:
         direction = target - robot_pos
 
-        if recursionfactor % 2 == 1:
-            perp_dir = rotate_vector(direction[0], direction[1], math.pi / 2)
+        if recursion_factor % 2 == 1:
+            perp_dir = np.array([-direction[1], direction[0]])
         else:
-            perp_dir = rotate_vector(direction[0], direction[1], math.pi * 3 / 2)
+            perp_dir = np.array([direction[1], -direction[0]])
 
         unitvec = perp_dir / np.linalg.norm(perp_dir)
         obstaclepos = (closest_obstacle[0] + closest_obstacle[1]) / 2
         subgoal = obstaclepos + self.SUBGOAL_DISTANCE * unitvec * multiple
 
         for o in obstacles:
-            if distance_point_to_segment(subgoal, (o[0], o[1])) < self.OBSTACLE_CLEARANCE:
+            if distance_point_to_segment(subgoal, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
                 subgoal = self._find_subgoal(
                     robot_pos,
                     target,
                     closest_obstacle,
                     obstacles,
-                    recursionfactor + 1,
+                    recursion_factor + 1,
                     multiple + 1,
                 )
         return subgoal
@@ -84,48 +89,50 @@ class FastPathPlanner:
         obstacles,
     ):  # returns None if no obstacles, else it returns the closest obstacle.
         closest_obstacle = None
-        tempdistance = distance(segment[0], segment[1])
+        temp_distance = distance(segment[0], segment[1])
         for o in obstacles:
-            # print('hello',o,segment)
             if distance_between_line_segments(o[0], o[1], segment[0], segment[1]) < self.OBSTACLE_CLEARANCE:
-                obstacledistance = distance_between_line_segments(o[0], o[1], segment[0], segment[1])
-                if closest_obstacle is None or obstacledistance < tempdistance:
-                    tempdistance = obstacledistance
+                obstacle_distance = distance_between_line_segments(o[0], o[1], segment[0], segment[1])
+                if closest_obstacle is None or obstacle_distance < temp_distance:
+                    temp_distance = obstacle_distance
                     closest_obstacle = o
 
         return closest_obstacle
 
     def _trajectory_length(self, trajectory):
-        trajectory_legnth = 0
+        """
+        Calculate the total length of a trajectory consisting of multiple segments.
+        """
+        trajectory_length = 0
         for i in trajectory:
-            trajectory_legnth += distance(i[0], i[1])
-        return trajectory_legnth
+            trajectory_length += distance(i[0], i[1])
+        return trajectory_length
 
     def checksegment(
-        self, segment: Tuple, obstacles, recursionlength: int, target
+        self, segment: Tuple, obstacles, recursion_length: int, target
     ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float]:
         """
         If there are obstacles in the segment, divide the segment and return subsegments
         along with the total trajectory length.
         """
 
-        closestobstacle = self.collides(segment, obstacles)
-        if closestobstacle is not None and recursionlength < self.MAXRECURSIONLENGTH:
+        closest_obstacle = self.collides(segment, obstacles)
+        if closest_obstacle is not None and recursion_length < self.MAXRECURSIONLENGTH:
             # compute left and right subgoals explicitly
             subgoal_left = self._find_subgoal(
                 segment[0],
                 segment[1],
-                closestobstacle,
+                closest_obstacle,
                 obstacles,
-                recursionfactor=1,
+                recursion_factor=1,
                 multiple=1,
             )
             subgoal_right = self._find_subgoal(
                 segment[0],
                 segment[1],
-                closestobstacle,
+                closest_obstacle,
                 obstacles,
-                recursionfactor=0,
+                recursion_factor=0,
                 multiple=1,
             )
 
@@ -133,13 +140,13 @@ class FastPathPlanner:
             left_seg1, left_len1 = self.checksegment(
                 (segment[0], subgoal_left),
                 obstacles,
-                recursionlength + 1,
+                recursion_length + 1,
                 target,
             )
             left_seg2, left_len2 = self.checksegment(
                 (subgoal_left, segment[1]),
                 obstacles,
-                recursionlength + 1,
+                recursion_length + 1,
                 target,
             )
             left_segments = left_seg1 + left_seg2
@@ -149,13 +156,13 @@ class FastPathPlanner:
             right_seg1, right_len1 = self.checksegment(
                 (segment[0], subgoal_right),
                 obstacles,
-                recursionlength + 1,
+                recursion_length + 1,
                 target,
             )
             right_seg2, right_len2 = self.checksegment(
                 (subgoal_right, segment[1]),
                 obstacles,
-                recursionlength + 1,
+                recursion_length + 1,
                 target,
             )
             right_segments = right_seg1 + right_seg2
@@ -177,9 +184,10 @@ class FastPathPlanner:
         our_pos = np.array([robot.p.x, robot.p.y])
         target = np.array(target)
         obstacles = self._get_obstacles(game, robot_id, our_pos, target)
-        finaltrajectory = self.checksegment((our_pos, target), obstacles, 0, target)[0]
-        print(finaltrajectory)
-        return finaltrajectory
+        final_trajectory = self.checksegment((our_pos, target), obstacles, 0, target)[0]
+        print(final_trajectory)
+        return final_trajectory
 
 
-# Here finaltrajectory is the final calculated trajectory which is a list consisting of different segements of the trajectory. Each segment is represented using a tuple
+# Here final_trajectory is the final calculated trajectory which is a list
+# consisting of different segments of the trajectory. Each segment is represented using a tuple
