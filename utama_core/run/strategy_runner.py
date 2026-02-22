@@ -88,7 +88,7 @@ class StrategyRunner:
         exp_enemy: int,
         field_bounds: FieldBounds = Field.FULL_FIELD_BOUNDS,
         opp_strategy: Optional[AbstractStrategy] = None,
-        control_scheme: str = "pid",  # This is also the default control scheme used in the motion planning tests
+        control_scheme: str = "fpp",  # This is also the default control scheme used in the motion planning tests
         opp_control_scheme: Optional[str] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         print_real_fps: bool = False,  # Turn this on for RSim
@@ -344,20 +344,24 @@ class StrategyRunner:
 
         elif self.mode == Mode.GRSIM:
             my_robot_controller = GRSimRobotController(
-                is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
+                is_team_yellow=self.my_team_is_yellow,
+                n_friendly=self.exp_friendly,
             )
             if self.opp_strategy:
                 opp_robot_controller = GRSimRobotController(
-                    is_team_yellow=not self.my_team_is_yellow, n_friendly=self.exp_enemy
+                    is_team_yellow=not self.my_team_is_yellow,
+                    n_friendly=self.exp_enemy,
                 )
 
         elif self.mode == Mode.REAL:
             my_robot_controller = RealRobotController(
-                is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
+                is_team_yellow=self.my_team_is_yellow,
+                n_friendly=self.exp_friendly,
             )
             if self.opp_strategy:
                 opp_robot_controller = RealRobotController(
-                    is_team_yellow=not self.my_team_is_yellow, n_friendly=self.exp_enemy
+                    is_team_yellow=not self.my_team_is_yellow,
+                    n_friendly=self.exp_enemy,
                 )
 
         else:

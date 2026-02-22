@@ -29,7 +29,7 @@ class FastPathPlanner:
     def _get_obstacles(self, game: Game, robot_id: int, our_pos, target):
         friendly_obstacles = [robot for robot in game.friendly_robots.values() if robot.id != robot_id]
         robots = friendly_obstacles + list(game.enemy_robots.values())
-        obstaclelist = []
+        obstacle_list = []
         for r in robots:
             robot_pos = np.array([r.p.x, r.p.y])
             if (
@@ -41,10 +41,10 @@ class FastPathPlanner:
                     velocity = np.array([r.v.x, r.v.y])
                     point = np.array([r.p.x, r.p.y]) + velocity * self.PROJECTEDFRAMES / 60
                     obstalcesegment = (robot_pos, point)
-                    obstaclelist.append(obstalcesegment)
+                    obstacle_list.append(obstalcesegment)
                 else:
-                    obstaclelist.append((robot_pos, robot_pos))
-        return obstaclelist
+                    obstacle_list.append((robot_pos, robot_pos))
+        return obstacle_list
 
     def _find_subgoal(
         self,
@@ -87,8 +87,8 @@ class FastPathPlanner:
         tempdistance = distance(segment[0], segment[1])
         for o in obstacles:
             # print('hello',o,segment)
-            if distance_between_line_segments([o[0], o[1]], [segment[0], segment[1]]) < self.OBSTACLE_CLEARANCE:
-                obstacledistance = distance_between_line_segments([o[0], o[1]], [segment[0], segment[1]])
+            if distance_between_line_segments(o[0], o[1], segment[0], segment[1]) < self.OBSTACLE_CLEARANCE:
+                obstacledistance = distance_between_line_segments(o[0], o[1], segment[0], segment[1])
                 if closest_obstacle is None or obstacledistance < tempdistance:
                     tempdistance = obstacledistance
                     closest_obstacle = o
@@ -113,24 +113,50 @@ class FastPathPlanner:
         if closestobstacle is not None and recursionlength < self.MAXRECURSIONLENGTH:
             # compute left and right subgoals explicitly
             subgoal_left = self._find_subgoal(
-                segment[0], segment[1], closestobstacle, obstacles, recursionfactor=1, multiple=1
+                segment[0],
+                segment[1],
+                closestobstacle,
+                obstacles,
+                recursionfactor=1,
+                multiple=1,
             )
             subgoal_right = self._find_subgoal(
-                segment[0], segment[1], closestobstacle, obstacles, recursionfactor=0, multiple=1
+                segment[0],
+                segment[1],
+                closestobstacle,
+                obstacles,
+                recursionfactor=0,
+                multiple=1,
             )
 
             # recursively check subsegments for left side
-            left_seg1, left_len1 = self.checksegment((segment[0], subgoal_left), obstacles, recursionlength + 1, target)
-            left_seg2, left_len2 = self.checksegment((subgoal_left, segment[1]), obstacles, recursionlength + 1, target)
+            left_seg1, left_len1 = self.checksegment(
+                (segment[0], subgoal_left),
+                obstacles,
+                recursionlength + 1,
+                target,
+            )
+            left_seg2, left_len2 = self.checksegment(
+                (subgoal_left, segment[1]),
+                obstacles,
+                recursionlength + 1,
+                target,
+            )
             left_segments = left_seg1 + left_seg2
             left_length = left_len1 + left_len2
 
             # recursively check subsegments for right side
             right_seg1, right_len1 = self.checksegment(
-                (segment[0], subgoal_right), obstacles, recursionlength + 1, target
+                (segment[0], subgoal_right),
+                obstacles,
+                recursionlength + 1,
+                target,
             )
             right_seg2, right_len2 = self.checksegment(
-                (subgoal_right, segment[1]), obstacles, recursionlength + 1, target
+                (subgoal_right, segment[1]),
+                obstacles,
+                recursionlength + 1,
+                target,
             )
             right_segments = right_seg1 + right_seg2
             right_length = right_len1 + right_len2
