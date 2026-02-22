@@ -3,6 +3,7 @@ from typing import List, Tuple
 
 import numpy as np  # type: ignore
 
+from utama_core.config.settings import CONTROL_FREQUENCY, SENDING_DELAY, TIMESTEP
 from utama_core.entities.game import Game
 from utama_core.global_utils.math_utils import (
     distance,
@@ -44,7 +45,7 @@ class FastPathPlanner:
             ):
                 if np.hypot(r.v.x, r.v.y) > 10e-10:
                     velocity = np.array([r.v.x, r.v.y])
-                    point = np.array([r.p.x, r.p.y]) + velocity * self.PROJECTEDFRAMES / 60
+                    point = np.array([r.p.x, r.p.y]) + velocity * self.PROJECTEDFRAMES / CONTROL_FREQUENCY
                     obstalcesegment = (robot_pos, point)
                     obstacle_list.append(obstalcesegment)
                 else:
@@ -67,9 +68,9 @@ class FastPathPlanner:
         else:
             perp_dir = np.array([direction[1], -direction[0]])
 
-        unitvec = perp_dir / np.linalg.norm(perp_dir)
-        obstaclepos = (closest_obstacle[0] + closest_obstacle[1]) / 2
-        subgoal = obstaclepos + self.SUBGOAL_DISTANCE * unitvec * multiple
+        unit_vec = perp_dir / np.linalg.norm(perp_dir)
+        obstacle_pos = (closest_obstacle[0] + closest_obstacle[1]) / 2
+        subgoal = obstacle_pos + self.SUBGOAL_DISTANCE * unit_vec * multiple
 
         for o in obstacles:
             if distance_point_to_segment(subgoal, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
@@ -87,7 +88,10 @@ class FastPathPlanner:
         self,
         segment: Tuple,
         obstacles,
-    ):  # returns None if no obstacles, else it returns the closest obstacle.
+    ):
+        """
+        returns None if no obstacles, else it returns the closest obstacle.
+        """
         closest_obstacle = None
         temp_distance = distance(segment[0], segment[1])
         for o in obstacles:
@@ -108,7 +112,7 @@ class FastPathPlanner:
             trajectory_length += distance(i[0], i[1])
         return trajectory_length
 
-    def checksegment(
+    def check_segment(
         self, segment: Tuple, obstacles, recursion_length: int, target
     ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float]:
         """
@@ -137,13 +141,13 @@ class FastPathPlanner:
             )
 
             # recursively check subsegments for left side
-            left_seg1, left_len1 = self.checksegment(
+            left_seg1, left_len1 = self.check_segment(
                 (segment[0], subgoal_left),
                 obstacles,
                 recursion_length + 1,
                 target,
             )
-            left_seg2, left_len2 = self.checksegment(
+            left_seg2, left_len2 = self.check_segment(
                 (subgoal_left, segment[1]),
                 obstacles,
                 recursion_length + 1,
@@ -153,13 +157,13 @@ class FastPathPlanner:
             left_length = left_len1 + left_len2
 
             # recursively check subsegments for right side
-            right_seg1, right_len1 = self.checksegment(
+            right_seg1, right_len1 = self.check_segment(
                 (segment[0], subgoal_right),
                 obstacles,
                 recursion_length + 1,
                 target,
             )
-            right_seg2, right_len2 = self.checksegment(
+            right_seg2, right_len2 = self.check_segment(
                 (subgoal_right, segment[1]),
                 obstacles,
                 recursion_length + 1,
@@ -180,12 +184,14 @@ class FastPathPlanner:
             return [segment], segment_length
 
     def _path_to(self, game: Game, robot_id: int, target: Tuple[float, float]):
+        """
+        Calculate a collision-free path from the robot's current position to the target position.
+        """
         robot = game.friendly_robots[robot_id]
         our_pos = np.array([robot.p.x, robot.p.y])
         target = np.array(target)
         obstacles = self._get_obstacles(game, robot_id, our_pos, target)
-        final_trajectory = self.checksegment((our_pos, target), obstacles, 0, target)[0]
-        print(final_trajectory)
+        final_trajectory = self.check_segment((our_pos, target), obstacles, 0, target)[0]
         return final_trajectory
 
 
