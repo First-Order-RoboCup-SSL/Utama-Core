@@ -35,4 +35,3 @@ class FastPathPlanningController(MotionController):
 
     def reset(self, robot_id):
         self.pid_oren.reset(robot_id)
-        self.pid_trans.reset(robot_id)
