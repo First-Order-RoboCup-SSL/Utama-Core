@@ -61,7 +61,7 @@ def get_pid_configs(mode: Mode) -> PIDConfigs:
                 max_acceleration=RSIM_PARAMS.MAX_ACCELERATION,
             ),
         )
-    if mode == Mode.GRSIM:
+    if mode in (Mode.GRSIM, Mode.VMAS):
         return PIDConfigs(
             orientation=OrientationPIDConfigs(
                 max_output=GRSIM_PARAMS.MAX_ANGULAR_VEL,

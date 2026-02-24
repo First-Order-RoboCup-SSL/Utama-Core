@@ -206,6 +206,12 @@ renders/
 .vscode
 
 .ruff_cache/
+
+# RL training artifacts
+outputs/
+wandb/
+*.gif
+
 # pixi environments
 .pixi/*
 !.pixi/config.toml

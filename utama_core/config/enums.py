@@ -9,6 +9,7 @@ class Mode(Enum):
     RSIM = "rsim"
     GRSIM = "grsim"
     REAL = "real"
+    VMAS = "vmas"
 
 
 mode_str_to_enum = {m.value: m for m in Mode}

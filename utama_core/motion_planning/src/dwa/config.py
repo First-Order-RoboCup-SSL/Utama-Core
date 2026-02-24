@@ -23,7 +23,7 @@ def get_dwa_config(mode: Mode) -> DynamicWindowConfig:
     """Returns the Dynamic Window configuration."""
     if mode == Mode.RSIM:
         return DynamicWindowConfig(max_speed=RSIM_PARAMS.MAX_VEL, max_acceleration=RSIM_PARAMS.MAX_ACCELERATION)
-    elif mode == Mode.GRSIM:
+    elif mode in (Mode.GRSIM, Mode.VMAS):
         return DynamicWindowConfig(max_speed=GRSIM_PARAMS.MAX_VEL, max_acceleration=GRSIM_PARAMS.MAX_ACCELERATION)
     elif mode == Mode.REAL:
         return DynamicWindowConfig(

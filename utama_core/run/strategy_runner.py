@@ -211,7 +211,7 @@ class StrategyRunner:
         """
         mode = mode_str_to_enum.get(mode_str.lower())
         if mode is None:
-            raise ValueError(f"Unknown mode: {mode_str}. Choose from 'rsim', 'grsim', or 'real'.")
+            raise ValueError(f"Unknown mode: {mode_str}. Choose from 'rsim', 'grsim', 'vmas', or 'real'.")
         return mode
 
     def data_update_listener(self, receiver: VisionReceiver):
@@ -313,6 +313,27 @@ class StrategyRunner:
 
             return None, sim_controller
 
+        elif self.mode == Mode.VMAS:
+            from utama_core.team_controller.src.controllers.sim.vmas_controller import (
+                VmasController,
+            )
+            from utama_core.vmas_simulator.src.ssl.envs import VmasStandardEnv
+
+            n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
+            vmas_env = VmasStandardEnv(
+                n_robots_yellow=n_yellow,
+                n_robots_blue=n_blue,
+                render_mode=None,
+                gaussian_noise=rsim_noise,
+                vanishing=rsim_vanishing,
+            )
+
+            if self.opp_strategy:
+                self.opp_strategy.load_rsim_env(vmas_env)
+            self.my_strategy.load_rsim_env(vmas_env)
+
+            return vmas_env, VmasController(env=vmas_env)
+
         else:
             return None, None
 
@@ -326,7 +347,7 @@ class StrategyRunner:
         ref_buffer = deque(maxlen=1)
         # referee_receiver = RefereeMessageReceiver(ref_buffer, debug=False)
         vision_receiver = VisionReceiver(vision_buffers)
-        if self.mode != Mode.RSIM:
+        if self.mode not in (Mode.RSIM, Mode.VMAS):
             self.start_threads(vision_receiver)  # , referee_receiver)
 
         return vision_buffers, ref_buffer
@@ -395,6 +416,35 @@ class StrategyRunner:
                     is_team_yellow=not self.my_team_is_yellow, n_friendly=self.exp_enemy
                 )
 
+        elif self.mode == Mode.VMAS:
+            from utama_core.team_controller.src.controllers.sim.vmas_robot_controller import (
+                VmasPVPManager,
+                VmasRobotController,
+            )
+
+            pvp_manager = None
+            if self.opp:
+                pvp_manager = VmasPVPManager(self.rsim_env)
+
+            my_robot_controller = VmasRobotController(
+                is_team_yellow=self.my_team_is_yellow,
+                n_friendly=self.exp_friendly,
+                env=self.rsim_env,
+                pvp_manager=pvp_manager,
+            )
+
+            if self.opp:
+                opp_robot_controller = VmasRobotController(
+                    is_team_yellow=not self.my_team_is_yellow,
+                    n_friendly=self.exp_enemy,
+                    env=self.rsim_env,
+                    pvp_manager=pvp_manager,
+                )
+                if self.my_team_is_yellow:
+                    pvp_manager.load_controllers(my_robot_controller, opp_robot_controller)
+                else:
+                    pvp_manager.load_controllers(opp_robot_controller, my_robot_controller)
+
         elif self.mode == Mode.REAL:
             my_robot_controller = RealRobotController(
                 is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
@@ -405,7 +455,7 @@ class StrategyRunner:
                 )
 
         else:
-            raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
+            raise ValueError("mode is invalid. Must be 'rsim', 'grsim', 'vmas', or 'real'")
 
         self.my_strategy.load_robot_controller(my_robot_controller)
         self.my_strategy.load_motion_controller(self.my_motion_controller(self.mode, self.rsim_env))
@@ -675,7 +725,7 @@ class StrategyRunner:
         No return value; updates internal game state and controllers.
         """
         frame_start = time.perf_counter()
-        if self.mode == Mode.RSIM:
+        if self.mode in (Mode.RSIM, Mode.VMAS):
             vision_frames = [self.rsim_env._frame_to_observations()[0]]
         else:
             vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
@@ -693,7 +743,7 @@ class StrategyRunner:
         self.toggle_opp_first = not self.toggle_opp_first
 
         # --- rate limiting ---
-        if self.mode != Mode.RSIM:
+        if self.mode not in (Mode.RSIM, Mode.VMAS):
             processing_time = time.perf_counter() - frame_start
             wait_time = max(0, TIMESTEP - processing_time)
             time.sleep(wait_time)

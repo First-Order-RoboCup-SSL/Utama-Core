@@ -13,7 +13,6 @@ py-trees = ">=2.3.0"
 python = "3.11.*"
 numpy = "==2.0.2"
 pygame = "==2.6.1"
-protobuf = "==3.20.2"
 gymnasium = "==1.0.0"
 pyserial = "==3.5"
 pytest = "==8.3.4"
@@ -53,5 +52,81 @@ replay = "python -m utama_core.replay.replay_player"
 precommit-install = "pre-commit install && pixi run pre-commit install --hook-type pre-commit"
 precommit-uninstall = "pre-commit uninstall"
 
+[feature.proto.dependencies]
+protobuf = "==3.20.2"
+
+[feature.vmas.dependencies]
+python = "3.11.*"
+pytorch = ">=2.0"
+
+[feature.vmas.pypi-dependencies]
+vmas = ">=1.3.0"
+pyglet = "<=1.5.27"
+gym = "*"
+gym-notices = "==0.0.8"
+six = "*"
+protobuf = "==3.20.2"
+
+[feature.vmas.tasks]
+vmas-test = "pytest utama_core/tests/vmas_simulator/ -v"
+
+[feature.training.dependencies]
+python = "3.11.*"
+pytorch = ">=2.0"
+
+[feature.training.pypi-dependencies]
+vmas = ">=1.3.0"
+torchrl = ">=0.5.0"
+benchmarl = ">=1.0.0"
+wandb = "*"
+hydra-core = ">=1.3"
+omegaconf = ">=2.3"
+pyglet = "<=1.5.27"
+gym = "*"
+gym-notices = "==0.0.8"
+six = "*"
+protobuf = "==3.20.2"
+
+[feature.training.tasks]
+train = "python -m utama_core.training.scripts.train"
+evaluate = "python -m utama_core.training.scripts.evaluate"
+training-test = "pytest utama_core/tests/training/ -v"
+clean-training = "rm -rf outputs/ wandb/ *.gif"
+
+[feature.training-gpu.system-requirements]
+cuda = "12.0"
+
+[feature.training-gpu.dependencies]
+python = "3.11.*"
+
+[feature.training-gpu.target.linux-64.dependencies]
+pytorch-gpu = ">=2.0"
+
+[feature.training-gpu.target.osx-arm64.dependencies]
+pytorch = ">=2.0"
+
+[feature.training-gpu.pypi-dependencies]
+vmas = ">=1.3.0"
+torchrl = ">=0.5.0"
+benchmarl = ">=1.0.0"
+wandb = "*"
+hydra-core = ">=1.3"
+omegaconf = ">=2.3"
+pyglet = "<=1.5.27"
+gym = "*"
+gym-notices = "==0.0.8"
+six = "*"
+protobuf = "==3.20.2"
+
+[feature.training-gpu.tasks]
+train = "python -m utama_core.training.scripts.train --device cuda"
+evaluate = "python -m utama_core.training.scripts.evaluate --device cuda"
+training-test = "pytest utama_core/tests/training/ -v"
+clean-training = "rm -rf outputs/ wandb/ *.gif"
+
 [environments]
+default = { features = ["proto"] }
 robosim = { features = ["robosim"], no-default-feature = true }
+vmas = { features = ["vmas"], no-default-feature = false }
+training = { features = ["training"], no-default-feature = false }
+training-gpu = { features = ["training-gpu"], no-default-feature = false, solve-group = "training-gpu" }
