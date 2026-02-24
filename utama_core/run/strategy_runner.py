@@ -23,6 +23,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameHistory
 from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
@@ -106,9 +107,12 @@ class StrategyRunner:
         profiler_name: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
         rsim_vanishing: float = 0,
+        custom_referee=None,
     ):
         self.logger = logging.getLogger(__name__)
 
+        self.custom_referee = custom_referee
+        self._prev_custom_ref_command = None
         self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
@@ -305,7 +309,7 @@ class StrategyRunner:
         vision_buffers = [deque(maxlen=1) for _ in range(MAX_CAMERAS)]
         ref_buffer = deque(maxlen=1)
         vision_receiver = VisionReceiver(vision_buffers)
-        if self.mode != Mode.RSIM:
+        if self.mode != Mode.RSIM and self.custom_referee is None:
             referee_receiver = RefereeMessageReceiver(ref_buffer)
             self.start_threads(vision_receiver, referee_receiver)
 
@@ -625,6 +629,22 @@ class StrategyRunner:
         No return value; updates internal game state and controllers.
         """
         frame_start = time.perf_counter()
+
+        # Push custom referee data into ref_buffer before reading vision frames.
+        if self.custom_referee is not None:
+            ref_data = self.custom_referee.step(self.my_current_game_frame, time.time())
+            self.ref_buffer.append(ref_data)
+            # Teleport ball on STOP transition with a designated position (RSim/grSim only)
+            if (
+                self.sim_controller is not None
+                and ref_data.referee_command == RefereeCommand.STOP
+                and ref_data.designated_position is not None
+                and self._prev_custom_ref_command != RefereeCommand.STOP
+            ):
+                x, y = ref_data.designated_position
+                self.sim_controller.teleport_ball(x, y)
+            self._prev_custom_ref_command = ref_data.referee_command
+
         if self.mode == Mode.RSIM:
             obs = self.rsim_env._frame_to_observations()
             if len(obs) == 4:

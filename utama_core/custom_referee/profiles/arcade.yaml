@@ -1,0 +1,28 @@
+profile_name: "arcade"
+geometry:
+  half_length: 4.5
+  half_width: 3.0
+  half_goal_width: 0.5
+  half_defense_length: 0.5
+  half_defense_width: 1.0
+  center_circle_radius: 0.5
+rules:
+  goal_detection:
+    enabled: true
+    cooldown_seconds: 1.0
+  out_of_bounds:
+    enabled: false
+    free_kick_assigner: "last_touch"
+  defense_area:
+    enabled: false
+    max_defenders: 1
+    attacker_infringement: true
+  keep_out:
+    enabled: false
+    radius_meters: 0.5
+    violation_persistence_frames: 30
+game:
+  half_duration_seconds: 300.0
+  kickoff_team: "yellow"
+  force_start_after_goal: true
+  stop_duration_seconds: 2.0
