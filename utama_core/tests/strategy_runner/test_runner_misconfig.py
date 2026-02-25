@@ -30,17 +30,22 @@ def test_load_mode_invalid(base_runner):
 
 
 def test_assert_exp_robots_valid(base_runner):
-    base_runner._assert_exp_robots(DummyStrategy(), None, 3, 3)  # Should not raise
+    base_runner._assert_exp_robots(3, 3)  # Should not raise
 
 
 def test_assert_exp_robots_too_many_friendly(base_runner):
     with pytest.raises(AssertionError):
-        base_runner._assert_exp_robots(DummyStrategy(), None, 999, 3)
+        base_runner._assert_exp_robots(999, 3)
 
 
 def test_assert_exp_robots_too_few_friendly(base_runner):
     with pytest.raises(AssertionError):
-        base_runner._assert_exp_robots(DummyStrategy(), None, 0, 3)
+        base_runner._assert_exp_robots(0, 3)
+
+
+def test_assert_exp_robots_too_many_enemy(base_runner):
+    with pytest.raises(AssertionError):
+        base_runner._assert_exp_robots(3, 999)
 
 
 def test_assert_exp_goals_fails(base_runner):
