@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from typing import Optional
 
 from utama_core.custom_referee.rules.base_rule import RuleViolation
@@ -36,7 +37,7 @@ class GameStateMachine:
         self.command_timestamp = 0.0
 
         self.stage = initial_stage
-        self.stage_start_time = 0.0
+        self.stage_start_time = time.time()  # initialise to now so timer is correct immediately
         self.stage_duration = half_duration_seconds
 
         self.yellow_team = TeamInfo(
@@ -123,6 +124,19 @@ class GameStateMachine:
         self.command = command
         self.command_counter += 1
         self.command_timestamp = timestamp
+
+        # Advance PRE stages to their active counterpart when play begins.
+        _PRE_TO_ACTIVE = {
+            Stage.NORMAL_FIRST_HALF_PRE: Stage.NORMAL_FIRST_HALF,
+            Stage.NORMAL_SECOND_HALF_PRE: Stage.NORMAL_SECOND_HALF,
+            Stage.EXTRA_FIRST_HALF_PRE: Stage.EXTRA_FIRST_HALF,
+            Stage.EXTRA_SECOND_HALF_PRE: Stage.EXTRA_SECOND_HALF,
+        }
+        if command in (RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START):
+            active = _PRE_TO_ACTIVE.get(self.stage)
+            if active is not None:
+                self.advance_stage(active, timestamp)
+
         logger.info("Referee command manually set to: %s", command.name)
 
     def advance_stage(self, new_stage: Stage, timestamp: float) -> None:

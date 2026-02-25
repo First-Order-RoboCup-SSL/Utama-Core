@@ -91,7 +91,7 @@ class RefereeProfile:
 def load_profile(name_or_path: str) -> RefereeProfile:
     """Load a RefereeProfile from a built-in name or an absolute/relative path.
 
-    Built-in names: "strict_ai", "exhibition", "arcade".
+    Built-in names: "strict_ai", "arcade".
     """
     p = Path(name_or_path)
     if not p.is_absolute():

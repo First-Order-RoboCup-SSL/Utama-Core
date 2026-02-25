@@ -60,6 +60,11 @@ class CustomReferee:
 
         referee = CustomReferee.from_profile_name("strict_ai")
         ref_data = referee.step(game_frame, time.time())
+
+    To also open the browser GUI (http://localhost:8080) when the referee
+    is created, pass ``enable_gui=True``::
+
+        referee = CustomReferee(profile, enable_gui=True, gui_port=8080)
     """
 
     def __init__(
@@ -67,6 +72,8 @@ class CustomReferee:
         profile: RefereeProfile,
         n_robots_yellow: int = 3,
         n_robots_blue: int = 3,
+        enable_gui: bool = False,
+        gui_port: int = 8080,
     ) -> None:
         self._geometry: RefereeGeometry = profile.geometry
         self._rules: List[BaseRule] = _build_active_rules(profile.rules)
@@ -78,6 +85,16 @@ class CustomReferee:
             force_start_after_goal=profile.game.force_start_after_goal,
             stop_duration_seconds=profile.game.stop_duration_seconds,
         )
+        self._gui_server = None
+        if enable_gui:
+            # Lazy import to keep this module free of HTTP/GUI dependencies
+            # when the GUI is not needed.
+            from referee_gui import _build_config_json, _RefereeGUIServer, attach_gui
+
+            self._gui_server = _RefereeGUIServer(self, profile, gui_port, run_tick_loop=False)
+            self._gui_server.start()
+            print(f"Referee GUI  →  http://localhost:{gui_port}")
+            print(f"Profile:        {profile.profile_name}")
 
     @classmethod
     def from_profile_name(
@@ -85,10 +102,18 @@ class CustomReferee:
         name: str,
         n_robots_yellow: int = 3,
         n_robots_blue: int = 3,
+        enable_gui: bool = False,
+        gui_port: int = 8080,
     ) -> "CustomReferee":
         """Convenience constructor: load profile by built-in name or file path."""
         profile = load_profile(name)
-        return cls(profile, n_robots_yellow=n_robots_yellow, n_robots_blue=n_robots_blue)
+        return cls(
+            profile,
+            n_robots_yellow=n_robots_yellow,
+            n_robots_blue=n_robots_blue,
+            enable_gui=enable_gui,
+            gui_port=gui_port,
+        )
 
     # ------------------------------------------------------------------
     # Main loop interface
@@ -112,7 +137,10 @@ class CustomReferee:
             for rule in self._rules:
                 rule.reset()
 
-        return self._state.step(current_time, violation)
+        result = self._state.step(current_time, violation)
+        if self._gui_server is not None:
+            self._gui_server.notify(result, game_frame)
+        return result
 
     def set_command(self, command: RefereeCommand, timestamp: float) -> None:
         """Manual override — for operator use or test scripting."""

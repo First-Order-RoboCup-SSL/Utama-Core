@@ -438,11 +438,6 @@ class TestProfileLoader:
         assert profile.rules.goal_detection.enabled is True
         assert profile.rules.keep_out.radius_meters == 0.5
 
-    def test_exhibition_loads(self):
-        profile = load_profile("exhibition")
-        assert profile.profile_name == "exhibition"
-        assert profile.rules.keep_out.radius_meters == 0.2
-
     def test_arcade_loads(self):
         profile = load_profile("arcade")
         assert profile.profile_name == "arcade"
