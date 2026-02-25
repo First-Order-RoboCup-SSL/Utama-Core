@@ -161,7 +161,7 @@ class RandomMovementStrategy(AbstractStrategy):
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
         """Requires number of friendly robots to match."""
-        return n_runtime_friendly >= self.n_robots
+        return n_runtime_friendly == self.n_robots
 
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True

@@ -52,41 +52,16 @@ class RandomMovementTestManager(AbstractTestManager):
         """Reset field with robots in random starting positions within bounds."""
         (min_x, max_x), (min_y, max_y) = self.scenario.field_bounds
 
-        # Place robots at random positions within bounds
+        # Use a fixed seed for reproducibility across test runs
+        rng = random.Random(42 + self.current_episode_number)
+
         for i in range(self.scenario.n_robots):
-            x = random.uniform(min_x + 0.5, max_x - 0.5)
-            y = random.uniform(min_y + 0.5, max_y - 0.5)
-            sim_controller.teleport_robot(
-                game.my_team_is_yellow,
-                i,
-                x,
-                y,
-                0.0,
-            )
+            x = rng.uniform(min_x + 0.5, max_x - 0.5)
+            y = rng.uniform(min_y + 0.5, max_y - 0.5)
+            sim_controller.teleport_robot(game.my_team_is_yellow, i, x, y, 0.0)
             self.targets_reached_count[i] = 0
 
-        # Teleport remaining robots far away
-        for i in range(self.scenario.n_robots, 6):
-            sim_controller.teleport_robot(
-                game.my_team_is_yellow,
-                i,
-                -10.0,
-                -10.0,
-                0.0,
-            )
-
-        # Remove enemy robots
-        for i in range(6):
-            sim_controller.teleport_robot(
-                not game.my_team_is_yellow,
-                i,
-                -10.0,
-                -10.0,
-                0.0,
-            )
-
-        # Place ball out of the way
-        sim_controller.teleport_ball(-10.0, -10.0)
+        sim_controller.teleport_ball(0.0, 0.0)
 
         self._reset_metrics()
 

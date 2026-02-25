@@ -45,50 +45,13 @@ class MultiRobotTestManager(AbstractTestManager):
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with all robots at their starting positions."""
-        # Teleport friendly robots to starting positions
         for i, (x, y) in enumerate(self.scenario.friendly_positions):
-            if i < MAX_ROBOTS:  # Max MAX_ROBOTS robots per team
-                sim_controller.teleport_robot(
-                    game.my_team_is_yellow,
-                    i,
-                    x,
-                    y,
-                    0.0,
-                )
+            sim_controller.teleport_robot(game.my_team_is_yellow, i, x, y, 0.0)
 
-        # Teleport remaining friendly robots far away
-        for i in range(len(self.scenario.friendly_positions), MAX_ROBOTS):
-            sim_controller.teleport_robot(
-                game.my_team_is_yellow,
-                i,
-                -10.0,
-                -10.0,
-                0.0,
-            )
-
-        # Teleport enemy robots to starting positions
         for i, (x, y) in enumerate(self.scenario.enemy_positions):
-            if i < MAX_ROBOTS:
-                sim_controller.teleport_robot(
-                    not game.my_team_is_yellow,
-                    i,
-                    x,
-                    y,
-                    0.0,
-                )
+            sim_controller.teleport_robot(not game.my_team_is_yellow, i, x, y, 0.0)
 
-        # Teleport remaining enemy robots far away
-        for i in range(len(self.scenario.enemy_positions), MAX_ROBOTS):
-            sim_controller.teleport_robot(
-                not game.my_team_is_yellow,
-                i,
-                -10.0,
-                -10.0,
-                0.0,
-            )
-
-        # Place ball out of the way
-        sim_controller.teleport_ball(-10.0, -10.0)
+        sim_controller.teleport_ball(0.0, 0.0)
 
         self._reset_metrics()
 

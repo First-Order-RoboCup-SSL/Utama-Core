@@ -42,47 +42,16 @@ class CollisionAvoidanceTestManager(AbstractTestManager):
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with robot at start position and obstacles along the path."""
-        # Teleport ALL friendly robots off-field first (to clean up from previous tests)
-        for i in range(MAX_ROBOTS):
-            if i == self.robot_id:
-                # Place the test robot at start position
-                sim_controller.teleport_robot(
-                    game.my_team_is_yellow,
-                    i,
-                    self.scenario.start_position[0],
-                    self.scenario.start_position[1],
-                    0.0,  # Face forward
-                )
-            else:
-                # Move other friendly robots far away
-                sim_controller.teleport_robot(
-                    game.my_team_is_yellow,
-                    i,
-                    -10.0,
-                    -10.0,
-                    0.0,
-                )
+        sim_controller.teleport_robot(
+            game.my_team_is_yellow,
+            self.robot_id,
+            self.scenario.start_position[0],
+            self.scenario.start_position[1],
+            0.0,
+        )
 
-        # Place enemy robots as obstacles
-        for i in range(MAX_ROBOTS):  # Handle all possible enemy robots
-            if i < len(self.scenario.obstacle_positions):
-                x, y = self.scenario.obstacle_positions[i]
-                sim_controller.teleport_robot(
-                    not game.my_team_is_yellow,
-                    i,
-                    x,
-                    y,
-                    0.0,
-                )
-            else:
-                # Move extra enemy robots far away
-                sim_controller.teleport_robot(
-                    not game.my_team_is_yellow,
-                    i,
-                    -10.0,
-                    -10.0,
-                    0.0,
-                )
+        for i, (x, y) in enumerate(self.scenario.obstacle_positions):
+            sim_controller.teleport_robot(not game.my_team_is_yellow, i, x, y, 0.0)
 
         # Place ball at target (for visual reference)
         sim_controller.teleport_ball(
