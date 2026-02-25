@@ -142,39 +142,19 @@ class StrategyRunner:
         self.exp_enemy = exp_enemy
         self.field_bounds = field_bounds
 
-        my_motion_controller = get_control_scheme(control_scheme)
-        opp_motion_controller = (
-            get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
-        )
-
-        strategy.setup_behaviour_tree(is_opp_strat=False)
-        if opp_strategy:
-            opp_strategy.setup_behaviour_tree(is_opp_strat=True)
-
-        self._assert_exp_robots(strategy, opp_strategy, exp_friendly, exp_enemy)
-        self.rsim_env, self.sim_controller = self._load_sim(strategy, opp_strategy, rsim_noise, rsim_vanishing)
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 
         assert_valid_bounding_box(self.field_bounds)
 
-        my_pos_ref, my_vel_ref, my_robot_ref = self._init_refiners(field_bounds, filtering)
-        self.my = SideRuntime(strategy, my_pos_ref, my_vel_ref, my_robot_ref, my_motion_controller)
+        self.my, self.opp = self._setup_sides_data(
+            strategy, opp_strategy, filtering, control_scheme, opp_control_scheme
+        )
 
-        if opp_strategy:
-            opp_pos_ref, opp_vel_ref, opp_robot_ref = self._init_refiners(field_bounds, filtering)
-            self.opp: Optional[SideRuntime] = SideRuntime(
-                opp_strategy,
-                opp_pos_ref,
-                opp_vel_ref,
-                opp_robot_ref,
-                opp_motion_controller,
-            )
-        else:
-            self.opp = None
+        self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
+        self._assert_exp_robots(exp_friendly, exp_enemy)
 
         self._load_robot_controllers()
 
-        # self.referee_refiner = RefereeRefiner()
         self._load_game()
 
         self._assert_exp_goals()
@@ -258,10 +238,57 @@ class StrategyRunner:
         vision_thread.start()
         # referee_thread.start()
 
-    def _load_sim(
+    def _setup_sides_data(
         self,
         my_strategy: AbstractStrategy,
         opp_strategy: Optional[AbstractStrategy],
+        filtering: bool,
+        control_scheme: str,
+        opp_control_scheme: Optional[str],
+    ) -> Tuple[SideRuntime, Optional[SideRuntime]]:
+        """Setup the data structures for both sides (my team and opponent)
+        Args:
+            my_strategy (AbstractStrategy): The strategy for the friendly team.
+            opp_strategy (Optional[AbstractStrategy]): The strategy for the opponent team. If None, opponent side will be None.
+            filtering (bool): Whether to use filtering in the position refiners.
+            control_scheme (str): Name of the motion control scheme to use for the friendly team.
+            opp_control_scheme (Optional[str]): Name of the motion control scheme to use for the opponent team. If not set, uses same as friendly.
+
+        Side effect: Initializes the SideRuntime for both friendly and opponent sides, including their strategies, refiners, and motion controllers.
+
+        Returns:
+            Tuple containing the SideRuntime for the friendly team and the opponent team (or None if no opponent strategy provided).
+        """
+        opp_side = None
+        my_pos_ref, my_vel_ref, my_robot_ref = self._init_refiners(self.field_bounds, filtering=filtering)
+        my_motion_controller = get_control_scheme(control_scheme)
+        my_strategy.setup_behaviour_tree(is_opp_strat=False)
+        my_side = SideRuntime(
+            strategy=my_strategy,
+            position_refiner=my_pos_ref,
+            velocity_refiner=my_vel_ref,
+            robot_info_refiner=my_robot_ref,
+            motion_controller=my_motion_controller,
+        )
+
+        if opp_strategy is not None:
+            opp_pos_ref, opp_vel_ref, opp_robot_ref = self._init_refiners(self.field_bounds, filtering=filtering)
+            opp_motion_controller = (
+                get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
+            )
+            opp_strategy.setup_behaviour_tree(is_opp_strat=True)
+            opp_side = SideRuntime(
+                strategy=opp_strategy,
+                position_refiner=opp_pos_ref,
+                velocity_refiner=opp_vel_ref,
+                robot_info_refiner=opp_robot_ref,
+                motion_controller=opp_motion_controller,
+            )
+
+        return my_side, opp_side
+
+    def _load_sim(
+        self,
         rsim_noise: RsimGaussianNoise,
         rsim_vanishing: float,
     ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
@@ -270,8 +297,6 @@ class StrategyRunner:
         robots is met.
 
         Args:
-            my_strategy (AbstractStrategy): The strategy for the friendly team.
-            opp_strategy (Optional[AbstractStrategy]): The strategy for the opponent team.
             rsim_noise (RsimGaussianNoise, optional): When running in rsim, add Gaussian noise to balls and robots with the
                 given standard deviation. The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
                 Defaults to 0 for each.
@@ -292,9 +317,9 @@ class StrategyRunner:
                 vanishing=rsim_vanishing,
             )
 
-            if opp_strategy:
-                opp_strategy.load_rsim_env(rsim_env)
-            my_strategy.load_rsim_env(rsim_env)
+            if self.opp:
+                self.opp.strategy.load_rsim_env(rsim_env)
+            self.my.strategy.load_rsim_env(rsim_env)
 
             return rsim_env, RSimController(env=rsim_env)
 
@@ -351,8 +376,6 @@ class StrategyRunner:
 
     def _assert_exp_robots(
         self,
-        my_strategy: AbstractStrategy,
-        opp_strategy: Optional[AbstractStrategy],
         exp_friendly: int,
         exp_enemy: int,
     ):
@@ -362,11 +385,11 @@ class StrategyRunner:
         assert exp_friendly >= 1, "Expected number of friendly robots is too low."
         assert exp_enemy >= 0, "Expected number of enemy robots is too low."
 
-        assert my_strategy.assert_exp_robots(
+        assert self.my.strategy.assert_exp_robots(
             exp_friendly, exp_enemy
         ), "Expected number of robots at runtime does not match my strategy."
-        if opp_strategy:
-            assert opp_strategy.assert_exp_robots(
+        if self.opp:
+            assert self.opp.strategy.assert_exp_robots(
                 exp_enemy, exp_friendly
             ), "Expected number of robots at runtime does not match opponent strategy."
 
