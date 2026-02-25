@@ -14,5 +14,5 @@ def test_position_refiner_config():
         field_bounds=FieldBounds(top_left=(0, 3), bottom_right=(4.5, -3)),
     )
 
-    assert runner.my_game.field.half_length == 2.25
-    assert runner.my_game.field.half_width == 3.0
+    assert runner.my.game.field.half_length == 2.25
+    assert runner.my.game.field.half_width == 3.0
