@@ -423,7 +423,7 @@ class StrategyRunner:
             )
 
             pvp_manager = None
-            if self.opp:
+            if self.opp_strategy:
                 pvp_manager = VmasPVPManager(self.rsim_env)
 
             my_robot_controller = VmasRobotController(
@@ -433,7 +433,7 @@ class StrategyRunner:
                 pvp_manager=pvp_manager,
             )
 
-            if self.opp:
+            if self.opp_strategy:
                 opp_robot_controller = VmasRobotController(
                     is_team_yellow=not self.my_team_is_yellow,
                     n_friendly=self.exp_enemy,

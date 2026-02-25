@@ -86,10 +86,14 @@ gym = "*"
 gym-notices = "==0.0.8"
 six = "*"
 protobuf = "==3.20.2"
+imageio = ">=2.34"
+imageio-ffmpeg = ">=0.5"
 
 [feature.training.tasks]
 train = "python -m utama_core.training.scripts.train"
 evaluate = "python -m utama_core.training.scripts.evaluate"
+eval-latest = "python -m utama_core.training.scripts.evaluate --latest --render --output eval.mp4"
+resume = "python -m utama_core.training.scripts.train --resume"
 training-test = "pytest utama_core/tests/training/ -v"
 clean-training = "rm -rf outputs/ wandb/ *.gif"
 
@@ -117,10 +121,14 @@ gym = "*"
 gym-notices = "==0.0.8"
 six = "*"
 protobuf = "==3.20.2"
+imageio = ">=2.34"
+imageio-ffmpeg = ">=0.5"
 
 [feature.training-gpu.tasks]
-train = "python -m utama_core.training.scripts.train --device cuda"
-evaluate = "python -m utama_core.training.scripts.evaluate --device cuda"
+train = "python -m utama_core.training.scripts.train"
+evaluate = "python -m utama_core.training.scripts.evaluate"
+eval-latest = "python -m utama_core.training.scripts.evaluate --latest --render --output eval.mp4"
+resume = "python -m utama_core.training.scripts.train --resume"
 training-test = "pytest utama_core/tests/training/ -v"
 clean-training = "rm -rf outputs/ wandb/ *.gif"
 

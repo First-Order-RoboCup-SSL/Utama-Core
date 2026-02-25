@@ -105,6 +105,7 @@ class SSLScenario(BaseScenario):
             mass=dc.ball_mass,
             color=torch.tensor([1.0, 0.5, 0.0]),
             linear_friction=dc.ball_friction,
+            drag=dc.ball_drag,
         )
         world.add_landmark(self.ball)
 
@@ -118,6 +119,11 @@ class SSLScenario(BaseScenario):
         self.goal_scored_blue = torch.zeros(batch_dim, device=device, dtype=torch.bool)
         self.goal_scored_yellow = torch.zeros(batch_dim, device=device, dtype=torch.bool)
         self.steps = torch.zeros(batch_dim, device=device, dtype=torch.long)
+
+        # --- Kick Cooldown (per agent) ---
+        self.kick_cooldown: dict[str, torch.Tensor] = {}
+        for agent in self.blue_agents + self.yellow_agents:
+            self.kick_cooldown[agent.name] = torch.zeros(batch_dim, device=device, dtype=torch.long)
 
         return world
 
@@ -218,10 +224,14 @@ class SSLScenario(BaseScenario):
             self.goal_scored_blue.zero_()
             self.goal_scored_yellow.zero_()
             self.steps.zero_()
+            for name in self.kick_cooldown:
+                self.kick_cooldown[name].zero_()
         else:
             self.goal_scored_blue[env_index] = False
             self.goal_scored_yellow[env_index] = False
             self.steps[env_index] = 0
+            for name in self.kick_cooldown:
+                self.kick_cooldown[name][env_index] = 0
 
     def _reset_agents(self, agents: list[Agent], formations: list[tuple], env_index: int = None):
         for i, agent in enumerate(agents):
@@ -257,54 +267,114 @@ class SSLScenario(BaseScenario):
                 entity.set_vel(zero2, batch_index=env_index)
 
     def process_action(self, agent: Agent):
-        """Extract kick and dribble from action dims [3:5] and apply forces to ball.
+        """Legacy method — calls both kick and dribble. Prefer calling them separately."""
+        dribble_active = self.compute_dribble_state(agent)
+        kick_triggered = self.process_kick(agent)
+        # Kick overrides dribble: if kick fired, suppress dribble re-lock
+        dribble_active = dribble_active & ~kick_triggered
+        self.process_dribble(agent, dribble_active)
 
-        HolonomicWithRotation consumes action dims [0:3] (force_x, force_y, torque).
-        We consume dims [3] (kick) and [4] (dribble) here.
+    def process_kick(self, agent: Agent) -> torch.Tensor:
+        """Apply kick action: set ball velocity directly with momentum preservation.
+
+        Must be called BEFORE world.step() so the ball is still in range
+        (collision forces haven't pushed it away yet) and so that world.step()
+        applies friction to the kicked ball velocity.
+
+        Physics matched to rSim:
+        - Direct velocity set (not impulse)
+        - Preserves kick_damp_factor of existing ball momentum along kick direction
+        - 10-step cooldown between kicks
+
+        Returns:
+            kick_triggered: (batch_dim,) bool mask of envs where kick fired
         """
         kick_action = agent.action.u[:, 3]  # (batch_dim,)
-        dribble_action = agent.action.u[:, 4]  # (batch_dim,)
 
-        agent_pos = agent.state.pos  # (batch_dim, 2)
-        ball_pos = self.ball.state.pos  # (batch_dim, 2)
+        agent_pos = agent.state.pos
+        ball_pos = self.ball.state.pos
+        dc = self.cfg.dynamics
+        fc = self.cfg.field_config
 
-        dist_to_ball = torch.norm(agent_pos - ball_pos, dim=-1)  # (batch_dim,)
-        in_range = dist_to_ball < self.cfg.dynamics.dribble_dist_threshold
+        dist_to_ball = torch.norm(agent_pos - ball_pos, dim=-1)
+        in_range = dist_to_ball < dc.dribble_dist_threshold
 
-        # --- Kick ---
-        kick_triggered = (kick_action > 0) & in_range
+        cos_rot = torch.cos(agent.state.rot.squeeze(-1))
+        sin_rot = torch.sin(agent.state.rot.squeeze(-1))
+        kick_dir = torch.stack([cos_rot, sin_rot], dim=-1)
+
+        cooldown = self.kick_cooldown[agent.name]
+        kick_ready = cooldown <= 0
+        kick_triggered = (kick_action > 0) & in_range & kick_ready
+
         if kick_triggered.any():
-            # Kick in direction agent is facing
-            cos_rot = torch.cos(agent.state.rot.squeeze(-1))
-            sin_rot = torch.sin(agent.state.rot.squeeze(-1))
-            kick_dir = torch.stack([cos_rot, sin_rot], dim=-1)
+            kick_speed_val = kick_action.clamp(min=0.0, max=dc.kick_speed)
 
-            impulse = kick_dir * self.cfg.dynamics.kick_impulse
-            ball_dv = impulse / self.cfg.dynamics.ball_mass * self.world.dt
-            self.ball.state.vel = self.ball.state.vel + ball_dv * kick_triggered.unsqueeze(-1).float()
+            ball_vel = self.ball.state.vel
+            existing_along_kick = (ball_vel * kick_dir).sum(dim=-1, keepdim=True)
 
-        # --- Dribble ---
-        dribble_active = (dribble_action > 0) & in_range
-        if dribble_active.any():
-            # Attract ball toward agent's front
-            cos_rot = torch.cos(agent.state.rot.squeeze(-1))
-            sin_rot = torch.sin(agent.state.rot.squeeze(-1))
-            front_offset = torch.stack([cos_rot, sin_rot], dim=-1) * (
-                self.cfg.field_config.robot_radius + self.cfg.field_config.ball_radius
+            new_ball_vel = (
+                kick_dir * kick_speed_val.unsqueeze(-1) + kick_dir * existing_along_kick * dc.kick_damp_factor
             )
-            target_pos = agent_pos + front_offset
 
-            attract_dir = target_pos - ball_pos
-            attract_force = attract_dir * self.cfg.dynamics.dribble_force
-            self.ball.state.vel = (
-                self.ball.state.vel + attract_force * dribble_active.unsqueeze(-1).float() * self.world.dt
+            mask = kick_triggered.unsqueeze(-1).float()
+            self.ball.state.vel = self.ball.state.vel * (1 - mask) + new_ball_vel * mask
+
+            # Move ball just outside robot to prevent VMAS collision forces
+            # from adding extra velocity during world.step()
+            separation = kick_dir * (fc.robot_radius + fc.ball_radius + 0.005)
+            kicked_pos = agent_pos + separation
+            self.ball.state.pos = self.ball.state.pos * (1 - mask) + kicked_pos * mask
+
+            cooldown = torch.where(
+                kick_triggered,
+                torch.full_like(cooldown, dc.kick_cooldown_steps),
+                cooldown,
             )
+
+        # Decrement cooldown (uses updated cooldown, not stale local var)
+        self.kick_cooldown[agent.name] = (cooldown - 1).clamp(min=0)
+
+        return kick_triggered
+
+    def compute_dribble_state(self, agent: Agent) -> torch.Tensor:
+        """Check if dribble should be active. Call BEFORE world.step().
+
+        Returns a boolean mask (batch_dim,) indicating dribble eligibility.
+        Must be called before collision forces push the ball away.
+        """
+        dribble_action = agent.action.u[:, 4]
+        dist_to_ball = torch.norm(agent.state.pos - self.ball.state.pos, dim=-1)
+        in_range = dist_to_ball < self.cfg.dynamics.dribble_dist_threshold
+        return (dribble_action > 0) & in_range
+
+    def process_dribble(self, agent: Agent, dribble_active: torch.Tensor):
+        """Position-lock ball to kicker face (matches rSim hinge joint).
+
+        Must be called AFTER world.step() so it overrides collision forces.
+        Uses the pre-computed dribble_active mask from compute_dribble_state().
+        """
+        if not dribble_active.any():
+            return
+
+        fc = self.cfg.field_config
+        cos_rot = torch.cos(agent.state.rot.squeeze(-1))
+        sin_rot = torch.sin(agent.state.rot.squeeze(-1))
+        kick_dir = torch.stack([cos_rot, sin_rot], dim=-1)
+
+        front_offset = kick_dir * (fc.robot_radius + fc.ball_radius)
+        target_pos = agent.state.pos + front_offset
+
+        mask = dribble_active.unsqueeze(-1).float()
+        self.ball.state.pos = self.ball.state.pos * (1 - mask) + target_pos * mask
+        self.ball.state.vel = self.ball.state.vel * (1 - mask) + agent.state.vel * mask
 
     def observation(self, agent: Agent) -> torch.Tensor:
         """Per-agent ego-centric observation vector. Shape: (batch_dim, obs_size).
 
         Contents (all positions relative to agent):
           - Own velocity (2) + angular velocity (1) + rotation (1) = 4
+          - Has ball (1) — 1.0 if ball within dribble threshold, else 0.0
           - Ball relative position (2) + ball velocity (2) = 4
           - Per teammate (n_team - 1): relative position (2)
           - Per opponent (n_opp): relative position (2)
@@ -320,6 +390,11 @@ class SSLScenario(BaseScenario):
         else:
             obs_parts.append(torch.zeros(self.world.batch_dim, 1, device=self.world.device))
         obs_parts.append(agent.state.rot)  # (batch, 1)
+
+        # Has ball (binary: ball within dribble threshold)
+        dist_to_ball = torch.norm(agent.state.pos - self.ball.state.pos, dim=-1, keepdim=True)
+        has_ball = (dist_to_ball < self.cfg.dynamics.dribble_dist_threshold).float()
+        obs_parts.append(has_ball)  # (batch, 1)
 
         # Ball relative
         ball_rel_pos = self.ball.state.pos - agent.state.pos

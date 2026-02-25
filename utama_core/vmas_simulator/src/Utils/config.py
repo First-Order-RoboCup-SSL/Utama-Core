@@ -18,20 +18,28 @@ class SSLFieldConfig:
 
 @dataclass(frozen=True)
 class SSLDynamicsConfig:
-    """Physics parameters for the VMAS simulation."""
+    """Physics parameters for the VMAS simulation, matched to rSim."""
 
     dt: float = 1.0 / 60.0  # Matches TIMESTEP from settings.py
     substeps: int = 5
-    robot_max_speed: float = 2.0  # Matches GRSIM_PARAMS.MAX_VEL
-    robot_max_angular_vel: float = 4.0  # Matches GRSIM_PARAMS.MAX_ANGULAR_VEL
-    robot_mass: float = 2.5
-    ball_mass: float = 0.046
-    ball_friction: float = 0.5
+    robot_max_speed: float = 2.0  # Matches RSIM_PARAMS.MAX_VEL
+    robot_max_angular_vel: float = 4.0  # Matches RSIM_PARAMS.MAX_ANGULAR_VEL
+    robot_mass: float = 2.4  # rSim: 2.2kg chassis + 4x0.05kg wheels
+    ball_mass: float = 0.043  # rSim ball mass
+    ball_friction: float = 0.49  # rSim: mu * g = 0.05 * 9.81
+    ball_drag: float = 0.004  # rSim linear_damping
     robot_friction: float = 0.1
-    kick_impulse: float = 5.0  # Matches GRSIM_PARAMS.KICK_SPD
-    dribble_force: float = 1.0
-    dribble_dist_threshold: float = 0.12
-    collision_force: float = 500.0
+    kick_speed: float = 3.0  # Max ball velocity after kick (m/s)
+    kick_damp_factor: float = 0.2  # rSim: preserve 20% of existing ball momentum on kick
+    kick_cooldown_steps: int = 10  # rSim: 10-iteration cooldown between kicks
+    dribble_dist_threshold: float = 0.12  # robot_radius + ball_radius + margin (VMAS uses sphere robots)
+    collision_force: float = 5.0  # Low penalty stiffness; actual momentum from our push/bounce
+    ball_speed_dead_zone: float = 0.01  # rSim: stop ball below this speed (m/s)
+    ball_restitution: float = 0.5  # rSim bounce coefficient
+    ball_bounce_vel_threshold: float = 0.1  # rSim: minimum speed for bounce
+    robot_max_acceleration: float = 4.0  # Matches RSIM_PARAMS.MAX_ACCELERATION
+    robot_max_angular_acceleration: float = 50.0  # Matches RSIM_PARAMS.MAX_ANGULAR_ACCELERATION
+    ball_push_transfer_coeff: float = 0.8  # Velocity transfer on robot-ball contact (dribbler off)
 
 
 @dataclass(frozen=True)

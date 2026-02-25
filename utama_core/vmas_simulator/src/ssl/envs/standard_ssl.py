@@ -96,6 +96,14 @@ class VmasStandardEnv(SSLVmasBaseEnv):
         self.latest_observation = (-1, None)
         return super().reset(seed=seed, options=options)
 
+    def teleport_robot(self, *args, **kwargs):
+        super().teleport_robot(*args, **kwargs)
+        self.latest_observation = (-1, None)
+
+    def teleport_ball(self, *args, **kwargs):
+        super().teleport_ball(*args, **kwargs)
+        self.latest_observation = (-1, None)
+
     def step(self, action):
         self.steps += 1
         commands = self._get_commands(action)
@@ -187,7 +195,7 @@ class VmasStandardEnv(SSLVmasBaseEnv):
             v_y = actions["team_blue"][i][1]
             v_theta = actions["team_blue"][i][2]
             dribbler = actions["team_blue"][i][4] > 0
-            kick_v_x = self.field.goal_depth if actions["team_blue"][i][3] > 0 else 0.0  # placeholder
+            kick_v_x = self.vmas.scenario_config.dynamics.kick_speed if actions["team_blue"][i][3] > 0 else 0.0
 
             cmd = Robot(
                 yellow=False,
@@ -205,7 +213,7 @@ class VmasStandardEnv(SSLVmasBaseEnv):
             v_y = actions["team_yellow"][i][1]
             v_theta = actions["team_yellow"][i][2]
             dribbler = actions["team_yellow"][i][4] > 0
-            kick_v_x = self.field.goal_depth if actions["team_yellow"][i][3] > 0 else 0.0
+            kick_v_x = self.vmas.scenario_config.dynamics.kick_speed if actions["team_yellow"][i][3] > 0 else 0.0
 
             cmd = Robot(
                 yellow=True,

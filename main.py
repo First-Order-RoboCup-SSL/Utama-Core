@@ -3,6 +3,7 @@ from utama_core.replay import ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import StrategyRunner
 from utama_core.strategy.examples import (
+    D,
     DefenceStrategy,
     GoToBallExampleStrategy,
     PointCycleStrategy,
@@ -21,7 +22,7 @@ def main():
         strategy=PointCycleStrategy(n_robots=2, field_bounds=custom_bounds, endpoint_tolerance=0.1, seed=42),
         my_team_is_yellow=True,
         my_team_is_right=True,
-        mode="vmas",
+        mode="rsim",
         exp_friendly=2,
         exp_enemy=0,
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),

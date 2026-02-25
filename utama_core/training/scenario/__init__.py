@@ -6,6 +6,12 @@ from utama_core.training.scenario.passing_config import (
     PassingRewardConfig,
     PassingScenarioConfig,
 )
+from utama_core.training.scenario.passing_rewards import (
+    compute_passing_reward,
+    deception_penalty,
+    displacement_error,
+    envy_free_bonus,
+)
 from utama_core.training.scenario.passing_scenario import PassingScenario
 
 __all__ = [
@@ -14,4 +20,8 @@ __all__ = [
     "PassingRewardConfig",
     "PassingScenarioConfig",
     "PassingScenario",
+    "compute_passing_reward",
+    "envy_free_bonus",
+    "deception_penalty",
+    "displacement_error",
 ]
