@@ -87,6 +87,9 @@ class PositionRefiner(BaseRefiner):
             for y_rbt_id, vision_y_rbt in vision_yellow.items():
                 if y_rbt_id not in self.kalman_filters_yellow:
                     self.kalman_filters_yellow[y_rbt_id] = KalmanFilter(id=y_rbt_id)
+                    if y_rbt_id not in yellow_rbt_last_frame:
+                        filtered_yellow_robots.append(vision_y_rbt)
+                        continue
 
                 filtered_robot = self.kalman_filters_yellow[y_rbt_id].filter_data(
                     vision_y_rbt,  # new measurement
@@ -100,6 +103,9 @@ class PositionRefiner(BaseRefiner):
             for b_rbt_id, vision_b_rbt in vision_blue.items():
                 if b_rbt_id not in self.kalman_filters_blue:
                     self.kalman_filters_blue[b_rbt_id] = KalmanFilter(id=b_rbt_id)
+                    if b_rbt_id not in blue_rbt_last_frame:
+                        filtered_blue_robots.append(vision_b_rbt)
+                        continue
 
                 filtered_robot = self.kalman_filters_blue[b_rbt_id].filter_data(
                     vision_b_rbt,  # new measurement
