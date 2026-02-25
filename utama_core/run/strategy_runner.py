@@ -150,6 +150,8 @@ class StrategyRunner:
             strategy, opp_strategy, filtering, control_scheme, opp_control_scheme
         )
 
+        ### functions below rely on self.my and self.opp ###
+
         self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
         self._assert_exp_robots(exp_friendly, exp_enemy)
 
@@ -159,7 +161,7 @@ class StrategyRunner:
 
         self._assert_exp_goals()
 
-        self.toggle_opp_first = False  # alternate the order of opp and friendly in run
+        self.toggle_opp_first = False  # used to alternate the order of opp and friendly in run
 
         # Replay Writer
         self.replay_writer = (
