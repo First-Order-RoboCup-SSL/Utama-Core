@@ -5,6 +5,7 @@ import threading
 import time
 import warnings
 from collections import deque
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 from rich.live import Live
@@ -27,7 +28,7 @@ from utama_core.data_processing.refiners import (
 )
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.raw_vision import RawVisionData
-from utama_core.entities.game import Game, GameHistory
+from utama_core.entities.game import Game, GameFrame, GameHistory
 from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
@@ -35,6 +36,7 @@ from utama_core.global_utils.mapping_utils import (
 )
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
+from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
@@ -62,6 +64,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)  # If this is within the class, or define it globally in the module
 logging.captureWarnings(True)
+
+
+@dataclass(slots=True)
+class SideRuntime:
+    """Encapsulates all per-side (my team / opponent) runtime state.
+
+    Args:
+        strategy (AbstractStrategy): The strategy for this side.
+        position_refiner (PositionRefiner): Position refiner for this side.
+        velocity_refiner (VelocityRefiner): Velocity refiner for this side.
+        robot_info_refiner (RobotInfoRefiner): Robot info refiner for this side.
+        motion_controller (type[MotionController]): Motion controller factory for this side.
+    """
+
+    strategy: AbstractStrategy
+    position_refiner: PositionRefiner
+    velocity_refiner: VelocityRefiner
+    robot_info_refiner: RobotInfoRefiner
+    motion_controller: type[MotionController]
+
+    game: Optional[Game] = field(init=False, default=None)
+    game_history: Optional[GameHistory] = field(init=False, default=None)
+    current_game_frame: Optional[GameFrame] = field(init=False, default=None)
 
 
 class StrategyRunner:
@@ -110,64 +135,33 @@ class StrategyRunner:
     ):
         self.logger = logging.getLogger(__name__)
 
-        self.my_strategy = strategy
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
         self.mode: Mode = self._load_mode(mode)
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
         self.field_bounds = field_bounds
-        self.opp_strategy = opp_strategy
 
-        self.my_motion_controller = get_control_scheme(control_scheme)
-        if opp_control_scheme is not None:
-            self.opp_motion_controller = get_control_scheme(opp_control_scheme)
-        else:
-            self.opp_motion_controller = self.my_motion_controller
-
-        self.my_strategy.setup_behaviour_tree(is_opp_strat=False)
-        if self.opp_strategy:
-            self.opp_strategy.setup_behaviour_tree(is_opp_strat=True)
-
-        self._assert_exp_robots()
-        self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
-        self._load_robot_controllers()
 
         assert_valid_bounding_box(self.field_bounds)
 
-        (
-            self.my_position_refiner,
-            self.my_velocity_refiner,
-            self.my_robot_info_refiner,
-        ) = self._init_refiners(
-            field_bounds,
-            filtering,
+        self.my, self.opp = self._setup_sides_data(
+            strategy, opp_strategy, filtering, control_scheme, opp_control_scheme
         )
 
-        if self.opp_strategy:
-            (
-                self.opp_position_refiner,
-                self.opp_velocity_refiner,
-                self.opp_robot_info_refiner,
-            ) = self._init_refiners(
-                field_bounds,
-                filtering,
-            )
+        ### functions below rely on self.my and self.opp ###
 
-        # self.referee_refiner = RefereeRefiner()
-        (
-            self.my_game_history,
-            self.my_current_game_frame,
-            self.my_game,
-            self.opp_game_history,
-            self.opp_current_game_frame,
-            self.opp_game,
-        ) = self._load_game()
+        self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
+        self._assert_exp_robots(exp_friendly, exp_enemy)
+
+        self._load_robot_controllers()
+
+        self._load_game()
 
         self._assert_exp_goals()
 
-        self.toggle_opp_first = False  # alternate the order of opp and friendly in run
+        self.toggle_opp_first = False  # used to alternate the order of opp and friendly in run
 
         # Replay Writer
         self.replay_writer = (
@@ -246,8 +240,59 @@ class StrategyRunner:
         vision_thread.start()
         # referee_thread.start()
 
+    def _setup_sides_data(
+        self,
+        my_strategy: AbstractStrategy,
+        opp_strategy: Optional[AbstractStrategy],
+        filtering: bool,
+        control_scheme: str,
+        opp_control_scheme: Optional[str],
+    ) -> Tuple[SideRuntime, Optional[SideRuntime]]:
+        """Setup the data structures for both sides (my team and opponent)
+        Args:
+            my_strategy (AbstractStrategy): The strategy for the friendly team.
+            opp_strategy (Optional[AbstractStrategy]): The strategy for the opponent team. If None, opponent side will be None.
+            filtering (bool): Whether to use filtering in the position refiners.
+            control_scheme (str): Name of the motion control scheme to use for the friendly team.
+            opp_control_scheme (Optional[str]): Name of the motion control scheme to use for the opponent team. If not set, uses same as friendly.
+
+        Side effect: Initializes the SideRuntime for both friendly and opponent sides, including their strategies, refiners, and motion controllers.
+
+        Returns:
+            Tuple containing the SideRuntime for the friendly team and the opponent team (or None if no opponent strategy provided).
+        """
+        opp_side = None
+        my_pos_ref, my_vel_ref, my_robot_ref = self._init_refiners(self.field_bounds, filtering=filtering)
+        my_motion_controller = get_control_scheme(control_scheme)
+        my_strategy.setup_behaviour_tree(is_opp_strat=False)
+        my_side = SideRuntime(
+            strategy=my_strategy,
+            position_refiner=my_pos_ref,
+            velocity_refiner=my_vel_ref,
+            robot_info_refiner=my_robot_ref,
+            motion_controller=my_motion_controller,
+        )
+
+        if opp_strategy is not None:
+            opp_pos_ref, opp_vel_ref, opp_robot_ref = self._init_refiners(self.field_bounds, filtering=filtering)
+            opp_motion_controller = (
+                get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
+            )
+            opp_strategy.setup_behaviour_tree(is_opp_strat=True)
+            opp_side = SideRuntime(
+                strategy=opp_strategy,
+                position_refiner=opp_pos_ref,
+                velocity_refiner=opp_vel_ref,
+                robot_info_refiner=opp_robot_ref,
+                motion_controller=opp_motion_controller,
+            )
+
+        return my_side, opp_side
+
     def _load_sim(
-        self, rsim_noise: RsimGaussianNoise, rsim_vanishing: float
+        self,
+        rsim_noise: RsimGaussianNoise,
+        rsim_vanishing: float,
     ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
         """Mode RSIM: Loads the RSim environment with the expected number of robots and corresponding sim controller.
         Mode GRSIM: Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of
@@ -274,9 +319,9 @@ class StrategyRunner:
                 vanishing=rsim_vanishing,
             )
 
-            if self.opp_strategy:
-                self.opp_strategy.load_rsim_env(rsim_env)
-            self.my_strategy.load_rsim_env(rsim_env)
+            if self.opp:
+                self.opp.strategy.load_rsim_env(rsim_env)
+            self.my.strategy.load_rsim_env(rsim_env)
 
             return rsim_env, RSimController(env=rsim_env)
 
@@ -331,31 +376,35 @@ class StrategyRunner:
 
         return vision_buffers, ref_buffer
 
-    def _assert_exp_robots(self):
+    def _assert_exp_robots(
+        self,
+        exp_friendly: int,
+        exp_enemy: int,
+    ):
         """Assert the expected number of robots."""
-        assert self.exp_friendly <= MAX_ROBOTS, "Expected number of friendly robots is too high."
-        assert self.exp_enemy <= MAX_ROBOTS, "Expected number of enemy robots is too high."
-        assert self.exp_friendly >= 1, "Expected number of friendly robots is too low."
-        assert self.exp_enemy >= 0, "Expected number of enemy robots is too low."
+        assert exp_friendly <= MAX_ROBOTS, "Expected number of friendly robots is too high."
+        assert exp_enemy <= MAX_ROBOTS, "Expected number of enemy robots is too high."
+        assert exp_friendly >= 1, "Expected number of friendly robots is too low."
+        assert exp_enemy >= 0, "Expected number of enemy robots is too low."
 
-        assert self.my_strategy.assert_exp_robots(
-            self.exp_friendly, self.exp_enemy
+        assert self.my.strategy.assert_exp_robots(
+            exp_friendly, exp_enemy
         ), "Expected number of robots at runtime does not match my strategy."
-        if self.opp_strategy:
-            assert self.opp_strategy.assert_exp_robots(
-                self.exp_enemy, self.exp_friendly
+        if self.opp:
+            assert self.opp.strategy.assert_exp_robots(
+                exp_enemy, exp_friendly
             ), "Expected number of robots at runtime does not match opponent strategy."
 
     def _assert_exp_goals(self):
         """Assert the expected number of goals."""
-        assert self.my_strategy.assert_exp_goals(
-            self.my_game.field.includes_my_goal_line,
-            self.my_game.field.includes_opp_goal_line,
+        assert self.my.strategy.assert_exp_goals(
+            self.my.game.field.includes_my_goal_line,
+            self.my.game.field.includes_opp_goal_line,
         ), "Field does not match expected goals for my strategy."
-        if self.opp_strategy:
-            assert self.opp_strategy.assert_exp_goals(
-                self.opp_game.field.includes_my_goal_line,
-                self.opp_game.field.includes_opp_goal_line,
+        if self.opp:
+            assert self.opp.strategy.assert_exp_goals(
+                self.opp.game.field.includes_my_goal_line,
+                self.opp.game.field.includes_opp_goal_line,
             ), "Field does not match expected goals for opponent strategy."
 
     def _load_robot_controllers(self):
@@ -364,7 +413,7 @@ class StrategyRunner:
         """
         if self.mode == Mode.RSIM:
             pvp_manager = None
-            if self.opp_strategy:
+            if self.opp:
                 pvp_manager = RSimPVPManager(self.rsim_env)
 
             my_robot_controller = RSimRobotController(
@@ -374,7 +423,7 @@ class StrategyRunner:
                 pvp_manager=pvp_manager,
             )
 
-            if self.opp_strategy:
+            if self.opp:
                 opp_robot_controller = RSimRobotController(
                     is_team_yellow=not self.my_team_is_yellow,
                     n_friendly=self.exp_enemy,
@@ -390,7 +439,7 @@ class StrategyRunner:
             my_robot_controller = GRSimRobotController(
                 is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
             )
-            if self.opp_strategy:
+            if self.opp:
                 opp_robot_controller = GRSimRobotController(
                     is_team_yellow=not self.my_team_is_yellow, n_friendly=self.exp_enemy
                 )
@@ -399,7 +448,7 @@ class StrategyRunner:
             my_robot_controller = RealRobotController(
                 is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
             )
-            if self.opp_strategy:
+            if self.opp:
                 opp_robot_controller = RealRobotController(
                     is_team_yellow=not self.my_team_is_yellow, n_friendly=self.exp_enemy
                 )
@@ -407,11 +456,11 @@ class StrategyRunner:
         else:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
-        self.my_strategy.load_robot_controller(my_robot_controller)
-        self.my_strategy.load_motion_controller(self.my_motion_controller(self.mode, self.rsim_env))
-        if self.opp_strategy:
-            self.opp_strategy.load_robot_controller(opp_robot_controller)
-            self.opp_strategy.load_motion_controller(self.opp_motion_controller(self.mode, self.rsim_env))
+        self.my.strategy.load_robot_controller(my_robot_controller)
+        self.my.strategy.load_motion_controller(self.my.motion_controller(self.mode, self.rsim_env))
+        if self.opp:
+            self.opp.strategy.load_robot_controller(opp_robot_controller)
+            self.opp.strategy.load_motion_controller(self.opp.motion_controller(self.mode, self.rsim_env))
 
     def _init_refiners(
         self,
@@ -439,7 +488,7 @@ class StrategyRunner:
         """
         Load the game state for both friendly and opponent strategies after waiting for valid game data with GameGater.
 
-        Side effect: Loads games for both friendly and opponent strategies.
+        Side effect: Populates game, game_history and current_game_frame on self.my (and self.opp if present).
         """
         my_current_game_frame, opp_current_game_frame = GameGater.wait_until_game_valid(
             self.my_team_is_yellow,
@@ -447,38 +496,29 @@ class StrategyRunner:
             self.exp_friendly,
             self.exp_enemy,
             self.vision_buffers,
-            self.my_position_refiner,
-            is_pvp=self.opp_strategy is not None,
+            self.my.position_refiner,
+            is_pvp=self.opp is not None,
             rsim_env=self.rsim_env,
         )
 
-        self.my_position_refiner.start_filtering()
-        if self.opp_strategy:
-            self.opp_position_refiner.start_filtering()
+        self.my.position_refiner.start_filtering()
+        if self.opp:
+            self.opp.position_refiner.start_filtering()
 
         my_field = Field(self.my_team_is_right, self.field_bounds)
-        my_game_history = GameHistory(MAX_GAME_HISTORY)
-        my_game = Game(my_game_history, my_current_game_frame, field=my_field)
+        self.my.game_history = GameHistory(MAX_GAME_HISTORY)
+        self.my.game = Game(self.my.game_history, my_current_game_frame, field=my_field)
+        self.my.current_game_frame = my_current_game_frame
 
-        if self.opp_strategy:
+        if self.opp:
             opp_field = Field(not self.my_team_is_right, self.field_bounds)
-            opp_game_history = GameHistory(MAX_GAME_HISTORY)
-            opp_game = Game(opp_game_history, opp_current_game_frame, field=opp_field)
-        else:
-            opp_game_history, opp_game = None, None
+            self.opp.game_history = GameHistory(MAX_GAME_HISTORY)
+            self.opp.game = Game(self.opp.game_history, opp_current_game_frame, field=opp_field)
+            self.opp.current_game_frame = opp_current_game_frame
 
-        self.my_strategy.load_game(my_game)
-        if self.opp_strategy:
-            self.opp_strategy.load_game(opp_game)
-
-        return (
-            my_game_history,
-            my_current_game_frame,
-            my_game,
-            opp_game_history,
-            opp_current_game_frame,
-            opp_game,
-        )
+        self.my.strategy.load_game(self.my.game)
+        if self.opp:
+            self.opp.strategy.load_game(self.opp.game)
 
     # Reset the game state and robot info in buffer
     def _reset_game(self):
@@ -487,19 +527,12 @@ class StrategyRunner:
         Calls into the same loading logic used at construction to refresh the
         current game and history objects (useful between episodes or after resets).
         """
-        _ = self.my_strategy.robot_controller.get_robots_responses()
+        _ = self.my.strategy.robot_controller.get_robots_responses()
 
-        self.my_position_refiner.reset()
-        if self.opp_strategy:
-            self.opp_position_refiner.reset()
-        (
-            self.my_game_history,
-            self.my_current_game_frame,
-            self.my_game,
-            self.opp_game_history,
-            self.opp_current_game_frame,
-            self.opp_game,
-        ) = self._load_game()
+        self.my.position_refiner.reset()
+        if self.opp:
+            self.opp.position_refiner.reset()
+        self._load_game()
 
     def _reset_robots(self):
         """Send zero-velocity commands to all robots to stop them.
@@ -507,14 +540,14 @@ class StrategyRunner:
         Ensures both friendly and opponent robots (if present) receive
         zeroed commands and that those commands are sent immediately.
         """
-        for i in self.my_current_game_frame.friendly_robots.keys():
-            self.my_strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
-        self.my_strategy.robot_controller.send_robot_commands()
+        for i in self.my.current_game_frame.friendly_robots.keys():
+            self.my.strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
+        self.my.strategy.robot_controller.send_robot_commands()
 
-        if self.opp_strategy and self.opp_current_game_frame:
-            for i in self.opp_current_game_frame.friendly_robots.keys():
-                self.opp_strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
-            self.opp_strategy.robot_controller.send_robot_commands()
+        if self.opp and self.opp.current_game_frame:
+            for i in self.opp.current_game_frame.friendly_robots.keys():
+                self.opp.strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
+            self.opp.strategy.robot_controller.send_robot_commands()
 
     def _stop_robots(self, stop_command_mult: int):
         """
@@ -523,19 +556,19 @@ class StrategyRunner:
             stop_command_mult (int): Number of times to send the stop command.
         """
         my_stop_commands = {
-            robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.my_game.friendly_robots.keys()
+            robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.my.game.friendly_robots.keys()
         }
-        if self.opp_game:
+        if self.opp and self.opp.game:
             opp_stop_commands = {
-                robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.opp_game.friendly_robots.keys()
+                robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.opp.game.friendly_robots.keys()
             }
 
         for _ in range(stop_command_mult):
-            self.my_strategy.robot_controller.add_robot_commands(my_stop_commands)
-            self.my_strategy.robot_controller.send_robot_commands()
-            if self.opp_strategy and self.opp_game:
-                self.opp_strategy.robot_controller.add_robot_commands(opp_stop_commands)
-                self.opp_strategy.robot_controller.send_robot_commands()
+            self.my.strategy.robot_controller.add_robot_commands(my_stop_commands)
+            self.my.strategy.robot_controller.send_robot_commands()
+            if self.opp and self.opp.game:
+                self.opp.strategy.robot_controller.add_robot_commands(opp_stop_commands)
+                self.opp.strategy.robot_controller.send_robot_commands()
 
     def close(self, stop_command_mult: int = 20):
         """
@@ -583,14 +616,14 @@ class StrategyRunner:
             warnings.warn("Running test in real, defaulting to 1 episode.")
             n_episodes = 1
 
-        test_manager.load_strategies(self.my_strategy, self.opp_strategy)
+        test_manager.load_strategies(self.my.strategy, self.opp.strategy if self.opp else None)
 
         try:
             for i in range(n_episodes):
                 test_manager.update_episode_n(i)
 
                 if self.sim_controller:
-                    test_manager.reset_field(self.sim_controller, self.my_game)
+                    test_manager.reset_field(self.sim_controller, self.my.game)
                     time.sleep(0.1)
 
                 self._reset_game()
@@ -619,7 +652,7 @@ class StrategyRunner:
                         else:
                             raise
 
-                    status = test_manager.eval_status(self.my_game)
+                    status = test_manager.eval_status(self.my.game)
 
                     if status == TestingStatus.FAILURE:
                         passed = False
@@ -683,12 +716,12 @@ class StrategyRunner:
 
         # alternate between opp and friendly playing
         if self.toggle_opp_first:
-            if self.opp_strategy:
+            if self.opp:
                 self._step_game(vision_frames, True)
             self._step_game(vision_frames, False)
         else:
             self._step_game(vision_frames, False)
-            if self.opp_strategy:
+            if self.opp:
                 self._step_game(vision_frames, True)
         self.toggle_opp_first = not self.toggle_opp_first
 
@@ -727,42 +760,23 @@ class StrategyRunner:
             vision_frames (List[RawVisionData]): The vision frames.
             running_opp (bool): Whether to run the opponent strategy.
         """
-        # Select which side to step
-        if running_opp:
-            strategy = self.opp_strategy
-            current_game_frame = self.opp_current_game_frame
-            game_history = self.opp_game_history
-            game = self.opp_game
-            position_refiner = self.opp_position_refiner
-            velocity_refiner = self.opp_velocity_refiner
-            robot_info_refiner = self.opp_robot_info_refiner
-        else:
-            strategy = self.my_strategy
-            current_game_frame = self.my_current_game_frame
-            game_history = self.my_game_history
-            game = self.my_game
-            position_refiner = self.my_position_refiner
-            velocity_refiner = self.my_velocity_refiner
-            robot_info_refiner = self.my_robot_info_refiner
+        side = self.opp if running_opp else self.my
 
         # Pull responses from robot controller
-        responses = strategy.robot_controller.get_robots_responses()
+        responses = side.strategy.robot_controller.get_robots_responses()
 
         # Update game frame with refined information
-        new_game_frame = position_refiner.refine(current_game_frame, vision_frames)
-        new_game_frame = velocity_refiner.refine(game_history, new_game_frame)  # , robot_frame.imu_data)
-        new_game_frame = robot_info_refiner.refine(new_game_frame, responses)
+        new_game_frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
+        new_game_frame = side.velocity_refiner.refine(side.game_history, new_game_frame)  # , robot_frame.imu_data)
+        new_game_frame = side.robot_info_refiner.refine(new_game_frame, responses)
         # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)
 
         # Store updated game frame
-        if running_opp:
-            self.opp_current_game_frame = new_game_frame
-        else:
-            self.my_current_game_frame = new_game_frame
+        side.current_game_frame = new_game_frame
 
         # write to replay
         if self.replay_writer and (running_opp != self.replay_writer.replay_configs.is_my_perspective):
             self.replay_writer.write_frame(new_game_frame)
 
-        game.add_game_frame(new_game_frame)
-        strategy.step()
+        side.game.add_game_frame(new_game_frame)
+        side.strategy.step()
