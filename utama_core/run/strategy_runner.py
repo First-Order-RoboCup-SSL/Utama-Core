@@ -111,7 +111,7 @@ class StrategyRunner:
             Defaults to 0 for each.
         rsim_vanishing (float, optional): When running in rsim, cause robots and ball to vanish with the given probability.
             Defaults to 0.
-        filtering (bool, optional): Turn on Kalman filtering. Defaults to true.
+        filtering (bool, optional): Turn on Kalman filtering. Defaults to false.
     """
 
     def __init__(
