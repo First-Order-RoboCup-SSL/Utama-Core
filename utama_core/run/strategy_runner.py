@@ -187,6 +187,7 @@ class StrategyRunner:
 
     def _handle_sigint(self, sig, frame):
         self._stop_event.set()
+        signal.default_int_handler(sig, frame)
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
