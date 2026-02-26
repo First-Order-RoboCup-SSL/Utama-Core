@@ -1,9 +1,13 @@
 """VMAS scenario for ASPAC SSL passing drills.
 
-Action space: 5D [vx, vy, omega (continuous), kick (binary impulse), dribble (binary on/off)]
-- Dims 0-2: consumed by VelocityHolonomic dynamics (sets agent vel directly)
+Action space: 6D [delta_x, delta_y, target_oren, kick, dribble, turn_on_spot]
+- Dims 0-2: position-based targets (relative offset in meters + absolute orientation)
+           converted to velocities via batched PD controller in process_action()
 - Dim 3: kick — thresholded > 0, applies one-shot impulse to ball
 - Dim 4: dribble — thresholded > 0, attracts ball toward agent front
+- Dim 5: turn_on_spot — thresholded > 0, pivot-turn around ball (assumes dribbling)
+
+Action priority: kick > turn_on_spot > move
 
 Supports 2v0, 2v1, 2v2 configurations with ASPAC reward hooks:
 - Delta-based dense shaping (standing still = 0 reward)
@@ -68,7 +72,15 @@ class PassingScenario(BaseScenario):
                     max_speed=dc.robot_max_speed,
                     max_angular_vel=dc.robot_max_angular_vel,
                 ),
-                action_size=5,
+                action_size=6,
+                u_multiplier=[
+                    dc.action_delta_range,  # delta_x (meters)
+                    dc.action_delta_range,  # delta_y (meters)
+                    math.pi,  # target_oren (radians)
+                    1.0,  # kick trigger
+                    1.0,  # dribble trigger
+                    1.0,  # turn_on_spot trigger
+                ],
                 drag=0,
             )
             world.add_agent(agent)
@@ -90,7 +102,15 @@ class PassingScenario(BaseScenario):
                     max_speed=dc.robot_max_speed,
                     max_angular_vel=dc.robot_max_angular_vel,
                 ),
-                action_size=5,
+                action_size=6,
+                u_multiplier=[
+                    dc.action_delta_range,  # delta_x (meters)
+                    dc.action_delta_range,  # delta_y (meters)
+                    math.pi,  # target_oren (radians)
+                    1.0,  # kick trigger
+                    1.0,  # dribble trigger
+                    1.0,  # turn_on_spot trigger
+                ],
                 drag=0,
             )
             world.add_agent(agent)
@@ -119,10 +139,12 @@ class PassingScenario(BaseScenario):
         self.pass_count = torch.zeros(batch_dim, device=device, dtype=torch.long)
         self.last_holder = torch.full((batch_dim,), -1, device=device, dtype=torch.long)
 
-        # Delta-based shaping: previous distances
+        # Delta-based shaping: previous distances and facing
         self.prev_ball_to_receiver_dist = torch.zeros(batch_dim, device=device, dtype=torch.float32)
         self.prev_receiver_to_ball_dist = torch.zeros(batch_dim, device=device, dtype=torch.float32)
         self.prev_passer_to_ball_dist = torch.zeros(batch_dim, device=device, dtype=torch.float32)
+        self.prev_receiver_facing_ball_cos = torch.zeros(batch_dim, device=device, dtype=torch.float32)
+        self.prev_passer_facing_receiver_cos = torch.zeros(batch_dim, device=device, dtype=torch.float32)
 
         # Cumulative rewards for episodic Envy-Free
         self.cumulative_attacker_rewards: dict[str, torch.Tensor] = {
@@ -135,6 +157,15 @@ class PassingScenario(BaseScenario):
         }
         self.prev_defender_rot: dict[str, torch.Tensor] = {
             d.name: torch.zeros(batch_dim, 1, device=device) for d in self.defenders
+        }
+
+        # PD controller state: previous errors per agent for derivative term
+        all_agents = self.attackers + self.defenders
+        self.prev_error_trans: dict[str, torch.Tensor] = {
+            a.name: torch.zeros(batch_dim, 1, device=device) for a in all_agents
+        }
+        self.prev_error_oren: dict[str, torch.Tensor] = {
+            a.name: torch.zeros(batch_dim, 1, device=device) for a in all_agents
         }
 
         return world
@@ -303,14 +334,7 @@ class PassingScenario(BaseScenario):
             self.ball_intercepted.zero_()
             self.pass_count.zero_()
             self.last_holder.fill_(-1)
-            # Stagger initial steps for smooth logging
-            self.steps = torch.randint(
-                0,
-                self.cfg.max_steps,
-                (self.world.batch_dim,),
-                device=device,
-                dtype=torch.long,
-            )
+            self.steps.zero_()
             # Initialize previous distances for delta-based shaping
             if self.cfg.n_attackers >= 1:
                 passer_pos = self.attackers[0].state.pos
@@ -321,18 +345,24 @@ class PassingScenario(BaseScenario):
                 bp = self.ball.state.pos
                 self.prev_ball_to_receiver_dist = torch.norm(bp - receiver_pos, dim=-1)
                 self.prev_receiver_to_ball_dist = torch.norm(receiver_pos - bp, dim=-1)
+                self.prev_receiver_facing_ball_cos = self._compute_facing_ball_cos(self.attackers[1], bp)
+                self.prev_passer_facing_receiver_cos = self._compute_facing_ball_cos(self.attackers[0], receiver_pos)
             for name in self.cumulative_attacker_rewards:
                 self.cumulative_attacker_rewards[name].zero_()
             for name in self.prev_defender_vel:
                 self.prev_defender_vel[name].zero_()
             for name in self.prev_defender_rot:
                 self.prev_defender_rot[name].zero_()
+            for name in self.prev_error_trans:
+                self.prev_error_trans[name].zero_()
+            for name in self.prev_error_oren:
+                self.prev_error_oren[name].zero_()
         else:
             self.pass_completed[env_index] = False
             self.ball_intercepted[env_index] = False
             self.pass_count[env_index] = 0
             self.last_holder[env_index] = -1
-            self.steps[env_index] = torch.randint(0, self.cfg.max_steps, (1,), device=device).item()
+            self.steps[env_index] = 0
             if self.cfg.n_attackers >= 1:
                 passer_pos = self.attackers[0].state.pos[env_index]
                 bp = self.ball.state.pos[env_index]
@@ -342,12 +372,22 @@ class PassingScenario(BaseScenario):
                 bp = self.ball.state.pos[env_index]
                 self.prev_ball_to_receiver_dist[env_index] = torch.norm(bp - receiver_pos)
                 self.prev_receiver_to_ball_dist[env_index] = torch.norm(receiver_pos - bp)
+                self.prev_receiver_facing_ball_cos[env_index] = self._compute_facing_ball_cos_single(
+                    self.attackers[1], bp, env_index
+                )
+                self.prev_passer_facing_receiver_cos[env_index] = self._compute_facing_ball_cos_single(
+                    self.attackers[0], receiver_pos, env_index
+                )
             for name in self.cumulative_attacker_rewards:
                 self.cumulative_attacker_rewards[name][env_index] = 0.0
             for name in self.prev_defender_vel:
                 self.prev_defender_vel[name][env_index] = 0.0
             for name in self.prev_defender_rot:
                 self.prev_defender_rot[name][env_index] = 0.0
+            for name in self.prev_error_trans:
+                self.prev_error_trans[name][env_index] = 0.0
+            for name in self.prev_error_oren:
+                self.prev_error_oren[name][env_index] = 0.0
 
     # ------------------------------------------------------------------
     # Helpers
@@ -367,48 +407,190 @@ class PassingScenario(BaseScenario):
                 entity.set_vel(zero2, batch_index=env_index)
 
     # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _has_ball(self, agent: Agent) -> torch.Tensor:
+        """Check if the ball is within dribble range AND in front of the agent."""
+        to_ball = self.ball.state.pos - agent.state.pos
+        dist = torch.norm(to_ball, dim=-1)
+        in_range = dist < self.cfg.dynamics.dribble_dist_threshold
+        cos_rot = torch.cos(agent.state.rot.squeeze(-1))
+        sin_rot = torch.sin(agent.state.rot.squeeze(-1))
+        facing = torch.stack([cos_rot, sin_rot], dim=-1)
+        ball_in_front = (to_ball * facing).sum(dim=-1) > 0
+        return in_range & ball_in_front
+
+    def _compute_facing_ball_cos(self, agent: Agent, ball_pos: torch.Tensor) -> torch.Tensor:
+        """Cosine of angle between agent facing direction and direction to ball (batched)."""
+        to_ball = ball_pos - agent.state.pos
+        to_ball_norm = torch.norm(to_ball, dim=-1, keepdim=True).clamp(min=1e-8)
+        to_ball_dir = to_ball / to_ball_norm
+        rot = agent.state.rot.squeeze(-1)
+        facing = torch.stack([torch.cos(rot), torch.sin(rot)], dim=-1)
+        return (facing * to_ball_dir).sum(dim=-1)
+
+    def _compute_facing_ball_cos_single(self, agent: Agent, ball_pos: torch.Tensor, env_index: int) -> torch.Tensor:
+        """Cosine of angle between agent facing and ball direction for a single env."""
+        to_ball = ball_pos - agent.state.pos[env_index]
+        to_ball_dir = to_ball / torch.norm(to_ball).clamp(min=1e-8)
+        rot = agent.state.rot[env_index].squeeze(-1)
+        facing = torch.stack([torch.cos(rot), torch.sin(rot)])
+        return (facing * to_ball_dir).sum()
+
+    # ------------------------------------------------------------------
     # Step hooks
     # ------------------------------------------------------------------
 
+    def _angle_wrap(self, angle: torch.Tensor) -> torch.Tensor:
+        """Wrap angle to [-pi, pi]."""
+        return (angle + math.pi) % (2 * math.pi) - math.pi
+
     def process_action(self, agent: Agent):
-        """Handle kick/dribble (dims 3-4). Zero out fixed defender actions."""
+        """Convert position-based actions to velocities via PD controller.
+
+        Action priority: kick > turn_on_spot > move.
+        Writes computed velocities into agent.action.u[:, 0:3] so that
+        VelocityHolonomic can apply them as velocity commands.
+        """
         # Fixed defenders: zero all actions
         if agent in self.defenders and self.cfg.defender_behavior == "fixed":
             agent.action.u = torch.zeros_like(agent.action.u)
             return
 
         dc = self.cfg.dynamics
-        kick_action = agent.action.u[:, 3]
-        dribble_action = agent.action.u[:, 4]
+        fc = self.cfg.field
+        u = agent.action.u
+
+        kick_action = u[:, 3]
+        dribble_action = u[:, 4]
+        turn_action = u[:, 5]
+        target_oren = u[:, 2:3]  # (batch, 1)
 
         agent_pos = agent.state.pos
         ball_pos = self.ball.state.pos
+        has_ball = self._has_ball(agent)
 
-        dist_to_ball = torch.norm(agent_pos - ball_pos, dim=-1)
-        in_range = dist_to_ball < dc.dribble_dist_threshold
+        # Facing direction
+        cos_rot = torch.cos(agent.state.rot.squeeze(-1))
+        sin_rot = torch.sin(agent.state.rot.squeeze(-1))
+        facing = torch.stack([cos_rot, sin_rot], dim=-1)
 
-        # Kick: set ball velocity directly (matches rsim's kick_v_x command)
-        kick_triggered = (kick_action > 0) & in_range
-        if kick_triggered.any():
-            cos_rot = torch.cos(agent.state.rot.squeeze(-1))
-            sin_rot = torch.sin(agent.state.rot.squeeze(-1))
-            kick_dir = torch.stack([cos_rot, sin_rot], dim=-1)
-            kick_vel = kick_dir * dc.kick_speed
+        # --- Determine action mode per env ---
+        kick_mode = (kick_action > 0) & has_ball
+        turn_mode = (turn_action > 0) & has_ball & ~kick_mode
+        # move_mode is the default (neither kick nor turn)
+
+        # Track kick events for reward function (kick alignment shaping)
+        if not hasattr(self, "kick_fired"):
+            self.kick_fired: dict[str, torch.Tensor] = {}
+        self.kick_fired[agent.name] = kick_mode
+
+        # --- Read previous PD errors (before any updates) ---
+        prev_e_trans = self.prev_error_trans[agent.name]
+        prev_e_oren = self.prev_error_oren[agent.name]
+
+        # --- Compute MOVE velocities (PD controller) ---
+        # Convert relative offset to absolute target, clamp to field bounds
+        delta_pos = u[:, 0:2]  # (batch, 2)
+        target_pos = agent_pos + delta_pos
+        field_min = torch.tensor([-fc.half_length, -fc.half_width], device=self.world.device)
+        field_max = torch.tensor([fc.half_length, fc.half_width], device=self.world.device)
+        target_pos = target_pos.clamp(min=field_min, max=field_max)
+
+        # Translation PD
+        pos_error = target_pos - agent_pos  # (batch, 2)
+        pos_error_mag = torch.norm(pos_error, dim=-1, keepdim=True)  # (batch, 1)
+        d_error_trans = (pos_error_mag - prev_e_trans) / dc.dt
+        pd_output = dc.pd_kp_translation * pos_error_mag + dc.pd_kd_translation * d_error_trans
+
+        dead_trans = pos_error_mag < 0.003
+        vel_dir = pos_error / pos_error_mag.clamp(min=1e-6)
+        move_vel = torch.where(dead_trans, torch.zeros_like(pos_error), pd_output * vel_dir)
+
+        # Clamp move speed by norm
+        speed = torch.norm(move_vel, dim=-1, keepdim=True)
+        scale = torch.where(
+            speed > dc.robot_max_speed,
+            dc.robot_max_speed / speed.clamp(min=1e-8),
+            torch.ones_like(speed),
+        )
+        move_vel = move_vel * scale
+
+        # Orientation PD (shared by move and turn modes)
+        oren_error = self._angle_wrap(target_oren - agent.state.rot)  # (batch, 1)
+        d_error_oren = self._angle_wrap(oren_error - prev_e_oren) / dc.dt
+        angular_vel = dc.pd_kp_orientation * oren_error + dc.pd_kd_orientation * d_error_oren
+
+        dead_oren = oren_error.abs() < 0.001
+        move_ang_vel = torch.where(dead_oren, torch.zeros_like(angular_vel), angular_vel)
+        move_ang_vel = move_ang_vel.clamp(-dc.robot_max_angular_vel, dc.robot_max_angular_vel)
+
+        # --- Compute TURN_ON_SPOT velocities (ball pivot) ---
+        # Reuse orientation PD (same angular vel computation)
+        turn_ang_vel = move_ang_vel  # same PD output for orientation
+
+        # Perpendicular velocity for ball pivot (orbit around ball center)
+        to_ball = ball_pos - agent_pos
+        to_ball_dist = torch.norm(to_ball, dim=-1, keepdim=True).clamp(min=1e-6)
+        to_ball_dir = to_ball / to_ball_dist
+        # Perpendicular: rotate 90° CCW when turning CCW (positive angular vel)
+        perp_dir = torch.stack([-to_ball_dir[:, 1], to_ball_dir[:, 0]], dim=-1)
+        turn_linear_vel = perp_dir * turn_ang_vel * to_ball_dist * dc.turn_on_spot_radius_modifier
+
+        # Clamp turn linear velocity
+        turn_speed = torch.norm(turn_linear_vel, dim=-1, keepdim=True)
+        turn_scale = torch.where(
+            turn_speed > dc.robot_max_speed,
+            dc.robot_max_speed / turn_speed.clamp(min=1e-8),
+            torch.ones_like(turn_speed),
+        )
+        turn_linear_vel = turn_linear_vel * turn_scale
+
+        # --- Merge velocities based on mode ---
+        zero_vel = torch.zeros_like(move_vel)
+        zero_ang = torch.zeros_like(move_ang_vel)
+
+        final_vel = torch.where(kick_mode.unsqueeze(-1), zero_vel, move_vel)
+        final_vel = torch.where(turn_mode.unsqueeze(-1), turn_linear_vel, final_vel)
+
+        final_ang = torch.where(kick_mode.unsqueeze(-1), zero_ang, move_ang_vel)
+        final_ang = torch.where(turn_mode.unsqueeze(-1), turn_ang_vel, final_ang)
+
+        # --- Update PD state ---
+        # Always store actual errors regardless of mode, so that transitioning
+        # back to move mode sees a smooth derivative (no spike from zero).
+        self.prev_error_trans[agent.name] = pos_error_mag.detach()
+        self.prev_error_oren[agent.name] = oren_error.detach()
+
+        # --- Overwrite action dims 0-2 with computed velocities ---
+        # VelocityHolonomic will read these as [vx, vy, omega]
+        agent.action.u = torch.cat(
+            [
+                final_vel,  # dims 0-1: linear velocity (global frame)
+                final_ang,  # dim 2: angular velocity
+                u[:, 3:],  # dims 3-5: pass through (kick, dribble, turn triggers)
+            ],
+            dim=-1,
+        )
+
+        # --- Kick: set ball velocity directly ---
+        if kick_mode.any():
+            kick_vel = facing * dc.kick_speed
             self.ball.state.vel = torch.where(
-                kick_triggered.unsqueeze(-1),
+                kick_mode.unsqueeze(-1),
                 kick_vel,
                 self.ball.state.vel,
             )
 
-        # Dribble: binary attract
-        dribble_active = (dribble_action > 0) & in_range
+        # --- Dribble: binary attract (move mode + turn mode both support dribble) ---
+        dribble_active = (dribble_action > 0) & has_ball & ~kick_mode
+        # Turn mode always dribbles
+        dribble_active = dribble_active | turn_mode
         if dribble_active.any():
-            fc = self.cfg.field
-            cos_rot = torch.cos(agent.state.rot.squeeze(-1))
-            sin_rot = torch.sin(agent.state.rot.squeeze(-1))
-            front_offset = torch.stack([cos_rot, sin_rot], dim=-1) * (fc.robot_radius + fc.ball_radius)
-            target_pos = agent_pos + front_offset
-            attract_dir = target_pos - ball_pos
+            front_offset = facing * (fc.robot_radius + fc.ball_radius)
+            dribble_target = agent_pos + front_offset
+            attract_dir = dribble_target - ball_pos
             attract_force = attract_dir * dc.dribble_force
             self.ball.state.vel = (
                 self.ball.state.vel + attract_force * dribble_active.unsqueeze(-1).float() * self.world.dt
@@ -445,7 +627,7 @@ class PassingScenario(BaseScenario):
         """Ego-centric observation with Stackelberg timing for attackers.
 
         Common: own vel(2) + ang_vel(1) + rot(1) + ball_rel(2) + ball_vel(2)
-                + active zone edge distances(4) = 12
+                + has_ball(1) + active zone edge distances(4) + time_remaining(1) = 14
         Per teammate: rel_pos(2) + vel(2) = 4
         Attacker per opponent: rel_pos(2) + vel(2) + prev_vel(2) + prev_rot(1) = 7
         Defender per opponent: rel_pos(2) + vel(2) = 4
@@ -465,6 +647,10 @@ class PassingScenario(BaseScenario):
         ball_rel = self.ball.state.pos - agent.state.pos
         obs_parts.append(ball_rel)
         obs_parts.append(self.ball.state.vel)
+
+        # Has-ball flag (1D): 1 if this agent is within dribble range of ball
+        has_ball = self._has_ball(agent).unsqueeze(-1).float()
+        obs_parts.append(has_ball)
 
         # Active zone edge distances
         az_cx = fc.active_zone_center_x
@@ -494,6 +680,10 @@ class PassingScenario(BaseScenario):
             if is_attacker and o.name in self.prev_defender_vel:
                 obs_parts.append(self.prev_defender_vel[o.name])
                 obs_parts.append(self.prev_defender_rot[o.name])
+
+        # Normalized time remaining (1D)
+        time_remaining = (1.0 - self.steps.float() / self.cfg.max_steps).unsqueeze(-1)
+        obs_parts.append(time_remaining)
 
         return torch.cat(obs_parts, dim=-1)
 
@@ -529,8 +719,10 @@ class PassingScenario(BaseScenario):
             self.prev_passer_to_ball_dist = torch.norm(agent.state.pos - bp, dim=-1)
             if self.cfg.n_attackers >= 2:
                 self.prev_ball_to_receiver_dist = torch.norm(bp - self.attackers[1].state.pos, dim=-1)
+                self.prev_passer_facing_receiver_cos = self._compute_facing_ball_cos(agent, self.attackers[1].state.pos)
         if self.cfg.n_attackers >= 2 and agent is self.attackers[1]:
             self.prev_receiver_to_ball_dist = torch.norm(agent.state.pos - bp, dim=-1)
+            self.prev_receiver_facing_ball_cos = self._compute_facing_ball_cos(agent, bp)
 
     # ------------------------------------------------------------------
     # Pass & interception tracking
@@ -542,11 +734,11 @@ class PassingScenario(BaseScenario):
 
         for i, agent in enumerate(self.attackers):
             dist = torch.norm(agent.state.pos - ball_pos, dim=-1)
-            has_ball = dist < dc.dribble_dist_threshold
-            new_pass = has_ball & (self.last_holder != i) & (self.last_holder >= 0)
+            near_ball = dist < dc.dribble_dist_threshold
+            new_pass = near_ball & (self.last_holder != i) & (self.last_holder >= 0)
             self.pass_completed = self.pass_completed | new_pass
             self.pass_count = self.pass_count + new_pass.long()
-            self.last_holder = torch.where(has_ball, i, self.last_holder)
+            self.last_holder = torch.where(near_ball, i, self.last_holder)
 
         # Interception: any defender within dribble range of ball
         for d in self.defenders:

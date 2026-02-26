@@ -18,17 +18,17 @@ class SSLExperimentConfig:
 
     task: str = "ssl_2v0"
     seed: int = 0
-    max_frames: int = 3_000_000
+    max_frames: int = 600_000
     n_envs: int = 32
     frames_per_batch: int = 6000
     minibatch_size: int = 400
-    n_minibatch_iters: int = 45
+    n_minibatch_iters: int = 8
     lr: float = 5e-5
     gamma: float = 0.99
     device: str = "auto"
 
     # MLP architecture
-    hidden_sizes: tuple = (256, 256)
+    hidden_sizes: tuple = (256, 256, 256)
 
     # WandB
     wandb_project: Optional[str] = None
@@ -60,7 +60,7 @@ def create_experiment(
 
     # Algorithm
     algorithm_config = MappoConfig.get_from_yaml()
-
+    algorithm_config.entropy_coef = 0.01  # prevent distribution collapse → NaN
     # Model
     model_config = MlpConfig(
         num_cells=list(cfg.hidden_sizes),
@@ -68,18 +68,23 @@ def create_experiment(
         activation_class=nn.Tanh,
     )
 
+    # Round up frames_per_batch to be divisible by n_envs. TorchRL rounds up
+    # internally; if we don't match, the collector exhausts total_frames in
+    # fewer iterations than BenchMARL expects → StopIteration.
+    fpb = -(-cfg.frames_per_batch // cfg.n_envs) * cfg.n_envs
+    max_frames = -(-cfg.max_frames // fpb) * fpb
+
     # Experiment config
     experiment_config = ExperimentConfig.get_from_yaml()
-    experiment_config.max_n_frames = cfg.max_frames
-    experiment_config.on_policy_collected_frames_per_batch = cfg.frames_per_batch
+    experiment_config.max_n_frames = max_frames
+    experiment_config.on_policy_collected_frames_per_batch = fpb
     experiment_config.on_policy_n_envs_per_worker = cfg.n_envs
     experiment_config.on_policy_minibatch_size = cfg.minibatch_size
     experiment_config.on_policy_n_minibatch_iters = cfg.n_minibatch_iters
     experiment_config.lr = cfg.lr
     experiment_config.gamma = cfg.gamma
 
-    # Device: always sample on CPU (VMAS is CPU-bound), train on target device
-    experiment_config.sampling_device = "cpu"
+    experiment_config.sampling_device = device
     experiment_config.train_device = device
     experiment_config.buffer_device = device
 
@@ -91,7 +96,7 @@ def create_experiment(
     experiment_config.loggers = loggers
 
     # Checkpointing
-    experiment_config.checkpoint_interval = cfg.frames_per_batch
+    experiment_config.checkpoint_interval = fpb
     experiment_config.checkpoint_at_end = True
     experiment_config.keep_checkpoints_num = 5
 
@@ -102,7 +107,7 @@ def create_experiment(
     # Evaluation / rendering
     if cfg.render and cfg.wandb_project:
         experiment_config.render = True
-        experiment_config.evaluation_interval = cfg.evaluation_interval or cfg.frames_per_batch
+        experiment_config.evaluation_interval = cfg.evaluation_interval or fpb
         experiment_config.evaluation_episodes = cfg.evaluation_episodes
     else:
         experiment_config.render = False

@@ -18,50 +18,51 @@ from utama_core.training.experiment import SSLExperimentConfig, create_experimen
 
 
 def parse_args() -> argparse.Namespace:
+    _defaults = SSLExperimentConfig()
     parser = argparse.ArgumentParser(description="SSL MARL Training")
 
     parser.add_argument(
         "--task",
         type=str,
-        default="ssl_2v0",
+        default=_defaults.task,
         choices=["ssl_2v0", "ssl_2v1", "ssl_2v2"],
-        help="Training scenario (default: ssl_2v0)",
+        help=f"Training scenario (default: {_defaults.task})",
     )
     parser.add_argument(
         "--max-frames",
         type=int,
-        default=3_000_000,
-        help="Total training frames (default: 3M)",
+        default=_defaults.max_frames,
+        help=f"Total training frames (default: {_defaults.max_frames:_})",
     )
     parser.add_argument(
         "--n-envs",
         type=int,
-        default=32,
-        help="Number of parallel environments (default: 32)",
+        default=_defaults.n_envs,
+        help=f"Number of parallel environments (default: {_defaults.n_envs})",
     )
     parser.add_argument(
         "--frames-per-batch",
         type=int,
-        default=6000,
-        help="Frames collected per iteration (default: 6000)",
+        default=_defaults.frames_per_batch,
+        help=f"Frames collected per iteration (default: {_defaults.frames_per_batch})",
     )
     parser.add_argument(
         "--lr",
         type=float,
-        default=5e-5,
-        help="Learning rate (default: 5e-5)",
+        default=_defaults.lr,
+        help=f"Learning rate (default: {_defaults.lr})",
     )
     parser.add_argument(
         "--seed",
         type=int,
-        default=0,
-        help="Random seed (default: 0)",
+        default=_defaults.seed,
+        help=f"Random seed (default: {_defaults.seed})",
     )
     parser.add_argument(
         "--device",
         type=str,
-        default="auto",
-        help="Device: 'cpu', 'cuda', or 'auto' (default: auto)",
+        default=_defaults.device,
+        help=f"Device: 'cpu', 'cuda', or 'auto' (default: {_defaults.device})",
     )
     parser.add_argument(
         "--wandb-project",

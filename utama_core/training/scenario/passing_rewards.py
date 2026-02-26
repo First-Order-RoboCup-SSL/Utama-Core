@@ -48,7 +48,8 @@ def compute_passing_reward(
             # Phased passer reward: approach ball → dribble/pass to receiver
             dc = scenario.cfg.dynamics
             passer_to_ball_dist = torch.norm(agent_pos - ball_pos, dim=-1)
-            has_ball = passer_to_ball_dist < dc.dribble_dist_threshold
+            passer_near_ball = passer_to_ball_dist < dc.dribble_dist_threshold
+            has_ball = scenario._has_ball(scenario.attackers[0])
             passer_touched_ball = scenario.last_holder == 0
 
             # Phase 1: passer approaches ball (before first touch)
@@ -60,15 +61,47 @@ def compute_passing_reward(
             pass_delta = scenario.prev_ball_to_receiver_dist - ball_to_recv
             phase2 = rc.ball_to_receiver_weight * pass_delta
 
-            in_phase2 = has_ball | passer_touched_ball
+            # Phase transition uses proximity only (not facing); facing check
+            # is reserved for action gating (kick/dribble/turn) in process_action()
+            in_phase2 = passer_near_ball | passer_touched_ball
             reward = reward + torch.where(in_phase2, phase2, phase1)
+
+            # Passer: delta-based reward for turning to face the receiver
+            to_recv = receiver_pos - agent_pos
+            to_recv_norm = torch.norm(to_recv, dim=-1, keepdim=True).clamp(min=1e-8)
+            to_recv_dir = to_recv / to_recv_norm
+            passer_rot = scenario.attackers[0].state.rot.squeeze(-1)
+            passer_facing = torch.stack([torch.cos(passer_rot), torch.sin(passer_rot)], dim=-1)
+            facing_recv_cos = (passer_facing * to_recv_dir).sum(dim=-1)
+            facing_recv_delta = facing_recv_cos - scenario.prev_passer_facing_receiver_cos
+            reward = reward + rc.passer_face_receiver_weight * facing_recv_delta
+
+            # Ball possession reward (encourages dribble activation)
+            reward = reward + has_ball.float() * rc.has_ball_reward
+
+            # Kick alignment shaping (one-shot on kick frame)
+            passer_name = scenario.attackers[0].name
+            if hasattr(scenario, "kick_fired") and passer_name in scenario.kick_fired:
+                kicked = scenario.kick_fired[passer_name]
+                if kicked.any():
+                    facing_recv_clamped = facing_recv_cos.clamp(min=0.0)
+                    reward = reward + kicked.float() * rc.kick_alignment_weight * facing_recv_clamped
         else:
-            # Receiver: no dense approach shaping by default (relies on sparse pass reward).
-            # Optional residual shaping controlled by receiver_to_ball_weight (default 0).
+            # Receiver: optional dense approach shaping
             if rc.receiver_to_ball_weight > 0:
                 curr_dist = torch.norm(agent_pos - ball_pos, dim=-1)
                 delta = scenario.prev_receiver_to_ball_dist - curr_dist
                 reward = reward + rc.receiver_to_ball_weight * delta
+
+            # Receiver: delta-based reward for turning to face the ball
+            to_ball = ball_pos - agent_pos
+            to_ball_norm = torch.norm(to_ball, dim=-1, keepdim=True).clamp(min=1e-8)
+            to_ball_dir = to_ball / to_ball_norm
+            recv_rot = scenario.attackers[1].state.rot.squeeze(-1)
+            recv_facing = torch.stack([torch.cos(recv_rot), torch.sin(recv_rot)], dim=-1)
+            facing_ball_cos = (recv_facing * to_ball_dir).sum(dim=-1)
+            facing_delta = facing_ball_cos - scenario.prev_receiver_facing_ball_cos
+            reward = reward + rc.receiver_face_ball_weight * facing_delta
 
         # Sparse: successful pass
         reward = reward + scenario.pass_completed.float() * rc.successful_pass
