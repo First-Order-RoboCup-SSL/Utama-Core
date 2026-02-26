@@ -369,7 +369,14 @@ class StrategyRunner:
                 sim_controller.set_robot_presence(b, False, True)
                 b_start = blue_start[b]
                 sim_controller.teleport_robot(False, b, b_start[0], b_start[1], b_start[2])
-            sim_controller.teleport_ball(0, 0)
+
+            if self.exp_ball:
+                sim_controller.teleport_ball(0, 0)
+            else:
+                sim_controller.teleport_ball(
+                    -self.field_bounds.top_left[0] * 2,
+                    self.field_bounds.top_left[1] * 2,
+                )  # teleport ball off-field to effectively remove it
 
             return None, sim_controller
 
