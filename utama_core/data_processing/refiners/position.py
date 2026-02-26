@@ -1,5 +1,5 @@
 from collections import defaultdict
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import Dict, List, Optional, Tuple
 
@@ -31,6 +31,14 @@ class AngleSmoother:
         return smoothed_angle
 
 
+@dataclass
+class VisionBounds:
+    x_min: float
+    x_max: float
+    y_min: float
+    y_max: float
+
+
 class PositionRefiner(BaseRefiner):
     def __init__(
         self,
@@ -40,11 +48,12 @@ class PositionRefiner(BaseRefiner):
     ):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
-        self.x_min = field_bounds.top_left[0] - bounds_buffer  # expand left
-        self.x_max = field_bounds.bottom_right[0] + bounds_buffer  # expand right
-        self.y_min = field_bounds.bottom_right[1] - bounds_buffer  # expand bottom
-        self.y_max = field_bounds.top_left[1] + bounds_buffer  # expand top
-        self.BOUNDS_BUFFER = bounds_buffer
+        self.vision_bounds = VisionBounds(
+            x_min=field_bounds.top_left[0] - bounds_buffer,  # expand left
+            x_max=field_bounds.bottom_right[0] + bounds_buffer,  # expand right
+            y_min=field_bounds.bottom_right[1] - bounds_buffer,  # expand bottom
+            y_max=field_bounds.top_left[1] + bounds_buffer,  # expand top
+        )
 
         # For Kalman filtering and imputing vanished values.
         self.filtering = filtering
@@ -68,7 +77,7 @@ class PositionRefiner(BaseRefiner):
 
         # class VisionData: ts: float; yellow_robots: List[VisionRobotData]; blue_robots: List[VisionRobotData]; balls: List[VisionBallData]
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
-        combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames)
+        combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames, bounds=self.vision_bounds)
 
         time_elapsed = combined_vision_data.ts - game_frame.ts
 
@@ -90,7 +99,6 @@ class PositionRefiner(BaseRefiner):
                     if y_rbt_id not in yellow_rbt_last_frame:
                         filtered_yellow_robots.append(vision_y_rbt)
                         continue
-
                 filtered_robot = self.kalman_filters_yellow[y_rbt_id].filter_data(
                     vision_y_rbt,  # new measurement
                     yellow_rbt_last_frame[y_rbt_id],  # last frame
@@ -270,12 +278,6 @@ class PositionRefiner(BaseRefiner):
         friendly: bool,
     ) -> Dict[int, Robot]:
         for robot in vision_robots:
-            new_x, new_y = robot.x, robot.y
-
-            if not (self.x_min <= new_x <= self.x_max and self.y_min <= new_y <= self.y_max):
-                # Out of bounds so ignore this robot
-                continue
-
             if robot.id not in new_game_robots:
                 # At the start of the game, we haven't seen anything yet, so just create a new robot
                 new_game_robots[robot.id] = PositionRefiner._robot_from_vision(robot, is_friendly=friendly)
@@ -318,9 +320,16 @@ class PositionRefiner(BaseRefiner):
 
 
 class CameraCombiner:
-    def combine_cameras(self, frames: List[RawVisionData]) -> VisionData:
-        # Now we have access to the game we can do more sophisticated things
-        # Such as ignoring outlier cameras etc
+    def combine_cameras(self, frames: List[RawVisionData], bounds: VisionBounds) -> VisionData:
+        """
+        Combines the vision data from multiple cameras into a single coherent VisionData object.
+        Also, removes any robot detections that are out of the specified bounds.
+        Args:
+            frames (List[RawVisionData]): A list of RawVisionData objects from different cameras.
+            bounds (VisionBounds): The bounds within which to consider vision data for combination.
+        Returns:
+            VisionData: A combined VisionData object containing averaged robot positions and the most confident ball position.
+        """
 
         ts = []
         # maps robot id to list of frames seen for that robot
@@ -331,13 +340,16 @@ class CameraCombiner:
         # Each frame is from a different camera
         for frame_ind, frame in enumerate(frames):
             for yr in frame.yellow_robots:
-                yellow_captured[yr.id].append(yr)
+                if self._bounds_check(yr.x, yr.y, bounds):
+                    yellow_captured[yr.id].append(yr)
 
             for br in frame.blue_robots:
-                blue_captured[br.id].append(br)
+                if self._bounds_check(br.x, br.y, bounds):
+                    blue_captured[br.id].append(br)
 
             for b in frame.balls:
-                balls_captured[frame_ind].append(b)
+                if self._bounds_check(b.x, b.y, bounds):
+                    balls_captured[frame_ind].append(b)
             ts.append(frame.ts)
 
         avg_yellows = list(map(self._avg_robots, yellow_captured.values()))
@@ -385,6 +397,9 @@ class CameraCombiner:
                     # If no ball close enough, must have found a new separate ball
                     combined_balls.append(b)
         return combined_balls
+
+    def _bounds_check(self, x: float, y: float, bounds: VisionBounds) -> bool:
+        return bounds.x_min <= x <= bounds.x_max and bounds.y_min <= y <= bounds.y_max
 
     @staticmethod
     def ball_merge_predicate(b1: RawBallData, b2: RawBallData) -> bool:
