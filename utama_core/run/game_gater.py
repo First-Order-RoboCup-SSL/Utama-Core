@@ -63,6 +63,13 @@ class GameGater:
                 print(f"Friendly robots: {len(my_game_frame.friendly_robots)}/{exp_friendly}")
                 print(f"Enemy robots: {len(my_game_frame.enemy_robots)}/{exp_enemy}")
                 print(f"Ball present: {my_game_frame.ball is not None} (exp: {exp_ball})\n")
+
+                # nothing will change in rsim if we don't step it.
+                # if no valid frame, likely misconfigured.
+                if rsim_env:
+                    raise TimeoutError(
+                        f"Rsim environment did not produce a valid game frame after {wait_before_warn} seconds. Check the environment setup and vision data."
+                    )
             time.sleep(0.05)
             my_game_frame, opp_game_frame = _add_frame(my_game_frame, opp_game_frame)
 
