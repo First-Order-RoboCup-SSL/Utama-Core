@@ -100,9 +100,7 @@ def _run_teleport_accuracy_test(robot_id: int, x: float, y: float, theta: float)
         rsim_headless=True,
     )
 
-    print("hello!")
     assert passed, "Test episode did not complete."
-    print("hello!")
     assert test_manager.first_frame_position is not None, f"Robot {robot_id} was never seen in the first game frame."
 
     actual_x, actual_y = test_manager.first_frame_position
