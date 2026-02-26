@@ -14,6 +14,7 @@ class GameGater:
         my_team_is_right: bool,
         exp_friendly: int,
         exp_enemy: int,
+        exp_ball: bool,
         vision_buffers: List[Deque[RawVisionData]],
         position_refiner: PositionRefiner,
         is_pvp: bool,
@@ -54,14 +55,14 @@ class GameGater:
         while (
             len(my_game_frame.friendly_robots) < exp_friendly
             or len(my_game_frame.enemy_robots) < exp_enemy
-            or my_game_frame.ball is None
+            or (my_game_frame.ball is None and exp_ball)
         ):
             if time.time() - start_time > wait_before_warn:
                 start_time = time.time()
                 print("Waiting for valid game frame...")
                 print(f"Friendly robots: {len(my_game_frame.friendly_robots)}/{exp_friendly}")
                 print(f"Enemy robots: {len(my_game_frame.enemy_robots)}/{exp_enemy}")
-                print(f"Ball present: {my_game_frame.ball is not None}\n")
+                print(f"Ball present: {my_game_frame.ball is not None} (exp: {exp_ball})\n")
             time.sleep(0.05)
             my_game_frame, opp_game_frame = _add_frame(my_game_frame, opp_game_frame)
 

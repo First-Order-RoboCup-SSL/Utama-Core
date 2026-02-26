@@ -1,4 +1,6 @@
 class DummyStrategy:
+    exp_ball: bool = True  # Not relevant for these tests
+
     def assert_exp_robots(self, exp_friendly, exp_enemy):
         return True
 

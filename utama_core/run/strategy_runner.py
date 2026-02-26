@@ -99,6 +99,7 @@ class StrategyRunner:
         mode (str): "real", "rsim", "grism"
         exp_friendly (int): Expected number of friendly robots.
         exp_enemy (int): Expected number of enemy robots.
+        exp_ball (bool): Whether the ball is expected to be present. Defaults to True.
         field_bounds (FieldBounds): Configuration of the field. Defaults to standard field.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         control_scheme (str, optional): Name of the motion control scheme to use.
@@ -122,6 +123,7 @@ class StrategyRunner:
         mode: str,
         exp_friendly: int,
         exp_enemy: int,
+        exp_ball: bool = True,
         field_bounds: FieldBounds = Field.FULL_FIELD_BOUNDS,
         opp_strategy: Optional[AbstractStrategy] = None,
         control_scheme: str = "pid",  # This is also the default control scheme used in the motion planning tests
@@ -140,6 +142,7 @@ class StrategyRunner:
         self.mode: Mode = self._load_mode(mode)
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
+        self.exp_ball = exp_ball
         self.field_bounds = field_bounds
 
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
@@ -153,9 +156,14 @@ class StrategyRunner:
         ### functions below rely on self.my and self.opp ###
 
         self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
-        self._assert_exp_robots(exp_friendly, exp_enemy)
+        self._assert_exp_robots_and_ball(exp_friendly, exp_enemy, exp_ball)
 
         self._load_robot_controllers()
+
+        # Remove Rsim ball. Rsim does not have the flexibilty to start without a ball.
+        # this must also be done after robot controllers are loaded.
+        if self.rsim_env and not self.exp_ball:
+            self._remove_rsim_ball()
 
         self._load_game()
 
@@ -290,6 +298,12 @@ class StrategyRunner:
 
         return my_side, opp_side
 
+    def _remove_rsim_ball(self):
+        """Removes the ball from the RSim environment by teleporting it off-field."""
+        self.rsim_env._remove_ball()
+        self.rsim_env._frame_to_observations()
+        self.rsim_env.steps += 1  # Increment the step count to simulate time passing in the environment
+
     def _load_sim(
         self,
         rsim_noise: RsimGaussianNoise,
@@ -377,16 +391,18 @@ class StrategyRunner:
 
         return vision_buffers, ref_buffer
 
-    def _assert_exp_robots(
+    def _assert_exp_robots_and_ball(
         self,
         exp_friendly: int,
         exp_enemy: int,
+        exp_ball: bool,
     ):
-        """Assert the expected number of robots."""
+        """Assert that the strategy and expected robots/ball parameters are consistent."""
         assert exp_friendly <= MAX_ROBOTS, "Expected number of friendly robots is too high."
         assert exp_enemy <= MAX_ROBOTS, "Expected number of enemy robots is too high."
         assert exp_friendly >= 1, "Expected number of friendly robots is too low."
         assert exp_enemy >= 0, "Expected number of enemy robots is too low."
+        assert self.my.strategy.exp_ball == exp_ball, "Expected presence of ball does not match my strategy."
 
         assert self.my.strategy.assert_exp_robots(
             exp_friendly, exp_enemy
@@ -496,6 +512,7 @@ class StrategyRunner:
             self.my_team_is_right,
             self.exp_friendly,
             self.exp_enemy,
+            self.exp_ball,
             self.vision_buffers,
             self.my.position_refiner,
             is_pvp=self.opp is not None,

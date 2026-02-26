@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 class RSimRobotController(AbstractRobotController):
     """Robot Controller (and Vision Receiver) for RSim.
 
+    Note: also does the first reset for the environment.
+
     pvp_manager:
     if not None, two controllers are playing against each other. Else, play against static
 
@@ -27,7 +29,7 @@ class RSimRobotController(AbstractRobotController):
         is_team_yellow: bool,
         n_friendly: int,
         env: SSLBaseEnv,
-        pvp_manager=None,  # RSimPVPRobotController, cannot forward declare
+        pvp_manager: Optional["RSimPVPManager"] = None,
     ):
         super().__init__(is_team_yellow, n_friendly)
         self._env = env
@@ -36,15 +38,15 @@ class RSimRobotController(AbstractRobotController):
         self._pvp_manager = pvp_manager
 
         if not self.pvp_manager:
-            self.env.reset()
+            self._env.reset()
 
     def get_robots_responses(self) -> Optional[List[RobotResponse]]:
         return self._robots_info.popleft() if len(self._robots_info) > 0 else None
 
     def send_robot_commands(self) -> None:
         """Sends the robot commands to the appropriate team (yellow or blue)."""
-        if self.pvp_manager:
-            self.pvp_manager.send_command(self.is_team_yellow, self._out_packet)
+        if self._pvp_manager is not None:
+            self._pvp_manager.send_command(self.is_team_yellow, self._out_packet)
         else:
             if self.is_team_yellow:
                 action = {
