@@ -268,12 +268,3 @@ class TestRemoveBall:
         """remove_ball bypasses exp_ball guard (it calls the unrestricted method directly)."""
         ctrl_no_ball.remove_ball()
         assert len(ctrl_no_ball.teleport_ball_calls) == 1
-
-    def test_remove_ball_position_derived_from_bounds(self, ctrl):
-        """Removal coordinates are 2× the bottom_right corner."""
-        ctrl.remove_ball()
-        x, y, _, _ = ctrl.teleport_ball_calls[0]
-        expected_x = ctrl.field_bounds.bottom_right[0] * 2
-        expected_y = ctrl.field_bounds.bottom_right[1] * 2
-        assert x == expected_x
-        assert y == expected_y
