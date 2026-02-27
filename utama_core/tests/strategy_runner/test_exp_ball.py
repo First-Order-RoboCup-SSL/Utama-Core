@@ -211,6 +211,24 @@ def test_exp_ball_true_ball_present_in_game():
     assert tm.ball_seen is True, "game.ball should be non-None when exp_ball=True"
 
 
+def test_exp_ball_true_ball_present_in_game_with_filtering():
+    """Same as above but with Kalman filtering enabled."""
+    tm = _BallPresentManager()
+    runner = StrategyRunner(
+        strategy=_IdleWithBallStrategy(),
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        mode="rsim",
+        exp_friendly=1,
+        exp_enemy=0,
+        exp_ball=True,
+        filtering=True,
+    )
+    passed = runner.run_test(tm, episode_timeout=5.0, rsim_headless=True)
+    assert passed
+    assert tm.ball_seen is True, "game.ball should be non-None when exp_ball=True (filtering=True)"
+
+
 def test_exp_ball_false_ball_absent_in_game():
     """When exp_ball=False, game.ball must be None on every game frame throughout the episode."""
     tm = _BallAbsentManager()
@@ -227,6 +245,29 @@ def test_exp_ball_false_ball_absent_in_game():
     assert passed, (
         f"game.ball was non-None within the first {tm.frames_checked} frames — "
         "expected None on every frame when exp_ball=False"
+    )
+    assert (
+        tm.frames_checked >= _BallAbsentManager.N_FRAMES_TO_CHECK
+    ), "Test timed out before reaching the required number of frames"
+
+
+def test_exp_ball_false_ball_absent_in_game_with_filtering():
+    """Same as above but with Kalman filtering enabled — the filter must not impute a ball."""
+    tm = _BallAbsentManager()
+    runner = StrategyRunner(
+        strategy=_IdleNoBallStrategy(),
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        mode="rsim",
+        exp_friendly=1,
+        exp_enemy=0,
+        exp_ball=False,
+        filtering=True,
+    )
+    passed = runner.run_test(tm, episode_timeout=10.0, rsim_headless=True)
+    assert passed, (
+        f"game.ball was non-None within the first {tm.frames_checked} frames — "
+        "expected None on every frame when exp_ball=False (filtering=True)"
     )
     assert (
         tm.frames_checked >= _BallAbsentManager.N_FRAMES_TO_CHECK
