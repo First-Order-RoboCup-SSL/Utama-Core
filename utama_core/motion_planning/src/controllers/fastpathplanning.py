@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 
+import numpy as np
+
 from utama_core.config.enums import Mode
+from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
@@ -28,7 +31,6 @@ class FastPathPlanningController(MotionController):
         oren = self.pid_oren.calculate(target_oren, robot.orientation, robot_id)
 
         pos = self.fpp._path_to(game, robot_id, target_pos)[0][1]
-
         vel = self.pid_trans.calculate(pos, robot.p, robot_id)
 
         return vel, oren

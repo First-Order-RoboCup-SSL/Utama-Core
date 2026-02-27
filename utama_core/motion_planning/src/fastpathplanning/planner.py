@@ -162,7 +162,7 @@ class FastPathPlanner:
 
             print(left_length, right_length)
             # choose shorter path
-            if right_length - left_length > 0.5:
+            if right_length > left_length:
                 return left_segments, left_length
             else:
                 return right_segments, right_length
