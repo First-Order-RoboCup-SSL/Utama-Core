@@ -95,7 +95,10 @@ class RandomMovementBehaviour(AbstractBehaviour):
         if rsim_env:
             rsim_env.draw_point(self.current_target.x, self.current_target.y, color="green")
             rsim_env.draw_line(
-                [(robot_pos.x, robot_pos.y), (self.current_target.x, self.current_target.y)],
+                [
+                    (robot_pos.x, robot_pos.y),
+                    (self.current_target.x, self.current_target.y),
+                ],
                 color="blue",
                 width=1,
             )

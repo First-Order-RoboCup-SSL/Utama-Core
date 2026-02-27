@@ -126,7 +126,10 @@ def test_random_movement_same_team(
     X_BUFFER = 0.5
     Y_BUFFER = 1.0
     field_bounds = FieldBounds(
-        top_left=(-Field.FULL_FIELD_HALF_LENGTH + X_BUFFER, Field.FULL_FIELD_HALF_WIDTH - Y_BUFFER),
+        top_left=(
+            -Field.FULL_FIELD_HALF_LENGTH + X_BUFFER,
+            Field.FULL_FIELD_HALF_WIDTH - Y_BUFFER,
+        ),
         bottom_right=(-X_BUFFER, -Field.FULL_FIELD_HALF_WIDTH + Y_BUFFER),
     )
 
