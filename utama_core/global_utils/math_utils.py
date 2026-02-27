@@ -266,3 +266,31 @@ def on_segment(p: np.ndarray, q: np.ndarray, r: np.ndarray) -> bool:
         return True
 
     return False
+
+
+def find_intersection(line1, line2):
+    """
+    Find the intersection point of two line segments.
+
+    Args:
+        line1: tuple of two np.arrays (start, end) -> (A, B)
+        line2: tuple of two np.arrays (start, end) -> (C, D)
+
+    Returns:
+        np.array of intersection point (x, y), or None if no intersection.
+    """
+    A, B = line1
+    C, D = line2
+
+    denom = (B[0] - A[0]) * (D[1] - C[1]) - (B[1] - A[1]) * (D[0] - C[0])
+
+    if denom == 0:
+        return None  # Parallel lines
+
+    t = ((C[0] - A[0]) * (D[1] - C[1]) - (C[1] - A[1]) * (D[0] - C[0])) / denom
+    u = ((C[0] - A[0]) * (B[1] - A[1]) - (C[1] - A[1]) * (B[0] - A[0])) / denom
+
+    if 0 <= t <= 1 and 0 <= u <= 1:
+        return A + t * (B - A)
+
+    return None  # Segments don't intersect

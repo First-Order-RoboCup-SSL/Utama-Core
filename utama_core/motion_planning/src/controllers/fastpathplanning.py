@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+
 from utama_core.config.enums import Mode
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -8,19 +10,6 @@ from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 
 class FastPathPlanningController(MotionController):
-    """
-    A motion controller that uses the FastPathPlanner to calculate a collision-free path
-    to the target position while also using PID controllers for orientation and translation.
-
-    The controller calculates the desired velocity and orientation for the robot
-    to reach the target position while avoiding obstacles. It uses the
-
-    FastPathPlanner to find a path and then applies
-    PID control to adjust the robot's movement towards the target. The controller
-    can be reset for a specific robot ID, which resets the PID controllers.
-
-    """
-
     def __init__(self, mode: Mode, rsim_env: SSLStandardEnv | None = None):
         self.mode = mode
         self.rsim_env: SSLStandardEnv | None = rsim_env
@@ -46,3 +35,4 @@ class FastPathPlanningController(MotionController):
 
     def reset(self, robot_id):
         self.pid_oren.reset(robot_id)
+        self.pid_trans.reset(robot_id)
