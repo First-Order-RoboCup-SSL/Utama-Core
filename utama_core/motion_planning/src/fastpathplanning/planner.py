@@ -45,30 +45,25 @@ class FastPathPlanner:
 
     def _find_subgoal(
         self,
-        robot_pos,
-        target,
-        obstaclepos,
-        obstacles,
-        recursionfactor,
-        multiple,
+        robot_pos: np.array,
+        target: np.array,
+        obstacle_pos: np.array,
+        obstacles: List,
+        recursionfactor: int,
+        multiple: int,
     ) -> np.array:
         direction = target - robot_pos
 
-        if recursionfactor % 2 == 1:
-            perp_dir = rotate_vector(direction[0], direction[1], math.pi / 2)
-        else:
-            perp_dir = rotate_vector(direction[0], direction[1], math.pi * 3 / 2)
-
+        perp_dir = rotate_vector(direction[0], direction[1], math.pi * (recursionfactor + 1 / 2))
         unitvec = perp_dir / np.linalg.norm(perp_dir)
-
-        subgoal = obstaclepos + self.SUBGOAL_DISTANCE * unitvec * multiple
+        subgoal = obstacle_pos + self.SUBGOAL_DISTANCE * unitvec * multiple
 
         for o in obstacles:
             if distance_point_to_segment(subgoal, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
                 subgoal = self._find_subgoal(
                     robot_pos,
                     target,
-                    obstaclepos,
+                    obstacle_pos,
                     obstacles,
                     recursionfactor,
                     multiple + 1,
@@ -78,10 +73,10 @@ class FastPathPlanner:
     def collides(
         self,
         segment: Tuple,
-        obstacles,
+        obstacles: List,
     ):  # returns None if no obstacles, else it returns the closest obstacle.
         closest_obstacle = None
-        obstaclepos = None
+        obstacle_pos = None
         tempdistance = distance(segment[0], segment[1])
         for o in obstacles:
 
@@ -91,15 +86,15 @@ class FastPathPlanner:
                     tempdistance = obstacledistance
                     closest_obstacle = o
         if closest_obstacle is not None:
-            obstaclepos = find_intersection(segment, closest_obstacle)
-            if obstaclepos is None:
+            obstacle_pos = find_intersection(segment, closest_obstacle)
+            if obstacle_pos is None:
                 if distance_point_to_segment(closest_obstacle[0], segment[0], segment[1]) < distance_point_to_segment(
                     closest_obstacle[1], segment[0], segment[1]
                 ):
-                    obstaclepos = closest_obstacle[0]
+                    obstacle_pos = closest_obstacle[0]
                 else:
-                    obstaclepos = closest_obstacle[1]
-        return obstaclepos
+                    obstacle_pos = closest_obstacle[1]
+        return obstacle_pos
 
     def _trajectory_length(self, trajectory):
         trajectory_legnth = 0
@@ -108,7 +103,7 @@ class FastPathPlanner:
         return trajectory_legnth
 
     def checksegment(
-        self, segment: Tuple, obstacles, recursionlength: int, target
+        self, segment: Tuple, obstacles: List, recursionlength: int, target: np.array
     ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float]:
         """
         If there are obstacles in the segment, divide the segment and return subsegments
@@ -169,7 +164,7 @@ class FastPathPlanner:
 
             print(left_length, right_length)
             # choose shorter path
-            if abs(left_length - right_length) > 2:
+            if right_length - left_length > 0.5:
                 return left_segments, left_length
             else:
                 return right_segments, right_length
@@ -193,6 +188,3 @@ class FastPathPlanner:
         #     else:
         #         self._env.draw_point(i[1][0],i[1][1], color = "BLUE", width = 10)
         return finaltrajectory
-
-
-# Here finaltrajectory is the final calculated trajectory which is a list consisting of different segements of the trajectory. Each segment is represented using a tuple
