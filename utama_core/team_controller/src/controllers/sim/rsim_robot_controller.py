@@ -37,7 +37,7 @@ class RSimRobotController(AbstractRobotController):
         self._out_packet = self._empty_command(self._n_friendly)
         self._pvp_manager = pvp_manager
 
-        if not self.pvp_manager:
+        if self._pvp_manager is None:
             self._env.reset()
 
     def get_robots_responses(self) -> Optional[List[RobotResponse]]:

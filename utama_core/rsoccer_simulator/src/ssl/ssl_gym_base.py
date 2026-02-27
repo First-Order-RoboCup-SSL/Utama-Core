@@ -153,9 +153,6 @@ class SSLBaseEnv:
 
     def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0):
         """Teleport ball to a new position on the field in meters.
-
-        Method does not allow for teleporting the ball outside of the field boundaries.
-
         Note: this does not create a new frame, but mutates the current frame
         """
         ball = Ball(x=x, y=-y, z=self.frame.ball.z, v_x=vx, v_y=-vy)
