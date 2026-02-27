@@ -34,12 +34,10 @@ class FastPathPlanner:
         for r in robots:
             robot_pos = np.array([r.p.x, r.p.y])
             if distance(our_pos, robot_pos) < self.LOOK_AHEAD_RANGE:
-
                 velocity = np.array([r.v.x, r.v.y])
                 point = np.array([r.p.x, r.p.y]) + velocity * self.PROJECTEDFRAMES / 60
-                obstalcesegment = (robot_pos, point)
-                obstacle_list.append(obstalcesegment)
-                self._env.draw_line(obstalcesegment)
+                obstalce_segment = (robot_pos, point)
+                obstacle_list.append(obstalce_segment)
 
         return obstacle_list
 
