@@ -161,7 +161,9 @@ class StrategyRunner:
         self._load_robot_controllers()
 
         # Remove Rsim ball. Rsim does not have the flexibilty to start without a ball.
-        # this must also be done after robot controllers are loaded.
+        # this must also be done after robot controllers are loaded and env reset
+        # the reset are embedded in the robot controllers so that the env can be controlled
+        # with the RsimRobotController even outside the context of StrategyRunner.
         if self.rsim_env and not self.exp_ball:
             self._remove_rsim_ball()
 
@@ -304,7 +306,7 @@ class StrategyRunner:
 
     def _remove_rsim_ball(self):
         """Removes the ball from the RSim environment by teleporting it off-field."""
-        self.rsim_env._remove_ball()
+        self.sim_controller.remove_ball()
         self.rsim_env._frame_to_observations()
         self.rsim_env.steps += 1  # Increment the step count to simulate time passing in the environment
 
@@ -342,11 +344,11 @@ class StrategyRunner:
                 self.opp.strategy.load_rsim_env(rsim_env)
             self.my.strategy.load_rsim_env(rsim_env)
 
-            return rsim_env, RSimController(env=rsim_env)
+            return rsim_env, RSimController(field_bounds=self.field_bounds, env=rsim_env)
 
         elif self.mode == Mode.GRSIM:
             # can consider baking all of these directly into sim controller
-            sim_controller = GRSimController()
+            sim_controller = GRSimController(self.field_bounds)
             n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
 
             # Ensure the expected number of robots is met by teleporting them
@@ -377,10 +379,7 @@ class StrategyRunner:
             if self.exp_ball:
                 sim_controller.teleport_ball(0, 0)
             else:
-                sim_controller.teleport_ball(
-                    -self.field_bounds.top_left[0] * 2,
-                    self.field_bounds.top_left[1] * 2,
-                )  # teleport ball off-field to effectively remove it
+                sim_controller.remove_ball()
 
             return None, sim_controller
 
@@ -501,8 +500,8 @@ class StrategyRunner:
         Args:
             field_bounds (FieldBounds): The bounds of the field.
             filtering (bool): Whether to use filtering in the position refiner.
-            exp_ball (bool): Whether the ball is expected. When False, the position refiner
-                will always output ball=None regardless of raw vision data.
+            exp_ball (bool): Whether the ball is expected. When False, the position refiner is
+                             allowed to return None if no ball is detected in raw vision data.
         Returns:
             tuple: The initialized PositionRefiner, VelocityRefiner, and RobotInfoRefiner.
         """

@@ -158,27 +158,21 @@ class SSLBaseEnv:
 
         Note: this does not create a new frame, but mutates the current frame
         """
-        assert x >= -self.field.length / 2 and x <= self.field.length / 2, "X coordinate out of bounds."
-        assert y >= -self.field.width / 2 and y <= self.field.width / 2, "Y coordinate out of bounds."
-        self._teleport_ball_unrestricted(x, y, vx, vy)
+        ball = Ball(x=x, y=-y, z=self.frame.ball.z, v_x=vx, v_y=-vy)
+        self.frame.ball = ball
+        self.rsim.reset(self.frame)
 
     def teleport_robot(
         self,
         is_team_yellow: bool,
-        robot_id: bool,
+        robot_id: int,
         x: float,
         y: float,
         theta: float = None,
     ):
         """Teleport robot to a new position on the field in meters, radians.
-
-        Method does not allow for teleporting the robot outside of the field boundaries.
-
         Note: this does not create a new frame, but mutates the current frame
         """
-        assert x >= -self.field.length / 2 and x <= self.field.length / 2, "X coordinate out of bounds."
-        assert y >= -self.field.width / 2 and y <= self.field.width / 2, "Y coordinate out of bounds."
-
         if theta is None:
             if is_team_yellow:
                 theta = self.frame.robots_yellow[robot_id].theta
@@ -258,28 +252,6 @@ class SSLBaseEnv:
             width=width,
         )
         self.overlay.append(poly_data)
-
-    def _teleport_ball_unrestricted(self, x: float, y: float, vx: float = 0, vy: float = 0):
-        """Teleports the ball to a specific location on the field without any restrictions.
-            The distinction exists to allow for teleporting the ball outside of the field boundaries.
-        Args:
-            x (float): The x-coordinate to place the ball at (in meters [-4.5, 4.5]).
-            y (float): The y-coordinate to place the ball at (in meters [-3.0, 3.0]).
-            vx (float): The velocity of the ball in the x-direction (in m/s).
-            vy (float): The velocity of the ball in the y-direction (in m/s).
-
-        This method creates a command for teleporting the ball and sends it to the simulator.
-        """
-        ball = Ball(x=x, y=-y, z=self.frame.ball.z, v_x=vx, v_y=-vy)
-        self.frame.ball = ball
-        self.rsim.reset(self.frame)
-
-    def _remove_ball(self):
-        """Removes the ball from the field by teleporting it to an off-field location."""
-        self._teleport_ball_unrestricted(
-            self.field.length / 2 + self.OFF_FIELD_OFFSET,
-            self.field.width / 2 + self.OFF_FIELD_OFFSET,
-        )
 
     ### END OF CUSTOM FUNCTIONS ###
 

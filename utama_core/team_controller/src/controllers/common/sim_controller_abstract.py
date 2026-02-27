@@ -1,10 +1,24 @@
 import abc
 
+from utama_core.entities.game.field import FieldBounds
+from utama_core.global_utils.math_utils import in_field_bounds
+
 
 class AbstractSimController:
     """Template for generic sim controller, allowing actions such."""
 
-    @abc.abstractmethod
+    def __init__(self, field_bounds: FieldBounds):
+        self.field_bounds = field_bounds
+
+    def remove_ball(self):
+        """Removes the ball from the field by teleporting it two times the field dimensions away."""
+        self._do_teleport_ball_unrestricted(
+            self.field_bounds.bottom_right[0] * 2,
+            -self.field_bounds.bottom_right[1] * 2,
+            0,
+            0,
+        )
+
     def teleport_ball(self, x: float, y: float) -> None:
         """Teleports the ball to a specific location on the field.
 
@@ -12,11 +26,17 @@ class AbstractSimController:
             x (float): The x-coordinate to place the ball at (in meters [-4.5, 4.5]).
             y (float): The y-coordinate to place the ball at (in meters [-3.0, 3.0]).
 
+        Method does not allow for teleporting the ball outside of the field boundaries.
+
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
-        ...
+        in_field = in_field_bounds((x, y), self.field_bounds)
+        if not in_field:
+            raise ValueError(
+                f"Cannot teleport ball to ({x}, {y}) as it is outside of the field boundaries defined by {self.field_bounds}."
+            )
+        self._do_teleport_ball_unrestricted(x, y, 0, 0)
 
-    @abc.abstractmethod
     def teleport_robot(
         self,
         is_team_yellow: bool,
@@ -34,9 +54,18 @@ class AbstractSimController:
             y (float): The y-coordinate to place the ball at (in meters [-3.0, 3.0]).
             theta (float): radian angle of the robot heading, 0 degrees faces towards positive x axis
 
+        Method does not allow for teleporting the ball outside of the field boundaries.
+
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
-        ...
+        in_field = in_field_bounds((x, y), self.field_bounds)
+        if not in_field:
+            raise ValueError(
+                f"Cannot teleport robot to ({x}, {y}) as it is outside of the field boundaries defined by {self.field_bounds}."
+            )
+        self._do_teleport_robot_unrestricted(is_team_yellow, robot_id, x, y, theta)
+
+    ### Below methods are implemented in the specific sim controllers ####
 
     @abc.abstractmethod
     def set_robot_presence(self, is_team_yellow: bool, robot_id: int, should_robot_be_present: bool) -> None:
@@ -50,3 +79,22 @@ class AbstractSimController:
         The method calculates a teleport location based on the team and presence status, then sends a command to the simulator.
         """
         ...
+
+    @abc.abstractmethod
+    def _do_teleport_ball_unrestricted(self, x: float, y: float, vx: float, vy: float) -> None:
+        """Teleports the ball to a specific location on the field without any boundary checks."""
+        ...
+
+    @abc.abstractmethod
+    def _do_teleport_robot_unrestricted(
+        self,
+        is_team_yellow: bool,
+        robot_id: int,
+        x: float,
+        y: float,
+        theta: float = None,
+    ) -> None:
+        """Teleports a robot to a specific location on the field without any boundary checks."""
+        ...
+
+    ### End of abstract methods ###

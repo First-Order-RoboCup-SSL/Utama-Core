@@ -113,6 +113,23 @@ def compute_bounding_zone_from_points(
     return FieldBounds(top_left=(min_x, max_y), bottom_right=(max_x, min_y))
 
 
+def in_field_bounds(point: Tuple[float, float] | Vector2D, bounding_box: FieldBounds) -> bool:
+    """Check if a point is within a given bounding box.
+
+    Args:
+        point (tuple or Vector2D): The (x, y) coordinates of the point to check.
+        bounding_box (FieldBounds): The bounding box defined by its top-left and bottom-right corners.
+
+    Returns:
+        bool: True if the point is within the bounding box, False otherwise.
+    """
+    x, y = point
+    return (
+        bounding_box.top_left[0] <= x <= bounding_box.bottom_right[0]
+        and bounding_box.bottom_right[1] <= y <= bounding_box.top_left[1]
+    )
+
+
 def assert_valid_bounding_box(bb: FieldBounds):
     """Asserts that a FieldBounds object is valid, raising an AssertionError if not."""
     fx, fy = Field._FULL_FIELD_HALF_LENGTH, Field._FULL_FIELD_HALF_WIDTH

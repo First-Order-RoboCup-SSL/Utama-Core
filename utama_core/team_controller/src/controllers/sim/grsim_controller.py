@@ -9,6 +9,7 @@ from utama_core.config.settings import (
     SIM_CONTROL_PORT,
     TELEPORT_X_COORDS,
 )
+from utama_core.entities.game.field import FieldBounds
 from utama_core.team_controller.src.controllers.common.sim_controller_abstract import (
     AbstractSimController,
 )
@@ -34,7 +35,13 @@ class GRSimController(AbstractSimController):
         port (int): Port of the simulator. Defaults to SIM_CONTROL_PORT.
     """
 
-    def __init__(self, ip: str = LOCAL_HOST, port: int = SIM_CONTROL_PORT):
+    def __init__(
+        self,
+        field_bounds: FieldBounds,
+        ip: str = LOCAL_HOST,
+        port: int = SIM_CONTROL_PORT,
+    ):
+        super().__init__(field_bounds)
         self.net = network_manager.NetworkManager(address=(ip, port))
 
     def _create_simulator_command(self, control_message: object) -> object:
@@ -42,7 +49,7 @@ class GRSimController(AbstractSimController):
         sim_command.control.CopyFrom(control_message)
         return sim_command
 
-    def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0) -> None:
+    def _do_teleport_ball_unrestricted(self, x: float, y: float, vx: float = 0, vy: float = 0) -> None:
         """Teleports the ball to a specific location on the field.
 
         Args:
@@ -71,7 +78,7 @@ class GRSimController(AbstractSimController):
             self.teleport_robot(False, idx, x[0], x[1], x[2])
         self.teleport_ball(0, 0, 0, 0)
 
-    def teleport_robot(
+    def _do_teleport_robot_unrestricted(
         self,
         is_team_yellow: bool,
         robot_id: int,
