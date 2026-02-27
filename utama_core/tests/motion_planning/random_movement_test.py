@@ -10,7 +10,9 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.run import StrategyRunner
-from utama_core.strategy.examples.random_movement_strategy import RandomMovementStrategy
+from utama_core.strategy.examples.motion_planning.random_movement_strategy import (
+    RandomMovementStrategy,
+)
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
@@ -120,27 +122,28 @@ def test_random_movement_same_team(
     my_team_is_yellow = True
     my_team_is_right = False  # Yellow on left half
 
-    # Define half court bounds for left side (Yellow team)
-    # Standard SSL field is ~9m x 6m, so half court is ~4.5m x 6m
-    # Using slightly smaller bounds for safety: -4m to 0m in x, -2.5m to 2.5m in y
-    X_BUFFER = 0.5
-    Y_BUFFER = 1.0
-    field_bounds = FieldBounds(
+    # use small bounds to increase chance of collision
+    small_bounds = FieldBounds(
         top_left=(
-            -Field.FULL_FIELD_HALF_LENGTH + X_BUFFER,
-            Field.FULL_FIELD_HALF_WIDTH - Y_BUFFER,
+            -Field.FULL_FIELD_HALF_LENGTH + 1,
+            Field.FULL_FIELD_HALF_WIDTH - 1,
         ),
-        bottom_right=(-X_BUFFER, -Field.FULL_FIELD_HALF_WIDTH + Y_BUFFER),
+        bottom_right=(
+            -Field.FULL_FIELD_HALF_LENGTH + 3,
+            Field.FULL_FIELD_HALF_WIDTH - 3,
+        ),
     )
 
     # Max is 6 robots
     n_robots = 2
 
+    seed = 42
+
     scenario = RandomMovementScenario(
         n_robots=n_robots,
-        field_bounds=field_bounds,
+        field_bounds=small_bounds,
         min_target_distance=1.0,  # Minimum distance for next target
-        required_targets_per_robot=3,  # Each robot must reach 3 targets
+        required_targets_per_robot=5,  # Each robot must reach 5 targets
         endpoint_tolerance=0.3,
     )
 
@@ -149,8 +152,9 @@ def test_random_movement_same_team(
     # Create random movement strategy
     strategy = RandomMovementStrategy(
         n_robots=n_robots,
-        field_bounds=field_bounds,
+        field_bounds=small_bounds,
         min_target_distance=scenario.min_target_distance,
+        seed=seed,
         endpoint_tolerance=scenario.endpoint_tolerance,
         on_target_reached=test_manager.update_target_reached,
     )

@@ -33,7 +33,7 @@ class RandomMovementBehaviour(AbstractBehaviour):
         field_bounds: FieldBounds,
         endpoint_tolerance: float,
         min_target_distance: float = 0.0,
-        seed: Optional[int] = None,
+        seed: int = 42,
         on_target_reached: Optional[callable] = None,
     ):
         super().__init__(name=f"RandomMovement_{robot_id}")
@@ -136,7 +136,7 @@ class RandomMovementStrategy(AbstractStrategy):
         field_bounds: FieldBounds,
         endpoint_tolerance: float,
         min_target_distance: float = 0.0,
-        seed: Optional[int] = None,
+        seed: int = 42,
         on_target_reached: Optional[callable] = None,
     ):
         self.n_robots = n_robots
@@ -165,7 +165,7 @@ class RandomMovementStrategy(AbstractStrategy):
                 field_bounds=self.field_bounds,
                 endpoint_tolerance=self.endpoint_tolerance,
                 min_target_distance=self.min_target_distance,
-                seed=None if self.seed is None else self.seed + robot_id,
+                seed=self.seed + robot_id,
                 on_target_reached=self.on_target_reached,
             )
 
