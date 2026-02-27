@@ -49,12 +49,12 @@ class FastPathPlanner:
         target: np.array,
         obstacle_pos: np.array,
         obstacles: List,
-        recursionfactor: int,
+        subgoal_direction: int,
         multiple: int,
     ) -> np.array:
-        direction = target - robot_pos
 
-        perp_dir = rotate_vector(direction[0], direction[1], math.pi * (recursionfactor + 1 / 2))
+        direction = target - robot_pos
+        perp_dir = rotate_vector(direction[0], direction[1], math.pi * (subgoal_direction + 1 / 2))
         unitvec = perp_dir / np.linalg.norm(perp_dir)
         subgoal = obstacle_pos + self.SUBGOAL_DISTANCE * unitvec * multiple
 
@@ -65,7 +65,7 @@ class FastPathPlanner:
                     target,
                     obstacle_pos,
                     obstacles,
-                    recursionfactor,
+                    subgoal_direction,
                     multiple + 1,
                 )
         return subgoal
@@ -118,7 +118,7 @@ class FastPathPlanner:
                 segment[1],
                 closestobstacle,
                 obstacles,
-                recursionfactor=1,
+                subgoal_direction=1,
                 multiple=1,
             )
             subgoal_right = self._find_subgoal(
@@ -126,7 +126,7 @@ class FastPathPlanner:
                 segment[1],
                 closestobstacle,
                 obstacles,
-                recursionfactor=0,
+                subgoal_direction=0,
                 multiple=1,
             )
 
@@ -180,11 +180,4 @@ class FastPathPlanner:
         target = np.array(target)
         obstacles = self._get_obstacles(game, robot_id, our_pos)
         finaltrajectory = self.checksegment((our_pos, target), obstacles, 0, target)[0]
-
-        # for i in finaltrajectory:
-        #     self._env.draw_line(i)
-        #     if len(finaltrajectory) == 2:
-        #         self._env.draw_point(i[1][0],i[1][1], width = 10)
-        #     else:
-        #         self._env.draw_point(i[1][0],i[1][1], color = "BLUE", width = 10)
         return finaltrajectory
