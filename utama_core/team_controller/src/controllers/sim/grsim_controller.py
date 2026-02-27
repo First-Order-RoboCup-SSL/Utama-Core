@@ -77,7 +77,10 @@ class GRSimController(AbstractSimController):
             self.teleport_robot(True, idx, x[0], x[1], x[2])
         for idx, x in enumerate(formations.LEFT_START_ONE):
             self.teleport_robot(False, idx, x[0], x[1], x[2])
-        self.teleport_ball(0, 0, 0, 0)
+        if self.exp_ball:
+            self.teleport_ball(0, 0, 0, 0)
+        else:
+            self.remove_ball()
 
     def _do_teleport_robot_unrestricted(
         self,

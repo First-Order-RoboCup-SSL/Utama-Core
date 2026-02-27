@@ -15,7 +15,7 @@ class AbstractSimController:
         """Removes the ball from the field by teleporting it two times the field dimensions away."""
         self._do_teleport_ball_unrestricted(
             self.field_bounds.bottom_right[0] * 2,
-            -self.field_bounds.bottom_right[1] * 2,
+            self.field_bounds.bottom_right[1] * 2,
             0,
             0,
         )
