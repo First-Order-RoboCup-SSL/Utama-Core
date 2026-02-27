@@ -271,7 +271,9 @@ class StrategyRunner:
             Tuple containing the SideRuntime for the friendly team and the opponent team (or None if no opponent strategy provided).
         """
         opp_side = None
-        my_pos_ref, my_vel_ref, my_robot_ref = self._init_refiners(self.field_bounds, filtering=filtering)
+        my_pos_ref, my_vel_ref, my_robot_ref = self._init_refiners(
+            self.field_bounds, filtering=filtering, exp_ball=self.exp_ball
+        )
         my_motion_controller = get_control_scheme(control_scheme)
         my_strategy.setup_behaviour_tree(is_opp_strat=False)
         my_side = SideRuntime(
@@ -283,7 +285,9 @@ class StrategyRunner:
         )
 
         if opp_strategy is not None:
-            opp_pos_ref, opp_vel_ref, opp_robot_ref = self._init_refiners(self.field_bounds, filtering=filtering)
+            opp_pos_ref, opp_vel_ref, opp_robot_ref = self._init_refiners(
+                self.field_bounds, filtering=filtering, exp_ball=True
+            )
             opp_motion_controller = (
                 get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
             )
@@ -490,18 +494,22 @@ class StrategyRunner:
         self,
         field_bounds: FieldBounds,
         filtering: bool,
+        exp_ball: bool = True,
     ) -> tuple[PositionRefiner, VelocityRefiner, RobotInfoRefiner]:
         """
         Initialize the position, velocity, and robot info refiners.
         Args:
             field_bounds (FieldBounds): The bounds of the field.
             filtering (bool): Whether to use filtering in the position refiner.
+            exp_ball (bool): Whether the ball is expected. When False, the position refiner
+                will always output ball=None regardless of raw vision data.
         Returns:
             tuple: The initialized PositionRefiner, VelocityRefiner, and RobotInfoRefiner.
         """
         position_refiner = PositionRefiner(
             field_bounds,
             filtering=filtering,
+            exp_ball=exp_ball,
         )
         velocity_refiner = VelocityRefiner()
         robot_info_refiner = RobotInfoRefiner()

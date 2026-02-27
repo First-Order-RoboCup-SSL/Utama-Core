@@ -166,22 +166,32 @@ class _BallPresentManager(AbstractTestManager):
 
 
 class _BallAbsentManager(AbstractTestManager):
-    """Records whether game.ball is None on the first eval call, then passes."""
+    """Verifies game.ball is None on EVERY eval call when exp_ball=False.
+
+    Returns FAILURE immediately on the first frame where a ball is seen, so
+    the test fails fast with a clear signal. Returns SUCCESS after
+    N_FRAMES_TO_CHECK frames with no ball, confirming the invariant holds
+    throughout and is not just an initial transient.
+    """
 
     n_episodes = 1
+    N_FRAMES_TO_CHECK = 20
 
     def __init__(self):
         super().__init__()
-        self.ball_seen: Optional[bool] = None
+        self.frames_checked: int = 0
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         sim_controller.teleport_robot(game.my_team_is_yellow, 0, -3.0, 0.0)
         # No ball teleport — ball has already been removed off-field by StrategyRunner
 
     def eval_status(self, game: Game) -> TestingStatus:
-        if self.ball_seen is None:
-            self.ball_seen = game.ball is not None
-        return TestingStatus.SUCCESS
+        self.frames_checked += 1
+        if game.ball is not None:
+            return TestingStatus.FAILURE
+        if self.frames_checked >= self.N_FRAMES_TO_CHECK:
+            return TestingStatus.SUCCESS
+        return TestingStatus.IN_PROGRESS
 
 
 def test_exp_ball_true_ball_present_in_game():
@@ -202,7 +212,7 @@ def test_exp_ball_true_ball_present_in_game():
 
 
 def test_exp_ball_false_ball_absent_in_game():
-    """When exp_ball=False, game.ball must be None because the ball is moved off-field."""
+    """When exp_ball=False, game.ball must be None on every game frame throughout the episode."""
     tm = _BallAbsentManager()
     runner = StrategyRunner(
         strategy=_IdleNoBallStrategy(),
@@ -213,6 +223,11 @@ def test_exp_ball_false_ball_absent_in_game():
         exp_enemy=0,
         exp_ball=False,
     )
-    passed = runner.run_test(tm, episode_timeout=5.0, rsim_headless=True)
-    assert passed
-    assert tm.ball_seen is False, "game.ball should be None when exp_ball=False"
+    passed = runner.run_test(tm, episode_timeout=10.0, rsim_headless=True)
+    assert passed, (
+        f"game.ball was non-None within the first {tm.frames_checked} frames — "
+        "expected None on every frame when exp_ball=False"
+    )
+    assert (
+        tm.frames_checked >= _BallAbsentManager.N_FRAMES_TO_CHECK
+    ), "Test timed out before reaching the required number of frames"
