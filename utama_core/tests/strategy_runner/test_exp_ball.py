@@ -89,7 +89,10 @@ def test_exp_ball_mismatch_strategy_true_runner_false():
 
 
 def test_exp_ball_mismatch_strategy_false_runner_true():
-    """Strategy expects no ball but runner says exp_ball=True → AssertionError."""
+    """
+    Strategy expects no ball but runner says exp_ball=True → No issue, runner remains exp_ball=True.
+    This is a design choice to allow strategies to be agnostic to ball presence if they don't care about it.
+    """
     strat = DummyStrategy()
     strat.exp_ball = False
     run = StrategyRunner(
