@@ -286,7 +286,7 @@ class StrategyRunner:
 
         if opp_strategy is not None:
             opp_pos_ref, opp_vel_ref, opp_robot_ref = self._init_refiners(
-                self.field_bounds, filtering=filtering, exp_ball=True
+                self.field_bounds, filtering=filtering, exp_ball=self.exp_ball
             )
             opp_motion_controller = (
                 get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
