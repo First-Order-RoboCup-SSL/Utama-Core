@@ -11,14 +11,22 @@ class AbstractSimController:
         self.field_bounds = field_bounds
         self.exp_ball = exp_ball
 
-    def remove_ball(self):
-        """Removes the ball from the field by teleporting it two times the field dimensions away."""
-        self._do_teleport_ball_unrestricted(
-            self.field_bounds.bottom_right[0] * 2,
-            self.field_bounds.bottom_right[1] * 2,
-            0,
-            0,
-        )
+    def remove_ball(self) -> None:
+        """
+        Removes the ball from play by teleporting it outside the field
+        bounds by twice the field length and width.
+        """
+
+        bottom_right = self.field_bounds.bottom_right
+        top_left = self.field_bounds.top_left
+
+        field_length = abs(bottom_right[0] - top_left[0])
+        field_width = abs(bottom_right[1] - top_left[1])
+
+        x = bottom_right[0] + 2 * field_length
+        y = bottom_right[1] + 2 * field_width
+
+        self._do_teleport_ball_unrestricted(x, y, 0, 0)
 
     def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0) -> None:
         """Teleports the ball to a specific location on the field.

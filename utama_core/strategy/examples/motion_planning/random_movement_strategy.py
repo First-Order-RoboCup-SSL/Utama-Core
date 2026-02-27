@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from typing import Optional
+from typing import Callable, Optional
 
 import py_trees
 
@@ -34,7 +34,7 @@ class RandomMovementBehaviour(AbstractBehaviour):
         endpoint_tolerance: float,
         min_target_distance: float = 0.0,
         seed: int = 42,
-        on_target_reached: Optional[callable] = None,
+        on_target_reached: Callable[[int], None] | None = None,
     ):
         super().__init__(name=f"RandomMovement_{robot_id}")
         self.robot_id = robot_id
@@ -137,7 +137,7 @@ class RandomMovementStrategy(AbstractStrategy):
         endpoint_tolerance: float,
         min_target_distance: float = 0.0,
         seed: int = 42,
-        on_target_reached: Optional[callable] = None,
+        on_target_reached: Callable[[int], None] | None = None,
     ):
         self.n_robots = n_robots
         self.field_bounds = field_bounds
