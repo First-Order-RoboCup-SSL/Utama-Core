@@ -99,7 +99,9 @@ class StrategyRunner:
         mode (str): "real", "rsim", "grism"
         exp_friendly (int): Expected number of friendly robots.
         exp_enemy (int): Expected number of enemy robots.
-        exp_ball (bool): Whether the ball is expected to be present. Defaults to True.
+        exp_ball (bool): Whether the ball is expected to be present.
+                        Only raises error when strategy expects ball but runtime does not provide it.
+                        Defaults to True.
         field_bounds (FieldBounds): Configuration of the field. Defaults to standard field.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         control_scheme (str, optional): Name of the motion control scheme to use.
@@ -406,22 +408,53 @@ class StrategyRunner:
         exp_friendly: int,
         exp_enemy: int,
         exp_ball: bool,
-    ):
-        """Assert that the strategy and expected robots/ball parameters are consistent."""
-        assert exp_friendly <= MAX_ROBOTS, "Expected number of friendly robots is too high."
-        assert exp_enemy <= MAX_ROBOTS, "Expected number of enemy robots is too high."
-        assert exp_friendly >= 1, "Expected number of friendly robots is too low."
-        assert exp_enemy >= 0, "Expected number of enemy robots is too low."
+    ) -> None:
+        """
+        Validate that expected robot counts and ball presence are consistent
+        with both team strategies at runtime.
 
-        assert self.my.strategy.assert_exp_robots(
-            exp_friendly, exp_enemy
-        ), "Expected number of robots at runtime does not match my strategy."
-        assert self.my.strategy.exp_ball == exp_ball, "Expected presence of ball does not match my strategy."
+        This method performs runtime configuration checks to ensure that the
+        expected number of friendly and opponent robots, as well as ball
+        availability, match the assumptions declared by each strategy.
+
+        Parameters
+        ----------
+        exp_friendly : int
+            Expected number of friendly robots.
+        exp_enemy : int
+            Expected number of opponent robots.
+        exp_ball : bool
+            Whether a ball is expected to be present.
+
+        Raises
+        ------
+        ValueError
+            If robot counts fall outside valid bounds.
+        RuntimeError
+            If strategy expectations do not match runtime configuration.
+        """
+
+        if exp_friendly > MAX_ROBOTS:
+            raise ValueError(f"Expected number of friendly robots ({exp_friendly}) exceeds MAX_ROBOTS ({MAX_ROBOTS}).")
+        if exp_enemy > MAX_ROBOTS:
+            raise ValueError(f"Expected number of enemy robots ({exp_enemy}) exceeds MAX_ROBOTS ({MAX_ROBOTS}).")
+        if exp_friendly < 1:
+            raise ValueError(f"Expected number of friendly robots ({exp_friendly}) must be at least 1.")
+        if exp_enemy < 0:
+            raise ValueError(f"Expected number of enemy robots ({exp_enemy}) cannot be negative.")
+
+        if not self.my.strategy.assert_exp_robots(exp_friendly, exp_enemy):
+            raise RuntimeError("Runtime robot count does not match expectations of my strategy.")
+
+        if not exp_ball and self.my.strategy.exp_ball:
+            raise RuntimeError("Ball expected by my strategy, but not available in runtime configuration.")
+
         if self.opp:
-            assert self.opp.strategy.assert_exp_robots(
-                exp_enemy, exp_friendly
-            ), "Expected number of robots at runtime does not match opponent strategy."
-            assert self.opp.strategy.exp_ball == exp_ball, "Expected presence of ball does not match opponent strategy."
+            if not self.opp.strategy.assert_exp_robots(exp_enemy, exp_friendly):
+                raise RuntimeError("Runtime robot count does not match expectations of opponent strategy.")
+
+            if not self.opp.strategy.exp_ball and exp_ball:
+                raise RuntimeError("Ball expected by opponent strategy, but not available in runtime configuration.")
 
     def _assert_exp_goals(self):
         """Assert the expected number of goals."""

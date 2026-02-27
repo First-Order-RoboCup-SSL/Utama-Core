@@ -62,6 +62,8 @@ class AbstractStrategy(ABC):
 
     ### To be specified in your abstract strategy ###
     # whether the strategy expects the ball to be present on the field
+    # if True, and strat_runner exp_ball is False, strat_runner will raise an error and not run the strategy
+    # if False, but ball exists, we will just rock on!
     exp_ball: bool = True
     #################################################
 
