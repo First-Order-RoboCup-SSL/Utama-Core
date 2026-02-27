@@ -1,5 +1,6 @@
 import abc
 
+from utama_core.config.settings import OFF_PITCH_OFFSET
 from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.math_utils import in_field_bounds
 
@@ -14,17 +15,13 @@ class AbstractSimController:
     def remove_ball(self) -> None:
         """
         Removes the ball from play by teleporting it outside the field
-        bounds by twice the field length and width.
+        offset by OFF_PITCH_OFFSET to the bottom right of the field.
         """
 
         bottom_right = self.field_bounds.bottom_right
-        top_left = self.field_bounds.top_left
 
-        field_length = abs(bottom_right[0] - top_left[0])
-        field_width = abs(bottom_right[1] - top_left[1])
-
-        x = bottom_right[0] + 2 * field_length
-        y = bottom_right[1] + 2 * field_width
+        x = bottom_right[0] + OFF_PITCH_OFFSET
+        y = bottom_right[1] + OFF_PITCH_OFFSET
 
         self._do_teleport_ball_unrestricted(x, y, 0, 0)
 
