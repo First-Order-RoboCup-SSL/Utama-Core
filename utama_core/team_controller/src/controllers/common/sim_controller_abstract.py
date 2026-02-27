@@ -7,8 +7,9 @@ from utama_core.global_utils.math_utils import in_field_bounds
 class AbstractSimController:
     """Template for generic sim controller, allowing actions such."""
 
-    def __init__(self, field_bounds: FieldBounds):
+    def __init__(self, field_bounds: FieldBounds, exp_ball: bool = True):
         self.field_bounds = field_bounds
+        self.exp_ball = exp_ball
 
     def remove_ball(self):
         """Removes the ball from the field by teleporting it two times the field dimensions away."""
@@ -32,6 +33,10 @@ class AbstractSimController:
 
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
+        if self.exp_ball is False:
+            raise ValueError(
+                "This controller is configured to not expect a ball, so teleporting the ball is not allowed."
+            )
         in_field = in_field_bounds((x, y), self.field_bounds)
         if not in_field:
             raise ValueError(

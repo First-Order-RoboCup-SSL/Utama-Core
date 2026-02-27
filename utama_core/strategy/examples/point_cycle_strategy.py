@@ -105,6 +105,8 @@ class PointCycleStrategy(AbstractStrategy):
         seed (Optional[int]): Base seed for deterministic behaviour.
     """
 
+    exp_ball = False  # This behaviour does not require the ball to be present
+
     def __init__(
         self,
         n_robots: int,

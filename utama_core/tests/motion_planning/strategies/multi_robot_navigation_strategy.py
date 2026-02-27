@@ -19,6 +19,8 @@ class MultiRobotNavigationStrategy(AbstractStrategy):
         target_orientation: Optional target orientation for all robots (default: 0)
     """
 
+    exp_ball = False  # No ball interaction expected
+
     def __init__(
         self,
         robot_targets: Dict[int, tuple[float, float]],

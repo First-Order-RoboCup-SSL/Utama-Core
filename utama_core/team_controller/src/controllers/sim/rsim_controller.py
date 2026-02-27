@@ -12,8 +12,8 @@ class RSimController(AbstractSimController):
     """A controller for interacting with a simulation environment for robot soccer, allowing actions such as teleporting
     the ball and setting robot presence on the field."""
 
-    def __init__(self, field_bounds: FieldBounds, env: SSLBaseEnv):
-        super().__init__(field_bounds)
+    def __init__(self, field_bounds: FieldBounds, exp_ball: bool, env: SSLBaseEnv):
+        super().__init__(field_bounds, exp_ball)
         self._env = env
 
     def _do_teleport_ball_unrestricted(self, x, y, vx, vy):

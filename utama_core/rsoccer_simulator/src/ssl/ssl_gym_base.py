@@ -151,6 +151,12 @@ class SSLBaseEnv:
 
     ### CUSTOM FUNCTIONS WE ADDED ###
 
+    def step_noop(self):
+        """Step the environment without any action."""
+        observation = self._frame_to_observations()[0]
+        self.steps += 1
+        return observation
+
     def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0):
         """Teleport ball to a new position on the field in meters.
         Note: this does not create a new frame, but mutates the current frame

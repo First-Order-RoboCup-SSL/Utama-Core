@@ -31,8 +31,8 @@ class GameGater:
 
         def _add_frame(my_game_frame: GameFrame, opp_game_frame: GameFrame) -> Tuple[GameFrame, Optional[GameFrame]]:
             if rsim_env:
-                vision_frames = [rsim_env._frame_to_observations()[0]]
-                rsim_env.steps += 1  # Increment the step count to simulate time passing in the environment
+                obs = rsim_env.step_noop()  # Step the environment without action to get the latest observation
+                vision_frames = [obs]
             else:
                 vision_frames = [buffer.popleft() if buffer else None for buffer in vision_buffers]
             my_game_frame = position_refiner.refine(my_game_frame, vision_frames)

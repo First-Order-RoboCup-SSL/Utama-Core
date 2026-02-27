@@ -61,8 +61,6 @@ class RandomMovementTestManager(AbstractTestManager):
             sim_controller.teleport_robot(game.my_team_is_yellow, i, x, y, 0.0)
             self.targets_reached_count[i] = 0
 
-        sim_controller.teleport_ball(0.0, 0.0)
-
         self._reset_metrics()
 
     def _reset_metrics(self):
@@ -163,6 +161,7 @@ def test_random_movement_same_team(
         mode=mode,
         exp_friendly=n_robots,
         exp_enemy=0,
+        exp_ball=False,
     )
 
     test_passed = runner.run_test(

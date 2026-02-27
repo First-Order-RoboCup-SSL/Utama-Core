@@ -309,8 +309,7 @@ class StrategyRunner:
     def _remove_rsim_ball(self):
         """Removes the ball from the RSim environment by teleporting it off-field."""
         self.sim_controller.remove_ball()
-        self.rsim_env._frame_to_observations()
-        self.rsim_env.steps += 1  # Increment the step count to simulate time passing in the environment
+        self.rsim_env.step_noop()  # Step the environment to apply the change
 
     def _load_sim(
         self,
@@ -346,11 +345,11 @@ class StrategyRunner:
                 self.opp.strategy.load_rsim_env(rsim_env)
             self.my.strategy.load_rsim_env(rsim_env)
 
-            return rsim_env, RSimController(field_bounds=self.field_bounds, env=rsim_env)
+            return rsim_env, RSimController(field_bounds=self.field_bounds, exp_ball=self.exp_ball, env=rsim_env)
 
         elif self.mode == Mode.GRSIM:
             # can consider baking all of these directly into sim controller
-            sim_controller = GRSimController(self.field_bounds)
+            sim_controller = GRSimController(self.field_bounds, self.exp_ball)
             n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
 
             # Ensure the expected number of robots is met by teleporting them
@@ -453,7 +452,7 @@ class StrategyRunner:
             if not self.opp.strategy.assert_exp_robots(exp_enemy, exp_friendly):
                 raise RuntimeError("Runtime robot count does not match expectations of opponent strategy.")
 
-            if not self.opp.strategy.exp_ball and exp_ball:
+            if not exp_ball and self.opp.strategy.exp_ball:
                 raise RuntimeError("Ball expected by opponent strategy, but not available in runtime configuration.")
 
     def _assert_exp_goals(self):

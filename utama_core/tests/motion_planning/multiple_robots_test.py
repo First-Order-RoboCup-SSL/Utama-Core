@@ -51,8 +51,6 @@ class MultiRobotTestManager(AbstractTestManager):
         for i, (x, y) in enumerate(self.scenario.enemy_positions):
             sim_controller.teleport_robot(not game.my_team_is_yellow, i, x, y, 0.0)
 
-        sim_controller.teleport_ball(0.0, 0.0)
-
         self._reset_metrics()
 
     def _reset_metrics(self):
@@ -182,6 +180,7 @@ def test_mirror_swap(
         mode=mode,
         exp_friendly=6,
         exp_enemy=6,
+        exp_ball=False,
         opp_strategy=opp_strategy,
     )
 
@@ -274,6 +273,7 @@ def test_diagonal_cross_square(
         mode=mode,
         exp_friendly=2,
         exp_enemy=2,
+        exp_ball=False,
         opp_strategy=opp_strategy,
     )
 

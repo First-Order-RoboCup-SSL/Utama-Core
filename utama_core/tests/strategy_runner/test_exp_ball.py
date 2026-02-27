@@ -76,7 +76,7 @@ def test_exp_ball_mismatch_strategy_true_runner_false():
     """Strategy expects ball but runner says exp_ball=False → AssertionError."""
     strat = DummyStrategy()
     strat.exp_ball = True
-    with pytest.raises(AssertionError, match="Expected presence of ball"):
+    with pytest.raises(RuntimeError, match="Ball expected"):
         StrategyRunner(
             strategy=strat,
             my_team_is_yellow=True,
@@ -92,16 +92,16 @@ def test_exp_ball_mismatch_strategy_false_runner_true():
     """Strategy expects no ball but runner says exp_ball=True → AssertionError."""
     strat = DummyStrategy()
     strat.exp_ball = False
-    with pytest.raises(AssertionError, match="Expected presence of ball"):
-        StrategyRunner(
-            strategy=strat,
-            my_team_is_yellow=True,
-            my_team_is_right=True,
-            mode="rsim",
-            exp_friendly=3,
-            exp_enemy=3,
-            exp_ball=True,
-        )
+    run = StrategyRunner(
+        strategy=strat,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        mode="rsim",
+        exp_friendly=3,
+        exp_enemy=3,
+        exp_ball=True,
+    )
+    assert run.exp_ball is True, "Runner should remain exp_ball=True even if strategy has exp_ball=False"
 
 
 # ---------------------------------------------------------------------------

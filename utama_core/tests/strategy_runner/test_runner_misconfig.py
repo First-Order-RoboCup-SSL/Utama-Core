@@ -34,17 +34,17 @@ def test_assert_exp_robots_valid(base_runner):
 
 
 def test_assert_exp_robots_too_many_friendly(base_runner):
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         base_runner._assert_exp_robots_and_ball(999, 3, True)
 
 
 def test_assert_exp_robots_too_few_friendly(base_runner):
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         base_runner._assert_exp_robots_and_ball(0, 3, True)
 
 
 def test_assert_exp_robots_too_many_enemy(base_runner):
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         base_runner._assert_exp_robots_and_ball(3, 999, True)
 
 

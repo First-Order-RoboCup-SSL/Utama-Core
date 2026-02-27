@@ -38,10 +38,11 @@ class GRSimController(AbstractSimController):
     def __init__(
         self,
         field_bounds: FieldBounds,
+        exp_ball: bool = True,
         ip: str = LOCAL_HOST,
         port: int = SIM_CONTROL_PORT,
     ):
-        super().__init__(field_bounds)
+        super().__init__(field_bounds, exp_ball)
         self.net = network_manager.NetworkManager(address=(ip, port))
 
     def _create_simulator_command(self, control_message: object) -> object:

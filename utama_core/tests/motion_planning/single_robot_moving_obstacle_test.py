@@ -74,12 +74,6 @@ class MovingObstacleTestManager(AbstractTestManager):
                 0.0,
             )
 
-        # Place ball at target (for visual reference)
-        sim_controller.teleport_ball(
-            self.scenario.target_position[0],
-            self.scenario.target_position[1],
-        )
-
         self._reset_metrics()
 
     def _reset_metrics(self):
@@ -197,6 +191,7 @@ def test_single_robot_moving_obstacles(
         mode=mode,
         exp_friendly=1,
         exp_enemy=len(scenario.moving_obstacles),
+        exp_ball=False,
         opp_strategy=opp_strategy,
         opp_control_scheme="pid",  # Use PID so obstacles follow exact paths without avoiding the robot
     )

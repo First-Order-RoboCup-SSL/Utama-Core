@@ -53,12 +53,6 @@ class CollisionAvoidanceTestManager(AbstractTestManager):
         for i, (x, y) in enumerate(self.scenario.obstacle_positions):
             sim_controller.teleport_robot(not game.my_team_is_yellow, i, x, y, 0.0)
 
-        # Place ball at target (for visual reference)
-        sim_controller.teleport_ball(
-            self.scenario.target_position[0],
-            self.scenario.target_position[1],
-        )
-
         self._reset_metrics()
 
     def _reset_metrics(self):
@@ -160,6 +154,7 @@ def test_collision_avoidance_goal_to_goal(
         mode=mode,
         exp_friendly=1,
         exp_enemy=len(obstacle_config["obstacles"]),
+        exp_ball=False,
     )
 
     test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)
@@ -209,6 +204,7 @@ def test_simple_straight_line_no_obstacles(
         mode=mode,
         exp_friendly=1,
         exp_enemy=0,
+        exp_ball=False,
     )
 
     test_manager = CollisionAvoidanceTestManager(scenario=scenario, robot_id=robot_id)

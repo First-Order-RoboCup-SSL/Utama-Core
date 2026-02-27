@@ -142,6 +142,8 @@ class RandomMovementStrategy(AbstractStrategy):
         speed_range: (min_speed, max_speed) for random speed selection
     """
 
+    exp_ball = False  # No ball interaction in this strategy
+
     def __init__(
         self,
         n_robots: int,
