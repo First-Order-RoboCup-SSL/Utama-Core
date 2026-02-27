@@ -1,7 +1,7 @@
 """Tests that exp_ball is correctly handled by StrategyRunner.
 
 Covers three layers:
-  1. Constructor-level misconfig — strategy.exp_ball != runner exp_ball raises AssertionError.
+  1. Constructor-level misconfig — strategy.exp_ball != runner exp_ball raises RuntimeError.
   2. Constructor-level agreement — no error raised when both sides agree.
   3. Integration — the actual game frame reflects the expected ball presence/absence.
 """
@@ -73,7 +73,7 @@ class _IdleNoBallStrategy(AbstractStrategy):
 
 
 def test_exp_ball_mismatch_strategy_true_runner_false():
-    """Strategy expects ball but runner says exp_ball=False → AssertionError."""
+    """Strategy expects ball but runner says exp_ball=False → RuntimeError."""
     strat = DummyStrategy()
     strat.exp_ball = True
     with pytest.raises(RuntimeError, match="Ball expected"):
