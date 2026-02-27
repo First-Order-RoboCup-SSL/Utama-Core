@@ -6,13 +6,11 @@ from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.run import StrategyRunner
+from utama_core.strategy.examples import SimpleNavigationStrategy
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
-)
-from utama_core.tests.motion_planning.strategies.simple_navigation_strategy import (
-    SimpleNavigationStrategy,
 )
 
 

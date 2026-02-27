@@ -8,15 +8,13 @@ from typing import Dict
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.entities.game.field import Field
+from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.run import StrategyRunner
+from utama_core.strategy.examples.random_movement_strategy import RandomMovementStrategy
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
-)
-from utama_core.tests.motion_planning.strategies.random_movement_strategy import (
-    RandomMovementStrategy,
 )
 
 # Fix pygame window position for screen capture
@@ -28,7 +26,7 @@ class RandomMovementScenario:
     """Configuration for random movement collision test."""
 
     n_robots: int
-    field_bounds: tuple[tuple[float, float], tuple[float, float]]  # ((min_x, max_x), (min_y, max_y))
+    field_bounds: FieldBounds
     min_target_distance: float
     required_targets_per_robot: int
     collision_threshold: float = ROBOT_RADIUS * 2.0
@@ -50,7 +48,11 @@ class RandomMovementTestManager(AbstractTestManager):
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with robots in random starting positions within bounds."""
-        (min_x, max_x), (min_y, max_y) = self.scenario.field_bounds
+        bounds = self.scenario.field_bounds
+        min_x = min(bounds.top_left[0], bounds.bottom_right[0])
+        max_x = max(bounds.top_left[0], bounds.bottom_right[0])
+        min_y = min(bounds.top_left[1], bounds.bottom_right[1])
+        max_y = max(bounds.top_left[1], bounds.bottom_right[1])
 
         # Use a fixed seed for reproducibility across test runs
         rng = random.Random(42 + self.current_episode_number)
@@ -123,13 +125,10 @@ def test_random_movement_same_team(
     # Using slightly smaller bounds for safety: -4m to 0m in x, -2.5m to 2.5m in y
     X_BUFFER = 0.5
     Y_BUFFER = 1.0
-    field_bounds = (
-        (-Field.FULL_FIELD_HALF_LENGTH + X_BUFFER, -X_BUFFER),
-        (
-            -Field.FULL_FIELD_HALF_WIDTH + Y_BUFFER,
-            Field.FULL_FIELD_HALF_WIDTH - Y_BUFFER,
-        ),
-    )  # ((min_x, max_x), (min_y, max_y))
+    field_bounds = FieldBounds(
+        top_left=(-Field.FULL_FIELD_HALF_LENGTH + X_BUFFER, Field.FULL_FIELD_HALF_WIDTH - Y_BUFFER),
+        bottom_right=(-X_BUFFER, -Field.FULL_FIELD_HALF_WIDTH + Y_BUFFER),
+    )
 
     # Max is 6 robots
     n_robots = 2
@@ -150,8 +149,7 @@ def test_random_movement_same_team(
         field_bounds=field_bounds,
         min_target_distance=scenario.min_target_distance,
         endpoint_tolerance=scenario.endpoint_tolerance,
-        test_manager=test_manager,
-        speed_range=(0.5, 1.0),  # Random speed between 0.5 and 1.0 m/s
+        on_target_reached=test_manager.update_target_reached,
     )
 
     runner = StrategyRunner(

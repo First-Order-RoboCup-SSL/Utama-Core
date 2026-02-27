@@ -7,6 +7,7 @@ from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.run import StrategyRunner
+from utama_core.strategy.examples import MultiRobotNavigationStrategy
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
@@ -159,12 +160,6 @@ def test_mirror_swap(
         endpoint_tolerance=0.3,
     )
 
-    # For simplicity, use a parallel strategy that runs all robot strategies
-    # Since we need a single strategy object, we'll create a custom one
-    from utama_core.tests.motion_planning.strategies.multi_robot_navigation_strategy import (
-        MultiRobotNavigationStrategy,
-    )
-
     my_strategy = MultiRobotNavigationStrategy(
         robot_targets={i: right_positions[i] for i in range(len(left_positions))}
     )
@@ -254,10 +249,6 @@ def test_diagonal_cross_square(
         friendly_targets=yellow_targets,
         enemy_targets=blue_targets,
         endpoint_tolerance=0.25,
-    )
-
-    from utama_core.tests.motion_planning.strategies.multi_robot_navigation_strategy import (
-        MultiRobotNavigationStrategy,
     )
 
     my_strategy = MultiRobotNavigationStrategy(
