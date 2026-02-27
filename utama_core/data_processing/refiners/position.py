@@ -155,7 +155,7 @@ class PositionRefiner(BaseRefiner):
         # if we don't expect a ball and we see no ball
         # don't bother running any filters
         if new_ball is None and not self.exp_ball:
-            new_ball = None
+            pass
         else:
             # For filtering and vanishing
             if self.filtering and self._filter_running:
