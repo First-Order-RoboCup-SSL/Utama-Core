@@ -412,15 +412,16 @@ class StrategyRunner:
         assert exp_enemy <= MAX_ROBOTS, "Expected number of enemy robots is too high."
         assert exp_friendly >= 1, "Expected number of friendly robots is too low."
         assert exp_enemy >= 0, "Expected number of enemy robots is too low."
-        assert self.my.strategy.exp_ball == exp_ball, "Expected presence of ball does not match my strategy."
 
         assert self.my.strategy.assert_exp_robots(
             exp_friendly, exp_enemy
         ), "Expected number of robots at runtime does not match my strategy."
+        assert self.my.strategy.exp_ball == exp_ball, "Expected presence of ball does not match my strategy."
         if self.opp:
             assert self.opp.strategy.assert_exp_robots(
                 exp_enemy, exp_friendly
             ), "Expected number of robots at runtime does not match opponent strategy."
+            assert self.opp.strategy.exp_ball == exp_ball, "Expected presence of ball does not match opponent strategy."
 
     def _assert_exp_goals(self):
         """Assert the expected number of goals."""
