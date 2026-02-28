@@ -2,6 +2,16 @@
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
+from enum import IntEnum
+
+
+class MacroAction(IntEnum):
+    """Parameterized macro-actions for the 3D action space."""
+
+    GO_TO_BALL = 0
+    KICK_TO = 1
+    DRIBBLE_TO = 2
+    MOVE_TO = 3
 
 
 @dataclass
@@ -42,13 +52,22 @@ class PassingDynamicsConfig:
     collision_force: float = 10.0  # reduced: VelocityHolonomic makes robot an immovable piston
     max_ball_speed: float = 6.5  # m/s — SSL regulation cap
 
-    # Position-based action space: PD controller gains (matched to pid/configs.py GRSIM/VMAS)
-    pd_kp_translation: float = 1.8
-    pd_kd_translation: float = 0.025
-    pd_kp_orientation: float = 4.5
-    pd_kd_orientation: float = 0.02
+    # Legacy 6D action space parameters (only used when use_macro_actions=False, use_unified_actions=False)
     action_delta_range: float = 2.0  # max relative position offset in meters
     turn_on_spot_radius_modifier: float = 1.35  # perpendicular velocity scale for ball pivot
+
+    # Action space mode (at most one should be True; both False = legacy 6D)
+    use_macro_actions: bool = False  # 3D macro-actions [selector, target_x, target_y]
+    use_unified_actions: bool = True  # 3D unified [target_x, target_y, kick_intent]
+
+    # Macro-action configuration (only when use_macro_actions=True)
+    n_macro_actions: int = 4  # GO_TO_BALL, KICK_TO, DRIBBLE_TO, MOVE_TO
+    dribble_engage_dist: float = 0.15  # distance to start dribble attract in GO_TO_BALL
+    decision_interval: int = 1  # reserved for future temporal abstraction
+
+    # Shared kick parameters
+    kick_align_threshold: float = 0.95  # cos(angle) to fire kick
+    kick_intent_threshold: float = 0.0  # unified: kick_intent > this to attempt kick
 
 
 @dataclass
@@ -100,3 +119,10 @@ class PassingScenarioConfig:
     field: PassingFieldConfig = dataclass_field(default_factory=PassingFieldConfig)
     dynamics: PassingDynamicsConfig = dataclass_field(default_factory=PassingDynamicsConfig)
     rewards: PassingRewardConfig = dataclass_field(default_factory=PassingRewardConfig)
+
+    def __post_init__(self):
+        if self.dynamics.use_macro_actions and self.dynamics.use_unified_actions:
+            raise ValueError(
+                "Cannot enable both use_macro_actions and use_unified_actions. "
+                "Set exactly one to True, or both to False for legacy 6D."
+            )

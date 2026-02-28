@@ -18,7 +18,7 @@ class SSLExperimentConfig:
 
     task: str = "ssl_2v0"
     seed: int = 0
-    max_frames: int = 600_000
+    max_frames: int = 1_200_000
     n_envs: int = 32
     frames_per_batch: int = 6000
     minibatch_size: int = 400

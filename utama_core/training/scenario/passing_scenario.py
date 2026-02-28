@@ -1,13 +1,20 @@
 """VMAS scenario for ASPAC SSL passing drills.
 
-Action space: 6D [delta_x, delta_y, target_oren, kick, dribble, turn_on_spot]
-- Dims 0-2: position-based targets (relative offset in meters + absolute orientation)
-           converted to velocities via batched PD controller in process_action()
-- Dim 3: kick — thresholded > 0, applies one-shot impulse to ball
-- Dim 4: dribble — thresholded > 0, attracts ball toward agent front
-- Dim 5: turn_on_spot — thresholded > 0, pivot-turn around ball (assumes dribbling)
+Supports three action space modes (select via config flags):
 
-Action priority: kick > turn_on_spot > move
+**Unified mode (4D, default):** [target_x, target_y, target_oren, kick_intent]
+  - target_x, target_y are absolute field positions (navigation target)
+  - target_oren is desired facing direction in [-pi, pi]
+  - kick_intent > 0 triggers kick when aligned + has ball (2-frame dribbler release)
+  - Auto-dribble when ball is in front area of robot
+  - PID gains from ``get_pid_configs(Mode.VMAS)`` via BatchedPID
+
+**Macro-action mode (3D):** [action_selector, target_x, target_y]
+  - action_selector in [-1, 1] mapped to 4 discrete macro-actions via bins
+  - Legacy: kept for backward compatibility / A-B comparison
+
+**Legacy mode (6D):** [delta_x, delta_y, target_oren, kick, dribble, turn_on_spot]
+  - Legacy: kept for backward compatibility
 
 Supports 2v0, 2v1, 2v2 configurations with ASPAC reward hooks:
 - Delta-based dense shaping (standing still = 0 reward)
@@ -21,7 +28,14 @@ import torch
 from vmas.simulator.core import Agent, Box, Landmark, Sphere, World
 from vmas.simulator.scenario import BaseScenario
 
-from utama_core.training.scenario.passing_config import PassingScenarioConfig
+from utama_core.training.scenario.batched_pid import (
+    BatchedOrientationPID,
+    BatchedTranslationPID,
+)
+from utama_core.training.scenario.passing_config import (
+    MacroAction,
+    PassingScenarioConfig,
+)
 from utama_core.training.scenario.passing_rewards import (
     compute_passing_reward,
     envy_free_bonus,
@@ -56,6 +70,33 @@ class PassingScenario(BaseScenario):
             collision_force=dc.collision_force,
         )
 
+        # --- Action space configuration ---
+        if dc.use_unified_actions:
+            _action_size = 4
+            _u_multiplier = [
+                fc.half_length,  # target_x: absolute field position
+                fc.half_width,  # target_y: absolute field position
+                math.pi,  # target_oren: [-pi, pi] rad
+                1.0,  # kick_intent: [-1, 1]
+            ]
+        elif dc.use_macro_actions:
+            _action_size = 3
+            _u_multiplier = [
+                1.0,  # action_selector: [-1, 1] → macro-action bins
+                fc.half_length,  # target_x: absolute field position
+                fc.half_width,  # target_y: absolute field position
+            ]
+        else:
+            _action_size = 6
+            _u_multiplier = [
+                dc.action_delta_range,  # delta_x (meters)
+                dc.action_delta_range,  # delta_y (meters)
+                math.pi,  # target_oren (radians)
+                1.0,  # kick trigger
+                1.0,  # dribble trigger
+                1.0,  # turn_on_spot trigger
+            ]
+
         # --- Attacker agents ---
         self.attackers: list[Agent] = []
         for i in range(self.cfg.n_attackers):
@@ -72,15 +113,8 @@ class PassingScenario(BaseScenario):
                     max_speed=dc.robot_max_speed,
                     max_angular_vel=dc.robot_max_angular_vel,
                 ),
-                action_size=6,
-                u_multiplier=[
-                    dc.action_delta_range,  # delta_x (meters)
-                    dc.action_delta_range,  # delta_y (meters)
-                    math.pi,  # target_oren (radians)
-                    1.0,  # kick trigger
-                    1.0,  # dribble trigger
-                    1.0,  # turn_on_spot trigger
-                ],
+                action_size=_action_size,
+                u_multiplier=_u_multiplier,
                 drag=0,
             )
             world.add_agent(agent)
@@ -102,15 +136,8 @@ class PassingScenario(BaseScenario):
                     max_speed=dc.robot_max_speed,
                     max_angular_vel=dc.robot_max_angular_vel,
                 ),
-                action_size=6,
-                u_multiplier=[
-                    dc.action_delta_range,  # delta_x (meters)
-                    dc.action_delta_range,  # delta_y (meters)
-                    math.pi,  # target_oren (radians)
-                    1.0,  # kick trigger
-                    1.0,  # dribble trigger
-                    1.0,  # turn_on_spot trigger
-                ],
+                action_size=_action_size,
+                u_multiplier=_u_multiplier,
                 drag=0,
             )
             world.add_agent(agent)
@@ -159,14 +186,22 @@ class PassingScenario(BaseScenario):
             d.name: torch.zeros(batch_dim, 1, device=device) for d in self.defenders
         }
 
-        # PD controller state: previous errors per agent for derivative term
+        # PID controllers (shared across all action modes)
         all_agents = self.attackers + self.defenders
-        self.prev_error_trans: dict[str, torch.Tensor] = {
-            a.name: torch.zeros(batch_dim, 1, device=device) for a in all_agents
-        }
-        self.prev_error_oren: dict[str, torch.Tensor] = {
-            a.name: torch.zeros(batch_dim, 1, device=device) for a in all_agents
-        }
+        self.pid_trans = BatchedTranslationPID()
+        self.pid_oren = BatchedOrientationPID()
+
+        # Unified action space state: 2-frame dribbler-release kick
+        if dc.use_unified_actions:
+            self.kick_pending: dict[str, torch.Tensor] = {
+                a.name: torch.zeros(batch_dim, device=device, dtype=torch.bool) for a in all_agents
+            }
+
+        # Macro-action state tracking (for logging/debugging)
+        if dc.use_macro_actions:
+            self.current_macro_action: dict[str, torch.Tensor] = {
+                a.name: torch.zeros(batch_dim, device=device, dtype=torch.long) for a in all_agents
+            }
 
         return world
 
@@ -353,10 +388,16 @@ class PassingScenario(BaseScenario):
                 self.prev_defender_vel[name].zero_()
             for name in self.prev_defender_rot:
                 self.prev_defender_rot[name].zero_()
-            for name in self.prev_error_trans:
-                self.prev_error_trans[name].zero_()
-            for name in self.prev_error_oren:
-                self.prev_error_oren[name].zero_()
+            # Reset PID controllers
+            for a in self.attackers + self.defenders:
+                self.pid_trans.reset(a.name)
+                self.pid_oren.reset(a.name)
+            if hasattr(self, "kick_pending"):
+                for name in self.kick_pending:
+                    self.kick_pending[name].zero_()
+            if hasattr(self, "current_macro_action"):
+                for name in self.current_macro_action:
+                    self.current_macro_action[name].zero_()
         else:
             self.pass_completed[env_index] = False
             self.ball_intercepted[env_index] = False
@@ -384,10 +425,16 @@ class PassingScenario(BaseScenario):
                 self.prev_defender_vel[name][env_index] = 0.0
             for name in self.prev_defender_rot:
                 self.prev_defender_rot[name][env_index] = 0.0
-            for name in self.prev_error_trans:
-                self.prev_error_trans[name][env_index] = 0.0
-            for name in self.prev_error_oren:
-                self.prev_error_oren[name][env_index] = 0.0
+            # Reset PID controllers for this env
+            for a in self.attackers + self.defenders:
+                self.pid_trans.reset(a.name, batch_index=env_index)
+                self.pid_oren.reset(a.name, batch_index=env_index)
+            if hasattr(self, "kick_pending"):
+                for name in self.kick_pending:
+                    self.kick_pending[name][env_index] = False
+            if hasattr(self, "current_macro_action"):
+                for name in self.current_macro_action:
+                    self.current_macro_action[name][env_index] = 0
 
     # ------------------------------------------------------------------
     # Helpers
@@ -447,17 +494,223 @@ class PassingScenario(BaseScenario):
         return (angle + math.pi) % (2 * math.pi) - math.pi
 
     def process_action(self, agent: Agent):
-        """Convert position-based actions to velocities via PD controller.
-
-        Action priority: kick > turn_on_spot > move.
-        Writes computed velocities into agent.action.u[:, 0:3] so that
-        VelocityHolonomic can apply them as velocity commands.
-        """
+        """Dispatch to unified, macro-action, or legacy action processing."""
         # Fixed defenders: zero all actions
         if agent in self.defenders and self.cfg.defender_behavior == "fixed":
             agent.action.u = torch.zeros_like(agent.action.u)
             return
 
+        dc = self.cfg.dynamics
+        if dc.use_unified_actions:
+            self._process_unified_action(agent)
+        elif dc.use_macro_actions:
+            self._process_macro_action(agent)
+        else:
+            self._process_legacy_action(agent)
+
+    # ------------------------------------------------------------------
+    # Unified action processing (4D: [target_x, target_y, target_oren, kick_intent])
+    # ------------------------------------------------------------------
+
+    def _process_unified_action(self, agent: Agent):
+        """Convert 4D [target_x, target_y, target_oren, kick_intent] to velocity commands.
+
+        Navigation tracks the target position.  Orientation tracks the
+        explicit target_oren from the action.  Dribble auto-engages when
+        the ball is in the front area of the robot.  Kick uses a 2-frame
+        dribbler-release mechanic: frame 1 disengages the dribbler, frame 2
+        fires the kick along the robot's facing direction.
+        """
+        dc = self.cfg.dynamics
+        fc = self.cfg.field
+        u = agent.action.u  # (batch, 4) — already scaled by u_multiplier
+
+        # --- Parse actions ---
+        target_pos = u[:, 0:2]  # (batch, 2) — absolute field coords
+        target_oren = u[:, 2:3]  # (batch, 1) — desired facing in [-pi, pi]
+        kick_intent = u[:, 3]  # (batch,)
+
+        # Clamp target to field bounds
+        field_min = torch.tensor([-fc.half_length, -fc.half_width], device=u.device)
+        field_max = torch.tensor([fc.half_length, fc.half_width], device=u.device)
+        target_pos = target_pos.clamp(min=field_min, max=field_max)
+
+        # --- Common state ---
+        agent_pos = agent.state.pos
+        agent_rot = agent.state.rot  # (batch, 1)
+        has_ball = self._has_ball(agent)
+
+        cos_rot = torch.cos(agent_rot.squeeze(-1))
+        sin_rot = torch.sin(agent_rot.squeeze(-1))
+        facing = torch.stack([cos_rot, sin_rot], dim=-1)
+
+        # --- Navigation: PID toward target ---
+        vel = self.pid_trans.calculate(agent_pos, target_pos, agent.name)
+
+        # --- Orientation: PID toward explicit target_oren ---
+        ang = self.pid_oren.calculate(agent_rot, target_oren, agent.name)
+
+        # --- Kick state machine (2-frame dribbler release) ---
+        to_target = target_pos - agent_pos
+        dist_to_target = torch.norm(to_target, dim=-1, keepdim=True)
+        to_target_dir = to_target / dist_to_target.clamp(min=1e-8)
+        alignment = (facing * to_target_dir).sum(dim=-1)
+        wants_kick = (kick_intent > dc.kick_intent_threshold) & has_ball & (alignment > dc.kick_align_threshold)
+
+        pending = self.kick_pending[agent.name]
+
+        # Frame 2: pending from last step AND still has ball + aligned → fire
+        kick_fire = pending & has_ball & (alignment > dc.kick_align_threshold)
+
+        # Frame 1: new kick request → set pending (dribbler off, no kick yet)
+        new_pending = wants_kick & ~pending
+
+        # Track kick events for reward function
+        if not hasattr(self, "kick_fired"):
+            self.kick_fired: dict[str, torch.Tensor] = {}
+        self.kick_fired[agent.name] = kick_fire
+
+        # Apply kick: set ball velocity along robot facing direction
+        if kick_fire.any():
+            kick_vel = facing * dc.kick_speed
+            self.ball.state.vel = torch.where(
+                kick_fire.unsqueeze(-1),
+                kick_vel,
+                self.ball.state.vel,
+            )
+
+        # Update pending state: fire clears, new request sets, else clear
+        self.kick_pending[agent.name] = new_pending & ~kick_fire
+
+        # --- Dribble: auto-engage when has_ball, not during kick sequence ---
+        dribble_active = has_ball & ~pending & ~kick_fire
+        if dribble_active.any():
+            front_offset = facing * (fc.robot_radius + fc.ball_radius)
+            dribble_target = agent_pos + front_offset
+            attract_dir = dribble_target - self.ball.state.pos
+            attract_force = attract_dir * dc.dribble_force
+            self.ball.state.vel = (
+                self.ball.state.vel + attract_force * dribble_active.unsqueeze(-1).float() * self.world.dt
+            )
+
+        # --- Write velocity commands for VelocityHolonomic ---
+        agent.action.u = torch.cat([vel, ang], dim=-1)
+
+    # ------------------------------------------------------------------
+    # Macro-action processing (3D action space)
+    # ------------------------------------------------------------------
+
+    def _process_macro_action(self, agent: Agent):
+        """Convert 3D [action_selector, target_x, target_y] to velocity commands.
+
+        Decodes the macro-action type from action_selector, computes blended
+        navigation/orientation targets per-env, then drives with BatchedPID.
+        """
+        dc = self.cfg.dynamics
+        fc = self.cfg.field
+        u = agent.action.u  # (batch, 3)
+
+        # --- Decode macro-action ---
+        action_selector = u[:, 0]  # [-1, 1]
+        n = dc.n_macro_actions
+        action_idx = ((action_selector + 1.0) * n / 2.0).long().clamp(0, n - 1)
+
+        if hasattr(self, "current_macro_action"):
+            self.current_macro_action[agent.name] = action_idx
+
+        # --- Target position (absolute field coords, already scaled by u_multiplier) ---
+        target_pos = u[:, 1:3]
+        target_pos = target_pos.clamp(
+            min=torch.tensor([-fc.half_length, -fc.half_width], device=u.device),
+            max=torch.tensor([fc.half_length, fc.half_width], device=u.device),
+        )
+
+        # --- Common state ---
+        agent_pos = agent.state.pos
+        agent_rot = agent.state.rot  # (batch, 1)
+        ball_pos = self.ball.state.pos
+        has_ball = self._has_ball(agent)
+
+        cos_rot = torch.cos(agent_rot.squeeze(-1))
+        sin_rot = torch.sin(agent_rot.squeeze(-1))
+        facing = torch.stack([cos_rot, sin_rot], dim=-1)
+
+        # --- Action masks (per-env, exactly one is 1.0) ---
+        is_go = (action_idx == MacroAction.GO_TO_BALL).unsqueeze(-1).float()
+        is_kick = (action_idx == MacroAction.KICK_TO).unsqueeze(-1).float()
+        is_drib = (action_idx == MacroAction.DRIBBLE_TO).unsqueeze(-1).float()
+        is_move = (action_idx == MacroAction.MOVE_TO).unsqueeze(-1).float()
+
+        # --- Blended navigation target ---
+        # GO_TO_BALL → ball, KICK_TO → ball, DRIBBLE_TO → target/ball, MOVE_TO → target
+        drib_nav = torch.where(has_ball.unsqueeze(-1), target_pos, ball_pos)
+        nav_target = is_go * ball_pos + is_kick * ball_pos + is_drib * drib_nav + is_move * target_pos
+
+        # --- Blended orientation target ---
+        to_ball = ball_pos - agent_pos
+        to_target = target_pos - agent_pos
+        ball_oren = torch.atan2(to_ball[:, 1], to_ball[:, 0]).unsqueeze(-1)
+        target_oren = torch.atan2(to_target[:, 1], to_target[:, 0]).unsqueeze(-1)
+        drib_oren = torch.where(has_ball.unsqueeze(-1), target_oren, ball_oren)
+        oren_target = is_go * ball_oren + is_kick * target_oren + is_drib * drib_oren + is_move * target_oren
+
+        # --- Drive with BatchedPID (single call, state tracked internally) ---
+        vel = self.pid_trans.calculate(agent_pos, nav_target, agent.name)
+        ang = self.pid_oren.calculate(agent_rot, oren_target, agent.name)
+
+        # KICK_TO with ball: stop translating (hold position while orienting)
+        kick_hold = ((action_idx == MacroAction.KICK_TO) & has_ball).unsqueeze(-1)
+        vel = torch.where(kick_hold, torch.zeros_like(vel), vel)
+
+        # --- Apply ball side-effects (masked per macro) ---
+        go_mask = action_idx == MacroAction.GO_TO_BALL
+        kick_mask = action_idx == MacroAction.KICK_TO
+        drib_mask = action_idx == MacroAction.DRIBBLE_TO
+
+        # Kick (KICK_TO only): fire when aligned + has_ball
+        to_target_flat = target_pos - agent_pos
+        to_target_norm = to_target_flat / torch.norm(to_target_flat, dim=-1, keepdim=True).clamp(min=1e-8)
+        alignment = (facing * to_target_norm).sum(dim=-1)
+        kick_ready = kick_mask & has_ball & (alignment > dc.kick_align_threshold)
+
+        if not hasattr(self, "kick_fired"):
+            self.kick_fired: dict[str, torch.Tensor] = {}
+        self.kick_fired[agent.name] = kick_ready
+
+        if kick_ready.any():
+            kick_ball_vel = facing * dc.kick_speed
+            self.ball.state.vel = torch.where(
+                kick_ready.unsqueeze(-1),
+                kick_ball_vel,
+                self.ball.state.vel,
+            )
+
+        # Dribble attract: GO_TO_BALL (when close), KICK_TO (hold while orienting),
+        # DRIBBLE_TO (while moving)
+        dribble_active = (go_mask & has_ball) | (kick_mask & has_ball & ~kick_ready) | (drib_mask & has_ball)
+        if dribble_active.any():
+            front_offset = facing * (fc.robot_radius + fc.ball_radius)
+            dribble_target = agent_pos + front_offset
+            attract_dir = dribble_target - ball_pos
+            attract_force = attract_dir * dc.dribble_force
+            self.ball.state.vel = (
+                self.ball.state.vel + attract_force * dribble_active.unsqueeze(-1).float() * self.world.dt
+            )
+
+        # --- Write velocity commands for VelocityHolonomic ---
+        agent.action.u = torch.cat([vel, ang], dim=-1)
+
+    # ------------------------------------------------------------------
+    # Legacy action processing (6D action space)
+    # ------------------------------------------------------------------
+
+    def _process_legacy_action(self, agent: Agent):
+        """Convert 6D position-based actions to velocities via BatchedPID.
+
+        Action priority: kick > turn_on_spot > move.
+        Writes computed velocities into agent.action.u[:, 0:3] so that
+        VelocityHolonomic can apply them as velocity commands.
+        """
         dc = self.cfg.dynamics
         fc = self.cfg.field
         u = agent.action.u
@@ -479,62 +732,31 @@ class PassingScenario(BaseScenario):
         # --- Determine action mode per env ---
         kick_mode = (kick_action > 0) & has_ball
         turn_mode = (turn_action > 0) & has_ball & ~kick_mode
-        # move_mode is the default (neither kick nor turn)
 
         # Track kick events for reward function (kick alignment shaping)
         if not hasattr(self, "kick_fired"):
             self.kick_fired: dict[str, torch.Tensor] = {}
         self.kick_fired[agent.name] = kick_mode
 
-        # --- Read previous PD errors (before any updates) ---
-        prev_e_trans = self.prev_error_trans[agent.name]
-        prev_e_oren = self.prev_error_oren[agent.name]
-
-        # --- Compute MOVE velocities (PD controller) ---
-        # Convert relative offset to absolute target, clamp to field bounds
+        # --- Compute MOVE velocities via BatchedPID ---
         delta_pos = u[:, 0:2]  # (batch, 2)
         target_pos = agent_pos + delta_pos
         field_min = torch.tensor([-fc.half_length, -fc.half_width], device=self.world.device)
         field_max = torch.tensor([fc.half_length, fc.half_width], device=self.world.device)
         target_pos = target_pos.clamp(min=field_min, max=field_max)
 
-        # Translation PD
-        pos_error = target_pos - agent_pos  # (batch, 2)
-        pos_error_mag = torch.norm(pos_error, dim=-1, keepdim=True)  # (batch, 1)
-        d_error_trans = (pos_error_mag - prev_e_trans) / dc.dt
-        pd_output = dc.pd_kp_translation * pos_error_mag + dc.pd_kd_translation * d_error_trans
+        move_vel = self.pid_trans.calculate(agent_pos, target_pos, agent.name)
 
-        dead_trans = pos_error_mag < 0.003
-        vel_dir = pos_error / pos_error_mag.clamp(min=1e-6)
-        move_vel = torch.where(dead_trans, torch.zeros_like(pos_error), pd_output * vel_dir)
-
-        # Clamp move speed by norm
-        speed = torch.norm(move_vel, dim=-1, keepdim=True)
-        scale = torch.where(
-            speed > dc.robot_max_speed,
-            dc.robot_max_speed / speed.clamp(min=1e-8),
-            torch.ones_like(speed),
-        )
-        move_vel = move_vel * scale
-
-        # Orientation PD (shared by move and turn modes)
-        oren_error = self._angle_wrap(target_oren - agent.state.rot)  # (batch, 1)
-        d_error_oren = self._angle_wrap(oren_error - prev_e_oren) / dc.dt
-        angular_vel = dc.pd_kp_orientation * oren_error + dc.pd_kd_orientation * d_error_oren
-
-        dead_oren = oren_error.abs() < 0.001
-        move_ang_vel = torch.where(dead_oren, torch.zeros_like(angular_vel), angular_vel)
-        move_ang_vel = move_ang_vel.clamp(-dc.robot_max_angular_vel, dc.robot_max_angular_vel)
+        # Orientation via BatchedPID
+        move_ang_vel = self.pid_oren.calculate(agent.state.rot, target_oren, agent.name)
 
         # --- Compute TURN_ON_SPOT velocities (ball pivot) ---
-        # Reuse orientation PD (same angular vel computation)
-        turn_ang_vel = move_ang_vel  # same PD output for orientation
+        turn_ang_vel = move_ang_vel  # same PID output for orientation
 
         # Perpendicular velocity for ball pivot (orbit around ball center)
         to_ball = ball_pos - agent_pos
         to_ball_dist = torch.norm(to_ball, dim=-1, keepdim=True).clamp(min=1e-6)
         to_ball_dir = to_ball / to_ball_dist
-        # Perpendicular: rotate 90° CCW when turning CCW (positive angular vel)
         perp_dir = torch.stack([-to_ball_dir[:, 1], to_ball_dir[:, 0]], dim=-1)
         turn_linear_vel = perp_dir * turn_ang_vel * to_ball_dist * dc.turn_on_spot_radius_modifier
 
@@ -557,14 +779,7 @@ class PassingScenario(BaseScenario):
         final_ang = torch.where(kick_mode.unsqueeze(-1), zero_ang, move_ang_vel)
         final_ang = torch.where(turn_mode.unsqueeze(-1), turn_ang_vel, final_ang)
 
-        # --- Update PD state ---
-        # Always store actual errors regardless of mode, so that transitioning
-        # back to move mode sees a smooth derivative (no spike from zero).
-        self.prev_error_trans[agent.name] = pos_error_mag.detach()
-        self.prev_error_oren[agent.name] = oren_error.detach()
-
         # --- Overwrite action dims 0-2 with computed velocities ---
-        # VelocityHolonomic will read these as [vx, vy, omega]
         agent.action.u = torch.cat(
             [
                 final_vel,  # dims 0-1: linear velocity (global frame)
@@ -585,7 +800,6 @@ class PassingScenario(BaseScenario):
 
         # --- Dribble: binary attract (move mode + turn mode both support dribble) ---
         dribble_active = (dribble_action > 0) & has_ball & ~kick_mode
-        # Turn mode always dribbles
         dribble_active = dribble_active | turn_mode
         if dribble_active.any():
             front_offset = facing * (fc.robot_radius + fc.ball_radius)

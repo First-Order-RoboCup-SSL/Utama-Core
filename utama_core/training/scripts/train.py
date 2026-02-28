@@ -25,7 +25,17 @@ def parse_args() -> argparse.Namespace:
         "--task",
         type=str,
         default=_defaults.task,
-        choices=["ssl_2v0", "ssl_2v1", "ssl_2v2"],
+        choices=[
+            "ssl_2v0",
+            "ssl_2v1",
+            "ssl_2v2",
+            "ssl_2v0_macro",
+            "ssl_2v1_macro",
+            "ssl_2v2_macro",
+            "ssl_2v0_unified",
+            "ssl_2v1_unified",
+            "ssl_2v2_unified",
+        ],
         help=f"Training scenario (default: {_defaults.task})",
     )
     parser.add_argument(

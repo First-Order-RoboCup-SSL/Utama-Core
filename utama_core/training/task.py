@@ -19,14 +19,77 @@ from utama_core.rsoccer_simulator.src.Render import (
     RenderSSLRobot,
     SSLRenderField,
 )
-from utama_core.training.scenario.passing_config import PassingScenarioConfig
+from utama_core.training.scenario.passing_config import (
+    PassingDynamicsConfig,
+    PassingRewardConfig,
+    PassingScenarioConfig,
+)
 from utama_core.training.scenario.passing_scenario import PassingScenario
+
+
+def _macro_config(n_attackers: int, n_defenders: int) -> PassingScenarioConfig:
+    """Create a PassingScenarioConfig with macro-actions enabled."""
+    return PassingScenarioConfig(
+        n_attackers=n_attackers,
+        n_defenders=n_defenders,
+        dynamics=PassingDynamicsConfig(use_macro_actions=True, use_unified_actions=False),
+        rewards=PassingRewardConfig(
+            passer_face_receiver_weight=0.0,  # macros auto-orient
+            receiver_face_ball_weight=0.0,  # macros auto-orient
+            kick_alignment_weight=0.0,  # KICK_TO auto-aligns
+        ),
+    )
+
+
+def _unified_config(n_attackers: int, n_defenders: int) -> PassingScenarioConfig:
+    """Create a PassingScenarioConfig with unified action space."""
+    return PassingScenarioConfig(
+        n_attackers=n_attackers,
+        n_defenders=n_defenders,
+        dynamics=PassingDynamicsConfig(use_macro_actions=False, use_unified_actions=True),
+        rewards=PassingRewardConfig(
+            passer_face_receiver_weight=0.3,  # model controls orientation
+            receiver_face_ball_weight=0.3,  # model controls orientation
+            kick_alignment_weight=0.0,  # kick gating handles alignment
+        ),
+    )
+
 
 # Registry mapping task names to (scenario_class, default_config) pairs
 _TASK_REGISTRY: Dict[str, tuple] = {
-    "ssl_2v0": (PassingScenario, PassingScenarioConfig(n_attackers=2, n_defenders=0)),
-    "ssl_2v1": (PassingScenario, PassingScenarioConfig(n_attackers=2, n_defenders=1)),
-    "ssl_2v2": (PassingScenario, PassingScenarioConfig(n_attackers=2, n_defenders=2)),
+    # Legacy 6D action space
+    "ssl_2v0": (
+        PassingScenario,
+        PassingScenarioConfig(
+            n_attackers=2,
+            n_defenders=0,
+            dynamics=PassingDynamicsConfig(use_macro_actions=False, use_unified_actions=False),
+        ),
+    ),
+    "ssl_2v1": (
+        PassingScenario,
+        PassingScenarioConfig(
+            n_attackers=2,
+            n_defenders=1,
+            dynamics=PassingDynamicsConfig(use_macro_actions=False, use_unified_actions=False),
+        ),
+    ),
+    "ssl_2v2": (
+        PassingScenario,
+        PassingScenarioConfig(
+            n_attackers=2,
+            n_defenders=2,
+            dynamics=PassingDynamicsConfig(use_macro_actions=False, use_unified_actions=False),
+        ),
+    ),
+    # Macro-action 3D action space
+    "ssl_2v0_macro": (PassingScenario, _macro_config(2, 0)),
+    "ssl_2v1_macro": (PassingScenario, _macro_config(2, 1)),
+    "ssl_2v2_macro": (PassingScenario, _macro_config(2, 2)),
+    # Unified 4D action space [target_x, target_y, target_oren, kick_intent]
+    "ssl_2v0_unified": (PassingScenario, _unified_config(2, 0)),
+    "ssl_2v1_unified": (PassingScenario, _unified_config(2, 1)),
+    "ssl_2v2_unified": (PassingScenario, _unified_config(2, 2)),
 }
 
 
