@@ -38,7 +38,7 @@ class AbstractSimController:
 
         This method creates a command for teleporting the ball and sends it to the simulator.
         """
-        if self.exp_ball is False:
+        if not self.exp_ball:
             raise ValueError(
                 "This controller is configured to not expect a ball, so teleporting the ball is not allowed."
             )

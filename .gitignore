@@ -209,3 +209,9 @@ renders/
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# RL training artifacts
+outputs/
+wandb/
+mappo_*/
+*.gif

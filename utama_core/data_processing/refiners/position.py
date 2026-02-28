@@ -151,11 +151,8 @@ class PositionRefiner(BaseRefiner):
         # After the balls have been combined, take the most confident
         new_ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
 
-        # if we don't expect a ball and we see no ball
-        # don't bother running any filters
-        if new_ball is None and not self.exp_ball:
-            pass
-        else:
+        # Skip filtering when there's no ball and we don't expect one
+        if new_ball is not None or self.exp_ball:
             # For filtering and vanishing
             if self.filtering and self._filter_running:
                 new_ball = self.kalman_filter_ball.filter_data(
