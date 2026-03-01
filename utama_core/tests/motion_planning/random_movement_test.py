@@ -8,15 +8,15 @@ from typing import Dict
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.entities.game.field import Field
+from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.run import StrategyRunner
+from utama_core.strategy.examples.motion_planning.random_movement_strategy import (
+    RandomMovementStrategy,
+)
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
-)
-from utama_core.tests.motion_planning.strategies.random_movement_strategy import (
-    RandomMovementStrategy,
 )
 
 # Fix pygame window position for screen capture
@@ -28,7 +28,7 @@ class RandomMovementScenario:
     """Configuration for random movement collision test."""
 
     n_robots: int
-    field_bounds: tuple[tuple[float, float], tuple[float, float]]  # ((min_x, max_x), (min_y, max_y))
+    field_bounds: FieldBounds
     min_target_distance: float
     required_targets_per_robot: int
     collision_threshold: float = ROBOT_RADIUS * 2.0
@@ -50,7 +50,11 @@ class RandomMovementTestManager(AbstractTestManager):
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with robots in random starting positions within bounds."""
-        (min_x, max_x), (min_y, max_y) = self.scenario.field_bounds
+        bounds = self.scenario.field_bounds
+        min_x = min(bounds.top_left[0], bounds.bottom_right[0])
+        max_x = max(bounds.top_left[0], bounds.bottom_right[0])
+        min_y = min(bounds.top_left[1], bounds.bottom_right[1])
+        max_y = max(bounds.top_left[1], bounds.bottom_right[1])
 
         # Use a fixed seed for reproducibility across test runs
         rng = random.Random(42 + self.current_episode_number)
@@ -60,8 +64,6 @@ class RandomMovementTestManager(AbstractTestManager):
             y = rng.uniform(min_y + 0.5, max_y - 0.5)
             sim_controller.teleport_robot(game.my_team_is_yellow, i, x, y, 0.0)
             self.targets_reached_count[i] = 0
-
-        sim_controller.teleport_ball(0.0, 0.0)
 
         self._reset_metrics()
 
@@ -120,27 +122,28 @@ def test_random_movement_same_team(
     my_team_is_yellow = True
     my_team_is_right = False  # Yellow on left half
 
-    # Define half court bounds for left side (Yellow team)
-    # Standard SSL field is ~9m x 6m, so half court is ~4.5m x 6m
-    # Using slightly smaller bounds for safety: -4m to 0m in x, -2.5m to 2.5m in y
-    X_BUFFER = 0.5
-    Y_BUFFER = 1.0
-    field_bounds = (
-        (-Field.FULL_FIELD_HALF_LENGTH + X_BUFFER, -X_BUFFER),
-        (
-            -Field.FULL_FIELD_HALF_WIDTH + Y_BUFFER,
-            Field.FULL_FIELD_HALF_WIDTH - Y_BUFFER,
+    # use small bounds to increase chance of collision
+    small_bounds = FieldBounds(
+        top_left=(
+            -Field.FULL_FIELD_HALF_LENGTH + 1,
+            Field.FULL_FIELD_HALF_WIDTH - 1,
         ),
-    )  # ((min_x, max_x), (min_y, max_y))
+        bottom_right=(
+            -Field.FULL_FIELD_HALF_LENGTH + 3,
+            Field.FULL_FIELD_HALF_WIDTH - 3,
+        ),
+    )
 
     # Max is 6 robots
     n_robots = 2
 
+    seed = 42
+
     scenario = RandomMovementScenario(
         n_robots=n_robots,
-        field_bounds=field_bounds,
+        field_bounds=small_bounds,
         min_target_distance=1.0,  # Minimum distance for next target
-        required_targets_per_robot=3,  # Each robot must reach 3 targets
+        required_targets_per_robot=5,  # Each robot must reach 5 targets
         endpoint_tolerance=0.3,
     )
 
@@ -149,11 +152,11 @@ def test_random_movement_same_team(
     # Create random movement strategy
     strategy = RandomMovementStrategy(
         n_robots=n_robots,
-        field_bounds=field_bounds,
+        field_bounds=small_bounds,
         min_target_distance=scenario.min_target_distance,
+        seed=seed,
         endpoint_tolerance=scenario.endpoint_tolerance,
-        test_manager=test_manager,
-        speed_range=(0.5, 1.0),  # Random speed between 0.5 and 1.0 m/s
+        on_target_reached=test_manager.update_target_reached,
     )
 
     runner = StrategyRunner(
@@ -163,6 +166,7 @@ def test_random_movement_same_team(
         mode=mode,
         exp_friendly=n_robots,
         exp_enemy=0,
+        exp_ball=False,
     )
 
     test_passed = runner.run_test(

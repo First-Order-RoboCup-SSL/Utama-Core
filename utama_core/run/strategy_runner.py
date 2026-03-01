@@ -99,6 +99,9 @@ class StrategyRunner:
         mode (str): "real", "rsim", "grism"
         exp_friendly (int): Expected number of friendly robots.
         exp_enemy (int): Expected number of enemy robots.
+        exp_ball (bool): Whether the ball is expected to be present.
+                        Only raises error when strategy expects ball but runtime does not provide it.
+                        Defaults to True.
         field_bounds (FieldBounds): Configuration of the field. Defaults to standard field.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         control_scheme (str, optional): Name of the motion control scheme to use.
@@ -122,6 +125,7 @@ class StrategyRunner:
         mode: str,
         exp_friendly: int,
         exp_enemy: int,
+        exp_ball: bool = True,
         field_bounds: FieldBounds = Field.FULL_FIELD_BOUNDS,
         opp_strategy: Optional[AbstractStrategy] = None,
         control_scheme: str = "pid",  # This is also the default control scheme used in the motion planning tests
@@ -140,6 +144,7 @@ class StrategyRunner:
         self.mode: Mode = self._load_mode(mode)
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
+        self.exp_ball = exp_ball
         self.field_bounds = field_bounds
 
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
@@ -153,9 +158,16 @@ class StrategyRunner:
         ### functions below rely on self.my and self.opp ###
 
         self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
-        self._assert_exp_robots(exp_friendly, exp_enemy)
+        self._assert_exp_robots_and_ball(exp_friendly, exp_enemy, exp_ball)
 
         self._load_robot_controllers()
+
+        # Remove Rsim ball. Rsim does not have the flexibilty to start without a ball.
+        # this must also be done after robot controllers are loaded and env reset
+        # the reset are embedded in the robot controllers so that the env can be controlled
+        # with the RsimRobotController even outside the context of StrategyRunner.
+        if self.rsim_env and not self.exp_ball:
+            self._remove_rsim_ball()
 
         self._load_game()
 
@@ -187,6 +199,7 @@ class StrategyRunner:
 
     def _handle_sigint(self, sig, frame):
         self._stop_event.set()
+        signal.default_int_handler(sig, frame)
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -262,7 +275,9 @@ class StrategyRunner:
             Tuple containing the SideRuntime for the friendly team and the opponent team (or None if no opponent strategy provided).
         """
         opp_side = None
-        my_pos_ref, my_vel_ref, my_robot_ref = self._init_refiners(self.field_bounds, filtering=filtering)
+        my_pos_ref, my_vel_ref, my_robot_ref = self._init_refiners(
+            self.field_bounds, filtering=filtering, exp_ball=self.exp_ball
+        )
         my_motion_controller = get_control_scheme(control_scheme)
         my_strategy.setup_behaviour_tree(is_opp_strat=False)
         my_side = SideRuntime(
@@ -274,7 +289,9 @@ class StrategyRunner:
         )
 
         if opp_strategy is not None:
-            opp_pos_ref, opp_vel_ref, opp_robot_ref = self._init_refiners(self.field_bounds, filtering=filtering)
+            opp_pos_ref, opp_vel_ref, opp_robot_ref = self._init_refiners(
+                self.field_bounds, filtering=filtering, exp_ball=self.exp_ball
+            )
             opp_motion_controller = (
                 get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
             )
@@ -288,6 +305,11 @@ class StrategyRunner:
             )
 
         return my_side, opp_side
+
+    def _remove_rsim_ball(self):
+        """Removes the ball from the RSim environment by teleporting it off-field."""
+        self.sim_controller.remove_ball()
+        self.rsim_env.step_noop()  # Step the environment to apply the change
 
     def _load_sim(
         self,
@@ -323,11 +345,11 @@ class StrategyRunner:
                 self.opp.strategy.load_rsim_env(rsim_env)
             self.my.strategy.load_rsim_env(rsim_env)
 
-            return rsim_env, RSimController(env=rsim_env)
+            return rsim_env, RSimController(field_bounds=self.field_bounds, exp_ball=self.exp_ball, env=rsim_env)
 
         elif self.mode == Mode.GRSIM:
             # can consider baking all of these directly into sim controller
-            sim_controller = GRSimController()
+            sim_controller = GRSimController(self.field_bounds, self.exp_ball)
             n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
 
             # Ensure the expected number of robots is met by teleporting them
@@ -354,7 +376,11 @@ class StrategyRunner:
                 sim_controller.set_robot_presence(b, False, True)
                 b_start = blue_start[b]
                 sim_controller.teleport_robot(False, b, b_start[0], b_start[1], b_start[2])
-            sim_controller.teleport_ball(0, 0)
+
+            if self.exp_ball:
+                sim_controller.teleport_ball(0, 0)
+            else:
+                sim_controller.remove_ball()
 
             return None, sim_controller
 
@@ -376,24 +402,58 @@ class StrategyRunner:
 
         return vision_buffers, ref_buffer
 
-    def _assert_exp_robots(
+    def _assert_exp_robots_and_ball(
         self,
         exp_friendly: int,
         exp_enemy: int,
-    ):
-        """Assert the expected number of robots."""
-        assert exp_friendly <= MAX_ROBOTS, "Expected number of friendly robots is too high."
-        assert exp_enemy <= MAX_ROBOTS, "Expected number of enemy robots is too high."
-        assert exp_friendly >= 1, "Expected number of friendly robots is too low."
-        assert exp_enemy >= 0, "Expected number of enemy robots is too low."
+        exp_ball: bool,
+    ) -> None:
+        """
+        Validate that expected robot counts and ball presence are consistent
+        with both team strategies at runtime.
 
-        assert self.my.strategy.assert_exp_robots(
-            exp_friendly, exp_enemy
-        ), "Expected number of robots at runtime does not match my strategy."
+        This method performs runtime configuration checks to ensure that the
+        expected number of friendly and opponent robots, as well as ball
+        availability, match the assumptions declared by each strategy.
+
+        Parameters
+        ----------
+        exp_friendly : int
+            Expected number of friendly robots.
+        exp_enemy : int
+            Expected number of opponent robots.
+        exp_ball : bool
+            Whether a ball is expected to be present.
+
+        Raises
+        ------
+        ValueError
+            If robot counts fall outside valid bounds.
+        RuntimeError
+            If strategy expectations do not match runtime configuration.
+        """
+
+        if exp_friendly > MAX_ROBOTS:
+            raise ValueError(f"Expected number of friendly robots ({exp_friendly}) exceeds MAX_ROBOTS ({MAX_ROBOTS}).")
+        if exp_enemy > MAX_ROBOTS:
+            raise ValueError(f"Expected number of enemy robots ({exp_enemy}) exceeds MAX_ROBOTS ({MAX_ROBOTS}).")
+        if exp_friendly < 1:
+            raise ValueError(f"Expected number of friendly robots ({exp_friendly}) must be at least 1.")
+        if exp_enemy < 0:
+            raise ValueError(f"Expected number of enemy robots ({exp_enemy}) cannot be negative.")
+
+        if not self.my.strategy.assert_exp_robots(exp_friendly, exp_enemy):
+            raise RuntimeError("Runtime robot count does not match expectations of my strategy.")
+
+        if not exp_ball and self.my.strategy.exp_ball:
+            raise RuntimeError("Ball expected by my strategy, but not available in runtime configuration.")
+
         if self.opp:
-            assert self.opp.strategy.assert_exp_robots(
-                exp_enemy, exp_friendly
-            ), "Expected number of robots at runtime does not match opponent strategy."
+            if not self.opp.strategy.assert_exp_robots(exp_enemy, exp_friendly):
+                raise RuntimeError("Runtime robot count does not match expectations of opponent strategy.")
+
+            if not exp_ball and self.opp.strategy.exp_ball:
+                raise RuntimeError("Ball expected by opponent strategy, but not available in runtime configuration.")
 
     def _assert_exp_goals(self):
         """Assert the expected number of goals."""
@@ -466,18 +526,22 @@ class StrategyRunner:
         self,
         field_bounds: FieldBounds,
         filtering: bool,
+        exp_ball: bool = True,
     ) -> tuple[PositionRefiner, VelocityRefiner, RobotInfoRefiner]:
         """
         Initialize the position, velocity, and robot info refiners.
         Args:
             field_bounds (FieldBounds): The bounds of the field.
             filtering (bool): Whether to use filtering in the position refiner.
+            exp_ball (bool): Whether the ball is expected. When False, the position refiner is
+                             allowed to return None if no ball is detected in raw vision data.
         Returns:
             tuple: The initialized PositionRefiner, VelocityRefiner, and RobotInfoRefiner.
         """
         position_refiner = PositionRefiner(
             field_bounds,
             filtering=filtering,
+            exp_ball=exp_ball,
         )
         velocity_refiner = VelocityRefiner()
         robot_info_refiner = RobotInfoRefiner()
@@ -495,6 +559,7 @@ class StrategyRunner:
             self.my_team_is_right,
             self.exp_friendly,
             self.exp_enemy,
+            self.exp_ball,
             self.vision_buffers,
             self.my.position_refiner,
             is_pvp=self.opp is not None,

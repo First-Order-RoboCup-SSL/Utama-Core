@@ -9,6 +9,7 @@ from utama_core.config.settings import (
     SIM_CONTROL_PORT,
     TELEPORT_X_COORDS,
 )
+from utama_core.entities.game.field import FieldBounds
 from utama_core.team_controller.src.controllers.common.sim_controller_abstract import (
     AbstractSimController,
 )
@@ -34,7 +35,14 @@ class GRSimController(AbstractSimController):
         port (int): Port of the simulator. Defaults to SIM_CONTROL_PORT.
     """
 
-    def __init__(self, ip: str = LOCAL_HOST, port: int = SIM_CONTROL_PORT):
+    def __init__(
+        self,
+        field_bounds: FieldBounds,
+        exp_ball: bool = True,
+        ip: str = LOCAL_HOST,
+        port: int = SIM_CONTROL_PORT,
+    ):
+        super().__init__(field_bounds, exp_ball)
         self.net = network_manager.NetworkManager(address=(ip, port))
 
     def _create_simulator_command(self, control_message: object) -> object:
@@ -42,7 +50,7 @@ class GRSimController(AbstractSimController):
         sim_command.control.CopyFrom(control_message)
         return sim_command
 
-    def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0) -> None:
+    def _do_teleport_ball_unrestricted(self, x: float, y: float, vx: float = 0, vy: float = 0) -> None:
         """Teleports the ball to a specific location on the field.
 
         Args:
@@ -69,9 +77,12 @@ class GRSimController(AbstractSimController):
             self.teleport_robot(True, idx, x[0], x[1], x[2])
         for idx, x in enumerate(formations.LEFT_START_ONE):
             self.teleport_robot(False, idx, x[0], x[1], x[2])
-        self.teleport_ball(0, 0, 0, 0)
+        if self.exp_ball:
+            self.teleport_ball(0, 0, 0, 0)
+        else:
+            self.remove_ball()
 
-    def teleport_robot(
+    def _do_teleport_robot_unrestricted(
         self,
         is_team_yellow: bool,
         robot_id: int,
@@ -94,18 +105,18 @@ class GRSimController(AbstractSimController):
         sim_command = self._create_simulator_command(sim_control)
         self.net.send_command(sim_command)
 
-    def set_robot_presence(self, robot_id: int, is_team_yellow: bool, is_present: bool) -> None:
+    def set_robot_presence(self, robot_id: int, is_team_yellow: bool, should_robot_be_present: bool) -> None:
         """Sets a robot's presence on the field by teleporting it on and off the field.
 
         Args:
             robot_id (int): The unique ID of the robot.
-            team_colour_is_blue (bool): Whether the robot belongs to the blue team. If False, it's assumed to be yellow.
-            is_present (bool): If True, the robot will be placed on the field; if False, it will be despawned.
+            is_team_yellow (bool): Whether the robot belongs to the yellow team. If False, it's assumed to be blue.
+            should_robot_be_present (bool): If True, the robot will be placed on the field; if False, it will be despawned.
 
         The method calculates a teleport location based on the team and presence status, then sends a command to the simulator.
         """
-        x, y = self._get_teleport_location(robot_id, is_team_yellow, is_present)
-        sim_control = self._create_teleport_robot_command(robot_id, is_team_yellow, x, y, is_present)
+        x, y = self._get_teleport_location(robot_id, is_team_yellow, should_robot_be_present)
+        sim_control = self._create_teleport_robot_command(robot_id, is_team_yellow, x, y, should_robot_be_present)
         sim_command = self._create_simulator_command(sim_control)
         self.net.send_command(sim_command)
 

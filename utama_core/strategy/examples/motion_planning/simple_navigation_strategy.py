@@ -74,6 +74,8 @@ class SimpleNavigationStrategy(AbstractStrategy):
         target_orientation: Optional target orientation in radians (default: 0)
     """
 
+    exp_ball = False  # This strategy does not require the ball
+
     def __init__(
         self,
         robot_id: int,

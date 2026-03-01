@@ -17,6 +17,8 @@ def make_dummy_blackboard(actual_field_bounds):
 
 # Helper strategy
 class DummyStrategy(AbstractStrategy):
+    exp_ball = True  # Not relevant for these tests
+
     def create_behaviour_tree(self):
         return AbstractBehaviour()
 

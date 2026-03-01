@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from utama_core.config.settings import BALL_MERGE_THRESHOLD
+from utama_core.config.settings import BALL_MERGE_THRESHOLD, VISION_BOUNDS_BUFFER
 from utama_core.data_processing.refiners.base_refiner import BaseRefiner
 from utama_core.data_processing.refiners.filters.kalman import (
     KalmanFilter,
@@ -40,19 +40,28 @@ class VisionBounds:
 
 
 class PositionRefiner(BaseRefiner):
+    """
+    Refiner that combines vision data from multiple cameras, applies bounds filtering,
+    and optionally applies Kalman filtering for smoothing and imputing vanished robots.
+
+    Important:
+        when exp_ball set to False, the refiner could return either Ball | None type ball value
+        when exp_ball set to True, the refiner will ALWAYS return a Ball type ball value (will impute missing frames)
+    """
+
     def __init__(
         self,
         field_bounds: FieldBounds,
-        bounds_buffer: float = 1.0,
         filtering: bool = True,
+        exp_ball: bool = True,
     ):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
         self.vision_bounds = VisionBounds(
-            x_min=field_bounds.top_left[0] - bounds_buffer,  # expand left
-            x_max=field_bounds.bottom_right[0] + bounds_buffer,  # expand right
-            y_min=field_bounds.bottom_right[1] - bounds_buffer,  # expand bottom
-            y_max=field_bounds.top_left[1] + bounds_buffer,  # expand top
+            x_min=field_bounds.top_left[0] - VISION_BOUNDS_BUFFER,  # expand left
+            x_max=field_bounds.bottom_right[0] + VISION_BOUNDS_BUFFER,  # expand right
+            y_min=field_bounds.bottom_right[1] - VISION_BOUNDS_BUFFER,  # expand bottom
+            y_max=field_bounds.top_left[1] + VISION_BOUNDS_BUFFER,  # expand top
         )
 
         # For Kalman filtering and imputing vanished values.
@@ -60,6 +69,8 @@ class PositionRefiner(BaseRefiner):
         self._filter_running = (
             False  # Only start filtering once we have valid data to filter (i.e. after the first valid game frame)
         )
+
+        self.exp_ball = exp_ball
 
         if self.filtering:
             # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
@@ -138,18 +149,20 @@ class PositionRefiner(BaseRefiner):
         )
 
         # After the balls have been combined, take the most confident
-        new_ball: Ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
+        new_ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
 
-        # For filtering and vanishing
-        if self.filtering and self._filter_running:
-            new_ball = self.kalman_filter_ball.filter_data(
-                new_ball,
-                game_frame.ball,
-                time_elapsed,
-            )
-        elif new_ball is None:
-            # If none, take the ball from the last frame of the game
-            new_ball = game_frame.ball
+        # Skip filtering when there's no ball and we don't expect one
+        if new_ball is not None or self.exp_ball:
+            # For filtering and vanishing
+            if self.filtering and self._filter_running:
+                new_ball = self.kalman_filter_ball.filter_data(
+                    new_ball,
+                    game_frame.ball,
+                    time_elapsed,
+                )
+            elif new_ball is None:
+                # If none, take the ball from the last frame of the game
+                new_ball = game_frame.ball
 
         if game_frame.my_team_is_yellow:
             new_game_frame = replace(
