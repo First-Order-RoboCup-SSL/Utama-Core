@@ -4,6 +4,7 @@ from typing import List, Tuple
 import numpy as np  # type: ignore
 
 from utama_core.entities.game import Game
+from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.math_utils import (
     distance,
     distance_between_line_segments,
@@ -26,6 +27,18 @@ class FastPathPlanner:
         self.SUBGOAL_DISTANCE = self.config.SUBGOAL_DISTANCE
         self.MAXRECURSIONLENGTH = self.config.MAXRECURSION_LENGTH
         self.PROJECTEDFRAMES = self.config.PROJECTEDFRAMES
+
+    @staticmethod
+    def is_point_in_field_bounds(point: np.ndarray | Tuple[float, float], field_bounds: FieldBounds) -> bool:
+        x = float(point[0])
+        y = float(point[1])
+
+        min_x = min(field_bounds.top_left[0], field_bounds.bottom_right[0])
+        max_x = max(field_bounds.top_left[0], field_bounds.bottom_right[0])
+        min_y = min(field_bounds.top_left[1], field_bounds.bottom_right[1])
+        max_y = max(field_bounds.top_left[1], field_bounds.bottom_right[1])
+
+        return min_x <= x <= max_x and min_y <= y <= max_y
 
     def _get_obstacles(self, game: Game, robot_id: int, our_pos):
         friendly_obstacles = [robot for robot in game.friendly_robots.values() if robot.id != robot_id]
@@ -176,6 +189,10 @@ class FastPathPlanner:
         robot = game.friendly_robots[robot_id]
         our_pos = np.array([robot.p.x, robot.p.y])
         target = np.array(target)
+        if not self.is_point_in_field_bounds(target, game.field.field_bounds):
+            raise ValueError(
+                f"Target point ({target[0]:.3f}, {target[1]:.3f}) is outside field bounds {game.field.field_bounds}"
+            )
         obstacles = self._get_obstacles(game, robot_id, our_pos)
         finaltrajectory = self.checksegment((our_pos, target), obstacles, 0, target)[0]
         return finaltrajectory
