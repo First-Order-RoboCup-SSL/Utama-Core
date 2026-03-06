@@ -6,6 +6,7 @@ from utama_core.config.enums import Mode
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.entities.game.field import Field
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.motion_planning.src.fastpathplanning.planner import FastPathPlanner
 from utama_core.motion_planning.src.pid.pid import get_pids
@@ -26,11 +27,14 @@ class FastPathPlanningController(MotionController):
         target_pos: Vector2D,
         target_oren: float,
     ) -> tuple[Vector2D, float]:
+        field = game.field
+
+        field_bounds = field.field_bounds
         robot = game.friendly_robots[robot_id]
 
         oren = self.pid_oren.calculate(target_oren, robot.orientation, robot_id)
 
-        pos = self.fpp._path_to(game, robot_id, target_pos)[0][1]
+        pos = self.fpp._path_to(game, robot_id, target_pos, field_bounds)[0][1]
         vel = self.pid_trans.calculate(pos, robot.p, robot_id)
 
         return vel, oren
