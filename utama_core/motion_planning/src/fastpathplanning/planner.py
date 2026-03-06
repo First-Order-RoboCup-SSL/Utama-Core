@@ -6,6 +6,7 @@ import numpy as np  # type: ignore
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.math_utils import (
+    closest_point_on_segment,
     distance,
     distance_between_line_segments,
     distance_point_to_segment,
@@ -100,7 +101,6 @@ class FastPathPlanner:
         obstacle_pos = None
         tempdistance = distance(segment[0], segment[1])
         for o in obstacles:
-
             if distance_between_line_segments(o[0], o[1], segment[0], segment[1]) < self.OBSTACLE_CLEARANCE:
                 obstacledistance = distance_between_line_segments(o[0], o[1], segment[0], segment[1])
                 if closest_obstacle is None or obstacledistance < tempdistance:
@@ -109,12 +109,17 @@ class FastPathPlanner:
         if closest_obstacle is not None:
             obstacle_pos = find_intersection(segment, closest_obstacle)
             if obstacle_pos is None:
-                if distance_point_to_segment(closest_obstacle[0], segment[0], segment[1]) < distance_point_to_segment(
-                    closest_obstacle[1], segment[0], segment[1]
-                ):
-                    obstacle_pos = closest_obstacle[0]
-                else:
-                    obstacle_pos = closest_obstacle[1]
+                Obstacle_distance_list = []
+
+                Obstacle_distance_list.append(distance_point_to_segment(closest_obstacle[0], segment[0], segment[1]))
+                Obstacle_distance_list.append(distance_point_to_segment(closest_obstacle[1], segment[0], segment[1]))
+                Point_C = closest_point_on_segment(segment[0], closest_obstacle[0], closest_obstacle[1])
+                Point_D = closest_point_on_segment(segment[1], closest_obstacle[0], closest_obstacle[1])
+                Obstacle_distance_list.append(distance(segment[0], Point_C))
+                Obstacle_distance_list.append(distance(segment[1], Point_D))
+                Obstacle_points_list = [closest_obstacle[0], closest_obstacle[1], Point_C, Point_D]
+
+                return Obstacle_points_list[Obstacle_distance_list.index(min(Obstacle_distance_list))]
         return obstacle_pos
 
     def _trajectory_length(self, trajectory):

@@ -192,6 +192,45 @@ def distance_point_to_segment(point: np.ndarray, seg_start: np.ndarray, seg_end:
     return np.hypot(x_1 - closest_x, y_1 - closest_y)
 
 
+def closest_point_on_segment(point: np.ndarray, seg_start: np.ndarray, seg_end: np.ndarray) -> np.ndarray:
+    """Calculate the point on a segment closest to another point.
+
+    Args:
+        point (tuple): A tuple representing the point (px, py).
+        seg_start (tuple): A tuple representing the start of the segment (x1, y1).
+        seg_end (tuple): A tuple representing the end of the segment (x2, y2).
+    Returns:
+        np.ndarray: An np array representing the closest point on the segment.
+    """
+    x_1, y_1 = point
+    (x_2, y_2), (x_3, y_3) = seg_start, seg_end
+
+    dx = x_3 - x_2
+    dy = y_3 - y_2
+
+    if dx == dy == 0:  # e.g. for static object the segment will be a point
+        return np.hypot(x_1 - x_2, y_1 - y_2)
+
+    # Now assume the segment is a line, calculate minimum distance to the line
+    # t describes the point on this line closest to point, in the form
+    # p_closest = (x_2 + t*dx, y_2 + t*dy),
+    # where (dx, dy) is the line direction vector
+    t = ((x_1 - x_2) * dx + (y_1 - y_2) * dy) / (dx * dx + dy * dy)
+
+    if t < 0:
+        # Closest point is the start of the segment
+        closest_x, closest_y = x_2, y_2
+    elif t > 1:
+        # Closest point is the end of the segment
+        closest_x, closest_y = x_3, y_3
+    else:
+        # Closest point is within the segment
+        closest_x = x_2 + t * dx
+        closest_y = y_2 + t * dy
+
+    return np.array([closest_x, closest_y])
+
+
 def segments_intersect(
     seg1_start: np.ndarray,
     seg1_end: np.ndarray,
