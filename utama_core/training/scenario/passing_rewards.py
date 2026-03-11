@@ -1,10 +1,8 @@
-"""ASPAC reward computation for SSL passing drills.
-
-All functions use torch.* ops only — no numpy/scipy — to preserve
-differentiability for future gradient-based MARL (e.g., SHAC).
-"""
+"""Reward computation for SSL passing drills."""
 
 from __future__ import annotations
+
+from typing import Dict, Tuple
 
 import torch
 from torch import Tensor
@@ -15,7 +13,7 @@ def compute_passing_reward(
     agent_pos: Tensor,
     ball_pos: Tensor,
     scenario,
-) -> Tensor:
+) -> Tuple[Tensor, Dict[str, Tensor]]:
     """Per-agent reward using delta-based shaping.
 
     Delta-based: reward = prev_dist - curr_dist, so standing still = 0.
@@ -27,7 +25,7 @@ def compute_passing_reward(
         scenario: PassingScenario instance (for accessing other agents/state).
 
     Returns:
-        Reward tensor, shape (batch,).
+        Tuple of (reward tensor shape (batch,), component dict for logging).
     """
     rc = scenario.cfg.rewards
     fc = scenario.cfg.field
@@ -35,100 +33,122 @@ def compute_passing_reward(
     batch_dim = agent_pos.shape[0]
 
     reward = torch.zeros(batch_dim, device=device)
+    components: Dict[str, Tensor] = {}
+    zeros = torch.zeros(batch_dim, device=device)
+
+    # Compute dense shaping annealing factor
+    dense_scale = _dense_annealing_factor(rc, scenario)
 
     is_attacker = any(a.name == agent_name for a in scenario.attackers)
+    holder = scenario.confirmed_holder
+    curr = scenario.current_metrics
+    prev = scenario.previous_metrics
 
     if is_attacker and len(scenario.attackers) >= 2:
         # Determine passer (attacker_0) vs receiver (attacker_1)
         is_passer = agent_name == scenario.attackers[0].name
-        receiver = scenario.attackers[1]
-        receiver_pos = receiver.state.pos
 
         if is_passer:
-            # Phased passer reward: approach ball → dribble/pass to receiver
-            dc = scenario.cfg.dynamics
-            passer_to_ball_dist = torch.norm(agent_pos - ball_pos, dim=-1)
-            passer_near_ball = passer_to_ball_dist < dc.dribble_dist_threshold
-            has_ball = scenario._has_ball(scenario.attackers[0])
-            passer_touched_ball = scenario.last_holder == 0
+            passer_near_ball = holder == 0
+            passer_touched_ball = scenario.last_attacker_holder == 0
 
-            # Phase 1: passer approaches ball (before first touch)
-            approach_delta = scenario.prev_passer_to_ball_dist - passer_to_ball_dist
-            phase1 = rc.passer_to_ball_weight * approach_delta
+            approach_delta = prev["passer_to_ball_dist"] - curr["passer_to_ball_dist"]
+            phase1 = rc.passer_to_ball_weight * approach_delta * dense_scale
 
-            # Phase 2: ball→receiver (after touching ball — dribble or kicked)
-            ball_to_recv = torch.norm(ball_pos - receiver_pos, dim=-1)
-            pass_delta = scenario.prev_ball_to_receiver_dist - ball_to_recv
-            phase2 = rc.ball_to_receiver_weight * pass_delta
+            pass_delta = prev["ball_to_receiver_dist"] - curr["ball_to_receiver_dist"]
+            phase2 = rc.ball_to_receiver_weight * pass_delta * dense_scale
 
-            # Phase transition uses proximity only (not facing); facing check
-            # is reserved for action gating (kick/dribble/turn) in process_action()
             in_phase2 = passer_near_ball | passer_touched_ball
-            reward = reward + torch.where(in_phase2, phase2, phase1)
+            phased_reward = torch.where(in_phase2, phase2, phase1)
+            reward = reward + phased_reward
 
-            # Passer: delta-based reward for turning to face the receiver
-            to_recv = receiver_pos - agent_pos
-            to_recv_norm = torch.norm(to_recv, dim=-1, keepdim=True).clamp(min=1e-8)
-            to_recv_dir = to_recv / to_recv_norm
-            passer_rot = scenario.attackers[0].state.rot.squeeze(-1)
-            passer_facing = torch.stack([torch.cos(passer_rot), torch.sin(passer_rot)], dim=-1)
-            facing_recv_cos = (passer_facing * to_recv_dir).sum(dim=-1)
-            facing_recv_delta = facing_recv_cos - scenario.prev_passer_facing_receiver_cos
-            reward = reward + rc.passer_face_receiver_weight * facing_recv_delta
+            components["reward/approach_delta"] = torch.where(~in_phase2, phase1, zeros)
+            components["reward/pass_delta"] = torch.where(in_phase2, phase2, zeros)
 
-            # Ball possession reward (encourages dribble activation)
-            reward = reward + has_ball.float() * rc.has_ball_reward
+            facing_recv_delta = curr["passer_facing_receiver_cos"] - prev["passer_facing_receiver_cos"]
+            face_recv_reward = rc.passer_face_receiver_weight * facing_recv_delta * dense_scale
+            reward = reward + face_recv_reward
+            components["reward/face_receiver"] = face_recv_reward
 
-            # Kick alignment shaping (one-shot on kick frame)
+            has_ball_reward = (holder == 0).float() * rc.has_ball_reward * dense_scale
+            reward = reward + has_ball_reward
+            components["reward/has_ball"] = has_ball_reward
+
+            kick_reward = zeros.clone()
             passer_name = scenario.attackers[0].name
             if hasattr(scenario, "kick_fired") and passer_name in scenario.kick_fired:
                 kicked = scenario.kick_fired[passer_name]
                 if kicked.any():
-                    facing_recv_clamped = facing_recv_cos.clamp(min=0.0)
-                    reward = reward + kicked.float() * rc.kick_alignment_weight * facing_recv_clamped
+                    facing_recv_clamped = curr["passer_facing_receiver_cos"].clamp(min=0.0)
+                    kick_reward = kicked.float() * rc.kick_alignment_weight * facing_recv_clamped * dense_scale
+                    reward = reward + kick_reward
+            components["reward/kick_align"] = kick_reward
         else:
-            # Receiver: optional dense approach shaping
+            recv_approach_reward = zeros.clone()
             if rc.receiver_to_ball_weight > 0:
-                curr_dist = torch.norm(agent_pos - ball_pos, dim=-1)
-                delta = scenario.prev_receiver_to_ball_dist - curr_dist
-                reward = reward + rc.receiver_to_ball_weight * delta
+                delta = prev["receiver_to_ball_dist"] - curr["receiver_to_ball_dist"]
+                recv_approach_reward = rc.receiver_to_ball_weight * delta * dense_scale
+                reward = reward + recv_approach_reward
+            components["reward/recv_approach"] = recv_approach_reward
 
-            # Receiver: delta-based reward for turning to face the ball
-            to_ball = ball_pos - agent_pos
-            to_ball_norm = torch.norm(to_ball, dim=-1, keepdim=True).clamp(min=1e-8)
-            to_ball_dir = to_ball / to_ball_norm
-            recv_rot = scenario.attackers[1].state.rot.squeeze(-1)
-            recv_facing = torch.stack([torch.cos(recv_rot), torch.sin(recv_rot)], dim=-1)
-            facing_ball_cos = (recv_facing * to_ball_dir).sum(dim=-1)
-            facing_delta = facing_ball_cos - scenario.prev_receiver_facing_ball_cos
-            reward = reward + rc.receiver_face_ball_weight * facing_delta
+            facing_delta = curr["receiver_facing_ball_cos"] - prev["receiver_facing_ball_cos"]
+            recv_face_reward = rc.receiver_face_ball_weight * facing_delta * dense_scale
+            reward = reward + recv_face_reward
+            components["reward/recv_face_ball"] = recv_face_reward
 
-        # Sparse: successful pass
-        reward = reward + scenario.pass_completed.float() * rc.successful_pass
+        pass_reward = scenario.pass_completed.float() * rc.successful_pass
+        reward = reward + pass_reward
+        components["reward/pass_completed"] = pass_reward
 
     elif not is_attacker:
-        # Defender reward: getting closer to ball (interception shaping)
-        dist_to_ball = torch.norm(agent_pos - ball_pos, dim=-1)
-        # Normalize by field diagonal for scale
-        max_dist = (fc.half_length**2 + fc.half_width**2) ** 0.5
-        reward = reward + (1.0 - dist_to_ball / max_dist) * 0.5
+        defender_dense = zeros.clone()
+        if rc.defender_delta_weight > 0:
+            delta = prev["defender_to_ball_dist"][agent_name] - curr["defender_to_ball_dist"][agent_name]
+            defender_dense = delta * rc.defender_delta_weight * dense_scale
+        reward = reward + defender_dense
+        components["reward/defender_approach"] = defender_dense
 
-        # Bonus for interception
-        reward = reward + scenario.ball_intercepted.float() * 10.0
+        intercept_reward = scenario.ball_intercepted.float() * 10.0
+        reward = reward + intercept_reward
+        components["reward/interception"] = intercept_reward
 
-    # Out-of-zone penalty (soft constraint)
+    # Out-of-zone penalty (soft constraint, NOT annealed)
     az_x = fc.active_zone_center_x
     az_y = fc.active_zone_center_y
     outside_x = agent_pos[:, 0].abs() - (az_x + fc.active_zone_half_length)
     outside_y = agent_pos[:, 1].abs() - (az_y + fc.active_zone_half_width)
     outside_zone = (outside_x > 0) | (outside_y > 0)
-    reward = reward + outside_zone.float() * rc.out_of_zone_penalty
+    zone_penalty = outside_zone.float() * rc.out_of_zone_penalty
+    reward = reward + zone_penalty
+    components["reward/out_of_zone"] = zone_penalty
 
-    # Sparse: ball out of bounds
+    # Sparse: ball out of bounds (NOT annealed)
     oob = (ball_pos[:, 0].abs() > fc.half_length) | (ball_pos[:, 1].abs() > fc.half_width)
-    reward = reward + oob.float() * rc.ball_out_of_bounds
+    oob_penalty = oob.float() * rc.ball_out_of_bounds
+    reward = reward + oob_penalty
+    components["reward/ball_oob"] = oob_penalty
 
-    return reward
+    # Log the annealing factor for monitoring
+    components["reward/dense_scale"] = torch.full((batch_dim,), dense_scale, device=device)
+
+    return reward, components
+
+
+def _dense_annealing_factor(rc, scenario) -> float:
+    """Compute the dense shaping annealing multiplier.
+
+    Returns 1.0 when annealing is disabled (shaping_anneal_end == 0).
+    """
+    if rc.shaping_anneal_end <= 0:
+        return 1.0
+
+    global_frame = getattr(scenario, "global_frame", 0)
+    if global_frame < rc.shaping_anneal_start:
+        return 1.0
+
+    progress = (global_frame - rc.shaping_anneal_start) / max(rc.shaping_anneal_end - rc.shaping_anneal_start, 1)
+    progress = min(progress, 1.0)
+    return max(rc.shaping_anneal_min, 1.0 - progress * (1.0 - rc.shaping_anneal_min))
 
 
 def envy_free_bonus(

@@ -1,106 +1,27 @@
 """Train MARL agents on SSL scenarios using BenchMARL.
 
-Usage:
-    pixi run -e training train --task ssl_2v0 --max-frames 60000 --n-envs 32
-    pixi run -e training train --task ssl_2v0 --wandb-project ssl-aspac --render
-    pixi run -e training train --resume                         # resume latest
-    pixi run -e training train --resume path/to/checkpoint.pt   # resume specific
+Usage (Hydra-style overrides):
+    pixi run -e training train                                  # default (2v0_unified)
+    pixi run -e training train scenario=2v1_unified             # pick scenario
+    pixi run -e training train max_frames=60000 n_envs=64       # override hyperparams
+    pixi run -e training train resume=latest                    # resume latest
+    pixi run -e training train resume=/path/to/checkpoint.pt    # resume specific
 """
 
-import argparse
 import sys
+from pathlib import Path
 
-from utama_core.training.checkpoint_utils import (
-    find_latest_experiment_checkpoint,
-    print_device_info,
-)
-from utama_core.training.experiment import SSLExperimentConfig, create_experiment
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
+from utama_core.training.hydra_config import register_configs
 
-def parse_args() -> argparse.Namespace:
-    _defaults = SSLExperimentConfig()
-    parser = argparse.ArgumentParser(description="SSL MARL Training")
-
-    parser.add_argument(
-        "--task",
-        type=str,
-        default=_defaults.task,
-        choices=[
-            "ssl_2v0",
-            "ssl_2v1",
-            "ssl_2v2",
-            "ssl_2v0_macro",
-            "ssl_2v1_macro",
-            "ssl_2v2_macro",
-            "ssl_2v0_unified",
-            "ssl_2v1_unified",
-            "ssl_2v2_unified",
-        ],
-        help=f"Training scenario (default: {_defaults.task})",
-    )
-    parser.add_argument(
-        "--max-frames",
-        type=int,
-        default=_defaults.max_frames,
-        help=f"Total training frames (default: {_defaults.max_frames:_})",
-    )
-    parser.add_argument(
-        "--n-envs",
-        type=int,
-        default=_defaults.n_envs,
-        help=f"Number of parallel environments (default: {_defaults.n_envs})",
-    )
-    parser.add_argument(
-        "--frames-per-batch",
-        type=int,
-        default=_defaults.frames_per_batch,
-        help=f"Frames collected per iteration (default: {_defaults.frames_per_batch})",
-    )
-    parser.add_argument(
-        "--lr",
-        type=float,
-        default=_defaults.lr,
-        help=f"Learning rate (default: {_defaults.lr})",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=_defaults.seed,
-        help=f"Random seed (default: {_defaults.seed})",
-    )
-    parser.add_argument(
-        "--device",
-        type=str,
-        default=_defaults.device,
-        help=f"Device: 'cpu', 'cuda', or 'auto' (default: {_defaults.device})",
-    )
-    parser.add_argument(
-        "--wandb-project",
-        type=str,
-        default=None,
-        help="WandB project name (enables WandB logging)",
-    )
-    parser.add_argument(
-        "--render",
-        action="store_true",
-        help="Enable eval rendering (logged to WandB as videos)",
-    )
-    parser.add_argument(
-        "--resume",
-        nargs="?",
-        const="latest",
-        default=None,
-        metavar="CHECKPOINT",
-        help="Resume training. No value or 'latest': find latest checkpoint for --task. "
-        "Or provide a path to a specific .pt checkpoint file.",
-    )
-
-    return parser.parse_args()
+register_configs()
 
 
 def _resolve_resume_checkpoint(resume_value: str, task: str) -> str:
-    """Resolve --resume argument to an actual checkpoint path."""
-    from pathlib import Path
+    """Resolve resume argument to an actual checkpoint path."""
+    from utama_core.training.checkpoint_utils import find_latest_experiment_checkpoint
 
     if resume_value != "latest":
         ckpt = Path(resume_value)
@@ -113,7 +34,7 @@ def _resolve_resume_checkpoint(resume_value: str, task: str) -> str:
     if ckpt is None:
         print(
             f"Error: no checkpoints found for task '{task}'. "
-            "Run a full training first or specify a path with --resume <path>.",
+            "Run a full training first or specify a path with resume=<path>.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -122,28 +43,68 @@ def _resolve_resume_checkpoint(resume_value: str, task: str) -> str:
     return str(ckpt)
 
 
-def main():
-    args = parse_args()
+@hydra.main(version_base=None, config_path="../conf", config_name="config")
+def main(cfg: DictConfig) -> None:
+    from utama_core.training.checkpoint_utils import print_device_info
+    from utama_core.training.experiment import SSLExperimentConfig, create_experiment
+    from utama_core.training.scenario.passing_config import PassingScenarioConfig
 
-    print_device_info(args.device)
+    print_device_info(cfg.device)
 
+    # --- Resume handling ---
     restore_file = None
-    if args.resume is not None:
-        restore_file = _resolve_resume_checkpoint(args.resume, args.task)
+    if cfg.resume is not None:
+        restore_file = _resolve_resume_checkpoint(cfg.resume, cfg.scenario.task)
 
-    cfg = SSLExperimentConfig(
-        task=args.task,
-        seed=args.seed,
-        max_frames=args.max_frames,
-        n_envs=args.n_envs,
-        frames_per_batch=args.frames_per_batch,
-        lr=args.lr,
-        device=args.device,
-        wandb_project=args.wandb_project,
-        render=args.render,
+    # --- Build SSLExperimentConfig ---
+    exp_cfg = SSLExperimentConfig(
+        task=cfg.scenario.task,
+        seed=cfg.seed,
+        max_frames=cfg.max_frames,
+        n_envs=cfg.n_envs,
+        frames_per_batch=cfg.frames_per_batch,
+        minibatch_size=cfg.minibatch_size,
+        n_minibatch_iters=cfg.n_minibatch_iters,
+        lr=cfg.lr,
+        gamma=cfg.gamma,
+        device=cfg.device,
+        hidden_sizes=tuple(cfg.hidden_sizes),
+        wandb_project=cfg.wandb_project,
+        render=cfg.render,
+        evaluation_interval=cfg.evaluation_interval,
+        evaluation_episodes=cfg.evaluation_episodes,
     )
 
-    experiment = create_experiment(cfg, restore_file=restore_file)
+    # --- Build PassingScenarioConfig from Hydra structured config ---
+    from utama_core.training.scenario.passing_config import (
+        PassingDynamicsConfig,
+        PassingFieldConfig,
+        PassingResetRandomizationConfig,
+        PassingRewardConfig,
+    )
+
+    sc = OmegaConf.to_container(cfg.scenario, resolve=True)
+    scenario_config = PassingScenarioConfig(
+        n_attackers=sc["n_attackers"],
+        n_defenders=sc["n_defenders"],
+        max_steps=sc["max_steps"],
+        defender_behavior=sc["defender_behavior"],
+        field=PassingFieldConfig(**sc["field"]) if "field" in sc else PassingFieldConfig(),
+        dynamics=PassingDynamicsConfig(**sc["dynamics"]) if "dynamics" in sc else PassingDynamicsConfig(),
+        rewards=PassingRewardConfig(**sc["rewards"]) if "rewards" in sc else PassingRewardConfig(),
+        reset_randomization=(
+            PassingResetRandomizationConfig(**sc["reset_randomization"])
+            if "reset_randomization" in sc
+            else PassingResetRandomizationConfig()
+        ),
+    )
+
+    # --- Create and run experiment ---
+    experiment = create_experiment(
+        exp_cfg,
+        restore_file=restore_file,
+        scenario_config=scenario_config,
+    )
     experiment.run()
 
 

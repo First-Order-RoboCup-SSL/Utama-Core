@@ -373,9 +373,9 @@ class StrategyRunner:
                 vanishing=rsim_vanishing,
             )
 
-            if self.opp_strategy:
-                self.opp_strategy.load_rsim_env(vmas_env)
-            self.my_strategy.load_rsim_env(vmas_env)
+            if self.opp:
+                self.opp.strategy.load_rsim_env(vmas_env)
+            self.my.strategy.load_rsim_env(vmas_env)
 
             return vmas_env, VmasController(env=vmas_env)
 
@@ -472,7 +472,7 @@ class StrategyRunner:
             )
 
             pvp_manager = None
-            if self.opp_strategy:
+            if self.opp:
                 pvp_manager = VmasPVPManager(self.rsim_env)
 
             my_robot_controller = VmasRobotController(
@@ -482,7 +482,7 @@ class StrategyRunner:
                 pvp_manager=pvp_manager,
             )
 
-            if self.opp_strategy:
+            if self.opp:
                 opp_robot_controller = VmasRobotController(
                     is_team_yellow=not self.my_team_is_yellow,
                     n_friendly=self.exp_enemy,

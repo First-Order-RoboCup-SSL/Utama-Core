@@ -4,12 +4,15 @@ Unlike HolonomicWithRotation (which maps actions to forces/torques),
 this sets agent velocity directly — matching real SSL robots that accept
 velocity commands (vx, vy, omega) with onboard PID controllers.
 
-Action flow with position-based action space (6D):
-  1. Policy outputs [delta_x, delta_y, target_oren, kick, dribble, turn_on_spot]
-  2. Scenario's process_action() converts dims 0-2 to velocity commands
-     via a batched PD controller, and handles kick/dribble/turn logic
-  3. This dynamics class reads the pre-computed velocities from dims 0-2
-     and applies them to the agent state
+Action flow:
+  1. Policy outputs an action tensor (size depends on mode):
+     - Unified (4D, default): [target_x, target_y, target_oren, kick_intent]
+     - Macro (3D): [action_selector, target_x, target_y]
+     - Legacy (6D): [delta_x, delta_y, target_oren, kick, dribble, turn_on_spot]
+  2. PassingScenario.process_action() converts to velocity commands
+     via batched PID controllers and handles kick/dribble logic
+  3. This dynamics class reads the 3D velocity output (vx, vy, omega)
+     and applies it directly to agent state
 """
 
 import torch

@@ -27,12 +27,21 @@ from utama_core.training.scenario.passing_config import (
 from utama_core.training.scenario.passing_scenario import PassingScenario
 
 
-def _macro_config(n_attackers: int, n_defenders: int) -> PassingScenarioConfig:
+def _macro_config(
+    n_attackers: int,
+    n_defenders: int,
+    *,
+    physics_mode: str = "force_based",
+) -> PassingScenarioConfig:
     """Create a PassingScenarioConfig with macro-actions enabled."""
     return PassingScenarioConfig(
         n_attackers=n_attackers,
         n_defenders=n_defenders,
-        dynamics=PassingDynamicsConfig(use_macro_actions=True, use_unified_actions=False),
+        dynamics=PassingDynamicsConfig(
+            use_macro_actions=True,
+            use_unified_actions=False,
+            physics_mode=physics_mode,
+        ),
         rewards=PassingRewardConfig(
             passer_face_receiver_weight=0.0,  # macros auto-orient
             receiver_face_ball_weight=0.0,  # macros auto-orient
@@ -41,16 +50,40 @@ def _macro_config(n_attackers: int, n_defenders: int) -> PassingScenarioConfig:
     )
 
 
-def _unified_config(n_attackers: int, n_defenders: int) -> PassingScenarioConfig:
+def _unified_config(
+    n_attackers: int,
+    n_defenders: int,
+    *,
+    physics_mode: str = "force_based",
+) -> PassingScenarioConfig:
     """Create a PassingScenarioConfig with unified action space."""
     return PassingScenarioConfig(
         n_attackers=n_attackers,
         n_defenders=n_defenders,
-        dynamics=PassingDynamicsConfig(use_macro_actions=False, use_unified_actions=True),
+        dynamics=PassingDynamicsConfig(
+            use_macro_actions=False,
+            use_unified_actions=True,
+            physics_mode=physics_mode,
+        ),
         rewards=PassingRewardConfig(
-            passer_face_receiver_weight=0.3,  # model controls orientation
+            passer_face_receiver_weight=0.5,  # model controls orientation
             receiver_face_ball_weight=0.3,  # model controls orientation
             kick_alignment_weight=0.0,  # kick gating handles alignment
+        ),
+    )
+
+
+def _legacy_config(
+    n_attackers: int,
+    n_defenders: int,
+) -> PassingScenarioConfig:
+    return PassingScenarioConfig(
+        n_attackers=n_attackers,
+        n_defenders=n_defenders,
+        dynamics=PassingDynamicsConfig(
+            use_macro_actions=False,
+            use_unified_actions=False,
+            physics_mode="kinematic_legacy",
         ),
     )
 
@@ -60,36 +93,33 @@ _TASK_REGISTRY: Dict[str, tuple] = {
     # Legacy 6D action space
     "ssl_2v0": (
         PassingScenario,
-        PassingScenarioConfig(
-            n_attackers=2,
-            n_defenders=0,
-            dynamics=PassingDynamicsConfig(use_macro_actions=False, use_unified_actions=False),
-        ),
+        PassingScenarioConfig(n_attackers=2, n_defenders=0),
     ),
     "ssl_2v1": (
         PassingScenario,
-        PassingScenarioConfig(
-            n_attackers=2,
-            n_defenders=1,
-            dynamics=PassingDynamicsConfig(use_macro_actions=False, use_unified_actions=False),
-        ),
+        PassingScenarioConfig(n_attackers=2, n_defenders=1),
     ),
     "ssl_2v2": (
         PassingScenario,
-        PassingScenarioConfig(
-            n_attackers=2,
-            n_defenders=2,
-            dynamics=PassingDynamicsConfig(use_macro_actions=False, use_unified_actions=False),
-        ),
+        PassingScenarioConfig(n_attackers=2, n_defenders=2),
     ),
-    # Macro-action 3D action space
+    # Force-based macro/unified variants
     "ssl_2v0_macro": (PassingScenario, _macro_config(2, 0)),
     "ssl_2v1_macro": (PassingScenario, _macro_config(2, 1)),
     "ssl_2v2_macro": (PassingScenario, _macro_config(2, 2)),
-    # Unified 4D action space [target_x, target_y, target_oren, kick_intent]
     "ssl_2v0_unified": (PassingScenario, _unified_config(2, 0)),
     "ssl_2v1_unified": (PassingScenario, _unified_config(2, 1)),
     "ssl_2v2_unified": (PassingScenario, _unified_config(2, 2)),
+    # Explicit legacy task names for the old kinematic path
+    "ssl_2v0_legacy": (PassingScenario, _legacy_config(2, 0)),
+    "ssl_2v1_legacy": (PassingScenario, _legacy_config(2, 1)),
+    "ssl_2v2_legacy": (PassingScenario, _legacy_config(2, 2)),
+    "ssl_2v0_macro_legacy": (PassingScenario, _macro_config(2, 0, physics_mode="kinematic_legacy")),
+    "ssl_2v1_macro_legacy": (PassingScenario, _macro_config(2, 1, physics_mode="kinematic_legacy")),
+    "ssl_2v2_macro_legacy": (PassingScenario, _macro_config(2, 2, physics_mode="kinematic_legacy")),
+    "ssl_2v0_unified_legacy": (PassingScenario, _unified_config(2, 0, physics_mode="kinematic_legacy")),
+    "ssl_2v1_unified_legacy": (PassingScenario, _unified_config(2, 1, physics_mode="kinematic_legacy")),
+    "ssl_2v2_unified_legacy": (PassingScenario, _unified_config(2, 2, physics_mode="kinematic_legacy")),
 }
 
 

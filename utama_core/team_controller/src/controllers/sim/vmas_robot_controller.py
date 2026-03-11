@@ -100,7 +100,7 @@ class VmasRobotController(AbstractRobotController):
         return self._empty_command(self.n_friendly)
 
     def _empty_command(self, n_robots: int) -> list[NDArray]:
-        return [np.zeros((6,), dtype=float) for _ in range(n_robots)]
+        return [np.zeros((5,), dtype=float) for _ in range(n_robots)]
 
     def _get_n_enemy(self) -> int:
         n_yellow = self._env.n_robots_yellow
@@ -179,4 +179,4 @@ class VmasPVPManager:
             self._pending = {"team_blue": None, "team_yellow": None}
 
     def _empty_command(self, n_robots: int) -> list[NDArray]:
-        return [np.zeros((6,), dtype=float) for _ in range(n_robots)]
+        return [np.zeros((5,), dtype=float) for _ in range(n_robots)]

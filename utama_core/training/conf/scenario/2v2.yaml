@@ -1,0 +1,67 @@
+task: ssl_2v2
+n_attackers: 2
+n_defenders: 2
+max_steps: 300            # ~5 seconds at 60Hz
+defender_behavior: fixed
+
+dynamics:
+  # Physics
+  dt: 0.016666666666666666  # 1/60
+  substeps: 2
+  robot_max_speed: 2.0
+  robot_max_angular_vel: 4.0
+  robot_max_acceleration: 4.0
+  robot_max_angular_acceleration: 50.0
+  robot_mass: 2.4
+  ball_mass: 0.043
+  ball_friction: 0.49
+  robot_friction: 0.1
+  kick_speed: 3.0           # m/s
+  dribble_force: 7.5
+  dribble_release_damping: 0.35
+  dribble_dist_threshold: 0.12
+  possession_cone_cos: 0.5
+  pass_min_ball_travel: 0.45
+  pass_confirm_frames: 2
+  holder_switch_cooldown_steps: 2
+  kick_cooldown_steps: 10
+  collision_force: 5.0
+  max_ball_speed: 6.5       # m/s — SSL regulation cap
+  # Legacy 6D action space parameters
+  action_delta_range: 2.0
+  turn_on_spot_radius_modifier: 1.35
+  # Action space mode
+  use_macro_actions: false
+  use_unified_actions: false
+  physics_mode: force_based
+  # Macro-action config (unused in legacy mode)
+  n_macro_actions: 4
+  dribble_engage_dist: 0.15
+  decision_interval: 1
+  # Kick parameters
+  kick_align_threshold: 0.95
+  kick_intent_threshold: 0.0
+
+rewards:
+  # Sparse
+  successful_pass: 3.0
+  ball_out_of_bounds: -0.3
+  # Dense shaping — passer
+  passer_to_ball_weight: 5.0
+  ball_to_receiver_weight: 0.5
+  passer_face_receiver_weight: 0.5
+  has_ball_reward: 0.1
+  kick_alignment_weight: 0.5
+  # Dense shaping — receiver
+  receiver_to_ball_weight: 0.3
+  receiver_face_ball_weight: 0.3
+  defender_delta_weight: 0.5
+  # Active zone
+  out_of_zone_penalty: -0.01
+  # Curriculum (0 = disabled)
+  shaping_anneal_start: 0
+  shaping_anneal_end: 0
+  shaping_anneal_min: 0.1
+
+reset_randomization:
+  benchmark_reset: false

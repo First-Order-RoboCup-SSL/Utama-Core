@@ -9,21 +9,27 @@ from benchmarl.algorithms import MappoConfig
 from benchmarl.experiment import Experiment, ExperimentConfig
 from benchmarl.models.mlp import MlpConfig
 
+from utama_core.training.scenario.passing_config import PassingScenarioConfig
 from utama_core.training.task import SSLTask
+
+
+def _ceil_to_multiple(x: int, m: int) -> int:
+    """Round *x* up to the nearest multiple of *m*."""
+    return -(-x // m) * m
 
 
 @dataclass
 class SSLExperimentConfig:
     """High-level config for SSL training experiments."""
 
-    task: str = "ssl_2v0"
+    task: str = "ssl_2v0_unified"
     seed: int = 0
     max_frames: int = 1_200_000
     n_envs: int = 32
     frames_per_batch: int = 6000
     minibatch_size: int = 400
     n_minibatch_iters: int = 8
-    lr: float = 5e-5
+    lr: float = 3e-4
     gamma: float = 0.99
     device: str = "auto"
 
@@ -42,12 +48,14 @@ class SSLExperimentConfig:
 def create_experiment(
     cfg: SSLExperimentConfig,
     restore_file: Optional[str] = None,
+    scenario_config: Optional[PassingScenarioConfig] = None,
 ) -> Experiment:
     """Create a BenchMARL Experiment from our high-level config.
 
     Args:
         cfg: High-level experiment configuration.
         restore_file: If provided, resume training from this checkpoint .pt file.
+        scenario_config: If provided, override the default scenario config for the task.
     """
 
     # Resolve device
@@ -56,7 +64,7 @@ def create_experiment(
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Task
-    task = SSLTask.from_name(cfg.task)
+    task = SSLTask.from_name(cfg.task, scenario_config=scenario_config)
 
     # Algorithm
     algorithm_config = MappoConfig.get_from_yaml()
@@ -71,8 +79,8 @@ def create_experiment(
     # Round up frames_per_batch to be divisible by n_envs. TorchRL rounds up
     # internally; if we don't match, the collector exhausts total_frames in
     # fewer iterations than BenchMARL expects → StopIteration.
-    fpb = -(-cfg.frames_per_batch // cfg.n_envs) * cfg.n_envs
-    max_frames = -(-cfg.max_frames // fpb) * fpb
+    fpb = _ceil_to_multiple(cfg.frames_per_batch, cfg.n_envs)
+    max_frames = _ceil_to_multiple(cfg.max_frames, fpb)
 
     # Experiment config
     experiment_config = ExperimentConfig.get_from_yaml()
@@ -107,12 +115,16 @@ def create_experiment(
     # Evaluation / rendering
     if cfg.render and cfg.wandb_project:
         experiment_config.render = True
-        experiment_config.evaluation_interval = cfg.evaluation_interval or fpb
+        eval_interval = cfg.evaluation_interval or fpb
+        experiment_config.evaluation_interval = _ceil_to_multiple(eval_interval, fpb)
         experiment_config.evaluation_episodes = cfg.evaluation_episodes
     else:
         experiment_config.render = False
         if cfg.evaluation_interval:
-            experiment_config.evaluation_interval = cfg.evaluation_interval
+            experiment_config.evaluation_interval = _ceil_to_multiple(cfg.evaluation_interval, fpb)
+        else:
+            # Align BenchMARL's default to be a multiple of fpb
+            experiment_config.evaluation_interval = _ceil_to_multiple(experiment_config.evaluation_interval, fpb)
 
     return Experiment(
         task=task,

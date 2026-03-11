@@ -3,6 +3,7 @@
 from utama_core.training.scenario.passing_config import (
     PassingDynamicsConfig,
     PassingFieldConfig,
+    PassingResetRandomizationConfig,
     PassingRewardConfig,
     PassingScenarioConfig,
 )
@@ -17,6 +18,7 @@ from utama_core.training.scenario.passing_scenario import PassingScenario
 __all__ = [
     "PassingDynamicsConfig",
     "PassingFieldConfig",
+    "PassingResetRandomizationConfig",
     "PassingRewardConfig",
     "PassingScenarioConfig",
     "PassingScenario",

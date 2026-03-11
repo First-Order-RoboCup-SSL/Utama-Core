@@ -1,31 +1,14 @@
-"""VMAS scenario for ASPAC SSL passing drills.
+"""VMAS scenario for SSL passing drills."""
 
-Supports three action space modes (select via config flags):
-
-**Unified mode (4D, default):** [target_x, target_y, target_oren, kick_intent]
-  - target_x, target_y are absolute field positions (navigation target)
-  - target_oren is desired facing direction in [-pi, pi]
-  - kick_intent > 0 triggers kick when aligned + has ball (2-frame dribbler release)
-  - Auto-dribble when ball is in front area of robot
-  - PID gains from ``get_pid_configs(Mode.VMAS)`` via BatchedPID
-
-**Macro-action mode (3D):** [action_selector, target_x, target_y]
-  - action_selector in [-1, 1] mapped to 4 discrete macro-actions via bins
-  - Legacy: kept for backward compatibility / A-B comparison
-
-**Legacy mode (6D):** [delta_x, delta_y, target_oren, kick, dribble, turn_on_spot]
-  - Legacy: kept for backward compatibility
-
-Supports 2v0, 2v1, 2v2 configurations with ASPAC reward hooks:
-- Delta-based dense shaping (standing still = 0 reward)
-- Stackelberg timing (attackers see defender's t-1 velocity/rotation)
-- Episodic Envy-Free bonus at done()
-"""
+from __future__ import annotations
 
 import math
+from typing import Any
 
 import torch
+from torch import Tensor
 from vmas.simulator.core import Agent, Box, Landmark, Sphere, World
+from vmas.simulator.dynamics.holonomic_with_rot import HolonomicWithRotation
 from vmas.simulator.scenario import BaseScenario
 
 from utama_core.training.scenario.batched_pid import (
@@ -36,21 +19,12 @@ from utama_core.training.scenario.passing_config import (
     MacroAction,
     PassingScenarioConfig,
 )
-from utama_core.training.scenario.passing_rewards import (
-    compute_passing_reward,
-    envy_free_bonus,
-)
+from utama_core.training.scenario.passing_rewards import compute_passing_reward
 from utama_core.training.scenario.velocity_holonomic import VelocityHolonomic
 
 
 class PassingScenario(BaseScenario):
-    """ASPAC passing drill scenario.
-
-    Reward structure:
-    - Dense: delta-based ball-to-receiver / receiver-to-ball shaping
-    - Sparse: successful pass (+50), ball OOB (-5)
-    - ASPAC stubs: envy-free bonus (episodic), deception penalty
-    """
+    """Passing drill scenario with force-based and legacy kinematic modes."""
 
     def make_world(self, batch_dim: int, device: torch.device, **kwargs) -> World:
         self.cfg: PassingScenarioConfig = kwargs.get("scenario_config", PassingScenarioConfig())
@@ -70,34 +44,26 @@ class PassingScenario(BaseScenario):
             collision_force=dc.collision_force,
         )
 
-        # --- Action space configuration ---
         if dc.use_unified_actions:
-            _action_size = 4
-            _u_multiplier = [
-                fc.half_length,  # target_x: absolute field position
-                fc.half_width,  # target_y: absolute field position
-                math.pi,  # target_oren: [-pi, pi] rad
-                1.0,  # kick_intent: [-1, 1]
-            ]
+            action_size = 4
+            u_multiplier = [fc.half_length, fc.half_width, math.pi, 1.0]
         elif dc.use_macro_actions:
-            _action_size = 3
-            _u_multiplier = [
-                1.0,  # action_selector: [-1, 1] → macro-action bins
-                fc.half_length,  # target_x: absolute field position
-                fc.half_width,  # target_y: absolute field position
-            ]
+            action_size = 3
+            u_multiplier = [1.0, fc.half_length, fc.half_width]
         else:
-            _action_size = 6
-            _u_multiplier = [
-                dc.action_delta_range,  # delta_x (meters)
-                dc.action_delta_range,  # delta_y (meters)
-                math.pi,  # target_oren (radians)
-                1.0,  # kick trigger
-                1.0,  # dribble trigger
-                1.0,  # turn_on_spot trigger
+            action_size = 6
+            u_multiplier = [
+                dc.action_delta_range,
+                dc.action_delta_range,
+                math.pi,
+                1.0,
+                1.0,
+                1.0,
             ]
 
-        # --- Attacker agents ---
+        max_force = dc.robot_mass * dc.robot_max_acceleration
+        max_torque = dc.robot_mass * (fc.robot_radius**2) * dc.robot_max_angular_acceleration
+
         self.attackers: list[Agent] = []
         for i in range(self.cfg.n_attackers):
             agent = Agent(
@@ -107,20 +73,19 @@ class PassingScenario(BaseScenario):
                 rotatable=True,
                 collide=True,
                 mass=dc.robot_mass,
-                max_speed=None,
+                max_speed=dc.robot_max_speed,
+                max_f=max_force if dc.physics_mode == "force_based" else None,
+                max_t=max_torque if dc.physics_mode == "force_based" else None,
                 color=torch.tensor([0.2, 0.2, 0.9]),
-                dynamics=VelocityHolonomic(
-                    max_speed=dc.robot_max_speed,
-                    max_angular_vel=dc.robot_max_angular_vel,
-                ),
-                action_size=_action_size,
-                u_multiplier=_u_multiplier,
-                drag=0,
+                dynamics=self._make_agent_dynamics(),
+                action_size=action_size,
+                u_multiplier=u_multiplier,
+                drag=0.0,
+                linear_friction=dc.robot_friction,
             )
             world.add_agent(agent)
             self.attackers.append(agent)
 
-        # --- Defender agents ---
         self.defenders: list[Agent] = []
         for i in range(self.cfg.n_defenders):
             agent = Agent(
@@ -130,20 +95,19 @@ class PassingScenario(BaseScenario):
                 rotatable=True,
                 collide=True,
                 mass=dc.robot_mass,
-                max_speed=None,
+                max_speed=dc.robot_max_speed,
+                max_f=max_force if dc.physics_mode == "force_based" else None,
+                max_t=max_torque if dc.physics_mode == "force_based" else None,
                 color=torch.tensor([0.9, 0.9, 0.2]),
-                dynamics=VelocityHolonomic(
-                    max_speed=dc.robot_max_speed,
-                    max_angular_vel=dc.robot_max_angular_vel,
-                ),
-                action_size=_action_size,
-                u_multiplier=_u_multiplier,
-                drag=0,
+                dynamics=self._make_agent_dynamics(),
+                action_size=action_size,
+                u_multiplier=u_multiplier,
+                drag=0.0,
+                linear_friction=dc.robot_friction,
             )
             world.add_agent(agent)
             self.defenders.append(agent)
 
-        # --- Ball ---
         self.ball = Landmark(
             name="ball",
             shape=Sphere(radius=fc.ball_radius),
@@ -155,72 +119,69 @@ class PassingScenario(BaseScenario):
             linear_friction=dc.ball_friction,
         )
         world.add_landmark(self.ball)
+        self._create_walls(world)
 
-        # --- Boundary walls ---
-        self._create_walls(world, fc)
-
-        # --- State tracking ---
         self.steps = torch.zeros(batch_dim, device=device, dtype=torch.long)
+        self.global_frame = 0
         self.pass_completed = torch.zeros(batch_dim, device=device, dtype=torch.bool)
         self.ball_intercepted = torch.zeros(batch_dim, device=device, dtype=torch.bool)
         self.pass_count = torch.zeros(batch_dim, device=device, dtype=torch.long)
-        self.last_holder = torch.full((batch_dim,), -1, device=device, dtype=torch.long)
 
-        # Delta-based shaping: previous distances and facing
-        self.prev_ball_to_receiver_dist = torch.zeros(batch_dim, device=device, dtype=torch.float32)
-        self.prev_receiver_to_ball_dist = torch.zeros(batch_dim, device=device, dtype=torch.float32)
-        self.prev_passer_to_ball_dist = torch.zeros(batch_dim, device=device, dtype=torch.float32)
-        self.prev_receiver_facing_ball_cos = torch.zeros(batch_dim, device=device, dtype=torch.float32)
-        self.prev_passer_facing_receiver_cos = torch.zeros(batch_dim, device=device, dtype=torch.float32)
+        self.confirmed_holder = torch.full((batch_dim,), -1, device=device, dtype=torch.long)
+        self.candidate_holder = torch.full((batch_dim,), -1, device=device, dtype=torch.long)
+        self.candidate_frames = torch.zeros(batch_dim, device=device, dtype=torch.long)
+        self.holder_switch_cooldown = torch.zeros(batch_dim, device=device, dtype=torch.long)
+        self.pass_active = torch.zeros(batch_dim, device=device, dtype=torch.bool)
+        self.pass_start_ball_pos = torch.zeros(batch_dim, 2, device=device)
+        self.last_attacker_holder = torch.full((batch_dim,), -1, device=device, dtype=torch.long)
 
-        # Cumulative rewards for episodic Envy-Free
-        self.cumulative_attacker_rewards: dict[str, torch.Tensor] = {
-            a.name: torch.zeros(batch_dim, device=device) for a in self.attackers
-        }
+        self.current_metrics = self._empty_metrics(batch_dim, device)
+        self.previous_metrics = self._empty_metrics(batch_dim, device)
+        self._needs_metric_commit = False
 
-        # Stackelberg timing: previous-step defender state
-        self.prev_defender_vel: dict[str, torch.Tensor] = {
+        self.prev_defender_vel: dict[str, Tensor] = {
             d.name: torch.zeros(batch_dim, 2, device=device) for d in self.defenders
         }
-        self.prev_defender_rot: dict[str, torch.Tensor] = {
+        self.prev_defender_rot: dict[str, Tensor] = {
             d.name: torch.zeros(batch_dim, 1, device=device) for d in self.defenders
         }
+        self.kick_cooldown: dict[str, Tensor] = {
+            a.name: torch.zeros(batch_dim, device=device, dtype=torch.long) for a in self.attackers + self.defenders
+        }
+        self.kick_fired: dict[str, Tensor] = {
+            a.name: torch.zeros(batch_dim, device=device, dtype=torch.bool) for a in self.attackers + self.defenders
+        }
+        self.current_macro_action: dict[str, Tensor] = {
+            a.name: torch.zeros(batch_dim, device=device, dtype=torch.long) for a in self.attackers + self.defenders
+        }
+        self._reward_components: dict[str, dict[str, Tensor]] = {}
+        self._step_requests: dict[str, dict[str, Tensor]] = {}
+        self._agents_processed_this_step = 0
 
-        # PID controllers (shared across all action modes)
-        all_agents = self.attackers + self.defenders
         self.pid_trans = BatchedTranslationPID()
         self.pid_oren = BatchedOrientationPID()
-
-        # Unified action space state: 2-frame dribbler-release kick
-        if dc.use_unified_actions:
-            self.kick_pending: dict[str, torch.Tensor] = {
-                a.name: torch.zeros(batch_dim, device=device, dtype=torch.bool) for a in all_agents
-            }
-
-        # Macro-action state tracking (for logging/debugging)
-        if dc.use_macro_actions:
-            self.current_macro_action: dict[str, torch.Tensor] = {
-                a.name: torch.zeros(batch_dim, device=device, dtype=torch.long) for a in all_agents
-            }
+        self._agent_names = [a.name for a in self.attackers + self.defenders]
+        self._holder_name_to_id = {name: idx for idx, name in enumerate(self._agent_names)}
 
         return world
 
-    # ------------------------------------------------------------------
-    # Field construction
-    # ------------------------------------------------------------------
+    def _make_agent_dynamics(self):
+        dc = self.cfg.dynamics
+        if dc.physics_mode == "force_based":
+            return HolonomicWithRotation()
+        return VelocityHolonomic(
+            max_speed=dc.robot_max_speed,
+            max_angular_vel=dc.robot_max_angular_vel,
+        )
 
-    def _create_walls(self, world: World, fc):
-        """Create boundary walls around the field."""
+    def _create_walls(self, world: World) -> None:
+        fc = self.cfg.field
         wall_thickness = 0.05
-        self.walls: list[tuple] = []
-
+        self.walls: list[tuple[str, Landmark, float, float]] = []
         for name, y_sign in [("top", 1), ("bottom", -1)]:
             wall = Landmark(
                 name=f"wall_{name}",
-                shape=Box(
-                    length=2 * (fc.half_length + fc.boundary_margin),
-                    width=wall_thickness,
-                ),
+                shape=Box(length=2 * (fc.half_length + fc.boundary_margin), width=wall_thickness),
                 movable=False,
                 collide=True,
                 color=torch.tensor([0.3, 0.6, 0.3]),
@@ -231,10 +192,7 @@ class PassingScenario(BaseScenario):
         for name, x_sign in [("left", -1), ("right", 1)]:
             wall = Landmark(
                 name=f"wall_{name}",
-                shape=Box(
-                    length=wall_thickness,
-                    width=2 * (fc.half_width + fc.boundary_margin),
-                ),
+                shape=Box(length=wall_thickness, width=2 * (fc.half_width + fc.boundary_margin)),
                 movable=False,
                 collide=True,
                 color=torch.tensor([0.3, 0.6, 0.3]),
@@ -242,641 +200,617 @@ class PassingScenario(BaseScenario):
             world.add_landmark(wall)
             self.walls.append((name, wall, x_sign * fc.half_length, 0.0))
 
-    # ------------------------------------------------------------------
-    # Reset — ASPAC geometric initialization
-    # ------------------------------------------------------------------
-
     def reset_world_at(self, env_index: int = None):
         fc = self.cfg.field
+        rcfg = self.cfg.reset_randomization
         device = self.world.device
 
-        # Fixed strategic positions
-        ball_pos = torch.tensor([1.0, 2.0], device=device, dtype=torch.float32)
+        if rcfg.benchmark_reset:
+            ball_pos = torch.tensor([1.0, 2.0], device=device, dtype=torch.float32)
+        else:
+            ball_pos = torch.stack(
+                [
+                    self._sample_scalar(rcfg.ball_x_range),
+                    self._sample_scalar(rcfg.ball_y_range),
+                ]
+            )
         goal_center = torch.tensor([fc.half_length, 0.0], device=device, dtype=torch.float32)
-
-        # --- Ball ---
         self._set_entity_state(self.ball, ball_pos[0].item(), ball_pos[1].item(), env_index)
 
-        # --- Attacker 0 (passer): 0.3m behind ball with angular randomization ---
         if self.cfg.n_attackers >= 1:
-            a0 = self.attackers[0]
-            if env_index is None:
-                beta = torch.empty(self.world.batch_dim, 1, device=device).uniform_(0, math.pi / 4)
-            else:
-                beta = torch.empty(1, device=device).uniform_(0, math.pi / 4)
+            angle = 0.35 if rcfg.benchmark_reset else self._sample_scalar(rcfg.passer_angle_range)
+            radius = 1.0 if rcfg.benchmark_reset else self._sample_scalar(rcfg.passer_radius_range)
+            angle_val = angle if isinstance(angle, float) else angle.item()
+            radius_val = radius if isinstance(radius, float) else radius.item()
+            offset = torch.tensor(
+                [radius_val * math.cos(angle_val), radius_val * math.sin(angle_val)],
+                device=device,
+                dtype=torch.float32,
+            )
+            passer_pos = ball_pos - offset
+            self._set_robot_state(self.attackers[0], passer_pos, goal_center - passer_pos, env_index)
 
-            offset_x = 0.3 * torch.cos(beta).squeeze(-1)
-            offset_y = 0.3 * torch.sin(beta).squeeze(-1)
-
-            if env_index is None:
-                a0_x = ball_pos[0] - offset_x
-                a0_y = ball_pos[1] - offset_y
-                a0_pos = torch.stack([a0_x, a0_y], dim=-1)
-                a0.set_pos(a0_pos, batch_index=None)
-                a0.set_vel(
-                    torch.zeros(self.world.batch_dim, 2, device=device),
-                    batch_index=None,
-                )
-                dir_to_goal = goal_center.unsqueeze(0) - a0_pos
-                rot = torch.atan2(dir_to_goal[:, 1], dir_to_goal[:, 0]).unsqueeze(-1)
-                a0.set_rot(rot, batch_index=None)
-            else:
-                a0_x = ball_pos[0] - offset_x
-                a0_y = ball_pos[1] - offset_y
-                a0_pos_s = torch.stack([a0_x, a0_y])
-                a0.set_pos(a0_pos_s, batch_index=env_index)
-                a0.set_vel(torch.zeros(2, device=device), batch_index=env_index)
-                dir_to_goal = goal_center - a0_pos_s
-                rot = torch.atan2(dir_to_goal[1], dir_to_goal[0]).unsqueeze(0)
-                a0.set_rot(rot, batch_index=env_index)
-
-        # --- Attacker 1 (receiver): fixed y=-2.5, randomized x ∈ [1.0, 2.0] ---
         if self.cfg.n_attackers >= 2:
-            a1 = self.attackers[1]
-            if env_index is None:
-                a1_x = torch.empty(self.world.batch_dim, device=device).uniform_(1.0, 2.0)
-                a1_y = torch.full((self.world.batch_dim,), -2.5, device=device)
-                a1_pos = torch.stack([a1_x, a1_y], dim=-1)
-                a1.set_pos(a1_pos, batch_index=None)
-                a1.set_vel(
-                    torch.zeros(self.world.batch_dim, 2, device=device),
-                    batch_index=None,
-                )
-                a1.set_rot(
-                    torch.zeros(self.world.batch_dim, 1, device=device),
-                    batch_index=None,
-                )
+            if rcfg.benchmark_reset:
+                receiver_pos = torch.tensor([1.5, -2.5], device=device, dtype=torch.float32)
+                receiver_rot = 0.0
             else:
-                a1_x = torch.empty(1, device=device).uniform_(1.0, 2.0)
-                a1_pos_s = torch.cat([a1_x, torch.tensor([-2.5], device=device)])
-                a1.set_pos(a1_pos_s, batch_index=env_index)
-                a1.set_vel(torch.zeros(2, device=device), batch_index=env_index)
-                a1.set_rot(torch.zeros(1, device=device), batch_index=env_index)
+                receiver_pos = torch.stack(
+                    [
+                        self._sample_scalar(rcfg.receiver_x_range),
+                        self._sample_scalar(rcfg.receiver_y_range),
+                    ]
+                )
+                receiver_rot = self._sample_scalar(rcfg.receiver_rot_range).item()
+            self._set_robot_state(
+                self.attackers[1],
+                receiver_pos,
+                None,
+                env_index,
+                explicit_rot=receiver_rot,
+            )
 
-        # --- Defender 0: 0.75m from ball on vector to goal center ---
         if self.cfg.n_defenders >= 1:
-            d0 = self.defenders[0]
+            dist = 0.75 if rcfg.benchmark_reset else self._sample_scalar(rcfg.defender0_distance_range).item()
             vec_to_goal = goal_center - ball_pos
-            norm_vec = vec_to_goal / torch.norm(vec_to_goal)
-            d0_pos_base = ball_pos + norm_vec * 0.75
+            vec_to_goal = vec_to_goal / torch.norm(vec_to_goal).clamp(min=1e-8)
+            defender_pos = ball_pos + vec_to_goal * dist
+            self._set_robot_state(self.defenders[0], defender_pos, ball_pos - defender_pos, env_index)
 
-            if env_index is None:
-                d0_pos = d0_pos_base.unsqueeze(0).expand(self.world.batch_dim, -1)
-                d0.set_pos(d0_pos, batch_index=None)
-                d0.set_vel(
-                    torch.zeros(self.world.batch_dim, 2, device=device),
-                    batch_index=None,
-                )
-                d0.set_rot(
-                    torch.zeros(self.world.batch_dim, 1, device=device),
-                    batch_index=None,
-                )
-            else:
-                d0.set_pos(d0_pos_base, batch_index=env_index)
-                d0.set_vel(torch.zeros(2, device=device), batch_index=env_index)
-                d0.set_rot(torch.zeros(1, device=device), batch_index=env_index)
-
-        # --- Defender 1: fixed y=-2.0, randomized x ∈ [1.0, 2.5] ---
         if self.cfg.n_defenders >= 2:
-            d1 = self.defenders[1]
-            if env_index is None:
-                d1_x = torch.empty(self.world.batch_dim, device=device).uniform_(1.0, 2.5)
-                d1_y = torch.full((self.world.batch_dim,), -2.0, device=device)
-                d1_pos = torch.stack([d1_x, d1_y], dim=-1)
-                d1.set_pos(d1_pos, batch_index=None)
-                d1.set_vel(
-                    torch.zeros(self.world.batch_dim, 2, device=device),
-                    batch_index=None,
-                )
-                d1.set_rot(
-                    torch.zeros(self.world.batch_dim, 1, device=device),
-                    batch_index=None,
-                )
+            if rcfg.benchmark_reset:
+                defender_pos = torch.tensor([1.5, -2.0], device=device, dtype=torch.float32)
             else:
-                d1_x = torch.empty(1, device=device).uniform_(1.0, 2.5)
-                d1_pos_s = torch.cat([d1_x, torch.tensor([-2.0], device=device)])
-                d1.set_pos(d1_pos_s, batch_index=env_index)
-                d1.set_vel(torch.zeros(2, device=device), batch_index=env_index)
-                d1.set_rot(torch.zeros(1, device=device), batch_index=env_index)
+                defender_pos = torch.stack(
+                    [
+                        self._sample_scalar(rcfg.defender1_x_range),
+                        self._sample_scalar(rcfg.defender1_y_range),
+                    ]
+                )
+            self._set_robot_state(self.defenders[1], defender_pos, ball_pos - defender_pos, env_index)
 
-        # --- Position walls ---
         for _, wall, wx, wy in self.walls:
             self._set_entity_state(wall, wx, wy, env_index, movable=False)
 
-        # --- Reset tracking ---
-        if env_index is None:
-            self.pass_completed.zero_()
-            self.ball_intercepted.zero_()
-            self.pass_count.zero_()
-            self.last_holder.fill_(-1)
-            self.steps.zero_()
-            # Initialize previous distances for delta-based shaping
-            if self.cfg.n_attackers >= 1:
-                passer_pos = self.attackers[0].state.pos
-                bp = self.ball.state.pos
-                self.prev_passer_to_ball_dist = torch.norm(passer_pos - bp, dim=-1)
-            if self.cfg.n_attackers >= 2:
-                receiver_pos = self.attackers[1].state.pos
-                bp = self.ball.state.pos
-                self.prev_ball_to_receiver_dist = torch.norm(bp - receiver_pos, dim=-1)
-                self.prev_receiver_to_ball_dist = torch.norm(receiver_pos - bp, dim=-1)
-                self.prev_receiver_facing_ball_cos = self._compute_facing_ball_cos(self.attackers[1], bp)
-                self.prev_passer_facing_receiver_cos = self._compute_facing_ball_cos(self.attackers[0], receiver_pos)
-            for name in self.cumulative_attacker_rewards:
-                self.cumulative_attacker_rewards[name].zero_()
-            for name in self.prev_defender_vel:
-                self.prev_defender_vel[name].zero_()
-            for name in self.prev_defender_rot:
-                self.prev_defender_rot[name].zero_()
-            # Reset PID controllers
-            for a in self.attackers + self.defenders:
-                self.pid_trans.reset(a.name)
-                self.pid_oren.reset(a.name)
-            if hasattr(self, "kick_pending"):
-                for name in self.kick_pending:
-                    self.kick_pending[name].zero_()
-            if hasattr(self, "current_macro_action"):
-                for name in self.current_macro_action:
-                    self.current_macro_action[name].zero_()
-        else:
-            self.pass_completed[env_index] = False
-            self.ball_intercepted[env_index] = False
-            self.pass_count[env_index] = 0
-            self.last_holder[env_index] = -1
-            self.steps[env_index] = 0
-            if self.cfg.n_attackers >= 1:
-                passer_pos = self.attackers[0].state.pos[env_index]
-                bp = self.ball.state.pos[env_index]
-                self.prev_passer_to_ball_dist[env_index] = torch.norm(passer_pos - bp)
-            if self.cfg.n_attackers >= 2:
-                receiver_pos = self.attackers[1].state.pos[env_index]
-                bp = self.ball.state.pos[env_index]
-                self.prev_ball_to_receiver_dist[env_index] = torch.norm(bp - receiver_pos)
-                self.prev_receiver_to_ball_dist[env_index] = torch.norm(receiver_pos - bp)
-                self.prev_receiver_facing_ball_cos[env_index] = self._compute_facing_ball_cos_single(
-                    self.attackers[1], bp, env_index
-                )
-                self.prev_passer_facing_receiver_cos[env_index] = self._compute_facing_ball_cos_single(
-                    self.attackers[0], receiver_pos, env_index
-                )
-            for name in self.cumulative_attacker_rewards:
-                self.cumulative_attacker_rewards[name][env_index] = 0.0
-            for name in self.prev_defender_vel:
-                self.prev_defender_vel[name][env_index] = 0.0
-            for name in self.prev_defender_rot:
-                self.prev_defender_rot[name][env_index] = 0.0
-            # Reset PID controllers for this env
-            for a in self.attackers + self.defenders:
-                self.pid_trans.reset(a.name, batch_index=env_index)
-                self.pid_oren.reset(a.name, batch_index=env_index)
-            if hasattr(self, "kick_pending"):
-                for name in self.kick_pending:
-                    self.kick_pending[name][env_index] = False
-            if hasattr(self, "current_macro_action"):
-                for name in self.current_macro_action:
-                    self.current_macro_action[name][env_index] = 0
+        self._reset_tracking(env_index)
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+    def _sample_scalar(self, bounds: tuple[float, float]) -> Tensor:
+        low, high = bounds
+        return torch.empty((), device=self.world.device).uniform_(low, high)
+
+    def _set_robot_state(
+        self,
+        agent: Agent,
+        pos: Tensor,
+        facing_vec: Tensor | None,
+        env_index: int | None,
+        explicit_rot: float | None = None,
+    ) -> None:
+        rot = explicit_rot
+        if rot is None and facing_vec is not None:
+            rot = math.atan2(facing_vec[1].item(), facing_vec[0].item())
+        if rot is None:
+            rot = 0.0
+
+        if env_index is None:
+            agent.set_pos(pos.unsqueeze(0).expand(self.world.batch_dim, -1), batch_index=None)
+            agent.set_vel(torch.zeros(self.world.batch_dim, 2, device=self.world.device), batch_index=None)
+            agent.set_rot(
+                torch.full((self.world.batch_dim, 1), rot, device=self.world.device, dtype=torch.float32),
+                batch_index=None,
+            )
+            if hasattr(agent.state, "ang_vel") and agent.state.ang_vel is not None:
+                agent.state.ang_vel = torch.zeros(self.world.batch_dim, 1, device=self.world.device)
+        else:
+            agent.set_pos(pos, batch_index=env_index)
+            agent.set_vel(torch.zeros(2, device=self.world.device), batch_index=env_index)
+            agent.set_rot(torch.tensor([rot], device=self.world.device), batch_index=env_index)
+            if hasattr(agent.state, "ang_vel") and agent.state.ang_vel is not None:
+                agent.state.ang_vel[env_index] = 0.0
 
     def _set_entity_state(self, entity, x, y, env_index, movable=True):
         pos = torch.tensor([x, y], device=self.world.device, dtype=torch.float32)
         if env_index is None:
             entity.set_pos(pos.unsqueeze(0).expand(self.world.batch_dim, -1), batch_index=None)
             if movable:
-                zero2 = torch.zeros(self.world.batch_dim, 2, device=self.world.device, dtype=torch.float32)
-                entity.set_vel(zero2, batch_index=None)
+                entity.set_vel(torch.zeros(self.world.batch_dim, 2, device=self.world.device), batch_index=None)
         else:
             entity.set_pos(pos, batch_index=env_index)
             if movable:
-                zero2 = torch.zeros(2, device=self.world.device, dtype=torch.float32)
-                entity.set_vel(zero2, batch_index=env_index)
+                entity.set_vel(torch.zeros(2, device=self.world.device), batch_index=env_index)
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+    def _reset_tracking(self, env_index: int | None) -> None:
+        batch_dim = self.world.batch_dim
+        device = self.world.device
+        holder_fill = torch.full((batch_dim,), -1, device=device, dtype=torch.long)
+        if env_index is None:
+            self.steps.zero_()
+            self.global_frame = 0
+            self.pass_completed.zero_()
+            self.ball_intercepted.zero_()
+            self.pass_count.zero_()
+            self.confirmed_holder.copy_(holder_fill)
+            self.candidate_holder.copy_(holder_fill)
+            self.candidate_frames.zero_()
+            self.holder_switch_cooldown.zero_()
+            self.pass_active.zero_()
+            self.pass_start_ball_pos.zero_()
+            self.last_attacker_holder.copy_(holder_fill)
+            for name in self.kick_cooldown:
+                self.kick_cooldown[name].zero_()
+                self.kick_fired[name].zero_()
+                if name in self.current_macro_action:
+                    self.current_macro_action[name].zero_()
+            for name in self.prev_defender_vel:
+                self.prev_defender_vel[name].zero_()
+                self.prev_defender_rot[name].zero_()
+            self._reward_components.clear()
+            self._step_requests.clear()
+            self._agents_processed_this_step = 0
+            self._needs_metric_commit = False
+            for agent in self.attackers + self.defenders:
+                self.pid_trans.reset(agent.name)
+                self.pid_oren.reset(agent.name)
+        else:
+            self.steps[env_index] = 0
+            self.pass_completed[env_index] = False
+            self.ball_intercepted[env_index] = False
+            self.pass_count[env_index] = 0
+            self.confirmed_holder[env_index] = -1
+            self.candidate_holder[env_index] = -1
+            self.candidate_frames[env_index] = 0
+            self.holder_switch_cooldown[env_index] = 0
+            self.pass_active[env_index] = False
+            self.pass_start_ball_pos[env_index] = 0.0
+            self.last_attacker_holder[env_index] = -1
+            for name in self.kick_cooldown:
+                self.kick_cooldown[name][env_index] = 0
+                self.kick_fired[name][env_index] = False
+                if name in self.current_macro_action:
+                    self.current_macro_action[name][env_index] = 0
+            for name in self.prev_defender_vel:
+                self.prev_defender_vel[name][env_index] = 0.0
+                self.prev_defender_rot[name][env_index] = 0.0
+            for agent in self.attackers + self.defenders:
+                self.pid_trans.reset(agent.name, batch_index=env_index)
+                self.pid_oren.reset(agent.name, batch_index=env_index)
 
-    def _has_ball(self, agent: Agent) -> torch.Tensor:
-        """Check if the ball is within dribble range AND in front of the agent."""
-        to_ball = self.ball.state.pos - agent.state.pos
-        dist = torch.norm(to_ball, dim=-1)
-        in_range = dist < self.cfg.dynamics.dribble_dist_threshold
-        cos_rot = torch.cos(agent.state.rot.squeeze(-1))
-        sin_rot = torch.sin(agent.state.rot.squeeze(-1))
-        facing = torch.stack([cos_rot, sin_rot], dim=-1)
-        ball_in_front = (to_ball * facing).sum(dim=-1) > 0
-        return in_range & ball_in_front
+        metrics = self._compute_metrics()
+        if env_index is None:
+            self.current_metrics = self._clone_metrics(metrics)
+            self.previous_metrics = self._clone_metrics(metrics)
+        else:
+            for key, value in metrics.items():
+                if isinstance(value, dict):
+                    for name, tensor in value.items():
+                        self.current_metrics[key][name][env_index] = tensor[env_index]
+                        self.previous_metrics[key][name][env_index] = tensor[env_index]
+                else:
+                    self.current_metrics[key][env_index] = value[env_index]
+                    self.previous_metrics[key][env_index] = value[env_index]
 
-    def _compute_facing_ball_cos(self, agent: Agent, ball_pos: torch.Tensor) -> torch.Tensor:
-        """Cosine of angle between agent facing direction and direction to ball (batched)."""
-        to_ball = ball_pos - agent.state.pos
-        to_ball_norm = torch.norm(to_ball, dim=-1, keepdim=True).clamp(min=1e-8)
-        to_ball_dir = to_ball / to_ball_norm
+    def _empty_metrics(self, batch_dim: int, device: torch.device) -> dict[str, Any]:
+        return {
+            "passer_to_ball_dist": torch.zeros(batch_dim, device=device),
+            "ball_to_receiver_dist": torch.zeros(batch_dim, device=device),
+            "receiver_to_ball_dist": torch.zeros(batch_dim, device=device),
+            "receiver_facing_ball_cos": torch.zeros(batch_dim, device=device),
+            "passer_facing_receiver_cos": torch.zeros(batch_dim, device=device),
+            "defender_to_ball_dist": {},
+            "ball_speed": torch.zeros(batch_dim, device=device),
+        }
+
+    def _clone_metrics(self, metrics: dict[str, Any]) -> dict[str, Any]:
+        cloned: dict[str, Any] = {}
+        for key, value in metrics.items():
+            if isinstance(value, dict):
+                cloned[key] = {name: tensor.clone() for name, tensor in value.items()}
+            else:
+                cloned[key] = value.clone()
+        return cloned
+
+    def _compute_metrics(self) -> dict[str, Any]:
+        metrics = self._empty_metrics(self.world.batch_dim, self.world.device)
+        ball_pos = self.ball.state.pos
+        metrics["ball_speed"] = torch.norm(self.ball.state.vel, dim=-1)
+        if self.cfg.n_attackers >= 1:
+            metrics["passer_to_ball_dist"] = torch.norm(self.attackers[0].state.pos - ball_pos, dim=-1)
+        if self.cfg.n_attackers >= 2:
+            receiver = self.attackers[1]
+            metrics["ball_to_receiver_dist"] = torch.norm(ball_pos - receiver.state.pos, dim=-1)
+            metrics["receiver_to_ball_dist"] = torch.norm(receiver.state.pos - ball_pos, dim=-1)
+            metrics["receiver_facing_ball_cos"] = self._facing_cos(receiver, ball_pos)
+            metrics["passer_facing_receiver_cos"] = self._facing_cos(self.attackers[0], receiver.state.pos)
+        for defender in self.defenders:
+            metrics["defender_to_ball_dist"][defender.name] = torch.norm(defender.state.pos - ball_pos, dim=-1)
+        return metrics
+
+    def _facing_cos(self, agent: Agent, target_pos: Tensor) -> Tensor:
+        to_target = target_pos - agent.state.pos
+        to_target = to_target / torch.norm(to_target, dim=-1, keepdim=True).clamp(min=1e-8)
         rot = agent.state.rot.squeeze(-1)
         facing = torch.stack([torch.cos(rot), torch.sin(rot)], dim=-1)
-        return (facing * to_ball_dir).sum(dim=-1)
+        return (facing * to_target).sum(dim=-1)
 
-    def _compute_facing_ball_cos_single(self, agent: Agent, ball_pos: torch.Tensor, env_index: int) -> torch.Tensor:
-        """Cosine of angle between agent facing and ball direction for a single env."""
-        to_ball = ball_pos - agent.state.pos[env_index]
-        to_ball_dir = to_ball / torch.norm(to_ball).clamp(min=1e-8)
-        rot = agent.state.rot[env_index].squeeze(-1)
-        facing = torch.stack([torch.cos(rot), torch.sin(rot)])
-        return (facing * to_ball_dir).sum()
-
-    # ------------------------------------------------------------------
-    # Step hooks
-    # ------------------------------------------------------------------
-
-    def _angle_wrap(self, angle: torch.Tensor) -> torch.Tensor:
-        """Wrap angle to [-pi, pi]."""
-        return (angle + math.pi) % (2 * math.pi) - math.pi
+    def _has_ball(self, agent: Agent) -> Tensor:
+        dist = torch.norm(self.ball.state.pos - agent.state.pos, dim=-1)
+        return (dist < self.cfg.dynamics.dribble_dist_threshold) & (
+            self._facing_cos(agent, self.ball.state.pos) >= self.cfg.dynamics.possession_cone_cos
+        )
 
     def process_action(self, agent: Agent):
-        """Dispatch to unified, macro-action, or legacy action processing."""
-        # Fixed defenders: zero all actions
+        self._begin_step_if_needed()
         if agent in self.defenders and self.cfg.defender_behavior == "fixed":
             agent.action.u = torch.zeros_like(agent.action.u)
+            self._step_requests[agent.name] = self._empty_request(agent)
+            self._mark_agent_processed()
             return
 
-        dc = self.cfg.dynamics
-        if dc.use_unified_actions:
+        if self.cfg.dynamics.use_unified_actions:
             self._process_unified_action(agent)
-        elif dc.use_macro_actions:
+        elif self.cfg.dynamics.use_macro_actions:
             self._process_macro_action(agent)
         else:
             self._process_legacy_action(agent)
+        self._mark_agent_processed()
 
-    # ------------------------------------------------------------------
-    # Unified action processing (4D: [target_x, target_y, target_oren, kick_intent])
-    # ------------------------------------------------------------------
+    def _begin_step_if_needed(self) -> None:
+        if self._agents_processed_this_step == 0:
+            if self._needs_metric_commit:
+                self.previous_metrics = self._clone_metrics(self.current_metrics)
+                self._needs_metric_commit = False
+            self._step_requests = {}
+            for name in self.kick_fired:
+                self.kick_fired[name].zero_()
 
-    def _process_unified_action(self, agent: Agent):
-        """Convert 4D [target_x, target_y, target_oren, kick_intent] to velocity commands.
+    def _mark_agent_processed(self) -> None:
+        self._agents_processed_this_step += 1
+        if self._agents_processed_this_step == len(self.attackers) + len(self.defenders):
+            self._apply_ball_effects_pre_step()
 
-        Navigation tracks the target position.  Orientation tracks the
-        explicit target_oren from the action.  Dribble auto-engages when
-        the ball is in the front area of the robot.  Kick uses a 2-frame
-        dribbler-release mechanic: frame 1 disengages the dribbler, frame 2
-        fires the kick along the robot's facing direction.
-        """
+    def _empty_request(self, agent: Agent) -> dict[str, Tensor]:
+        zeros = torch.zeros(self.world.batch_dim, device=self.world.device)
+        return {
+            "kick_request": zeros.bool(),
+            "dribble_request": zeros.bool(),
+            "kick_alignment": zeros,
+        }
+
+    def _store_request(
+        self,
+        agent: Agent,
+        *,
+        kick_request: Tensor,
+        dribble_request: Tensor,
+        kick_alignment: Tensor,
+    ) -> None:
+        self._step_requests[agent.name] = {
+            "kick_request": kick_request.bool(),
+            "dribble_request": dribble_request.bool(),
+            "kick_alignment": kick_alignment,
+        }
+
+    def _process_unified_action(self, agent: Agent) -> None:
         dc = self.cfg.dynamics
         fc = self.cfg.field
-        u = agent.action.u  # (batch, 4) — already scaled by u_multiplier
+        u = agent.action.u
 
-        # --- Parse actions ---
-        target_pos = u[:, 0:2]  # (batch, 2) — absolute field coords
-        target_oren = u[:, 2:3]  # (batch, 1) — desired facing in [-pi, pi]
-        kick_intent = u[:, 3]  # (batch,)
-
-        # Clamp target to field bounds
-        field_min = torch.tensor([-fc.half_length, -fc.half_width], device=u.device)
-        field_max = torch.tensor([fc.half_length, fc.half_width], device=u.device)
-        target_pos = target_pos.clamp(min=field_min, max=field_max)
-
-        # --- Common state ---
-        agent_pos = agent.state.pos
-        agent_rot = agent.state.rot  # (batch, 1)
-        has_ball = self._has_ball(agent)
-
-        cos_rot = torch.cos(agent_rot.squeeze(-1))
-        sin_rot = torch.sin(agent_rot.squeeze(-1))
-        facing = torch.stack([cos_rot, sin_rot], dim=-1)
-
-        # --- Navigation: PID toward target ---
-        vel = self.pid_trans.calculate(agent_pos, target_pos, agent.name)
-
-        # --- Orientation: PID toward explicit target_oren ---
-        ang = self.pid_oren.calculate(agent_rot, target_oren, agent.name)
-
-        # --- Kick state machine (2-frame dribbler release) ---
-        to_target = target_pos - agent_pos
-        dist_to_target = torch.norm(to_target, dim=-1, keepdim=True)
-        to_target_dir = to_target / dist_to_target.clamp(min=1e-8)
-        alignment = (facing * to_target_dir).sum(dim=-1)
-        wants_kick = (kick_intent > dc.kick_intent_threshold) & has_ball & (alignment > dc.kick_align_threshold)
-
-        pending = self.kick_pending[agent.name]
-
-        # Frame 2: pending from last step AND still has ball + aligned → fire
-        kick_fire = pending & has_ball & (alignment > dc.kick_align_threshold)
-
-        # Frame 1: new kick request → set pending (dribbler off, no kick yet)
-        new_pending = wants_kick & ~pending
-
-        # Track kick events for reward function
-        if not hasattr(self, "kick_fired"):
-            self.kick_fired: dict[str, torch.Tensor] = {}
-        self.kick_fired[agent.name] = kick_fire
-
-        # Apply kick: set ball velocity along robot facing direction
-        if kick_fire.any():
-            kick_vel = facing * dc.kick_speed
-            self.ball.state.vel = torch.where(
-                kick_fire.unsqueeze(-1),
-                kick_vel,
-                self.ball.state.vel,
-            )
-
-        # Update pending state: fire clears, new request sets, else clear
-        self.kick_pending[agent.name] = new_pending & ~kick_fire
-
-        # --- Dribble: auto-engage when has_ball, not during kick sequence ---
-        dribble_active = has_ball & ~pending & ~kick_fire
-        if dribble_active.any():
-            front_offset = facing * (fc.robot_radius + fc.ball_radius)
-            dribble_target = agent_pos + front_offset
-            attract_dir = dribble_target - self.ball.state.pos
-            attract_force = attract_dir * dc.dribble_force
-            self.ball.state.vel = (
-                self.ball.state.vel + attract_force * dribble_active.unsqueeze(-1).float() * self.world.dt
-            )
-
-        # --- Write velocity commands for VelocityHolonomic ---
-        agent.action.u = torch.cat([vel, ang], dim=-1)
-
-    # ------------------------------------------------------------------
-    # Macro-action processing (3D action space)
-    # ------------------------------------------------------------------
-
-    def _process_macro_action(self, agent: Agent):
-        """Convert 3D [action_selector, target_x, target_y] to velocity commands.
-
-        Decodes the macro-action type from action_selector, computes blended
-        navigation/orientation targets per-env, then drives with BatchedPID.
-        """
-        dc = self.cfg.dynamics
-        fc = self.cfg.field
-        u = agent.action.u  # (batch, 3)
-
-        # --- Decode macro-action ---
-        action_selector = u[:, 0]  # [-1, 1]
-        n = dc.n_macro_actions
-        action_idx = ((action_selector + 1.0) * n / 2.0).long().clamp(0, n - 1)
-
-        if hasattr(self, "current_macro_action"):
-            self.current_macro_action[agent.name] = action_idx
-
-        # --- Target position (absolute field coords, already scaled by u_multiplier) ---
-        target_pos = u[:, 1:3]
+        target_pos = u[:, 0:2]
+        target_oren = u[:, 2:3]
+        kick_intent = u[:, 3]
         target_pos = target_pos.clamp(
             min=torch.tensor([-fc.half_length, -fc.half_width], device=u.device),
             max=torch.tensor([fc.half_length, fc.half_width], device=u.device),
         )
 
-        # --- Common state ---
-        agent_pos = agent.state.pos
-        agent_rot = agent.state.rot  # (batch, 1)
-        ball_pos = self.ball.state.pos
-        has_ball = self._has_ball(agent)
+        desired_vel = self.pid_trans.calculate(agent.state.pos, target_pos, agent.name)
+        desired_ang = self.pid_oren.calculate(agent.state.rot, target_oren, agent.name)
+        low_level = self._to_low_level_command(agent, desired_vel, desired_ang)
+        agent.action.u = torch.cat([low_level, kick_intent.unsqueeze(-1)], dim=-1)
 
-        cos_rot = torch.cos(agent_rot.squeeze(-1))
-        sin_rot = torch.sin(agent_rot.squeeze(-1))
-        facing = torch.stack([cos_rot, sin_rot], dim=-1)
+        to_target = target_pos - agent.state.pos
+        to_target = to_target / torch.norm(to_target, dim=-1, keepdim=True).clamp(min=1e-8)
+        facing = self._agent_facing(agent)
+        kick_alignment = (facing * to_target).sum(dim=-1)
+        self._store_request(
+            agent,
+            kick_request=kick_intent > dc.kick_intent_threshold,
+            dribble_request=torch.ones_like(kick_intent, dtype=torch.bool),
+            kick_alignment=kick_alignment,
+        )
 
-        # --- Action masks (per-env, exactly one is 1.0) ---
-        is_go = (action_idx == MacroAction.GO_TO_BALL).unsqueeze(-1).float()
-        is_kick = (action_idx == MacroAction.KICK_TO).unsqueeze(-1).float()
-        is_drib = (action_idx == MacroAction.DRIBBLE_TO).unsqueeze(-1).float()
-        is_move = (action_idx == MacroAction.MOVE_TO).unsqueeze(-1).float()
-
-        # --- Blended navigation target ---
-        # GO_TO_BALL → ball, KICK_TO → ball, DRIBBLE_TO → target/ball, MOVE_TO → target
-        drib_nav = torch.where(has_ball.unsqueeze(-1), target_pos, ball_pos)
-        nav_target = is_go * ball_pos + is_kick * ball_pos + is_drib * drib_nav + is_move * target_pos
-
-        # --- Blended orientation target ---
-        to_ball = ball_pos - agent_pos
-        to_target = target_pos - agent_pos
-        ball_oren = torch.atan2(to_ball[:, 1], to_ball[:, 0]).unsqueeze(-1)
-        target_oren = torch.atan2(to_target[:, 1], to_target[:, 0]).unsqueeze(-1)
-        drib_oren = torch.where(has_ball.unsqueeze(-1), target_oren, ball_oren)
-        oren_target = is_go * ball_oren + is_kick * target_oren + is_drib * drib_oren + is_move * target_oren
-
-        # --- Drive with BatchedPID (single call, state tracked internally) ---
-        vel = self.pid_trans.calculate(agent_pos, nav_target, agent.name)
-        ang = self.pid_oren.calculate(agent_rot, oren_target, agent.name)
-
-        # KICK_TO with ball: stop translating (hold position while orienting)
-        kick_hold = ((action_idx == MacroAction.KICK_TO) & has_ball).unsqueeze(-1)
-        vel = torch.where(kick_hold, torch.zeros_like(vel), vel)
-
-        # --- Apply ball side-effects (masked per macro) ---
-        go_mask = action_idx == MacroAction.GO_TO_BALL
-        kick_mask = action_idx == MacroAction.KICK_TO
-        drib_mask = action_idx == MacroAction.DRIBBLE_TO
-
-        # Kick (KICK_TO only): fire when aligned + has_ball
-        to_target_flat = target_pos - agent_pos
-        to_target_norm = to_target_flat / torch.norm(to_target_flat, dim=-1, keepdim=True).clamp(min=1e-8)
-        alignment = (facing * to_target_norm).sum(dim=-1)
-        kick_ready = kick_mask & has_ball & (alignment > dc.kick_align_threshold)
-
-        if not hasattr(self, "kick_fired"):
-            self.kick_fired: dict[str, torch.Tensor] = {}
-        self.kick_fired[agent.name] = kick_ready
-
-        if kick_ready.any():
-            kick_ball_vel = facing * dc.kick_speed
-            self.ball.state.vel = torch.where(
-                kick_ready.unsqueeze(-1),
-                kick_ball_vel,
-                self.ball.state.vel,
-            )
-
-        # Dribble attract: GO_TO_BALL (when close), KICK_TO (hold while orienting),
-        # DRIBBLE_TO (while moving)
-        dribble_active = (go_mask & has_ball) | (kick_mask & has_ball & ~kick_ready) | (drib_mask & has_ball)
-        if dribble_active.any():
-            front_offset = facing * (fc.robot_radius + fc.ball_radius)
-            dribble_target = agent_pos + front_offset
-            attract_dir = dribble_target - ball_pos
-            attract_force = attract_dir * dc.dribble_force
-            self.ball.state.vel = (
-                self.ball.state.vel + attract_force * dribble_active.unsqueeze(-1).float() * self.world.dt
-            )
-
-        # --- Write velocity commands for VelocityHolonomic ---
-        agent.action.u = torch.cat([vel, ang], dim=-1)
-
-    # ------------------------------------------------------------------
-    # Legacy action processing (6D action space)
-    # ------------------------------------------------------------------
-
-    def _process_legacy_action(self, agent: Agent):
-        """Convert 6D position-based actions to velocities via BatchedPID.
-
-        Action priority: kick > turn_on_spot > move.
-        Writes computed velocities into agent.action.u[:, 0:3] so that
-        VelocityHolonomic can apply them as velocity commands.
-        """
+    def _process_macro_action(self, agent: Agent) -> None:
         dc = self.cfg.dynamics
         fc = self.cfg.field
         u = agent.action.u
+        action_selector = u[:, 0]
+        action_idx = ((action_selector + 1.0) * dc.n_macro_actions / 2.0).long().clamp(0, dc.n_macro_actions - 1)
+        self.current_macro_action[agent.name] = action_idx
 
-        kick_action = u[:, 3]
-        dribble_action = u[:, 4]
-        turn_action = u[:, 5]
-        target_oren = u[:, 2:3]  # (batch, 1)
-
-        agent_pos = agent.state.pos
+        target_pos = u[:, 1:3].clamp(
+            min=torch.tensor([-fc.half_length, -fc.half_width], device=u.device),
+            max=torch.tensor([fc.half_length, fc.half_width], device=u.device),
+        )
         ball_pos = self.ball.state.pos
         has_ball = self._has_ball(agent)
 
-        # Facing direction
-        cos_rot = torch.cos(agent.state.rot.squeeze(-1))
-        sin_rot = torch.sin(agent.state.rot.squeeze(-1))
-        facing = torch.stack([cos_rot, sin_rot], dim=-1)
+        is_go = action_idx == MacroAction.GO_TO_BALL
+        is_kick = action_idx == MacroAction.KICK_TO
+        is_drib = action_idx == MacroAction.DRIBBLE_TO
 
-        # --- Determine action mode per env ---
-        kick_mode = (kick_action > 0) & has_ball
-        turn_mode = (turn_action > 0) & has_ball & ~kick_mode
-
-        # Track kick events for reward function (kick alignment shaping)
-        if not hasattr(self, "kick_fired"):
-            self.kick_fired: dict[str, torch.Tensor] = {}
-        self.kick_fired[agent.name] = kick_mode
-
-        # --- Compute MOVE velocities via BatchedPID ---
-        delta_pos = u[:, 0:2]  # (batch, 2)
-        target_pos = agent_pos + delta_pos
-        field_min = torch.tensor([-fc.half_length, -fc.half_width], device=self.world.device)
-        field_max = torch.tensor([fc.half_length, fc.half_width], device=self.world.device)
-        target_pos = target_pos.clamp(min=field_min, max=field_max)
-
-        move_vel = self.pid_trans.calculate(agent_pos, target_pos, agent.name)
-
-        # Orientation via BatchedPID
-        move_ang_vel = self.pid_oren.calculate(agent.state.rot, target_oren, agent.name)
-
-        # --- Compute TURN_ON_SPOT velocities (ball pivot) ---
-        turn_ang_vel = move_ang_vel  # same PID output for orientation
-
-        # Perpendicular velocity for ball pivot (orbit around ball center)
-        to_ball = ball_pos - agent_pos
-        to_ball_dist = torch.norm(to_ball, dim=-1, keepdim=True).clamp(min=1e-6)
-        to_ball_dir = to_ball / to_ball_dist
-        perp_dir = torch.stack([-to_ball_dir[:, 1], to_ball_dir[:, 0]], dim=-1)
-        turn_linear_vel = perp_dir * turn_ang_vel * to_ball_dist * dc.turn_on_spot_radius_modifier
-
-        # Clamp turn linear velocity
-        turn_speed = torch.norm(turn_linear_vel, dim=-1, keepdim=True)
-        turn_scale = torch.where(
-            turn_speed > dc.robot_max_speed,
-            dc.robot_max_speed / turn_speed.clamp(min=1e-8),
-            torch.ones_like(turn_speed),
-        )
-        turn_linear_vel = turn_linear_vel * turn_scale
-
-        # --- Merge velocities based on mode ---
-        zero_vel = torch.zeros_like(move_vel)
-        zero_ang = torch.zeros_like(move_ang_vel)
-
-        final_vel = torch.where(kick_mode.unsqueeze(-1), zero_vel, move_vel)
-        final_vel = torch.where(turn_mode.unsqueeze(-1), turn_linear_vel, final_vel)
-
-        final_ang = torch.where(kick_mode.unsqueeze(-1), zero_ang, move_ang_vel)
-        final_ang = torch.where(turn_mode.unsqueeze(-1), turn_ang_vel, final_ang)
-
-        # --- Overwrite action dims 0-2 with computed velocities ---
-        agent.action.u = torch.cat(
-            [
-                final_vel,  # dims 0-1: linear velocity (global frame)
-                final_ang,  # dim 2: angular velocity
-                u[:, 3:],  # dims 3-5: pass through (kick, dribble, turn triggers)
-            ],
-            dim=-1,
+        drib_nav = torch.where(has_ball.unsqueeze(-1), target_pos, ball_pos)
+        nav_target = torch.where(
+            is_go.unsqueeze(-1) | is_kick.unsqueeze(-1),
+            ball_pos,
+            torch.where(is_drib.unsqueeze(-1), drib_nav, target_pos),
         )
 
-        # --- Kick: set ball velocity directly ---
-        if kick_mode.any():
-            kick_vel = facing * dc.kick_speed
-            self.ball.state.vel = torch.where(
-                kick_mode.unsqueeze(-1),
-                kick_vel,
-                self.ball.state.vel,
+        to_ball = ball_pos - agent.state.pos
+        to_target = target_pos - agent.state.pos
+        ball_oren = torch.atan2(to_ball[:, 1], to_ball[:, 0]).unsqueeze(-1)
+        target_oren = torch.atan2(to_target[:, 1], to_target[:, 0]).unsqueeze(-1)
+        drib_oren = torch.where(has_ball.unsqueeze(-1), target_oren, ball_oren)
+        oren_target = torch.where(
+            is_go.unsqueeze(-1),
+            ball_oren,
+            torch.where(is_kick.unsqueeze(-1), target_oren, torch.where(is_drib.unsqueeze(-1), drib_oren, target_oren)),
+        )
+
+        desired_vel = self.pid_trans.calculate(agent.state.pos, nav_target, agent.name)
+        desired_ang = self.pid_oren.calculate(agent.state.rot, oren_target, agent.name)
+        desired_vel = torch.where(
+            (is_kick & has_ball).unsqueeze(-1),
+            torch.zeros_like(desired_vel),
+            desired_vel,
+        )
+        agent.action.u = self._to_low_level_command(agent, desired_vel, desired_ang)
+
+        facing = self._agent_facing(agent)
+        to_target = to_target / torch.norm(to_target, dim=-1, keepdim=True).clamp(min=1e-8)
+        kick_alignment = (facing * to_target).sum(dim=-1)
+        self._store_request(
+            agent,
+            kick_request=is_kick,
+            dribble_request=is_go | is_kick | is_drib,
+            kick_alignment=kick_alignment,
+        )
+
+    def _process_legacy_action(self, agent: Agent) -> None:
+        dc = self.cfg.dynamics
+        fc = self.cfg.field
+        u = agent.action.u
+        target_pos = (agent.state.pos + u[:, 0:2]).clamp(
+            min=torch.tensor([-fc.half_length, -fc.half_width], device=u.device),
+            max=torch.tensor([fc.half_length, fc.half_width], device=u.device),
+        )
+        target_oren = u[:, 2:3]
+
+        desired_vel = self.pid_trans.calculate(agent.state.pos, target_pos, agent.name)
+        desired_ang = self.pid_oren.calculate(agent.state.rot, target_oren, agent.name)
+
+        has_ball = self._has_ball(agent)
+        kick_mode = (u[:, 3] > 0) & has_ball
+        turn_mode = (u[:, 5] > 0) & has_ball & ~kick_mode
+        if turn_mode.any():
+            to_ball = self.ball.state.pos - agent.state.pos
+            to_ball_dist = torch.norm(to_ball, dim=-1, keepdim=True).clamp(min=1e-6)
+            to_ball_dir = to_ball / to_ball_dist
+            perp_dir = torch.stack([-to_ball_dir[:, 1], to_ball_dir[:, 0]], dim=-1)
+            desired_vel = torch.where(
+                turn_mode.unsqueeze(-1),
+                perp_dir * desired_ang * to_ball_dist * dc.turn_on_spot_radius_modifier,
+                desired_vel,
             )
 
-        # --- Dribble: binary attract (move mode + turn mode both support dribble) ---
-        dribble_active = (dribble_action > 0) & has_ball & ~kick_mode
-        dribble_active = dribble_active | turn_mode
-        if dribble_active.any():
-            front_offset = facing * (fc.robot_radius + fc.ball_radius)
-            dribble_target = agent_pos + front_offset
-            attract_dir = dribble_target - ball_pos
-            attract_force = attract_dir * dc.dribble_force
-            self.ball.state.vel = (
-                self.ball.state.vel + attract_force * dribble_active.unsqueeze(-1).float() * self.world.dt
-            )
+        low_level = self._to_low_level_command(agent, desired_vel, desired_ang)
+        agent.action.u = torch.cat([low_level, u[:, 3:]], dim=-1)
+
+        self._store_request(
+            agent,
+            kick_request=u[:, 3] > 0,
+            dribble_request=(u[:, 4] > 0) | turn_mode,
+            kick_alignment=torch.ones(self.world.batch_dim, device=self.world.device),
+        )
+
+    def _to_low_level_command(self, agent: Agent, desired_vel: Tensor, desired_ang: Tensor) -> Tensor:
+        dc = self.cfg.dynamics
+        fc = self.cfg.field
+        if dc.physics_mode == "kinematic_legacy":
+            return torch.cat([desired_vel, desired_ang], dim=-1)
+
+        current_vel = agent.state.vel
+        desired_acc = (desired_vel - current_vel) / dc.dt
+        acc_norm = torch.norm(desired_acc, dim=-1, keepdim=True)
+        acc_scale = torch.where(
+            acc_norm > dc.robot_max_acceleration,
+            dc.robot_max_acceleration / acc_norm.clamp(min=1e-8),
+            torch.ones_like(acc_norm),
+        )
+        desired_acc = desired_acc * acc_scale
+        force = desired_acc * dc.robot_mass
+
+        current_ang = (
+            agent.state.ang_vel
+            if hasattr(agent.state, "ang_vel") and agent.state.ang_vel is not None
+            else torch.zeros(self.world.batch_dim, 1, device=self.world.device)
+        )
+        desired_ang_acc = (desired_ang - current_ang) / dc.dt
+        desired_ang_acc = desired_ang_acc.clamp(
+            -dc.robot_max_angular_acceleration,
+            dc.robot_max_angular_acceleration,
+        )
+        torque = desired_ang_acc * dc.robot_mass * (fc.robot_radius**2)
+        return torch.cat([force, torque], dim=-1)
+
+    def _agent_facing(self, agent: Agent) -> Tensor:
+        rot = agent.state.rot.squeeze(-1)
+        return torch.stack([torch.cos(rot), torch.sin(rot)], dim=-1)
+
+    def _apply_ball_effects_pre_step(self) -> None:
+        dc = self.cfg.dynamics
+        holder_candidate = self._compute_candidate_holder()
+        effective_holder = torch.where(self.confirmed_holder >= 0, self.confirmed_holder, holder_candidate)
+
+        for name in self.kick_cooldown:
+            self.kick_cooldown[name] = (self.kick_cooldown[name] - 1).clamp(min=0)
+
+        if hasattr(self.ball.state, "force") and self.ball.state.force is not None:
+            self.ball.state.force = torch.zeros_like(self.ball.state.force)
+
+        for holder_id, agent in enumerate(self.attackers + self.defenders):
+            req = self._step_requests.get(agent.name, self._empty_request(agent))
+            holder_mask = effective_holder == holder_id
+            aligned = req["kick_alignment"] > dc.kick_align_threshold
+            can_kick = holder_mask & req["kick_request"] & aligned & (self.kick_cooldown[agent.name] <= 0)
+            self.kick_fired[agent.name] = can_kick
+            if can_kick.any():
+                kick_vel = self._agent_facing(agent) * dc.kick_speed
+                self.ball.state.vel = torch.where(can_kick.unsqueeze(-1), kick_vel, self.ball.state.vel)
+                self.kick_cooldown[agent.name] = torch.where(
+                    can_kick,
+                    torch.full_like(self.kick_cooldown[agent.name], dc.kick_cooldown_steps),
+                    self.kick_cooldown[agent.name],
+                )
+
+            dribble_mask = holder_mask & req["dribble_request"] & ~can_kick
+            if dribble_mask.any():
+                front_offset = self._agent_facing(agent) * (self.cfg.field.robot_radius + self.cfg.field.ball_radius)
+                dribble_target = agent.state.pos + front_offset
+                attract_dir = dribble_target - self.ball.state.pos
+                if hasattr(self.ball.state, "force") and self.ball.state.force is not None:
+                    self.ball.state.force = (
+                        self.ball.state.force + attract_dir * dc.dribble_force * dribble_mask.unsqueeze(-1).float()
+                    )
+                else:
+                    self.ball.state.vel = self.ball.state.vel + (
+                        attract_dir * dc.dribble_force * dc.dt * dribble_mask.unsqueeze(-1).float()
+                    )
+
+        self._agents_processed_this_step = 0
+
+    def _compute_candidate_holder(self) -> Tensor:
+        if not self._agent_names:
+            return torch.full((self.world.batch_dim,), -1, device=self.world.device, dtype=torch.long)
+        dists = []
+        for agent in self.attackers + self.defenders:
+            dist = torch.norm(self.ball.state.pos - agent.state.pos, dim=-1)
+            facing_ok = self._facing_cos(agent, self.ball.state.pos) >= self.cfg.dynamics.possession_cone_cos
+            eligible = facing_ok & (dist < self.cfg.dynamics.dribble_dist_threshold)
+            dists.append(torch.where(eligible, dist, torch.full_like(dist, float("inf"))))
+        stacked = torch.stack(dists, dim=-1)
+        best_dist, best_idx = stacked.min(dim=-1)
+        return torch.where(best_dist.isfinite(), best_idx.long(), torch.full_like(best_idx, -1))
 
     def post_step(self):
-        """Update Stackelberg timing state and clamp ball speed."""
-        # Update previous defender state for Stackelberg timing
+        self.global_frame += 1
+        self.steps += 1
         for d in self.defenders:
             self.prev_defender_vel[d.name] = d.state.vel.clone()
             self.prev_defender_rot[d.name] = d.state.rot.clone()
 
-        # Cap ball speed (prevents unrealistic collision-launched velocities)
-        dc = self.cfg.dynamics
         ball_speed = torch.norm(self.ball.state.vel, dim=-1, keepdim=True)
-        excess = ball_speed > dc.max_ball_speed
+        excess = ball_speed > self.cfg.dynamics.max_ball_speed
         if excess.any():
             scale = torch.where(
                 excess,
-                dc.max_ball_speed / ball_speed.clamp(min=1e-8),
+                self.cfg.dynamics.max_ball_speed / ball_speed.clamp(min=1e-8),
                 torch.ones_like(ball_speed),
             )
             self.ball.state.vel = self.ball.state.vel * scale
 
-        # NOTE: prev distances for delta-based reward shaping are updated in
-        # reward() AFTER the reward is computed. VMAS calls post_step() before
-        # reward(), so updating here would zero out all deltas.
+        self._update_possession_and_pass_state()
+        self.current_metrics = self._compute_metrics()
+        self._needs_metric_commit = True
 
-    # ------------------------------------------------------------------
-    # Observation — ego-centric with Stackelberg timing
-    # ------------------------------------------------------------------
+    def _update_possession_and_pass_state(self) -> None:
+        dc = self.cfg.dynamics
+        candidate = self._compute_candidate_holder()
+        switched = candidate != self.candidate_holder
+        self.candidate_holder = torch.where(switched, candidate, self.candidate_holder)
+        self.candidate_frames = torch.where(
+            switched,
+            torch.ones_like(self.candidate_frames),
+            self.candidate_frames + 1,
+        )
 
-    def observation(self, agent: Agent) -> torch.Tensor:
-        """Ego-centric observation with Stackelberg timing for attackers.
+        self.holder_switch_cooldown = (self.holder_switch_cooldown - 1).clamp(min=0)
+        ready_to_switch = (
+            (candidate != self.confirmed_holder)
+            & (self.candidate_frames >= dc.pass_confirm_frames)
+            & (self.holder_switch_cooldown <= 0)
+        )
 
-        Common: own vel(2) + ang_vel(1) + rot(1) + ball_rel(2) + ball_vel(2)
-                + has_ball(1) + active zone edge distances(4) + time_remaining(1) = 14
-        Per teammate: rel_pos(2) + vel(2) = 4
-        Attacker per opponent: rel_pos(2) + vel(2) + prev_vel(2) + prev_rot(1) = 7
-        Defender per opponent: rel_pos(2) + vel(2) = 4
-        """
+        previous_holder = self.confirmed_holder.clone()
+        new_holder = torch.where(ready_to_switch, candidate, self.confirmed_holder)
+        released_from_passer = ready_to_switch & (previous_holder == 0) & (new_holder != 0)
+        if released_from_passer.any():
+            self.pass_active = torch.where(released_from_passer, torch.ones_like(self.pass_active), self.pass_active)
+            self.pass_start_ball_pos = torch.where(
+                released_from_passer.unsqueeze(-1),
+                self.ball.state.pos,
+                self.pass_start_ball_pos,
+            )
+
+        travel = torch.norm(self.ball.state.pos - self.pass_start_ball_pos, dim=-1)
+        completed = ready_to_switch & (new_holder == 1) & self.pass_active & (travel >= dc.pass_min_ball_travel)
+        self.pass_completed = self.pass_completed | completed
+        self.pass_count = self.pass_count + completed.long()
+
+        defender_pickup = ready_to_switch & (new_holder >= self.cfg.n_attackers)
+        self.ball_intercepted = self.ball_intercepted | defender_pickup
+
+        attacker_switch = ready_to_switch & (new_holder >= 0) & (new_holder < self.cfg.n_attackers)
+        self.last_attacker_holder = torch.where(attacker_switch, new_holder, self.last_attacker_holder)
+        self.pass_active = torch.where(
+            completed | defender_pickup | ((ready_to_switch) & (new_holder == 0)),
+            torch.zeros_like(self.pass_active),
+            self.pass_active,
+        )
+        self.confirmed_holder = new_holder
+        self.holder_switch_cooldown = torch.where(
+            ready_to_switch,
+            torch.full_like(self.holder_switch_cooldown, dc.holder_switch_cooldown_steps),
+            self.holder_switch_cooldown,
+        )
+
+    def observation(self, agent: Agent) -> Tensor:
         fc = self.cfg.field
-        obs_parts: list[torch.Tensor] = []
+        dc = self.cfg.dynamics
+        pos_scale = torch.tensor([fc.half_length, fc.half_width], device=self.world.device)
+        vel_scale = max(dc.robot_max_speed, 1e-6)
+        ball_vel_scale = max(dc.max_ball_speed, 1e-6)
 
-        # Own state
-        obs_parts.append(agent.state.vel)
-        if hasattr(agent.state, "ang_vel") and agent.state.ang_vel is not None:
-            obs_parts.append(agent.state.ang_vel)
-        else:
-            obs_parts.append(torch.zeros(self.world.batch_dim, 1, device=self.world.device))
-        obs_parts.append(agent.state.rot)
+        obs_parts: list[Tensor] = []
+        obs_parts.append(agent.state.pos / pos_scale)
+        obs_parts.append(agent.state.vel / vel_scale)
+        ang_vel = (
+            agent.state.ang_vel
+            if hasattr(agent.state, "ang_vel") and agent.state.ang_vel is not None
+            else torch.zeros(self.world.batch_dim, 1, device=self.world.device)
+        )
+        obs_parts.append(ang_vel / max(dc.robot_max_angular_vel, 1e-6))
+        rot = agent.state.rot.squeeze(-1)
+        obs_parts.append(torch.stack([torch.cos(rot), torch.sin(rot)], dim=-1))
 
-        # Ball
-        ball_rel = self.ball.state.pos - agent.state.pos
+        ball_rel = (self.ball.state.pos - agent.state.pos) / pos_scale
         obs_parts.append(ball_rel)
-        obs_parts.append(self.ball.state.vel)
+        obs_parts.append(self.ball.state.vel / ball_vel_scale)
+        obs_parts.append(torch.norm(self.ball.state.vel, dim=-1, keepdim=True) / ball_vel_scale)
 
-        # Has-ball flag (1D): 1 if this agent is within dribble range of ball
-        has_ball = self._has_ball(agent).unsqueeze(-1).float()
-        obs_parts.append(has_ball)
+        holder_id = self._holder_name_to_id.get(agent.name, -1)
+        obs_parts.append(self._has_ball(agent).unsqueeze(-1).float())
+        obs_parts.append((self.confirmed_holder == holder_id).unsqueeze(-1).float())
+        obs_parts.append(self._facing_cos(agent, self.ball.state.pos).unsqueeze(-1))
 
-        # Active zone edge distances
         az_cx = fc.active_zone_center_x
         az_cy = fc.active_zone_center_y
         pos = agent.state.pos
-        dist_right = (az_cx + fc.active_zone_half_length) - pos[:, 0:1]
-        dist_left = pos[:, 0:1] - (az_cx - fc.active_zone_half_length)
-        dist_top = (az_cy + fc.active_zone_half_width) - pos[:, 1:2]
-        dist_bottom = pos[:, 1:2] - (az_cy - fc.active_zone_half_width)
+        dist_right = ((az_cx + fc.active_zone_half_length) - pos[:, 0:1]) / fc.active_zone_half_length
+        dist_left = (pos[:, 0:1] - (az_cx - fc.active_zone_half_length)) / fc.active_zone_half_length
+        dist_top = ((az_cy + fc.active_zone_half_width) - pos[:, 1:2]) / fc.active_zone_half_width
+        dist_bottom = (pos[:, 1:2] - (az_cy - fc.active_zone_half_width)) / fc.active_zone_half_width
         obs_parts.extend([dist_right, dist_left, dist_top, dist_bottom])
 
-        # Teammates
         is_attacker = agent in self.attackers
         teammates = self.attackers if is_attacker else self.defenders
         opponents = self.defenders if is_attacker else self.attackers
@@ -884,114 +818,46 @@ class PassingScenario(BaseScenario):
         for t in teammates:
             if t is agent:
                 continue
-            obs_parts.append(t.state.pos - agent.state.pos)
-            obs_parts.append(t.state.vel)
+            obs_parts.append((t.state.pos - agent.state.pos) / pos_scale)
+            obs_parts.append(t.state.vel / vel_scale)
 
-        # Opponents — attackers get Stackelberg timing (t-1 state)
         for o in opponents:
-            obs_parts.append(o.state.pos - agent.state.pos)
-            obs_parts.append(o.state.vel)
+            obs_parts.append((o.state.pos - agent.state.pos) / pos_scale)
+            obs_parts.append(o.state.vel / vel_scale)
             if is_attacker and o.name in self.prev_defender_vel:
-                obs_parts.append(self.prev_defender_vel[o.name])
-                obs_parts.append(self.prev_defender_rot[o.name])
+                obs_parts.append(self.prev_defender_vel[o.name] / vel_scale)
+                obs_parts.append(self.prev_defender_rot[o.name] / math.pi)
 
-        # Normalized time remaining (1D)
         time_remaining = (1.0 - self.steps.float() / self.cfg.max_steps).unsqueeze(-1)
         obs_parts.append(time_remaining)
-
         return torch.cat(obs_parts, dim=-1)
 
-    # ------------------------------------------------------------------
-    # Reward — delegates to passing_rewards.py
-    # ------------------------------------------------------------------
-
-    def reward(self, agent: Agent) -> torch.Tensor:
-        self._update_pass_tracking()
-
-        r = compute_passing_reward(
+    def reward(self, agent: Agent) -> Tensor:
+        reward, components = compute_passing_reward(
             agent_name=agent.name,
             agent_pos=agent.state.pos,
             ball_pos=self.ball.state.pos,
             scenario=self,
         )
+        self._reward_components[agent.name] = components
+        return reward
 
-        # Update prev distances AFTER computing reward so that the next step's
-        # delta = (this step's distance) - (next step's distance) is non-zero.
-        # VMAS calls post_step() before reward(), so we must update here.
-        self._update_prev_distances(agent)
-
-        # Accumulate for episodic Envy-Free
-        if agent.name in self.cumulative_attacker_rewards:
-            self.cumulative_attacker_rewards[agent.name] = self.cumulative_attacker_rewards[agent.name] + r
-
-        return r
-
-    def _update_prev_distances(self, agent: Agent):
-        """Update previous distances for delta-based shaping after reward."""
-        bp = self.ball.state.pos
-        if self.cfg.n_attackers >= 1 and agent is self.attackers[0]:
-            self.prev_passer_to_ball_dist = torch.norm(agent.state.pos - bp, dim=-1)
-            if self.cfg.n_attackers >= 2:
-                self.prev_ball_to_receiver_dist = torch.norm(bp - self.attackers[1].state.pos, dim=-1)
-                self.prev_passer_facing_receiver_cos = self._compute_facing_ball_cos(agent, self.attackers[1].state.pos)
-        if self.cfg.n_attackers >= 2 and agent is self.attackers[1]:
-            self.prev_receiver_to_ball_dist = torch.norm(agent.state.pos - bp, dim=-1)
-            self.prev_receiver_facing_ball_cos = self._compute_facing_ball_cos(agent, bp)
-
-    # ------------------------------------------------------------------
-    # Pass & interception tracking
-    # ------------------------------------------------------------------
-
-    def _update_pass_tracking(self):
-        dc = self.cfg.dynamics
-        ball_pos = self.ball.state.pos
-
-        for i, agent in enumerate(self.attackers):
-            dist = torch.norm(agent.state.pos - ball_pos, dim=-1)
-            near_ball = dist < dc.dribble_dist_threshold
-            new_pass = near_ball & (self.last_holder != i) & (self.last_holder >= 0)
-            self.pass_completed = self.pass_completed | new_pass
-            self.pass_count = self.pass_count + new_pass.long()
-            self.last_holder = torch.where(near_ball, i, self.last_holder)
-
-        # Interception: any defender within dribble range of ball
-        for d in self.defenders:
-            dist_to_ball = torch.norm(ball_pos - d.state.pos, dim=-1)
-            newly_intercepted = ~self.ball_intercepted & (dist_to_ball < dc.dribble_dist_threshold)
-            self.ball_intercepted = self.ball_intercepted | newly_intercepted
-
-    # ------------------------------------------------------------------
-    # Done — with episodic Envy-Free bonus
-    # ------------------------------------------------------------------
-
-    def done(self) -> torch.Tensor:
-        self.steps += 1
+    def done(self) -> Tensor:
         fc = self.cfg.field
         ball_pos = self.ball.state.pos
-
         oob = (ball_pos[:, 0].abs() > fc.half_length + fc.boundary_margin) | (
             ball_pos[:, 1].abs() > fc.half_width + fc.boundary_margin
         )
         timeout = self.steps >= self.cfg.max_steps
-        is_done = self.pass_completed | self.ball_intercepted | oob | timeout
-
-        # Apply episodic Envy-Free bonus at termination
-        if self.cfg.rewards.envy_free_weight > 0 and is_done.any():
-            envy_free_bonus(
-                self.cumulative_attacker_rewards,
-                self.cfg.rewards.envy_free_weight,
-            )
-
-        return is_done
-
-    # ------------------------------------------------------------------
-    # Info
-    # ------------------------------------------------------------------
+        return self.pass_completed | self.ball_intercepted | oob | timeout
 
     def info(self, agent: Agent) -> dict:
-        return {
+        info = {
             "pass_completed": self.pass_completed,
             "ball_intercepted": self.ball_intercepted,
             "pass_count": self.pass_count,
             "steps": self.steps,
+            "confirmed_holder": self.confirmed_holder,
         }
+        info.update(self._reward_components.get(agent.name, {}))
+        return info
