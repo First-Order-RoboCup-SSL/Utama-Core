@@ -34,7 +34,7 @@ class FastPathPlanningController(MotionController):
 
         oren = self.pid_oren.calculate(target_oren, robot.orientation, robot_id)
 
-        pos = self.fpp._path_to(game, robot_id, target_pos, field_bounds)[0][1]
+        pos = self.fpp._path_to(game, robot_id, target_pos, field_bounds)
         vel = self.pid_trans.calculate(pos, robot.p, robot_id)
 
         return vel, oren

@@ -28,6 +28,7 @@ class FastPathPlanner:
         self.SUBGOAL_DISTANCE = self.config.SUBGOAL_DISTANCE
         self.MAXRECURSIONLENGTH = self.config.MAXRECURSION_LENGTH
         self.PROJECTEDFRAMES = self.config.PROJECTEDFRAMES
+        self.PROJECTION_DISTANCE = self.config.PROJECTION_DISTANCE
 
     def is_point_in_field(self, point, field_bounds: FieldBounds) -> bool:
         x = float(point[0])
@@ -190,6 +191,20 @@ class FastPathPlanner:
             segment_length = distance(segment[0], segment[1])
             return [segment], segment_length
 
+    def smooth_path(self, trajectory, target, robot_position) -> np.ndarray:
+        if len(trajectory) == 1:
+            return target
+        else:
+            direction = trajectory[0][1] - robot_position
+            unit_vec = direction / np.linalg.norm(direction)
+            new_target = robot_position + unit_vec * self.PROJECTION_DISTANCE
+            if distance(new_target, robot_position) < distance(robot_position, trajectory[0][1]):
+                return trajectory[0][1]
+            else:
+                point = closest_point_on_segment(new_target, trajectory[1][0], trajectory[1][1])
+                new_target = (point + new_target) / 2
+                return new_target
+
     def _path_to(self, game: Game, robot_id: int, target: Tuple[float, float], field_bounds: FieldBounds):
         robot = game.friendly_robots[robot_id]
         our_pos = np.array([robot.p.x, robot.p.y])
@@ -197,4 +212,8 @@ class FastPathPlanner:
         obstacles = self._get_obstacles(game, robot_id, our_pos, field_bounds)
 
         finaltrajectory = self.checksegment((our_pos, target), obstacles, 0, target, field_bounds)[0]
-        return finaltrajectory
+        for i in finaltrajectory:
+            self._env.draw_line(i)
+        new_target = self.smooth_path(finaltrajectory, target, our_pos)
+        self._env.draw_line((our_pos, new_target), color="Blue")
+        return new_target
