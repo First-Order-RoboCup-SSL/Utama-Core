@@ -110,7 +110,7 @@ class GRSimRobotController(AbstractRobotController):
             # ignore robot_info for robots that are not expected (ie deactivated since the start of the game)
         self._robots_info.append(robots_info)
 
-    def get_robots_responses(self) -> Optional[RobotResponse]:
+    def get_robots_responses(self) -> Optional[list[RobotResponse]]:
         if self._robots_info is None or len(self._robots_info) == 0:
             for i in range(self._n_friendly):
                 self.add_robot_commands(RobotCommand(0, 0, 0, False, False, False), i)
