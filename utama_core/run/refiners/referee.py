@@ -32,9 +32,7 @@ class RefereeRefiner(BaseRefiner):
         return dataclasses.replace(game_frame, referee=data)
 
     def add_new_referee_data(self, referee_data: RefereeData) -> None:
-        if not self._referee_records:
-            self._referee_records.append(referee_data)
-        elif referee_data[1:] != self._referee_records[-1][1:]:
+        if not self._referee_records or referee_data != self._referee_records[-1]:
             self._referee_records.append(referee_data)
 
     def source_identifier(self) -> Optional[str]:

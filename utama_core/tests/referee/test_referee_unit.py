@@ -106,7 +106,7 @@ def _make_game(
     my_team_is_right: bool = True,
 ) -> Game:
     frame = _make_game_frame(friendly_robots, referee, my_team_is_yellow, my_team_is_right)
-    history = GameHistory()
+    history = GameHistory(10)
     return Game(past=history, current=frame, field=Field.FULL_FIELD_BOUNDS)
 
 

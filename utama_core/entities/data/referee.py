@@ -1,12 +1,18 @@
-from typing import List, NamedTuple, Optional, Tuple
+from __future__ import annotations
 
-from utama_core.entities.game.team_info import TeamInfo
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, List, Optional, Tuple
+
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 
+if TYPE_CHECKING:
+    from utama_core.entities.game.team_info import TeamInfo
 
-class RefereeData(NamedTuple):
-    """Namedtuple for referee data."""
+
+@dataclass(eq=False)
+class RefereeData:
+    """Dataclass for referee data."""
 
     source_identifier: Optional[str]
     time_sent: float
@@ -39,7 +45,7 @@ class RefereeData(NamedTuple):
     # All game events detected since the last RUNNING state (e.g. foul type, ball-out side).
     # Stored as raw protobuf GameEvent objects. Cleared when the game resumes.
     # Useful for logging and future decision-making; not required for basic compliance.
-    game_events: List = []
+    game_events: List = field(default_factory=list)
 
     # Meta information about the match type:
     # 0 = UNKNOWN_MATCH, 1 = GROUP_PHASE, 2 = ELIMINATION_PHASE, 3 = FRIENDLY
@@ -51,16 +57,32 @@ class RefereeData(NamedTuple):
     def __eq__(self, other):
         if not isinstance(other, RefereeData):
             return NotImplemented
-        # game_events, match_type, and status_message are intentionally excluded
-        # from equality so they do not trigger spurious re-records in RefereeRefiner.
+        # game_events, match_type, status_message, source_identifier, and
+        # timestamps are intentionally excluded from equality so they do not
+        # trigger spurious re-records in RefereeRefiner.
+        # TeamInfo has no __eq__ so compare the mutable game-state fields only.
         return (
             self.stage == other.stage
             and self.referee_command == other.referee_command
             and self.referee_command_timestamp == other.referee_command_timestamp
-            and self.yellow_team == other.yellow_team
-            and self.blue_team == other.blue_team
+            and self.yellow_team.score == other.yellow_team.score
+            and self.yellow_team.goalkeeper == other.yellow_team.goalkeeper
+            and self.blue_team.score == other.blue_team.score
+            and self.blue_team.goalkeeper == other.blue_team.goalkeeper
             and self.designated_position == other.designated_position
             and self.blue_team_on_positive_half == other.blue_team_on_positive_half
             and self.next_command == other.next_command
             and self.current_action_time_remaining == other.current_action_time_remaining
+        )
+
+    def __hash__(self):
+        return hash(
+            (
+                self.stage,
+                self.referee_command,
+                self.referee_command_timestamp,
+                self.designated_position,
+                self.blue_team_on_positive_half,
+                self.next_command,
+            )
         )
