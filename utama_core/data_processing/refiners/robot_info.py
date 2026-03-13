@@ -2,9 +2,9 @@ import warnings
 from dataclasses import replace
 from typing import List
 
+from utama_core.data_processing.refiners.base_refiner import BaseRefiner
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.game.game_frame import GameFrame
-from utama_core.run.refiners.base_refiner import BaseRefiner
 
 # TODO: current doesn't handle has_ball for enemy robots. In future, implement using vision data
 

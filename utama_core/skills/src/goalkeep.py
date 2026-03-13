@@ -2,11 +2,11 @@ from typing import Optional
 
 import numpy as np
 
+from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from utama_core.run.predictors.position import predict_ball_pos_at_x
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.utils.move_utils import face_ball, move
 
@@ -40,22 +40,35 @@ def goalkeep(
 
     if len(game.friendly_robots) == 2:
         try:
-            _, yy = intersection_with_vertical_line(
-                (game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1)
+            # Check if defender is between ball and goal (side-aware)
+            defender_between = (game.my_team_is_right and game.friendly_robots[1].p.x > game.ball.p.x) or (
+                not game.my_team_is_right and game.friendly_robots[1].p.x < game.ball.p.x
             )
-            stop_y = (yy + 0.5) / 2
+            if defender_between:
+                _, yy = intersection_with_vertical_line(
+                    (game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1)
+                )
+                stop_y = (yy + 0.5) / 2
         except (IndexError, KeyError):
             # If robot with ID 1 is not available, keep default stop_y
             pass
     elif len(game.friendly_robots) >= 3:
         try:
-            _, yy1 = intersection_with_vertical_line(
-                (game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1)
+            # Check if both defenders are between ball and goal (side-aware)
+            defender1_between = (game.my_team_is_right and game.friendly_robots[1].p.x > game.ball.p.x) or (
+                not game.my_team_is_right and game.friendly_robots[1].p.x < game.ball.p.x
             )
-            _, yy2 = intersection_with_vertical_line(
-                (game.ball.p.x, game.ball.p.y), (game.friendly_robots[2].p.x, game.friendly_robots[2].p.y - 0.1)
+            defender2_between = (game.my_team_is_right and game.friendly_robots[2].p.x > game.ball.p.x) or (
+                not game.my_team_is_right and game.friendly_robots[2].p.x < game.ball.p.x
             )
-            stop_y = (yy1 + yy2) / 2
+            if defender1_between and defender2_between:
+                _, yy1 = intersection_with_vertical_line(
+                    (game.ball.p.x, game.ball.p.y), (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + 0.1)
+                )
+                _, yy2 = intersection_with_vertical_line(
+                    (game.ball.p.x, game.ball.p.y), (game.friendly_robots[2].p.x, game.friendly_robots[2].p.y - 0.1)
+                )
+                stop_y = (yy1 + yy2) / 2
         except (IndexError, KeyError):
             # If robots with IDs 1 or 2 are not available, keep existing stop_y
             pass

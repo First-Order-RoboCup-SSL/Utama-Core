@@ -3,7 +3,7 @@ import threading
 import time
 from collections import deque
 
-from utama_core.run.receivers.vision_receiver import VisionReceiver
+from utama_core.data_processing.receivers.vision_receiver import VisionReceiver
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

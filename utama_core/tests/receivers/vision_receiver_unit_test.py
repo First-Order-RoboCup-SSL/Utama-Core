@@ -1,7 +1,7 @@
 from collections import deque
 from dataclasses import dataclass, replace
 
-from utama_core.run.receivers.vision_receiver import (
+from utama_core.data_processing.receivers.vision_receiver import (
     RawBallData,
     RawRobotData,
     VisionReceiver,

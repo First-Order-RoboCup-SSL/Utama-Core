@@ -4,6 +4,7 @@ from typing import Dict, Tuple, Union  # Added List for type hinting
 
 import numpy as np  # Import NumPy
 
+from utama_core.data_processing.refiners.base_refiner import BaseRefiner
 from utama_core.entities.data.object import ObjectKey, TeamType
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import GameFrame, Robot
@@ -12,7 +13,6 @@ from utama_core.entities.game.game_history import (
     GameHistory,
     get_structured_object_key,
 )
-from utama_core.run.refiners.base_refiner import BaseRefiner
 
 logger = logging.getLogger(__name__)
 

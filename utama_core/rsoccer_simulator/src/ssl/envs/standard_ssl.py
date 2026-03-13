@@ -93,6 +93,7 @@ class SSLStandardEnv(SSLBaseEnv):
             time_step=time_step,
             render_mode=render_mode,
         )
+
         # Note: observation_space and action_space removed - not needed for non-RL use
 
         # set starting formation style for
@@ -118,7 +119,7 @@ class SSLStandardEnv(SSLBaseEnv):
         # Adding Gaussian noise and vanishing. Refer to StrategyRunner
         self.gaussian_noise = gaussian_noise
 
-        assert vanishing >= 0
+        assert vanishing >= 0, "Negative vanishing probability not allowed"
         self.vanishing = vanishing
 
     def reset(self, *, seed=None, options=None):
@@ -359,7 +360,7 @@ class SSLStandardEnv(SSLBaseEnv):
     def _calculate_reward_and_done(self):
         return 1, False
 
-    def _get_initial_positions_frame(self):
+    def _get_initial_positions_frame(self, ball_exists: bool = True) -> Frame:
         """Returns the position of each robot and ball for the initial frame (random placement)"""
         pos_frame: Frame = Frame()
 
@@ -371,7 +372,13 @@ class SSLStandardEnv(SSLBaseEnv):
             x, y, heading = self.yellow_formation[i]
             pos_frame.robots_yellow[i] = Robot(id=i, x=x, y=-y, theta=-rad_to_deg(heading))
 
-        pos_frame.ball = Ball(x=0, y=0)
+        if ball_exists:
+            pos_frame.ball = Ball(x=0, y=0)
+        else:
+            pos_frame.ball = Ball(
+                x=self.OFF_FIELD_OFFSET + self.field.length,
+                y=self.OFF_FIELD_OFFSET + self.field.width,
+            )
 
         return pos_frame
 

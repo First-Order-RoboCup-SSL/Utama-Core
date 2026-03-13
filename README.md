@@ -40,16 +40,17 @@ First Order Robotics core software stack for [RoboCup SSL](https://ssl.robocup.o
 ### Folder Structure
 
 1. `strategy`: higher level control from above roles to plays and tactics in decision-tree like abstraction
-2. `skills`: lowest level of control for individual robots
-3. `motion_planning`: control algorithms for movement and path planning
-4. `team_controller`: interfacing with vision (including processing) and robots
-5. `run`: The logic for main running loop, including refiners and predictors
-6. `global_utils`: store utility functions that can be shared across all folders
-7. `entities`: store classes for building field, robot, data entities etc.
-8. `rsoccer_simulator`: Lightweight rSoccer simulator for testing
-9. `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rsoccer sim
-10. `tests`: include all unit tests here
-11. `config`: configs for the robots (defaults, settings, roles/tactics enums, etc.)
+1. `skills`: lowest level of control for individual robots
+1. `motion_planning`: control algorithms for movement and path planning
+1. `team_controller`: interfacing with vision (including processing) and robots
+1. `run`: The logic for main running loop
+1. `data_processing`: processors of vision, robot_info and referee raw data
+1. `global_utils`: store utility functions that can be shared across all folders
+1. `entities`: store classes for building field, robot, data entities etc.
+1. `rsoccer_simulator`: Lightweight rSoccer simulator for testing
+1. `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rsoccer sim
+1. `tests`: include all unit tests here
+1. `config`: configs for the robots (defaults, settings, roles/tactics enums, etc.)
 
 ### Code Writing
 

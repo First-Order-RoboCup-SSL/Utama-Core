@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from utama_core.data_processing.refiners import VelocityRefiner
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
@@ -10,7 +11,6 @@ from utama_core.entities.game.game_history import (
     get_structured_object_key,
 )
 from utama_core.entities.game.robot import Robot
-from utama_core.run.refiners import VelocityRefiner
 
 velocity_refiner = VelocityRefiner()
 

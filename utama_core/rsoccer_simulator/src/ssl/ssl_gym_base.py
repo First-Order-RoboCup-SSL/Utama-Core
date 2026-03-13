@@ -33,6 +33,7 @@ class SSLBaseEnv:
         "render.fps": 60,
     }
     NORM_BOUNDS = 1.2
+    OFF_FIELD_OFFSET = 100.0  # Meters outside of the field to place ball when not needed.
 
     def __init__(
         self,
@@ -51,6 +52,7 @@ class SSLBaseEnv:
             n_robots_yellow=n_robots_yellow,
             time_step_ms=int(self.time_step * 1000),
         )
+
         self.n_robots_blue: int = n_robots_blue
         self.n_robots_yellow: int = n_robots_yellow
 
@@ -149,9 +151,14 @@ class SSLBaseEnv:
 
     ### CUSTOM FUNCTIONS WE ADDED ###
 
-    def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0):
-        """Teleport ball to new position in meters.
+    def step_noop(self):
+        """Step the environment without any action."""
+        observation = self._frame_to_observations()[0]
+        self.steps += 1
+        return observation
 
+    def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0):
+        """Teleport ball to a new position on the field in meters.
         Note: this does not create a new frame, but mutates the current frame
         """
         ball = Ball(x=x, y=-y, z=self.frame.ball.z, v_x=vx, v_y=-vy)
@@ -161,13 +168,12 @@ class SSLBaseEnv:
     def teleport_robot(
         self,
         is_team_yellow: bool,
-        robot_id: bool,
+        robot_id: int,
         x: float,
         y: float,
         theta: float = None,
     ):
-        """Teleport robot to new position in meters, radians.
-
+        """Teleport robot to a new position on the field in meters, radians.
         Note: this does not create a new frame, but mutates the current frame
         """
         if theta is None:
@@ -312,8 +318,14 @@ class SSLBaseEnv:
         """Returns reward value and done flag from type List[Robot] state."""
         raise NotImplementedError
 
-    def _get_initial_positions_frame(self) -> Frame:
-        """Returns frame with robots initial positions."""
+    def _get_initial_positions_frame(self, ball_exists: bool = True) -> Frame:
+        """
+        Returns frame with robots initial positions.
+        Args:
+            ball_exists (bool): Whether the ball should be placed in the center of the field or removed from the field.
+        Returns:
+            Frame: frame with initial positions of robots and ball (if ball_exists=True)
+        """
         raise NotImplementedError
 
     def norm_pos(self, pos):

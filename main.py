@@ -5,6 +5,7 @@ from utama_core.run import StrategyRunner
 from utama_core.strategy.examples import (
     DefenceStrategy,
     GoToBallExampleStrategy,
+    RandomMovementStrategy,
     RobotPlacementStrategy,
     StartupStrategy,
     TwoRobotPlacementStrategy,
@@ -17,7 +18,7 @@ def main():
     custom_bounds = FieldBounds(top_left=(2.25, 1.5), bottom_right=(4.5, -1.5))
 
     runner = StrategyRunner(
-        strategy=TwoRobotPlacementStrategy(first_robot_id=0, second_robot_id=1, field_bounds=custom_bounds),
+        strategy=RandomMovementStrategy(n_robots=2, field_bounds=custom_bounds, endpoint_tolerance=0.1, seed=42),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",
@@ -27,7 +28,7 @@ def main():
         print_real_fps=True,
         profiler_name=None,
     )
-    runner.my_strategy.render()
+    runner.my.strategy.render()
     runner.run()
 
 

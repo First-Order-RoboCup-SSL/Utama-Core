@@ -4,10 +4,10 @@ import time
 from collections import deque
 
 from utama_core.config.settings import TIMESTEP
+from utama_core.data_processing.receivers.vision_receiver import VisionReceiver
+from utama_core.data_processing.refiners import PositionRefiner
 from utama_core.entities.game import Field
 from utama_core.run import GameGater
-from utama_core.run.receivers.vision_receiver import VisionReceiver
-from utama_core.run.refiners import PositionRefiner
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG)

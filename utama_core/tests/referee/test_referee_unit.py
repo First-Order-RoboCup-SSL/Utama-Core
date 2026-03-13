@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import py_trees
 import pytest
 
+from utama_core.data_processing.refiners.referee import RefereeRefiner
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game.ball import Ball
@@ -25,7 +26,6 @@ from utama_core.entities.game.robot import Robot
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.run.refiners.referee import RefereeRefiner
 from utama_core.strategy.referee.conditions import CheckRefereeCommand
 from utama_core.strategy.referee.tree import build_referee_override_tree
 
