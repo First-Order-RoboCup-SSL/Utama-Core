@@ -179,6 +179,9 @@ class RefereeMessageReceiver:
                 if referee_packet.HasField("current_action_time_remaining")
                 else None
             ),
+            game_events=list(referee_packet.game_events),
+            match_type=referee_packet.match_type,
+            status_message=referee_packet.status_message if referee_packet.status_message else None,
         )
 
         # add to referee buffer

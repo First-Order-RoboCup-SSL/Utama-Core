@@ -18,6 +18,7 @@ class CurrentGameFrame(GameFrame):
         object.__setattr__(self, "friendly_robots", game.friendly_robots)
         object.__setattr__(self, "enemy_robots", game.enemy_robots)
         object.__setattr__(self, "ball", game.ball)
+        object.__setattr__(self, "referee", game.referee)
         object.__setattr__(self, "robot_with_ball", self._set_robot_with_ball(game))
         object.__setattr__(self, "proximity_lookup", self._init_proximity_lookup(game))
 

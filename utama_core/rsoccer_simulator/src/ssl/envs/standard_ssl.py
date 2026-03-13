@@ -14,6 +14,7 @@ from utama_core.config.settings import (
 )
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
+from utama_core.entities.data.referee import RefereeData
 from utama_core.global_utils.math_utils import (
     deg_to_rad,
     normalise_heading_deg,
@@ -173,10 +174,11 @@ class SSLStandardEnv(SSLBaseEnv):
     ) -> Tuple[RawVisionData, RobotResponse, RobotResponse]:
         """Return observation data that aligns with grSim. There may be Gaussian noise and vanishing added.
 
-        Returns (vision_observation, yellow_robot_feedback, blue_robot_feedback)
+        Returns (vision_observation, yellow_robot_feedback, blue_robot_feedback, referee_data)
         vision_observation: closely aligned to SSLVision that returns a FramData object
         yellow_robots_info: feedback from individual yellow robots that returns a List[RobotInfo]
         blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
+        referee_data: current referee state from embedded referee state machine
         """
 
         if self.latest_observation[0] == self.steps:
@@ -215,6 +217,9 @@ class SSLStandardEnv(SSLBaseEnv):
         # Return the complete shared observation
         # note that ball_obs stored in list to standardise with SSLVision
         # As there is sometimes multiple possible positions for the ball
+
+        # Get referee data
+        # current_time = self.time_step * self.steps
 
         # Camera id as 0, only one camera for RSim
         result = (

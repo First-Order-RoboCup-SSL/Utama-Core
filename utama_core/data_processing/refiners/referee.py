@@ -1,3 +1,4 @@
+import dataclasses
 from typing import Optional
 
 from utama_core.data_processing.refiners.base_refiner import BaseRefiner
@@ -8,15 +9,30 @@ from utama_core.entities.referee.stage import Stage
 
 
 class RefereeRefiner(BaseRefiner):
-    def refine(self, game, data):
-        return game
-
+    def __init__(self):
         self._referee_records = []
 
+    def refine(self, game_frame, data: Optional[RefereeData]):
+        """Process referee data and update the game frame.
+
+        Args:
+            game_frame: Current GameFrame object
+            data: Referee data to process (None if no referee)
+
+        Returns:
+            Updated GameFrame with referee data attached, or the original frame if data is None
+        """
+        if data is None:
+            return game_frame
+
+        # Add to history
+        self.add_new_referee_data(data)
+
+        # Return a new GameFrame with referee data injected
+        return dataclasses.replace(game_frame, referee=data)
+
     def add_new_referee_data(self, referee_data: RefereeData) -> None:
-        if not self._referee_records:
-            self._referee_records.append(referee_data)
-        elif referee_data[1:] != self._referee_records[-1][1:]:
+        if not self._referee_records or referee_data != self._referee_records[-1]:
             self._referee_records.append(referee_data)
 
     def source_identifier(self) -> Optional[str]:

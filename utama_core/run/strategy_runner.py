@@ -20,9 +20,10 @@ from utama_core.config.settings import (
     MAX_GAME_HISTORY,
     TIMESTEP,
 )
-from utama_core.data_processing.receivers import VisionReceiver
+from utama_core.data_processing.receivers import RefereeMessageReceiver, VisionReceiver
 from utama_core.data_processing.refiners import (
     PositionRefiner,
+    RefereeRefiner,
     RobotInfoRefiner,
     VelocityRefiner,
 )
@@ -150,6 +151,7 @@ class StrategyRunner:
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 
         assert_valid_bounding_box(self.field_bounds)
+        self.referee_refiner = RefereeRefiner()
 
         self.my, self.opp = self._setup_sides_data(
             strategy, opp_strategy, filtering, control_scheme, opp_control_scheme
@@ -233,25 +235,23 @@ class StrategyRunner:
         # Start receiving game data; this will run in a separate thread.
         receiver.pull_game_data()
 
-    def start_threads(self, vision_receiver: VisionReceiver):  # , referee_receiver):
-        """Start background threads for receiving vision (and referee) data.
+    def start_threads(self, vision_receiver: VisionReceiver, referee_receiver: RefereeMessageReceiver):
+        """Start background threads for receiving vision and referee data.
 
         Starts daemon threads so they do not prevent process exit.
 
         Args:
             vision_receiver: VisionReceiver to run in a background thread.
+            referee_receiver: RefereeMessageReceiver to run in a background thread.
         """
-        # Start the data receiving in separate threads
         vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
-        # referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
+        referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
 
-        # Allows the thread to close when the main program exits
         vision_thread.daemon = True
-        # referee_thread.daemon = True
+        referee_thread.daemon = True
 
-        # Start both thread
         vision_thread.start()
-        # referee_thread.start()
+        referee_thread.start()
 
     def _setup_sides_data(
         self,
@@ -395,10 +395,10 @@ class StrategyRunner:
         """
         vision_buffers = [deque(maxlen=1) for _ in range(MAX_CAMERAS)]
         ref_buffer = deque(maxlen=1)
-        # referee_receiver = RefereeMessageReceiver(ref_buffer, debug=False)
         vision_receiver = VisionReceiver(vision_buffers)
         if self.mode != Mode.RSIM:
-            self.start_threads(vision_receiver)  # , referee_receiver)
+            referee_receiver = RefereeMessageReceiver(ref_buffer)
+            self.start_threads(vision_receiver, referee_receiver)
 
         return vision_buffers, ref_buffer
 
@@ -774,20 +774,28 @@ class StrategyRunner:
         """
         frame_start = time.perf_counter()
         if self.mode == Mode.RSIM:
-            vision_frames = [self.rsim_env._frame_to_observations()[0]]
+            obs = self.rsim_env._frame_to_observations()
+            if len(obs) == 4:
+                # New format with referee embedded in observations
+                vision_frames = [obs[0]]
+                referee_data = obs[3]
+            else:
+                # Standard format — check ref_buffer for externally injected referee data
+                vision_frames = [obs[0]]
+                referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
         else:
             vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
-        # referee_frame = ref_buffer.popleft()
+            referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
 
         # alternate between opp and friendly playing
         if self.toggle_opp_first:
             if self.opp:
-                self._step_game(vision_frames, True)
-            self._step_game(vision_frames, False)
+                self._step_game(vision_frames, referee_data, True)
+            self._step_game(vision_frames, referee_data, False)
         else:
-            self._step_game(vision_frames, False)
+            self._step_game(vision_frames, referee_data, False)
             if self.opp:
-                self._step_game(vision_frames, True)
+                self._step_game(vision_frames, referee_data, True)
         self.toggle_opp_first = not self.toggle_opp_first
 
         # --- rate limiting ---
@@ -807,8 +815,29 @@ class StrategyRunner:
             if self.elapsed_time >= FPS_PRINT_INTERVAL:
                 fps = self.num_frames_elapsed / self.elapsed_time
 
-                # Update the live FPS area (one line, no box)
-                self._fps_live.update(Text(f"FPS: {fps:.2f}"))
+                ref = self.referee_refiner
+                stage_secs = ref.stage_time_left
+                stage_min = int(stage_secs // 60)
+                stage_sec = int(stage_secs % 60)
+
+                display = Text()
+                display.append(f"FPS: {fps:.1f}", style="bold cyan")
+                display.append("  |  ")
+                display.append(ref.last_command.name, style="bold yellow")
+                display.append("  |  ")
+                display.append(ref.stage.name.replace("_", " ").title())
+                display.append("  |  Blue ")
+                display.append(str(ref.blue_team.score), style="bold blue")
+                display.append(" - ")
+                display.append(str(ref.yellow_team.score), style="bold yellow")
+                display.append(" Yellow")
+                display.append(f"  |  {stage_min}:{stage_sec:02d} left")
+
+                last_ref = self.referee_refiner._referee_records[-1] if self.referee_refiner._referee_records else None
+                if last_ref and last_ref.status_message:
+                    display.append(f"  |  {last_ref.status_message}", style="dim")
+
+                self._fps_live.update(display)
                 self._fps_live.refresh()
 
                 self.elapsed_time = 0.0
@@ -817,12 +846,14 @@ class StrategyRunner:
     def _step_game(
         self,
         vision_frames: List[RawVisionData],
+        referee_data,
         running_opp: bool,
     ):
         """Step the game for the robot controller and strategy.
 
         Args:
             vision_frames (List[RawVisionData]): The vision frames.
+            referee_data: The referee data from RSim or network receiver.
             running_opp (bool): Whether to run the opponent strategy.
         """
         side = self.opp if running_opp else self.my
@@ -834,7 +865,7 @@ class StrategyRunner:
         new_game_frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
         new_game_frame = side.velocity_refiner.refine(side.game_history, new_game_frame)  # , robot_frame.imu_data)
         new_game_frame = side.robot_info_refiner.refine(new_game_frame, responses)
-        # new_game_frame = self.referee_refiner.refine(new_game_frame, responses)
+        new_game_frame = self.referee_refiner.refine(new_game_frame, referee_data)
 
         # Store updated game frame
         side.current_game_frame = new_game_frame
