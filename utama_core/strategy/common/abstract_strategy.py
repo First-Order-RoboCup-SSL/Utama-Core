@@ -60,6 +60,13 @@ class AbstractStrategy(ABC):
     Base class for team strategies backed by behaviour trees.
     """
 
+    ### To be specified in your abstract strategy ###
+    # whether the strategy expects the ball to be present on the field
+    # if True, and strat_runner exp_ball is False, strat_runner will raise an error and not run the strategy
+    # if False, but ball exists, we will just rock on!
+    exp_ball: bool = True
+    #################################################
+
     def __init__(self):
         self.behaviour_tree = py_trees.trees.BehaviourTree(self.create_behaviour_tree())
 

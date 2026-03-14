@@ -6,16 +6,14 @@ from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.run import StrategyRunner
+from utama_core.strategy.examples import (
+    OscillatingObstacleStrategy,
+    SimpleNavigationStrategy,
+)
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
-)
-from utama_core.tests.motion_planning.strategies.oscillating_obstacle_strategy import (
-    OscillatingObstacleStrategy,
-)
-from utama_core.tests.motion_planning.strategies.simple_navigation_strategy import (
-    SimpleNavigationStrategy,
 )
 
 
@@ -73,12 +71,6 @@ class MovingObstacleTestManager(AbstractTestManager):
                 obstacle_config.center_position[1],
                 0.0,
             )
-
-        # Place ball at target (for visual reference)
-        sim_controller.teleport_ball(
-            self.scenario.target_position[0],
-            self.scenario.target_position[1],
-        )
 
         self._reset_metrics()
 
@@ -197,6 +189,7 @@ def test_single_robot_moving_obstacles(
         mode=mode,
         exp_friendly=1,
         exp_enemy=len(scenario.moving_obstacles),
+        exp_ball=False,
         opp_strategy=opp_strategy,
         opp_control_scheme="pid",  # Use PID so obstacles follow exact paths without avoiding the robot
     )

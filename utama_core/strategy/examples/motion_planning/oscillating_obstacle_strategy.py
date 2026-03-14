@@ -134,6 +134,8 @@ class OscillatingObstacleStrategy(AbstractStrategy):
         obstacle_configs: List of MovingObstacleConfig objects defining each obstacle's behavior
     """
 
+    exp_ball = False  # This strategy does not require the ball
+
     def __init__(self, obstacle_configs: List["MovingObstacleConfig"]):
         self.obstacle_configs = obstacle_configs
         super().__init__()
