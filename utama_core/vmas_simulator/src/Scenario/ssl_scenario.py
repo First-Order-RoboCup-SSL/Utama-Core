@@ -125,6 +125,12 @@ class SSLScenario(BaseScenario):
         for agent in self.blue_agents + self.yellow_agents:
             self.kick_cooldown[agent.name] = torch.zeros(batch_dim, device=device, dtype=torch.long)
 
+        self.all_agents = self.blue_agents + self.yellow_agents
+        self._agent_name_to_idx = {agent.name: idx for idx, agent in enumerate(self.all_agents)}
+        self.confirmed_holder = torch.full((batch_dim,), -1, device=device, dtype=torch.long)
+        self.candidate_holder = torch.full((batch_dim,), -1, device=device, dtype=torch.long)
+        self.candidate_frames = torch.zeros(batch_dim, device=device, dtype=torch.long)
+
         return world
 
     def _create_boundary_walls(self, world: World, fc: SSLFieldConfig):
@@ -233,6 +239,8 @@ class SSLScenario(BaseScenario):
             for name in self.kick_cooldown:
                 self.kick_cooldown[name][env_index] = 0
 
+        self._reset_possession_tracking(env_index)
+
     def _reset_agents(self, agents: list[Agent], formations: list[tuple], env_index: int = None):
         for i, agent in enumerate(agents):
             if i < len(formations):
@@ -292,12 +300,8 @@ class SSLScenario(BaseScenario):
         kick_action = agent.action.u[:, 3]  # (batch_dim,)
 
         agent_pos = agent.state.pos
-        ball_pos = self.ball.state.pos
         dc = self.cfg.dynamics
         fc = self.cfg.field_config
-
-        dist_to_ball = torch.norm(agent_pos - ball_pos, dim=-1)
-        in_range = dist_to_ball < dc.dribble_dist_threshold
 
         cos_rot = torch.cos(agent.state.rot.squeeze(-1))
         sin_rot = torch.sin(agent.state.rot.squeeze(-1))
@@ -305,10 +309,10 @@ class SSLScenario(BaseScenario):
 
         cooldown = self.kick_cooldown[agent.name]
         kick_ready = cooldown <= 0
-        kick_triggered = (kick_action > 0) & in_range & kick_ready
+        kick_triggered = (kick_action > 0) & self._has_ball(agent) & kick_ready
 
         if kick_triggered.any():
-            kick_speed_val = kick_action.clamp(min=0.0, max=dc.kick_speed)
+            kick_speed_val = torch.full_like(kick_action, dc.kick_speed)
 
             ball_vel = self.ball.state.vel
             existing_along_kick = (ball_vel * kick_dir).sum(dim=-1, keepdim=True)
@@ -344,9 +348,7 @@ class SSLScenario(BaseScenario):
         Must be called before collision forces push the ball away.
         """
         dribble_action = agent.action.u[:, 4]
-        dist_to_ball = torch.norm(agent.state.pos - self.ball.state.pos, dim=-1)
-        in_range = dist_to_ball < self.cfg.dynamics.dribble_dist_threshold
-        return (dribble_action > 0) & in_range
+        return (dribble_action > 0) & self._has_ball(agent)
 
     def process_dribble(self, agent: Agent, dribble_active: torch.Tensor):
         """Position-lock ball to kicker face (matches rSim hinge joint).
@@ -369,12 +371,80 @@ class SSLScenario(BaseScenario):
         self.ball.state.pos = self.ball.state.pos * (1 - mask) + target_pos * mask
         self.ball.state.vel = self.ball.state.vel * (1 - mask) + agent.state.vel * mask
 
+    def post_step(self):
+        """Update terminal state after physics so rewards reflect current-step events."""
+        self.steps += 1
+
+        fc = self.cfg.field_config
+        ball_x = self.ball.state.pos[:, 0]
+        ball_y = self.ball.state.pos[:, 1]
+
+        in_right_goal = (ball_x > fc.half_length) & (ball_y.abs() < fc.goal_width / 2)
+        in_left_goal = (ball_x < -fc.half_length) & (ball_y.abs() < fc.goal_width / 2)
+
+        self.goal_scored_blue = self.goal_scored_blue | in_right_goal
+        self.goal_scored_yellow = self.goal_scored_yellow | in_left_goal
+        self._update_ball_possession()
+
+    def _reset_possession_tracking(self, env_index: int = None):
+        if env_index is None:
+            self.confirmed_holder.fill_(-1)
+            self.candidate_holder.fill_(-1)
+            self.candidate_frames.zero_()
+        else:
+            self.confirmed_holder[env_index] = -1
+            self.candidate_holder[env_index] = -1
+            self.candidate_frames[env_index] = 0
+
+    def _is_ball_control_candidate(self, agent: Agent) -> torch.Tensor:
+        dist = torch.norm(agent.state.pos - self.ball.state.pos, dim=-1)
+        contact_dist = self.cfg.field_config.robot_radius + self.cfg.field_config.ball_radius
+        control_dist = min(self.cfg.dynamics.dribble_dist_threshold, contact_dist)
+        return dist <= control_dist
+
+    def _compute_candidate_holder(self) -> torch.Tensor:
+        if not self.all_agents:
+            return torch.full((self.world.batch_dim,), -1, device=self.world.device, dtype=torch.long)
+
+        contact_dist = self.cfg.field_config.robot_radius + self.cfg.field_config.ball_radius
+        control_dist = min(self.cfg.dynamics.dribble_dist_threshold, contact_dist)
+        dists = []
+        for agent in self.all_agents:
+            dist = torch.norm(agent.state.pos - self.ball.state.pos, dim=-1)
+            eligible = dist <= control_dist
+            dists.append(torch.where(eligible, dist, torch.full_like(dist, float("inf"))))
+
+        stacked = torch.stack(dists, dim=-1)
+        best_dist, best_idx = stacked.min(dim=-1)
+        return torch.where(best_dist.isfinite(), best_idx.long(), torch.full_like(best_idx, -1))
+
+    def _update_ball_possession(self):
+        candidate = self._compute_candidate_holder()
+        switched = candidate != self.candidate_holder
+        self.candidate_holder = torch.where(switched, candidate, self.candidate_holder)
+        self.candidate_frames = torch.where(
+            switched,
+            torch.ones_like(self.candidate_frames),
+            self.candidate_frames + 1,
+        )
+
+        ready_to_switch = (candidate != self.confirmed_holder) & (
+            self.candidate_frames >= self.cfg.dynamics.possession_confirm_steps
+        )
+        self.confirmed_holder = torch.where(ready_to_switch, candidate, self.confirmed_holder)
+
+    def _has_ball(self, agent: Agent) -> torch.Tensor:
+        holder_id = self._agent_name_to_idx.get(agent.name, -1)
+        if holder_id < 0:
+            return torch.zeros(self.world.batch_dim, device=self.world.device, dtype=torch.bool)
+        return self.confirmed_holder == holder_id
+
     def observation(self, agent: Agent) -> torch.Tensor:
         """Per-agent ego-centric observation vector. Shape: (batch_dim, obs_size).
 
         Contents (all positions relative to agent):
           - Own velocity (2) + angular velocity (1) + rotation (1) = 4
-          - Has ball (1) — 1.0 if ball within dribble threshold, else 0.0
+          - Has ball (1) — 1.0 if possession has been confirmed, else 0.0
           - Ball relative position (2) + ball velocity (2) = 4
           - Per teammate (n_team - 1): relative position (2)
           - Per opponent (n_opp): relative position (2)
@@ -391,9 +461,8 @@ class SSLScenario(BaseScenario):
             obs_parts.append(torch.zeros(self.world.batch_dim, 1, device=self.world.device))
         obs_parts.append(agent.state.rot)  # (batch, 1)
 
-        # Has ball (binary: ball within dribble threshold)
-        dist_to_ball = torch.norm(agent.state.pos - self.ball.state.pos, dim=-1, keepdim=True)
-        has_ball = (dist_to_ball < self.cfg.dynamics.dribble_dist_threshold).float()
+        # Has ball (binary: possession confirmation)
+        has_ball = self._has_ball(agent).unsqueeze(-1).float()
         obs_parts.append(has_ball)  # (batch, 1)
 
         # Ball relative
@@ -452,20 +521,7 @@ class SSLScenario(BaseScenario):
 
     def done(self) -> torch.Tensor:
         """Episode ends when a goal is scored or max steps reached."""
-        self.steps += 1
-
-        fc = self.cfg.field_config
-        ball_x = self.ball.state.pos[:, 0]
-        ball_y = self.ball.state.pos[:, 1]
-
-        # Goal detection
-        in_right_goal = (ball_x > fc.half_length) & (ball_y.abs() < fc.goal_width / 2)
-        in_left_goal = (ball_x < -fc.half_length) & (ball_y.abs() < fc.goal_width / 2)
-
-        self.goal_scored_blue = self.goal_scored_blue | in_right_goal
-        self.goal_scored_yellow = self.goal_scored_yellow | in_left_goal
-
-        goal_scored = in_right_goal | in_left_goal
+        goal_scored = self.goal_scored_blue | self.goal_scored_yellow
         timeout = self.steps >= self.cfg.max_steps
 
         return goal_scored | timeout

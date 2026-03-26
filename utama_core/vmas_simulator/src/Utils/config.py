@@ -33,6 +33,7 @@ class SSLDynamicsConfig:
     kick_damp_factor: float = 0.2  # rSim: preserve 20% of existing ball momentum on kick
     kick_cooldown_steps: int = 10  # rSim: 10-iteration cooldown between kicks
     dribble_dist_threshold: float = 0.12  # robot_radius + ball_radius + margin (VMAS uses sphere robots)
+    possession_confirm_steps: int = 2  # require stable contact before reporting ball possession
     collision_force: float = 5.0  # Low penalty stiffness; actual momentum from our push/bounce
     ball_speed_dead_zone: float = 0.01  # rSim: stop ball below this speed (m/s)
     ball_restitution: float = 0.5  # rSim bounce coefficient

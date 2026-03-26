@@ -87,6 +87,7 @@ class VmasSSL:
         """Reset using a Frame object (matches RSimSSL.reset interface)."""
         self._prev_vel.clear()
         self._has_ball.clear()
+        self.scenario._reset_possession_tracking(env_index=None)
         # Reset kick cooldowns
         for name in self.scenario.kick_cooldown:
             self.scenario.kick_cooldown[name].zero_()
@@ -131,7 +132,6 @@ class VmasSSL:
         Velocity-based control with acceleration rate limiting to match rSim.
         """
         dt = self.world.dt
-        dc = self.scenario.cfg.dynamics
 
         # Build dribbler state lookup for ball push logic
         dribbler_on: dict[tuple[bool, int], bool] = {}
@@ -194,10 +194,6 @@ class VmasSSL:
                 ang_vel = torch.tensor([[v_theta]], device=self.device, dtype=torch.float32).expand(self.num_envs, -1)
                 agent.state.ang_vel = ang_vel
 
-            # Update rotation by integrating angular velocity
-            new_rot = agent.state.rot + v_theta * dt
-            agent.set_rot(new_rot, batch_index=None)
-
         # Ball push: transfer momentum from robot contact (dribbler off)
         self._apply_robot_ball_push(commands, dribbler_on)
 
@@ -240,20 +236,17 @@ class VmasSSL:
         self.world.step()
 
         # Post-step: dribble position-lock using pre-step range check
-        # and update ball possession tracking
-        dc = self.scenario.cfg.dynamics
-        ball_pos = self.scenario.ball.state.pos
         for agent in agents_with_actions:
             dribble_active = dribble_masks[agent.name]
             self.scenario.process_dribble(agent, dribble_active)
 
-            # Track ball possession: dribbling OR within contact distance
-            dist = torch.norm(agent.state.pos - ball_pos, dim=-1)
-            in_contact = dist < dc.dribble_dist_threshold
-            self._has_ball[agent.name] = bool(dribble_active.any().item() or in_contact.any().item())
-
         # Post-step: ball dead zone, wall/robot bounce
         self._apply_ball_post_processing()
+        self.scenario._update_ball_possession()
+        self._has_ball = {
+            agent.name: bool(self.scenario._has_ball(agent)[0].item())
+            for agent in self.scenario.blue_agents + self.scenario.yellow_agents
+        }
 
     def _apply_robot_ball_push(
         self,

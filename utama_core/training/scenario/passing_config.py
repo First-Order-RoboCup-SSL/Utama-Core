@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import IntEnum
-from typing import Literal
 
 
 class MacroAction(IntEnum):
@@ -74,6 +73,9 @@ class PassingDynamicsConfig:
     dribble_force: float = 7.5
     dribble_release_damping: float = 0.35
     dribble_dist_threshold: float = 0.12
+    capture_target_radius: float = 0.25  # reinterpret near-ball nav targets as front-contact capture targets
+    capture_lock_radius: float = 0.4  # once near the ball, ignore through-ball targets until possession is secured
+    capture_target_overlap: float = 0.01  # press slightly through the contact point so physics resolves into real touch
     possession_cone_cos: float = 0.5
     pass_min_ball_travel: float = 0.45
     pass_confirm_frames: int = 2
@@ -89,7 +91,7 @@ class PassingDynamicsConfig:
     # Action space mode (at most one should be True; both False = legacy 6D)
     use_macro_actions: bool = False  # 3D macro-actions [selector, target_x, target_y]
     use_unified_actions: bool = True  # 4D unified [target_x, target_y, target_oren, kick_intent]
-    physics_mode: Literal["force_based", "kinematic_legacy"] = "force_based"
+    physics_mode: str = "force_based"
 
     # Macro-action configuration (only when use_macro_actions=True)
     n_macro_actions: int = 4  # GO_TO_BALL, KICK_TO, DRIBBLE_TO, MOVE_TO
@@ -113,20 +115,25 @@ class PassingRewardConfig:
     ball_out_of_bounds: float = -0.3
 
     # Dense shaping — passer (delta-based: positive when distance decreases)
-    passer_to_ball_weight: float = 5.0  # Phase 1: passer approaches ball
+    passer_to_ball_weight: float = 5.0  # Phase 1: passer brings the dribbler contact point onto the ball
     ball_to_receiver_weight: float = 0.5  # Phase 2: ball→receiver (dribble/pass)
 
     # Dense shaping — passer orientation
+    passer_face_ball_weight: float = 0.3  # Auxiliary pre-capture orientation reward
     passer_face_receiver_weight: float = 0.5  # Reward for passer turning to face receiver
+    passer_settle_capture_radius: float = 0.18  # Near-ball window where overshoot/orbit penalties activate
+    passer_overshoot_speed_penalty: float = 0.15  # Penalize moving away from the ball near capture
+    passer_orbit_speed_penalty: float = 0.1  # Penalize tangential motion near capture for holonomic robots
 
     # Ball possession — encourages dribble activation
     has_ball_reward: float = 0.1  # Per-step reward when passer holds ball
+    acquire_ball_reward: float = 0.5  # One-shot reward when passer secures possession
 
     # Kick alignment — one-shot bonus for kicking toward receiver
     kick_alignment_weight: float = 0.5  # cos(facing, to_receiver), clamped >= 0
 
     # Dense shaping — receiver
-    receiver_to_ball_weight: float = 0.3  # Dense shaping: receiver moves toward ball
+    receiver_to_ball_weight: float = 0.3  # Dense shaping: receiver brings its dribbler contact point toward the ball
     receiver_face_ball_weight: float = 0.3  # Reward for facing the ball
 
     # Dense shaping — defenders

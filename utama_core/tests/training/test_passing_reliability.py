@@ -3,6 +3,7 @@
 import math
 
 import torch
+from tensordict import TensorDict
 
 from utama_core.training.scenario.passing_config import (
     PassingDynamicsConfig,
@@ -10,6 +11,7 @@ from utama_core.training.scenario.passing_config import (
     PassingScenarioConfig,
 )
 from utama_core.training.scenario.passing_scenario import PassingScenario
+from utama_core.training.task import SSLTask
 from utama_core.vmas_simulator.src.Utils.config import SSLDynamicsConfig
 
 
@@ -116,8 +118,168 @@ class TestRewardOrder:
         assert torch.equal(state01[0], state10[0])
         assert torch.equal(state01[1], state10[1])
 
+    def test_passer_phase2_requires_live_possession_or_active_pass(self):
+        scenario = _make_scenario()
+        scenario.confirmed_holder[:] = -1
+        scenario.last_attacker_holder[:] = 0
+        scenario.pass_active[:] = False
+
+        scenario.previous_metrics["passer_to_ball_dist"][:] = 0.4
+        scenario.current_metrics["passer_to_ball_dist"][:] = 0.6
+        scenario.previous_metrics["passer_capture_error"][:] = 0.4
+        scenario.current_metrics["passer_capture_error"][:] = 0.6
+        scenario.previous_metrics["ball_to_receiver_dist"][:] = 2.0
+        scenario.current_metrics["ball_to_receiver_dist"][:] = 1.0
+        scenario.previous_metrics["passer_facing_receiver_cos"][:] = 0.0
+        scenario.current_metrics["passer_facing_receiver_cos"][:] = 0.0
+
+        reward = scenario.reward(scenario.attackers[0]).clone()
+        info = scenario.info(scenario.attackers[0])
+
+        assert info["reward/pass_delta"].item() == 0.0
+        assert info["reward/approach_delta"].item() < 0.0
+        assert reward.item() < 0.0
+
+    def test_passer_capture_reward_penalizes_driving_past_ball(self):
+        scenario = _make_scenario()
+        contact_dist = scenario.cfg.field.robot_radius + scenario.cfg.field.ball_radius
+        ball_x = 0.2
+
+        _set_ball(scenario, ball_x, 0.0)
+        _set_robot(scenario.attackers[0], ball_x - contact_dist, 0.0, 0.0)
+        scenario.previous_metrics = scenario._clone_metrics(scenario._compute_metrics())
+
+        _set_robot(scenario.attackers[0], 0.16, 0.0, 0.0)
+        scenario.current_metrics = scenario._compute_metrics()
+
+        reward = scenario.reward(scenario.attackers[0]).clone()
+        info = scenario.info(scenario.attackers[0])
+
+        assert info["reward/approach_delta"].item() < 0.0
+        assert reward.item() < 0.0
+
+    def test_pre_possession_passer_does_not_get_face_receiver_reward(self):
+        scenario = _make_scenario()
+        scenario.confirmed_holder[:] = -1
+        scenario.pass_active[:] = False
+        scenario.previous_metrics["passer_facing_ball_cos"][:] = 0.0
+        scenario.current_metrics["passer_facing_ball_cos"][:] = 0.0
+        scenario.previous_metrics["passer_facing_receiver_cos"][:] = 0.0
+        scenario.current_metrics["passer_facing_receiver_cos"][:] = 1.0
+
+        reward = scenario.reward(scenario.attackers[0]).clone()
+        info = scenario.info(scenario.attackers[0])
+
+        assert info["reward/face_receiver"].item() == 0.0
+        assert reward.item() == 0.0
+
+    def test_near_ball_overshoot_and_orbit_penalties_apply_before_possession(self):
+        scenario = _make_scenario()
+        scenario.confirmed_holder[:] = -1
+        scenario.pass_active[:] = False
+        scenario.previous_metrics["passer_capture_error"][:] = 0.05
+        scenario.current_metrics["passer_capture_error"][:] = 0.05
+        scenario.previous_metrics["passer_ball_radial_speed"][:] = 0.0
+        scenario.current_metrics["passer_ball_radial_speed"][:] = -1.2
+        scenario.previous_metrics["passer_ball_tangential_speed"][:] = 0.0
+        scenario.current_metrics["passer_ball_tangential_speed"][:] = 0.6
+
+        reward = scenario.reward(scenario.attackers[0]).clone()
+        info = scenario.info(scenario.attackers[0])
+
+        assert info["reward/overshoot_speed"].item() < 0.0
+        assert info["reward/orbit_speed"].item() < 0.0
+        assert reward.item() < 0.0
+
+    def test_acquire_ball_reward_fires_once_on_possession_transition(self):
+        scenario = _make_scenario()
+        scenario.previous_metrics["passer_has_ball"][:] = 0.0
+        scenario.current_metrics["passer_has_ball"][:] = 1.0
+        scenario.previous_metrics["passer_facing_ball_cos"][:] = 0.0
+        scenario.current_metrics["passer_facing_ball_cos"][:] = 0.0
+        scenario.previous_metrics["passer_facing_receiver_cos"][:] = 0.0
+        scenario.current_metrics["passer_facing_receiver_cos"][:] = 0.0
+        scenario.previous_metrics["ball_to_receiver_dist"][:] = 0.0
+        scenario.current_metrics["ball_to_receiver_dist"][:] = 0.0
+        scenario.previous_metrics["passer_to_ball_dist"][:] = 0.0
+        scenario.current_metrics["passer_to_ball_dist"][:] = 0.0
+        scenario.previous_metrics["passer_capture_error"][:] = 0.0
+        scenario.current_metrics["passer_capture_error"][:] = 0.0
+
+        reward = scenario.reward(scenario.attackers[0]).clone()
+        info = scenario.info(scenario.attackers[0])
+
+        assert info["reward/acquire_ball"].item() == scenario.cfg.rewards.acquire_ball_reward
+        assert reward.item() >= scenario.cfg.rewards.acquire_ball_reward
+
+    def test_receiver_approach_reward_waits_for_released_pass(self):
+        scenario = _make_scenario()
+        receiver = scenario.attackers[1]
+
+        scenario.pass_active[:] = False
+        scenario.previous_metrics["receiver_to_ball_dist"][:] = 3.0
+        scenario.current_metrics["receiver_to_ball_dist"][:] = 2.0
+        scenario.previous_metrics["receiver_capture_error"][:] = 3.0
+        scenario.current_metrics["receiver_capture_error"][:] = 2.0
+        scenario.previous_metrics["receiver_facing_ball_cos"][:] = 0.0
+        scenario.current_metrics["receiver_facing_ball_cos"][:] = 0.0
+
+        reward = scenario.reward(receiver).clone()
+        info = scenario.info(receiver)
+
+        assert info["reward/recv_approach"].item() == 0.0
+        assert reward.item() == 0.0
+
+        scenario.pass_active[:] = True
+        reward = scenario.reward(receiver).clone()
+        info = scenario.info(receiver)
+
+        assert info["reward/recv_approach"].item() > 0.0
+        assert reward.item() > 0.0
+
 
 class TestPassDetection:
+    def test_authoritative_has_ball_stays_false_until_confirmation(self):
+        scenario = _make_scenario()
+        _set_robot(scenario.attackers[0], 0.0, 0.0, 0.0)
+        _set_ball(scenario, 0.08, 0.0)
+
+        scenario._update_possession_and_pass_state()
+        assert not scenario._has_ball(scenario.attackers[0]).item()
+
+        scenario._update_possession_and_pass_state()
+        assert scenario._has_ball(scenario.attackers[0]).item()
+
+    def test_precontact_gap_does_not_count_as_possession(self):
+        scenario = _make_scenario()
+        contact_dist = scenario.cfg.field.robot_radius + scenario.cfg.field.ball_radius
+        _set_robot(scenario.attackers[0], 0.0, 0.0, 0.0)
+        _set_ball(scenario, contact_dist + 0.003, 0.0)
+
+        _confirm_holder(scenario)
+
+        assert not scenario._is_ball_control_candidate(scenario.attackers[0]).item()
+        assert not scenario._has_ball(scenario.attackers[0]).item()
+
+    def test_candidate_contact_does_not_enable_preconfirmation_ball_control(self):
+        scenario = _make_scenario()
+        passer = scenario.attackers[0]
+        _set_robot(passer, 0.0, 0.0, 0.0)
+        _set_ball(scenario, 0.08, 0.0)
+
+        _step_scenario(
+            scenario,
+            {
+                "attacker_0": torch.tensor([[0.0, 0.0, 0.0, 1.0]], dtype=torch.float32),
+                "attacker_1": torch.tensor([[1.5, -2.5, 0.0, -1.0]], dtype=torch.float32),
+                "defender_0": torch.zeros(1, 4),
+            },
+        )
+        assert not scenario._has_ball(passer).item()
+        assert not scenario.kick_fired["attacker_0"].item()
+        contact_dist = scenario.cfg.field.robot_radius + scenario.cfg.field.ball_radius
+        assert scenario.ball.state.pos[0, 0].item() >= contact_dist - 1e-5
+
     def test_true_pass_requires_release_and_receiver_confirmation(self):
         scenario = _make_scenario()
         _set_robot(scenario.attackers[0], 0.0, 0.0, 0.0)
@@ -184,6 +346,91 @@ class TestPassDetection:
 
 
 class TestDeterminismAndPhysics:
+    def test_post_step_dribble_lock_keeps_ball_at_kicker_face(self):
+        scenario = _make_scenario()
+        passer = scenario.attackers[0]
+        _set_robot(passer, 0.0, 0.0, 0.0)
+        _set_ball(scenario, 0.02, 0.0)
+        scenario.confirmed_holder[:] = 0
+        scenario.kick_fired[passer.name][:] = False
+        scenario._step_requests[passer.name] = {
+            "kick_request": torch.zeros(1, dtype=torch.bool),
+            "dribble_request": torch.ones(1, dtype=torch.bool),
+            "kick_alignment": torch.zeros(1),
+        }
+
+        scenario._apply_ball_effects_post_step()
+
+        contact_dist = scenario.cfg.field.robot_radius + scenario.cfg.field.ball_radius
+        assert torch.allclose(
+            scenario.ball.state.pos,
+            torch.tensor([[contact_dist, 0.0]], dtype=torch.float32),
+            atol=1e-6,
+        )
+
+    def test_scripted_go_to_ball_rollout_reaches_confirmed_possession(self):
+        task = SSLTask.from_name("ssl_2v0_unified")
+        env = task.get_env_fun(num_envs=1, continuous_actions=True, seed=0, device="cpu")()
+        try:
+            env.reset()
+            scenario = env._env.scenario
+
+            for _ in range(180):
+                scenario = env._env.scenario
+                ball_pos = scenario.ball.state.pos[0]
+                passer = scenario.attackers[0]
+                receiver = scenario.attackers[1]
+                to_ball = ball_pos - passer.state.pos[0]
+                target_oren = math.atan2(to_ball[1].item(), to_ball[0].item())
+                actions = TensorDict(
+                    {
+                        "passer": TensorDict(
+                            {
+                                "action": torch.tensor(
+                                    [
+                                        [
+                                            [
+                                                ball_pos[0].item() / scenario.cfg.field.half_length,
+                                                ball_pos[1].item() / scenario.cfg.field.half_width,
+                                                target_oren / math.pi,
+                                                -1.0,
+                                            ]
+                                        ]
+                                    ],
+                                    dtype=torch.float32,
+                                )
+                            },
+                            batch_size=[1, 1],
+                        ),
+                        "receiver": TensorDict(
+                            {
+                                "action": torch.tensor(
+                                    [
+                                        [
+                                            [
+                                                receiver.state.pos[0, 0].item() / scenario.cfg.field.half_length,
+                                                receiver.state.pos[0, 1].item() / scenario.cfg.field.half_width,
+                                                receiver.state.rot[0, 0].item() / math.pi,
+                                                -1.0,
+                                            ]
+                                        ]
+                                    ],
+                                    dtype=torch.float32,
+                                )
+                            },
+                            batch_size=[1, 1],
+                        ),
+                    },
+                    batch_size=[1],
+                )
+                env.step(actions)
+                if env._env.scenario._has_ball(env._env.scenario.attackers[0]).item():
+                    break
+
+            assert env._env.scenario._has_ball(env._env.scenario.attackers[0]).item()
+        finally:
+            env.close()
+
     def test_rollout_is_deterministic(self):
         scenario_a = _make_scenario()
         scenario_b = _make_scenario()
@@ -220,12 +467,14 @@ class TestDeterminismAndPhysics:
         scenario = _make_scenario()
         _set_robot(scenario.attackers[0], 0.0, 0.0, 0.0)
         _set_ball(scenario, 0.08, 0.0)
+        _confirm_holder(scenario)
         action = {"attacker_0": torch.tensor([[4.0, 0.0, 0.0, 1.0]])}
         _step_scenario(scenario, action)
         first_kick = scenario.kick_fired["attacker_0"].clone()
 
         _set_robot(scenario.attackers[0], 0.0, 0.0, 0.0)
         _set_ball(scenario, 0.08, 0.0)
+        scenario.confirmed_holder[:] = 0
         _step_scenario(scenario, action)
         second_kick = scenario.kick_fired["attacker_0"].clone()
 

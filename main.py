@@ -3,7 +3,6 @@ from utama_core.replay import ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import StrategyRunner
 from utama_core.strategy.examples import (
-    D,
     DefenceStrategy,
     GoToBallExampleStrategy,
     RandomMovementStrategy,

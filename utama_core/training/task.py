@@ -1,5 +1,6 @@
 """Custom BenchMARL task wrapper for SSL scenarios."""
 
+import copy
 import math
 from typing import Callable, Dict, List, Optional
 
@@ -164,7 +165,6 @@ class SSLTask(TaskClass):
         seed: Optional[int],
         device: DEVICE_TYPING,
     ) -> Callable[[], EnvBase]:
-        scenario = self._scenario_class()
         config = self._scenario_config
 
         # Each agent gets its own group for independent policies
@@ -177,7 +177,7 @@ class SSLTask(TaskClass):
             group_map[f"defender_{i}"] = [f"defender_{i}"]
 
         return lambda: VmasEnv(
-            scenario=scenario,
+            scenario=self._scenario_class(),
             num_envs=num_envs,
             continuous_actions=continuous_actions,
             seed=seed,
@@ -185,7 +185,7 @@ class SSLTask(TaskClass):
             max_steps=None,  # Scenario's done() handles termination
             categorical_actions=True,
             clamp_actions=True,
-            scenario_config=config,
+            scenario_config=copy.deepcopy(config),
             group_map=group_map,
         )
 

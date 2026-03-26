@@ -201,6 +201,15 @@ class PassingScenario(BaseScenario):
             self.walls.append((name, wall, x_sign * fc.half_length, 0.0))
 
     def reset_world_at(self, env_index: int = None):
+        if env_index is None:
+            self._reset_world_batch()
+            self.global_frame = 0
+            self._reward_components.clear()
+            self._step_requests.clear()
+            self._agents_processed_this_step = 0
+            self._needs_metric_commit = False
+            return
+
         fc = self.cfg.field
         rcfg = self.cfg.reset_randomization
         device = self.world.device
@@ -274,9 +283,96 @@ class PassingScenario(BaseScenario):
 
         self._reset_tracking(env_index)
 
+    def _reset_world_batch(self) -> None:
+        batch_dim = self.world.batch_dim
+        fc = self.cfg.field
+        rcfg = self.cfg.reset_randomization
+        device = self.world.device
+
+        if rcfg.benchmark_reset:
+            ball_pos = torch.tensor([1.0, 2.0], device=device, dtype=torch.float32).unsqueeze(0).expand(batch_dim, -1)
+        else:
+            ball_pos = torch.stack(
+                [
+                    self._sample_scalars(rcfg.ball_x_range, batch_dim),
+                    self._sample_scalars(rcfg.ball_y_range, batch_dim),
+                ],
+                dim=-1,
+            )
+
+        goal_center = torch.tensor([fc.half_length, 0.0], device=device, dtype=torch.float32).unsqueeze(0)
+        self._set_entity_state_batch(self.ball, ball_pos)
+
+        if self.cfg.n_attackers >= 1:
+            if rcfg.benchmark_reset:
+                angle = torch.full((batch_dim,), 0.35, device=device, dtype=torch.float32)
+                radius = torch.full((batch_dim,), 1.0, device=device, dtype=torch.float32)
+            else:
+                angle = self._sample_scalars(rcfg.passer_angle_range, batch_dim)
+                radius = self._sample_scalars(rcfg.passer_radius_range, batch_dim)
+            offset = torch.stack([radius * torch.cos(angle), radius * torch.sin(angle)], dim=-1)
+            passer_pos = ball_pos - offset
+            self._set_robot_state_batch(self.attackers[0], passer_pos, goal_center - passer_pos)
+
+        if self.cfg.n_attackers >= 2:
+            if rcfg.benchmark_reset:
+                receiver_pos = (
+                    torch.tensor([1.5, -2.5], device=device, dtype=torch.float32).unsqueeze(0).expand(batch_dim, -1)
+                )
+                receiver_rot = torch.zeros(batch_dim, 1, device=device, dtype=torch.float32)
+            else:
+                receiver_pos = torch.stack(
+                    [
+                        self._sample_scalars(rcfg.receiver_x_range, batch_dim),
+                        self._sample_scalars(rcfg.receiver_y_range, batch_dim),
+                    ],
+                    dim=-1,
+                )
+                receiver_rot = self._sample_scalars(rcfg.receiver_rot_range, batch_dim).unsqueeze(-1)
+            self._set_robot_state_batch(
+                self.attackers[1],
+                receiver_pos,
+                None,
+                explicit_rot=receiver_rot,
+            )
+
+        if self.cfg.n_defenders >= 1:
+            if rcfg.benchmark_reset:
+                dist = torch.full((batch_dim, 1), 0.75, device=device, dtype=torch.float32)
+            else:
+                dist = self._sample_scalars(rcfg.defender0_distance_range, batch_dim).unsqueeze(-1)
+            vec_to_goal = goal_center - ball_pos
+            vec_to_goal = vec_to_goal / torch.norm(vec_to_goal, dim=-1, keepdim=True).clamp(min=1e-8)
+            defender_pos = ball_pos + vec_to_goal * dist
+            self._set_robot_state_batch(self.defenders[0], defender_pos, ball_pos - defender_pos)
+
+        if self.cfg.n_defenders >= 2:
+            if rcfg.benchmark_reset:
+                defender_pos = (
+                    torch.tensor([1.5, -2.0], device=device, dtype=torch.float32).unsqueeze(0).expand(batch_dim, -1)
+                )
+            else:
+                defender_pos = torch.stack(
+                    [
+                        self._sample_scalars(rcfg.defender1_x_range, batch_dim),
+                        self._sample_scalars(rcfg.defender1_y_range, batch_dim),
+                    ],
+                    dim=-1,
+                )
+            self._set_robot_state_batch(self.defenders[1], defender_pos, ball_pos - defender_pos)
+
+        for _, wall, wx, wy in self.walls:
+            self._set_entity_state_batch(wall, torch.tensor([wx, wy], device=device, dtype=torch.float32))
+
+        self._reset_tracking(env_index=None)
+
     def _sample_scalar(self, bounds: tuple[float, float]) -> Tensor:
         low, high = bounds
         return torch.empty((), device=self.world.device).uniform_(low, high)
+
+    def _sample_scalars(self, bounds: tuple[float, float], count: int) -> Tensor:
+        low, high = bounds
+        return torch.empty(count, device=self.world.device).uniform_(low, high)
 
     def _set_robot_state(
         self,
@@ -308,6 +404,29 @@ class PassingScenario(BaseScenario):
             if hasattr(agent.state, "ang_vel") and agent.state.ang_vel is not None:
                 agent.state.ang_vel[env_index] = 0.0
 
+    def _set_robot_state_batch(
+        self,
+        agent: Agent,
+        pos: Tensor,
+        facing_vec: Tensor | None,
+        explicit_rot: Tensor | None = None,
+    ) -> None:
+        if explicit_rot is None:
+            if facing_vec is None:
+                rot = torch.zeros(self.world.batch_dim, 1, device=self.world.device, dtype=torch.float32)
+            else:
+                rot = torch.atan2(facing_vec[:, 1], facing_vec[:, 0]).unsqueeze(-1)
+        else:
+            rot = explicit_rot
+            if rot.ndim == 1:
+                rot = rot.unsqueeze(-1)
+
+        agent.set_pos(pos, batch_index=None)
+        agent.set_vel(torch.zeros(self.world.batch_dim, 2, device=self.world.device), batch_index=None)
+        agent.set_rot(rot.to(device=self.world.device, dtype=torch.float32), batch_index=None)
+        if hasattr(agent.state, "ang_vel") and agent.state.ang_vel is not None:
+            agent.state.ang_vel = torch.zeros(self.world.batch_dim, 1, device=self.world.device)
+
     def _set_entity_state(self, entity, x, y, env_index, movable=True):
         pos = torch.tensor([x, y], device=self.world.device, dtype=torch.float32)
         if env_index is None:
@@ -318,6 +437,13 @@ class PassingScenario(BaseScenario):
             entity.set_pos(pos, batch_index=env_index)
             if movable:
                 entity.set_vel(torch.zeros(2, device=self.world.device), batch_index=env_index)
+
+    def _set_entity_state_batch(self, entity, pos: Tensor, movable: bool = True):
+        if pos.ndim == 1:
+            pos = pos.unsqueeze(0).expand(self.world.batch_dim, -1)
+        entity.set_pos(pos.to(device=self.world.device, dtype=torch.float32), batch_index=None)
+        if movable:
+            entity.set_vel(torch.zeros(self.world.batch_dim, 2, device=self.world.device), batch_index=None)
 
     def _reset_tracking(self, env_index: int | None) -> None:
         batch_dim = self.world.batch_dim
@@ -392,11 +518,20 @@ class PassingScenario(BaseScenario):
     def _empty_metrics(self, batch_dim: int, device: torch.device) -> dict[str, Any]:
         return {
             "passer_to_ball_dist": torch.zeros(batch_dim, device=device),
+            "passer_capture_error": torch.zeros(batch_dim, device=device),
+            "passer_facing_ball_cos": torch.zeros(batch_dim, device=device),
+            "passer_ball_radial_speed": torch.zeros(batch_dim, device=device),
+            "passer_ball_tangential_speed": torch.zeros(batch_dim, device=device),
+            "passer_has_ball": torch.zeros(batch_dim, device=device),
             "ball_to_receiver_dist": torch.zeros(batch_dim, device=device),
             "receiver_to_ball_dist": torch.zeros(batch_dim, device=device),
+            "receiver_capture_error": torch.zeros(batch_dim, device=device),
             "receiver_facing_ball_cos": torch.zeros(batch_dim, device=device),
+            "receiver_has_ball": torch.zeros(batch_dim, device=device),
             "passer_facing_receiver_cos": torch.zeros(batch_dim, device=device),
-            "defender_to_ball_dist": {},
+            "defender_to_ball_dist": {
+                defender.name: torch.zeros(batch_dim, device=device) for defender in self.defenders
+            },
             "ball_speed": torch.zeros(batch_dim, device=device),
         }
 
@@ -415,11 +550,20 @@ class PassingScenario(BaseScenario):
         metrics["ball_speed"] = torch.norm(self.ball.state.vel, dim=-1)
         if self.cfg.n_attackers >= 1:
             metrics["passer_to_ball_dist"] = torch.norm(self.attackers[0].state.pos - ball_pos, dim=-1)
+            metrics["passer_capture_error"] = self._capture_error(self.attackers[0], ball_pos)
+            metrics["passer_facing_ball_cos"] = self._facing_cos(self.attackers[0], ball_pos)
+            radial_speed, tangential_speed = self._ball_motion_components(self.attackers[0], ball_pos)
+            metrics["passer_ball_radial_speed"] = radial_speed
+            metrics["passer_ball_tangential_speed"] = tangential_speed
+            metrics["passer_has_ball"] = self._has_ball(self.attackers[0]).float()
         if self.cfg.n_attackers >= 2:
             receiver = self.attackers[1]
-            metrics["ball_to_receiver_dist"] = torch.norm(ball_pos - receiver.state.pos, dim=-1)
-            metrics["receiver_to_ball_dist"] = torch.norm(receiver.state.pos - ball_pos, dim=-1)
+            recv_ball_dist = torch.norm(ball_pos - receiver.state.pos, dim=-1)
+            metrics["ball_to_receiver_dist"] = recv_ball_dist
+            metrics["receiver_to_ball_dist"] = recv_ball_dist
+            metrics["receiver_capture_error"] = self._capture_error(receiver, ball_pos)
             metrics["receiver_facing_ball_cos"] = self._facing_cos(receiver, ball_pos)
+            metrics["receiver_has_ball"] = self._has_ball(receiver).float()
             metrics["passer_facing_receiver_cos"] = self._facing_cos(self.attackers[0], receiver.state.pos)
         for defender in self.defenders:
             metrics["defender_to_ball_dist"][defender.name] = torch.norm(defender.state.pos - ball_pos, dim=-1)
@@ -432,11 +576,124 @@ class PassingScenario(BaseScenario):
         facing = torch.stack([torch.cos(rot), torch.sin(rot)], dim=-1)
         return (facing * to_target).sum(dim=-1)
 
-    def _has_ball(self, agent: Agent) -> Tensor:
+    def _contact_point(self, agent: Agent) -> Tensor:
+        contact_dist = self.cfg.field.robot_radius + self.cfg.field.ball_radius
+        return agent.state.pos + self._agent_facing(agent) * contact_dist
+
+    def _capture_control_targets(
+        self,
+        agent: Agent,
+        requested_target: Tensor,
+        requested_oren: Tensor | None = None,
+        *,
+        force_capture: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None, Tensor]:
+        has_ball = self._has_ball(agent)
+        to_ball = self.ball.state.pos - agent.state.pos
+        to_ball_dist = torch.norm(to_ball, dim=-1, keepdim=True)
+        facing = self._agent_facing(agent)
+        approach_dir = torch.where(
+            to_ball_dist > 1e-6,
+            to_ball / to_ball_dist.clamp(min=1e-8),
+            facing,
+        )
+        if force_capture is None:
+            target_to_ball_dist = torch.norm(requested_target - self.ball.state.pos, dim=-1)
+            close_to_ball = to_ball_dist.squeeze(-1) <= self.cfg.dynamics.capture_lock_radius
+            force_capture = (target_to_ball_dist <= self.cfg.dynamics.capture_target_radius) | close_to_ball
+        capture_mask = force_capture & ~has_ball
+
+        contact_dist = self.cfg.field.robot_radius + self.cfg.field.ball_radius
+        press_dist = max(contact_dist - self.cfg.dynamics.capture_target_overlap, 0.0)
+        capture_target = self.ball.state.pos - approach_dir * press_dist
+        nav_target = torch.where(capture_mask.unsqueeze(-1), capture_target, requested_target)
+
+        if requested_oren is None:
+            return nav_target, None, capture_mask
+
+        capture_oren = torch.atan2(approach_dir[:, 1], approach_dir[:, 0]).unsqueeze(-1)
+        orientation_target = torch.where(capture_mask.unsqueeze(-1), capture_oren, requested_oren)
+        return nav_target, orientation_target, capture_mask
+
+    def _capture_nav_target(
+        self,
+        agent: Agent,
+        requested_target: Tensor,
+        *,
+        force_capture: Tensor | None = None,
+    ) -> Tensor:
+        nav_target, _, _ = self._capture_control_targets(agent, requested_target, force_capture=force_capture)
+        return nav_target
+
+    def _capture_error(self, agent: Agent, ball_pos: Tensor | None = None) -> Tensor:
+        if ball_pos is None:
+            ball_pos = self.ball.state.pos
+        return torch.norm(self._contact_point(agent) - ball_pos, dim=-1)
+
+    def _ball_motion_components(self, agent: Agent, ball_pos: Tensor | None = None) -> tuple[Tensor, Tensor]:
+        if ball_pos is None:
+            ball_pos = self.ball.state.pos
+        to_ball = ball_pos - agent.state.pos
+        to_ball_dist = torch.norm(to_ball, dim=-1, keepdim=True).clamp(min=1e-8)
+        radial_dir = to_ball / to_ball_dist
+        radial_speed = (agent.state.vel * radial_dir).sum(dim=-1)
+        tangential_vel = agent.state.vel - radial_dir * radial_speed.unsqueeze(-1)
+        tangential_speed = torch.norm(tangential_vel, dim=-1)
+        return radial_speed, tangential_speed
+
+    def _resolve_ball_penetration(self) -> None:
+        contact_dist = self.cfg.field.robot_radius + self.cfg.field.ball_radius
+        ball_pos = self.ball.state.pos
+        ball_vel = self.ball.state.vel
+
+        for holder_id, agent in enumerate(self.attackers + self.defenders):
+            to_ball = ball_pos - agent.state.pos
+            dist = torch.norm(to_ball, dim=-1, keepdim=True)
+            overlapping = dist.squeeze(-1) < contact_dist
+            if not overlapping.any():
+                continue
+
+            facing = self._agent_facing(agent)
+            normal = torch.where(
+                dist > 1e-8,
+                to_ball / dist.clamp(min=1e-8),
+                facing,
+            )
+            separated_pos = agent.state.pos + normal * contact_dist
+            holder_mask = overlapping & (self.confirmed_holder == holder_id)
+            holder_pos = agent.state.pos + facing * contact_dist
+            ball_pos = torch.where(
+                overlapping.unsqueeze(-1),
+                torch.where(holder_mask.unsqueeze(-1), holder_pos, separated_pos),
+                ball_pos,
+            )
+
+            rel_vel = ball_vel - agent.state.vel
+            inward_speed = (rel_vel * normal).sum(dim=-1)
+            inward_mask = overlapping & (inward_speed < 0)
+            ball_vel = torch.where(
+                inward_mask.unsqueeze(-1),
+                ball_vel - normal * inward_speed.unsqueeze(-1),
+                ball_vel,
+            )
+            ball_vel = torch.where(holder_mask.unsqueeze(-1), agent.state.vel, ball_vel)
+
+        self.ball.state.pos = ball_pos
+        self.ball.state.vel = ball_vel
+
+    def _is_ball_control_candidate(self, agent: Agent) -> Tensor:
         dist = torch.norm(self.ball.state.pos - agent.state.pos, dim=-1)
-        return (dist < self.cfg.dynamics.dribble_dist_threshold) & (
+        contact_dist = self.cfg.field.robot_radius + self.cfg.field.ball_radius
+        control_dist = min(self.cfg.dynamics.dribble_dist_threshold, contact_dist)
+        return (dist <= control_dist) & (
             self._facing_cos(agent, self.ball.state.pos) >= self.cfg.dynamics.possession_cone_cos
         )
+
+    def _has_ball(self, agent: Agent) -> Tensor:
+        holder_id = self._holder_name_to_id.get(agent.name, -1)
+        if holder_id < 0:
+            return torch.zeros(self.world.batch_dim, device=self.world.device, dtype=torch.bool)
+        return self.confirmed_holder == holder_id
 
     def process_action(self, agent: Agent):
         self._begin_step_if_needed()
@@ -502,8 +759,9 @@ class PassingScenario(BaseScenario):
             min=torch.tensor([-fc.half_length, -fc.half_width], device=u.device),
             max=torch.tensor([fc.half_length, fc.half_width], device=u.device),
         )
+        nav_target, target_oren, _ = self._capture_control_targets(agent, target_pos, target_oren)
 
-        desired_vel = self.pid_trans.calculate(agent.state.pos, target_pos, agent.name)
+        desired_vel = self.pid_trans.calculate(agent.state.pos, nav_target, agent.name)
         desired_ang = self.pid_oren.calculate(agent.state.rot, target_oren, agent.name)
         low_level = self._to_low_level_command(agent, desired_vel, desired_ang)
         agent.action.u = torch.cat([low_level, kick_intent.unsqueeze(-1)], dim=-1)
@@ -538,10 +796,12 @@ class PassingScenario(BaseScenario):
         is_kick = action_idx == MacroAction.KICK_TO
         is_drib = action_idx == MacroAction.DRIBBLE_TO
 
-        drib_nav = torch.where(has_ball.unsqueeze(-1), target_pos, ball_pos)
+        capture_request = is_go | is_kick | is_drib
+        ball_nav = self._capture_nav_target(agent, ball_pos, force_capture=capture_request)
+        drib_nav = torch.where(has_ball.unsqueeze(-1), target_pos, ball_nav)
         nav_target = torch.where(
             is_go.unsqueeze(-1) | is_kick.unsqueeze(-1),
-            ball_pos,
+            ball_nav,
             torch.where(is_drib.unsqueeze(-1), drib_nav, target_pos),
         )
 
@@ -584,8 +844,9 @@ class PassingScenario(BaseScenario):
             max=torch.tensor([fc.half_length, fc.half_width], device=u.device),
         )
         target_oren = u[:, 2:3]
+        nav_target, target_oren, _ = self._capture_control_targets(agent, target_pos, target_oren)
 
-        desired_vel = self.pid_trans.calculate(agent.state.pos, target_pos, agent.name)
+        desired_vel = self.pid_trans.calculate(agent.state.pos, nav_target, agent.name)
         desired_ang = self.pid_oren.calculate(agent.state.rot, target_oren, agent.name)
 
         has_ball = self._has_ball(agent)
@@ -648,8 +909,7 @@ class PassingScenario(BaseScenario):
 
     def _apply_ball_effects_pre_step(self) -> None:
         dc = self.cfg.dynamics
-        holder_candidate = self._compute_candidate_holder()
-        effective_holder = torch.where(self.confirmed_holder >= 0, self.confirmed_holder, holder_candidate)
+        effective_holder = self.confirmed_holder
 
         for name in self.kick_cooldown:
             self.kick_cooldown[name] = (self.kick_cooldown[name] - 1).clamp(min=0)
@@ -672,30 +932,31 @@ class PassingScenario(BaseScenario):
                     self.kick_cooldown[agent.name],
                 )
 
-            dribble_mask = holder_mask & req["dribble_request"] & ~can_kick
-            if dribble_mask.any():
-                front_offset = self._agent_facing(agent) * (self.cfg.field.robot_radius + self.cfg.field.ball_radius)
-                dribble_target = agent.state.pos + front_offset
-                attract_dir = dribble_target - self.ball.state.pos
-                if hasattr(self.ball.state, "force") and self.ball.state.force is not None:
-                    self.ball.state.force = (
-                        self.ball.state.force + attract_dir * dc.dribble_force * dribble_mask.unsqueeze(-1).float()
-                    )
-                else:
-                    self.ball.state.vel = self.ball.state.vel + (
-                        attract_dir * dc.dribble_force * dc.dt * dribble_mask.unsqueeze(-1).float()
-                    )
-
         self._agents_processed_this_step = 0
+
+    def _apply_ball_effects_post_step(self) -> None:
+        contact_dist = self.cfg.field.robot_radius + self.cfg.field.ball_radius
+        for holder_id, agent in enumerate(self.attackers + self.defenders):
+            req = self._step_requests.get(agent.name, self._empty_request(agent))
+            dribble_mask = (self.confirmed_holder == holder_id) & req["dribble_request"] & ~self.kick_fired[agent.name]
+            if not dribble_mask.any():
+                continue
+
+            front_offset = self._agent_facing(agent) * contact_dist
+            dribble_target = agent.state.pos + front_offset
+            self.ball.state.pos = torch.where(dribble_mask.unsqueeze(-1), dribble_target, self.ball.state.pos)
+            self.ball.state.vel = torch.where(dribble_mask.unsqueeze(-1), agent.state.vel, self.ball.state.vel)
 
     def _compute_candidate_holder(self) -> Tensor:
         if not self._agent_names:
             return torch.full((self.world.batch_dim,), -1, device=self.world.device, dtype=torch.long)
+        contact_dist = self.cfg.field.robot_radius + self.cfg.field.ball_radius
+        control_dist = min(self.cfg.dynamics.dribble_dist_threshold, contact_dist)
+        cone_cos = self.cfg.dynamics.possession_cone_cos
         dists = []
         for agent in self.attackers + self.defenders:
             dist = torch.norm(self.ball.state.pos - agent.state.pos, dim=-1)
-            facing_ok = self._facing_cos(agent, self.ball.state.pos) >= self.cfg.dynamics.possession_cone_cos
-            eligible = facing_ok & (dist < self.cfg.dynamics.dribble_dist_threshold)
+            eligible = (dist <= control_dist) & (self._facing_cos(agent, self.ball.state.pos) >= cone_cos)
             dists.append(torch.where(eligible, dist, torch.full_like(dist, float("inf"))))
         stacked = torch.stack(dists, dim=-1)
         best_dist, best_idx = stacked.min(dim=-1)
@@ -718,6 +979,8 @@ class PassingScenario(BaseScenario):
             )
             self.ball.state.vel = self.ball.state.vel * scale
 
+        self._apply_ball_effects_post_step()
+        self._resolve_ball_penetration()
         self._update_possession_and_pass_state()
         self.current_metrics = self._compute_metrics()
         self._needs_metric_commit = True

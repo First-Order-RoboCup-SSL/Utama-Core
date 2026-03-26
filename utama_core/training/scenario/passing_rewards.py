@@ -40,7 +40,6 @@ def compute_passing_reward(
     dense_scale = _dense_annealing_factor(rc, scenario)
 
     is_attacker = any(a.name == agent_name for a in scenario.attackers)
-    holder = scenario.confirmed_holder
     curr = scenario.current_metrics
     prev = scenario.previous_metrics
 
@@ -49,30 +48,55 @@ def compute_passing_reward(
         is_passer = agent_name == scenario.attackers[0].name
 
         if is_passer:
-            passer_near_ball = holder == 0
-            passer_touched_ball = scenario.last_attacker_holder == 0
+            prev_has_ball = prev["passer_has_ball"] > 0.5
+            passer_near_ball = curr["passer_has_ball"] > 0.5
+            # Phase 2 should only run while the passer still controls the ball
+            # or after a released pass is actually in flight.
+            live_pass_phase = passer_near_ball | scenario.pass_active
 
-            approach_delta = prev["passer_to_ball_dist"] - curr["passer_to_ball_dist"]
+            approach_delta = prev["passer_capture_error"] - curr["passer_capture_error"]
             phase1 = rc.passer_to_ball_weight * approach_delta * dense_scale
 
             pass_delta = prev["ball_to_receiver_dist"] - curr["ball_to_receiver_dist"]
             phase2 = rc.ball_to_receiver_weight * pass_delta * dense_scale
 
-            in_phase2 = passer_near_ball | passer_touched_ball
+            in_phase2 = live_pass_phase
             phased_reward = torch.where(in_phase2, phase2, phase1)
             reward = reward + phased_reward
 
             components["reward/approach_delta"] = torch.where(~in_phase2, phase1, zeros)
             components["reward/pass_delta"] = torch.where(in_phase2, phase2, zeros)
 
+            facing_ball_delta = curr["passer_facing_ball_cos"] - prev["passer_facing_ball_cos"]
+            face_ball_reward = rc.passer_face_ball_weight * facing_ball_delta * dense_scale
+            face_ball_reward = torch.where(~live_pass_phase, face_ball_reward, zeros)
+            reward = reward + face_ball_reward
+            components["reward/face_ball"] = face_ball_reward
+
             facing_recv_delta = curr["passer_facing_receiver_cos"] - prev["passer_facing_receiver_cos"]
             face_recv_reward = rc.passer_face_receiver_weight * facing_recv_delta * dense_scale
+            face_recv_reward = torch.where(live_pass_phase, face_recv_reward, zeros)
             reward = reward + face_recv_reward
             components["reward/face_receiver"] = face_recv_reward
 
-            has_ball_reward = (holder == 0).float() * rc.has_ball_reward * dense_scale
+            settle_window = (~live_pass_phase) & (curr["passer_capture_error"] <= rc.passer_settle_capture_radius)
+            overshoot_penalty = torch.relu(-curr["passer_ball_radial_speed"]) * rc.passer_overshoot_speed_penalty
+            overshoot_penalty = torch.where(settle_window, -overshoot_penalty * dense_scale, zeros)
+            reward = reward + overshoot_penalty
+            components["reward/overshoot_speed"] = overshoot_penalty
+
+            orbit_penalty = curr["passer_ball_tangential_speed"] * rc.passer_orbit_speed_penalty
+            orbit_penalty = torch.where(settle_window, -orbit_penalty * dense_scale, zeros)
+            reward = reward + orbit_penalty
+            components["reward/orbit_speed"] = orbit_penalty
+
+            has_ball_reward = passer_near_ball.float() * rc.has_ball_reward * dense_scale
             reward = reward + has_ball_reward
             components["reward/has_ball"] = has_ball_reward
+
+            acquire_ball_reward = ((~prev_has_ball) & passer_near_ball).float() * rc.acquire_ball_reward * dense_scale
+            reward = reward + acquire_ball_reward
+            components["reward/acquire_ball"] = acquire_ball_reward
 
             kick_reward = zeros.clone()
             passer_name = scenario.attackers[0].name
@@ -86,8 +110,13 @@ def compute_passing_reward(
         else:
             recv_approach_reward = zeros.clone()
             if rc.receiver_to_ball_weight > 0:
-                delta = prev["receiver_to_ball_dist"] - curr["receiver_to_ball_dist"]
-                recv_approach_reward = rc.receiver_to_ball_weight * delta * dense_scale
+                delta = prev["receiver_capture_error"] - curr["receiver_capture_error"]
+                # Let the receiver attack the ball only after the pass has been released.
+                recv_approach_reward = torch.where(
+                    scenario.pass_active,
+                    rc.receiver_to_ball_weight * delta * dense_scale,
+                    zeros,
+                )
                 reward = reward + recv_approach_reward
             components["reward/recv_approach"] = recv_approach_reward
 

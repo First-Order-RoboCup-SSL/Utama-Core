@@ -3,6 +3,7 @@
 from typing import Tuple
 
 from utama_core.config.settings import ADD_Y_COORD, REMOVAL_Y_COORD, TELEPORT_X_COORDS
+from utama_core.entities.game.field import FieldBounds
 from utama_core.team_controller.src.controllers.common.sim_controller_abstract import (
     AbstractSimController,
 )
@@ -16,20 +17,21 @@ class VmasController(AbstractSimController):
     Same interface as RSimController. Uses SSL standard coordinates.
     """
 
-    def __init__(self, env: SSLVmasBaseEnv):
+    def __init__(self, field_bounds: FieldBounds, exp_ball: bool, env: SSLVmasBaseEnv):
+        super().__init__(field_bounds, exp_ball)
         self._env = env
 
-    def teleport_ball(self, x: float, y: float, vx: float = 0, vy: float = 0) -> None:
+    def _do_teleport_ball_unrestricted(self, x: float, y: float, vx: float, vy: float) -> None:
         self._env.teleport_ball(x, y, vx, vy)
 
-    def teleport_robot(
+    def _do_teleport_robot_unrestricted(
         self,
         is_team_yellow: bool,
         robot_id: int,
         x: float,
         y: float,
         theta: float = None,
-    ) -> None:
+    ):
         self._env.teleport_robot(is_team_yellow, robot_id, x, y, theta)
 
     def set_robot_presence(self, robot_id: int, is_team_yellow: bool, should_robot_be_present: bool) -> None:

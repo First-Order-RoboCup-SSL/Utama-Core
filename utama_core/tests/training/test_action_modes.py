@@ -64,6 +64,62 @@ class TestUnifiedMode:
         assert agent.action.u.shape == (2, 4)
         assert not torch.isnan(agent.action.u).any()
 
+    def test_near_ball_target_resolves_to_capture_standoff(self):
+        scenario = _make_scenario(_benchmark_cfg(), batch_dim=1)
+        agent = scenario.attackers[0]
+        requested = scenario.ball.state.pos.clone()
+
+        nav_target = scenario._capture_nav_target(agent, requested)
+
+        press_dist = (
+            scenario.cfg.field.robot_radius
+            + scenario.cfg.field.ball_radius
+            - scenario.cfg.dynamics.capture_target_overlap
+        )
+        to_ball = scenario.ball.state.pos - agent.state.pos
+        expected = scenario.ball.state.pos - to_ball / torch.norm(to_ball, dim=-1, keepdim=True) * press_dist
+
+        assert torch.allclose(nav_target, expected, atol=1e-5)
+
+    def test_far_target_remains_unmodified(self):
+        scenario = _make_scenario(_benchmark_cfg(), batch_dim=1)
+        agent = scenario.attackers[0]
+        requested = scenario.ball.state.pos + torch.tensor([[0.5, 0.0]])
+
+        nav_target = scenario._capture_nav_target(agent, requested)
+
+        assert torch.allclose(nav_target, requested)
+
+    def test_close_ball_capture_lock_overrides_far_target(self):
+        scenario = _make_scenario(_benchmark_cfg(), batch_dim=1)
+        agent = scenario.attackers[0]
+        ball_pos = scenario.ball.state.pos.clone()
+        agent.set_pos(ball_pos - torch.tensor([[0.3, 0.0]], dtype=torch.float32), batch_index=None)
+        requested = ball_pos + torch.tensor([[0.8, 0.0]], dtype=torch.float32)
+
+        nav_target = scenario._capture_nav_target(agent, requested)
+
+        press_dist = (
+            scenario.cfg.field.robot_radius
+            + scenario.cfg.field.ball_radius
+            - scenario.cfg.dynamics.capture_target_overlap
+        )
+        expected = ball_pos - torch.tensor([[press_dist, 0.0]], dtype=torch.float32)
+        assert torch.allclose(nav_target, expected, atol=1e-5)
+
+    def test_close_ball_capture_lock_overrides_orientation_to_ball(self):
+        scenario = _make_scenario(_benchmark_cfg(), batch_dim=1)
+        agent = scenario.attackers[0]
+        ball_pos = scenario.ball.state.pos.clone()
+        agent.set_pos(ball_pos - torch.tensor([[0.3, 0.0]], dtype=torch.float32), batch_index=None)
+        requested = ball_pos + torch.tensor([[0.8, 0.0]], dtype=torch.float32)
+        requested_oren = torch.tensor([[math.pi / 2]], dtype=torch.float32)
+
+        _, orientation_target, capture_mask = scenario._capture_control_targets(agent, requested, requested_oren)
+
+        assert capture_mask.item()
+        assert torch.allclose(orientation_target, torch.zeros_like(orientation_target), atol=1e-5)
+
     def test_fixed_defender_zeroes_action(self):
         scenario = _make_scenario(_benchmark_cfg())
         defender = scenario.defenders[0]
@@ -105,3 +161,13 @@ class TestMacroAndLegacyModes:
         scenario.process_action(agent)
         assert agent.action.u.shape == (2, 6)
         assert not torch.isnan(agent.action.u).any()
+
+
+class TestResetRandomization:
+    def test_full_batch_reset_randomizes_envs_independently(self):
+        cfg = PassingScenarioConfig(n_attackers=2, n_defenders=1)
+        scenario = _make_scenario(cfg, batch_dim=4)
+
+        unique_ball_positions = torch.unique(scenario.ball.state.pos, dim=0)
+
+        assert unique_ball_positions.shape[0] > 1

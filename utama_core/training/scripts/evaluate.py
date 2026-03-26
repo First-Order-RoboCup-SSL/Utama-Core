@@ -12,6 +12,7 @@ import functools
 import sys
 from contextlib import contextmanager
 
+import numpy as np
 import torch
 from benchmarl.experiment import Experiment
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -103,6 +104,16 @@ def _force_map_location(device: str):
         torch.serialization.load = orig_serial
 
 
+def _pad_frame_for_video(frame: np.ndarray, macro_block_size: int = 16) -> np.ndarray:
+    """Pad frames so ffmpeg doesn't resize them for codec compatibility."""
+    height, width = frame.shape[:2]
+    pad_h = (-height) % macro_block_size
+    pad_w = (-width) % macro_block_size
+    if pad_h == 0 and pad_w == 0:
+        return frame
+    return np.pad(frame, ((0, pad_h), (0, pad_w), (0, 0)), mode="edge")
+
+
 def main():
     args = parse_args()
 
@@ -188,6 +199,14 @@ def main():
         import imageio
 
         frames = [f.cpu().numpy() if isinstance(f, torch.Tensor) else f for f in video_frames]
+        original_shape = frames[0].shape[:2]
+        frames = [_pad_frame_for_video(frame) for frame in frames]
+        padded_shape = frames[0].shape[:2]
+        if padded_shape != original_shape:
+            print(
+                f"[Eval] Padded video frames from {original_shape[1]}x{original_shape[0]} "
+                f"to {padded_shape[1]}x{padded_shape[0]} for codec compatibility"
+            )
         imageio.mimsave(args.output, frames, fps=args.fps)
         print(f"Video saved to {args.output} ({len(frames)} frames)")
 

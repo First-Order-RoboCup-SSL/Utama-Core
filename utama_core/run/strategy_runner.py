@@ -403,7 +403,7 @@ class StrategyRunner:
                 self.opp.strategy.load_rsim_env(vmas_env)
             self.my.strategy.load_rsim_env(vmas_env)
 
-            return vmas_env, VmasController(env=vmas_env)
+            return vmas_env, VmasController(field_bounds=self.field_bounds, exp_ball=self.exp_ball, env=vmas_env)
 
         else:
             return None, None
