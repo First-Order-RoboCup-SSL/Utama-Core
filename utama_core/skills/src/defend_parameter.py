@@ -1,8 +1,6 @@
-import math
 from typing import Optional
 
-import numpy as np
-
+from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -10,99 +8,108 @@ from utama_core.motion_planning.src.common.motion_controller import MotionContro
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from utama_core.skills.src.go_to_point import go_to_point
 
+DEFENSE_FRONT_OFFSET_X = 1.0
+
 
 def defend_parameter(
     game: Game,
     motion_controller: MotionController,
     robot_id: int,
     env: Optional[SSLStandardEnv] = None,
+    goal_frame_y: Optional[float] = None,
 ):
-    defenseing_friendly = game.friendly_robots[robot_id]
-    vel = game.ball.v.to_2d()
+    robot_pos = game.friendly_robots[robot_id].p
+    # Ball position is stored in 3D, but all defending geometry here is planar.
+    ball_pos = game.ball.p.to_2d()
+    ball_vel = game.ball.v.to_2d()
+    goal_x = 4.5 if game.my_team_is_right else -4.5
+    sign = 1.0 if game.my_team_is_right else -1.0
+    defense_front_x = goal_x - sign * DEFENSE_FRONT_OFFSET_X
+
+    # Multi-robot: send specific defenders to static positions
     if len(game.friendly_robots) > 2:
-        if game.ball.p.y >= -0.5 and robot_id == 1:
-            target_pos = [3.0 if game.my_team_is_right else -3.0, -1.2]
+        if ball_pos.y >= -0.5 and robot_id == 1:
             return go_to_point(
                 game,
                 motion_controller,
                 robot_id,
-                Vector2D(target_pos[0], target_pos[1]),
+                Vector2D(3.0 * sign, -1.2),
             )
-        elif game.ball.p.y < -0.5 and robot_id == 2:
-            target_pos = [3.0 if game.my_team_is_right else -3.0, 1.2]
+        elif ball_pos.y < -0.5 and robot_id == 2:
             return go_to_point(
                 game,
                 motion_controller,
                 robot_id,
-                Vector2D(target_pos[0], target_pos[1]),
+                Vector2D(3.0 * sign, 1.2),
             )
-    if robot_id == 1:
-        goal_frame = 0.5
-    else:
-        goal_frame = -0.5
 
-    def positions_to_defend_parameter(x2, y2):
-        x1, y1 = game.ball.p.x, game.ball.p.y
-        x3, y3 = defenseing_friendly.p.x, defenseing_friendly.p.y
-        t = ((x3 - x1) * (x2 - x1) + (y3 - y1) * (y2 - y1)) / ((x2 - x1) ** 2 + (y2 - y1) ** 2)
-        x4 = x1 + t * (x2 - x1)
-        y4 = y1 + t * (y2 - y1)
+    if goal_frame_y is None:
+        goal_frame_y = 0.5 if robot_id == 1 else -0.5
 
-        def cal_xy5(xa, ya, xb, yb, w, x4, y4):
-            x5 = xa - w
-            dx = xb - xa
-            if abs(dx) < 1e-12:
-                return x4, y4
-            t = (x5 - xa) / dx
-            y5 = ya + t * (yb - ya)
-            return x5, y5
+    def project_and_clamp(goal_point: Vector2D) -> Vector2D:
+        """Project onto the blocking line, anchored near the front of our box."""
+        line = goal_point - ball_pos
+        denom = line.dot(line)
+        if denom < 1e-12:
+            return robot_pos
 
-        def distance(x1, y1, x2, y2):
-            return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+        t = (robot_pos - ball_pos).dot(line) / denom
 
-        if abs(x2 - x4) < 1 and -1 < y4 < 1:
-            hori_x, hori_y = cal_xy5(x2, y2, x1, y1, 1.0, x4, y4)
-            ver_x, ver_y = cal_xy5(y2, x2, y1, x1, 2.0, x4, y4)
-            if distance(x4, y4, hori_x, hori_y) < distance(x4, y4, ver_x, ver_y):
-                x4, y4 = hori_x, hori_y
+        if abs(line.x) > 1e-12:
+            t_box = (defense_front_x - ball_pos.x) / line.x
+            t = max(t, max(0.0, min(1.0, t_box)))
+
+        t = max(0.0, min(1.0, t))
+        projected = ball_pos + line * t
+
+        # Clamp when projected point is near goal line and within goal area
+        if abs(goal_point.x - projected.x) < 1.0 and -1.0 < projected.y < 1.0:
+            ball_to_goal = ball_pos - goal_point
+
+            # Horizontal clamp: 1m in front of goal line
+            if abs(ball_to_goal.x) > 1e-12:
+                clamp_x = defense_front_x
+                t_h = (clamp_x - goal_point.x) / ball_to_goal.x
+                hori = Vector2D(clamp_x, goal_point.y + t_h * ball_to_goal.y)
             else:
-                x4, y4 = ver_y, ver_x
+                hori = projected
 
-        return x3, y3, x4, y4
+            # Vertical clamp: 2m from goal point y
+            if abs(ball_to_goal.y) > 1e-12:
+                clamp_y = goal_point.y - 2.0
+                t_v = (clamp_y - goal_point.y) / ball_to_goal.y
+                ver = Vector2D(goal_point.x + t_v * ball_to_goal.x, clamp_y)
+            else:
+                ver = projected
 
-    ball_y_at_baseline = predict_ball_pos_at_x(game, 4.5 if game.my_team_is_right else -4.5)
-    ball_y_at_robo = predict_ball_pos_at_x(game, defenseing_friendly.p.x)
+            if projected.distance_to(hori) < projected.distance_to(ver):
+                return hori
+            else:
+                return ver
+
+        return projected
+
+    # Check ball trajectory
+    ball_at_baseline = predict_ball_pos_at_x(game, goal_x)
+    ball_at_robot = predict_ball_pos_at_x(game, robot_pos.x)
+
     if (
-        vel[0] ** 2 + vel[1] ** 2 > 0.05
-        and (ball_y_at_baseline is not None and ball_y_at_baseline[1] < 0.5 and ball_y_at_baseline[1] > -0.5)
-        and (ball_y_at_robo is not None and abs(ball_y_at_robo[1] - defenseing_friendly.p.y) > 0.1)
+        ball_vel.dot(ball_vel) > 0.05
+        and ball_at_baseline is not None
+        and abs(ball_at_baseline.y) < 0.5
+        and ball_at_robot is not None
+        and abs(ball_at_robot.y - robot_pos.y) > 0.1
     ):
-        x2, y2 = 4.5 if game.my_team_is_right else -4.5, (goal_frame + 0.2 if robot_id == 1 else goal_frame - 0.2)
-        x3, y3, x4, y4 = positions_to_defend_parameter(x2, y2)
-        target_pos = np.array([x4, y4])
-
+        offset = 0.2 if goal_frame_y >= 0 else -0.2
+        goal_point = Vector2D(goal_x, goal_frame_y + offset)
+        target = project_and_clamp(goal_point)
     else:
-        robot_rad = 0.09
-        x2, y2 = 4.5 if game.my_team_is_right else -4.5, -goal_frame
-        x3, y3, x4, y4 = positions_to_defend_parameter(x2, y2)
-        vec_to_target = np.array(
-            [
-                x4 - x3,
-                y4 + y3,
-            ]
-        )
-        dist_to_target = np.linalg.norm(vec_to_target)
+        goal_point = Vector2D(goal_x, -goal_frame_y)
+        target = project_and_clamp(goal_point)
+        # Offset target by robot radius
+        vec_to_target = target - robot_pos
+        dist = vec_to_target.mag()
+        if dist > 0:
+            target = target - vec_to_target.norm() * ROBOT_RADIUS
 
-        if dist_to_target > 0:
-            vec_dir = vec_to_target / dist_to_target
-        else:
-            vec_dir = np.array([0.0, 0.0])
-        target_pos = np.array([x4, y4]) - vec_dir * robot_rad
-
-    return go_to_point(
-        game,
-        motion_controller,
-        robot_id,
-        Vector2D(target_pos[0], target_pos[1]),
-        dribbling=True,
-    )
+    return go_to_point(game, motion_controller, robot_id, target, dribbling=True)
