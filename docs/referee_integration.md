@@ -49,7 +49,7 @@ Rules sourced from the [SSL Rulebook](https://robocup-ssl.github.io/ssl-rules/ss
 | **PREPARE_KICKOFF (theirs)** | All robots to own half, outside centre circle. | Same zone constraint. |
 | **NORMAL_START** (after kickoff / free kick) | Game live — pass to strategy tree. | Ball is now in play. |
 | **FORCE_START** | Game live — pass to strategy tree. | Ball at current position; no placement needed. |
-| **PREPARE_PENALTY (ours)** | Kicker: approach penalty mark, do not touch. Our other robots: ≥ 0.4 m behind penalty mark line. | Penalty mark: 6 m from goal centre (Div B). |
+| **PREPARE_PENALTY (ours)** | Kicker: approach penalty mark, do not touch. Our other robots: ≥ 0.4 m behind penalty mark line. | Penalty mark: halfway between centre line and attacked goal in Utama's field model. |
 | **PREPARE_PENALTY (theirs)** | Our goalkeeper: touch own goal line. All other our robots: ≥ 0.4 m behind the penalty mark (on our side). | Goalkeeper ID from `referee.{our_team}.goalkeeper`. |
 | **DIRECT_FREE (ours)** | One robot (kicker) approaches ball. Others position freely. After NORMAL_START the kicker may shoot directly. | Ball must move ≥ 0.05 m to be in play. |
 | **DIRECT_FREE (theirs)** | All our robots ≥ 0.5 m from ball. Full speed allowed (unlike STOP). | Same distance as STOP but no speed cap. |

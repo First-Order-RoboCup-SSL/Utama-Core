@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from utama_core.config.enums import Mode
@@ -65,6 +67,101 @@ def test_resolve_referee_system_rejects_custom_referee_with_none_mode():
 def test_resolve_referee_system_rejects_custom_referee_with_official_mode():
     with pytest.raises(ValueError, match="custom_referee"):
         StrategyRunner._resolve_referee_system(Mode.GRSIM, "official", object())
+
+
+def test_setup_vision_and_referee_starts_vision_only_when_referee_none(monkeypatch):
+    from utama_core.run import strategy_runner as runner_mod
+
+    started = []
+
+    class DummyVisionReceiver:
+        def __init__(self, buffers):
+            self.buffers = buffers
+
+    class DummyRefereeReceiver:
+        def __init__(self, buffer):
+            self.buffer = buffer
+
+    monkeypatch.setattr(runner_mod, "VisionReceiver", DummyVisionReceiver)
+    monkeypatch.setattr(runner_mod, "RefereeMessageReceiver", DummyRefereeReceiver)
+
+    fake_runner = SimpleNamespace(
+        mode=Mode.GRSIM,
+        referee_system="none",
+        start_threads=lambda vision_receiver, referee_receiver=None: started.append(
+            (vision_receiver, referee_receiver)
+        ),
+    )
+
+    vision_buffers, ref_buffer = StrategyRunner._setup_vision_and_referee(fake_runner)
+
+    assert len(vision_buffers) > 0
+    assert ref_buffer.maxlen == 1
+    assert len(started) == 1
+    assert isinstance(started[0][0], DummyVisionReceiver)
+    assert started[0][1] is None
+
+
+def test_setup_vision_and_referee_starts_vision_only_when_referee_custom(monkeypatch):
+    from utama_core.run import strategy_runner as runner_mod
+
+    started = []
+
+    class DummyVisionReceiver:
+        def __init__(self, buffers):
+            self.buffers = buffers
+
+    class DummyRefereeReceiver:
+        def __init__(self, buffer):
+            self.buffer = buffer
+
+    monkeypatch.setattr(runner_mod, "VisionReceiver", DummyVisionReceiver)
+    monkeypatch.setattr(runner_mod, "RefereeMessageReceiver", DummyRefereeReceiver)
+
+    fake_runner = SimpleNamespace(
+        mode=Mode.REAL,
+        referee_system="custom",
+        start_threads=lambda vision_receiver, referee_receiver=None: started.append(
+            (vision_receiver, referee_receiver)
+        ),
+    )
+
+    StrategyRunner._setup_vision_and_referee(fake_runner)
+
+    assert len(started) == 1
+    assert isinstance(started[0][0], DummyVisionReceiver)
+    assert started[0][1] is None
+
+
+def test_setup_vision_and_referee_starts_both_receivers_when_referee_official(monkeypatch):
+    from utama_core.run import strategy_runner as runner_mod
+
+    started = []
+
+    class DummyVisionReceiver:
+        def __init__(self, buffers):
+            self.buffers = buffers
+
+    class DummyRefereeReceiver:
+        def __init__(self, buffer):
+            self.buffer = buffer
+
+    monkeypatch.setattr(runner_mod, "VisionReceiver", DummyVisionReceiver)
+    monkeypatch.setattr(runner_mod, "RefereeMessageReceiver", DummyRefereeReceiver)
+
+    fake_runner = SimpleNamespace(
+        mode=Mode.GRSIM,
+        referee_system="official",
+        start_threads=lambda vision_receiver, referee_receiver=None: started.append(
+            (vision_receiver, referee_receiver)
+        ),
+    )
+
+    StrategyRunner._setup_vision_and_referee(fake_runner)
+
+    assert len(started) == 1
+    assert isinstance(started[0][0], DummyVisionReceiver)
+    assert isinstance(started[0][1], DummyRefereeReceiver)
 
 
 def test_assert_exp_robots_valid(base_runner):

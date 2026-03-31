@@ -19,8 +19,11 @@ from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.skills.src.utils.move_utils import empty_command, move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
 
-# SSL Div B field constants (metres)
-_PENALTY_MARK_DIST = 6.0  # distance from goal centre to penalty mark
+# SSL field constants / heuristics (metres)
+# Utama's standard field model is 9m x 6m. For penalty setup we place the
+# penalty mark halfway between the centre line and the relevant goal line so
+# it always lies on the correct half, including custom field bounds.
+_PENALTY_MARK_HALF_FIELD_RATIO = 0.5
 _HALF_FIELD_X = 4.5  # half field length
 _CENTRE_CIRCLE_R = 0.5  # centre circle radius
 _BALL_KEEP_DIST = 0.55  # ≥0.5 m required; 5 cm buffer
@@ -33,6 +36,48 @@ def _all_stop(blackboard) -> py_trees.common.Status:
     """Send empty_command to every friendly robot and return RUNNING."""
     for robot_id in blackboard.game.friendly_robots:
         blackboard.cmd_map[robot_id] = empty_command(False)
+    return py_trees.common.Status.RUNNING
+
+
+def _field_half_length(game) -> float:
+    """Return the current field half-length, supporting Field and FieldBounds alike."""
+    field = game.field
+    if hasattr(field, "half_length"):
+        return field.half_length
+    return (field.bottom_right[0] - field.top_left[0]) / 2.0
+
+
+def _penalty_mark_x(goal_x: float) -> float:
+    """Place the penalty mark midway between centre and goal line."""
+    return goal_x * _PENALTY_MARK_HALF_FIELD_RATIO
+
+
+def _clear_from_ball(blackboard, keep_dist: float = _BALL_KEEP_DIST) -> py_trees.common.Status:
+    """Move encroaching robots out beyond the keep-out radius and stop the rest."""
+    game = blackboard.game
+    ball = game.ball
+    motion_controller = blackboard.motion_controller
+    if ball is None:
+        return _all_stop(blackboard)
+
+    bx, by = ball.p.x, ball.p.y
+    for robot_id, robot in game.friendly_robots.items():
+        dx = robot.p.x - bx
+        dy = robot.p.y - by
+        dist = math.hypot(dx, dy)
+        if dist >= keep_dist:
+            blackboard.cmd_map[robot_id] = empty_command(False)
+            continue
+
+        if dist == 0.0:
+            ux, uy = 1.0, 0.0
+        else:
+            ux, uy = dx / dist, dy / dist
+
+        target = Vector2D(bx + ux * keep_dist, by + uy * keep_dist)
+        oren = robot.p.angle_to(target)
+        blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, target, oren)
+
     return py_trees.common.Status.RUNNING
 
 
@@ -58,14 +103,10 @@ class HaltStep(AbstractBehaviour):
 
 
 class StopStep(AbstractBehaviour):
-    """Sends zero-velocity commands to all friendly robots.
-
-    Complies with STOP: robots are stationary, so speed = 0 m/s ≤ 1.5 m/s
-    and they do not approach the ball.
-    """
+    """Moves encroaching robots out of the keep-out radius and stops the rest."""
 
     def update(self) -> py_trees.common.Status:
-        return _all_stop(self.blackboard)
+        return _clear_from_ball(self.blackboard)
 
 
 # ---------------------------------------------------------------------------
@@ -132,15 +173,10 @@ class BallPlacementOursStep(AbstractBehaviour):
 
 
 class BallPlacementTheirsStep(AbstractBehaviour):
-    """Stops all friendly robots during the opponent's ball placement.
-
-    Robots stopped in place are guaranteed not to approach the ball or interfere
-    with the placement. Active clearance (move ≥0.5 m from ball) is a future
-    enhancement.
-    """
+    """Actively clear our robots away from the ball during their placement."""
 
     def update(self) -> py_trees.common.Status:
-        return _all_stop(self.blackboard)
+        return _clear_from_ball(self.blackboard)
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +272,7 @@ class PreparePenaltyOursStep(AbstractBehaviour):
     Kicker (lowest non-keeper ID): moves to our penalty mark, faces goal.
     All others: stop on a line 0.4 m behind the penalty mark (on own side).
 
-    Penalty mark is at (opp_goal_x ∓ 6.0, 0), sign depends on which side we attack.
+    Penalty mark is placed halfway between the centre line and the target goal line.
     """
 
     def update(self) -> py_trees.common.Status:
@@ -249,9 +285,10 @@ class PreparePenaltyOursStep(AbstractBehaviour):
         keeper_id = our_team_info.goalkeeper
 
         # Opponent goal is on the right if we are on the right, else on the left
-        opp_goal_x = _HALF_FIELD_X if not game.my_team_is_right else -_HALF_FIELD_X
+        field_half_length = _field_half_length(game)
+        opp_goal_x = field_half_length if not game.my_team_is_right else -field_half_length
         sign = 1 if not game.my_team_is_right else -1
-        penalty_mark = Vector2D(opp_goal_x - sign * _PENALTY_MARK_DIST, 0.0)
+        penalty_mark = Vector2D(_penalty_mark_x(opp_goal_x), 0.0)
         behind_line_x = penalty_mark.x - sign * _PENALTY_BEHIND_OFFSET
 
         goal_oren = math.atan2(0.0, opp_goal_x - penalty_mark.x)
@@ -296,11 +333,12 @@ class PreparePenaltyTheirsStep(AbstractBehaviour):
         keeper_id = our_team_info.goalkeeper
 
         # Our goal is on the right if my_team_is_right, else on the left
-        our_goal_x = _HALF_FIELD_X if game.my_team_is_right else -_HALF_FIELD_X
+        field_half_length = _field_half_length(game)
+        our_goal_x = field_half_length if game.my_team_is_right else -field_half_length
         sign = 1 if game.my_team_is_right else -1
 
-        # Opponent's penalty mark is in their half attacking our goal
-        opp_penalty_mark_x = our_goal_x - sign * _PENALTY_MARK_DIST
+        # Opponent's penalty mark is in our half, between centre and our goal line.
+        opp_penalty_mark_x = _penalty_mark_x(our_goal_x)
         behind_line_x = opp_penalty_mark_x + sign * _PENALTY_BEHIND_OFFSET
 
         robot_ids = sorted(game.friendly_robots.keys())
@@ -363,14 +401,10 @@ class DirectFreeOursStep(AbstractBehaviour):
 
 
 class DirectFreeTheirsStep(AbstractBehaviour):
-    """Stops all our robots during the opponent's direct free kick.
-
-    All robots must remain ≥ 0.5 m from the ball. Stopping in place satisfies this
-    assuming robots are not already within 0.5 m (future: add active clearance).
-    """
+    """Actively clear our robots out of the ball keep-out radius."""
 
     def update(self) -> py_trees.common.Status:
-        return _all_stop(self.blackboard)
+        return _clear_from_ball(self.blackboard)
 
 
 # ---------------------------------------------------------------------------

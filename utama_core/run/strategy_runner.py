@@ -296,23 +296,28 @@ class StrategyRunner:
         # Start receiving game data; this will run in a separate thread.
         receiver.pull_game_data()
 
-    def start_threads(self, vision_receiver: VisionReceiver, referee_receiver: RefereeMessageReceiver):
-        """Start background threads for receiving vision and referee data.
+    def start_threads(
+        self,
+        vision_receiver: VisionReceiver,
+        referee_receiver: Optional[RefereeMessageReceiver] = None,
+    ):
+        """Start background threads for receiving vision and optionally referee data.
 
         Starts daemon threads so they do not prevent process exit.
 
         Args:
             vision_receiver: VisionReceiver to run in a background thread.
-            referee_receiver: RefereeMessageReceiver to run in a background thread.
+            referee_receiver: Optional RefereeMessageReceiver to run in a background thread.
         """
         vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
-        referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
 
         vision_thread.daemon = True
-        referee_thread.daemon = True
 
         vision_thread.start()
-        referee_thread.start()
+        if referee_receiver is not None:
+            referee_thread = threading.Thread(target=referee_receiver.pull_referee_data)
+            referee_thread.daemon = True
+            referee_thread.start()
 
     def _setup_sides_data(
         self,
@@ -456,10 +461,13 @@ class StrategyRunner:
         """
         vision_buffers = [deque(maxlen=1) for _ in range(MAX_CAMERAS)]
         ref_buffer = deque(maxlen=1)
-        vision_receiver = VisionReceiver(vision_buffers)
-        if self.referee_system == "official":
-            referee_receiver = RefereeMessageReceiver(ref_buffer)
-            self.start_threads(vision_receiver, referee_receiver)
+        if self.mode != Mode.RSIM:
+            vision_receiver = VisionReceiver(vision_buffers)
+            if self.referee_system == "official":
+                referee_receiver = RefereeMessageReceiver(ref_buffer)
+                self.start_threads(vision_receiver, referee_receiver)
+            else:
+                self.start_threads(vision_receiver)
 
         return vision_buffers, ref_buffer
 
