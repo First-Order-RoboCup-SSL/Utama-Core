@@ -357,6 +357,38 @@ class TestGameStateMachine:
         sm.set_command(RefereeCommand.NORMAL_START, timestamp=5.0)
         assert sm.command == RefereeCommand.NORMAL_START
 
+    def test_manual_ball_placement_auto_advances_from_stop_and_then_to_normal_start(self):
+        sm = _state_machine()
+        sm.set_command(RefereeCommand.BALL_PLACEMENT_YELLOW, timestamp=1.0)
+        sm.ball_placement_target = (0.0, 0.0)
+
+        clear_frame = _frame(ball=_ball(2.0, 0.0), ts=10.0)
+        data = sm.step(current_time=10.0, violation=None, game_frame=clear_frame)
+        assert data.referee_command == RefereeCommand.BALL_PLACEMENT_YELLOW
+        assert data.next_command == RefereeCommand.NORMAL_START
+
+        placed_frame = _frame(ball=_ball(0.0, 0.0), ts=20.0)
+        sm.step(current_time=20.0, violation=None, game_frame=placed_frame)
+        data = sm.step(current_time=23.0, violation=None, game_frame=placed_frame)
+        assert data.referee_command == RefereeCommand.NORMAL_START
+        assert data.next_command is None
+
+    def test_manual_penalty_auto_advances_from_stop_and_then_to_normal_start(self):
+        sm = _state_machine()
+        sm.set_command(RefereeCommand.PREPARE_PENALTY_YELLOW, timestamp=1.0)
+
+        clear_frame = _frame(ball=_ball(0.0, 0.0), ts=10.0)
+        data = sm.step(current_time=10.0, violation=None, game_frame=clear_frame)
+        assert data.referee_command == RefereeCommand.PREPARE_PENALTY_YELLOW
+        assert data.next_command == RefereeCommand.NORMAL_START
+
+        ready_attackers = {0: _robot(0, 2.25, 0.0, is_friendly=True)}
+        ready_frame = _frame(ball=_ball(0.0, 0.0), friendly_robots=ready_attackers, ts=14.0)
+        sm.step(current_time=14.0, violation=None, game_frame=ready_frame)
+        data = sm.step(current_time=17.0, violation=None, game_frame=ready_frame)
+        assert data.referee_command == RefereeCommand.NORMAL_START
+        assert data.next_command is None
+
 
 # ---------------------------------------------------------------------------
 # CustomReferee integration
@@ -419,6 +451,55 @@ class TestCustomReferee:
         data = referee.step(_frame(ball=_ball(0.0, 0.0), ts=70.0), current_time=70.0)
         assert data.referee_command == RefereeCommand.PREPARE_KICKOFF_YELLOW
 
+    def test_simulation_oob_auto_advances_to_direct_free_and_then_normal_start(self):
+        referee = CustomReferee.from_profile_name("simulation")
+        referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+
+        touch_frame = _frame(
+            ball=_ball(4.4, 2.9),
+            friendly_robots={0: _robot(0, 4.4, 2.9, is_friendly=True, has_ball=True)},
+            my_team_is_yellow=True,
+            ts=9.9,
+        )
+        referee.step(touch_frame, current_time=9.9)
+
+        out_frame = _frame(ball=_ball(0.0, 3.5), my_team_is_yellow=True, ts=10.0)
+        data = referee.step(out_frame, current_time=10.0)
+        assert data.referee_command == RefereeCommand.DIRECT_FREE_BLUE
+        assert data.next_command == RefereeCommand.NORMAL_START
+
+        ready_frame = _frame(
+            ball=_ball(0.0, 0.0),
+            friendly_robots={0: _robot(0, 1.0, 0.0, is_friendly=True)},
+            enemy_robots={0: _robot(0, 0.1, 0.0, is_friendly=False)},
+            my_team_is_yellow=True,
+            ts=20.0,
+        )
+        referee.step(ready_frame, current_time=20.0)
+        data = referee.step(ready_frame, current_time=23.0)
+        assert data.referee_command == RefereeCommand.NORMAL_START
+
+    def test_human_manual_direct_free_stays_in_stop_until_operator_advances(self):
+        referee = CustomReferee.from_profile_name("human")
+        referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+        referee.set_command(RefereeCommand.DIRECT_FREE_BLUE, timestamp=1.0)
+
+        data = referee.step(_frame(ball=_ball(0.0, 0.0), my_team_is_yellow=True, ts=10.0), current_time=10.0)
+        assert data.referee_command == RefereeCommand.STOP
+        assert data.next_command == RefereeCommand.DIRECT_FREE_BLUE
+
+        still_stop = referee.step(_frame(ball=_ball(0.0, 0.0), ts=40.0), current_time=40.0)
+        assert still_stop.referee_command == RefereeCommand.STOP
+
+    def test_human_manual_penalty_stays_in_stop_until_operator_advances(self):
+        referee = CustomReferee.from_profile_name("human")
+        referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+        referee.set_command(RefereeCommand.PREPARE_PENALTY_YELLOW, timestamp=1.0)
+
+        data = referee.step(_frame(ball=_ball(0.0, 0.0), ts=10.0), current_time=10.0)
+        assert data.referee_command == RefereeCommand.STOP
+        assert data.next_command == RefereeCommand.PREPARE_PENALTY_YELLOW
+
 
 # ---------------------------------------------------------------------------
 # Profile loader
@@ -437,7 +518,24 @@ class TestProfileLoader:
         assert profile.profile_name == "human"
         assert profile.rules.out_of_bounds.enabled is False
         assert profile.game.force_start_after_goal is False
-        assert profile.game.auto_advance.stop_to_prepare_kickoff is False
+        assert profile.game.auto_advance.stop_to_next_command is False
+        assert profile.game.auto_advance.prepare_penalty_to_normal is False
+
+    def test_legacy_stop_to_prepare_kickoff_key_is_still_loaded(self, tmp_path):
+        profile_path = tmp_path / "legacy_profile.yaml"
+        profile_path.write_text(
+            """
+profile_name: "legacy"
+geometry: {}
+rules: {}
+game:
+  auto_advance:
+    stop_to_prepare_kickoff: false
+""".strip()
+        )
+
+        profile = load_profile(str(profile_path))
+        assert profile.game.auto_advance.stop_to_next_command is False
 
     def test_unknown_profile_raises(self):
         with pytest.raises(FileNotFoundError):

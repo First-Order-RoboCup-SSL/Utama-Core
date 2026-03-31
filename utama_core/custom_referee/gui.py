@@ -352,8 +352,9 @@ def _build_config_json(profile: "RefereeProfile") -> str:
                 "force_start_after_goal": gm.force_start_after_goal,
                 "stop_duration_seconds": gm.stop_duration_seconds,
                 "auto_advance": {
-                    "stop_to_prepare_kickoff": gm.auto_advance.stop_to_prepare_kickoff,
+                    "stop_to_next_command": gm.auto_advance.stop_to_next_command,
                     "prepare_kickoff_to_normal": gm.auto_advance.prepare_kickoff_to_normal,
+                    "prepare_penalty_to_normal": gm.auto_advance.prepare_penalty_to_normal,
                     "direct_free_to_normal": gm.auto_advance.direct_free_to_normal,
                     "ball_placement_to_next": gm.auto_advance.ball_placement_to_next,
                     "normal_start_to_force": gm.auto_advance.normal_start_to_force,
@@ -976,8 +977,9 @@ fetch('/config').then(r => r.json()).then(c => {
 
   const aa = gm.auto_advance || {};
   const aaRows =
-    cfgRow('stop → prepare kickoff',   aa.stop_to_prepare_kickoff) +
+    cfgRow('stop → next command',      aa.stop_to_next_command) +
     cfgRow('prepare kickoff → normal', aa.prepare_kickoff_to_normal) +
+    cfgRow('prepare penalty → normal', aa.prepare_penalty_to_normal) +
     cfgRow('direct free → normal',     aa.direct_free_to_normal) +
     cfgRow('ball placement → next',    aa.ball_placement_to_next) +
     cfgRow('normal start → force',     aa.normal_start_to_force);

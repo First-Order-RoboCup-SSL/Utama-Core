@@ -67,11 +67,14 @@ class AutoAdvanceConfig:
     explicitly advance the state to prevent robots from moving unexpectedly.
     """
 
-    # STOP → PREPARE_KICKOFF_* when all robots have cleared the ball.
-    stop_to_prepare_kickoff: bool = True
+    # STOP → queued restart command when all robots have cleared the ball.
+    stop_to_next_command: bool = True
     # PREPARE_KICKOFF_* → NORMAL_START after prepare_duration_seconds when
     # the kicker is inside the centre circle.
     prepare_kickoff_to_normal: bool = True
+    # PREPARE_PENALTY_* → NORMAL_START after prepare_duration_seconds when
+    # the kicker reaches the penalty mark.
+    prepare_penalty_to_normal: bool = True
     # DIRECT_FREE_* → NORMAL_START when kicker is in position and defenders
     # have cleared.
     direct_free_to_normal: bool = True
@@ -198,9 +201,11 @@ def _parse_profile(data: dict) -> RefereeProfile:
 
     game_d = data.get("game", {})
     aa = game_d.get("auto_advance", {})
+    stop_to_next_command = aa.get("stop_to_next_command", aa.get("stop_to_prepare_kickoff", True))
     auto_advance = AutoAdvanceConfig(
-        stop_to_prepare_kickoff=aa.get("stop_to_prepare_kickoff", True),
+        stop_to_next_command=stop_to_next_command,
         prepare_kickoff_to_normal=aa.get("prepare_kickoff_to_normal", True),
+        prepare_penalty_to_normal=aa.get("prepare_penalty_to_normal", True),
         direct_free_to_normal=aa.get("direct_free_to_normal", True),
         ball_placement_to_next=aa.get("ball_placement_to_next", True),
         normal_start_to_force=aa.get("normal_start_to_force", True),

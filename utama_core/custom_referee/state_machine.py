@@ -19,7 +19,7 @@ from utama_core.entities.referee.stage import Stage
 logger = logging.getLogger(__name__)
 
 _TRANSITION_COOLDOWN = 0.3  # seconds — prevents command oscillation
-_BALL_CLEAR_DIST = 0.5  # metres — all robots must be this far from ball before PREPARE_KICKOFF
+_BALL_CLEAR_DIST = 0.5  # metres — all robots must be this far from ball before queued restart
 _KICKER_READY_DIST = 0.3  # metres — kicker must be within this distance to trigger free kick start
 _PLACEMENT_DONE_DIST = 0.15  # metres — ball within this dist of target → placement complete
 _AUTO_ADVANCE_DELAY = 2.0  # seconds — readiness must be sustained this long before play starts
@@ -109,7 +109,7 @@ class GameStateMachine:
 
         # Timestamps for sustained-readiness countdown before play-starting advances.
         # Set to math.inf when condition is not yet met; fire when elapsed >= _AUTO_ADVANCE_DELAY.
-        self._advance2_ready_since: float = math.inf  # PREPARE_KICKOFF_* → NORMAL_START
+        self._advance2_ready_since: float = math.inf  # PREPARE_* → NORMAL_START
         self._advance3_ready_since: float = math.inf  # DIRECT_FREE_* → NORMAL_START
         self._advance4_ready_since: float = math.inf  # BALL_PLACEMENT_* → next_command
 
@@ -138,6 +138,12 @@ class GameStateMachine:
             RefereeCommand.DIRECT_FREE_BLUE,
         }
     )
+    _PREPARE_PENALTY_COMMANDS = frozenset(
+        {
+            RefereeCommand.PREPARE_PENALTY_YELLOW,
+            RefereeCommand.PREPARE_PENALTY_BLUE,
+        }
+    )
     _BALL_PLACEMENT_COMMANDS = frozenset(
         {
             RefereeCommand.BALL_PLACEMENT_YELLOW,
@@ -156,13 +162,13 @@ class GameStateMachine:
             self._apply_violation(violation, current_time)
 
         # ----------------------------------------------------------------
-        # Auto-advance 1: STOP → PREPARE_KICKOFF_*
+        # Auto-advance 1: STOP → next queued restart
         # Fires when all robots are ≥ _BALL_CLEAR_DIST from the ball.
         # ----------------------------------------------------------------
         if (
-            self._auto_advance.stop_to_prepare_kickoff
+            self._auto_advance.stop_to_next_command
             and self.command == RefereeCommand.STOP
-            and self.next_command in self._PREPARE_KICKOFF_COMMANDS
+            and self.next_command in self._NEEDS_STOP_FIRST
             and game_frame is not None
             and self._all_robots_clear(game_frame)
         ):
@@ -170,15 +176,22 @@ class GameStateMachine:
             self.command = self.next_command
             self.command_counter += 1
             self.command_timestamp = current_time
-            self.next_command = RefereeCommand.NORMAL_START
-            self._prepare_entered_time = current_time
+            if self.command in self._BALL_PLACEMENT_COMMANDS:
+                self.next_command = RefereeCommand.NORMAL_START
+                self._advance4_ready_since = math.inf
+            elif self.command in self._DIRECT_FREE_COMMANDS:
+                self.next_command = RefereeCommand.NORMAL_START
+                self._advance3_ready_since = math.inf
+            elif self.command in self._PREPARE_KICKOFF_COMMANDS or self.command in self._PREPARE_PENALTY_COMMANDS:
+                self.next_command = RefereeCommand.NORMAL_START
+                self._prepare_entered_time = current_time
+                self._advance2_ready_since = math.inf
             self._last_transition_time = current_time
 
         # ----------------------------------------------------------------
-        # Auto-advance 2: PREPARE_KICKOFF_* → NORMAL_START
+        # Auto-advance 2a: PREPARE_KICKOFF_* → NORMAL_START
         # Fires after prepare_duration_seconds AND one attacker is inside
-        # the centre circle (i.e. kicker is in position), sustained for
-        # _AUTO_ADVANCE_DELAY seconds.
+        # the centre circle, sustained for _AUTO_ADVANCE_DELAY seconds.
         # ----------------------------------------------------------------
         elif self._auto_advance.prepare_kickoff_to_normal and self.command in self._PREPARE_KICKOFF_COMMANDS:
             ready = (
@@ -193,6 +206,39 @@ class GameStateMachine:
                 elif (current_time - self._advance2_ready_since) >= _AUTO_ADVANCE_DELAY:
                     logger.info(
                         "Kicker in centre circle — auto-advancing %s → NORMAL_START",
+                        self.command.name,
+                    )
+                    self.command = RefereeCommand.NORMAL_START
+                    self.command_counter += 1
+                    self.command_timestamp = current_time
+                    self.next_command = None
+                    self._normal_start_time = current_time
+                    self._ball_pos_at_normal_start = (
+                        (game_frame.ball.p.x, game_frame.ball.p.y) if game_frame.ball is not None else None
+                    )
+                    self._advance2_ready_since = math.inf
+                    self._last_transition_time = current_time
+            else:
+                self._advance2_ready_since = math.inf
+
+        # ----------------------------------------------------------------
+        # Auto-advance 2b: PREPARE_PENALTY_* → NORMAL_START
+        # Fires after prepare_duration_seconds when the kicker reaches the
+        # penalty mark, sustained for _AUTO_ADVANCE_DELAY seconds.
+        # ----------------------------------------------------------------
+        elif self._auto_advance.prepare_penalty_to_normal and self.command in self._PREPARE_PENALTY_COMMANDS:
+            ready = (
+                (current_time - self._prepare_entered_time) >= self._prepare_duration_seconds
+                and game_frame is not None
+                and self._penalty_kicker_ready(self.command, game_frame)
+            )
+            if ready:
+                if self._advance2_ready_since == math.inf:
+                    self._advance2_ready_since = current_time
+                    logger.debug("Advance 2 countdown started (%s)", self.command.name)
+                elif (current_time - self._advance2_ready_since) >= _AUTO_ADVANCE_DELAY:
+                    logger.info(
+                        "Kicker at penalty mark — auto-advancing %s → NORMAL_START",
                         self.command.name,
                     )
                     self.command = RefereeCommand.NORMAL_START
@@ -319,6 +365,26 @@ class GameStateMachine:
             game_frame.friendly_robots if kicking_is_yellow == game_frame.my_team_is_yellow else game_frame.enemy_robots
         )
         return any(math.hypot(robot.p.x, robot.p.y) <= r for robot in attackers.values())
+
+    def _penalty_kicker_ready(self, command: RefereeCommand, game_frame: "GameFrame") -> bool:
+        """Return True when an attacking robot is within the ready radius of the penalty mark."""
+        kicking_is_yellow = command == RefereeCommand.PREPARE_PENALTY_YELLOW
+        attackers = (
+            game_frame.friendly_robots if kicking_is_yellow == game_frame.my_team_is_yellow else game_frame.enemy_robots
+        )
+        if not attackers:
+            return False
+
+        half_length = self._geometry.half_length if self._geometry is not None else 4.5
+        yellow_is_right = game_frame.my_team_is_right == game_frame.my_team_is_yellow
+        if kicking_is_yellow:
+            goal_sign = -1.0 if yellow_is_right else 1.0
+        else:
+            goal_sign = 1.0 if yellow_is_right else -1.0
+        penalty_mark_x = goal_sign * half_length * 0.5
+
+        closest = min(math.hypot(robot.p.x - penalty_mark_x, robot.p.y) for robot in attackers.values())
+        return closest <= _KICKER_READY_DIST
 
     def _free_kick_ready(self, command: RefereeCommand, game_frame: "GameFrame") -> bool:
         """Return True when a free kick is ready to start:

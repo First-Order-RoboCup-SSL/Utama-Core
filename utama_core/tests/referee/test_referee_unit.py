@@ -496,6 +496,39 @@ class TestBallPlacementOursStep:
         assert captured[0][1] == Vector2D(1.5, -0.5)
         assert captured[0][2] is True
 
+    def test_non_placing_teammate_clears_from_ball(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords, dribbling))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {
+            0: _robot(0, 0.0, 0.0),
+            1: _robot(1, 0.1, 0.0),
+        }
+        referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_YELLOW)
+        referee.designated_position = (1.5, 0.0)
+        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
+
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.BallPlacementOursStep(name="BallPlacementOurs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        status = node.update()
+
+        assert status == py_trees.common.Status.RUNNING
+        assert len(captured) == 2
+        placer_move = next(item for item in captured if item[0] == 0)
+        support_move = next(item for item in captured if item[0] == 1)
+        assert placer_move[1] == game.ball.p
+        assert support_move[1] == Vector2D(0.55, 0.0)
+        assert support_move[2] is False
+
 
 # ---------------------------------------------------------------------------
 # Keep-out retreat and penalty positioning
@@ -531,6 +564,47 @@ class TestRefereeKeepOutRetreat:
         assert captured[0][1] == Vector2D(0.55, 0.0)
         assert cmd_map[1] is not None
 
+    def test_stop_clears_robot_from_opponent_defense_area(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {
+            0: _robot(0, -4.3, 0.0),
+            1: _robot(1, 1.0, 0.0),
+        }
+        referee = _make_referee_data(command=RefereeCommand.STOP)
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(2.0, 0.0),
+            referee=referee,
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.StopStep(name="Stop")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        status = node.update()
+
+        assert status == py_trees.common.Status.RUNNING
+        assert len(captured) == 1
+        assert captured[0][0] == 0
+        assert captured[0][1] == Vector2D(-3.25, 0.0)
+
     def test_ball_placement_theirs_clears_encroaching_robot(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
 
@@ -558,6 +632,48 @@ class TestRefereeKeepOutRetreat:
         assert len(captured) == 1
         assert captured[0][0] == 0
         assert captured[0][1] == Vector2D(0.55, 0.0)
+
+    def test_ball_placement_theirs_clears_robot_from_designated_position(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {
+            0: _robot(0, 1.0, 1.0),
+            1: _robot(1, -1.0, 0.0),
+        }
+        referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_BLUE)
+        referee.designated_position = (1.0, 1.0)
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(0.0, 0.0),
+            referee=referee,
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.BallPlacementTheirsStep(name="BallPlacementTheirs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        status = node.update()
+
+        assert status == py_trees.common.Status.RUNNING
+        assert len(captured) == 1
+        assert captured[0][0] == 0
+        assert captured[0][1] == Vector2D(1.55, 1.0)
 
     def test_direct_free_theirs_clears_encroaching_robot(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
@@ -684,8 +800,43 @@ class TestVariableFieldScaling:
         first_support_target = next(target for robot_id, target in captured if robot_id == 1)
 
         assert status == py_trees.common.Status.RUNNING
-        assert first_support_target.x == pytest.approx(-6.0 * (0.8 / 4.5))
+        assert first_support_target.x == pytest.approx(6.0 * (0.8 / 4.5))
         assert first_support_target.y == pytest.approx(4.0 * (0.5 / 3.0))
+        assert first_support_target.distance_to(Vector2D(0.0, 0.0)) >= Field.CENTER_CIRCLE_RADIUS
+
+    def test_prepare_kickoff_ours_uses_own_half_when_defending_left(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {
+            0: _robot(0, 0.0, 0.0),
+            1: _robot(1, 1.0, 0.0),
+        }
+        custom_bounds = FieldBounds(top_left=(-6.0, 4.0), bottom_right=(6.0, -4.0))
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_YELLOW)
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=False,
+            field_bounds=custom_bounds,
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.PrepareKickoffOursStep(name="PrepareKickoffOurs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        status = node.update()
+        first_support_target = next(target for robot_id, target in captured if robot_id == 1)
+
+        assert status == py_trees.common.Status.RUNNING
+        assert first_support_target.x == pytest.approx(-6.0 * (0.8 / 4.5))
         assert first_support_target.distance_to(Vector2D(0.0, 0.0)) >= Field.CENTER_CIRCLE_RADIUS
 
     def test_prepare_penalty_ours_scales_penalty_mark_with_field_bounds(self, monkeypatch):

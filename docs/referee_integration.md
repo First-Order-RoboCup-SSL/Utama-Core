@@ -439,7 +439,7 @@ Standard half start:
 Halt → Stop → Kickoff Yellow → Normal Start
 ```
 
-After goal (human profile — auto-restart):
+After goal (human profile — operator-controlled):
 ```
 (Goal auto-detected) → Stop → (auto Force Start after stop_duration_seconds)
 ```
@@ -482,8 +482,8 @@ The **Event Log** panel shows the 20 most recent events, newest first.
 
 ## 9. Open Questions / Future Work
 
-- **Active distance-keeping during STOP/free kicks**: Currently we stop in place.
-  A better implementation moves robots away from the ball if they are within 0.5 m.
+- **Active distance-keeping during STOP/free kicks**:
+  Implemented for built-in referee nodes: STOP, opponent free kicks, and both ball-placement variants now actively clear illegal positions. Future work is mainly smarter pre-positioning, not basic compliance.
 
 - **Ball placement precision**: `BallPlacementOursStep` uses `move()` which will stop the ball
   near (not exactly at) `designated_position`. The tolerance is ±0.15 m per the rules.
@@ -497,5 +497,4 @@ The **Event Log** panel shows the 20 most recent events, newest first.
 - **`can_place_ball` fallback**: If `TeamInfo.can_place_ball` is False (too many placement
   failures), `BallPlacementOursStep` must fall back to STOP behaviour.
 
-- **Active ball-distance enforcement during DIRECT_FREE (theirs)**: Currently stops in place.
-  Should actively move away if within 0.5 m of ball.
+- **Penalty / ball-placement readiness tuning**: `simulation` now auto-progresses these restarts, but the exact readiness heuristics may still need iteration as we gather more simulator coverage.

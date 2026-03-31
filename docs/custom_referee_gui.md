@@ -92,7 +92,7 @@ Standard half start:
 Halt → Stop → Kickoff Yellow → Normal Start
 ```
 
-After goal (human profile — auto-restart):
+After goal (human profile — operator-controlled):
 ```
 (Goal auto-detected) → Stop → (auto Force Start after stop_duration_seconds)
 ```
@@ -200,8 +200,9 @@ Every tuneable parameter and its effect:
 | `game.kickoff_team` | `"yellow"` or `"blue"` | Which team kicks off at the start |
 | `game.force_start_after_goal` | bool | Legacy human fast-path; superseded by `auto_advance` flags |
 | `game.stop_duration_seconds` | float | STOP hold time before auto FORCE START (legacy human path) |
-| `game.auto_advance.stop_to_prepare_kickoff` | bool | Auto STOP → PREPARE_KICKOFF when all robots clear |
+| `game.auto_advance.stop_to_next_command` | bool | Auto STOP → queued restart when all robots clear |
 | `game.auto_advance.prepare_kickoff_to_normal` | bool | Auto PREPARE_KICKOFF → NORMAL_START when kicker in position (2 s delay) |
+| `game.auto_advance.prepare_penalty_to_normal` | bool | Auto PREPARE_PENALTY → NORMAL_START when kicker reaches the mark (2 s delay) |
 | `game.auto_advance.direct_free_to_normal` | bool | Auto DIRECT_FREE → NORMAL_START when kicker ready (2 s delay) |
 | `game.auto_advance.ball_placement_to_next` | bool | Auto BALL_PLACEMENT → next command when ball at target (2 s delay) |
 | `game.auto_advance.normal_start_to_force` | bool | Auto NORMAL_START → FORCE_START after kickoff timeout if ball hasn't moved |
@@ -213,17 +214,18 @@ Every tuneable parameter and its effect:
 The state machine can automatically advance through referee states when certain conditions are
 met. Each transition is independently configurable via the `auto_advance` block in the profile.
 
-### The five auto-advances
+### The six auto-advances
 
 | # | Transition | Trigger | Delay |
 |---|---|---|---|
-| 1 | `STOP` → `PREPARE_KICKOFF_*` | All robots ≥ 0.5 m from ball | None |
+| 1 | `STOP` → queued restart | All robots ≥ 0.5 m from ball | None |
 | 2 | `PREPARE_KICKOFF_*` → `NORMAL_START` | Timer elapsed + kicker inside centre circle | **2 s** |
-| 3 | `DIRECT_FREE_*` → `NORMAL_START` | Kicker ≤ 0.3 m from ball + defenders ≥ 0.5 m away | **2 s** |
-| 4 | `BALL_PLACEMENT_*` → next command | Ball ≤ 0.15 m from placement target | **2 s** |
-| 5 | `NORMAL_START` → `FORCE_START` | Kickoff timeout elapsed + ball hasn't moved | None (uses `kickoff_timeout_seconds`) |
+| 3 | `PREPARE_PENALTY_*` → `NORMAL_START` | Timer elapsed + kicker reaches the penalty mark | **2 s** |
+| 4 | `DIRECT_FREE_*` → `NORMAL_START` | Kicker ≤ 0.3 m from ball + defenders ≥ 0.5 m away | **2 s** |
+| 5 | `BALL_PLACEMENT_*` → next command | Ball ≤ 0.15 m from placement target | **2 s** |
+| 6 | `NORMAL_START` → `FORCE_START` | Kickoff timeout elapsed + ball hasn't moved | None (uses `kickoff_timeout_seconds`) |
 
-Advances 2, 3, and 4 require the readiness condition to be **sustained for 2 seconds** before
+Advances 2, 3, 4, and 5 require the readiness condition to be **sustained for 2 seconds** before
 firing. If the condition drops out during that window (e.g. kicker steps back), the countdown
 resets. This gives robots time to settle before play begins.
 
@@ -234,8 +236,9 @@ resets. This gives robots time to settle before play begins.
 ```yaml
 game:
   auto_advance:
-    stop_to_prepare_kickoff: true
+    stop_to_next_command: true
     prepare_kickoff_to_normal: true
+    prepare_penalty_to_normal: true
     direct_free_to_normal: true
     ball_placement_to_next: true
     normal_start_to_force: true
@@ -248,8 +251,9 @@ nobody is on the field when play begins.
 ```yaml
 game:
   auto_advance:
-    stop_to_prepare_kickoff: false
+    stop_to_next_command: false
     prepare_kickoff_to_normal: false
+    prepare_penalty_to_normal: false
     direct_free_to_normal: false
     ball_placement_to_next: false
     normal_start_to_force: false
@@ -309,8 +313,9 @@ game:
   force_start_after_goal: false
   stop_duration_seconds: 3.0
   auto_advance:
-    stop_to_prepare_kickoff: true   # set false for physical/operator-driven environments
+    stop_to_next_command: true      # set false for physical/operator-driven environments
     prepare_kickoff_to_normal: true
+    prepare_penalty_to_normal: true
     direct_free_to_normal: true
     ball_placement_to_next: true
     normal_start_to_force: true
@@ -351,7 +356,7 @@ game:
   force_start_after_goal: true
   stop_duration_seconds: 2.0
   auto_advance:
-    stop_to_prepare_kickoff: true
+    stop_to_next_command: true
     prepare_kickoff_to_normal: true
     direct_free_to_normal: true
     ball_placement_to_next: true

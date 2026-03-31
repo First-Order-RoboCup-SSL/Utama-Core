@@ -29,8 +29,9 @@ game:
   prepare_duration_seconds: 2.0
   kickoff_timeout_seconds: 10.0
   auto_advance:
-    stop_to_prepare_kickoff: false  # Operator advances restarts manually
+    stop_to_next_command: false     # Operator advances restarts manually
     prepare_kickoff_to_normal: false
+    prepare_penalty_to_normal: false
     direct_free_to_normal: false
     ball_placement_to_next: false
     normal_start_to_force: false

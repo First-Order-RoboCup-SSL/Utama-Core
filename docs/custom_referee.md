@@ -64,7 +64,7 @@ The one-frame lag (the `GameFrame` used is from the previous step) is acceptable
 
 ## State Machine
 
-The `GameStateMachine` owns all mutable state: command, score, stage, and next command. It does **not** auto-advance from `STOP` to `NORMAL_START` — that transition is always explicit (operator input or a fixed-delay script). This keeps control predictable.
+The `GameStateMachine` owns all mutable state: command, score, stage, and next command. In the `simulation` profile it can auto-advance from `STOP` into the queued restart command once robots have cleared the ball, then continue through restart-specific readiness checks. In the `human` profile those auto-advances are disabled so an operator stays in control.
 
 ```mermaid
 stateDiagram-v2
@@ -75,11 +75,14 @@ stateDiagram-v2
     HALT --> STOP
     HALT --> NORMAL_START
 
-    STOP --> NORMAL_START\n[operator / script]
     STOP --> PREPARE_KICKOFF_YELLOW
     STOP --> PREPARE_KICKOFF_BLUE
     STOP --> DIRECT_FREE_YELLOW
     STOP --> DIRECT_FREE_BLUE
+    STOP --> PREPARE_PENALTY_YELLOW
+    STOP --> PREPARE_PENALTY_BLUE
+    STOP --> BALL_PLACEMENT_YELLOW
+    STOP --> BALL_PLACEMENT_BLUE
 
     NORMAL_START --> STOP : GoalRule fires\n[score++, next_cmd set]
     NORMAL_START --> STOP : OutOfBoundsRule fires\n[designated_position set]
@@ -92,15 +95,18 @@ stateDiagram-v2
 
     PREPARE_KICKOFF_YELLOW --> NORMAL_START
     PREPARE_KICKOFF_BLUE --> NORMAL_START
+    PREPARE_PENALTY_YELLOW --> NORMAL_START
+    PREPARE_PENALTY_BLUE --> NORMAL_START
     DIRECT_FREE_YELLOW --> NORMAL_START
     DIRECT_FREE_BLUE --> NORMAL_START
+    BALL_PLACEMENT_YELLOW --> NORMAL_START
+    BALL_PLACEMENT_BLUE --> NORMAL_START
 
     NORMAL_START --> FORCE_START
     FORCE_START --> NORMAL_START
 ```
 
-> **Key design principle:** `CustomReferee` only ever *moves into* `STOP` automatically. All transitions *out of* `STOP` require an explicit `set_command()` call. This matches how a human operator interacts with a real game controller.  
-> More thoughts on this, in RL loop / automated testing, we do want the referee system to resume the game after our system is ready, e.g. putting ball at designated location and ready to start.
+> **Key design principle:** profile choice controls restart ownership. `simulation` auto-progresses through queued restarts when readiness checks are satisfied; `human` keeps those transitions manual for operator control.
 
 ### Transition cooldown
 
@@ -195,14 +201,14 @@ referee = CustomReferee.from_profile_name("simulation")
 referee = CustomReferee.from_profile_name("/path/to/my_profile.yaml")
 ```
 
-| Setting | `simulation` | `exhibition` | `human` |
-|---|---|---|---|
-| Goal detection | ✅ 1.0 s cooldown | ✅ 1.0 s cooldown | ✅ 1.0 s cooldown |
-| Out of bounds | ✅ | ✅ | ❌ |
-| Defence area | ✅ max 1 defender | ✅ max 1 defender | ❌ |
-| Keep-out radius | ✅ 0.5 m | ✅ 0.2 m | ❌ |
-| Force start after goal | ❌ | ❌ | ❌ |
-| Half duration | 300 s | 300 s | 300 s |
+| Setting | `simulation` | `human` |
+|---|---|---|
+| Goal detection | ✅ 1.0 s cooldown | ✅ 1.0 s cooldown |
+| Out of bounds | ✅ | ❌ |
+| Defence area | ✅ max 1 defender | ❌ |
+| Keep-out radius | ✅ 0.5 m | ❌ |
+| Restart progression | Auto when readiness criteria are met | Manual operator control |
+| Half duration | 300 s | 300 s |
 
 **`simulation`** — Full SSL-compatible rule set with auto-advance enabled for most restarts. Use for simulator testing, AI-vs-AI development, and RL training.
 
@@ -238,6 +244,13 @@ game:
   half_duration_seconds: 300.0
   kickoff_team: "yellow"
   force_start_after_goal: false
+  auto_advance:
+    stop_to_next_command: true
+    prepare_kickoff_to_normal: true
+    prepare_penalty_to_normal: true
+    direct_free_to_normal: true
+    ball_placement_to_next: true
+    normal_start_to_force: true
 ```
 
 ---
