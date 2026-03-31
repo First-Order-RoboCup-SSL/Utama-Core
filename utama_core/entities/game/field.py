@@ -32,6 +32,7 @@ class Field:
 
     # Class constants refer to the standard SSL field (9m x 6m)
 
+    _CENTER_CIRCLE_RADIUS = 0.5
     _HALF_GOAL_WIDTH = 0.5
     _HALF_DEFENSE_AREA_LENGTH = 0.5
     _HALF_DEFENSE_AREA_WIDTH = 1
@@ -179,6 +180,18 @@ class Field:
     @ClassProperty
     def HALF_GOAL_WIDTH(cls) -> float:
         return cls._HALF_GOAL_WIDTH
+
+    @ClassProperty
+    def HALF_DEFENSE_AREA_LENGTH(cls) -> float:
+        return cls._HALF_DEFENSE_AREA_LENGTH
+
+    @ClassProperty
+    def HALF_DEFENSE_AREA_WIDTH(cls) -> float:
+        return cls._HALF_DEFENSE_AREA_WIDTH
+
+    @ClassProperty
+    def CENTER_CIRCLE_RADIUS(cls) -> float:
+        return cls._CENTER_CIRCLE_RADIUS
 
     @ClassProperty
     def LEFT_GOAL_LINE(cls) -> np.ndarray:

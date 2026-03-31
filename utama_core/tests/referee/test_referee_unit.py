@@ -18,7 +18,7 @@ from utama_core.data_processing.refiners.referee import RefereeRefiner
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game.ball import Ball
-from utama_core.entities.game.field import Field
+from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.entities.game.game import Game
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.game_history import GameHistory
@@ -105,10 +105,15 @@ def _make_game(
     referee=None,
     my_team_is_yellow: bool = True,
     my_team_is_right: bool = True,
+    field_bounds: FieldBounds = Field.FULL_FIELD_BOUNDS,
 ) -> Game:
     frame = _make_game_frame(friendly_robots, referee, my_team_is_yellow, my_team_is_right)
     history = GameHistory(10)
-    return Game(past=history, current=frame, field=Field.FULL_FIELD_BOUNDS)
+    return Game(
+        past=history,
+        current=frame,
+        field=Field(my_team_is_right=my_team_is_right, field_bounds=field_bounds),
+    )
 
 
 def _make_blackboard(game: Game, cmd_map=None):
@@ -420,7 +425,11 @@ class TestBallPlacementOursStep:
             ball=_ball(0.2, 0.0),
             referee=referee,
         )
-        game = Game(past=GameHistory(10), current=frame, field=Field.FULL_FIELD_BOUNDS)
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+        )
 
         cmd_map = _make_cmd_map(game)
         node = referee_actions.BallPlacementOursStep(name="BallPlacementOurs")
@@ -470,7 +479,11 @@ class TestBallPlacementOursStep:
             ball=_ball(0.0, 0.0),
             referee=referee,
         )
-        game = Game(past=GameHistory(10), current=frame, field=Field.FULL_FIELD_BOUNDS)
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+        )
 
         cmd_map = _make_cmd_map(game)
         node = referee_actions.BallPlacementOursStep(name="BallPlacementOurs")
@@ -635,6 +648,81 @@ class TestPenaltyPositioning:
         assert status == py_trees.common.Status.RUNNING
         assert keeper_target.x == pytest.approx(4.5)
         assert all(target.x > 0.0 for target in support_targets)
+
+
+class TestVariableFieldScaling:
+    def test_prepare_kickoff_ours_scales_support_positions_with_field_bounds(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {
+            0: _robot(0, 0.0, 0.0),
+            1: _robot(1, 1.0, 0.0),
+            2: _robot(2, 2.0, 0.0),
+        }
+        custom_bounds = FieldBounds(top_left=(-6.0, 4.0), bottom_right=(6.0, -4.0))
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_YELLOW)
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            field_bounds=custom_bounds,
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.PrepareKickoffOursStep(name="PrepareKickoffOurs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        status = node.update()
+        first_support_target = next(target for robot_id, target in captured if robot_id == 1)
+
+        assert status == py_trees.common.Status.RUNNING
+        assert first_support_target.x == pytest.approx(-6.0 * (0.8 / 4.5))
+        assert first_support_target.y == pytest.approx(4.0 * (0.5 / 3.0))
+        assert first_support_target.distance_to(Vector2D(0.0, 0.0)) >= Field.CENTER_CIRCLE_RADIUS
+
+    def test_prepare_penalty_ours_scales_penalty_mark_with_field_bounds(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {
+            0: _robot(0, 0.0, 0.0),
+            1: _robot(1, 1.0, 0.0),
+        }
+        custom_bounds = FieldBounds(top_left=(-6.0, 4.0), bottom_right=(6.0, -4.0))
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_PENALTY_YELLOW)
+        referee.yellow_team.goalkeeper = 1
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            field_bounds=custom_bounds,
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.PreparePenaltyOursStep(name="PreparePenaltyOurs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        status = node.update()
+        kicker_target = next(target for robot_id, target in captured if robot_id == 0)
+
+        assert status == py_trees.common.Status.RUNNING
+        assert kicker_target.x == pytest.approx(-3.0)
+        assert kicker_target.y == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------

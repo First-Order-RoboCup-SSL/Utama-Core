@@ -1,4 +1,4 @@
-"""Hardcoded action nodes for each referee game state.
+"""Referee action nodes for each referee game state.
 
 Each node:
   - Reads game state from blackboard.game
@@ -14,22 +14,21 @@ import math
 
 import py_trees
 
+from utama_core.config.referee_constants import (
+    BALL_KEEP_OUT_DISTANCE,
+    BALL_PLACEMENT_DONE_DISTANCE,
+    CLEARANCE_FALLBACK_DIRECTION,
+    KICKOFF_DEFENCE_POSITION_RATIOS_RIGHT,
+    KICKOFF_SUPPORT_POSITION_RATIOS_RIGHT,
+    PENALTY_BEHIND_MARK_DISTANCE,
+    PENALTY_LINE_Y_STEP_RATIO,
+    PENALTY_MARK_HALF_FIELD_RATIO,
+)
 from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.game.field import Field
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.skills.src.utils.move_utils import empty_command, move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
-
-# SSL field constants / heuristics (metres)
-# Utama's standard field model is 9m x 6m. For penalty setup we place the
-# penalty mark halfway between the centre line and the relevant goal line so
-# it always lies on the correct half, including custom field bounds.
-_PENALTY_MARK_HALF_FIELD_RATIO = 0.5
-_HALF_FIELD_X = 4.5  # half field length
-_CENTRE_CIRCLE_R = 0.5  # centre circle radius
-_BALL_KEEP_DIST = 0.55  # ≥0.5 m required; 5 cm buffer
-_PENALTY_BEHIND_OFFSET = 0.4  # robots must be ≥0.4 m behind penalty mark
-_OPP_DEF_AREA_KEEP_DIST = 0.25  # ≥0.2 m from opponent defence area; 5 cm buffer
-_PLACEMENT_DONE_DIST = 0.15  # ball within this dist of target → placement complete
 
 
 def _all_stop(blackboard) -> py_trees.common.Status:
@@ -47,12 +46,44 @@ def _field_half_length(game) -> float:
     return (field.bottom_right[0] - field.top_left[0]) / 2.0
 
 
+def _field_half_width(game) -> float:
+    """Return the current field half-width, supporting Field and FieldBounds alike."""
+    field = game.field
+    if hasattr(field, "half_width"):
+        return field.half_width
+    return (field.top_left[1] - field.bottom_right[1]) / 2.0
+
+
 def _penalty_mark_x(goal_x: float) -> float:
     """Place the penalty mark midway between centre and goal line."""
-    return goal_x * _PENALTY_MARK_HALF_FIELD_RATIO
+    return goal_x * PENALTY_MARK_HALF_FIELD_RATIO
 
 
-def _clear_from_ball(blackboard, keep_dist: float = _BALL_KEEP_DIST) -> py_trees.common.Status:
+def _scaled_position(game, x_ratio: float, y_ratio: float) -> Vector2D:
+    """Scale a normalized formation coordinate to the current field dimensions."""
+    return Vector2D(x_ratio * _field_half_length(game), y_ratio * _field_half_width(game))
+
+
+def _ensure_outside_center_circle(target: Vector2D) -> Vector2D:
+    """Project kickoff support points to the centre-circle boundary when needed."""
+    dist = math.hypot(target.x, target.y)
+    keep_radius = Field.CENTER_CIRCLE_RADIUS
+    if dist == 0.0 or dist >= keep_radius:
+        return target
+    scale = keep_radius / dist
+    return Vector2D(target.x * scale, target.y * scale)
+
+
+def _formation_positions(game, ratios: tuple[tuple[float, float], ...], mirror_x: bool) -> list[Vector2D]:
+    """Build field-scaled formation positions, mirroring x when we defend the left goal."""
+    positions = []
+    for x_ratio, y_ratio in ratios:
+        scaled_x_ratio = -x_ratio if mirror_x else x_ratio
+        positions.append(_ensure_outside_center_circle(_scaled_position(game, scaled_x_ratio, y_ratio)))
+    return positions
+
+
+def _clear_from_ball(blackboard, keep_dist: float = BALL_KEEP_OUT_DISTANCE) -> py_trees.common.Status:
     """Move encroaching robots out beyond the keep-out radius and stop the rest."""
     game = blackboard.game
     ball = game.ball
@@ -70,7 +101,7 @@ def _clear_from_ball(blackboard, keep_dist: float = _BALL_KEEP_DIST) -> py_trees
             continue
 
         if dist == 0.0:
-            ux, uy = 1.0, 0.0
+            ux, uy = CLEARANCE_FALLBACK_DIRECTION
         else:
             ux, uy = dx / dist, dy / dist
 
@@ -141,7 +172,7 @@ class BallPlacementOursStep(AbstractBehaviour):
         if ball is None:
             return _all_stop(self.blackboard)
 
-        if ball.p.distance_to(target_pos) <= _PLACEMENT_DONE_DIST:
+        if ball.p.distance_to(target_pos) <= BALL_PLACEMENT_DONE_DISTANCE:
             return _all_stop(self.blackboard)
 
         # Pick the placer: robot closest to the ball
@@ -183,17 +214,6 @@ class BallPlacementTheirsStep(AbstractBehaviour):
 # PREPARE_KICKOFF — ours
 # ---------------------------------------------------------------------------
 
-# Kickoff formation positions (own half, outside centre circle).
-# Relative x is negative = own half when we are on the right; sign is flipped below.
-_KICKOFF_SUPPORT_POSITIONS_RIGHT = [
-    Vector2D(-0.8, 0.5),
-    Vector2D(-0.8, -0.5),
-    Vector2D(-1.5, 0.8),
-    Vector2D(-1.5, -0.8),
-    Vector2D(-2.5, 0.0),
-]
-_KICKOFF_SUPPORT_POSITIONS_LEFT = [Vector2D(-p.x, p.y) for p in _KICKOFF_SUPPORT_POSITIONS_RIGHT]
-
 
 class PrepareKickoffOursStep(AbstractBehaviour):
     """Positions robots for our kickoff.
@@ -210,8 +230,10 @@ class PrepareKickoffOursStep(AbstractBehaviour):
         kicker_id = robot_ids[0]
 
         # Support positions depend on which side we defend
-        support_positions = (
-            _KICKOFF_SUPPORT_POSITIONS_RIGHT if game.my_team_is_right else _KICKOFF_SUPPORT_POSITIONS_LEFT
+        support_positions = _formation_positions(
+            game,
+            KICKOFF_SUPPORT_POSITION_RATIOS_RIGHT,
+            mirror_x=not game.my_team_is_right,
         )
 
         support_idx = 0
@@ -219,7 +241,7 @@ class PrepareKickoffOursStep(AbstractBehaviour):
             if robot_id == kicker_id:
                 # Approach the ball at centre, face the opponent goal
                 target = Vector2D(0.0, 0.0)
-                goal_x = _HALF_FIELD_X if not game.my_team_is_right else -_HALF_FIELD_X
+                goal_x = _field_half_length(game) if not game.my_team_is_right else -_field_half_length(game)
                 oren = math.atan2(0.0 - target.y, goal_x - target.x)
                 self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, target, oren)
             else:
@@ -234,16 +256,6 @@ class PrepareKickoffOursStep(AbstractBehaviour):
 # PREPARE_KICKOFF — theirs
 # ---------------------------------------------------------------------------
 
-_KICKOFF_DEFENCE_POSITIONS_RIGHT = [
-    Vector2D(-0.8, 0.4),
-    Vector2D(-0.8, -0.4),
-    Vector2D(-1.5, 0.6),
-    Vector2D(-1.5, -0.6),
-    Vector2D(-2.5, 0.0),
-    Vector2D(-1.5, 0.0),
-]
-_KICKOFF_DEFENCE_POSITIONS_LEFT = [Vector2D(-p.x, p.y) for p in _KICKOFF_DEFENCE_POSITIONS_RIGHT]
-
 
 class PrepareKickoffTheirsStep(AbstractBehaviour):
     """Moves all our robots to own half, outside the centre circle, for the opponent kickoff."""
@@ -252,7 +264,11 @@ class PrepareKickoffTheirsStep(AbstractBehaviour):
         game = self.blackboard.game
         motion_controller = self.blackboard.motion_controller
 
-        positions = _KICKOFF_DEFENCE_POSITIONS_RIGHT if game.my_team_is_right else _KICKOFF_DEFENCE_POSITIONS_LEFT
+        positions = _formation_positions(
+            game,
+            KICKOFF_DEFENCE_POSITION_RATIOS_RIGHT,
+            mirror_x=not game.my_team_is_right,
+        )
 
         for idx, robot_id in enumerate(sorted(game.friendly_robots.keys())):
             pos = positions[idx % len(positions)]
@@ -270,7 +286,7 @@ class PreparePenaltyOursStep(AbstractBehaviour):
     """Positions robots for our penalty kick.
 
     Kicker (lowest non-keeper ID): moves to our penalty mark, faces goal.
-    All others: stop on a line 0.4 m behind the penalty mark (on own side).
+    All others: stop on a line behind the penalty mark on our side.
 
     Penalty mark is placed halfway between the centre line and the target goal line.
     """
@@ -289,7 +305,7 @@ class PreparePenaltyOursStep(AbstractBehaviour):
         opp_goal_x = field_half_length if not game.my_team_is_right else -field_half_length
         sign = 1 if not game.my_team_is_right else -1
         penalty_mark = Vector2D(_penalty_mark_x(opp_goal_x), 0.0)
-        behind_line_x = penalty_mark.x - sign * _PENALTY_BEHIND_OFFSET
+        behind_line_x = penalty_mark.x - sign * PENALTY_BEHIND_MARK_DISTANCE
 
         goal_oren = math.atan2(0.0, opp_goal_x - penalty_mark.x)
 
@@ -298,7 +314,7 @@ class PreparePenaltyOursStep(AbstractBehaviour):
         kicker_id = non_keeper_ids[0] if non_keeper_ids else robot_ids[0]
 
         behind_idx = 0
-        behind_y_step = 0.35
+        behind_y_step = PENALTY_LINE_Y_STEP_RATIO * _field_half_width(game)
         for robot_id in robot_ids:
             if robot_id == kicker_id:
                 self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, penalty_mark, goal_oren)
@@ -321,7 +337,7 @@ class PreparePenaltyTheirsStep(AbstractBehaviour):
     """Positions our robots for the opponent's penalty kick.
 
     Goalkeeper: moves to our goal line centre.
-    All others: move to a line 0.4 m behind the penalty mark on our half.
+    All others: move to a line behind the penalty mark on our half.
     """
 
     def update(self) -> py_trees.common.Status:
@@ -339,11 +355,11 @@ class PreparePenaltyTheirsStep(AbstractBehaviour):
 
         # Opponent's penalty mark is in our half, between centre and our goal line.
         opp_penalty_mark_x = _penalty_mark_x(our_goal_x)
-        behind_line_x = opp_penalty_mark_x + sign * _PENALTY_BEHIND_OFFSET
+        behind_line_x = opp_penalty_mark_x + sign * PENALTY_BEHIND_MARK_DISTANCE
 
         robot_ids = sorted(game.friendly_robots.keys())
         behind_idx = 0
-        behind_y_step = 0.35
+        behind_y_step = PENALTY_LINE_Y_STEP_RATIO * _field_half_width(game)
 
         for robot_id in robot_ids:
             if robot_id == keeper_id:
