@@ -88,6 +88,7 @@ class GameStateMachine:
 
         self.next_command: Optional[RefereeCommand] = None
         self.ball_placement_target: Optional[tuple[float, float]] = None
+        self.status_message: Optional[str] = None
 
         # Kickoff team initialised from profile.
         self._kickoff_team_is_yellow = kickoff_team.lower() == "yellow"
@@ -212,6 +213,7 @@ class GameStateMachine:
                     self.command_counter += 1
                     self.command_timestamp = current_time
                     self.next_command = None
+                    self.status_message = None
                     self._normal_start_time = current_time
                     self._ball_pos_at_normal_start = (
                         (game_frame.ball.p.x, game_frame.ball.p.y) if game_frame.ball is not None else None
@@ -245,6 +247,7 @@ class GameStateMachine:
                     self.command_counter += 1
                     self.command_timestamp = current_time
                     self.next_command = None
+                    self.status_message = None
                     self._normal_start_time = current_time
                     self._ball_pos_at_normal_start = (
                         (game_frame.ball.p.x, game_frame.ball.p.y) if game_frame.ball is not None else None
@@ -272,6 +275,7 @@ class GameStateMachine:
                     self.command_counter += 1
                     self.command_timestamp = current_time
                     self.next_command = None
+                    self.status_message = None
                     self._normal_start_time = current_time
                     self._ball_pos_at_normal_start = (
                         (game_frame.ball.p.x, game_frame.ball.p.y) if game_frame.ball is not None else None
@@ -303,6 +307,7 @@ class GameStateMachine:
                     self.command_timestamp = current_time
                     self.next_command = None
                     self._advance4_ready_since = math.inf
+                    self.status_message = None
                     self._last_transition_time = current_time
             else:
                 self._advance4_ready_since = math.inf
@@ -325,6 +330,7 @@ class GameStateMachine:
             self.command_counter += 1
             self.command_timestamp = current_time
             self.next_command = None
+            self.status_message = None
             self._ball_pos_at_normal_start = None
             self._last_transition_time = current_time
 
@@ -341,6 +347,7 @@ class GameStateMachine:
             self.command_counter += 1
             self.command_timestamp = current_time
             self.next_command = None
+            self.status_message = None
             self._last_transition_time = current_time
             logger.info("Auto-advanced STOP → FORCE_START after goal (force-start profile mode)")
 
@@ -463,6 +470,7 @@ class GameStateMachine:
             self.command_counter += 1
             self.command_timestamp = timestamp
             self.next_command = command
+            self.status_message = None
             self._stop_entered_time = timestamp
             return
 
@@ -483,12 +491,14 @@ class GameStateMachine:
             self.command_counter += 1
             self.command_timestamp = timestamp
             self.next_command = RefereeCommand.NORMAL_START
+            self.status_message = None
             self._prepare_entered_time = timestamp
             return
 
         self.command = command
         self.command_counter += 1
         self.command_timestamp = timestamp
+        self.status_message = None
         self._advance2_ready_since = math.inf
         self._advance3_ready_since = math.inf
         self._advance4_ready_since = math.inf
@@ -553,6 +563,7 @@ class GameStateMachine:
         self.command_timestamp = current_time
         self.next_command = violation.next_command
         self.ball_placement_target = (0.0, 0.0)
+        self.status_message = violation.status_message
         self._stop_entered_time = current_time
 
     def _handle_foul(self, violation: RuleViolation, current_time: float) -> None:
@@ -561,6 +572,7 @@ class GameStateMachine:
         self.command_timestamp = current_time
         self.next_command = violation.next_command
         self.ball_placement_target = violation.designated_position
+        self.status_message = violation.status_message
         logger.info(
             "Foul detected: %s → %s (next: %s)",
             violation.rule_name,
@@ -584,4 +596,5 @@ class GameStateMachine:
             blue_team_on_positive_half=None,
             next_command=self.next_command,
             current_action_time_remaining=None,
+            status_message=self.status_message,
         )

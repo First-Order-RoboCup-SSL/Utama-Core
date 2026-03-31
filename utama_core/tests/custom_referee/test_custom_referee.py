@@ -352,6 +352,35 @@ class TestGameStateMachine:
         data = sm.step(current_time=10.0, violation=violation)
         assert data.designated_position == (0.0, 0.0)
 
+    def test_goal_status_message_is_propagated_into_referee_data(self):
+        from utama_core.custom_referee.rules.base_rule import RuleViolation
+
+        sm = _state_machine()
+        violation = RuleViolation(
+            rule_name="goal",
+            suggested_command=RefereeCommand.STOP,
+            next_command=RefereeCommand.PREPARE_KICKOFF_BLUE,
+            status_message="Goal by Yellow",
+        )
+        data = sm.step(current_time=10.0, violation=violation)
+        assert data.status_message == "Goal by Yellow"
+
+    def test_manual_command_clears_status_message(self):
+        from utama_core.custom_referee.rules.base_rule import RuleViolation
+
+        sm = _state_machine()
+        violation = RuleViolation(
+            rule_name="goal",
+            suggested_command=RefereeCommand.STOP,
+            next_command=RefereeCommand.PREPARE_KICKOFF_BLUE,
+            status_message="Goal by Yellow",
+        )
+        sm.step(current_time=10.0, violation=violation)
+
+        sm.set_command(RefereeCommand.NORMAL_START, timestamp=11.0)
+        data = sm.step(current_time=11.0, violation=None)
+        assert data.status_message is None
+
     def test_manual_set_command(self):
         sm = _state_machine()
         sm.set_command(RefereeCommand.NORMAL_START, timestamp=5.0)
@@ -423,6 +452,13 @@ class TestCustomReferee:
         frame = _frame(ball=_ball(0.0, 4.0), ts=10.0)  # ball outside field width
         data = referee.step(frame, current_time=10.0)
         assert data.referee_command == RefereeCommand.NORMAL_START
+
+    def test_simulation_oob_exposes_status_message(self):
+        referee = CustomReferee.from_profile_name("simulation")
+        referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+        frame = _frame(ball=_ball(0.0, 4.0), ts=10.0)
+        data = referee.step(frame, current_time=10.0)
+        assert data.status_message == "Ball out of bounds"
 
     def test_human_stays_in_stop_after_goal_until_operator_advances(self):
         """Human mode keeps the game in STOP after a goal for operator control."""
