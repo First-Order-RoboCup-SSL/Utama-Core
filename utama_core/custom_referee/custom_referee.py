@@ -75,6 +75,7 @@ class CustomReferee:
         enable_gui: bool = False,
         gui_port: int = 8080,
     ) -> None:
+        self._profile_name = profile.profile_name
         self._geometry: RefereeGeometry = profile.geometry
         self._rules: List[BaseRule] = _build_active_rules(profile.rules)
         self._state = GameStateMachine(
@@ -161,3 +162,7 @@ class CustomReferee:
     @property
     def geometry(self) -> RefereeGeometry:
         return self._geometry
+
+    @property
+    def profile_name(self) -> str:
+        return self._profile_name
