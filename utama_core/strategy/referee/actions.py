@@ -26,6 +26,7 @@ _CENTRE_CIRCLE_R = 0.5  # centre circle radius
 _BALL_KEEP_DIST = 0.55  # ≥0.5 m required; 5 cm buffer
 _PENALTY_BEHIND_OFFSET = 0.4  # robots must be ≥0.4 m behind penalty mark
 _OPP_DEF_AREA_KEEP_DIST = 0.25  # ≥0.2 m from opponent defence area; 5 cm buffer
+_PLACEMENT_DONE_DIST = 0.15  # ball within this dist of target → placement complete
 
 
 def _all_stop(blackboard) -> py_trees.common.Status:
@@ -73,12 +74,11 @@ class StopStep(AbstractBehaviour):
 
 
 class BallPlacementOursStep(AbstractBehaviour):
-    """Moves the closest friendly robot to the designated_position to place the ball.
+    """Moves the closest friendly robot to place the ball at designated_position.
 
-    All other robots stop in place. If can_place_ball is False, all robots stop.
-
-    The placing robot drives toward designated_position using the move() skill.
-    Ball capture and release are handled by the dribbler (future: dribble_subtree).
+    If the chosen placer does not yet have the ball, it first drives to the ball
+    with the dribbler on. Once it has possession, it carries the ball to the
+    designated position. All other robots stop in place.
     """
 
     def update(self) -> py_trees.common.Status:
@@ -88,7 +88,7 @@ class BallPlacementOursStep(AbstractBehaviour):
 
         # Determine which team is ours
         our_team = ref.yellow_team if game.my_team_is_yellow else ref.blue_team
-        if not getattr(our_team, "can_place_ball", True):
+        if getattr(our_team, "can_place_ball", None) is False:
             return _all_stop(self.blackboard)
 
         target = ref.designated_position
@@ -97,20 +97,28 @@ class BallPlacementOursStep(AbstractBehaviour):
 
         target_pos = Vector2D(target[0], target[1])
         ball = game.ball
+        if ball is None:
+            return _all_stop(self.blackboard)
+
+        if ball.p.distance_to(target_pos) <= _PLACEMENT_DONE_DIST:
+            return _all_stop(self.blackboard)
 
         # Pick the placer: robot closest to the ball
         placer_id = min(
             game.friendly_robots,
-            key=lambda rid: game.friendly_robots[rid].p.distance_to(ball.p) if ball else float("inf"),
+            key=lambda rid: game.friendly_robots[rid].p.distance_to(ball.p),
         )
 
         for robot_id in game.friendly_robots:
             if robot_id == placer_id:
-                # Face the target while approaching
                 robot = game.friendly_robots[robot_id]
-                oren = robot.p.angle_to(target_pos)
+                if robot.has_ball:
+                    target_for_move = target_pos
+                else:
+                    target_for_move = ball.p
+                oren = robot.p.angle_to(target_for_move)
                 self.blackboard.cmd_map[robot_id] = move(
-                    game, motion_controller, robot_id, target_pos, oren, dribbling=True
+                    game, motion_controller, robot_id, target_for_move, oren, dribbling=True
                 )
             else:
                 self.blackboard.cmd_map[robot_id] = empty_command(False)

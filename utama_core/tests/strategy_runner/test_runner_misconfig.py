@@ -29,6 +29,44 @@ def test_load_mode_invalid(base_runner):
         base_runner._load_mode("invalid_mode")
 
 
+def test_resolve_referee_system_defaults_to_none_in_rsim():
+    assert StrategyRunner._resolve_referee_system(Mode.RSIM, None, None) == "none"
+
+
+def test_resolve_referee_system_defaults_to_none_in_grsim():
+    assert StrategyRunner._resolve_referee_system(Mode.GRSIM, None, None) == "none"
+
+
+def test_resolve_referee_system_defaults_to_none_even_when_custom_referee_is_provided():
+    with pytest.raises(ValueError, match="custom_referee"):
+        StrategyRunner._resolve_referee_system(Mode.RSIM, None, object())
+
+
+def test_resolve_referee_system_rejects_invalid_name():
+    with pytest.raises(ValueError, match="Unknown referee_system"):
+        StrategyRunner._resolve_referee_system(Mode.RSIM, "auto", None)
+
+
+def test_resolve_referee_system_rejects_official_in_rsim():
+    with pytest.raises(ValueError, match="official"):
+        StrategyRunner._resolve_referee_system(Mode.RSIM, "official", None)
+
+
+def test_resolve_referee_system_requires_custom_referee_for_custom_mode():
+    with pytest.raises(ValueError, match="custom_referee"):
+        StrategyRunner._resolve_referee_system(Mode.RSIM, "custom", None)
+
+
+def test_resolve_referee_system_rejects_custom_referee_with_none_mode():
+    with pytest.raises(ValueError, match="custom_referee"):
+        StrategyRunner._resolve_referee_system(Mode.RSIM, "none", object())
+
+
+def test_resolve_referee_system_rejects_custom_referee_with_official_mode():
+    with pytest.raises(ValueError, match="custom_referee"):
+        StrategyRunner._resolve_referee_system(Mode.GRSIM, "official", object())
+
+
 def test_assert_exp_robots_valid(base_runner):
     base_runner._assert_exp_robots_and_ball(3, 3, True)  # Should not raise
 

@@ -142,7 +142,7 @@ def main():
         mode="rsim",
         exp_friendly=N_ROBOTS,
         exp_enemy=N_ROBOTS,
-        print_real_fps=True,
+        show_live_status=True,
     )
 
     # Patch _run_step to push scripted RefereeData into ref_buffer before each

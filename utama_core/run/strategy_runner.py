@@ -6,7 +6,7 @@ import time
 import warnings
 from collections import deque
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from rich.live import Live
 from rich.text import Text
@@ -31,6 +31,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameFrame, GameHistory
 from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
@@ -56,6 +57,9 @@ from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
 )
+
+if TYPE_CHECKING:
+    from utama_core.custom_referee import CustomReferee
 
 logging.basicConfig(
     filename="Utama.log",
@@ -108,7 +112,10 @@ class StrategyRunner:
         control_scheme (str, optional): Name of the motion control scheme to use.
         opp_control_scheme (str, optional): Name of the opponent motion control scheme to use. If not set, uses same as friendly.
         replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
-        print_real_fps (bool, optional): Whether to print real FPS. Defaults to False.
+        show_live_status (bool, optional): Whether to show the live terminal status panel.
+            This panel includes FPS, referee command, stage, score, time remaining,
+            and optional status text. Defaults to False.
+        print_real_fps (bool, optional): Deprecated alias for `show_live_status`.
         profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
         rsim_noise (RsimGaussianNoise, optional): When running in rsim, add Gaussian noise to balls and robots with the
             given standard deviation. The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
@@ -116,6 +123,13 @@ class StrategyRunner:
         rsim_vanishing (float, optional): When running in rsim, cause robots and ball to vanish with the given probability.
             Defaults to 0.
         filtering (bool, optional): Turn on Kalman filtering. Defaults to false.
+        referee_system (str, optional): Referee source selector. Valid values are
+            `"none"`, `"official"`, and `"custom"`. When omitted, it defaults to
+            `"none"` and no referee input is consumed unless an explicit referee
+            system is selected.
+        custom_referee (CustomReferee, optional): In-process referee source used instead of the
+            network referee receiver. Works across rsim, grsim, and real modes by pushing RefereeData
+            into ref_buffer each tick before the strategy step.
     """
 
     def __init__(
@@ -132,14 +146,19 @@ class StrategyRunner:
         control_scheme: str = "pid",  # This is also the default control scheme used in the motion planning tests
         opp_control_scheme: Optional[str] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
-        print_real_fps: bool = False,  # Turn this on for RSim
+        show_live_status: bool = False,  # Turn this on for simulator debugging
+        print_real_fps: Optional[bool] = None,
         profiler_name: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
         rsim_vanishing: float = 0,
         filtering: bool = False,
+        referee_system: Optional[str] = None,
+        custom_referee: Optional["CustomReferee"] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
+        self.custom_referee = custom_referee
+        self._prev_custom_ref_command: Optional[RefereeCommand] = None
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
         self.mode: Mode = self._load_mode(mode)
@@ -147,6 +166,7 @@ class StrategyRunner:
         self.exp_enemy = exp_enemy
         self.exp_ball = exp_ball
         self.field_bounds = field_bounds
+        self.referee_system = self._resolve_referee_system(self.mode, referee_system, custom_referee)
 
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 
@@ -177,6 +197,14 @@ class StrategyRunner:
 
         self.toggle_opp_first = False  # used to alternate the order of opp and friendly in run
 
+        if print_real_fps is not None:
+            warnings.warn(
+                "`print_real_fps` is deprecated; use `show_live_status` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            show_live_status = print_real_fps
+
         # Replay Writer
         self.replay_writer = (
             ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
@@ -184,11 +212,12 @@ class StrategyRunner:
             else None
         )
 
-        # FPS Printing
+        # Live terminal status panel
         self.num_frames_elapsed = 0
         self.elapsed_time = 0.0
-        self.print_real_fps = print_real_fps
-        if print_real_fps:
+        self.show_live_status = show_live_status
+        self.print_real_fps = show_live_status
+        if show_live_status:
             self._fps_live = Live(auto_refresh=False)
             self._fps_live.start()  # manually control it so it never overrides prints
         else:
@@ -222,6 +251,38 @@ class StrategyRunner:
         if mode is None:
             raise ValueError(f"Unknown mode: {mode_str}. Choose from 'rsim', 'grsim', or 'real'.")
         return mode
+
+    @staticmethod
+    def _resolve_referee_system(
+        mode: Mode,
+        referee_system: Optional[str],
+        custom_referee: Optional["CustomReferee"],
+    ) -> str:
+        """Resolve and validate referee source selection.
+
+        Default behavior:
+          - omitted -> "none"
+        """
+        if referee_system is None:
+            referee_system = "none"
+
+        system = referee_system.lower()
+        if system not in {"none", "official", "custom"}:
+            raise ValueError(f"Unknown referee_system: {referee_system}. Choose from 'none', 'official', or 'custom'.")
+
+        if system == "custom" and custom_referee is None:
+            raise ValueError("referee_system='custom' requires a custom_referee instance.")
+
+        if system != "custom" and custom_referee is not None:
+            raise ValueError(
+                "custom_referee was provided, but referee_system is not 'custom'. "
+                "Use referee_system='custom' or remove custom_referee."
+            )
+
+        if system == "official" and mode == Mode.RSIM:
+            raise ValueError("referee_system='official' is not supported in rsim. Use 'none' or 'custom'.")
+
+        return system
 
     def data_update_listener(self, receiver: VisionReceiver):
         """Listener function to pull vision data from a VisionReceiver.
@@ -396,7 +457,7 @@ class StrategyRunner:
         vision_buffers = [deque(maxlen=1) for _ in range(MAX_CAMERAS)]
         ref_buffer = deque(maxlen=1)
         vision_receiver = VisionReceiver(vision_buffers)
-        if self.mode != Mode.RSIM:
+        if self.referee_system == "official":
             referee_receiver = RefereeMessageReceiver(ref_buffer)
             self.start_threads(vision_receiver, referee_receiver)
 
@@ -773,14 +834,29 @@ class StrategyRunner:
         No return value; updates internal game state and controllers.
         """
         frame_start = time.perf_counter()
+
+        if self.referee_system == "custom":
+            ref_data = self.custom_referee.step(self.my.current_game_frame, time.time())
+            self.ref_buffer.append(ref_data)
+            if (
+                self.sim_controller is not None
+                and ref_data.referee_command == RefereeCommand.STOP
+                and ref_data.designated_position is not None
+                and self._prev_custom_ref_command != RefereeCommand.STOP
+            ):
+                x, y = ref_data.designated_position
+                self.sim_controller.teleport_ball(x, y)
+            self._prev_custom_ref_command = ref_data.referee_command
+
         if self.mode == Mode.RSIM:
             obs = self.rsim_env._frame_to_observations()
-            if len(obs) == 4:
+            if len(obs) == 4 and self.referee_system != "custom":
                 # New format with referee embedded in observations
                 vision_frames = [obs[0]]
                 referee_data = obs[3]
             else:
-                # Standard format — check ref_buffer for externally injected referee data
+                # custom_referee already pushed data into ref_buffer above;
+                # otherwise read externally injected referee data.
                 vision_frames = [obs[0]]
                 referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
         else:
@@ -805,7 +881,7 @@ class StrategyRunner:
             time.sleep(wait_time)
 
         # --- end of frame ---
-        if self.print_real_fps:
+        if self.show_live_status:
             frame_end = time.perf_counter()
             frame_dt = frame_end - frame_start
 

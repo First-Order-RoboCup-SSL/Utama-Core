@@ -34,7 +34,7 @@ from utama_core.strategy.referee.tree import build_referee_override_tree
 # ---------------------------------------------------------------------------
 
 
-def _team_info(goalkeeper: int = 0) -> TeamInfo:
+def _team_info(goalkeeper: int = 0, can_place_ball: bool = True) -> TeamInfo:
     return TeamInfo(
         name="TestTeam",
         score=0,
@@ -44,6 +44,7 @@ def _team_info(goalkeeper: int = 0) -> TeamInfo:
         timeouts=0,
         timeout_time=0,
         goalkeeper=goalkeeper,
+        can_place_ball=can_place_ball,
     )
 
 
@@ -383,6 +384,104 @@ class TestHaltAndStopStep:
         game = _make_game(friendly_robots=robots, referee=_make_referee_data())
         status, cmd_map = self._run_step(StopStep, game)
         assert set(cmd_map.keys()) == {0, 1, 2}
+
+
+# ---------------------------------------------------------------------------
+# BallPlacementOursStep — fetch ball before target placement
+# ---------------------------------------------------------------------------
+
+
+class TestBallPlacementOursStep:
+    def test_robot_without_ball_moves_to_ball_first(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords, dribbling))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {
+            0: _robot(0, 0.0, 0.0),
+            1: _robot(1, 2.0, 2.0),
+        }
+        referee = _make_referee_data(
+            command=RefereeCommand.BALL_PLACEMENT_YELLOW,
+        )
+        referee.designated_position = (1.5, 1.5)
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(0.2, 0.0),
+            referee=referee,
+        )
+        game = Game(past=GameHistory(10), current=frame, field=Field.FULL_FIELD_BOUNDS)
+
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.BallPlacementOursStep(name="BallPlacementOurs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        status = node.update()
+
+        assert status == py_trees.common.Status.RUNNING
+        assert captured[0][0] == 0
+        assert captured[0][1].x == game.ball.p.x
+        assert captured[0][1].y == game.ball.p.y
+        assert captured[0][2] is True
+        assert cmd_map[1] is not None
+
+    def test_robot_with_ball_moves_to_designated_position(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords, dribbling))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {
+            0: Robot(
+                id=0,
+                is_friendly=True,
+                has_ball=True,
+                p=Vector2D(0.0, 0.0),
+                v=Vector2D(0.0, 0.0),
+                a=Vector2D(0.0, 0.0),
+                orientation=0.0,
+            )
+        }
+        referee = _make_referee_data(
+            command=RefereeCommand.BALL_PLACEMENT_YELLOW,
+        )
+        referee.designated_position = (1.5, -0.5)
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(0.0, 0.0),
+            referee=referee,
+        )
+        game = Game(past=GameHistory(10), current=frame, field=Field.FULL_FIELD_BOUNDS)
+
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.BallPlacementOursStep(name="BallPlacementOurs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        status = node.update()
+
+        assert status == py_trees.common.Status.RUNNING
+        assert captured[0][0] == 0
+        assert captured[0][1] == Vector2D(1.5, -0.5)
+        assert captured[0][2] is True
 
 
 # ---------------------------------------------------------------------------
