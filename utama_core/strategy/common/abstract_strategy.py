@@ -192,7 +192,7 @@ class AbstractStrategy(ABC):
         self.blackboard.set("motion_controller", motion_controller, overwrite=True)
         self.blackboard.register_key(key="motion_controller", access=py_trees.common.Access.READ)
 
-    def assert_field_requirements(self):
+    def assert_field_requirements(self, game: Game):
         """
         Assert that the actual field size meets the strategy's requirements,
         that both actual field and min_bounding_zone are within the full field,
@@ -203,7 +203,11 @@ class AbstractStrategy(ABC):
 
         # --- Validate min bounding zone ---
         if min_bounding_zone is not None:
-            assert_valid_bounding_box(min_bounding_zone)
+            assert_valid_bounding_box(
+                min_bounding_zone,
+                game.field.full_field_half_length,
+                game.field.full_field_half_width,
+            )
 
             # --- Check that actual field contains min_bounding_zone ---
             ax0, ay0 = actual_field_size.top_left
@@ -223,7 +227,7 @@ class AbstractStrategy(ABC):
         We do not set to READ after, as we TestManager may reset the game object for the new episode.
         """
         self.blackboard.set("game", game, overwrite=True)
-        self.assert_field_requirements()
+        self.assert_field_requirements(game)
 
     def step(self):
         # start_time = time.time()

@@ -130,9 +130,9 @@ def in_field_bounds(point: Tuple[float, float] | Vector2D, bounding_box: FieldBo
     )
 
 
-def assert_valid_bounding_box(bb: FieldBounds):
+def assert_valid_bounding_box(bb: FieldBounds, full_field_half_length: float, full_field_half_width: float):
     """Asserts that a FieldBounds object is valid, raising an AssertionError if not."""
-    fx, fy = Field._FULL_FIELD_HALF_LENGTH, Field._FULL_FIELD_HALF_WIDTH
+    fx, fy = full_field_half_length, full_field_half_width
 
     x0, y0 = bb.top_left
     x1, y1 = bb.bottom_right

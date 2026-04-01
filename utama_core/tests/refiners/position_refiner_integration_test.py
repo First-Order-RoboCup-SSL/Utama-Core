@@ -3,10 +3,10 @@ import threading
 import time
 from collections import deque
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.settings import TIMESTEP
 from utama_core.data_processing.receivers.vision_receiver import VisionReceiver
 from utama_core.data_processing.refiners import PositionRefiner
-from utama_core.entities.game import Field
 from utama_core.run import GameGater
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ def main():
     # Runs the vision receiver,
     vision_buffers = [deque(maxlen=1) for _ in range(4)]
     vision_receiver = VisionReceiver(vision_buffers)
-    position_refiner = PositionRefiner(Field.FULL_FIELD_BOUNDS)
+    position_refiner = PositionRefiner(STANDARD_FIELD_DIMS.full_field_bounds)
 
     start_threads(vision_receiver)
     NUM_FRIENDLY = 1

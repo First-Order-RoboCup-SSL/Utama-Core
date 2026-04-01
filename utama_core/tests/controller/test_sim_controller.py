@@ -1,10 +1,8 @@
 """Tests for AbstractSimController bounds-checking behaviour."""
 
-from unittest.mock import MagicMock, call, patch
-
 import pytest
 
-from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldBounds
 from utama_core.team_controller.src.controllers.common.sim_controller_abstract import (
     AbstractSimController,
 )
@@ -37,7 +35,7 @@ class StubSimController(AbstractSimController):
 # ---------------------------------------------------------------------------
 
 # Standard SSL full-field bounds: x ∈ [-4.5, 4.5], y ∈ [-3.0, 3.0]
-FULL_BOUNDS = Field.FULL_FIELD_BOUNDS
+FULL_BOUNDS = STANDARD_FIELD_DIMS.full_field_bounds
 
 # A small custom bounds used for many tests: x ∈ [0, 2], y ∈ [-1, 1]
 CUSTOM_BOUNDS = FieldBounds(top_left=(0.0, 1.0), bottom_right=(2.0, -1.0))

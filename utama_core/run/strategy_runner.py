@@ -12,6 +12,7 @@ from rich.live import Live
 from rich.text import Text
 
 from utama_core.config.enums import Mode, mode_str_to_enum
+from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.config.physical_constants import MAX_ROBOTS
 from utama_core.config.settings import (
@@ -102,7 +103,8 @@ class StrategyRunner:
         exp_ball (bool): Whether the ball is expected to be present.
                         Only raises error when strategy expects ball but runtime does not provide it.
                         Defaults to True.
-        field_bounds (FieldBounds): Configuration of the field. Defaults to standard field.
+        full_field_dims (FieldDimensions): The dimensions of the full field. Defaults to standard field dimensions.
+        field_bounds (FieldBounds): Bounds of the subset of the full field being used. Defaults to None (ie full field).
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         control_scheme (str, optional): Name of the motion control scheme to use.
         opp_control_scheme (str, optional): Name of the opponent motion control scheme to use. If not set, uses same as friendly.
@@ -126,7 +128,8 @@ class StrategyRunner:
         exp_friendly: int,
         exp_enemy: int,
         exp_ball: bool = True,
-        field_bounds: FieldBounds = Field.FULL_FIELD_BOUNDS,
+        full_field_dims: FieldDimensions = STANDARD_FIELD_DIMS,
+        field_bounds: Optional[FieldBounds] = None,
         opp_strategy: Optional[AbstractStrategy] = None,
         control_scheme: str = "pid",  # This is also the default control scheme used in the motion planning tests
         opp_control_scheme: Optional[str] = None,
@@ -145,11 +148,30 @@ class StrategyRunner:
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
         self.exp_ball = exp_ball
-        self.field_bounds = field_bounds
+        self.full_field_dims = full_field_dims
+        # if field bounds not provided, default to full field dimensions
+        self.field_bounds = (
+            field_bounds
+            if field_bounds
+            else FieldBounds(
+                top_left=(
+                    -full_field_dims.full_field_half_length,
+                    full_field_dims.full_field_half_width,
+                ),
+                bottom_right=(
+                    full_field_dims.full_field_half_length,
+                    -full_field_dims.full_field_half_width,
+                ),
+            )
+        )
 
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 
-        assert_valid_bounding_box(self.field_bounds)
+        assert_valid_bounding_box(
+            self.field_bounds,
+            full_field_dims.full_field_half_length,
+            full_field_dims.full_field_half_width,
+        )
 
         self.my, self.opp = self._setup_sides_data(
             strategy, opp_strategy, filtering, control_scheme, opp_control_scheme

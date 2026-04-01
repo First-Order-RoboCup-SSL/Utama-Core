@@ -154,14 +154,12 @@ class TwoRobotPlacementStrategy(AbstractStrategy):
         self,
         first_robot_id: int,
         second_robot_id: int,
-        field_bounds: Optional[FieldBounds] = None,
     ):
         """
         Initialize the TwoRobotPlacementStrategy with two robot IDs and optional field bounds.
         """
         self.first_robot_id = first_robot_id
         self.second_robot_id = second_robot_id
-        self.field_bounds = field_bounds if field_bounds else Field.FULL_FIELD_BOUNDS
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
@@ -197,7 +195,7 @@ class TwoRobotPlacementStrategy(AbstractStrategy):
         set_turn = SetBlackboardVariable(name="InitTurn", variable_name=turn_key, value=0)
 
         # Calculate Field Center from custom field_bounds
-        calc_center = CalculateFieldCenter(field_bounds=self.field_bounds, output_key=field_center_key)
+        calc_center = CalculateFieldCenter(output_key=field_center_key)
 
         # Robot 1 (X-mover): Centered at (center_x, center_y), move range +/- 0.5 in X
         move_robot1 = RobotPlacementStep(

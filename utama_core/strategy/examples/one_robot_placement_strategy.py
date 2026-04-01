@@ -117,7 +117,7 @@ class RobotPlacementStep(AbstractBehaviour):
 
 
 class RobotPlacementStrategy(AbstractStrategy):
-    def __init__(self, robot_id: int, field_bounds: Optional[FieldBounds] = None):
+    def __init__(self, robot_id: int):
         """
         Initializes the RobotPlacementStrategy with a specific robot ID.
 
@@ -125,7 +125,6 @@ class RobotPlacementStrategy(AbstractStrategy):
         :param field_bounds: The bounds of the field to operate within.
         """
         self.robot_id = robot_id
-        self.field_bounds = field_bounds if field_bounds else Field.FULL_FIELD_BOUNDS
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
@@ -157,7 +156,7 @@ class RobotPlacementStrategy(AbstractStrategy):
         ### Assemble the tree ###
 
         # Calculate Field Center from custom field_bounds
-        calc_center = CalculateFieldCenter(field_bounds=self.field_bounds, output_key=field_center_key)
+        calc_center = CalculateFieldCenter(output_key=field_center_key)
 
         coach_root.add_children(
             [
