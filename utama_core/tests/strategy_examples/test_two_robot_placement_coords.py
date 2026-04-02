@@ -13,13 +13,8 @@ from typing import Optional
 
 import pytest
 
-from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
-from utama_core.global_utils.mapping_utils import (
-    map_friendly_enemy_to_colors,
-    map_left_right_to_colors,
-)
 from utama_core.run import StrategyRunner
 from utama_core.strategy.examples.two_robot_placement import TwoRobotPlacementStrategy
 from utama_core.team_controller.src.controllers import AbstractSimController
@@ -61,17 +56,6 @@ class TwoRobotPlacementTestManager(AbstractTestManager):
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset robot and ball positions for the test."""
-        ini_yellow, ini_blue = map_left_right_to_colors(
-            game.my_team_is_yellow,
-            game.my_team_is_right,
-            RIGHT_START_ONE,
-            LEFT_START_ONE,
-        )
-
-        y_robots, b_robots = map_friendly_enemy_to_colors(
-            game.my_team_is_yellow, game.friendly_robots, game.enemy_robots
-        )
-
         # Position robots near the center for faster test convergence
         cx, cy = self.expected_center
         sim_controller.teleport_robot(game.my_team_is_yellow, self.first_robot_id, cx - 0.4, cy)
