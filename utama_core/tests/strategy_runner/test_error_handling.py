@@ -50,6 +50,38 @@ def mock_runner():
 class TestStopRobotsOnClose:
     """Tests for _stop_robots behavior when close() is called."""
 
+    def test_stop_robots_sends_commands_when_game_exists(self, mock_runner):
+        mock_runner._stop_robots(repeat=2)
+
+        controller = mock_runner.my.strategy.robot_controller
+        assert controller.add_robot_commands.call_count == 2
+        assert controller.send_robot_commands.call_count == 2
+
+    def test_stop_robots_handles_missing_game_gracefully(self, mock_runner):
+        mock_runner.my.game = None
+
+        mock_runner._stop_robots(repeat=3)
+
+        controller = mock_runner.my.strategy.robot_controller
+        controller.add_robot_commands.assert_not_called()
+        controller.send_robot_commands.assert_not_called()
+
+    def test_stop_robots_only_sends_for_sides_with_game(self, mock_runner):
+        opp = MagicMock()
+        opp.game = None
+        opp.strategy = MagicMock()
+        opp.strategy.robot_controller = MagicMock()
+        mock_runner.opp = opp
+
+        mock_runner._stop_robots(repeat=1)
+
+        my_controller = mock_runner.my.strategy.robot_controller
+        opp_controller = mock_runner.opp.strategy.robot_controller
+        assert my_controller.add_robot_commands.call_count == 1
+        assert my_controller.send_robot_commands.call_count == 1
+        opp_controller.add_robot_commands.assert_not_called()
+        opp_controller.send_robot_commands.assert_not_called()
+
     def test_stop_commands_sent_in_real_mode(self, mock_runner):
         mock_runner.close(stop_command_repeat=5)
 

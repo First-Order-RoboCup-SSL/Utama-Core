@@ -176,7 +176,6 @@ class StrategyRunner:
         self.my, self.opp = self._setup_sides_data(
             strategy, opp_strategy, filtering, control_scheme, opp_control_scheme
         )
-        self._game_ready = False  # Game data is only available on run() or run_test() call.
 
         ### functions below rely on self.my and self.opp ###
 
@@ -646,8 +645,8 @@ class StrategyRunner:
         def build_commands(team: SideRuntime) -> dict[int, RobotCommand]:
             return {robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in team.game.friendly_robots.keys()}
 
-        my_cmds = build_commands(self.my) if getattr(self.my, "_game", None) is not None else None
-        opp_cmds = build_commands(self.opp) if self.opp and getattr(self.opp, "_game", None) is not None else None
+        my_cmds = build_commands(self.my) if self.my.game is not None else None
+        opp_cmds = build_commands(self.opp) if self.opp and self.opp.game is not None else None
 
         for _ in range(repeat):
             if my_cmds:
