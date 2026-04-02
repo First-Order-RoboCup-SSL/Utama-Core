@@ -356,6 +356,10 @@ class StrategyRunner:
             SSLBaseEnv: The RSim environment (Otherwise None).
             AbstractSimController: The simulation controller for the environment (Otherwise None).
         """
+        # No sim to load for real mode.
+        if self.mode == Mode.REAL:
+            return None, None
+
         left_start, right_start = get_formations(
             bounds=self.field_bounds,
             n_left=self.exp_enemy if self.my_team_is_right else self.exp_friendly,
@@ -387,7 +391,8 @@ class StrategyRunner:
 
             return rsim_env, RSimController(field_bounds=self.field_bounds, exp_ball=self.exp_ball, env=rsim_env)
 
-        elif self.mode == Mode.GRSIM:
+        # GRSIM Mode
+        else:
             # can consider baking all of these directly into sim controller
             sim_controller = GRSimController(self.field_bounds, self.exp_ball)
             n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
@@ -417,9 +422,6 @@ class StrategyRunner:
                 sim_controller.remove_ball()
 
             return None, sim_controller
-
-        else:
-            return None, None
 
     def _setup_vision_and_referee(self) -> Tuple[deque, deque]:
         """Setup the vision and referee buffers.

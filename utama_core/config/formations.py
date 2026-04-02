@@ -85,8 +85,6 @@ def _validate_formation(
     Args:
         formation: List of (x, y, theta) tuples for robots.
         bounds: FieldBounds object with top_left and bottom_right coordinates.
-        n_left: Expected number of robots on the left team.
-        n_right: Expected number of robots on the right team.
     """
     # --- Bounding box edges (center can touch boundary) ---
     x_min = bounds.top_left[0]
