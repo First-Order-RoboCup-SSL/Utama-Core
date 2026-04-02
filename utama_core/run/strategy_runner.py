@@ -193,6 +193,10 @@ class StrategyRunner:
 
         self._load_game()
 
+        # Setup behaviour trees after blackboard fully populated.
+        self.my.strategy.setup_behaviour_tree(is_opp_strat=False)
+        self.opp.strategy.setup_behaviour_tree(is_opp_strat=True) if self.opp else None
+
         self._assert_exp_goals()
 
         self.toggle_opp_first = False  # used to alternate the order of opp and friendly in run
@@ -301,7 +305,7 @@ class StrategyRunner:
             self.field_bounds, filtering=filtering, exp_ball=self.exp_ball
         )
         my_motion_controller = get_control_scheme(control_scheme)
-        my_strategy.setup_behaviour_tree(is_opp_strat=False)
+        my_strategy.setup_strategy_blackboard(is_opp_strat=False)
         my_side = SideRuntime(
             strategy=my_strategy,
             position_refiner=my_pos_ref,
@@ -317,7 +321,7 @@ class StrategyRunner:
             opp_motion_controller = (
                 get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
             )
-            opp_strategy.setup_behaviour_tree(is_opp_strat=True)
+            opp_strategy.setup_strategy_blackboard(is_opp_strat=True)
             opp_side = SideRuntime(
                 strategy=opp_strategy,
                 position_refiner=opp_pos_ref,
@@ -592,13 +596,13 @@ class StrategyRunner:
         if self.opp:
             self.opp.position_refiner.start_filtering()
 
-        my_field = Field(self.my_team_is_right, self.field_bounds)
+        my_field = Field(self.my_team_is_right, self.full_field_dims, self.field_bounds)
         self.my.game_history = GameHistory(MAX_GAME_HISTORY)
         self.my.game = Game(self.my.game_history, my_current_game_frame, field=my_field)
         self.my.current_game_frame = my_current_game_frame
 
         if self.opp:
-            opp_field = Field(not self.my_team_is_right, self.field_bounds)
+            opp_field = Field(not self.my_team_is_right, self.full_field_dims, self.field_bounds)
             self.opp.game_history = GameHistory(MAX_GAME_HISTORY)
             self.opp.game = Game(self.opp.game_history, opp_current_game_frame, field=opp_field)
             self.opp.current_game_frame = opp_current_game_frame
@@ -621,40 +625,25 @@ class StrategyRunner:
             self.opp.position_refiner.reset()
         self._load_game()
 
-    def _reset_robots(self):
-        """Send zero-velocity commands to all robots to stop them.
-
-        Ensures both friendly and opponent robots (if present) receive
-        zeroed commands and that those commands are sent immediately.
+    def _send_stop_commands(self, repeat: int = 1):
         """
-        for i in self.my.current_game_frame.friendly_robots.keys():
-            self.my.strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
-        self.my.strategy.robot_controller.send_robot_commands()
-
-        if self.opp and self.opp.current_game_frame:
-            for i in self.opp.current_game_frame.friendly_robots.keys():
-                self.opp.strategy.robot_controller.add_robot_commands(RobotCommand(0, 0, 0, 0, 0, 0), i)
-            self.opp.strategy.robot_controller.send_robot_commands()
-
-    def _stop_robots(self, stop_command_mult: int):
-        """
-        Send a series of stop commands to all robots to ensure they come to a halt.
+        Send stop commands to the robots.
         Args:
-            stop_command_mult (int): Number of times to send the stop command.
+            repeat (int): Number of times to send the stop command.
         """
-        my_stop_commands = {
-            robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.my.game.friendly_robots.keys()
-        }
-        if self.opp and self.opp.game:
-            opp_stop_commands = {
-                robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in self.opp.game.friendly_robots.keys()
-            }
 
-        for _ in range(stop_command_mult):
-            self.my.strategy.robot_controller.add_robot_commands(my_stop_commands)
+        def build_commands(team):
+            return {robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in team.game.friendly_robots.keys()}
+
+        my_cmds = build_commands(self.my)
+        opp_cmds = build_commands(self.opp) if self.opp and self.opp.game else None
+
+        for _ in range(repeat):
+            self.my.strategy.robot_controller.add_robot_commands(my_cmds)
             self.my.strategy.robot_controller.send_robot_commands()
-            if self.opp and self.opp.game:
-                self.opp.strategy.robot_controller.add_robot_commands(opp_stop_commands)
+
+            if opp_cmds:
+                self.opp.strategy.robot_controller.add_robot_commands(opp_cmds)
                 self.opp.strategy.robot_controller.send_robot_commands()
 
     def close(self, stop_command_mult: int = 20):
@@ -667,7 +656,7 @@ class StrategyRunner:
 
         if self.mode == Mode.REAL:
             try:
-                self._stop_robots(stop_command_mult)
+                self._send_stop_commands(repeat=stop_command_mult)
             except Exception:
                 self.logger.exception("Was unable to stop robots cleanly.")
         if self.profiler:
@@ -743,10 +732,10 @@ class StrategyRunner:
 
                     if status == TestingStatus.FAILURE:
                         passed = False
-                        self._reset_robots()
+                        self._send_stop_commands()
                         break
                     elif status == TestingStatus.SUCCESS:
-                        self._reset_robots()
+                        self._send_stop_commands()
                         break
 
                 if self._stop_event.is_set():

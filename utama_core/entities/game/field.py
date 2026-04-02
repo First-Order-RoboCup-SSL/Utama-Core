@@ -14,13 +14,12 @@ class Field:
     def __init__(
         self,
         my_team_is_right: bool,
-        field_bounds: FieldBounds,
         field_dims: FieldDimensions,
+        field_bounds: FieldBounds,
     ):
         self.my_team_is_right = my_team_is_right
-
-        self._field_bounds = field_bounds
         self._field_dims = field_dims
+        self._field_bounds = field_bounds
 
         self._half_length = (field_bounds.bottom_right[0] - field_bounds.top_left[0]) / 2
         self._half_width = (field_bounds.top_left[1] - field_bounds.bottom_right[1]) / 2

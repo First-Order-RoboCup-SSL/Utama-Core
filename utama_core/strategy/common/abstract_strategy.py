@@ -11,7 +11,10 @@ from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PAT
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import Field, FieldBounds
-from utama_core.global_utils.math_utils import assert_valid_bounding_box
+from utama_core.global_utils.math_utils import (
+    assert_contains,
+    assert_valid_bounding_box,
+)
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command
@@ -163,13 +166,20 @@ class AbstractStrategy(ABC):
 
     ### END OF STRATEGY IMPLEMENTATION ###
 
+    def setup_strategy_blackboard(self, is_opp_strat: bool):
+        """
+        Must be called before blackboard can be used.
+
+        Setups the blackboard based on if is_opp_strat.
+        """
+        self.blackboard = self._setup_blackboard(is_opp_strat)
+
     def setup_behaviour_tree(self, is_opp_strat: bool):
         """
         Must be called before strategy can be run.
 
-        Setups the tree and blackboard based on if is_opp_strat
+        Setups the behaviour tree based on if is_opp_strat.
         """
-        self.blackboard = self._setup_blackboard(is_opp_strat)
         self.behaviour_tree.setup(is_opp_strat=is_opp_strat)
 
     def load_rsim_env(self, env: SSLBaseEnv):
@@ -203,22 +213,15 @@ class AbstractStrategy(ABC):
 
         # --- Validate min bounding zone ---
         if min_bounding_zone is not None:
+            # Validate required zone
             assert_valid_bounding_box(
                 min_bounding_zone,
                 game.field.full_field_half_length,
                 game.field.full_field_half_width,
             )
 
-            # --- Check that actual field contains min_bounding_zone ---
-            ax0, ay0 = actual_field_size.top_left
-            ax1, ay1 = actual_field_size.bottom_right
-            mx0, my0 = min_bounding_zone.top_left
-            mx1, my1 = min_bounding_zone.bottom_right
-
-            assert ax0 <= mx0, f"Field top-left x {ax0} smaller than required {mx0}"
-            assert ay0 >= my0, f"Field top-left y {ay0} smaller than required {my0}"
-            assert ax1 >= mx1, f"Field bottom-right x {ax1} smaller than required {mx1}"
-            assert ay1 <= my1, f"Field bottom-right y {ay1} smaller than required {my1}"
+            # Check containment
+            assert_contains(actual_field_size, min_bounding_zone)
 
     def load_game(self, game: Game):
         """

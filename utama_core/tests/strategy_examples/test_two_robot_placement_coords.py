@@ -121,13 +121,13 @@ def _run_two_robot_placement_test(
     strategy = TwoRobotPlacementStrategy(
         first_robot_id=first_robot_id,
         second_robot_id=second_robot_id,
-        field_bounds=field_bounds,
     )
 
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,
         my_team_is_right=False,
+        field_bounds=field_bounds,
         mode="rsim",
         exp_friendly=2,
         exp_enemy=0,

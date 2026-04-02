@@ -90,6 +90,7 @@ def _run_placement_test(field_bounds: Optional[FieldBounds], expected_center: tu
         strategy=strategy,
         my_team_is_yellow=True,
         my_team_is_right=False,
+        field_bounds=field_bounds,
         mode="rsim",
         exp_friendly=1,
         exp_enemy=0,

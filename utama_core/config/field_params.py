@@ -108,6 +108,25 @@ class FieldDimensions:
             ]
         )
 
+    def __post_init__(self):
+        L = self.full_field_half_length
+        W = self.full_field_half_width
+        D = self.half_defense_area_depth
+        DW = self.half_defense_area_width
+        G = self.half_goal_width
+
+        # --- Positivity ---
+        assert L > 0 and W > 0, "Field dimensions must be positive"
+        assert D > 0 and DW > 0 and G > 0, "Sub-dimensions must be positive"
+
+        # --- Fit constraints ---
+        assert 2 * D <= L, f"Defense depth {2*D} exceeds field length {L}"
+        assert DW <= W, f"Defense width {DW} exceeds field width {W}"
+        assert G <= W, f"Goal width {G} exceeds field width {W}"
+
+        # --- Optional semantic constraint ---
+        assert G <= DW, f"Goal width {G} should not exceed defense width {DW}"
+
 
 STANDARD_FIELD_DIMS = FieldDimensions(
     full_field_half_length=4.5,
