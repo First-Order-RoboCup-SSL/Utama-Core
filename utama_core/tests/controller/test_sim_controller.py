@@ -3,6 +3,7 @@
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldBounds
+from utama_core.config.settings import OFF_PITCH_OFFSET
 from utama_core.team_controller.src.controllers.common.sim_controller_abstract import (
     AbstractSimController,
 )
@@ -40,6 +41,9 @@ FULL_BOUNDS = STANDARD_FIELD_DIMS.full_field_bounds
 # A small custom bounds used for many tests: x ∈ [0, 2], y ∈ [-1, 1]
 CUSTOM_BOUNDS = FieldBounds(top_left=(0.0, 1.0), bottom_right=(2.0, -1.0))
 
+# A shifted non-centered bounds: x ∈ [1.5, 3.5], y ∈ [2.0, 4.0]
+SHIFTED_BOUNDS = FieldBounds(top_left=(1.5, 4.0), bottom_right=(3.5, 2.0))
+
 
 @pytest.fixture
 def ctrl():
@@ -57,6 +61,12 @@ def ctrl_no_ball():
 def ctrl_full():
     """Controller using full-field bounds."""
     return StubSimController(FULL_BOUNDS, exp_ball=True)
+
+
+@pytest.fixture
+def ctrl_shifted():
+    """Controller using shifted non-centered bounds."""
+    return StubSimController(SHIFTED_BOUNDS, exp_ball=True)
 
 
 # ===========================================================================
@@ -78,6 +88,13 @@ class TestTeleportBall:
     def test_center_of_bounds_accepted(self, ctrl):
         ctrl.teleport_ball(1.0, 0.0)  # center of CUSTOM_BOUNDS
         assert len(ctrl.teleport_ball_calls) == 1
+
+    def test_shifted_bounds_use_shifted_coordinates(self, ctrl_shifted):
+        # Center of SHIFTED_BOUNDS is (2.5, 3.0), not (0, 0)
+        ctrl_shifted.teleport_ball(2.5, 3.0)
+        assert ctrl_shifted.teleport_ball_calls == [(2.5, 3.0, 0, 0)]
+        with pytest.raises(ValueError, match=r"outside of the field boundaries"):
+            ctrl_shifted.teleport_ball(0.0, 0.0)
 
     @pytest.mark.parametrize(
         "x, y",
@@ -185,6 +202,12 @@ class TestTeleportRobot:
         ctrl.teleport_robot(True, 1, 1.0, 0.0)
         assert ctrl.teleport_robot_calls == [(True, 1, 1.0, 0.0, None)]
 
+    def test_shifted_bounds_robot_teleport_is_not_origin_based(self, ctrl_shifted):
+        ctrl_shifted.teleport_robot(True, 0, 2.5, 3.0, 0.0)
+        assert ctrl_shifted.teleport_robot_calls == [(True, 0, 2.5, 3.0, 0.0)]
+        with pytest.raises(ValueError, match=r"outside of the field boundaries"):
+            ctrl_shifted.teleport_robot(True, 0, 0.0, 0.0, 0.0)
+
     @pytest.mark.parametrize(
         "x, y",
         [
@@ -261,6 +284,12 @@ class TestRemoveBall:
         from utama_core.global_utils.math_utils import in_field_bounds
 
         assert not in_field_bounds((x, y), ctrl.field_bounds)
+
+    def test_remove_ball_uses_bounds_relative_offset(self, ctrl_shifted):
+        ctrl_shifted.remove_ball()
+        x, y, _, _ = ctrl_shifted.teleport_ball_calls[0]
+        assert x == SHIFTED_BOUNDS.bottom_right[0] + OFF_PITCH_OFFSET
+        assert y == SHIFTED_BOUNDS.bottom_right[1] + OFF_PITCH_OFFSET
 
     def test_remove_ball_works_when_ball_not_expected(self, ctrl_no_ball):
         """remove_ball bypasses exp_ball guard (it calls the unrestricted method directly)."""

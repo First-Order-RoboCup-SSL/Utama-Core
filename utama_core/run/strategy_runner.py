@@ -376,6 +376,7 @@ class StrategyRunner:
                 render_mode=None,
                 blue_starting_formation=blue_start,
                 yellow_starting_formation=yellow_start,
+                ball_starting_position=self.field_bounds.center,
                 gaussian_noise=rsim_noise,
                 vanishing=rsim_vanishing,
             )
@@ -411,7 +412,7 @@ class StrategyRunner:
                 sim_controller.teleport_robot(False, b, b_start[0], b_start[1], b_start[2])
 
             if self.exp_ball:
-                sim_controller.teleport_ball(0, 0)
+                sim_controller.teleport_ball(self.field_bounds.center[0], self.field_bounds.center[1])
             else:
                 sim_controller.remove_ball()
 

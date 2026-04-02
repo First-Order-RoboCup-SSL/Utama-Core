@@ -83,6 +83,7 @@ class SSLStandardEnv(SSLBaseEnv):
         time_step: float = TIMESTEP,
         blue_starting_formation: Optional[list[FormationEntry]] = None,
         yellow_starting_formation: Optional[list[FormationEntry]] = None,
+        ball_starting_position: Optional[Tuple[float, float]] = None,
         gaussian_noise: RsimGaussianNoise = RsimGaussianNoise(),
         vanishing: float = 0,
     ):
@@ -110,6 +111,10 @@ class SSLStandardEnv(SSLBaseEnv):
                 n_right=n_robots_yellow,
                 formation_type=FormationType.START_ONE,
             )
+
+        # Ball start position is expressed in normal field coordinates used by
+        # StrategyRunner/game state (not simulator-internal y-sign convention).
+        self.ball_starting_position = ball_starting_position if ball_starting_position is not None else (0.0, 0.0)
 
         # Track dribbler state across steps so we can model ball release when
         # the dribbler turns off in a way that depends on robot speed.
@@ -380,7 +385,8 @@ class SSLStandardEnv(SSLBaseEnv):
             pos_frame.robots_yellow[i] = Robot(id=i, x=x, y=-y, theta=-rad_to_deg(heading))
 
         if ball_exists:
-            pos_frame.ball = Ball(x=0, y=0)
+            bx, by = self.ball_starting_position
+            pos_frame.ball = Ball(x=bx, y=-by)
         else:
             pos_frame.ball = Ball(
                 x=self.OFF_FIELD_OFFSET + self.field.length,
