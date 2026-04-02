@@ -376,6 +376,7 @@ class StrategyRunner:
                 render_mode=None,
                 blue_starting_formation=blue_start,
                 yellow_starting_formation=yellow_start,
+                full_field_dims=self.full_field_dims,
                 ball_starting_position=self.field_bounds.center,
                 gaussian_noise=rsim_noise,
                 vanishing=rsim_vanishing,
@@ -645,12 +646,13 @@ class StrategyRunner:
         def build_commands(team: SideRuntime) -> dict[int, RobotCommand]:
             return {robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in team.game.friendly_robots.keys()}
 
-        my_cmds = build_commands(self.my)
+        my_cmds = build_commands(self.my) if getattr(self.my, "_game", None) is not None else None
         opp_cmds = build_commands(self.opp) if self.opp and getattr(self.opp, "_game", None) is not None else None
 
         for _ in range(repeat):
-            self.my.strategy.robot_controller.add_robot_commands(my_cmds)
-            self.my.strategy.robot_controller.send_robot_commands()
+            if my_cmds:
+                self.my.strategy.robot_controller.add_robot_commands(my_cmds)
+                self.my.strategy.robot_controller.send_robot_commands()
 
             if opp_cmds:
                 self.opp.strategy.robot_controller.add_robot_commands(opp_cmds)
@@ -794,6 +796,8 @@ class StrategyRunner:
         No return value; updates internal game state and controllers.
         """
         frame_start = time.perf_counter()
+        self._draw_rsim_field_bounds_overlay()
+
         if self.mode == Mode.RSIM:
             vision_frames = [self.rsim_env._frame_to_observations()[0]]
         else:
@@ -834,6 +838,26 @@ class StrategyRunner:
 
                 self.elapsed_time = 0.0
                 self.num_frames_elapsed = 0
+
+    def _draw_rsim_field_bounds_overlay(self) -> None:
+        """Draw active field bounds overlay in RSIM human render mode."""
+        if self.mode != Mode.RSIM or not self.rsim_env:
+            return
+
+        # Overlays are cleared during render; only enqueue when the frame will be rendered.
+        if self.rsim_env.render_mode != "human":
+            return
+
+        top_left = self.field_bounds.top_left
+        bottom_right = self.field_bounds.bottom_right
+
+        bounds_polygon = [
+            (top_left[0], top_left[1]),
+            (bottom_right[0], top_left[1]),
+            (bottom_right[0], bottom_right[1]),
+            (top_left[0], bottom_right[1]),
+        ]
+        self.rsim_env.draw_polygon(bounds_polygon, color="PINK", width=2)
 
     def _step_game(
         self,

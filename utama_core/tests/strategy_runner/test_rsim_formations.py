@@ -3,6 +3,7 @@ import os
 import py_trees
 import pytest
 
+from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.config.formations import FormationType, get_formations
 from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.mapping_utils import map_left_right_to_colors
@@ -139,3 +140,34 @@ def test_rsim_spawn_respects_shifted_bounds_and_ball_center():
     assert manager.ball_position is not None
     assert abs(manager.ball_position[0] - expected_x) <= POSITION_TOLERANCE
     assert abs(manager.ball_position[1] - expected_y) <= POSITION_TOLERANCE
+
+
+def test_rsim_renderer_resizes_with_non_standard_field_dimensions():
+    dims = GREAT_EXHIBITION_FIELD_DIMS
+    runner = StrategyRunner(
+        strategy=_IdleStrategy(),
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        mode="rsim",
+        exp_friendly=1,
+        exp_enemy=0,
+        full_field_dims=dims,
+    )
+
+    renderer = runner.rsim_env.field_renderer
+    scale = renderer.scale
+
+    assert renderer.length == pytest.approx(2 * dims.full_field_half_length * scale)
+    assert renderer.width == pytest.approx(2 * dims.full_field_half_width * scale)
+    assert renderer.penalty_length == pytest.approx(2 * dims.half_defense_area_depth * scale)
+    assert renderer.penalty_width == pytest.approx(2 * dims.half_defense_area_width * scale)
+    assert renderer.goal_width == pytest.approx(2 * dims.half_goal_width * scale)
+
+    # Goal line and boundary should be centered and align with resized geometry.
+    goal_top = (renderer.screen_height - renderer.goal_width) / 2
+    goal_bottom = goal_top + renderer.goal_width
+
+    assert renderer.margin == pytest.approx(renderer.center_x - renderer.length / 2)
+    assert renderer.margin == pytest.approx(renderer.center_y - renderer.width / 2)
+    assert goal_top == pytest.approx(renderer.center_y - dims.half_goal_width * scale)
+    assert goal_bottom == pytest.approx(renderer.center_y + dims.half_goal_width * scale)

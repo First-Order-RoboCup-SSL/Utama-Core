@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 
 from numpy.random import normal
 
-from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.formations import FormationEntry, FormationType, get_formations
 from utama_core.config.robot_params import RSIM_PARAMS
 from utama_core.config.settings import (
@@ -83,16 +83,28 @@ class SSLStandardEnv(SSLBaseEnv):
         time_step: float = TIMESTEP,
         blue_starting_formation: Optional[list[FormationEntry]] = None,
         yellow_starting_formation: Optional[list[FormationEntry]] = None,
+        full_field_dims: Optional[FieldDimensions] = None,
         ball_starting_position: Optional[Tuple[float, float]] = None,
         gaussian_noise: RsimGaussianNoise = RsimGaussianNoise(),
         vanishing: float = 0,
     ):
+        render_field_overrides = None
+        if full_field_dims is not None:
+            render_field_overrides = {
+                "length": 2 * full_field_dims.full_field_half_length,
+                "width": 2 * full_field_dims.full_field_half_width,
+                "penalty_length": 2 * full_field_dims.half_defense_area_depth,
+                "penalty_width": 2 * full_field_dims.half_defense_area_width,
+                "goal_width": 2 * full_field_dims.half_goal_width,
+            }
+
         super().__init__(
             field_type=field_type,
             n_robots_blue=n_robots_blue,
             n_robots_yellow=n_robots_yellow,
             time_step=time_step,
             render_mode=render_mode,
+            render_field_overrides=render_field_overrides,
         )
 
         # NOTE: observation_space and action_space removed - not needed for non-RL use
