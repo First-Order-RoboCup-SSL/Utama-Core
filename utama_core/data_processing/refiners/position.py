@@ -79,7 +79,12 @@ class PositionRefiner(BaseRefiner):
             self.kalman_filter_ball = KalmanFilterBall()
 
     # Primary function for the Refiner interface
-    def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
+    def refine(
+        self,
+        game_frame: GameFrame,
+        data: List[RawVisionData],
+        incl_out_of_bounds_vision: bool = False,  # for first frame of sims to handle first frame before teleporting
+    ) -> GameFrame:
         frames = [frame for frame in data if frame is not None]
 
         # If no information just return the original
@@ -88,7 +93,11 @@ class PositionRefiner(BaseRefiner):
 
         # class VisionData: ts: float; yellow_robots: List[VisionRobotData]; blue_robots: List[VisionRobotData]; balls: List[VisionBallData]
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
-        combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames, bounds=self.vision_bounds)
+        combined_vision_data: VisionData = CameraCombiner().combine_cameras(
+            frames,
+            bounds=self.vision_bounds,
+            incl_out_of_bounds_vision=incl_out_of_bounds_vision,
+        )
 
         time_elapsed = combined_vision_data.ts - game_frame.ts
 
@@ -196,7 +205,7 @@ class PositionRefiner(BaseRefiner):
 
     def start_filtering(self):
         """
-        Start filtering after first valid frame is received from GameGater.
+        Start filtering (imputation and interpolation) after first valid frame is received from GameGater.
         """
         self._filter_running = True
 
@@ -333,13 +342,19 @@ class PositionRefiner(BaseRefiner):
 
 
 class CameraCombiner:
-    def combine_cameras(self, frames: List[RawVisionData], bounds: VisionBounds) -> VisionData:
+    def combine_cameras(
+        self,
+        frames: List[RawVisionData],
+        bounds: VisionBounds,
+        incl_out_of_bounds_vision: bool = False,
+    ) -> VisionData:
         """
         Combines the vision data from multiple cameras into a single coherent VisionData object.
         Also, removes any robot detections that are out of the specified bounds.
         Args:
             frames (List[RawVisionData]): A list of RawVisionData objects from different cameras.
             bounds (VisionBounds): The bounds within which to consider vision data for combination.
+            incl_out_of_bounds_vision (bool): Whether to include vision data that is out of bounds.
         Returns:
             VisionData: A combined VisionData object containing averaged robot positions and the most confident ball position.
         """
@@ -353,15 +368,15 @@ class CameraCombiner:
         # Each frame is from a different camera
         for frame_ind, frame in enumerate(frames):
             for yr in frame.yellow_robots:
-                if self._bounds_check(yr.x, yr.y, bounds):
+                if incl_out_of_bounds_vision or self._bounds_check(yr.x, yr.y, bounds):
                     yellow_captured[yr.id].append(yr)
 
             for br in frame.blue_robots:
-                if self._bounds_check(br.x, br.y, bounds):
+                if incl_out_of_bounds_vision or self._bounds_check(br.x, br.y, bounds):
                     blue_captured[br.id].append(br)
 
             for b in frame.balls:
-                if self._bounds_check(b.x, b.y, bounds):
+                if incl_out_of_bounds_vision or self._bounds_check(b.x, b.y, bounds):
                     balls_captured[frame_ind].append(b)
             ts.append(frame.ts)
 

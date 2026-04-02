@@ -85,9 +85,45 @@ class SideRuntime:
     robot_info_refiner: RobotInfoRefiner
     motion_controller: type[MotionController]
 
-    game: Optional[Game] = field(init=False, default=None)
-    game_history: Optional[GameHistory] = field(init=False, default=None)
-    current_game_frame: Optional[GameFrame] = field(init=False, default=None)
+    _game: Optional[Game] = field(init=False, default=None, repr=False)
+    _game_history: Optional[GameHistory] = field(init=False, default=None, repr=False)
+    _current_game_frame: Optional[GameFrame] = field(init=False, default=None, repr=False)
+
+    def _not_ready_error(self):
+        raise RuntimeError(
+            "Game data is not available yet. "
+            "You must call StrategyRunner.run() or run_test() before accessing game state."
+        )
+
+    @property
+    def game(self) -> Game:
+        if self._game is None:
+            self._not_ready_error()
+        return self._game
+
+    @game.setter
+    def game(self, value: Game):
+        self._game = value
+
+    @property
+    def game_history(self) -> GameHistory:
+        if self._game_history is None:
+            self._not_ready_error()
+        return self._game_history
+
+    @game_history.setter
+    def game_history(self, value: GameHistory):
+        self._game_history = value
+
+    @property
+    def current_game_frame(self) -> GameFrame:
+        if self._current_game_frame is None:
+            self._not_ready_error()
+        return self._current_game_frame
+
+    @current_game_frame.setter
+    def current_game_frame(self, value: GameFrame):
+        self._current_game_frame = value
 
 
 class StrategyRunner:
@@ -176,6 +212,7 @@ class StrategyRunner:
         self.my, self.opp = self._setup_sides_data(
             strategy, opp_strategy, filtering, control_scheme, opp_control_scheme
         )
+        self._game_ready = False  # Game data is only available on run() or run_test() call.
 
         ### functions below rely on self.my and self.opp ###
 
@@ -190,14 +227,6 @@ class StrategyRunner:
         # with the RsimRobotController even outside the context of StrategyRunner.
         if self.rsim_env and not self.exp_ball:
             self._remove_rsim_ball()
-
-        self._load_game()
-
-        # Setup behaviour trees after blackboard fully populated.
-        self.my.strategy.setup_behaviour_tree(is_opp_strat=False)
-        self.opp.strategy.setup_behaviour_tree(is_opp_strat=True) if self.opp else None
-
-        self._assert_exp_goals()
 
         self.toggle_opp_first = False  # used to alternate the order of opp and friendly in run
 
@@ -226,6 +255,25 @@ class StrategyRunner:
     def _handle_sigint(self, sig, frame):
         self._stop_event.set()
         signal.default_int_handler(sig, frame)
+
+    def _pre_run_setup(self, is_run_test: bool):
+        """Setup the behaviour tree for the strategy.
+
+        This method should be called after loading the game and before starting the main loop.
+
+        args:
+            is_run_test (bool): Whether this setup is being called on init of run_test. If True, include out of bounds vision.
+            This is because the field will be reset immediately after setup to teleport the robots to within bounds. Do bounds check then.
+
+        Side effect: Initializes the behaviour tree on self.my.strategy (and self.opp.strategy if present).
+        """
+        self._load_game(incl_out_of_bounds=is_run_test)
+        self._assert_exp_goals()
+        self.my.strategy.setup_behaviour_tree(is_opp_strat=False)
+        if self.opp:
+            self.opp.strategy.setup_behaviour_tree(is_opp_strat=True)
+
+        self._game_ready = True
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -574,9 +622,13 @@ class StrategyRunner:
 
         return position_refiner, velocity_refiner, robot_info_refiner
 
-    def _load_game(self):
+    def _load_game(self, incl_out_of_bounds: bool = False):
         """
         Load the game state for both friendly and opponent strategies after waiting for valid game data with GameGater.
+
+        args:
+            incl_out_of_bounds (bool): Whether to include out-of-bounds entities in the game frame.
+            This is passed to the position refiner and may affect the refined game frame returned by GameGater.
 
         Side effect: Populates game, game_history and current_game_frame on self.my (and self.opp if present).
         """
@@ -590,6 +642,7 @@ class StrategyRunner:
             self.my.position_refiner,
             is_pvp=self.opp is not None,
             rsim_env=self.rsim_env,
+            incl_out_of_bounds_vision=incl_out_of_bounds,
         )
 
         self.my.position_refiner.start_filtering()
@@ -625,7 +678,7 @@ class StrategyRunner:
             self.opp.position_refiner.reset()
         self._load_game()
 
-    def _send_stop_commands(self, repeat: int = 1):
+    def _stop_robots(self, repeat: int = 1):
         """
         Send stop commands to the robots.
         Args:
@@ -646,17 +699,17 @@ class StrategyRunner:
                 self.opp.strategy.robot_controller.add_robot_commands(opp_cmds)
                 self.opp.strategy.robot_controller.send_robot_commands()
 
-    def close(self, stop_command_mult: int = 20):
+    def close(self, stop_command_repeat: int = 20):
         """
         Close resources used by the StrategyRunner and stop robots if in real mode.
         Args:
-            stop_command_mult (int): Number of times to send the stop command to robots.
+            stop_command_repeat (int): Number of times to send the stop command to robots.
         """
         self.logger.info("Cleaning up resources...")
 
         if self.mode == Mode.REAL:
             try:
-                self._send_stop_commands(repeat=stop_command_mult)
+                self._stop_robots(repeat=stop_command_repeat)
             except Exception:
                 self.logger.exception("Was unable to stop robots cleanly.")
         if self.profiler:
@@ -693,6 +746,8 @@ class StrategyRunner:
             n_episodes = 1
 
         test_manager.load_strategies(self.my.strategy, self.opp.strategy if self.opp else None)
+
+        self._pre_run_setup(is_run_test=True)
 
         try:
             for i in range(n_episodes):
@@ -732,10 +787,10 @@ class StrategyRunner:
 
                     if status == TestingStatus.FAILURE:
                         passed = False
-                        self._send_stop_commands()
+                        self._stop_robots()
                         break
                     elif status == TestingStatus.SUCCESS:
-                        self._send_stop_commands()
+                        self._stop_robots()
                         break
 
                 if self._stop_event.is_set():
@@ -757,6 +812,8 @@ class StrategyRunner:
         (such as replay writer and rsim env) are closed.
         """
         signal.signal(signal.SIGINT, self._handle_sigint)
+
+        self._pre_run_setup(is_run_test=False)
 
         if self.rsim_env:
             self.rsim_env.render_mode = "human"

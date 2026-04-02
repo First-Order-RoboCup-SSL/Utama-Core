@@ -201,7 +201,7 @@ class DefenceStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line, includes_opp_goal_line):
         return True  # No specific goal line requirements
 
-    def get_min_bounding_zone(self):
+    def get_min_bounding_req(self):
         return None  # No specific bounding zone requirements
 
     def execute_default_action(self, game: Game, role: Role, robot_id: int):

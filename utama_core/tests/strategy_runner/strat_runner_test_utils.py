@@ -7,8 +7,11 @@ class DummyStrategy:
     def assert_exp_goals(self, my_goal, opp_goal):
         return True
 
-    def get_min_bounding_zone(self):
+    def get_min_bounding_req(self):
         return None
+
+    def setup_strategy_blackboard(self, is_opp_strat):
+        pass
 
     def setup_behaviour_tree(self, is_opp_strat):
         pass

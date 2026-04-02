@@ -43,7 +43,7 @@ class DummyStrategy(AbstractStrategy):
         super().__init__()
         self._min_bb = min_bb
 
-    def get_min_bounding_zone(self):
+    def get_min_bounding_req(self):
         return self._min_bb
 
 

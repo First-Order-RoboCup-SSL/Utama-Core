@@ -19,6 +19,7 @@ class GameGater:
         position_refiner: PositionRefiner,
         is_pvp: bool,
         rsim_env: SSLBaseEnv = None,
+        incl_out_of_bounds_vision: bool = False,
         wait_before_warn: float = 3.0,
     ) -> Tuple[GameFrame, Optional[GameFrame]]:
         """
@@ -41,9 +42,17 @@ class GameGater:
                 vision_frames = [obs]
             else:
                 vision_frames = [buffer.popleft() if buffer else None for buffer in vision_buffers]
-            my_game_frame = position_refiner.refine(my_game_frame, vision_frames)
+            my_game_frame = position_refiner.refine(
+                my_game_frame,
+                vision_frames,
+                incl_out_of_bounds_vision=incl_out_of_bounds_vision,
+            )
             if is_pvp:
-                opp_game_frame = position_refiner.refine(opp_game_frame, vision_frames)
+                opp_game_frame = position_refiner.refine(
+                    opp_game_frame,
+                    vision_frames,
+                    incl_out_of_bounds_vision=incl_out_of_bounds_vision,
+                )
 
             return my_game_frame, opp_game_frame
 

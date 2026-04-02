@@ -116,8 +116,8 @@ class FieldDimensions:
         G = self.half_goal_width
 
         # --- Positivity ---
-        assert L > 0 and W > 0, "Field dimensions must be positive"
-        assert D > 0 and DW > 0 and G > 0, "Sub-dimensions must be positive"
+        assert L > 0 and W > 0, "Field length/width must be positive"
+        assert D > 0 and DW > 0 and G > 0, "Goal/defense measurements must be positive"
 
         # --- Fit constraints ---
         assert 2 * D <= L, f"Defense depth {2*D} exceeds field length {L}"

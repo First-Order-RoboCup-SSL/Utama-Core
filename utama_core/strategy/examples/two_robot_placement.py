@@ -6,11 +6,14 @@ import py_trees
 from py_trees.composites import Parallel, Sequence
 
 from utama_core.config.settings import TIMESTEP
-from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.math_utils import Vector2D
 from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.strategy.common.abstract_strategy import (
+    AbstractStrategy,
+    SpaceRequirements,
+)
 from utama_core.strategy.examples.utils import (
     CalculateFieldCenter,
     SetBlackboardVariable,
@@ -163,18 +166,15 @@ class TwoRobotPlacementStrategy(AbstractStrategy):
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if n_runtime_friendly == 2:
+        if n_runtime_friendly == 2 and n_runtime_enemy == 0:
             return True
         return False
 
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True  # No specific goal line requirements
 
-    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
-        # toggles robot between (1, -1) and (1, 1)
-        # Using full field bounds logic now, but maybe should return specific bounds if needed.
-        # For now, keeping consistent with previous simple bounds or updating if needed.
-        return FieldBounds(top_left=(-1, 1), bottom_right=(1, -1))
+    def get_min_bounding_req(self):
+        return SpaceRequirements(min_length=1.0, min_width=1.0)  # Require at least a 1x1 area to allow for oscillation
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete behaviour tree."""

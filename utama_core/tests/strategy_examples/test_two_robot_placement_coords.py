@@ -72,16 +72,13 @@ class TwoRobotPlacementTestManager(AbstractTestManager):
             game.my_team_is_yellow, game.friendly_robots, game.enemy_robots
         )
 
-        for i in b_robots.keys():
-            sim_controller.teleport_robot(False, i, ini_blue[i][0], ini_blue[i][1], ini_blue[i][2])
-        for j in y_robots.keys():
-            sim_controller.teleport_robot(True, j, ini_yellow[j][0], ini_yellow[j][1], ini_yellow[j][2])
-
         # Position robots near the center for faster test convergence
         cx, cy = self.expected_center
-        sim_controller.teleport_robot(game.my_team_is_yellow, self.first_robot_id, cx, cy)
-        sim_controller.teleport_robot(game.my_team_is_yellow, self.second_robot_id, cx, cy)
-        sim_controller.teleport_ball(3, 3)
+        sim_controller.teleport_robot(game.my_team_is_yellow, self.first_robot_id, cx - 0.4, cy)
+        sim_controller.teleport_robot(game.my_team_is_yellow, self.second_robot_id, cx, cy - 0.4)
+        sim_controller.teleport_ball(
+            cx + 0.5, cy + 0.5
+        )  # Place ball at corner to avoid interference with robot movement
 
     def eval_status(self, game: Game) -> TestingStatus:
         """Verify both robots reach their oscillation targets."""

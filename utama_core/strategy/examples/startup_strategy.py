@@ -55,7 +55,7 @@ class StartupStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True  # No specific goal line requirements
 
-    def get_min_bounding_zone(self) -> FieldBounds:
+    def get_min_bounding_req(self):
         all_points = []
         start_formation, target_formation = generate_starting_positions(self.blackboard.game.my_team_is_right)
 

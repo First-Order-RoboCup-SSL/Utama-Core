@@ -1,5 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Optional, cast
 
 import py_trees
@@ -58,6 +59,21 @@ def _prune_base_blackboard_elements(graph: pydot.Dot) -> None:
     prune_nodes(graph)
 
 
+@dataclass(slots=True, frozen=True)
+class SpaceRequirements:
+    """
+    Represents minimum space requirements for a strategy.
+
+    Attributes:
+        min_length (float): Minimum required length of the field region.
+        min_width (float): Minimum required width of the field region.
+    """
+
+    min_length: float
+    min_width: float
+
+
+@dataclass
 class AbstractStrategy(ABC):
     """
     Base class for team strategies backed by behaviour trees.
@@ -127,7 +143,7 @@ class AbstractStrategy(ABC):
         ...
 
     @abstractmethod
-    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
+    def get_min_bounding_req(self) -> Optional[FieldBounds | SpaceRequirements]:
         """
         Return the minimum field region required by the strategy.
 
@@ -142,7 +158,9 @@ class AbstractStrategy(ABC):
             The bounding zone should be defined in field coordinates (i.e., absolute positions).
 
         Returns:
-            Optional[FieldBounds]: A `FieldBounds` specifying the minimum bounding region, or `None`.
+            Optional[FieldBounds | SpaceRequirements]:
+                A `FieldBounds` object specifying the required region, a `SpaceRequirements`
+                object specifying minimum length and width, or `None` if no specific region is required.
         """
         ...
 
@@ -208,20 +226,39 @@ class AbstractStrategy(ABC):
         that both actual field and min_bounding_zone are within the full field,
         and that bounding boxes are well-formed (top-left above/left of bottom-right).
         """
-        actual_field_size = self.blackboard.game.field.field_bounds
-        min_bounding_zone = self.get_min_bounding_zone()
+        actual_field_bounds = self.blackboard.game.field.field_bounds
+        min_bounding_req = self.get_min_bounding_req()
 
         # --- Validate min bounding zone ---
-        if min_bounding_zone is not None:
+        if min_bounding_req is not None:
             # Validate required zone
-            assert_valid_bounding_box(
-                min_bounding_zone,
-                game.field.full_field_half_length,
-                game.field.full_field_half_width,
-            )
+            if isinstance(min_bounding_req, FieldBounds):
+                assert_valid_bounding_box(
+                    min_bounding_req,
+                    game.field.full_field_half_length,
+                    game.field.full_field_half_width,
+                )
+                # Check containment
+                assert_contains(actual_field_bounds, min_bounding_req)
+            elif isinstance(min_bounding_req, SpaceRequirements):
+                # Check if the actual field is large enough
+                actual_length = actual_field_bounds.bottom_right[0] - actual_field_bounds.top_left[0]
+                actual_width = actual_field_bounds.top_left[1] - actual_field_bounds.bottom_right[1]
+                assert (
+                    actual_length >= min_bounding_req.min_length
+                ), f"""
+                    Field bound length too small for strategy. 
+                    Actual length: {actual_length}, 
+                    required minimum length: {min_bounding_req.min_length}.
+                    """
 
-            # Check containment
-            assert_contains(actual_field_size, min_bounding_zone)
+                assert (
+                    actual_width >= min_bounding_req.min_width
+                ), f"""
+                    Field bound width too small for strategy. 
+                    Actual width: {actual_width}, 
+                    required minimum width: {min_bounding_req.min_width}.
+                    """
 
     def load_game(self, game: Game):
         """
