@@ -116,16 +116,22 @@ class FieldDimensions:
         G = self.half_goal_width
 
         # --- Positivity ---
-        assert L > 0 and W > 0, "Field length/width must be positive"
-        assert D > 0 and DW > 0 and G > 0, "Goal/defense measurements must be positive"
+        if not (L > 0 and W > 0):
+            raise ValueError("Field length/width must be positive")
+        if not (D > 0 and DW > 0 and G > 0):
+            raise ValueError("Goal/defense measurements must be positive")
 
         # --- Fit constraints ---
-        assert 2 * D <= L, f"Defense depth {2*D} exceeds field length {L}"
-        assert DW <= W, f"Defense width {DW} exceeds field width {W}"
-        assert G <= W, f"Goal width {G} exceeds field width {W}"
+        if 2 * D > L:
+            raise ValueError(f"Defense depth {2*D} exceeds field length {L}")
+        if DW > W:
+            raise ValueError(f"Defense width {DW} exceeds field width {W}")
+        if G > W:
+            raise ValueError(f"Goal width {G} exceeds field width {W}")
 
         # --- Optional semantic constraint ---
-        assert G <= DW, f"Goal width {G} should not exceed defense width {DW}"
+        if G > DW:
+            raise ValueError(f"Goal width {G} should not exceed defense width {DW}")
 
 
 STANDARD_FIELD_DIMS = FieldDimensions(

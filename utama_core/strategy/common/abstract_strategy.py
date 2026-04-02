@@ -244,21 +244,17 @@ class AbstractStrategy(ABC):
                 # Check if the actual field is large enough
                 actual_length = actual_field_bounds.bottom_right[0] - actual_field_bounds.top_left[0]
                 actual_width = actual_field_bounds.top_left[1] - actual_field_bounds.bottom_right[1]
-                assert (
-                    actual_length >= min_bounding_req.min_length
-                ), f"""
-                    Field bound length too small for strategy. 
-                    Actual length: {actual_length}, 
-                    required minimum length: {min_bounding_req.min_length}.
-                    """
+                if actual_length < min_bounding_req.min_length:
+                    raise ValueError(
+                        "Field bound length too small for strategy. "
+                        f"Actual length: {actual_length}, required minimum length: {min_bounding_req.min_length}."
+                    )
 
-                assert (
-                    actual_width >= min_bounding_req.min_width
-                ), f"""
-                    Field bound width too small for strategy. 
-                    Actual width: {actual_width}, 
-                    required minimum width: {min_bounding_req.min_width}.
-                    """
+                if actual_width < min_bounding_req.min_width:
+                    raise ValueError(
+                        "Field bound width too small for strategy. "
+                        f"Actual width: {actual_width}, required minimum width: {min_bounding_req.min_width}."
+                    )
 
     def load_game(self, game: Game):
         """

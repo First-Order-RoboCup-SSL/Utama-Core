@@ -181,8 +181,8 @@ def test_field_reports_goal_lines_absent_when_bounds_crop_goal_width(
         ),
     ],
 )
-def test_invalid_field_dimensions_raise_assertions(kwargs, error_pattern: str):
-    with pytest.raises(AssertionError, match=error_pattern):
+def test_invalid_field_dimensions_raise_value_errors(kwargs, error_pattern: str):
+    with pytest.raises(ValueError, match=error_pattern):
         FieldDimensions(**kwargs)
 
 

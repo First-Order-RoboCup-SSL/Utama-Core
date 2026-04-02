@@ -531,15 +531,17 @@ class StrategyRunner:
 
     def _assert_exp_goals(self):
         """Assert the expected number of goals."""
-        assert self.my.strategy.assert_exp_goals(
+        if not self.my.strategy.assert_exp_goals(
             self.my.game.field.includes_my_goal_line,
             self.my.game.field.includes_opp_goal_line,
-        ), "Field does not match expected goals for my strategy."
+        ):
+            raise RuntimeError("Field does not match expected goals for my strategy.")
         if self.opp:
-            assert self.opp.strategy.assert_exp_goals(
+            if not self.opp.strategy.assert_exp_goals(
                 self.opp.game.field.includes_my_goal_line,
                 self.opp.game.field.includes_opp_goal_line,
-            ), "Field does not match expected goals for opponent strategy."
+            ):
+                raise RuntimeError("Field does not match expected goals for opponent strategy.")
 
     def _load_robot_controllers(self):
         """

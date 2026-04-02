@@ -135,30 +135,38 @@ def assert_valid_bounding_box(
     full_field_half_length: float,
     full_field_half_width: float,
 ):
-    """Assert a bounding box is well-formed and within full field limits."""
+    """Validate a bounding box is well-formed and within full field limits."""
     fx, fy = full_field_half_length, full_field_half_width
 
     x0, y0 = bb.top_left
     x1, y1 = bb.bottom_right
 
     # Shape validity
-    assert x0 <= x1, f"top-left x {x0} must be <= bottom-right x {x1}"
-    assert y0 >= y1, f"top-left y {y0} must be >= bottom-right y {y1}"
+    if x0 > x1:
+        raise ValueError(f"top-left x {x0} must be <= bottom-right x {x1}")
+    if y0 < y1:
+        raise ValueError(f"top-left y {y0} must be >= bottom-right y {y1}")
 
     # Within global field bounds
-    assert -fx <= x0 <= fx and -fx <= x1 <= fx, f"x coordinates out of full field bounds ±{fx}"
-    assert -fy <= y0 <= fy and -fy <= y1 <= fy, f"y coordinates out of full field bounds ±{fy}"
+    if not (-fx <= x0 <= fx and -fx <= x1 <= fx):
+        raise ValueError(f"x coordinates out of full field bounds +/-{fx}")
+    if not (-fy <= y0 <= fy and -fy <= y1 <= fy):
+        raise ValueError(f"y coordinates out of full field bounds +/-{fy}")
 
 
 def assert_contains(outer: FieldBounds, inner: FieldBounds):
-    """Assert that one bounding box fully contains another."""
+    """Validate that one bounding box fully contains another."""
     ox0, oy0 = outer.top_left
     ox1, oy1 = outer.bottom_right
 
     ix0, iy0 = inner.top_left
     ix1, iy1 = inner.bottom_right
 
-    assert ox0 <= ix0, f"Outer left {ox0} does not contain inner left {ix0}"
-    assert oy0 >= iy0, f"Outer top {oy0} does not contain inner top {iy0}"
-    assert ox1 >= ix1, f"Outer right {ox1} does not contain inner right {ix1}"
-    assert oy1 <= iy1, f"Outer bottom {oy1} does not contain inner bottom {iy1}"
+    if ox0 > ix0:
+        raise ValueError(f"Outer left {ox0} does not contain inner left {ix0}")
+    if oy0 < iy0:
+        raise ValueError(f"Outer top {oy0} does not contain inner top {iy0}")
+    if ox1 < ix1:
+        raise ValueError(f"Outer right {ox1} does not contain inner right {ix1}")
+    if oy1 > iy1:
+        raise ValueError(f"Outer bottom {oy1} does not contain inner bottom {iy1}")

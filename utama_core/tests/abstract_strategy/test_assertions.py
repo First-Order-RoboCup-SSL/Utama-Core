@@ -4,7 +4,11 @@ import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.game.field import Field, FieldBounds
-from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
+from utama_core.strategy.common import (
+    AbstractBehaviour,
+    AbstractStrategy,
+    SpaceRequirements,
+)
 
 
 # Dummy blackboard helper
@@ -73,7 +77,7 @@ def test_min_bb_outside_field():
     strategy = DummyStrategy(min_bb=min_bb)
     strategy.blackboard = make_dummy_blackboard(actual_field)
     game = make_dummy_game(actual_field)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         strategy.assert_field_requirements(game)
 
 
@@ -83,7 +87,7 @@ def test_crossed_bounding_box():
     strategy = DummyStrategy(min_bb=min_bb)
     strategy.blackboard = make_dummy_blackboard(actual_field)
     game = make_dummy_game(actual_field)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         strategy.assert_field_requirements(game)
 
 
@@ -93,5 +97,24 @@ def test_min_bb_exceeds_full_field():
     strategy = DummyStrategy(min_bb=min_bb)
     strategy.blackboard = make_dummy_blackboard(actual_field)
     game = make_dummy_game(actual_field)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
+        strategy.assert_field_requirements(game)
+
+
+def test_min_bb_not_contained_in_actual_field():
+    actual_field = FieldBounds(top_left=(-2.0, 2.0), bottom_right=(2.0, -2.0))
+    min_bb = FieldBounds(top_left=(-3.0, 1.5), bottom_right=(1.0, -1.5))
+    strategy = DummyStrategy(min_bb=min_bb)
+    strategy.blackboard = make_dummy_blackboard(actual_field)
+    game = make_dummy_game(actual_field)
+    with pytest.raises(ValueError, match="does not contain"):
+        strategy.assert_field_requirements(game)
+
+
+def test_space_requirements_rejected_when_field_too_small():
+    actual_field = FieldBounds(top_left=(-2.0, 1.0), bottom_right=(2.0, -1.0))
+    strategy = DummyStrategy(min_bb=SpaceRequirements(min_length=4.5, min_width=2.5))
+    strategy.blackboard = make_dummy_blackboard(actual_field)
+    game = make_dummy_game(actual_field)
+    with pytest.raises(ValueError, match="too small for strategy"):
         strategy.assert_field_requirements(game)

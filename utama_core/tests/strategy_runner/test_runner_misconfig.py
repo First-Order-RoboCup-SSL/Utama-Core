@@ -59,7 +59,7 @@ def test_assert_exp_goals_fails(base_runner):
         includes_my_goal_line=True,
         includes_opp_goal_line=True,
     )
-    with pytest.raises(AssertionError):
+    with pytest.raises(RuntimeError, match="Field does not match expected goals"):
         base_runner._assert_exp_goals()
 
 
@@ -85,10 +85,10 @@ def test_strategy_runner_valid_bounds():
 
 
 def test_strategy_runner_invalid_bounds():
-    """Should raise AssertionError when bounds are invalid."""
+    """Should raise ValueError when bounds are invalid."""
     invalid_bounds = FieldBounds(top_left=(3, 2), bottom_right=(-3, -2))
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         StrategyRunner(
             strategy=DummyStrategy(),
             my_team_is_yellow=True,
@@ -105,7 +105,7 @@ def test_strategy_runner_bounds_outside_non_standard_field_dims():
     # Valid in standard SSL dimensions, but outside GREAT_EXHIBITION_FIELD_DIMS.
     too_large_for_custom_dims = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
 
-    with pytest.raises(AssertionError, match="out of full field bounds"):
+    with pytest.raises(ValueError, match="out of full field bounds"):
         StrategyRunner(
             strategy=DummyStrategy(),
             my_team_is_yellow=True,

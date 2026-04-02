@@ -198,5 +198,5 @@ def test_assert_valid_bounding_box_valid():
 )
 def test_assert_valid_bounding_box_invalid(top_left, bottom_right):
     bb = FieldBounds(top_left, bottom_right)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         assert_valid_bounding_box(bb, 4.5, 3.0)
