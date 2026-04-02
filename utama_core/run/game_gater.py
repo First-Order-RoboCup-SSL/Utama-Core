@@ -32,9 +32,9 @@ class GameGater:
 
         def print_current_vision(game_frame: GameFrame):
             print("Waiting for valid game frame...")
-            print(f"Friendly robots: {len(my_game_frame.friendly_robots)}/{exp_friendly}")
-            print(f"Enemy robots: {len(my_game_frame.enemy_robots)}/{exp_enemy}")
-            print(f"Ball present: {my_game_frame.ball is not None} (exp: {exp_ball})\n")
+            print(f"Friendly robots: {len(game_frame.friendly_robots)}/{exp_friendly}")
+            print(f"Enemy robots: {len(game_frame.enemy_robots)}/{exp_enemy}")
+            print(f"Ball present: {game_frame.ball is not None} (exp: {exp_ball})\n")
 
         def _add_frame(my_game_frame: GameFrame, opp_game_frame: GameFrame) -> Tuple[GameFrame, Optional[GameFrame]]:
             if rsim_env:

@@ -139,7 +139,7 @@ class RobotPlacementStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True  # No specific goal line requirements
 
-    def get_min_bounding_req(self) -> Optional[FieldBounds]:
+    def get_min_bounding_req(self):
         return SpaceRequirements(min_length=1.0, min_width=1.0)  # Require at least a 1x1 area to allow for oscillation
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:

@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from functools import cached_property
 
+import numpy as np
+
 
 @dataclass(frozen=True)
 class FieldBounds:
@@ -13,11 +15,6 @@ class FieldBounds:
         cx = (self.top_left[0] + self.bottom_right[0]) / 2.0
         cy = (self.top_left[1] + self.bottom_right[1]) / 2.0
         return (cx, cy)
-
-
-from dataclasses import dataclass
-
-import numpy as np
 
 
 @dataclass(frozen=True)
