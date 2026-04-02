@@ -691,7 +691,11 @@ class StrategyRunner:
             return {robot_id: RobotCommand(0, 0, 0, 0, 0, 0) for robot_id in team.game.friendly_robots.keys()}
 
         my_cmds = build_commands(self.my)
-        opp_cmds = build_commands(self.opp) if self.opp and self.opp.game else None
+        opp_cmds = (
+            build_commands(self.opp)
+            if self.opp and getattr(self.opp, "_game", None) is not None
+            else None
+        )
 
         for _ in range(repeat):
             self.my.strategy.robot_controller.add_robot_commands(my_cmds)
