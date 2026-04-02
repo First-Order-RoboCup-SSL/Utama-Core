@@ -114,6 +114,9 @@ def _validate_formation(
                 )
 
 
+# TODO: can consider a fitting algorithm that can optimise robot placement so that the chance of running out of space is reduced.
+
+
 def get_formations(
     bounds: FieldBounds,
     n_left: int,
