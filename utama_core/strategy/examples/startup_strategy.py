@@ -14,12 +14,13 @@ def generate_starting_positions(is_right_team: bool):
     """
     Generate starting and target formations based on team side.
     """
-    start_formation = get_formations(
+    left_formation, right_formation = get_formations(
         STANDARD_FIELD_DIMS.full_field_bounds,
         MAX_ROBOTS,
         MAX_ROBOTS,
         formation_type=FormationType.START_ONE,
     )
+    start_formation = right_formation if is_right_team else left_formation
     target_formation = start_formation.copy()
     target_formation.reverse()
     return start_formation, target_formation
