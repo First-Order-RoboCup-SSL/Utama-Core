@@ -498,3 +498,18 @@ The **Event Log** panel shows the 20 most recent events, newest first.
   failures), `BallPlacementOursStep` must fall back to STOP behaviour.
 
 - **Penalty / ball-placement readiness tuning**: `simulation` now auto-progresses these restarts, but the exact readiness heuristics may still need iteration as we gather more simulator coverage.
+
+- **End-to-end ball placement integration test**: The intended test scenario is:
+  ball exits field → `STOP` → `BALL_PLACEMENT_YELLOW` → robot physically carries ball to
+  `designated_position` → `DIRECT_FREE_YELLOW` → kicker drives to ball → `NORMAL_START`.
+  This was attempted in `utama_core/tests/strategy_runner/test_referee_rsim.py` but deferred
+  because `BallPlacementOursStep` cannot reliably carry the ball in RSim.  The robot drives
+  to `ball.p` with the dribbler on, but the motion controller decelerates to a stop at the
+  ball centre rather than capturing it, causing the robot to push the ball instead of carrying
+  it.  Approaches tried: behind-ball offset (robot stops short), direct drive to ball with
+  face-target orientation (hits ball side-on), proximity fallback for `has_ball` (still pushes).
+  Root cause: the approach, dribbler-capture, and carry phases need a dedicated
+  "get-behind-ball" skill with a slower final-approach speed before this can be tested
+  end-to-end.  Additionally, `OutOfBoundsRule` currently issues `STOP → DIRECT_FREE` directly
+  (no automatic ball placement step), so `BALL_PLACEMENT` must be injected manually via
+  `set_command()` for this scenario.
