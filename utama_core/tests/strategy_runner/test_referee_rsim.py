@@ -11,6 +11,7 @@ Scenarios covered:
   - Ball exits side boundary → DIRECT_FREE_YELLOW issued → kicker drives to ball.
   - Ball exits side boundary, robot near ball → DIRECT_FREE_BLUE issued → robots clear keep-out zone.
   - PREPARE_KICKOFF issued → robots reach own-half positions outside centre circle.
+  - Full out-of-bounds sequence: ball exits → STOP → BALL_PLACEMENT → DIRECT_FREE → NORMAL_START.
 
 Note on initial commands:
   Out-of-bounds and goal rules only fire during NORMAL_START / FORCE_START, so the
@@ -23,6 +24,12 @@ Note on last-touch tracking:
   We control which fires by positioning a friendly robot next to the ball before
   it exits (triggers friendly last-touch → DIRECT_FREE_BLUE, their kick).
   With no robot near the ball, last-touch defaults to DIRECT_FREE_YELLOW (ours).
+
+Note on ball placement in out-of-bounds:
+  OutOfBoundsRule issues STOP → DIRECT_FREE directly (no automatic ball placement).
+  Ball placement is only reachable via set_command().  The full-sequence test manually
+  injects BALL_PLACEMENT_YELLOW after the STOP fires, then lets auto-advance carry the
+  state machine through BALL_PLACEMENT → DIRECT_FREE → NORMAL_START.
 """
 
 import math
@@ -384,3 +391,31 @@ def test_prepare_kickoff_robots_form_on_own_half_outside_circle(headless):
 
     assert tm.kickoff_command_seen, "CustomReferee never issued a PREPARE_KICKOFF command"
     assert passed, "Robots did not sustain a legal kickoff formation for the required number of frames"
+
+
+# ---------------------------------------------------------------------------
+# Future work: full out-of-bounds sequence integration test
+#
+# Intended scenario:
+#   ball exits → STOP → BALL_PLACEMENT_YELLOW → robot physically carries ball
+#   to designated position → DIRECT_FREE_YELLOW → kicker drives to ball →
+#   NORMAL_START (play resumes)
+#
+# Why it is not implemented yet:
+#   BallPlacementOursStep relies on robot.has_ball (IR sensor) to switch from
+#   approach to carry mode. In rsim the robot drives to ball.p but decelerates
+#   to a stop AT the ball centre rather than past it, so the dribbler never
+#   properly captures the ball — the robot ends up pushing it instead of
+#   carrying it. Several approaches were tried:
+#     - Adding a behind-ball approach offset (robot stopped short with a gap)
+#     - Driving directly into ball.p with face-target orientation (pushed sideways)
+#     - Proximity fallback for has_ball (robot reached ball but pushed it away)
+#   Root cause: the motion controller targets and the dribbler capture
+#   mechanics need tighter integration (approach from behind, slower final
+#   approach speed, or a dedicated "get-behind-ball" skill) before ball
+#   placement via robot carry can be reliably tested end-to-end.
+#
+# Additionally, OutOfBoundsRule currently issues STOP → DIRECT_FREE directly
+# (no automatic ball placement step). Ball placement must be injected manually
+# via set_command(), which makes the test scenario somewhat artificial.
+# ---------------------------------------------------------------------------

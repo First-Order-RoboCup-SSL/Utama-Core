@@ -846,11 +846,16 @@ class StrategyRunner:
         if self.referee_system == "custom":
             ref_data = self.custom_referee.step(self.my.current_game_frame, time.time())
             self.ref_buffer.append(ref_data)
+            _ball_placement_next = ref_data.next_command in (
+                RefereeCommand.BALL_PLACEMENT_YELLOW,
+                RefereeCommand.BALL_PLACEMENT_BLUE,
+            )
             if (
                 self.sim_controller is not None
                 and ref_data.referee_command == RefereeCommand.STOP
                 and ref_data.designated_position is not None
                 and self._prev_custom_ref_command != RefereeCommand.STOP
+                and not _ball_placement_next
             ):
                 x, y = ref_data.designated_position
                 self.sim_controller.teleport_ball(x, y)
