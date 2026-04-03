@@ -24,11 +24,11 @@ class RefereeGeometry:
     def from_standard_div_b(cls) -> "RefereeGeometry":
         """Return geometry matching the standard SSL Division B field."""
         return cls(
-            half_length=Field._FULL_FIELD_HALF_LENGTH,  # 4.5
-            half_width=Field._FULL_FIELD_HALF_WIDTH,  # 3.0
-            half_goal_width=Field._HALF_GOAL_WIDTH,  # 0.5
-            half_defense_length=Field._HALF_DEFENSE_AREA_LENGTH,  # 0.5
-            half_defense_width=Field._HALF_DEFENSE_AREA_WIDTH,  # 1.0
+            half_length=Field.FULL_FIELD_HALF_LENGTH,  # 4.5
+            half_width=Field.FULL_FIELD_HALF_WIDTH,  # 3.0
+            half_goal_width=Field.HALF_GOAL_WIDTH,  # 0.5
+            half_defense_length=Field.HALF_DEFENSE_AREA_LENGTH,  # 0.5
+            half_defense_width=Field.HALF_DEFENSE_AREA_WIDTH,  # 1.0
             center_circle_radius=0.5,
         )
 
@@ -40,9 +40,9 @@ class RefereeGeometry:
         return cls(
             half_length=half_length,
             half_width=half_width,
-            half_goal_width=Field._HALF_GOAL_WIDTH,
-            half_defense_length=Field._HALF_DEFENSE_AREA_LENGTH,
-            half_defense_width=Field._HALF_DEFENSE_AREA_WIDTH,
+            half_goal_width=Field.HALF_GOAL_WIDTH,
+            half_defense_length=Field.HALF_DEFENSE_AREA_LENGTH,
+            half_defense_width=Field.HALF_DEFENSE_AREA_WIDTH,
             center_circle_radius=0.5,
         )
 
