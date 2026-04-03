@@ -418,10 +418,6 @@ framework dependency — state updates arrive via `EventSource`, config is fetch
 | **Kickoff Blue** | `PREPARE_KICKOFF_BLUE` | After Yellow scores | Blue kicker approaches centre; others to own half |
 | **Free Kick Yellow** | `DIRECT_FREE_YELLOW` | Foul by Blue | Yellow kicker near ball; Blue ≥0.5 m away |
 | **Free Kick Blue** | `DIRECT_FREE_BLUE` | Foul by Yellow | Blue kicker near ball; Yellow ≥0.5 m away |
-| **Penalty Yellow** *(adv)* | `PREPARE_PENALTY_YELLOW` | Usually auto-detected; manual override only | Yellow kicker at penalty mark; others behind line |
-| **Penalty Blue** *(adv)* | `PREPARE_PENALTY_BLUE` | Usually auto-detected; manual override only | Blue kicker at penalty mark; others behind line |
-| **Ball Placement Yellow** *(adv)* | `BALL_PLACEMENT_YELLOW` | Manual placement command | Yellow robot moves ball to `designated_position` |
-| **Ball Placement Blue** *(adv)* | `BALL_PLACEMENT_BLUE` | Manual placement command | Blue robot moves ball to `designated_position` |
 
 #### Auto-detected vs manual
 
@@ -429,8 +425,8 @@ framework dependency — state updates arrive via `EventSource`, config is fetch
 |---|---|---|
 | Goal → kickoff | Auto (GoalRule) | Operator sets kickoff team before half starts |
 | Out-of-bounds → free kick | Auto (OutOfBoundsRule) | `free_kick_assigner` in profile controls which team |
-| Defense area → penalty | Auto (DefenseAreaRule, if enabled) | Penalty buttons are in **Advanced** row; hidden by default |
-| Ball placement | Auto (OutOfBoundsRule, if enabled) | Manual override via Advanced row if auto fails |
+| Defense area → penalty | Auto (DefenseAreaRule, if enabled) | Penalty and ball placement are not exposed in the GUI |
+| Ball placement | Auto (OutOfBoundsRule, if enabled) | Use `set_command()` in code if manual override is needed |
 
 #### Typical sequences
 

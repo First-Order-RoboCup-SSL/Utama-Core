@@ -613,10 +613,6 @@ _HTML = r"""<!DOCTYPE html>
   .log-cmd  { color:var(--green); }
   .log-score{ color:var(--yellow); }
   .log-msg  { color:var(--text); opacity:.8; }
-  .adv-toggle { display:flex; align-items:center; gap:8px; font-size:.75rem; color:var(--muted); padding:4px 0 0 0; cursor:pointer; user-select:none; }
-  .adv-toggle input { cursor:pointer; }
-  .adv-row { display:none; }
-  .adv-row.visible { display:flex; }
 </style>
 </head>
 <body>
@@ -682,22 +678,6 @@ _HTML = r"""<!DOCTYPE html>
       title="Award Yellow a direct free kick. If game is running, STOP is issued first so robots can clear — then click Normal Start.">Free Kick Yellow</button>
     <button class="btn-blue"   onclick="send('DIRECT_FREE_BLUE')"
       title="Award Blue a direct free kick. If game is running, STOP is issued first so robots can clear — then click Normal Start.">Free Kick Blue</button>
-  </div>
-  <label class="adv-toggle">
-    <input type="checkbox" id="adv-toggle" onchange="toggleAdvanced(this.checked)">
-    Advanced controls (penalty &amp; ball placement)
-  </label>
-  <div class="btn-row adv-row">
-    <button class="btn-yellow" onclick="send('PREPARE_PENALTY_YELLOW')"
-      title="(Advanced) Award Yellow a penalty. Usually auto-detected. Follow with Normal Start.">Penalty Yellow</button>
-    <button class="btn-blue"   onclick="send('PREPARE_PENALTY_BLUE')"
-      title="(Advanced) Award Blue a penalty. Usually auto-detected. Follow with Normal Start.">Penalty Blue</button>
-  </div>
-  <div class="btn-row adv-row">
-    <button class="btn-yellow" onclick="send('BALL_PLACEMENT_YELLOW')"
-      title="(Advanced) Manually command Yellow to place ball at designated position.">Ball Placement Yellow</button>
-    <button class="btn-blue"   onclick="send('BALL_PLACEMENT_BLUE')"
-      title="(Advanced) Manually command Blue to place ball at designated position.">Ball Placement Blue</button>
   </div>
 </div>
 
@@ -938,10 +918,6 @@ function send(command) {
   }).catch(err => console.error('command error:', err));
 }
 
-function toggleAdvanced(on) {
-  document.querySelectorAll('.adv-row').forEach(el =>
-    el.classList.toggle('visible', on));
-}
 
 function pill(val) {
   if (val === true)  return '<span class="pill on">ON</span>';
