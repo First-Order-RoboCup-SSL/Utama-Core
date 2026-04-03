@@ -509,3 +509,29 @@ The **Event Log** panel shows the 20 most recent events, newest first.
   end-to-end.  Additionally, `OutOfBoundsRule` currently issues `STOP → DIRECT_FREE` directly
   (no automatic ball placement step), so `BALL_PLACEMENT` must be injected manually via
   `set_command()` for this scenario.
+
+- **Ball placement before free kick (SSL rule compliance)**: Per the official SSL rulebook,
+  after a ball-out-of-bounds event the correct sequence is `STOP → BALL_PLACEMENT_* →
+  DIRECT_FREE_* → NORMAL_START`, not `STOP → DIRECT_FREE_*` as `OutOfBoundsRule` currently
+  produces.  `OutOfBoundsRule` should be updated to set `suggested_command=STOP` and
+  `next_command=BALL_PLACEMENT_*` (with `designated_position` set to the infield restart
+  spot), so the state machine progresses through ball placement before issuing the free kick.
+  This requires `BallPlacementOursStep` to be working reliably first (see item above).
+
+- **`BallPlacementOursStep` robot carry mechanics**: The current single-robot dribble
+  approach does not work reliably — the robot pushes the ball rather than carrying it.
+  Investigation needed.  Most competitive SSL teams use a two-robot "kissing" technique:
+  one robot pushes from behind while a second robot lightly contacts the ball from the
+  front to stabilise it, allowing the pair to transport it as a unit.  Alternatively,
+  a single-robot approach with a dedicated "get-behind-ball" skill (slower final approach,
+  approach vector aligned from behind relative to the target) may also be viable and is
+  worth evaluating first before adding multi-robot coordination complexity.
+
+- **GUI: suggested next action for human operators**: The current operator panel presents
+  all available command buttons simultaneously, which is overwhelming for operators who
+  are unfamiliar with SSL rules.  A future improvement would display a highlighted
+  "suggested next step" banner or button based on the current referee command — for
+  example, after a goal the suggestion would be "Kickoff [team]", after `PREPARE_KICKOFF`
+  it would be "Normal Start (when robots are in position)".  This shifts the operator's
+  job from deciding *what* to do next to simply deciding *when* it is safe to advance,
+  reducing cognitive load and operator error during matches.
