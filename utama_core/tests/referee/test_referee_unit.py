@@ -1045,3 +1045,388 @@ class TestDispatcherRouting:
 
         self._tick_dispatcher(dispatcher, game)
         assert called == ["ours"]
+
+
+# ---------------------------------------------------------------------------
+# PrepareKickoffTheirsStep
+# ---------------------------------------------------------------------------
+
+
+class TestPrepareKickoffTheirsStep:
+    def test_returns_running(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
+
+        robots = {0: _robot(0, 0.0, 0.0)}
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.PrepareKickoffTheirsStep(name="PrepareKickoffTheirs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        assert node.update() == py_trees.common.Status.RUNNING
+
+    def test_all_robots_placed_on_own_half_right(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {i: _robot(i, float(i), 0.0) for i in range(3)}
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_BLUE)
+        # my_team_is_right=True → own half is positive-x side
+        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.PrepareKickoffTheirsStep(name="PrepareKickoffTheirs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert len(captured) == 3
+        for _, target in captured:
+            assert target.x > 0.0, f"Expected positive-x (own half right), got {target}"
+
+    def test_all_robots_placed_on_own_half_left(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {i: _robot(i, float(i), 0.0) for i in range(3)}
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_YELLOW)
+        # my_team_is_right=False → own half is negative-x side
+        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=False)
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.PrepareKickoffTheirsStep(name="PrepareKickoffTheirs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert len(captured) == 3
+        for _, target in captured:
+            assert target.x < 0.0, f"Expected negative-x (own half left), got {target}"
+
+    def test_positions_outside_centre_circle(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {i: _robot(i, 0.0, 0.0) for i in range(6)}
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.PrepareKickoffTheirsStep(name="PrepareKickoffTheirs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        for _, target in captured:
+            dist = target.distance_to(Vector2D(0.0, 0.0))
+            assert dist >= Field.CENTER_CIRCLE_RADIUS, f"Target {target} inside centre circle"
+
+    def test_scales_with_custom_field_bounds(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {0: _robot(0, 0.0, 0.0), 1: _robot(1, 0.0, 0.0)}
+        custom_bounds = FieldBounds(top_left=(-6.0, 4.0), bottom_right=(6.0, -4.0))
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_BLUE)
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            field_bounds=custom_bounds,
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.PrepareKickoffTheirsStep(name="PrepareKickoffTheirs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        # Positions must be on own half and outside centre circle
+        for _, target in captured:
+            assert target.x > 0.0
+            assert target.distance_to(Vector2D(0.0, 0.0)) >= Field.CENTER_CIRCLE_RADIUS
+
+
+# ---------------------------------------------------------------------------
+# DirectFreeOursStep
+# ---------------------------------------------------------------------------
+
+
+class TestDirectFreeOursStep:
+    def test_returns_running(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
+
+        robots = {0: _robot(0, 0.0, 0.0)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW)
+        game = _make_game(friendly_robots=robots, referee=referee)
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        assert node.update() == py_trees.common.Status.RUNNING
+
+    def test_kicker_is_closest_robot_to_ball(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        # Robot 1 is closer to the ball at (1.0, 0.0)
+        robots = {
+            0: _robot(0, -2.0, 0.0),
+            1: _robot(1, 1.2, 0.0),
+        }
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(1.0, 0.0),
+            referee=_make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW),
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        kicker_entries = [entry for entry in captured if entry[0] == 1]
+        assert len(kicker_entries) == 1
+        assert kicker_entries[0][1].x == pytest.approx(1.0)
+        assert kicker_entries[0][1].y == pytest.approx(0.0)
+
+    def test_kicker_moves_toward_ball(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {0: _robot(0, 0.5, 0.0)}
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(2.0, 1.0),
+            referee=_make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW),
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert len(captured) == 1
+        assert captured[0][0] == 0
+        assert captured[0][1].x == pytest.approx(2.0)
+        assert captured[0][1].y == pytest.approx(1.0)
+
+    def test_non_kicker_robots_get_stop_command(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
+
+        # Robot 0 is closest to ball at (0.0, 0.0); robots 1 and 2 are farther
+        robots = {
+            0: _robot(0, 0.0, 0.0),
+            1: _robot(1, 2.0, 0.0),
+            2: _robot(2, -3.0, 1.0),
+        }
+        game = _make_game(
+            friendly_robots=robots,
+            referee=_make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        # Robots 1 and 2 must have been given the empty (stop) command, not a move
+        assert cmd_map[1] is not None
+        assert cmd_map[2] is not None
+        # The stop command is the empty_command tuple; move returns ("move", robot_id)
+        assert cmd_map[1] != ("move", 1)
+        assert cmd_map[2] != ("move", 2)
+
+    def test_writes_command_for_every_robot(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
+
+        robots = {i: _robot(i, float(i), 0.0) for i in range(4)}
+        game = _make_game(
+            friendly_robots=robots,
+            referee=_make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert set(cmd_map.keys()) == set(robots.keys())
+        for v in cmd_map.values():
+            assert v is not None
+
+
+# ---------------------------------------------------------------------------
+# DirectFreeTheirsStep — comprehensive keep-out coverage
+# ---------------------------------------------------------------------------
+
+
+class TestDirectFreeTheirsStep:
+    def test_returns_running(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
+
+        robots = {0: _robot(0, 2.0, 0.0)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee)
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeTheirsStep(name="DirectFreeTheirs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        assert node.update() == py_trees.common.Status.RUNNING
+
+    def test_robot_outside_keep_out_stays_put(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
+
+        robots = {0: _robot(0, 2.0, 0.0)}  # well outside 0.55 m from ball at (0,0)
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee)
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeTheirsStep(name="DirectFreeTheirs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        # No move was needed; cmd_map entry should be the empty (stop) command
+        assert cmd_map[0] is not None
+        assert cmd_map[0] != ("move", 0)
+
+    def test_multiple_robots_only_encroaching_ones_move(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        # Ball at (0, 0); robot 0 inside keep-out, robots 1 & 2 outside
+        robots = {
+            0: _robot(0, 0.1, 0.0),
+            1: _robot(1, 1.0, 0.0),
+            2: _robot(2, -1.5, 0.5),
+        }
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee)
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeTheirsStep(name="DirectFreeTheirs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        moved_ids = [rid for rid, _ in captured]
+        assert moved_ids == [0]
+        assert cmd_map[1] is not None
+        assert cmd_map[2] is not None
+
+    def test_encroaching_robot_projected_to_keep_out_boundary(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        # Ball at origin; robot dead on the x-axis at 0.3 m (inside 0.55)
+        robots = {0: _robot(0, 0.3, 0.0)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee)
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeTheirsStep(name="DirectFreeTheirs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert len(captured) == 1
+        assert captured[0][1] == pytest.approx(Vector2D(0.55, 0.0))
+
+    def test_all_robots_get_commands(self, monkeypatch):
+        from utama_core.strategy.referee import actions as referee_actions
+
+        monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
+
+        robots = {i: _robot(i, float(i) * 0.5 - 1.0, 0.0) for i in range(5)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee)
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeTheirsStep(name="DirectFreeTheirs")
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert set(cmd_map.keys()) == set(robots.keys())
+        for v in cmd_map.values():
+            assert v is not None

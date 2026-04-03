@@ -62,7 +62,7 @@ def main() -> None:
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,
         mode="rsim",
-        control_scheme="dwa",
+        control_scheme="pid",
         exp_friendly=N_ROBOTS,
         exp_enemy=N_ROBOTS,
         referee_system="custom",
