@@ -226,7 +226,7 @@ class AbstractStrategy(ABC):
         that both actual field and min_bounding_zone are within the full field,
         and that bounding boxes are well-formed (top-left above/left of bottom-right).
         """
-        actual_field_bounds = self.blackboard.game.field.field_bounds
+        actual_field_bounds = game.field.field_bounds
         min_bounding_req = self.get_min_bounding_req()
 
         # --- Validate min bounding zone ---

@@ -150,20 +150,7 @@ class StrategyRunner:
         self.exp_ball = exp_ball
         self.full_field_dims = full_field_dims
         # if field bounds not provided, default to full field dimensions
-        self.field_bounds = (
-            field_bounds
-            if field_bounds
-            else FieldBounds(
-                top_left=(
-                    -full_field_dims.full_field_half_length,
-                    full_field_dims.full_field_half_width,
-                ),
-                bottom_right=(
-                    full_field_dims.full_field_half_length,
-                    -full_field_dims.full_field_half_width,
-                ),
-            )
-        )
+        self.field_bounds = field_bounds if field_bounds else full_field_dims.full_field_bounds
 
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 

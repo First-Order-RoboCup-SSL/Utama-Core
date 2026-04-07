@@ -6,6 +6,7 @@ import numpy as np
 
 from utama_core.config.field_params import FieldBounds, FieldDimensions
 from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
+from utama_core.global_utils.math_utils import normalise_heading
 
 
 class FormationEntry(NamedTuple):
@@ -46,13 +47,13 @@ FORMATIONS = {
 
 
 def _mirror(formation: list[FormationEntry], bounds: FieldBounds) -> list[FormationEntry]:
-    cx, cy = bounds.center
+    cx, _ = bounds.center
 
     return [
         FormationEntry(
             2 * cx - entry.x,
-            2 * cy - entry.y,
-            (entry.theta + np.pi) % (2 * np.pi),
+            entry.y,
+            normalise_heading(np.pi - entry.theta),
         )
         for entry in formation
     ]
