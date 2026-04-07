@@ -116,10 +116,14 @@ def _validate_team_separation(left, right):
     """
     Validate that the left and right teams are sufficiently separated to avoid collisions.
     """
-    min_left_x = min(x for x, _, _ in left)
-    max_right_x = max(x for x, _, _ in right)
+    max_left_x = -np.inf
+    min_right_x = np.inf
+    if left:
+        max_left_x = max(x for x, _, _ in left)
+    if right:
+        min_right_x = min(x for x, _, _ in right)
 
-    gap = min_left_x - max_right_x
+    gap = min_right_x - max_left_x
     required = 2 * ROBOT_RADIUS
 
     if gap < required:
