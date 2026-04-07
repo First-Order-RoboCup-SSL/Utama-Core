@@ -45,6 +45,11 @@ class PositionRefiner(BaseRefiner):
     Refiner that combines vision data from multiple cameras, applies bounds filtering,
     and optionally applies Kalman filtering for smoothing and imputing vanished robots.
 
+    Args:
+        full_field_dims: The dimensions of the full field, used to set bounds for vision data inclusion.
+        filtering: Whether to apply Kalman filtering for smoothing and imputing vanished robots.
+        exp_ball: Whether to expect a ball on the field.
+
     Important:
         when exp_ball set to False, the refiner could return either Ball | None type ball value
         when exp_ball set to True, the refiner will ALWAYS return a Ball type ball value (will impute missing frames)
