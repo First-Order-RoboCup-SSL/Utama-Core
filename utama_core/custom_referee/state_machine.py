@@ -43,13 +43,16 @@ class GameStateMachine:
         kickoff_timeout_seconds: float = 10.0,
         geometry: Optional[RefereeGeometry] = None,
         auto_advance: Optional[AutoAdvanceConfig] = None,
+        initial_time: Optional[float] = None,
     ) -> None:
         self.command = initial_command
         self.command_counter = 0
         self.command_timestamp = 0.0
 
         self.stage = initial_stage
-        self.stage_start_time = time.time()  # initialise to now so timer is correct immediately
+        self.stage_start_time = (
+            time.time() if initial_time is None else initial_time
+        )
         self.stage_duration = half_duration_seconds
 
         self.yellow_team = TeamInfo(
