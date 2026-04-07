@@ -901,15 +901,13 @@ class StrategyRunner:
                 stage_secs = ref.stage_time_left
                 stage_min = int(stage_secs // 60)
                 stage_sec = int(stage_secs % 60)
-                last_ref = self.referee_refiner._referee_records[-1] if self.referee_refiner._referee_records else None
-
                 display = Text()
                 display.append(f"FPS: {fps:.1f}", style="bold cyan")
                 display.append("  |  ")
                 display.append(ref.last_command.name, style="bold yellow")
-                if last_ref and last_ref.next_command:
+                if ref.last_next_command:
                     display.append("  ->  ")
-                    display.append(last_ref.next_command.name, style="yellow")
+                    display.append(ref.last_next_command.name, style="yellow")
                 display.append("  |  ")
                 display.append(ref.stage.name.replace("_", " ").title())
                 display.append("  |  Blue ")
@@ -925,8 +923,8 @@ class StrategyRunner:
                     display.append(self.custom_referee.profile_name, style="magenta")
                     display.append(")")
 
-                if last_ref and last_ref.status_message:
-                    display.append(f"  |  {last_ref.status_message}", style="dim")
+                if ref.last_status_message:
+                    display.append(f"  |  {ref.last_status_message}", style="dim")
 
                 self._fps_live.update(display)
                 self._fps_live.refresh()

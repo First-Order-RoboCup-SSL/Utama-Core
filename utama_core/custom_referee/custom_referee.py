@@ -141,12 +141,14 @@ class CustomReferee:
                 violation = result
                 break
 
-        # Notify rules of any command transition so they can reset internal state.
-        if violation is not None:
+        previous_command = self._state.command
+        result = self._state.step(current_time, violation, game_frame)
+
+        # Notify rules only when the command actually changed (not when the
+        # state machine ignored the violation due to the transition cooldown).
+        if self._state.command != previous_command:
             for rule in self._rules:
                 rule.reset()
-
-        result = self._state.step(current_time, violation, game_frame)
         if self._gui_server is not None:
             self._gui_server.notify(result, game_frame)
         return result

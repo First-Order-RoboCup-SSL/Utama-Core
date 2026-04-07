@@ -38,6 +38,7 @@ from typing import Optional
 
 import py_trees
 
+from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.custom_referee import CustomReferee
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import Field, FieldBounds
@@ -49,9 +50,6 @@ from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
 )
-
-# SSL keep-out radius during opponent free kicks (must match referee_constants.py).
-BALL_KEEP_OUT_DISTANCE = 0.55
 
 # ---------------------------------------------------------------------------
 # Minimal idle strategy — referee override tree handles all motion

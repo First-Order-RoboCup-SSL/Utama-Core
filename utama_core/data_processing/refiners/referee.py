@@ -113,6 +113,14 @@ class RefereeRefiner(BaseRefiner):
         return self._referee_records[-1].current_action_time_remaining if self._referee_records else None
 
     @property
+    def last_status_message(self) -> Optional[str]:
+        return self._referee_records[-1].status_message if self._referee_records else None
+
+    @property
+    def last_next_command(self) -> Optional[RefereeCommand]:
+        return self._referee_records[-1].next_command if self._referee_records else None
+
+    @property
     def is_halt(self) -> bool:
         return self.last_command == RefereeCommand.HALT
 

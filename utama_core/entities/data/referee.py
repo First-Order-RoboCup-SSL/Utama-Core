@@ -23,7 +23,7 @@ class RefereeData:
     stage_time_left: float
     blue_team: TeamInfo
     yellow_team: TeamInfo
-    designated_position: Optional[Tuple[float]] = None
+    designated_position: Optional[Tuple[float, float]] = None
 
     # Information about the direction of play.
     # True, if the blue team will have it's goal on the positive x-axis of the ssl-vision coordinate system.
