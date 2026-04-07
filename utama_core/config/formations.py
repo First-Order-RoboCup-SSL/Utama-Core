@@ -72,7 +72,7 @@ def _scale(norm_formation, bounds: FieldBounds) -> list[FormationEntry]:
     return [FormationEntry(cx + x * L, cy + y * W, theta) for x, y, theta in norm_formation]
 
 
-def _validate_formation(
+def _validate_bounds_and_intra_team_collision(
     formation: list[FormationEntry],
     bounds: FieldBounds,
 ) -> None:
@@ -110,6 +110,20 @@ def _validate_formation(
                 raise ValueError(
                     f"Could not fit all robots in provided FieldBounds/FieldDimensions. Robots {i} and {j} overlap (distance={dist:.3f})"
                 )
+
+
+def _validate_team_separation(left, right):
+    """
+    Validate that the left and right teams are sufficiently separated to avoid collisions.
+    """
+    min_left_x = min(x for x, _, _ in left)
+    max_right_x = max(x for x, _, _ in right)
+
+    gap = min_left_x - max_right_x
+    required = 2 * ROBOT_RADIUS
+
+    if gap < required:
+        raise ValueError(f"Teams not sufficiently separated: gap={gap:.3f}, required={required:.3f}")
 
 
 # TODO: can consider a fitting algorithm that can optimise robot placement so that the chance of running out of space is reduced.
@@ -151,7 +165,8 @@ def get_formations(
     left = _mirror(_scale(base[:n_left], bounds), bounds)
     right = _scale(base[:n_right], bounds)
 
-    _validate_formation(left, bounds)
-    _validate_formation(right, bounds)
+    _validate_bounds_and_intra_team_collision(left, bounds)
+    _validate_bounds_and_intra_team_collision(right, bounds)
+    _validate_team_separation(left, right)
 
     return left, right
