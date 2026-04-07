@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import math
 import time
@@ -590,8 +591,8 @@ class GameStateMachine:
             referee_command_timestamp=self.command_timestamp,
             stage=self.stage,
             stage_time_left=stage_time_left,
-            blue_team=self.blue_team,
-            yellow_team=self.yellow_team,
+            blue_team=copy.copy(self.blue_team),
+            yellow_team=copy.copy(self.yellow_team),
             designated_position=self.ball_placement_target,
             blue_team_on_positive_half=None,
             next_command=self.next_command,

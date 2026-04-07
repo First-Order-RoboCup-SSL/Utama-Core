@@ -58,7 +58,7 @@ GameStateMachine.step(current_time, violation)
 RefereeData  (source_identifier="custom_referee")
 ```
 
-The one-frame lag (the `GameFrame` used is from the previous step) is acceptable and matches how the existing RSim `RefereeStateMachine` works.
+The one-frame lag (the `GameFrame` used is from the previous step) is acceptable for all supported modes.
 
 ---
 

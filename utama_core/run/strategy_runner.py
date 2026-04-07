@@ -863,15 +863,8 @@ class StrategyRunner:
 
         if self.mode == Mode.RSIM:
             obs = self.rsim_env._frame_to_observations()
-            if len(obs) == 4 and self.referee_system != "custom":
-                # New format with referee embedded in observations
-                vision_frames = [obs[0]]
-                referee_data = obs[3]
-            else:
-                # custom_referee already pushed data into ref_buffer above;
-                # otherwise read externally injected referee data.
-                vision_frames = [obs[0]]
-                referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
+            vision_frames = [obs[0]]
+            referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
         else:
             vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
             referee_data = self.ref_buffer.popleft() if self.ref_buffer else None

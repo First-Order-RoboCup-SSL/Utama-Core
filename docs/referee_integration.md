@@ -208,8 +208,8 @@ Requires WSL `networkingMode=mirrored` in `.wslconfig` for multicast UDP to reac
 ### RSim mode (simulation)
 
 ```
-ref_buffer.append(RefereeData)  ← pushed externally (e.g. referee_sim.py)
-  → strategy_runner._run_step reads ref_buffer (when _frame_to_observations returns 3-tuple)
+ref_buffer.append(RefereeData)  ← pushed by CustomReferee.step() each tick (or externally, e.g. referee_sim.py)
+  → strategy_runner._run_step reads ref_buffer
   → same pipeline as above
 ```
 

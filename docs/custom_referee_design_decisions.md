@@ -102,3 +102,18 @@ placed at `y = ±3.0 m` (touch-line boundary) rather than spread across the fiel
 The x-coordinate (`behind_line_x`) is unchanged — robots remain behind the penalty mark.
 Full off-field placement (Option C) is deferred until the simulator supports it.
 Penalty kicks remain disabled in all built-in profiles.
+
+---
+
+## 8. `TeamInfo` should be a frozen dataclass
+
+**File:** `utama_core/entities/game/team_info.py`
+
+**Current behaviour:**
+`TeamInfo` is a mutable class. `GameStateMachine._generate_referee_data()` passes `self.blue_team` / `self.yellow_team` directly into `RefereeData`. `RefereeRefiner` stores these `RefereeData` objects in `_referee_records`. Because all stored records reference the same `TeamInfo` objects, a subsequent `increment_score()` call mutates the score retroactively across all historical records — which can cause `RefereeData.__eq__` to falsely consider a new record equal to the previous one, silently dropping it from `_referee_records`.
+
+**Workaround (applied 2026-04-07):** `_generate_referee_data()` now calls `copy.copy(self.blue_team)` / `copy.copy(self.yellow_team)` to snapshot team state at the time of record creation. This fixes the aliasing issue for the `CustomReferee` path without touching `TeamInfo` or the network referee path.
+
+**Long-term fix:** Convert `TeamInfo` to `@dataclass(frozen=True)`. Replace all in-place mutations (`increment_score()`, `parse_referee_packet()`, etc.) with `dataclasses.replace()` calls. This eliminates the aliasing hazard at the type level across the whole codebase, and gives `TeamInfo` a correct `__eq__` for free. The network referee path (`RefereeMessageReceiver` → `parse_referee_packet()`) will need updating too.
+
+**Why deferred:** The refactor touches the network referee path which is out of scope for the referee integration PR.

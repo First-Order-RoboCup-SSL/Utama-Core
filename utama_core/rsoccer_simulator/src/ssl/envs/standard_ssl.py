@@ -174,11 +174,10 @@ class SSLStandardEnv(SSLBaseEnv):
     ) -> Tuple[RawVisionData, RobotResponse, RobotResponse]:
         """Return observation data that aligns with grSim. There may be Gaussian noise and vanishing added.
 
-        Returns (vision_observation, yellow_robot_feedback, blue_robot_feedback, referee_data)
+        Returns (vision_observation, yellow_robot_feedback, blue_robot_feedback)
         vision_observation: closely aligned to SSLVision that returns a FramData object
         yellow_robots_info: feedback from individual yellow robots that returns a List[RobotInfo]
         blue_robots_info: feedback from individual blue robots that returns a List[RobotInfo]
-        referee_data: current referee state from embedded referee state machine
         """
 
         if self.latest_observation[0] == self.steps:
