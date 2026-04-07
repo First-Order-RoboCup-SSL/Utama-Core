@@ -1,4 +1,4 @@
-from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldBounds
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.data_processing.refiners import PositionRefiner
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D
@@ -6,8 +6,8 @@ from utama_core.entities.data.vision import VisionBallData, VisionRobotData
 from utama_core.entities.game import Ball, GameFrame
 from utama_core.entities.game.robot import Robot
 
-full_field = STANDARD_FIELD_DIMS.full_field_bounds
-position_refiner = PositionRefiner(full_field)
+full_field_dims = STANDARD_FIELD_DIMS
+position_refiner = PositionRefiner(full_field_dims)
 
 
 def test_combining_single_team_combines_single_robot():
@@ -77,7 +77,7 @@ def base_refine(is_yellow: bool):
     raw_balls = [RawBallData(0, 0, 0, 0)]
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, raw_blue, raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, raw_blue, raw_balls, 1)
-    p = PositionRefiner(full_field)
+    p = PositionRefiner(full_field_dims)
     g = GameFrame(0, is_yellow, True, friendly, enemy, bfac(0, 0))
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2])
     fr = result.friendly_robots[0]
@@ -109,7 +109,7 @@ def test_refine_for_multiple_yellow():
     raw_balls = [RawBallData(0, 0, 0, 0)]
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, [], raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, [], raw_balls, 1)
-    p = PositionRefiner(full_field)
+    p = PositionRefiner(full_field_dims)
     g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2])
 
@@ -128,7 +128,7 @@ def test_refine_nones():
     raw_balls = [RawBallData(0, 0, 0, 0)]
     raw_vision_data_cam1 = RawVisionData(0, raw_yellow, [], raw_balls, 0)
     raw_vision_data_cam2 = RawVisionData(0, raw_yellow, [], raw_balls, 1)
-    p = PositionRefiner(full_field)
+    p = PositionRefiner(full_field_dims)
     g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
     result = p.refine(g, [raw_vision_data_cam1, raw_vision_data_cam2, None, None])
 
@@ -143,12 +143,12 @@ def test_refine_nones():
 def test_out_of_bounds_does_not_update_existing_robot():
     # Existing friendly robot at origin
     friendly = {0: rfac(0, True, 0, 0)}
-    # Vision sees same robot far outside bounds (x beyond 5.5)
+    # Vision sees same robot far outside bounds (x beyond full field)
     raw_yellow = [RawRobotData(0, 10.0, 0.0, 0.0, 1.0)]
     raw_balls = [RawBallData(0, 0, 0, 0)]
     frames = [RawVisionData(0, raw_yellow, [], raw_balls, 0)]
 
-    p = PositionRefiner(full_field)
+    p = PositionRefiner(full_field_dims)
     g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
     result = p.refine(g, frames)
 
@@ -161,12 +161,12 @@ def test_out_of_bounds_does_not_update_existing_robot():
 def test_out_of_bounds_enemy_not_added():
     # No enemy robots initially
     friendly = {0: rfac(0, True, 0, 0)}
-    # Vision sees a blue robot outside bounds (y beyond 4.0)
+    # Vision sees a blue robot outside full field bounds
     raw_blue = [RawRobotData(1, 0.0, 10.0, 0.0, 1.0)]
     raw_balls = [RawBallData(0, 0, 0, 0)]
     frames = [RawVisionData(0, [], raw_blue, raw_balls, 0)]
 
-    p = PositionRefiner(full_field)
+    p = PositionRefiner(full_field_dims)
     g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
     result = p.refine(g, frames)
 
@@ -175,12 +175,12 @@ def test_out_of_bounds_enemy_not_added():
 
 
 def test_out_of_bounds_friendly_not_added():
-    # Vision sees a yellow robot outside bounds (y beyond 4.0)
-    raw_yellow = [RawRobotData(1, 3.0, 3.1, 0.0, 1.0)]
+    # Vision sees a yellow robot clearly outside full field bounds (+ buffer)
+    raw_yellow = [RawRobotData(1, 3.0, 10.0, 0.0, 1.0)]
     raw_balls = [RawBallData(0, 0, 0, 0)]
     frames = [RawVisionData(0, raw_yellow, [], raw_balls, 0)]
 
-    p = PositionRefiner(FieldBounds(top_left=(-1, 1.0), bottom_right=(1.0, -1.0)))
+    p = PositionRefiner(full_field_dims)
     g = GameFrame(0, True, True, {}, {}, bfac(0, 0))
     result = p.refine(g, frames)
 

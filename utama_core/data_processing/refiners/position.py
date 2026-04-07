@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from utama_core.config.field_params import FieldDimensions
 from utama_core.config.settings import BALL_MERGE_THRESHOLD, VISION_BOUNDS_BUFFER
 from utama_core.data_processing.refiners.base_refiner import BaseRefiner
 from utama_core.data_processing.refiners.filters.kalman import (
@@ -51,17 +52,20 @@ class PositionRefiner(BaseRefiner):
 
     def __init__(
         self,
-        field_bounds: FieldBounds,
+        full_field_dims: FieldDimensions,
         filtering: bool = True,
         exp_ball: bool = True,
     ):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
+        top_left = full_field_dims.full_field_bounds.top_left
+        bottom_right = full_field_dims.full_field_bounds.bottom_right
+
         self.vision_bounds = VisionBounds(
-            x_min=field_bounds.top_left[0] - VISION_BOUNDS_BUFFER,  # expand left
-            x_max=field_bounds.bottom_right[0] + VISION_BOUNDS_BUFFER,  # expand right
-            y_min=field_bounds.bottom_right[1] - VISION_BOUNDS_BUFFER,  # expand bottom
-            y_max=field_bounds.top_left[1] + VISION_BOUNDS_BUFFER,  # expand top
+            x_min=top_left[0] - VISION_BOUNDS_BUFFER,
+            x_max=bottom_right[0] + VISION_BOUNDS_BUFFER,
+            y_min=bottom_right[1] - VISION_BOUNDS_BUFFER,
+            y_max=top_left[1] + VISION_BOUNDS_BUFFER,
         )
 
         # For Kalman filtering and imputing vanished values.

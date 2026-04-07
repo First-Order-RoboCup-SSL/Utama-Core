@@ -288,7 +288,7 @@ class StrategyRunner:
         """
         opp_side = None
         my_pos_ref, my_vel_ref, my_robot_ref = self._init_refiners(
-            self.field_bounds, filtering=filtering, exp_ball=self.exp_ball
+            self.full_field_dims, filtering=filtering, exp_ball=self.exp_ball
         )
         my_motion_controller = get_control_scheme(control_scheme)
         my_strategy.setup_strategy_blackboard(is_opp_strat=False)
@@ -302,7 +302,7 @@ class StrategyRunner:
 
         if opp_strategy is not None:
             opp_pos_ref, opp_vel_ref, opp_robot_ref = self._init_refiners(
-                self.field_bounds, filtering=filtering, exp_ball=self.exp_ball
+                self.full_field_dims, filtering=filtering, exp_ball=self.exp_ball
             )
             opp_motion_controller = (
                 get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
@@ -549,7 +549,7 @@ class StrategyRunner:
 
     def _init_refiners(
         self,
-        field_bounds: FieldBounds,
+        field_dims: FieldDimensions,
         filtering: bool,
         exp_ball: bool = True,
     ) -> tuple[PositionRefiner, VelocityRefiner, RobotInfoRefiner]:
@@ -564,7 +564,7 @@ class StrategyRunner:
             tuple: The initialized PositionRefiner, VelocityRefiner, and RobotInfoRefiner.
         """
         position_refiner = PositionRefiner(
-            field_bounds,
+            field_dims,
             filtering=filtering,
             exp_ball=exp_ball,
         )
