@@ -83,10 +83,10 @@ def test_grsim_spawn_positions_and_ball_use_field_bounds_center():
 
     assert isinstance(runner.sim_controller, _FakeGRSimController)
 
-    left_start, right_start = get_formations(
+    right_start, left_start = get_formations(
         bounds=bounds,
-        n_left=exp_friendly,
         n_right=exp_enemy,
+        n_left=exp_friendly,
         formation_type=FormationType.START_ONE,
     )
     expected_yellow, expected_blue = map_left_right_to_colors(

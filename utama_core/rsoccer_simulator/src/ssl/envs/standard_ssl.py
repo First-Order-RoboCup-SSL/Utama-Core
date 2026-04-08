@@ -117,10 +117,10 @@ class SSLStandardEnv(SSLBaseEnv):
         # Makes the implicit assumption of blue on left and yellow on right if formation not given
         # This assumption is faulty for normal strats, but it is necessary if rsim is spawned in isolation with no strat context
         if blue_starting_formation is None or yellow_starting_formation is None:
-            self.blue_formation, self.yellow_formation = get_formations(
+            self.yellow_formation, self.blue_formation = get_formations(
                 STANDARD_FIELD_DIMS.full_field_bounds,
-                n_left=n_robots_blue,
                 n_right=n_robots_yellow,
+                n_left=n_robots_blue,
                 formation_type=FormationType.START_ONE,
             )
 
