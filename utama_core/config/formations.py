@@ -146,8 +146,8 @@ def get_formations(
 
     Args:
         bounds: FieldBounds object defining the top-left and bottom-right corners of the field.
-        n_right: Number of robots on the right team. Default is MAX_ROBOTS (6).
-        n_left: Number of robots on the left team. Default is MAX_ROBOTS (6).
+        n_right: Number of robots on the right team. Default is MAX_ROBOTS.
+        n_left: Number of robots on the left team. Default is MAX_ROBOTS.
         formation_type: The type of formation to generate (e.g., START_ONE). Default is FormationType.START_ONE.
 
     Returns:
