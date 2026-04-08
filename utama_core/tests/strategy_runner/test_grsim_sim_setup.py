@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from utama_core.config.formations import FormationType, get_formations
+from utama_core.config.formations import get_formations
 from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.mapping_utils import (
     map_friendly_enemy_to_colors,
@@ -87,7 +87,6 @@ def test_grsim_spawn_positions_and_ball_use_field_bounds_center():
         bounds=bounds,
         n_right=exp_enemy,
         n_left=exp_friendly,
-        formation_type=FormationType.START_ONE,
     )
     expected_yellow, expected_blue = map_left_right_to_colors(
         my_team_is_yellow,

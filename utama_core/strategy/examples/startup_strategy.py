@@ -2,10 +2,8 @@ import py_trees
 from py_trees.composites import Sequence
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
-from utama_core.config.formations import FormationType, get_formations
-from utama_core.config.physical_constants import MAX_ROBOTS
+from utama_core.config.formations import get_formations
 from utama_core.entities.data.vector import Vector2D
-from utama_core.global_utils.math_utils import compute_bounding_zone_from_points
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
 
@@ -14,12 +12,7 @@ def generate_starting_positions(is_right_team: bool):
     """
     Generate starting and target formations based on team side.
     """
-    right_formation, left_formation = get_formations(
-        STANDARD_FIELD_DIMS.full_field_bounds,
-        MAX_ROBOTS,
-        MAX_ROBOTS,
-        formation_type=FormationType.START_ONE,
-    )
+    right_formation, left_formation = get_formations(STANDARD_FIELD_DIMS.full_field_bounds)
     start_formation = right_formation if is_right_team else left_formation
     target_formation = start_formation.copy()
     target_formation.reverse()

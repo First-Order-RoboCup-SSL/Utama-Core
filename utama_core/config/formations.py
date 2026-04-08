@@ -4,7 +4,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from utama_core.config.field_params import FieldBounds, FieldDimensions
+from utama_core.config.field_params import FieldBounds
 from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
 from utama_core.global_utils.math_utils import normalise_heading
 
@@ -136,19 +136,19 @@ def _validate_team_separation(left, right):
 
 def get_formations(
     bounds: FieldBounds,
-    n_right: int,
-    n_left: int,
-    formation_type: FormationType,
+    n_right: int = MAX_ROBOTS,
+    n_left: int = MAX_ROBOTS,
+    formation_type: FormationType = FormationType.START_ONE,
 ) -> tuple[list[FormationEntry], list[FormationEntry]]:
     """
-    Returns the starting formations for both teams based on the provided field dimensions.
+    Returns the starting formations for both teams based on the provided FieldBounds.
     The formations are defined as lists of FormationEntry objects, which contain the x and y coordinates
 
     Args:
         bounds: FieldBounds object defining the top-left and bottom-right corners of the field.
-        n_right: Number of robots on the right team.
-        n_left: Number of robots on the left team.
-        formation_type: The type of formation to generate (e.g., START_ONE).
+        n_right: Number of robots on the right team. Default is MAX_ROBOTS.
+        n_left: Number of robots on the left team. Default is MAX_ROBOTS.
+        formation_type: The type of formation to generate (e.g., START_ONE). Default is FormationType.START_ONE.
 
     Returns:
         tuple[list[FormationEntry], list[FormationEntry]]: A tuple containing two lists of FormationEntry objects.

@@ -13,7 +13,7 @@ from rich.text import Text
 
 from utama_core.config.enums import Mode, mode_str_to_enum
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
-from utama_core.config.formations import FormationType, get_formations
+from utama_core.config.formations import get_formations
 from utama_core.config.physical_constants import MAX_ROBOTS
 from utama_core.config.settings import (
     FPS_PRINT_INTERVAL,
@@ -351,7 +351,6 @@ class StrategyRunner:
             bounds=self.field_bounds,
             n_right=self.exp_friendly if self.my_team_is_right else self.exp_enemy,
             n_left=self.exp_enemy if self.my_team_is_right else self.exp_friendly,
-            formation_type=FormationType.START_ONE,
         )
 
         yellow_start, blue_start = map_left_right_to_colors(
