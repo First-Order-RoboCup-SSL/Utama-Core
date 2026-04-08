@@ -7,43 +7,43 @@ from utama_core.motion_planning.src.common.motion_controller import MotionContro
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from utama_core.skills.src.go_to_point import go_to_point
 
-GOAL_HALF_WIDTH = 0.5
 SHADOW_EDGE_OFFSET = 0.1
 
 
-def _clamp_goal_y(y: float) -> float:
-    return max(-GOAL_HALF_WIDTH, min(GOAL_HALF_WIDTH, y))
+def _clamp_goal_y(y: float, goal_half_width: float) -> float:
+    return max(-goal_half_width, min(goal_half_width, y))
 
 
-def _intersection_with_goal_line(a, b, goal_x: float):
+def _intersection_with_goal_line(a, b, goal_x: float, goal_half_width: float):
     xa, ya = a
     xb, yb = b
     dx = xb - xa
 
     if abs(dx) < 1e-12:
-        return (goal_x, _clamp_goal_y(yb))
+        return (goal_x, _clamp_goal_y(yb, goal_half_width))
 
     t = (goal_x - xa) / dx
     if t < 0:
-        return (goal_x, _clamp_goal_y(ya))
+        return (goal_x, _clamp_goal_y(ya, goal_half_width))
 
     y_intersect = ya + t * (yb - ya)
-    return (goal_x, _clamp_goal_y(y_intersect))
+    return (goal_x, _clamp_goal_y(y_intersect, goal_half_width))
 
 
-def _single_defender_stop_y(ball_pos: Vector2D, defender_pos: Vector2D, goal_x: float) -> float:
+def _single_defender_stop_y(ball_pos: Vector2D, defender_pos: Vector2D, goal_x: float, goal_half_width: float) -> float:
     open_top = defender_pos.y <= ball_pos.y
     edge_y = defender_pos.y + SHADOW_EDGE_OFFSET if open_top else defender_pos.y - SHADOW_EDGE_OFFSET
     _, yy = _intersection_with_goal_line(
         (ball_pos.x, ball_pos.y),
         (defender_pos.x, edge_y),
         goal_x,
+        goal_half_width,
     )
 
     if open_top:
-        return (yy + GOAL_HALF_WIDTH) / 2
+        return (yy + goal_half_width) / 2
 
-    return (yy - GOAL_HALF_WIDTH) / 2
+    return (yy - goal_half_width) / 2
 
 
 def goalkeep(
@@ -52,7 +52,9 @@ def goalkeep(
     robot_id: int,
     env: Optional[SSLStandardEnv] = None,
 ):
-    goal_x = 4.5 if game.my_team_is_right else -4.5
+    goal_line = game.field.my_goal_line
+    goal_x = float(goal_line[0][0])
+    goal_half_width = abs(float(goal_line[0][1]))
     ball_pos = game.ball.p.to_2d()
     target = predict_ball_pos_at_x(game, goal_x)
 
@@ -69,6 +71,7 @@ def goalkeep(
                     ball_pos,
                     game.friendly_robots[1].p,
                     goal_x,
+                    goal_half_width,
                 )
         except (IndexError, KeyError):
             # If robot with ID 1 is not available, keep default stop_y
@@ -87,17 +90,19 @@ def goalkeep(
                     (ball_pos.x, ball_pos.y),
                     (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + SHADOW_EDGE_OFFSET),
                     goal_x,
+                    goal_half_width,
                 )
                 _, yy2 = _intersection_with_goal_line(
                     (ball_pos.x, ball_pos.y),
                     (game.friendly_robots[2].p.x, game.friendly_robots[2].p.y - SHADOW_EDGE_OFFSET),
                     goal_x,
+                    goal_half_width,
                 )
                 stop_y = (yy1 + yy2) / 2
         except (IndexError, KeyError):
             # If robots with IDs 1 or 2 are not available, keep existing stop_y
             pass
-    if target is None or abs(target.y) > 0.5:
+    if target is None or abs(target.y) > goal_half_width:
         target = Vector2D(goal_x, stop_y)
 
     return go_to_point(

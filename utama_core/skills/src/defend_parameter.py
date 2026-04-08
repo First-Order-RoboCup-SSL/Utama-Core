@@ -7,8 +7,11 @@ from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from utama_core.skills.src.go_to_point import go_to_point
+from utama_core.skills.src.utils.defense_utils import _defense_geometry
 
-DEFENSE_FRONT_OFFSET_X = 1.0
+STATIC_DEFENDER_OFFSET_X = 0.5
+STATIC_DEFENDER_MARGIN_Y = 0.2
+GOAL_FRAME_OFFSET = 0.2
 
 
 def defend_parameter(
@@ -22,29 +25,40 @@ def defend_parameter(
     # Ball position is stored in 3D, but all defending geometry here is planar.
     ball_pos = game.ball.p.to_2d()
     ball_vel = game.ball.v.to_2d()
-    goal_x = 4.5 if game.my_team_is_right else -4.5
+
+    geo = _defense_geometry(game)
+    goal_x = geo.goal_x
+    goal_half_width = geo.goal_half_width
+    defense_front_x = geo.defense_front_x
+    defense_depth = geo.defense_depth
+    defense_half_width = geo.defense_half_width
     sign = 1.0 if game.my_team_is_right else -1.0
-    defense_front_x = goal_x - sign * DEFENSE_FRONT_OFFSET_X
 
     # Multi-robot: send specific defenders to static positions
     if len(game.friendly_robots) > 2:
-        if ball_pos.y >= -0.5 and robot_id == 1:
+        if ball_pos.y >= -goal_half_width and robot_id == 1:
             return go_to_point(
                 game,
                 motion_controller,
                 robot_id,
-                Vector2D(3.0 * sign, -1.2),
+                Vector2D(
+                    defense_front_x - sign * STATIC_DEFENDER_OFFSET_X,
+                    -(defense_half_width + STATIC_DEFENDER_MARGIN_Y),
+                ),
             )
-        elif ball_pos.y < -0.5 and robot_id == 2:
+        elif ball_pos.y < -goal_half_width and robot_id == 2:
             return go_to_point(
                 game,
                 motion_controller,
                 robot_id,
-                Vector2D(3.0 * sign, 1.2),
+                Vector2D(
+                    defense_front_x - sign * STATIC_DEFENDER_OFFSET_X,
+                    defense_half_width + STATIC_DEFENDER_MARGIN_Y,
+                ),
             )
 
     if goal_frame_y is None:
-        goal_frame_y = 0.5 if robot_id == 1 else -0.5
+        goal_frame_y = goal_half_width if robot_id == 1 else -goal_half_width
 
     def project_and_clamp(goal_point: Vector2D) -> Vector2D:
         """Project onto the blocking line, anchored near the front of our box."""
@@ -62,11 +76,11 @@ def defend_parameter(
         t = max(0.0, min(1.0, t))
         projected = ball_pos + line * t
 
-        # Clamp when projected point is near goal line and within goal area
-        if abs(goal_point.x - projected.x) < 1.0 and -1.0 < projected.y < 1.0:
+        # Clamp when projected point is near goal line and within defense area
+        if abs(goal_point.x - projected.x) < defense_depth and -defense_half_width < projected.y < defense_half_width:
             ball_to_goal = ball_pos - goal_point
 
-            # Horizontal clamp: 1m in front of goal line
+            # Horizontal clamp: at defense front
             if abs(ball_to_goal.x) > 1e-12:
                 clamp_x = defense_front_x
                 t_h = (clamp_x - goal_point.x) / ball_to_goal.x
@@ -74,9 +88,9 @@ def defend_parameter(
             else:
                 hori = projected
 
-            # Vertical clamp: 2m from goal point y
+            # Vertical clamp: defense half-width span from goal point y
             if abs(ball_to_goal.y) > 1e-12:
-                clamp_y = goal_point.y - 2.0
+                clamp_y = goal_point.y - 2 * defense_half_width
                 t_v = (clamp_y - goal_point.y) / ball_to_goal.y
                 ver = Vector2D(goal_point.x + t_v * ball_to_goal.x, clamp_y)
             else:
@@ -96,11 +110,11 @@ def defend_parameter(
     if (
         ball_vel.dot(ball_vel) > 0.05
         and ball_at_baseline is not None
-        and abs(ball_at_baseline.y) < 0.5
+        and abs(ball_at_baseline.y) < goal_half_width
         and ball_at_robot is not None
         and abs(ball_at_robot.y - robot_pos.y) > 0.1
     ):
-        offset = 0.2 if goal_frame_y >= 0 else -0.2
+        offset = GOAL_FRAME_OFFSET if goal_frame_y >= 0 else -GOAL_FRAME_OFFSET
         goal_point = Vector2D(goal_x, goal_frame_y + offset)
         target = project_and_clamp(goal_point)
     else:

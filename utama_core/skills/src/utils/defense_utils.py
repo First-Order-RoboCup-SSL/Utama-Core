@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 import numpy as np
 
@@ -7,6 +7,37 @@ from utama_core.entities.game import Ball, Game, Robot
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
 EPS = 1e-5
+
+CURVE_MARGIN = 0.1
+CURVE_SHAPE_R = 2.1
+
+
+class DefenseGeometry(NamedTuple):
+    goal_x: float
+    goal_half_width: float
+    defense_front_x: float
+    defense_depth: float
+    defense_half_width: float
+
+
+def _defense_geometry(game: Game) -> DefenseGeometry:
+    """Derive all field-shaped defense values from ``game.field``."""
+    goal_line = game.field.my_goal_line
+    goal_x = float(goal_line[0][0])
+    goal_half_width = abs(float(goal_line[0][1]))
+
+    defense_area = game.field.my_defense_area
+    defense_front_x = float(defense_area[1][0])
+    defense_depth = abs(goal_x - defense_front_x)
+    defense_half_width = abs(float(defense_area[0][1]))
+
+    return DefenseGeometry(
+        goal_x=goal_x,
+        goal_half_width=goal_half_width,
+        defense_front_x=defense_front_x,
+        defense_depth=defense_depth,
+        defense_half_width=defense_half_width,
+    )
 
 
 def align_defenders(
@@ -24,8 +55,8 @@ def align_defenders(
     # Start by getting the current position of the defenders
     defender_pos = calculate_defense_area(game, defender_parametric_pos)
 
-    # logger.debug(f"DEFENDER {dx} {dy}")
-    goal_centre_x = game.field.my_goal_line[0][0]
+    geo = _defense_geometry(game)
+    goal_centre_x = geo.goal_x
 
     if attacker_orientation is None or attacker_orientation == 0:
         # In case there is no ball velocity or attackers, use centre of goal
@@ -33,7 +64,10 @@ def align_defenders(
     else:
         predicted_goal_position = Vector2D(
             goal_centre_x,
-            clamp_to_goal_width(predict_goal_y_location(game, attacker_position, attacker_orientation)),
+            clamp_to_goal_width(
+                predict_goal_y_location(game, attacker_position, attacker_orientation),
+                geo.goal_half_width,
+            ),
         )
 
     if env:
@@ -85,21 +119,16 @@ def calculate_defense_area(game: Game, t: float) -> Vector2D:
     cos_t = np.cos(t)
     sin_t = np.sin(t)
 
-    a, r = 1.1, 2.1
+    geo = _defense_geometry(game)
+    front_extent = geo.defense_depth + CURVE_MARGIN
+    vertical_extent = geo.defense_half_width + CURVE_MARGIN
+    r = CURVE_SHAPE_R
     rp = Vector2D(
-        a * ((1 - r) * (abs(cos_t) * cos_t) + r * cos_t),
-        a * ((1 - r) * (abs(sin_t) * sin_t) + r * sin_t),
+        front_extent * ((1 - r) * (abs(cos_t) * cos_t) + r * cos_t),
+        vertical_extent * ((1 - r) * (abs(sin_t) * sin_t) + r * sin_t),
     )
 
-    # This slows everything down sooo much that everything breaks (ask Fred if still confused)
-    # goal_centre_x, _ = game.field.my_goal_line[0]
-
-    if game.my_team_is_right:
-        goal_centre_x = 4.5
-    else:
-        goal_centre_x = -4.5
-
-    return make_relative_to_goal_centre(goal_centre_x, rp)
+    return make_relative_to_goal_centre(geo.goal_x, rp)
 
 
 def make_relative_to_goal_centre(goal_centre_x: float, p: Vector2D) -> Vector2D:
@@ -166,8 +195,8 @@ def step_curve(t: float, direction: int):
     return direction * STEP_SIZE + t
 
 
-def clamp_to_goal_width(y: float) -> float:
-    return max(min(y, 0.5), -0.5)
+def clamp_to_goal_width(y: float, goal_half_width: float) -> float:
+    return max(min(y, goal_half_width), -goal_half_width)
 
 
 def clamp_to_parametric(t: float) -> float:
