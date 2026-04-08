@@ -141,7 +141,7 @@ def get_formations(
     formation_type: FormationType = FormationType.START_ONE,
 ) -> tuple[list[FormationEntry], list[FormationEntry]]:
     """
-    Returns the starting formations for both teams based on the provided field dimensions.
+    Returns the starting formations for both teams based on the provided FieldBounds.
     The formations are defined as lists of FormationEntry objects, which contain the x and y coordinates
 
     Args:
