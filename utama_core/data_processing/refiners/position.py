@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from utama_core.config.field_params import FieldDimensions
 from utama_core.config.settings import BALL_MERGE_THRESHOLD, VISION_BOUNDS_BUFFER
 from utama_core.data_processing.refiners.base_refiner import BaseRefiner
 from utama_core.data_processing.refiners.filters.kalman import (
@@ -44,6 +45,11 @@ class PositionRefiner(BaseRefiner):
     Refiner that combines vision data from multiple cameras, applies bounds filtering,
     and optionally applies Kalman filtering for smoothing and imputing vanished robots.
 
+    Args:
+        full_field_dims: The dimensions of the full field, used to set bounds for vision data inclusion.
+        filtering: Whether to apply Kalman filtering for smoothing and imputing vanished robots.
+        exp_ball: Whether to expect a ball on the field.
+
     Important:
         when exp_ball set to False, the refiner could return either Ball | None type ball value
         when exp_ball set to True, the refiner will ALWAYS return a Ball type ball value (will impute missing frames)
@@ -51,17 +57,20 @@ class PositionRefiner(BaseRefiner):
 
     def __init__(
         self,
-        field_bounds: FieldBounds,
+        full_field_dims: FieldDimensions,
         filtering: bool = True,
         exp_ball: bool = True,
     ):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
+        top_left = full_field_dims.full_field_bounds.top_left
+        bottom_right = full_field_dims.full_field_bounds.bottom_right
+
         self.vision_bounds = VisionBounds(
-            x_min=field_bounds.top_left[0] - VISION_BOUNDS_BUFFER,  # expand left
-            x_max=field_bounds.bottom_right[0] + VISION_BOUNDS_BUFFER,  # expand right
-            y_min=field_bounds.bottom_right[1] - VISION_BOUNDS_BUFFER,  # expand bottom
-            y_max=field_bounds.top_left[1] + VISION_BOUNDS_BUFFER,  # expand top
+            x_min=top_left[0] - VISION_BOUNDS_BUFFER,
+            x_max=bottom_right[0] + VISION_BOUNDS_BUFFER,
+            y_min=bottom_right[1] - VISION_BOUNDS_BUFFER,
+            y_max=top_left[1] + VISION_BOUNDS_BUFFER,
         )
 
         # For Kalman filtering and imputing vanished values.
@@ -79,7 +88,11 @@ class PositionRefiner(BaseRefiner):
             self.kalman_filter_ball = KalmanFilterBall()
 
     # Primary function for the Refiner interface
-    def refine(self, game_frame: GameFrame, data: List[RawVisionData]) -> GameFrame:
+    def refine(
+        self,
+        game_frame: GameFrame,
+        data: List[RawVisionData],
+    ) -> GameFrame:
         frames = [frame for frame in data if frame is not None]
 
         # If no information just return the original
@@ -88,7 +101,10 @@ class PositionRefiner(BaseRefiner):
 
         # class VisionData: ts: float; yellow_robots: List[VisionRobotData]; blue_robots: List[VisionRobotData]; balls: List[VisionBallData]
         # class VisionRobotData: id: int; x: float; y: float; orientation: float
-        combined_vision_data: VisionData = CameraCombiner().combine_cameras(frames, bounds=self.vision_bounds)
+        combined_vision_data: VisionData = CameraCombiner().combine_cameras(
+            frames,
+            bounds=self.vision_bounds,
+        )
 
         time_elapsed = combined_vision_data.ts - game_frame.ts
 
@@ -196,7 +212,7 @@ class PositionRefiner(BaseRefiner):
 
     def start_filtering(self):
         """
-        Start filtering after first valid frame is received from GameGater.
+        Start filtering (imputation and interpolation) after first valid frame is received from GameGater.
         """
         self._filter_running = True
 
@@ -333,7 +349,11 @@ class PositionRefiner(BaseRefiner):
 
 
 class CameraCombiner:
-    def combine_cameras(self, frames: List[RawVisionData], bounds: VisionBounds) -> VisionData:
+    def combine_cameras(
+        self,
+        frames: List[RawVisionData],
+        bounds: VisionBounds,
+    ) -> VisionData:
         """
         Combines the vision data from multiple cameras into a single coherent VisionData object.
         Also, removes any robot detections that are out of the specified bounds.

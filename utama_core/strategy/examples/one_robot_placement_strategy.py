@@ -13,7 +13,10 @@ from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
 
 # from robot_control.src.tests.utils import one_robot_placement
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.strategy.common.abstract_strategy import (
+    AbstractStrategy,
+    SpaceRequirements,
+)
 from utama_core.strategy.examples.utils import (
     CalculateFieldCenter,
     SetBlackboardVariable,
@@ -117,28 +120,27 @@ class RobotPlacementStep(AbstractBehaviour):
 
 
 class RobotPlacementStrategy(AbstractStrategy):
-    def __init__(self, robot_id: int, field_bounds: Optional[FieldBounds] = None):
+    def __init__(self, robot_id: int):
         """
         Initializes the RobotPlacementStrategy with a specific robot ID.
+        Robot placement oscillates the specified robot between two points centered around the middle of the field bounds.
 
         :param robot_id: The ID of the robot this strategy will control.
         :param field_bounds: The bounds of the field to operate within.
         """
         self.robot_id = robot_id
-        self.field_bounds = field_bounds if field_bounds else Field.FULL_FIELD_BOUNDS
         super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int):
-        if 1 <= n_runtime_friendly <= 6:
+        if n_runtime_friendly == 1 and n_runtime_enemy == 0:
             return True
         return False
 
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True  # No specific goal line requirements
 
-    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
-        # toggles robot between (1, -1) and (1, 1)
-        return FieldBounds(top_left=(-1, 1), bottom_right=(1, -1))
+    def get_min_bounding_req(self):
+        return SpaceRequirements(min_length=1.0, min_width=1.0)  # Require at least a 1x1 area to allow for oscillation
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete behaviour tree."""
@@ -157,7 +159,7 @@ class RobotPlacementStrategy(AbstractStrategy):
         ### Assemble the tree ###
 
         # Calculate Field Center from custom field_bounds
-        calc_center = CalculateFieldCenter(field_bounds=self.field_bounds, output_key=field_center_key)
+        calc_center = CalculateFieldCenter(output_key=field_center_key)
 
         coach_root.add_children(
             [

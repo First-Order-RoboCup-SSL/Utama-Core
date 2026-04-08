@@ -18,14 +18,3 @@ class GameFrame:
     friendly_robots: Dict[int, Robot]
     enemy_robots: Dict[int, Robot]
     ball: Optional[Ball]
-
-    def is_ball_in_goal(self, right_goal: bool) -> bool:
-        ball_pos = self.ball.p
-        return (
-            ball_pos.x < -self.field.half_length
-            and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH)
-            and not right_goal
-            or ball_pos.x > self.field.half_length
-            and (ball_pos.y < self.field.HALF_GOAL_WIDTH and ball_pos.y > -self.field.HALF_GOAL_WIDTH)
-            and right_goal
-        )

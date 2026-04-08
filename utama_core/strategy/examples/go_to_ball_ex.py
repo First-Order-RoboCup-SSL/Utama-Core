@@ -146,7 +146,7 @@ class GoToBallExampleStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True
 
-    def get_min_bounding_zone(self):
+    def get_min_bounding_req(self):
         return None
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:

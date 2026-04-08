@@ -1,7 +1,6 @@
 import time
 from typing import Tuple
 
-from utama_core.config import formations
 from utama_core.config.settings import (
     ADD_Y_COORD,
     LOCAL_HOST,
@@ -71,16 +70,6 @@ class GRSimController(AbstractSimController):
         sim_control = SimulatorControl()
         sim_control.teleport_ball.CopyFrom(tele_ball)
         return sim_control
-
-    def reset(self):
-        for idx, x in enumerate(formations.RIGHT_START_ONE):
-            self.teleport_robot(True, idx, x[0], x[1], x[2])
-        for idx, x in enumerate(formations.LEFT_START_ONE):
-            self.teleport_robot(False, idx, x[0], x[1], x[2])
-        if self.exp_ball:
-            self.teleport_ball(0, 0, 0, 0)
-        else:
-            self.remove_ball()
 
     def _do_teleport_robot_unrestricted(
         self,

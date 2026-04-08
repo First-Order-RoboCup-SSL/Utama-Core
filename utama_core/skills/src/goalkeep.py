@@ -1,13 +1,12 @@
 from typing import Optional
 
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from utama_core.skills.src.go_to_point import go_to_point
-
-SHADOW_EDGE_OFFSET = 0.1
 
 
 def _clamp_goal_y(y: float, goal_half_width: float) -> float:
@@ -30,20 +29,38 @@ def _intersection_with_goal_line(a, b, goal_x: float, goal_half_width: float):
     return (goal_x, _clamp_goal_y(y_intersect, goal_half_width))
 
 
-def _single_defender_stop_y(ball_pos: Vector2D, defender_pos: Vector2D, goal_x: float, goal_half_width: float) -> float:
-    open_top = defender_pos.y <= ball_pos.y
-    edge_y = defender_pos.y + SHADOW_EDGE_OFFSET if open_top else defender_pos.y - SHADOW_EDGE_OFFSET
-    _, yy = _intersection_with_goal_line(
+def _single_defender_stop_y(
+    ball_pos: Vector2D,
+    defender_pos: Vector2D,
+    goal_x: float,
+    goal_half_width: float,
+    edge_offset: float,
+) -> float:
+    # Project both edges of the defender to find the shadow on the goal line
+    _, yy_top = _intersection_with_goal_line(
         (ball_pos.x, ball_pos.y),
-        (defender_pos.x, edge_y),
+        (defender_pos.x, defender_pos.y + edge_offset),
+        goal_x,
+        goal_half_width,
+    )
+    _, yy_bottom = _intersection_with_goal_line(
+        (ball_pos.x, ball_pos.y),
+        (defender_pos.x, defender_pos.y - edge_offset),
         goal_x,
         goal_half_width,
     )
 
-    if open_top:
-        return (yy + goal_half_width) / 2
+    # Position the goalie in the middle of the largest gap
+    top_gap_size = max(0, goal_half_width - yy_top)
+    bottom_gap_size = max(0, yy_bottom - (-goal_half_width))
 
-    return (yy - goal_half_width) / 2
+    if top_gap_size > bottom_gap_size:
+        return (yy_top + goal_half_width) / 2
+
+    return (yy_bottom - goal_half_width) / 2
+
+
+# TODO: instead of checking number of friendly, should check roles
 
 
 def goalkeep(
@@ -52,9 +69,12 @@ def goalkeep(
     robot_id: int,
     env: Optional[SSLStandardEnv] = None,
 ):
-    goal_line = game.field.my_goal_line
-    goal_x = float(goal_line[0][0])
-    goal_half_width = abs(float(goal_line[0][1]))
+    if game.ball is None:
+        return None
+
+    edge_offset = BALL_RADIUS + ROBOT_RADIUS
+    goal_x = game.field.my_goal_line[0][0]
+    goal_half_width = game.field.half_goal_width
     ball_pos = game.ball.p.to_2d()
     target = predict_ball_pos_at_x(game, goal_x)
 
@@ -72,6 +92,7 @@ def goalkeep(
                     game.friendly_robots[1].p,
                     goal_x,
                     goal_half_width,
+                    edge_offset,
                 )
         except (IndexError, KeyError):
             # If robot with ID 1 is not available, keep default stop_y
@@ -88,13 +109,13 @@ def goalkeep(
             if defender1_between and defender2_between:
                 _, yy1 = _intersection_with_goal_line(
                     (ball_pos.x, ball_pos.y),
-                    (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + SHADOW_EDGE_OFFSET),
+                    (game.friendly_robots[1].p.x, game.friendly_robots[1].p.y + edge_offset),
                     goal_x,
                     goal_half_width,
                 )
                 _, yy2 = _intersection_with_goal_line(
                     (ball_pos.x, ball_pos.y),
-                    (game.friendly_robots[2].p.x, game.friendly_robots[2].p.y - SHADOW_EDGE_OFFSET),
+                    (game.friendly_robots[2].p.x, game.friendly_robots[2].p.y - edge_offset),
                     goal_x,
                     goal_half_width,
                 )

@@ -29,15 +29,27 @@ class GameGater:
             A tuple containing the refined game frame for the player's team and the opponent's team (if is_pvp is True).
         """
 
+        def print_current_vision(game_frame: GameFrame):
+            print("Waiting for valid game frame...")
+            print(f"Friendly robots: {len(game_frame.friendly_robots)}/{exp_friendly}")
+            print(f"Enemy robots: {len(game_frame.enemy_robots)}/{exp_enemy}")
+            print(f"Ball present: {game_frame.ball is not None} (exp: {exp_ball})\n")
+
         def _add_frame(my_game_frame: GameFrame, opp_game_frame: GameFrame) -> Tuple[GameFrame, Optional[GameFrame]]:
             if rsim_env:
                 obs = rsim_env.step_noop()  # Step the environment without action to get the latest observation
                 vision_frames = [obs]
             else:
                 vision_frames = [buffer.popleft() if buffer else None for buffer in vision_buffers]
-            my_game_frame = position_refiner.refine(my_game_frame, vision_frames)
+            my_game_frame = position_refiner.refine(
+                my_game_frame,
+                vision_frames,
+            )
             if is_pvp:
-                opp_game_frame = position_refiner.refine(opp_game_frame, vision_frames)
+                opp_game_frame = position_refiner.refine(
+                    opp_game_frame,
+                    vision_frames,
+                )
 
             return my_game_frame, opp_game_frame
 
@@ -59,17 +71,14 @@ class GameGater:
         ):
             if time.time() - start_time > wait_before_warn:
                 start_time = time.time()
-                print("Waiting for valid game frame...")
-                print(f"Friendly robots: {len(my_game_frame.friendly_robots)}/{exp_friendly}")
-                print(f"Enemy robots: {len(my_game_frame.enemy_robots)}/{exp_enemy}")
-                print(f"Ball present: {my_game_frame.ball is not None} (exp: {exp_ball})\n")
-
+                print_current_vision(my_game_frame)
                 # nothing will change in rsim if we don't step it.
                 # if no valid frame, likely misconfigured.
-                if rsim_env:
-                    raise TimeoutError(
-                        f"Rsim environment did not produce a valid game frame after {wait_before_warn} seconds. Check the environment setup and vision data."
-                    )
+            if rsim_env:
+                print_current_vision(my_game_frame)
+                raise TimeoutError(
+                    f"Rsim environment did not produce a valid game frame after {wait_before_warn} seconds. Check the environment setup and vision data."
+                )
             time.sleep(0.05)
             my_game_frame, opp_game_frame = _add_frame(my_game_frame, opp_game_frame)
 

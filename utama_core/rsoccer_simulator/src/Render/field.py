@@ -263,6 +263,38 @@ class SSLRenderField(VSSRenderField):
     corner_arc_r = 0.01
     _scale = 100
 
+    def __init__(
+        self,
+        length: float | None = None,
+        width: float | None = None,
+        penalty_length: float | None = None,
+        penalty_width: float | None = None,
+        goal_width: float | None = None,
+        goal_depth: float | None = None,
+        margin: float | None = None,
+        center_circle_r: float | None = None,
+        scale: float | None = None,
+    ):
+        if length is not None:
+            self.length = length
+        if width is not None:
+            self.width = width
+        if penalty_length is not None:
+            self.penalty_length = penalty_length
+        if penalty_width is not None:
+            self.penalty_width = penalty_width
+        if goal_width is not None:
+            self.goal_width = goal_width
+        if goal_depth is not None:
+            self.goal_depth = goal_depth
+        if margin is not None:
+            self.margin = margin
+        if center_circle_r is not None:
+            self.center_circle_r = center_circle_r
+        if scale is not None:
+            self._scale = scale
+        super().__init__()
+
 
 if __name__ == "__main__":
     field = Sim2DRenderField()

@@ -153,7 +153,7 @@ class RandomMovementStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True
 
-    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
+    def get_min_bounding_req(self):
         return self.field_bounds
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
