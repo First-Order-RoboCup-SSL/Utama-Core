@@ -45,7 +45,7 @@ class _IdleWithBallStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
         return True
 
-    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
+    def get_min_bounding_req(self):
         return None
 
 
@@ -63,7 +63,7 @@ class _IdleNoBallStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
         return True
 
-    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
+    def get_min_bounding_req(self):
         return None
 
 

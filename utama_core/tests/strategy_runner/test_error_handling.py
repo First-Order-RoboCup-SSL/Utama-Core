@@ -23,6 +23,17 @@ def mock_runner():
         runner._stop_event = MagicMock()
         runner._stop_event.is_set.return_value = False
 
+        # run() now performs pre-run game setup; keep these tests focused on
+        # stop/exception handling by bypassing that heavy integration step.
+        runner._pre_run_setup = MagicMock()
+        runner.toggle_opp_first = False
+        runner.my_team_is_yellow = True
+        runner.my_team_is_right = False
+        runner.exp_friendly = 2
+        runner.exp_enemy = 0
+        runner.exp_ball = True
+        runner.vision_buffers = []
+
         # Opp side
         runner.opp = None
 
@@ -39,8 +50,40 @@ def mock_runner():
 class TestStopRobotsOnClose:
     """Tests for _stop_robots behavior when close() is called."""
 
+    def test_stop_robots_sends_commands_when_game_exists(self, mock_runner):
+        mock_runner._stop_robots(repeat=2)
+
+        controller = mock_runner.my.strategy.robot_controller
+        assert controller.add_robot_commands.call_count == 2
+        assert controller.send_robot_commands.call_count == 2
+
+    def test_stop_robots_handles_missing_game_gracefully(self, mock_runner):
+        mock_runner.my.game = None
+
+        mock_runner._stop_robots(repeat=3)
+
+        controller = mock_runner.my.strategy.robot_controller
+        controller.add_robot_commands.assert_not_called()
+        controller.send_robot_commands.assert_not_called()
+
+    def test_stop_robots_only_sends_for_sides_with_game(self, mock_runner):
+        opp = MagicMock()
+        opp.game = None
+        opp.strategy = MagicMock()
+        opp.strategy.robot_controller = MagicMock()
+        mock_runner.opp = opp
+
+        mock_runner._stop_robots(repeat=1)
+
+        my_controller = mock_runner.my.strategy.robot_controller
+        opp_controller = mock_runner.opp.strategy.robot_controller
+        assert my_controller.add_robot_commands.call_count == 1
+        assert my_controller.send_robot_commands.call_count == 1
+        opp_controller.add_robot_commands.assert_not_called()
+        opp_controller.send_robot_commands.assert_not_called()
+
     def test_stop_commands_sent_in_real_mode(self, mock_runner):
-        mock_runner.close(stop_command_mult=5)
+        mock_runner.close(stop_command_repeat=5)
 
         controller = mock_runner.my.strategy.robot_controller
         assert controller.add_robot_commands.call_count == 5
@@ -53,7 +96,7 @@ class TestStopRobotsOnClose:
             2: MagicMock(),
         }
 
-        mock_runner._stop_robots(stop_command_mult=1)
+        mock_runner._stop_robots(repeat=1)
 
         controller = mock_runner.my.strategy.robot_controller
         commands_dict = controller.add_robot_commands.call_args[0][0]

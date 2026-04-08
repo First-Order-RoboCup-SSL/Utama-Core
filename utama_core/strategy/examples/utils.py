@@ -34,13 +34,13 @@ class CalculateFieldCenter(AbstractBehaviour):
     Calculates the center of the provided field bounds and writes it to the blackboard.
     """
 
-    def __init__(self, field_bounds: FieldBounds, output_key: str = "FieldCenter"):
+    def __init__(self, output_key: str = "FieldCenter"):
         super().__init__(name="CalculateFieldCenter")
         self.output_key = output_key
-        self.field_bounds = field_bounds
         self.calculated = False
 
     def setup_(self):
+        self.field_bounds = self.blackboard.game.field.field_bounds
         self.blackboard.register_key(key=self.output_key, access=py_trees.common.Access.WRITE)
 
     def update(self) -> py_trees.common.Status:

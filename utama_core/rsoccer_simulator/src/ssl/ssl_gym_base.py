@@ -4,7 +4,7 @@
 #    - To create your wrapper from env to communcation, use inherit from this class!
 """
 
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pygame
@@ -42,6 +42,7 @@ class SSLBaseEnv:
         n_robots_yellow: int,
         time_step: float,
         render_mode=None,
+        render_field_overrides: Optional[dict[str, float]] = None,
     ):
         # Initialize Simulator
         self.render_mode = render_mode
@@ -73,7 +74,7 @@ class SSLBaseEnv:
         self.overlay: list[OverlayObject] = []
 
         # Render
-        self.field_renderer = SSLRenderField()
+        self.field_renderer = SSLRenderField(**render_field_overrides) if render_field_overrides else SSLRenderField()
         self.window_surface = None
         self.window_size = self.field_renderer.window_size
         self.clock = None

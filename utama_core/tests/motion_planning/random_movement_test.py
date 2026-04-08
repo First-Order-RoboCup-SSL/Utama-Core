@@ -5,6 +5,7 @@ import random
 from dataclasses import dataclass
 from typing import Dict
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -125,12 +126,12 @@ def test_random_movement_same_team(
     # use small bounds to increase chance of collision
     small_bounds = FieldBounds(
         top_left=(
-            -Field.FULL_FIELD_HALF_LENGTH + 1,
-            Field.FULL_FIELD_HALF_WIDTH - 1,
+            -STANDARD_FIELD_DIMS.full_field_half_length + 1,
+            STANDARD_FIELD_DIMS.full_field_half_width - 1,
         ),
         bottom_right=(
-            -Field.FULL_FIELD_HALF_LENGTH + 3,
-            Field.FULL_FIELD_HALF_WIDTH - 3,
+            -STANDARD_FIELD_DIMS.full_field_half_length + 3,
+            STANDARD_FIELD_DIMS.full_field_half_width - 3,
         ),
     )
 
