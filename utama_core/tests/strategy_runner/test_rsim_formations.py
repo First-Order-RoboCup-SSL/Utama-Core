@@ -4,7 +4,7 @@ import py_trees
 import pytest
 
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
-from utama_core.config.formations import FormationType, get_formations
+from utama_core.config.formations import get_formations
 from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.mapping_utils import map_left_right_to_colors
 from utama_core.run.strategy_runner import StrategyRunner
@@ -85,7 +85,6 @@ def test_rsim_formation_allocation_and_spawn_positions(
         bounds=runner.field_bounds,
         n_right=n_friendly if team_on_right else n_enemy,
         n_left=n_enemy if team_on_right else n_friendly,
-        formation_type=FormationType.START_ONE,
     )
     expected_yellow, expected_blue = map_left_right_to_colors(
         team_is_yellow,

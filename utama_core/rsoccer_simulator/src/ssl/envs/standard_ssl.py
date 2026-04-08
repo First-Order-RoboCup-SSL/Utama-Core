@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple
 from numpy.random import normal
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
-from utama_core.config.formations import FormationEntry, FormationType, get_formations
+from utama_core.config.formations import FormationEntry, get_formations
 from utama_core.config.robot_params import RSIM_PARAMS
 from utama_core.config.settings import (
     MAX_BALL_SPEED,
@@ -121,7 +121,6 @@ class SSLStandardEnv(SSLBaseEnv):
                 STANDARD_FIELD_DIMS.full_field_bounds,
                 n_right=n_robots_yellow,
                 n_left=n_robots_blue,
-                formation_type=FormationType.START_ONE,
             )
 
         # Ball start position is expressed in normal field coordinates used by
