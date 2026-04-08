@@ -14,7 +14,7 @@ def generate_starting_positions(is_right_team: bool):
     """
     Generate starting and target formations based on team side.
     """
-    left_formation, right_formation = get_formations(
+    right_formation, left_formation = get_formations(
         STANDARD_FIELD_DIMS.full_field_bounds,
         MAX_ROBOTS,
         MAX_ROBOTS,

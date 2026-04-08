@@ -81,10 +81,10 @@ def test_rsim_formation_allocation_and_spawn_positions(
         exp_enemy=n_enemy,
     )
 
-    left_start, right_start = get_formations(
+    right_start, left_start = get_formations(
         bounds=runner.field_bounds,
-        n_left=n_enemy if team_on_right else n_friendly,
         n_right=n_friendly if team_on_right else n_enemy,
+        n_left=n_enemy if team_on_right else n_friendly,
         formation_type=FormationType.START_ONE,
     )
     expected_yellow, expected_blue = map_left_right_to_colors(

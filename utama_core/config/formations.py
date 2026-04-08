@@ -136,8 +136,8 @@ def _validate_team_separation(left, right):
 
 def get_formations(
     bounds: FieldBounds,
-    n_left: int,
     n_right: int,
+    n_left: int,
     formation_type: FormationType,
 ) -> tuple[list[FormationEntry], list[FormationEntry]]:
     """
@@ -146,13 +146,13 @@ def get_formations(
 
     Args:
         bounds: FieldBounds object defining the top-left and bottom-right corners of the field.
-        n_left: Number of robots on the left team.
         n_right: Number of robots on the right team.
+        n_left: Number of robots on the left team.
         formation_type: The type of formation to generate (e.g., START_ONE).
 
     Returns:
         tuple[list[FormationEntry], list[FormationEntry]]: A tuple containing two lists of FormationEntry objects.
-                                                            left and right team formations respectively.
+                                                            (right, left) team formations respectively.
     """
     if n_left > MAX_ROBOTS or n_right > MAX_ROBOTS:
         raise ValueError(
@@ -174,4 +174,4 @@ def get_formations(
     _validate_bounds_and_intra_team_collision(right, bounds)
     _validate_team_separation(left, right)
 
-    return left, right
+    return right, left

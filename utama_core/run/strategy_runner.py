@@ -347,10 +347,10 @@ class StrategyRunner:
         if self.mode == Mode.REAL:
             return None, None
 
-        left_start, right_start = get_formations(
+        right_start, left_start = get_formations(
             bounds=self.field_bounds,
-            n_left=self.exp_enemy if self.my_team_is_right else self.exp_friendly,
             n_right=self.exp_friendly if self.my_team_is_right else self.exp_enemy,
+            n_left=self.exp_enemy if self.my_team_is_right else self.exp_friendly,
             formation_type=FormationType.START_ONE,
         )
 
