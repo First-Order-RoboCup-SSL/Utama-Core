@@ -58,7 +58,7 @@ class RandomMovementTestManager(AbstractTestManager):
         max_y = max(bounds.top_left[1], bounds.bottom_right[1])
 
         # Use a fixed seed for reproducibility across test runs
-        rng = random.Random(42 + self.current_episode_number)
+        rng = random.Random(420 + self.current_episode_number)
 
         for i in range(self.scenario.n_robots):
             x = rng.uniform(min_x + 0.5, max_x - 0.5)

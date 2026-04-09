@@ -288,10 +288,10 @@ def segments_intersect(
     p2 = np.asarray(seg2_start)
     q2 = np.asarray(seg2_end)
 
-    o1 = orientation(p1, q1, p2)
-    o2 = orientation(p1, q1, q2)
-    o3 = orientation(p2, q2, p1)
-    o4 = orientation(p2, q2, q1)
+    o1 = point_orientation(p1, q1, p2)
+    o2 = point_orientation(p1, q1, q2)
+    o3 = point_orientation(p2, q2, p1)
+    o4 = point_orientation(p2, q2, q1)
 
     if o1 != o2 and o3 != o4:
         return True
@@ -308,7 +308,7 @@ def segments_intersect(
     return False
 
 
-def orientation(p_1: np.ndarray, p_2: np.ndarray, p_3: np.ndarray) -> int:
+def point_orientation(p_1: np.ndarray, p_2: np.ndarray, p_3: np.ndarray) -> int:
     """Calculate the orientation of 3 points (e.g. on a line or in a triangle).
 
     Args:
