@@ -49,9 +49,14 @@ class AbstractTestManager(ABC):
         """
         Method is called at start of each test episode in strategyRunner.run_test().
         Use this to reset position of robots and ball for the next episode.
+
         Args:
             sim_controller (AbstractSimController): The simulation controller to manipulate robot positions.
             game (Game): The current game state.
+
+        Note:
+            This causes run_test to initialise Game twice on the first episode.
+            However, this is necessary to give the test manager access to the initial Game object before the first episode setup.
         """
         ...
 

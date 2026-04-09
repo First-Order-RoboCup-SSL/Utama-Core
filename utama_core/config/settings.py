@@ -44,3 +44,6 @@ FPS_PRINT_INTERVAL = 1.0  # seconds
 
 ### Refiners ###
 BALL_MERGE_THRESHOLD = 0.05  # CameraCombiner: distance threshold to merge balls (m)
+VISION_BOUNDS_BUFFER = 1.0  # CameraCombiner: buffer around field bounds to include in vision (m)
+
+OFF_PITCH_OFFSET = VISION_BOUNDS_BUFFER * 5  # distance outside field bounds to consider as off-pitch (m)

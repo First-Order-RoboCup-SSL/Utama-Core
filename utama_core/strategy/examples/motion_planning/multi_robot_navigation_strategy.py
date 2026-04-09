@@ -19,6 +19,8 @@ class MultiRobotNavigationStrategy(AbstractStrategy):
         target_orientation: Optional target orientation for all robots (default: 0)
     """
 
+    exp_ball = False  # No ball interaction expected
+
     def __init__(
         self,
         robot_targets: Dict[int, tuple[float, float]],
@@ -35,8 +37,7 @@ class MultiRobotNavigationStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True
 
-    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
-        """Calculate bounding box for all robot targets."""
+    def get_min_bounding_req(self):
         if not self.robot_targets:
             return None
 

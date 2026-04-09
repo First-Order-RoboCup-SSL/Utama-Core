@@ -53,16 +53,28 @@ class FastPathPlanner:
                 obstalce_segment = (robot_pos, point)
                 obstacle_list.append(obstalce_segment)
         obstacle_list.append(
-            (np.array(field_bounds.top_left), np.array([field_bounds.bottom_right[0], field_bounds.top_left[1]]))
+            (
+                np.array(field_bounds.top_left),
+                np.array([field_bounds.bottom_right[0], field_bounds.top_left[1]]),
+            )
         )
         obstacle_list.append(
-            (np.array([field_bounds.bottom_right[0], field_bounds.top_left[1]]), np.array(field_bounds.bottom_right))
+            (
+                np.array([field_bounds.bottom_right[0], field_bounds.top_left[1]]),
+                np.array(field_bounds.bottom_right),
+            )
         )
         obstacle_list.append(
-            (np.array(field_bounds.bottom_right), np.array([field_bounds.top_left[0], field_bounds.bottom_right[1]]))
+            (
+                np.array(field_bounds.bottom_right),
+                np.array([field_bounds.top_left[0], field_bounds.bottom_right[1]]),
+            )
         )
         obstacle_list.append(
-            (np.array([field_bounds.top_left[0], field_bounds.bottom_right[1]]), field_bounds.top_left)
+            (
+                np.array([field_bounds.top_left[0], field_bounds.bottom_right[1]]),
+                field_bounds.top_left,
+            )
         )
         return obstacle_list
 
@@ -118,7 +130,12 @@ class FastPathPlanner:
                 Point_D = closest_point_on_segment(segment[1], closest_obstacle[0], closest_obstacle[1])
                 Obstacle_distance_list.append(distance(segment[0], Point_C))
                 Obstacle_distance_list.append(distance(segment[1], Point_D))
-                Obstacle_points_list = [closest_obstacle[0], closest_obstacle[1], Point_C, Point_D]
+                Obstacle_points_list = [
+                    closest_obstacle[0],
+                    closest_obstacle[1],
+                    Point_C,
+                    Point_D,
+                ]
 
                 return Obstacle_points_list[Obstacle_distance_list.index(min(Obstacle_distance_list))]
         return obstacle_pos
@@ -130,7 +147,12 @@ class FastPathPlanner:
         return trajectory_legnth
 
     def checksegment(
-        self, segment: Tuple, obstacles: List, recursionlength: int, target: np.array, field_bounds: FieldBounds
+        self,
+        segment: Tuple,
+        obstacles: List,
+        recursionlength: int,
+        target: np.array,
+        field_bounds: FieldBounds,
     ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float]:
         """
         If there are obstacles in the segment, divide the segment and return subsegments
@@ -159,20 +181,36 @@ class FastPathPlanner:
 
             # recursively check subsegments for left side
             left_seg1, left_len1 = self.checksegment(
-                (segment[0], subgoal_left), obstacles, recursionlength + 1, target, field_bounds
+                (segment[0], subgoal_left),
+                obstacles,
+                recursionlength + 1,
+                target,
+                field_bounds,
             )
             left_seg2, left_len2 = self.checksegment(
-                (subgoal_left, segment[1]), obstacles, recursionlength + 1, target, field_bounds
+                (subgoal_left, segment[1]),
+                obstacles,
+                recursionlength + 1,
+                target,
+                field_bounds,
             )
             left_segments = left_seg1 + left_seg2
             left_length = left_len1 + left_len2
 
             # recursively check subsegments for right side
             right_seg1, right_len1 = self.checksegment(
-                (segment[0], subgoal_right), obstacles, recursionlength + 1, target, field_bounds
+                (segment[0], subgoal_right),
+                obstacles,
+                recursionlength + 1,
+                target,
+                field_bounds,
             )
             right_seg2, right_len2 = self.checksegment(
-                (subgoal_right, segment[1]), obstacles, recursionlength + 1, target, field_bounds
+                (subgoal_right, segment[1]),
+                obstacles,
+                recursionlength + 1,
+                target,
+                field_bounds,
             )
             right_segments = right_seg1 + right_seg2
             right_length = right_len1 + right_len2
@@ -205,7 +243,13 @@ class FastPathPlanner:
                 new_target = (point + new_target) / 2
                 return new_target
 
-    def _path_to(self, game: Game, robot_id: int, target: Tuple[float, float], field_bounds: FieldBounds):
+    def _path_to(
+        self,
+        game: Game,
+        robot_id: int,
+        target: Tuple[float, float],
+        field_bounds: FieldBounds,
+    ):
         robot = game.friendly_robots[robot_id]
         our_pos = np.array([robot.p.x, robot.p.y])
         target = np.array(target)

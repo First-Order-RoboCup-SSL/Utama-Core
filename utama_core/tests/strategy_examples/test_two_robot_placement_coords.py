@@ -13,13 +13,8 @@ from typing import Optional
 
 import pytest
 
-from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
-from utama_core.global_utils.mapping_utils import (
-    map_friendly_enemy_to_colors,
-    map_left_right_to_colors,
-)
 from utama_core.run import StrategyRunner
 from utama_core.strategy.examples.two_robot_placement import TwoRobotPlacementStrategy
 from utama_core.team_controller.src.controllers import AbstractSimController
@@ -61,27 +56,13 @@ class TwoRobotPlacementTestManager(AbstractTestManager):
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset robot and ball positions for the test."""
-        ini_yellow, ini_blue = map_left_right_to_colors(
-            game.my_team_is_yellow,
-            game.my_team_is_right,
-            RIGHT_START_ONE,
-            LEFT_START_ONE,
-        )
-
-        y_robots, b_robots = map_friendly_enemy_to_colors(
-            game.my_team_is_yellow, game.friendly_robots, game.enemy_robots
-        )
-
-        for i in b_robots.keys():
-            sim_controller.teleport_robot(False, i, ini_blue[i][0], ini_blue[i][1], ini_blue[i][2])
-        for j in y_robots.keys():
-            sim_controller.teleport_robot(True, j, ini_yellow[j][0], ini_yellow[j][1], ini_yellow[j][2])
-
         # Position robots near the center for faster test convergence
         cx, cy = self.expected_center
-        sim_controller.teleport_robot(game.my_team_is_yellow, self.first_robot_id, cx, cy)
-        sim_controller.teleport_robot(game.my_team_is_yellow, self.second_robot_id, cx, cy)
-        sim_controller.teleport_ball(3, 3)
+        sim_controller.teleport_robot(game.my_team_is_yellow, self.first_robot_id, cx - 0.4, cy)
+        sim_controller.teleport_robot(game.my_team_is_yellow, self.second_robot_id, cx, cy - 0.4)
+        sim_controller.teleport_ball(
+            cx + 0.5, cy + 0.5
+        )  # Place ball at corner to avoid interference with robot movement
 
     def eval_status(self, game: Game) -> TestingStatus:
         """Verify both robots reach their oscillation targets."""
@@ -121,13 +102,13 @@ def _run_two_robot_placement_test(
     strategy = TwoRobotPlacementStrategy(
         first_robot_id=first_robot_id,
         second_robot_id=second_robot_id,
-        field_bounds=field_bounds,
     )
 
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,
         my_team_is_right=False,
+        field_bounds=field_bounds,
         mode="rsim",
         exp_friendly=2,
         exp_enemy=0,

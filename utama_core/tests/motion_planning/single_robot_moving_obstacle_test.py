@@ -6,16 +6,14 @@ from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.run import StrategyRunner
+from utama_core.strategy.examples import (
+    OscillatingObstacleStrategy,
+    SimpleNavigationStrategy,
+)
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
-)
-from utama_core.tests.motion_planning.strategies.oscillating_obstacle_strategy import (
-    OscillatingObstacleStrategy,
-)
-from utama_core.tests.motion_planning.strategies.simple_navigation_strategy import (
-    SimpleNavigationStrategy,
 )
 
 
@@ -57,53 +55,22 @@ class MovingObstacleTestManager(AbstractTestManager):
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset field with robot at start position and moving obstacles."""
-        # Teleport ALL friendly robots off-field
-        for i in range(6):
-            if i == self.robot_id:
-                # Place the test robot at start position
-                sim_controller.teleport_robot(
-                    game.my_team_is_yellow,
-                    i,
-                    self.scenario.start_position[0],
-                    self.scenario.start_position[1],
-                    0.0,
-                )
-            else:
-                # Move other friendly robots far away
-                sim_controller.teleport_robot(
-                    game.my_team_is_yellow,
-                    i,
-                    -10.0,
-                    -10.0,
-                    0.0,
-                )
-
-        # Place enemy robots at their center positions (they will start moving via their strategy)
-        for i in range(6):
-            if i < len(self.scenario.moving_obstacles):
-                obstacle_config = self.scenario.moving_obstacles[i]
-                sim_controller.teleport_robot(
-                    not game.my_team_is_yellow,
-                    i,
-                    obstacle_config.center_position[0],
-                    obstacle_config.center_position[1],
-                    0.0,
-                )
-            else:
-                # Move extra enemy robots far away
-                sim_controller.teleport_robot(
-                    not game.my_team_is_yellow,
-                    i,
-                    -10.0,
-                    -10.0,
-                    0.0,
-                )
-
-        # Place ball at target (for visual reference)
-        sim_controller.teleport_ball(
-            self.scenario.target_position[0],
-            self.scenario.target_position[1],
+        sim_controller.teleport_robot(
+            game.my_team_is_yellow,
+            self.robot_id,
+            self.scenario.start_position[0],
+            self.scenario.start_position[1],
+            0.0,
         )
+
+        for i, obstacle_config in enumerate(self.scenario.moving_obstacles):
+            sim_controller.teleport_robot(
+                not game.my_team_is_yellow,
+                i,
+                obstacle_config.center_position[0],
+                obstacle_config.center_position[1],
+                0.0,
+            )
 
         self._reset_metrics()
 
@@ -222,6 +189,7 @@ def test_single_robot_moving_obstacles(
         mode=mode,
         exp_friendly=1,
         exp_enemy=len(scenario.moving_obstacles),
+        exp_ball=False,
         opp_strategy=opp_strategy,
         opp_control_scheme="pid",  # Use PID so obstacles follow exact paths without avoiding the robot
     )

@@ -184,7 +184,7 @@ def test_compute_bounding_zone_from_points_with_vector2d():
 
 def test_assert_valid_bounding_box_valid():
     bb = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
-    assert_valid_bounding_box(bb)  # Should not raise
+    assert_valid_bounding_box(bb, 4.5, 3.0)  # Should not raise
 
 
 @pytest.mark.parametrize(
@@ -198,5 +198,5 @@ def test_assert_valid_bounding_box_valid():
 )
 def test_assert_valid_bounding_box_invalid(top_left, bottom_right):
     bb = FieldBounds(top_left, bottom_right)
-    with pytest.raises(AssertionError):
-        assert_valid_bounding_box(bb)
+    with pytest.raises(ValueError):
+        assert_valid_bounding_box(bb, 4.5, 3.0)

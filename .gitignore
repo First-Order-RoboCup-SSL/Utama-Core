@@ -210,5 +210,11 @@ renders/
 .pixi/*
 !.pixi/config.toml
 
+# RL training artifacts
+outputs/
+wandb/
+mappo_*/
+*.gif
+
 # macOS
 .DS_Store 

@@ -134,6 +134,8 @@ class OscillatingObstacleStrategy(AbstractStrategy):
         obstacle_configs: List of MovingObstacleConfig objects defining each obstacle's behavior
     """
 
+    exp_ball = False  # This strategy does not require the ball
+
     def __init__(self, obstacle_configs: List["MovingObstacleConfig"]):
         self.obstacle_configs = obstacle_configs
         super().__init__()
@@ -145,8 +147,7 @@ class OscillatingObstacleStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True
 
-    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
-        """Calculate bounding box for all oscillating obstacles."""
+    def get_min_bounding_req(self):
         if not self.obstacle_configs:
             return None
 

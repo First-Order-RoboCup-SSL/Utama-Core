@@ -5,6 +5,8 @@ import numpy as np
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import Field, FieldBounds
 
+EPS = 1e-9
+
 
 def rotate_vector(vx_global: float, vy_global: float, theta: float) -> Tuple[float, float]:
     """Rotates a 2D vector from global coordinates to local coordinates based on a given angle.
@@ -113,17 +115,63 @@ def compute_bounding_zone_from_points(
     return FieldBounds(top_left=(min_x, max_y), bottom_right=(max_x, min_y))
 
 
-def assert_valid_bounding_box(bb: FieldBounds):
-    """Asserts that a FieldBounds object is valid, raising an AssertionError if not."""
-    fx, fy = Field._FULL_FIELD_HALF_LENGTH, Field._FULL_FIELD_HALF_WIDTH
+def in_field_bounds(point: Tuple[float, float] | Vector2D, bounding_box: FieldBounds) -> bool:
+    """Check if a point is within a given bounding box.
+
+    Args:
+        point (tuple or Vector2D): The (x, y) coordinates of the point to check.
+        bounding_box (FieldBounds): The bounding box defined by its top-left and bottom-right corners.
+
+    Returns:
+        bool: True if the point is within the bounding box, False otherwise.
+    """
+    x, y = point
+    return (
+        bounding_box.top_left[0] <= x <= bounding_box.bottom_right[0]
+        and bounding_box.bottom_right[1] <= y <= bounding_box.top_left[1]
+    )
+
+
+def assert_valid_bounding_box(
+    bb: FieldBounds,
+    full_field_half_length: float,
+    full_field_half_width: float,
+):
+    """Validate a bounding box is well-formed and within full field limits."""
+    fx, fy = full_field_half_length, full_field_half_width
 
     x0, y0 = bb.top_left
     x1, y1 = bb.bottom_right
-    assert x0 <= x1, f"top-left x {x0} must be <= bottom-right x {x1}"
-    assert y0 >= y1, f"top-left y {y0} must be >= bottom-right y {y1}"
-    # Also ensure within full field
-    assert -fx <= x0 <= fx and -fx <= x1 <= fx, f"x coordinates out of full field bounds ±{fx}"
-    assert -fy <= y0 <= fy and -fy <= y1 <= fy, f"y coordinates out of full field bounds ±{fy}"
+
+    # Shape validity
+    if x0 > x1:
+        raise ValueError(f"top-left x {x0} must be <= bottom-right x {x1}")
+    if y0 < y1:
+        raise ValueError(f"top-left y {y0} must be >= bottom-right y {y1}")
+
+    # Within global field bounds
+    if not (-fx <= x0 <= fx and -fx <= x1 <= fx):
+        raise ValueError(f"x coordinates out of full field bounds +/-{fx}")
+    if not (-fy <= y0 <= fy and -fy <= y1 <= fy):
+        raise ValueError(f"y coordinates out of full field bounds +/-{fy}")
+
+
+def assert_contains(outer: FieldBounds, inner: FieldBounds):
+    """Validate that one bounding box fully contains another."""
+    ox0, oy0 = outer.top_left
+    ox1, oy1 = outer.bottom_right
+
+    ix0, iy0 = inner.top_left
+    ix1, iy1 = inner.bottom_right
+
+    if ox0 > ix0:
+        raise ValueError(f"Outer left {ox0} does not contain inner left {ix0}")
+    if oy0 < iy0:
+        raise ValueError(f"Outer top {oy0} does not contain inner top {iy0}")
+    if ox1 < ix1:
+        raise ValueError(f"Outer right {ox1} does not contain inner right {ix1}")
+    if oy1 > iy1:
+        raise ValueError(f"Outer bottom {oy1} does not contain inner bottom {iy1}")
 
 
 def distance_between_line_segments(
@@ -163,36 +211,31 @@ def distance_point_to_segment(point: np.ndarray, seg_start: np.ndarray, seg_end:
     Returns:
         float: The minimum distance from the point to the line segment.
     """
-    x_1, y_1 = point
-    (x_2, y_2), (x_3, y_3) = seg_start, seg_end
+    point = np.asarray(point)
+    seg_start = np.asarray(seg_start)
+    seg_end = np.asarray(seg_end)
 
-    dx = x_3 - x_2
-    dy = y_3 - y_2
+    seg_vec = seg_end - seg_start
+    pt_vec = point - seg_start
 
-    if dx == dy == 0:  # e.g. for static object the segment will be a point
-        return np.hypot(x_1 - x_2, y_1 - y_2)
+    seg_len_sq = np.dot(seg_vec, seg_vec)
 
-    # Now assume the segment is a line, calculate minimum distance to the line
-    # t describes the point on this line closest to point, in the form
-    # p_closest = (x_2 + t*dx, y_2 + t*dy),
-    # where (dx, dy) is the line direction vector
-    t = ((x_1 - x_2) * dx + (y_1 - y_2) * dy) / (dx * dx + dy * dy)
+    if seg_len_sq < EPS:
+        return np.linalg.norm(point - seg_start)
+
+    t = np.dot(pt_vec, seg_vec) / seg_len_sq
 
     if t < 0:
-        # Closest point is the start of the segment
-        closest_x, closest_y = x_2, y_2
+        closest = seg_start
     elif t > 1:
-        # Closest point is the end of the segment
-        closest_x, closest_y = x_3, y_3
+        closest = seg_end
     else:
-        # Closest point is within the segment
-        closest_x = x_2 + t * dx
-        closest_y = y_2 + t * dy
+        closest = seg_start + t * seg_vec
 
-    return np.hypot(x_1 - closest_x, y_1 - closest_y)
+    return np.linalg.norm(point - closest)
 
 
-def closest_point_on_segment(point: np.ndarray, seg_start: np.ndarray, seg_end: np.ndarray) -> np.ndarray:
+def closest_point_on_segment(point, seg_start, seg_end):
     """Calculate the point on a segment closest to another point.
 
     Args:
@@ -202,33 +245,26 @@ def closest_point_on_segment(point: np.ndarray, seg_start: np.ndarray, seg_end: 
     Returns:
         np.ndarray: An np array representing the closest point on the segment.
     """
-    x_1, y_1 = point
-    (x_2, y_2), (x_3, y_3) = seg_start, seg_end
+    point = np.asarray(point)
+    seg_start = np.asarray(seg_start)
+    seg_end = np.asarray(seg_end)
 
-    dx = x_3 - x_2
-    dy = y_3 - y_2
+    seg_vec = seg_end - seg_start
+    pt_vec = point - seg_start
 
-    if dx == dy == 0:  # e.g. for static object the segment will be a point
-        return np.hypot(x_1 - x_2, y_1 - y_2)
+    seg_len_sq = np.dot(seg_vec, seg_vec)
 
-    # Now assume the segment is a line, calculate minimum distance to the line
-    # t describes the point on this line closest to point, in the form
-    # p_closest = (x_2 + t*dx, y_2 + t*dy),
-    # where (dx, dy) is the line direction vector
-    t = ((x_1 - x_2) * dx + (y_1 - y_2) * dy) / (dx * dx + dy * dy)
+    if seg_len_sq < EPS:
+        return seg_start
+
+    t = np.dot(pt_vec, seg_vec) / seg_len_sq
 
     if t < 0:
-        # Closest point is the start of the segment
-        closest_x, closest_y = x_2, y_2
+        return seg_start
     elif t > 1:
-        # Closest point is the end of the segment
-        closest_x, closest_y = x_3, y_3
+        return seg_end
     else:
-        # Closest point is within the segment
-        closest_x = x_2 + t * dx
-        closest_y = y_2 + t * dy
-
-    return np.array([closest_x, closest_y])
+        return seg_start + t * seg_vec
 
 
 def segments_intersect(
@@ -247,19 +283,19 @@ def segments_intersect(
     Returns:
         bool: True if the segments intersect, False otherwise.
     """
-    (p1, q1) = seg1_start, seg1_end
-    (p2, q2) = seg2_start, seg2_end
+    p1 = np.asarray(seg1_start)
+    q1 = np.asarray(seg1_end)
+    p2 = np.asarray(seg2_start)
+    q2 = np.asarray(seg2_end)
 
     o1 = orientation(p1, q1, p2)
     o2 = orientation(p1, q1, q2)
     o3 = orientation(p2, q2, p1)
     o4 = orientation(p2, q2, q1)
 
-    # General case
     if o1 != o2 and o3 != o4:
         return True
 
-    # Special Cases (collinear cases where they touch/overlap)
     if o1 == 0 and on_segment(p1, p2, q1):
         return True
     if o2 == 0 and on_segment(p1, q2, q1):
@@ -283,11 +319,16 @@ def orientation(p_1: np.ndarray, p_2: np.ndarray, p_3: np.ndarray) -> int:
     Returns:
         int: 0 if collinear, 1 if clockwise, 2 if counterclockwise.
     """
-    val = (p_2[1] - p_1[1]) * (p_3[0] - p_2[0]) - (p_2[0] - p_1[0]) * (p_3[1] - p_2[1])
-    if val == 0:
-        return 0  # collinear
+    p1 = np.asarray(p_1)
+    p2 = np.asarray(p_2)
+    p3 = np.asarray(p_3)
 
-    return 1 if val > 0 else 2  # 1: clockwise, 2: counterclockwise
+    val = (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0])
+
+    if abs(val) < EPS:
+        return 0
+
+    return 1 if val < 0 else 2
 
 
 def on_segment(p: np.ndarray, q: np.ndarray, r: np.ndarray) -> bool:
@@ -301,10 +342,14 @@ def on_segment(p: np.ndarray, q: np.ndarray, r: np.ndarray) -> bool:
     Returns:
         bool: True if q lies on segment pr, False otherwise.
     """
-    if min(p[0], r[0]) <= q[0] <= max(p[0], r[0]) and min(p[1], r[1]) <= q[1] <= max(p[1], r[1]):
-        return True
+    p = np.asarray(p)
+    q = np.asarray(q)
+    r = np.asarray(r)
 
-    return False
+    return (
+        min(p[0], r[0]) - EPS <= q[0] <= max(p[0], r[0]) + EPS
+        and min(p[1], r[1]) - EPS <= q[1] <= max(p[1], r[1]) + EPS
+    )
 
 
 def find_intersection(line1, line2):
@@ -318,18 +363,18 @@ def find_intersection(line1, line2):
     Returns:
         np.array of intersection point (x, y), or None if no intersection.
     """
-    A, B = line1
-    C, D = line2
+    A, B = np.asarray(line1[0]), np.asarray(line1[1])
+    C, D = np.asarray(line2[0]), np.asarray(line2[1])
 
     denom = (B[0] - A[0]) * (D[1] - C[1]) - (B[1] - A[1]) * (D[0] - C[0])
 
-    if denom == 0:
-        return None  # Parallel lines
+    if abs(denom) < EPS:
+        return None
 
     t = ((C[0] - A[0]) * (D[1] - C[1]) - (C[1] - A[1]) * (D[0] - C[0])) / denom
     u = ((C[0] - A[0]) * (B[1] - A[1]) - (C[1] - A[1]) * (B[0] - A[0])) / denom
 
-    if 0 <= t <= 1 and 0 <= u <= 1:
+    if -EPS <= t <= 1 + EPS and -EPS <= u <= 1 + EPS:
         return A + t * (B - A)
 
-    return None  # Segments don't intersect
+    return None

@@ -1,6 +1,9 @@
+from unittest.mock import MagicMock
+
 import pytest
 
 from utama_core.config.enums import Mode
+from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.entities.game.field import FieldBounds
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.tests.strategy_runner.strat_runner_test_utils import DummyStrategy
@@ -30,25 +33,33 @@ def test_load_mode_invalid(base_runner):
 
 
 def test_assert_exp_robots_valid(base_runner):
-    base_runner._assert_exp_robots()  # Should not raise
+    base_runner._assert_exp_robots_and_ball(3, 3, True)  # Should not raise
 
 
 def test_assert_exp_robots_too_many_friendly(base_runner):
-    base_runner.exp_friendly = 999
-    with pytest.raises(AssertionError):
-        base_runner._assert_exp_robots()
+    with pytest.raises(ValueError):
+        base_runner._assert_exp_robots_and_ball(999, 3, True)
 
 
 def test_assert_exp_robots_too_few_friendly(base_runner):
-    base_runner.exp_friendly = 0
-    with pytest.raises(AssertionError):
-        base_runner._assert_exp_robots()
+    with pytest.raises(ValueError):
+        base_runner._assert_exp_robots_and_ball(0, 3, True)
+
+
+def test_assert_exp_robots_too_many_enemy(base_runner):
+    with pytest.raises(ValueError):
+        base_runner._assert_exp_robots_and_ball(3, 999, True)
 
 
 def test_assert_exp_goals_fails(base_runner):
     # Mock the strategy to return False on assert_exp_goals
-    base_runner.my_strategy.assert_exp_goals = lambda *a, **k: False
-    with pytest.raises(AssertionError):
+    base_runner.my.strategy.assert_exp_goals = lambda *a, **k: False
+    base_runner.my.game = MagicMock()
+    base_runner.my.game.field = MagicMock(
+        includes_my_goal_line=True,
+        includes_opp_goal_line=True,
+    )
+    with pytest.raises(RuntimeError, match="Field does not match expected goals"):
         base_runner._assert_exp_goals()
 
 
@@ -74,10 +85,10 @@ def test_strategy_runner_valid_bounds():
 
 
 def test_strategy_runner_invalid_bounds():
-    """Should raise AssertionError when bounds are invalid."""
+    """Should raise ValueError when bounds are invalid."""
     invalid_bounds = FieldBounds(top_left=(3, 2), bottom_right=(-3, -2))
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         StrategyRunner(
             strategy=DummyStrategy(),
             my_team_is_yellow=True,
@@ -86,4 +97,22 @@ def test_strategy_runner_invalid_bounds():
             exp_friendly=3,
             exp_enemy=3,
             field_bounds=invalid_bounds,
+        )
+
+
+def test_strategy_runner_bounds_outside_non_standard_field_dims():
+    """Should raise when bounds exceed a custom full field size."""
+    # Valid in standard SSL dimensions, but outside GREAT_EXHIBITION_FIELD_DIMS.
+    too_large_for_custom_dims = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
+
+    with pytest.raises(ValueError, match="out of full field bounds"):
+        StrategyRunner(
+            strategy=DummyStrategy(),
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            mode="rsim",
+            exp_friendly=3,
+            exp_enemy=3,
+            full_field_dims=GREAT_EXHIBITION_FIELD_DIMS,
+            field_bounds=too_large_for_custom_dims,
         )
