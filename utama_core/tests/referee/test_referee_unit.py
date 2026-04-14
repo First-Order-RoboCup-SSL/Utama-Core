@@ -1087,10 +1087,10 @@ class TestPrepareKickoffTheirsStep:
     def test_all_robots_placed_on_own_half_right(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
 
-        captured = []
+        captured = {}
 
         def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
-            captured.append((robot_id, target_coords))
+            captured[robot_id] = target_coords
             return ("move", robot_id)
 
         monkeypatch.setattr(referee_actions, "move", fake_move)
@@ -1106,16 +1106,16 @@ class TestPrepareKickoffTheirsStep:
         node.update()
 
         assert len(captured) == 3
-        for _, target in captured:
+        for _, target in captured.items():
             assert target.x > 0.0, f"Expected positive-x (own half right), got {target}"
 
     def test_all_robots_placed_on_own_half_left(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
 
-        captured = []
+        captured = {}
 
         def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
-            captured.append((robot_id, target_coords))
+            captured[robot_id] = target_coords
             return ("move", robot_id)
 
         monkeypatch.setattr(referee_actions, "move", fake_move)
@@ -1131,7 +1131,7 @@ class TestPrepareKickoffTheirsStep:
         node.update()
 
         assert len(captured) == 3
-        for _, target in captured:
+        for _, target in captured.items():
             assert target.x < 0.0, f"Expected negative-x (own half left), got {target}"
 
     def test_positions_outside_centre_circle(self, monkeypatch):

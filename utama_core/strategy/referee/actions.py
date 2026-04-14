@@ -83,14 +83,19 @@ def _formation_positions(game, ratios: tuple[tuple[float, float], ...]) -> list[
     return positions
 
 
-def _project_outside_circle(point: Vector2D, center: Vector2D, keep_dist: float) -> Vector2D:
+def _project_outside_circle(
+    point: Vector2D,
+    center: Vector2D,
+    keep_dist: float,
+    fallback_direction: tuple[float, float] = CLEARANCE_FALLBACK_DIRECTION,
+) -> Vector2D:
     """Project a point to the circle boundary if it lies inside the keep-out radius."""
     offset = point - center
     dist = offset.mag()
     if dist >= keep_dist:
         return point
     if dist == 0.0:
-        ux, uy = CLEARANCE_FALLBACK_DIRECTION
+        ux, uy = fallback_direction
         return Vector2D(center.x + ux * keep_dist, center.y + uy * keep_dist)
     scale = keep_dist / dist
     return Vector2D(center.x + offset.x * scale, center.y + offset.y * scale)
@@ -150,15 +155,19 @@ def _clear_to_legal_positions(
     if designated_keep_dist is not None and ref is not None and ref.designated_position is not None:
         designated_center = Vector2D(ref.designated_position[0], ref.designated_position[1])
 
+    # When a robot is exactly coincident with the obstruction, push it toward own half.
+    own_half_sign = 1.0 if game.my_team_is_right else -1.0
+    own_half_fallback = (own_half_sign, 0.0)
+
     for robot_id, robot in game.friendly_robots.items():
         if robot_id in exempt_robot_ids:
             continue
 
         target = Vector2D(robot.p.x, robot.p.y)
         if ball_center is not None:
-            target = _project_outside_circle(target, ball_center, ball_keep_dist)
+            target = _project_outside_circle(target, ball_center, ball_keep_dist, own_half_fallback)
         if designated_center is not None:
-            target = _project_outside_circle(target, designated_center, designated_keep_dist)
+            target = _project_outside_circle(target, designated_center, designated_keep_dist, own_half_fallback)
         if clear_opp_defense_area:
             target = _project_outside_opp_defense_area(game, target, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
 
