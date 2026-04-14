@@ -173,6 +173,16 @@ class StrategyRunner:
         self.field_bounds = field_bounds if field_bounds else full_field_dims.full_field_bounds
         self.referee_system = self._resolve_referee_system(self.mode, referee_system, custom_referee)
 
+        # Ensure the custom referee's geometry matches the actual field in use.
+        # The YAML profile geometry is the fallback for standalone use; here
+        # full_field_dims + field_bounds is the single source of truth.
+        if self.referee_system == "custom" and self.custom_referee is not None:
+            from utama_core.custom_referee.geometry import RefereeGeometry
+
+            self.custom_referee.override_geometry(
+                RefereeGeometry.from_field_dims(self.full_field_dims, self.field_bounds)
+            )
+
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 
         assert_valid_bounding_box(

@@ -161,6 +161,16 @@ class CustomReferee:
     # Properties (read-only access for callers that need to inspect state)
     # ------------------------------------------------------------------
 
+    def override_geometry(self, geometry: RefereeGeometry) -> None:
+        """Replace the active field geometry on both the referee and the state machine.
+
+        Called by StrategyRunner to ensure the referee's geometry always matches
+        the actual field dims/bounds in use, regardless of what the YAML profile
+        specifies.
+        """
+        self._geometry = geometry
+        self._state._geometry = geometry
+
     @property
     def geometry(self) -> RefereeGeometry:
         return self._geometry
