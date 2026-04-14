@@ -322,7 +322,7 @@ def _build_config_json(profile: "RefereeProfile") -> str:
                 "half_length": g.half_length,
                 "half_width": g.half_width,
                 "half_goal_width": g.half_goal_width,
-                "half_defense_length": g.half_defense_length,
+                "half_defense_depth": g.half_defense_depth,
                 "half_defense_width": g.half_defense_width,
                 "center_circle_radius": g.center_circle_radius,
             },
@@ -772,7 +772,7 @@ function drawField(d) {
   ctx.fill();
 
   // Defence areas
-  const dl = g.half_defense_length, dw = g.half_defense_width;
+  const dl = g.half_defense_depth, dw = g.half_defense_width;
   // Left (negative x)
   ctx.strokeRect(toX(-g.half_length), toY(dw), dl * scale, 2 * dw * scale);
   // Right (positive x)
@@ -940,7 +940,7 @@ fetch('/config').then(r => r.json()).then(c => {
     cfgRow('half length',           g.half_length          + ' m') +
     cfgRow('half width',            g.half_width           + ' m') +
     cfgRow('half goal width',       g.half_goal_width      + ' m') +
-    cfgRow('defense length (half)', g.half_defense_length  + ' m') +
+    cfgRow('defense length (half)', g.half_defense_depth  + ' m') +
     cfgRow('defense width (half)',  g.half_defense_width   + ' m') +
     cfgRow('centre circle r',       g.center_circle_radius + ' m');
 

@@ -159,7 +159,7 @@ def _parse_profile(data: dict) -> RefereeProfile:
         half_length=geo_d.get("half_length", 4.5),
         half_width=geo_d.get("half_width", 3.0),
         half_goal_width=geo_d.get("half_goal_width", 0.5),
-        half_defense_length=geo_d.get("half_defense_length", 0.5),
+        half_defense_depth=geo_d.get("half_defense_depth", 0.5),
         half_defense_width=geo_d.get("half_defense_width", 1.0),
         center_circle_radius=geo_d.get("center_circle_radius", 0.5),
     )

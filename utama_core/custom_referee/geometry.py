@@ -16,7 +16,7 @@ class RefereeGeometry:
     half_length: float
     half_width: float
     half_goal_width: float
-    half_defense_length: float
+    half_defense_depth: float
     half_defense_width: float
     center_circle_radius: float
 
@@ -36,7 +36,7 @@ class RefereeGeometry:
             half_length=half_length,
             half_width=half_width,
             half_goal_width=field_dims.half_goal_width,
-            half_defense_length=field_dims.half_defense_area_depth,
+            half_defense_depth=field_dims.half_defense_area_depth,
             half_defense_width=field_dims.half_defense_area_width,
             center_circle_radius=0.5,
         )
@@ -59,8 +59,8 @@ class RefereeGeometry:
 
     def is_in_left_defense_area(self, x: float, y: float) -> bool:
         """True if (x, y) is inside the left defense area."""
-        return x <= -self.half_length + 2 * self.half_defense_length and abs(y) <= self.half_defense_width
+        return x <= -self.half_length + 2 * self.half_defense_depth and abs(y) <= self.half_defense_width
 
     def is_in_right_defense_area(self, x: float, y: float) -> bool:
         """True if (x, y) is inside the right defense area."""
-        return x >= self.half_length - 2 * self.half_defense_length and abs(y) <= self.half_defense_width
+        return x >= self.half_length - 2 * self.half_defense_depth and abs(y) <= self.half_defense_width
