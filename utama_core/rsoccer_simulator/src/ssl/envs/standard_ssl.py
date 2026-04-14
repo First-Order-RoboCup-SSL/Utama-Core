@@ -1,10 +1,11 @@
 import logging
 import random
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from numpy.random import normal
 
-from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
+from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
+from utama_core.config.formations import FormationEntry, get_formations
 from utama_core.config.robot_params import RSIM_PARAMS
 from utama_core.config.settings import (
     MAX_BALL_SPEED,
@@ -81,24 +82,51 @@ class SSLStandardEnv(SSLBaseEnv):
         n_robots_blue: int = 6,
         n_robots_yellow: int = 6,
         time_step: float = TIMESTEP,
-        blue_starting_formation: list[tuple] = None,
-        yellow_starting_formation: list[tuple] = None,
+        blue_starting_formation: Optional[list[FormationEntry]] = None,
+        yellow_starting_formation: Optional[list[FormationEntry]] = None,
+        full_field_dims: Optional[FieldDimensions] = None,
+        ball_starting_position: Optional[Tuple[float, float]] = None,
         gaussian_noise: RsimGaussianNoise = RsimGaussianNoise(),
         vanishing: float = 0,
     ):
+        render_field_overrides = None
+        if full_field_dims is not None:
+            render_field_overrides = {
+                "length": 2 * full_field_dims.full_field_half_length,
+                "width": 2 * full_field_dims.full_field_half_width,
+                "penalty_length": 2 * full_field_dims.half_defense_area_depth,
+                "penalty_width": 2 * full_field_dims.half_defense_area_width,
+                "goal_width": 2 * full_field_dims.half_goal_width,
+            }
+
         super().__init__(
             field_type=field_type,
             n_robots_blue=n_robots_blue,
             n_robots_yellow=n_robots_yellow,
             time_step=time_step,
             render_mode=render_mode,
+            render_field_overrides=render_field_overrides,
         )
 
-        # Note: observation_space and action_space removed - not needed for non-RL use
+        # NOTE: observation_space and action_space removed - not needed for non-RL use
 
-        # set starting formation style for
-        self.blue_formation = LEFT_START_ONE if not blue_starting_formation else blue_starting_formation
-        self.yellow_formation = RIGHT_START_ONE if not yellow_starting_formation else yellow_starting_formation
+        self.blue_formation = blue_starting_formation
+        self.yellow_formation = yellow_starting_formation
+
+        # NOTE: in a normal strategy, formations will never be None
+        # This implementation is to allow rsim to be used as standalone
+        # Makes the implicit assumption of blue on left and yellow on right if formation not given
+        # This assumption is faulty for normal strats, but it is necessary if rsim is spawned in isolation with no strat context
+        if blue_starting_formation is None or yellow_starting_formation is None:
+            self.yellow_formation, self.blue_formation = get_formations(
+                STANDARD_FIELD_DIMS.full_field_bounds,
+                n_right=n_robots_yellow,
+                n_left=n_robots_blue,
+            )
+
+        # Ball start position is expressed in normal field coordinates used by
+        # StrategyRunner/game state (not simulator-internal y-sign convention).
+        self.ball_starting_position = ball_starting_position if ball_starting_position is not None else (0.0, 0.0)
 
         # Track dribbler state across steps so we can model ball release when
         # the dribbler turns off in a way that depends on robot speed.
@@ -372,7 +400,8 @@ class SSLStandardEnv(SSLBaseEnv):
             pos_frame.robots_yellow[i] = Robot(id=i, x=x, y=-y, theta=-rad_to_deg(heading))
 
         if ball_exists:
-            pos_frame.ball = Ball(x=0, y=0)
+            bx, by = self.ball_starting_position
+            pos_frame.ball = Ball(x=bx, y=-by)
         else:
             pos_frame.ball = Ball(
                 x=self.OFF_FIELD_OFFSET + self.field.length,

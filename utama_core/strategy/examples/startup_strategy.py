@@ -1,10 +1,9 @@
 import py_trees
 from py_trees.composites import Sequence
 
-from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.formations import get_formations
 from utama_core.entities.data.vector import Vector2D
-from utama_core.entities.game.field import FieldBounds
-from utama_core.global_utils.math_utils import compute_bounding_zone_from_points
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
 
@@ -13,7 +12,8 @@ def generate_starting_positions(is_right_team: bool):
     """
     Generate starting and target formations based on team side.
     """
-    start_formation = RIGHT_START_ONE if is_right_team else LEFT_START_ONE
+    right_formation, left_formation = get_formations(STANDARD_FIELD_DIMS.full_field_bounds)
+    start_formation = right_formation if is_right_team else left_formation
     target_formation = start_formation.copy()
     target_formation.reverse()
     return start_formation, target_formation
@@ -55,17 +55,8 @@ class StartupStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True  # No specific goal line requirements
 
-    def get_min_bounding_zone(self) -> FieldBounds:
-        all_points = []
-        start_formation, target_formation = generate_starting_positions(self.blackboard.game.my_team_is_right)
-
-        for robot_id in self.blackboard.game.friendly_robots:
-            fx, fy, _ = start_formation[robot_id]
-            all_points.append((fx, fy))
-            tx, ty, _ = target_formation[robot_id]
-            all_points.append((tx, ty))
-
-        return compute_bounding_zone_from_points(all_points)
+    def get_min_bounding_req(self):
+        return STANDARD_FIELD_DIMS.full_field_bounds  # enforce full field required
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         """Factory function to create a complete behaviour tree."""

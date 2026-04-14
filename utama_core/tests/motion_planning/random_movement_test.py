@@ -5,6 +5,7 @@ import random
 from dataclasses import dataclass
 from typing import Dict
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -57,7 +58,7 @@ class RandomMovementTestManager(AbstractTestManager):
         max_y = max(bounds.top_left[1], bounds.bottom_right[1])
 
         # Use a fixed seed for reproducibility across test runs
-        rng = random.Random(42 + self.current_episode_number)
+        rng = random.Random(420 + self.current_episode_number)
 
         for i in range(self.scenario.n_robots):
             x = rng.uniform(min_x + 0.5, max_x - 0.5)
@@ -125,12 +126,12 @@ def test_random_movement_same_team(
     # use small bounds to increase chance of collision
     small_bounds = FieldBounds(
         top_left=(
-            -Field.FULL_FIELD_HALF_LENGTH + 1,
-            Field.FULL_FIELD_HALF_WIDTH - 1,
+            -STANDARD_FIELD_DIMS.full_field_half_length + 1,
+            STANDARD_FIELD_DIMS.full_field_half_width - 1,
         ),
         bottom_right=(
-            -Field.FULL_FIELD_HALF_LENGTH + 3,
-            Field.FULL_FIELD_HALF_WIDTH - 3,
+            -STANDARD_FIELD_DIMS.full_field_half_length + 3,
+            STANDARD_FIELD_DIMS.full_field_half_width - 3,
         ),
     )
 

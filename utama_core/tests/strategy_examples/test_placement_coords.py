@@ -11,13 +11,8 @@ from typing import Optional
 
 import pytest
 
-from utama_core.config.formations import LEFT_START_ONE, RIGHT_START_ONE
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
-from utama_core.global_utils.mapping_utils import (
-    map_friendly_enemy_to_colors,
-    map_left_right_to_colors,
-)
 from utama_core.run import StrategyRunner
 from utama_core.strategy.examples.one_robot_placement_strategy import (
     RobotPlacementStrategy,
@@ -45,24 +40,10 @@ class RobotPlacementTestManager(AbstractTestManager):
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         """Reset robot and ball positions for the test."""
-        ini_yellow, ini_blue = map_left_right_to_colors(
-            game.my_team_is_yellow,
-            game.my_team_is_right,
-            RIGHT_START_ONE,
-            LEFT_START_ONE,
-        )
+        centre = game.field.field_bounds.center
+        sim_controller.teleport_robot(game.my_team_is_yellow, self.my_strategy.robot_id, centre[0], centre[1])
 
-        y_robots, b_robots = map_friendly_enemy_to_colors(
-            game.my_team_is_yellow, game.friendly_robots, game.enemy_robots
-        )
-
-        for i in b_robots.keys():
-            sim_controller.teleport_robot(False, i, ini_blue[i][0], ini_blue[i][1], ini_blue[i][2])
-        for j in y_robots.keys():
-            sim_controller.teleport_robot(True, j, ini_yellow[j][0], ini_yellow[j][1], ini_yellow[j][2])
-
-        sim_controller.teleport_robot(game.my_team_is_yellow, self.my_strategy.robot_id, 0, 0)
-        sim_controller.teleport_ball(3, 3)
+        sim_controller.teleport_ball(centre[0] + 0.5, centre[1] + 0.5)
 
     def eval_status(self, game: Game) -> TestingStatus:
         """Verify robot reaches both oscillation targets."""
@@ -84,12 +65,13 @@ class RobotPlacementTestManager(AbstractTestManager):
 
 def _run_placement_test(field_bounds: Optional[FieldBounds], expected_center: tuple[float, float]):
     """Helper to run a placement strategy test with given bounds."""
-    strategy = RobotPlacementStrategy(robot_id=0, field_bounds=field_bounds)
+    strategy = RobotPlacementStrategy(robot_id=0)
 
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,
         my_team_is_right=False,
+        field_bounds=field_bounds,
         mode="rsim",
         exp_friendly=1,
         exp_enemy=0,

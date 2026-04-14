@@ -1,5 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Optional, cast
 
 import py_trees
@@ -11,7 +12,10 @@ from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PAT
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import Field, FieldBounds
-from utama_core.global_utils.math_utils import assert_valid_bounding_box
+from utama_core.global_utils.math_utils import (
+    assert_contains,
+    assert_valid_bounding_box,
+)
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command
@@ -55,6 +59,21 @@ def _prune_base_blackboard_elements(graph: pydot.Dot) -> None:
     prune_nodes(graph)
 
 
+@dataclass(slots=True, frozen=True)
+class SpaceRequirements:
+    """
+    Represents minimum space requirements for a strategy.
+
+    Attributes:
+        min_length (float): Minimum required length of the field region.
+        min_width (float): Minimum required width of the field region.
+    """
+
+    min_length: float
+    min_width: float
+
+
+@dataclass
 class AbstractStrategy(ABC):
     """
     Base class for team strategies backed by behaviour trees.
@@ -137,7 +156,7 @@ class AbstractStrategy(ABC):
         ...
 
     @abstractmethod
-    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
+    def get_min_bounding_req(self) -> Optional[FieldBounds | SpaceRequirements]:
         """
         Return the minimum field region required by the strategy.
 
@@ -152,7 +171,9 @@ class AbstractStrategy(ABC):
             The bounding zone should be defined in field coordinates (i.e., absolute positions).
 
         Returns:
-            Optional[FieldBounds]: A `FieldBounds` specifying the minimum bounding region, or `None`.
+            Optional[FieldBounds | SpaceRequirements]:
+                A `FieldBounds` object specifying the required region, a `SpaceRequirements`
+                object specifying minimum length and width, or `None` if no specific region is required.
         """
         ...
 
@@ -176,13 +197,20 @@ class AbstractStrategy(ABC):
 
     ### END OF STRATEGY IMPLEMENTATION ###
 
+    def setup_strategy_blackboard(self, is_opp_strat: bool):
+        """
+        Must be called before blackboard can be used.
+
+        Setups the blackboard based on if is_opp_strat.
+        """
+        self.blackboard = self._setup_blackboard(is_opp_strat)
+
     def setup_behaviour_tree(self, is_opp_strat: bool):
         """
         Must be called before strategy can be run.
 
-        Setups the tree and blackboard based on if is_opp_strat
+        Setups the behaviour tree based on if is_opp_strat.
         """
-        self.blackboard = self._setup_blackboard(is_opp_strat)
         self.behaviour_tree.setup(is_opp_strat=is_opp_strat)
 
     def load_rsim_env(self, env: SSLBaseEnv):
@@ -205,29 +233,41 @@ class AbstractStrategy(ABC):
         self.blackboard.set("motion_controller", motion_controller, overwrite=True)
         self.blackboard.register_key(key="motion_controller", access=py_trees.common.Access.READ)
 
-    def assert_field_requirements(self):
+    def assert_field_requirements(self, game: Game):
         """
         Assert that the actual field size meets the strategy's requirements,
         that both actual field and min_bounding_zone are within the full field,
         and that bounding boxes are well-formed (top-left above/left of bottom-right).
         """
-        actual_field_size = self.blackboard.game.field.field_bounds
-        min_bounding_zone = self.get_min_bounding_zone()
+        actual_field_bounds = game.field.field_bounds
+        min_bounding_req = self.get_min_bounding_req()
 
         # --- Validate min bounding zone ---
-        if min_bounding_zone is not None:
-            assert_valid_bounding_box(min_bounding_zone)
+        if min_bounding_req is not None:
+            # Validate required zone
+            if isinstance(min_bounding_req, FieldBounds):
+                assert_valid_bounding_box(
+                    min_bounding_req,
+                    game.field.full_field_half_length,
+                    game.field.full_field_half_width,
+                )
+                # Check containment
+                assert_contains(actual_field_bounds, min_bounding_req)
+            elif isinstance(min_bounding_req, SpaceRequirements):
+                # Check if the actual field is large enough
+                actual_length = actual_field_bounds.bottom_right[0] - actual_field_bounds.top_left[0]
+                actual_width = actual_field_bounds.top_left[1] - actual_field_bounds.bottom_right[1]
+                if actual_length < min_bounding_req.min_length:
+                    raise ValueError(
+                        "Field bound length too small for strategy. "
+                        f"Actual length: {actual_length}, required minimum length: {min_bounding_req.min_length}."
+                    )
 
-            # --- Check that actual field contains min_bounding_zone ---
-            ax0, ay0 = actual_field_size.top_left
-            ax1, ay1 = actual_field_size.bottom_right
-            mx0, my0 = min_bounding_zone.top_left
-            mx1, my1 = min_bounding_zone.bottom_right
-
-            assert ax0 <= mx0, f"Field top-left x {ax0} smaller than required {mx0}"
-            assert ay0 >= my0, f"Field top-left y {ay0} smaller than required {my0}"
-            assert ax1 >= mx1, f"Field bottom-right x {ax1} smaller than required {mx1}"
-            assert ay1 <= my1, f"Field bottom-right y {ay1} smaller than required {my1}"
+                if actual_width < min_bounding_req.min_width:
+                    raise ValueError(
+                        "Field bound width too small for strategy. "
+                        f"Actual width: {actual_width}, required minimum width: {min_bounding_req.min_width}."
+                    )
 
     def load_game(self, game: Game):
         """
@@ -236,7 +276,7 @@ class AbstractStrategy(ABC):
         We do not set to READ after, as we TestManager may reset the game object for the new episode.
         """
         self.blackboard.set("game", game, overwrite=True)
-        self.assert_field_requirements()
+        self.assert_field_requirements(game)
 
     def step(self):
         # start_time = time.time()

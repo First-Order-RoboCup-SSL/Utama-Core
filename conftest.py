@@ -59,14 +59,14 @@ def pytest_generate_tests(metafunc):
 
 
 # temporarily excludes the motion planning tests until the motion planning algorithms are working
-def pytest_collection_modifyitems(config, items):
-    if config.getoption("--include-motion-planning"):
-        return
+# def pytest_collection_modifyitems(config, items):
+#     if config.getoption("--include-motion-planning"):
+#         return
 
-    skip_mp = pytest.mark.skip(reason="motion planning not ready")
-    for item in items:
-        if "motion_planning" in item.keywords:
-            item.add_marker(skip_mp)
+#     skip_mp = pytest.mark.skip(reason="motion planning not ready")
+#     for item in items:
+#         if "motion_planning" in item.keywords:
+#             item.add_marker(skip_mp)
 
 
 @pytest.fixture

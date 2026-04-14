@@ -2,26 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-
-class ClassProperty:
-    def __init__(self, getter):
-        self.getter = getter
-
-    def __get__(self, instance, owner):
-        return self.getter(owner)
-
-
-@dataclass(frozen=True)
-class FieldBounds:
-    top_left: tuple[float, float]
-    bottom_right: tuple[float, float]
-
-    @property
-    def center(self) -> tuple[float, float]:
-        """Calculates the geometric center of the field bounds."""
-        cx = (self.top_left[0] + self.bottom_right[0]) / 2.0
-        cy = (self.top_left[1] + self.bottom_right[1]) / 2.0
-        return (cx, cy)
+from utama_core.config.field_params import FieldBounds, FieldDimensions
 
 
 class Field:
@@ -30,74 +11,14 @@ class Field:
     Call the class properties to get the field information
     """
 
-    # Class constants refer to the standard SSL field (9m x 6m)
-
-    _CENTER_CIRCLE_RADIUS = 0.5
-    _HALF_GOAL_WIDTH = 0.5
-    _HALF_DEFENSE_AREA_LENGTH = 0.5
-    _HALF_DEFENSE_AREA_WIDTH = 1
-
-    _FULL_FIELD_HALF_WIDTH = 3.0
-    _FULL_FIELD_HALF_LENGTH = 4.5
-
-    _RIGHT_GOAL_LINE = np.array(
-        [
-            (_FULL_FIELD_HALF_LENGTH, _HALF_GOAL_WIDTH),
-            (_FULL_FIELD_HALF_LENGTH, -_HALF_GOAL_WIDTH),
-        ]
-    )
-
-    _LEFT_GOAL_LINE = np.array(
-        [
-            (-_FULL_FIELD_HALF_LENGTH, _HALF_GOAL_WIDTH),
-            (-_FULL_FIELD_HALF_LENGTH, -_HALF_GOAL_WIDTH),
-        ]
-    )
-
-    _RIGHT_DEFENSE_AREA = np.array(
-        [
-            (_FULL_FIELD_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
-            (
-                _FULL_FIELD_HALF_LENGTH - 2 * _HALF_DEFENSE_AREA_LENGTH,
-                _HALF_DEFENSE_AREA_WIDTH,
-            ),
-            (
-                _FULL_FIELD_HALF_LENGTH - 2 * _HALF_DEFENSE_AREA_LENGTH,
-                -_HALF_DEFENSE_AREA_WIDTH,
-            ),
-            (_FULL_FIELD_HALF_LENGTH, -_HALF_DEFENSE_AREA_WIDTH),
-            (_FULL_FIELD_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
-        ]
-    )
-
-    _LEFT_DEFENSE_AREA = np.array(
-        [
-            (-_FULL_FIELD_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
-            (
-                -_FULL_FIELD_HALF_LENGTH + 2 * _HALF_DEFENSE_AREA_LENGTH,
-                _HALF_DEFENSE_AREA_WIDTH,
-            ),
-            (
-                -_FULL_FIELD_HALF_LENGTH + 2 * _HALF_DEFENSE_AREA_LENGTH,
-                -_HALF_DEFENSE_AREA_WIDTH,
-            ),
-            (-_FULL_FIELD_HALF_LENGTH, -_HALF_DEFENSE_AREA_WIDTH),
-            (-_FULL_FIELD_HALF_LENGTH, _HALF_DEFENSE_AREA_WIDTH),
-        ]
-    )
-
-    _FULL_FIELD = np.array(
-        [
-            (-_FULL_FIELD_HALF_LENGTH, -_FULL_FIELD_HALF_WIDTH),
-            (-_FULL_FIELD_HALF_LENGTH, _FULL_FIELD_HALF_WIDTH),
-            (_FULL_FIELD_HALF_LENGTH, _FULL_FIELD_HALF_WIDTH),
-            (_FULL_FIELD_HALF_LENGTH, -_FULL_FIELD_HALF_WIDTH),
-        ]
-    )
-
-    def __init__(self, my_team_is_right: bool, field_bounds: FieldBounds):
+    def __init__(
+        self,
+        my_team_is_right: bool,
+        field_dims: FieldDimensions,
+        field_bounds: FieldBounds,
+    ):
         self.my_team_is_right = my_team_is_right
-
+        self._field_dims = field_dims
         self._field_bounds = field_bounds
 
         self._half_length = (field_bounds.bottom_right[0] - field_bounds.top_left[0]) / 2
@@ -105,16 +26,16 @@ class Field:
 
     @property
     def includes_left_goal(self) -> bool:
-        return self._field_bounds.top_left[0] == -self._FULL_FIELD_HALF_LENGTH and (
-            self._field_bounds.top_left[1] >= self._HALF_GOAL_WIDTH
-            and self._field_bounds.bottom_right[1] <= -self._HALF_GOAL_WIDTH
+        return self._field_bounds.top_left[0] == -self._field_dims.full_field_half_length and (
+            self._field_bounds.top_left[1] >= self._field_dims.half_goal_width
+            and self._field_bounds.bottom_right[1] <= -self._field_dims.half_goal_width
         )
 
     @property
     def includes_right_goal(self) -> bool:
-        return self._field_bounds.bottom_right[0] == self._FULL_FIELD_HALF_LENGTH and (
-            self._field_bounds.top_left[1] >= self._HALF_GOAL_WIDTH
-            and self._field_bounds.bottom_right[1] <= -self._HALF_GOAL_WIDTH
+        return self._field_bounds.bottom_right[0] == self._field_dims.full_field_half_length and (
+            self._field_bounds.top_left[1] >= self._field_dims.half_goal_width
+            and self._field_bounds.bottom_right[1] <= -self._field_dims.half_goal_width
         )
 
     @property
@@ -134,30 +55,30 @@ class Field:
     @property
     def my_goal_line(self) -> np.ndarray:
         if self.my_team_is_right:
-            return self._RIGHT_GOAL_LINE
+            return self._field_dims.right_goal_line
         else:
-            return self._LEFT_GOAL_LINE
+            return self._field_dims.left_goal_line
 
     @property
     def enemy_goal_line(self) -> np.ndarray:
         if self.my_team_is_right:
-            return self._LEFT_GOAL_LINE
+            return self._field_dims.left_goal_line
         else:
-            return self._RIGHT_GOAL_LINE
+            return self._field_dims.right_goal_line
 
     @property
     def my_defense_area(self) -> np.ndarray:
         if self.my_team_is_right:
-            return self._RIGHT_DEFENSE_AREA
+            return self._field_dims.right_defense_area
         else:
-            return self._LEFT_DEFENSE_AREA
+            return self._field_dims.left_defense_area
 
     @property
     def enemy_defense_area(self) -> np.ndarray:
         if self.my_team_is_right:
-            return self._LEFT_DEFENSE_AREA
+            return self._field_dims.left_defense_area
         else:
-            return self._RIGHT_DEFENSE_AREA
+            return self._field_dims.right_defense_area
 
     @property
     def half_length(self) -> float:
@@ -177,53 +98,46 @@ class Field:
 
     ### Class Properties for standard field dimensions ###
 
-    @ClassProperty
-    def HALF_GOAL_WIDTH(cls) -> float:
-        return cls._HALF_GOAL_WIDTH
+    @property
+    def full_field_half_length(self) -> float:
+        return self._field_dims.full_field_half_length
 
-    @ClassProperty
-    def HALF_DEFENSE_AREA_LENGTH(cls) -> float:
-        return cls._HALF_DEFENSE_AREA_LENGTH
+    @property
+    def full_field_half_width(self) -> float:
+        return self._field_dims.full_field_half_width
 
-    @ClassProperty
-    def HALF_DEFENSE_AREA_WIDTH(cls) -> float:
-        return cls._HALF_DEFENSE_AREA_WIDTH
+    @property
+    def half_goal_width(self) -> float:
+        return self._field_dims.half_goal_width
 
-    @ClassProperty
-    def CENTER_CIRCLE_RADIUS(cls) -> float:
-        return cls._CENTER_CIRCLE_RADIUS
+    @property
+    def left_goal_line(self) -> np.ndarray:
+        return self._field_dims.left_goal_line
 
-    @ClassProperty
-    def LEFT_GOAL_LINE(cls) -> np.ndarray:
-        return cls._LEFT_GOAL_LINE
+    @property
+    def right_goal_line(self) -> np.ndarray:
+        return self._field_dims.right_goal_line
 
-    @ClassProperty
-    def RIGHT_GOAL_LINE(cls) -> np.ndarray:
-        return cls._RIGHT_GOAL_LINE
+    @property
+    def left_defense_area(self) -> np.ndarray:
+        return self._field_dims.left_defense_area
 
-    @ClassProperty
-    def LEFT_DEFENSE_AREA(cls) -> np.ndarray:
-        return cls._LEFT_DEFENSE_AREA
+    @property
+    def right_defense_area(self) -> np.ndarray:
+        return self._field_dims.right_defense_area
 
-    @ClassProperty
-    def RIGHT_DEFENSE_AREA(cls) -> np.ndarray:
-        return cls._RIGHT_DEFENSE_AREA
+    @property
+    def full_field(self) -> np.ndarray:
+        return self._field_dims.full_field
 
-    @ClassProperty
-    def FULL_FIELD_HALF_LENGTH(cls) -> float:
-        return cls._FULL_FIELD_HALF_LENGTH
+    @property
+    def half_defense_area_depth(self) -> float:
+        return self._field_dims.half_defense_area_depth
 
-    @ClassProperty
-    def FULL_FIELD_HALF_WIDTH(cls) -> float:
-        return cls._FULL_FIELD_HALF_WIDTH
+    @property
+    def half_defense_area_width(self) -> float:
+        return self._field_dims.half_defense_area_width
 
-    @ClassProperty
-    def FULL_FIELD(cls) -> np.ndarray:
-        return cls._FULL_FIELD
-
-    @ClassProperty
-    def FULL_FIELD_BOUNDS(cls) -> FieldBounds:
-        return FieldBounds(
-            top_left=(-cls._FULL_FIELD_HALF_LENGTH, cls._FULL_FIELD_HALF_WIDTH),
-            bottom_right=(cls._FULL_FIELD_HALF_LENGTH, -cls._FULL_FIELD_HALF_WIDTH),
-        )
+    @property
+    def full_field_bounds(self) -> FieldBounds:
+        return self._field_dims.full_field_bounds
