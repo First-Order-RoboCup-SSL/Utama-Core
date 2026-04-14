@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.custom_referee.custom_referee import CustomReferee
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.profiles.profile_loader import load_profile
@@ -27,7 +28,7 @@ from utama_core.entities.referee.stage import Stage
 # Helpers
 # ---------------------------------------------------------------------------
 
-GEO = RefereeGeometry.from_standard_div_b()
+GEO = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
 
 
 def _ball(x: float, y: float, z: float = 0.0) -> Ball:

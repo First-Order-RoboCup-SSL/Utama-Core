@@ -2,11 +2,7 @@
 
 from dataclasses import dataclass
 
-from utama_core.config.field_params import (
-    STANDARD_FIELD_DIMS,
-    FieldBounds,
-    FieldDimensions,
-)
+from utama_core.config.field_params import FieldBounds, FieldDimensions
 
 
 @dataclass(frozen=True)
@@ -23,18 +19,6 @@ class RefereeGeometry:
     half_defense_length: float
     half_defense_width: float
     center_circle_radius: float
-
-    @classmethod
-    def from_standard_div_b(cls) -> "RefereeGeometry":
-        """Return geometry matching the standard SSL Division B field."""
-        return cls(
-            half_length=STANDARD_FIELD_DIMS.full_field_half_length,  # 4.5
-            half_width=STANDARD_FIELD_DIMS.full_field_half_width,  # 3.0
-            half_goal_width=STANDARD_FIELD_DIMS.half_goal_width,  # 0.5
-            half_defense_length=STANDARD_FIELD_DIMS.half_defense_area_depth,  # 0.5
-            half_defense_width=STANDARD_FIELD_DIMS.half_defense_area_width,  # 1.0
-            center_circle_radius=0.5,
-        )
 
     @classmethod
     def from_field_dims(cls, field_dims: FieldDimensions, field_bounds: FieldBounds | None = None) -> "RefereeGeometry":
