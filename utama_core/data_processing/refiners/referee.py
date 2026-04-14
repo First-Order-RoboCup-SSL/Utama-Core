@@ -11,6 +11,7 @@ from utama_core.entities.referee.stage import Stage
 class RefereeRefiner(BaseRefiner):
     def __init__(self):
         self._referee_records = []
+        self._latest_stage_time_left: float = 0.0
 
     def refine(self, game_frame, data: Optional[RefereeData]):
         """Process referee data and update the game frame.
@@ -24,6 +25,9 @@ class RefereeRefiner(BaseRefiner):
         """
         if data is None:
             return game_frame
+
+        # Always track the latest countdown, even when deduplication skips the record
+        self._latest_stage_time_left = data.stage_time_left
 
         # Add to history
         self.add_new_referee_data(data)
@@ -60,7 +64,7 @@ class RefereeRefiner(BaseRefiner):
 
     @property
     def stage_time_left(self) -> float:
-        return self._referee_records[-1].stage_time_left if self._referee_records else 0.0
+        return self._latest_stage_time_left
 
     @property
     def blue_team(self) -> TeamInfo:
