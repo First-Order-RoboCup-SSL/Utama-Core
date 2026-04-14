@@ -26,7 +26,6 @@ from utama_core.config.referee_constants import (
     PENALTY_MARK_HALF_FIELD_RATIO,
 )
 from utama_core.entities.data.vector import Vector2D
-from utama_core.entities.game.field import Field
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.skills.src.utils.move_utils import empty_command, move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
@@ -68,7 +67,7 @@ def _scaled_position(game, x_ratio: float, y_ratio: float) -> Vector2D:
 def _ensure_outside_center_circle(target: Vector2D) -> Vector2D:
     """Project kickoff support points to the centre-circle boundary when needed."""
     dist = math.hypot(target.x, target.y)
-    keep_radius = Field.CENTER_CIRCLE_RADIUS
+    keep_radius = 0.5  # standard SSL centre-circle radius
     if dist == 0.0 or dist >= keep_radius:
         return target
     scale = keep_radius / dist
@@ -97,12 +96,23 @@ def _project_outside_circle(point: Vector2D, center: Vector2D, keep_dist: float)
     return Vector2D(center.x + offset.x * scale, center.y + offset.y * scale)
 
 
+def _clamp_to_field(point: Vector2D, game) -> Vector2D:
+    """Clamp a position to within the field boundaries with a small inset margin."""
+    margin = 0.1
+    half_length = _field_half_length(game) - margin
+    half_width = _field_half_width(game) - margin
+    return Vector2D(
+        max(-half_length, min(half_length, point.x)),
+        max(-half_width, min(half_width, point.y)),
+    )
+
+
 def _project_outside_opp_defense_area(game, point: Vector2D, keep_dist: float) -> Vector2D:
     """Project a point out of the opponent defense area plus the required keep distance."""
     field_half_length = _field_half_length(game)
     opp_goal_sign = -1.0 if game.my_team_is_right else 1.0
-    defense_width = Field.HALF_DEFENSE_AREA_WIDTH + keep_dist
-    defense_inner_x = opp_goal_sign * (field_half_length - 2.0 * Field.HALF_DEFENSE_AREA_LENGTH)
+    defense_width = game.field.half_defense_area_width + keep_dist
+    defense_inner_x = opp_goal_sign * (field_half_length - 2.0 * game.field.half_defense_area_depth)
     safe_x = defense_inner_x - opp_goal_sign * keep_dist
 
     if abs(point.y) > defense_width:
@@ -151,6 +161,8 @@ def _clear_to_legal_positions(
             target = _project_outside_circle(target, designated_center, designated_keep_dist)
         if clear_opp_defense_area:
             target = _project_outside_opp_defense_area(game, target, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+
+        target = _clamp_to_field(target, game)
 
         if target == robot.p:
             blackboard.cmd_map[robot_id] = empty_command(False)
@@ -241,7 +253,7 @@ class BallPlacementOursStep(AbstractBehaviour):
                 if robot.has_ball:
                     target_for_move = target_pos
                 else:
-                    target_for_move = ball.p
+                    target_for_move = Vector2D(ball.p.x, ball.p.y)
                 oren = robot.p.angle_to(target_for_move)
                 self.blackboard.cmd_map[robot_id] = move(
                     game, motion_controller, robot_id, target_for_move, oren, dribbling=True
@@ -325,7 +337,10 @@ class PrepareKickoffTheirsStep(AbstractBehaviour):
             pos = positions[idx % len(positions)]
             self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, pos, 0.0)
 
-        return py_trees.common.Status.RUNNING
+        return _clear_to_legal_positions(
+            self.blackboard,
+            ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -436,10 +451,13 @@ class PreparePenaltyTheirsStep(AbstractBehaviour):
 class DirectFreeOursStep(AbstractBehaviour):
     """Positions our robots for our direct free kick.
 
-    The robot closest to the ball becomes the kicker and drives toward the ball.
-    All other robots stop in place (they may be repositioned by the strategy tree
-    after NORMAL_START transitions the override layer to pass-through).
+    The robot closest to the ball becomes the kicker and approaches from the
+    field-inward side so it cannot push the ball out of bounds.
+    All other robots stop in place.
     """
+
+    # How far infield from the ball the approach point is placed
+    _APPROACH_OFFSET = 0.15
 
     def update(self) -> py_trees.common.Status:
         game = self.blackboard.game
@@ -454,8 +472,23 @@ class DirectFreeOursStep(AbstractBehaviour):
         for robot_id in game.friendly_robots:
             if robot_id == kicker_id and ball:
                 robot = game.friendly_robots[robot_id]
-                oren = robot.p.angle_to(ball.p)
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, ball.p, oren)
+                ball_pos = Vector2D(ball.p.x, ball.p.y)
+
+                # Compute an approach point offset inward from the nearest boundary,
+                # so the robot never drives through the ball toward the edge.
+                half_length = _field_half_length(game)
+                half_width = _field_half_width(game)
+                # Inward direction: push away from whichever boundary is closest
+                offset_x = 0.0
+                offset_y = 0.0
+                if abs(ball_pos.x) > half_length - 0.5:
+                    offset_x = self._APPROACH_OFFSET * (-1.0 if ball_pos.x > 0 else 1.0)
+                if abs(ball_pos.y) > half_width - 0.5:
+                    offset_y = self._APPROACH_OFFSET * (-1.0 if ball_pos.y > 0 else 1.0)
+
+                approach = Vector2D(ball_pos.x + offset_x, ball_pos.y + offset_y)
+                oren = robot.p.angle_to(approach)
+                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, approach, oren)
             else:
                 self.blackboard.cmd_map[robot_id] = empty_command(False)
 

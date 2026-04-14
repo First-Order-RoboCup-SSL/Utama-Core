@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import py_trees
 import pytest
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.data_processing.refiners.referee import RefereeRefiner
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -105,14 +106,14 @@ def _make_game(
     referee=None,
     my_team_is_yellow: bool = True,
     my_team_is_right: bool = True,
-    field_bounds: FieldBounds = Field.FULL_FIELD_BOUNDS,
+    field_bounds: FieldBounds = STANDARD_FIELD_DIMS.full_field_bounds,
 ) -> Game:
     frame = _make_game_frame(friendly_robots, referee, my_team_is_yellow, my_team_is_right)
     history = GameHistory(10)
     return Game(
         past=history,
         current=frame,
-        field=Field(my_team_is_right=my_team_is_right, field_bounds=field_bounds),
+        field=Field(my_team_is_right=my_team_is_right, field_dims=STANDARD_FIELD_DIMS, field_bounds=field_bounds),
     )
 
 
@@ -428,7 +429,11 @@ class TestBallPlacementOursStep:
         game = Game(
             past=GameHistory(10),
             current=frame,
-            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
         )
 
         cmd_map = _make_cmd_map(game)
@@ -482,7 +487,11 @@ class TestBallPlacementOursStep:
         game = Game(
             past=GameHistory(10),
             current=frame,
-            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
         )
 
         cmd_map = _make_cmd_map(game)
@@ -525,8 +534,8 @@ class TestBallPlacementOursStep:
         assert len(captured) == 2
         placer_move = next(item for item in captured if item[0] == 0)
         support_move = next(item for item in captured if item[0] == 1)
-        assert placer_move[1] == game.ball.p
-        assert support_move[1] == Vector2D(0.55, 0.0)
+        assert placer_move[1] == Vector2D(game.ball.p.x, game.ball.p.y)
+        assert support_move[1] == Vector2D(0.8, 0.0)
         assert support_move[2] is False
 
 
@@ -561,7 +570,7 @@ class TestRefereeKeepOutRetreat:
         assert status == py_trees.common.Status.RUNNING
         assert len(captured) == 1
         assert captured[0][0] == 0
-        assert captured[0][1] == Vector2D(0.55, 0.0)
+        assert captured[0][1] == Vector2D(0.8, 0.0)
         assert cmd_map[1] is not None
 
     def test_stop_clears_robot_from_opponent_defense_area(self, monkeypatch):
@@ -592,7 +601,11 @@ class TestRefereeKeepOutRetreat:
         game = Game(
             past=GameHistory(10),
             current=frame,
-            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
         )
         cmd_map = _make_cmd_map(game)
         node = referee_actions.StopStep(name="Stop")
@@ -631,7 +644,7 @@ class TestRefereeKeepOutRetreat:
         assert status == py_trees.common.Status.RUNNING
         assert len(captured) == 1
         assert captured[0][0] == 0
-        assert captured[0][1] == Vector2D(0.55, 0.0)
+        assert captured[0][1] == Vector2D(0.8, 0.0)
 
     def test_ball_placement_theirs_clears_robot_from_designated_position(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
@@ -662,7 +675,11 @@ class TestRefereeKeepOutRetreat:
         game = Game(
             past=GameHistory(10),
             current=frame,
-            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
         )
         cmd_map = _make_cmd_map(game)
         node = referee_actions.BallPlacementTheirsStep(name="BallPlacementTheirs")
@@ -673,7 +690,7 @@ class TestRefereeKeepOutRetreat:
         assert status == py_trees.common.Status.RUNNING
         assert len(captured) == 1
         assert captured[0][0] == 0
-        assert captured[0][1] == Vector2D(1.55, 1.0)
+        assert captured[0][1] == Vector2D(1.8, 1.0)
 
     def test_direct_free_theirs_clears_encroaching_robot(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
@@ -701,7 +718,7 @@ class TestRefereeKeepOutRetreat:
         assert status == py_trees.common.Status.RUNNING
         assert len(captured) == 1
         assert captured[0][0] == 0
-        assert captured[0][1] == Vector2D(0.55, 0.0)
+        assert captured[0][1] == Vector2D(0.8, 0.0)
 
 
 class TestPenaltyPositioning:
@@ -802,7 +819,7 @@ class TestVariableFieldScaling:
         assert status == py_trees.common.Status.RUNNING
         assert first_support_target.x == pytest.approx(6.0 * (0.8 / 4.5))
         assert first_support_target.y == pytest.approx(4.0 * (0.5 / 3.0))
-        assert first_support_target.distance_to(Vector2D(0.0, 0.0)) >= Field.CENTER_CIRCLE_RADIUS
+        assert first_support_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
 
     def test_prepare_kickoff_ours_uses_own_half_when_defending_left(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
@@ -837,7 +854,7 @@ class TestVariableFieldScaling:
 
         assert status == py_trees.common.Status.RUNNING
         assert first_support_target.x == pytest.approx(-6.0 * (0.8 / 4.5))
-        assert first_support_target.distance_to(Vector2D(0.0, 0.0)) >= Field.CENTER_CIRCLE_RADIUS
+        assert first_support_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
 
     def test_prepare_penalty_ours_scales_penalty_mark_with_field_bounds(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
@@ -1139,7 +1156,7 @@ class TestPrepareKickoffTheirsStep:
 
         for _, target in captured:
             dist = target.distance_to(Vector2D(0.0, 0.0))
-            assert dist >= Field.CENTER_CIRCLE_RADIUS, f"Target {target} inside centre circle"
+            assert dist >= 0.5, f"Target {target} inside centre circle"
 
     def test_scales_with_custom_field_bounds(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
@@ -1171,7 +1188,7 @@ class TestPrepareKickoffTheirsStep:
         # Positions must be on own half and outside centre circle
         for _, target in captured:
             assert target.x > 0.0
-            assert target.distance_to(Vector2D(0.0, 0.0)) >= Field.CENTER_CIRCLE_RADIUS
+            assert target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -1222,7 +1239,11 @@ class TestDirectFreeOursStep:
         game = Game(
             past=GameHistory(10),
             current=frame,
-            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
         )
         cmd_map = _make_cmd_map(game)
         node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
@@ -1259,7 +1280,11 @@ class TestDirectFreeOursStep:
         game = Game(
             past=GameHistory(10),
             current=frame,
-            field=Field(my_team_is_right=True, field_bounds=Field.FULL_FIELD_BOUNDS),
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
         )
         cmd_map = _make_cmd_map(game)
         node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
@@ -1346,7 +1371,7 @@ class TestDirectFreeTheirsStep:
 
         monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
 
-        robots = {0: _robot(0, 2.0, 0.0)}  # well outside 0.55 m from ball at (0,0)
+        robots = {0: _robot(0, 2.0, 0.0)}  # well outside 0.8 m from ball at (0,0)
         referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
         game = _make_game(friendly_robots=robots, referee=referee)
         cmd_map = _make_cmd_map(game)
@@ -1400,7 +1425,7 @@ class TestDirectFreeTheirsStep:
 
         monkeypatch.setattr(referee_actions, "move", fake_move)
 
-        # Ball at origin; robot dead on the x-axis at 0.3 m (inside 0.55)
+        # Ball at origin; robot dead on the x-axis at 0.3 m (inside 0.8)
         robots = {0: _robot(0, 0.3, 0.0)}
         referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
         game = _make_game(friendly_robots=robots, referee=referee)
@@ -1411,7 +1436,7 @@ class TestDirectFreeTheirsStep:
         node.update()
 
         assert len(captured) == 1
-        assert captured[0][1] == pytest.approx(Vector2D(0.55, 0.0))
+        assert captured[0][1] == pytest.approx(Vector2D(0.8, 0.0))
 
     def test_all_robots_get_commands(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions

@@ -41,7 +41,7 @@ import py_trees
 from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.custom_referee import CustomReferee
 from utama_core.entities.game import Game
-from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.entities.game.field import FieldBounds
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
@@ -83,7 +83,7 @@ class _IdleStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
         return True
 
-    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
+    def get_min_bounding_req(self) -> Optional[FieldBounds]:
         return None
 
 
@@ -364,9 +364,7 @@ class _KickoffPositioningManager(AbstractTestManager):
 
         kicker_ok = kicker is not None and kicker.p.x <= 0.2
         supports_on_half = all(r.p.x <= self.POSITION_TOLERANCE for r in support_robots)
-        supports_outside_circle = all(
-            math.hypot(r.p.x, r.p.y) >= Field.CENTER_CIRCLE_RADIUS - self.POSITION_TOLERANCE for r in support_robots
-        )
+        supports_outside_circle = all(math.hypot(r.p.x, r.p.y) >= 0.5 - self.POSITION_TOLERANCE for r in support_robots)
 
         if kicker_ok and supports_on_half and supports_outside_circle:
             self.success_frame_count += 1

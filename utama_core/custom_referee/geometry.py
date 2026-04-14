@@ -2,7 +2,11 @@
 
 from dataclasses import dataclass
 
-from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.config.field_params import (
+    STANDARD_FIELD_DIMS,
+    FieldBounds,
+    FieldDimensions,
+)
 
 
 @dataclass(frozen=True)
@@ -24,25 +28,32 @@ class RefereeGeometry:
     def from_standard_div_b(cls) -> "RefereeGeometry":
         """Return geometry matching the standard SSL Division B field."""
         return cls(
-            half_length=Field.FULL_FIELD_HALF_LENGTH,  # 4.5
-            half_width=Field.FULL_FIELD_HALF_WIDTH,  # 3.0
-            half_goal_width=Field.HALF_GOAL_WIDTH,  # 0.5
-            half_defense_length=Field.HALF_DEFENSE_AREA_LENGTH,  # 0.5
-            half_defense_width=Field.HALF_DEFENSE_AREA_WIDTH,  # 1.0
+            half_length=STANDARD_FIELD_DIMS.full_field_half_length,  # 4.5
+            half_width=STANDARD_FIELD_DIMS.full_field_half_width,  # 3.0
+            half_goal_width=STANDARD_FIELD_DIMS.half_goal_width,  # 0.5
+            half_defense_length=STANDARD_FIELD_DIMS.half_defense_area_depth,  # 0.5
+            half_defense_width=STANDARD_FIELD_DIMS.half_defense_area_width,  # 1.0
             center_circle_radius=0.5,
         )
 
     @classmethod
-    def from_field_bounds(cls, field_bounds: FieldBounds) -> "RefereeGeometry":
-        """Derive half_length/width from a FieldBounds; use Field constants for the rest."""
-        half_length = (field_bounds.bottom_right[0] - field_bounds.top_left[0]) / 2.0
-        half_width = (field_bounds.top_left[1] - field_bounds.bottom_right[1]) / 2.0
+    def from_field_dims(cls, field_dims: FieldDimensions, field_bounds: FieldBounds | None = None) -> "RefereeGeometry":
+        """Build geometry from a FieldDimensions instance.
+
+        If field_bounds is provided (e.g. a sub-field play area), half_length and
+        half_width are derived from it; otherwise the full field extents are used.
+        All goal/defense dimensions are taken from field_dims so that non-standard
+        field sizes are fully supported.
+        """
+        bounds = field_bounds or field_dims.full_field_bounds
+        half_length = (bounds.bottom_right[0] - bounds.top_left[0]) / 2.0
+        half_width = (bounds.top_left[1] - bounds.bottom_right[1]) / 2.0
         return cls(
             half_length=half_length,
             half_width=half_width,
-            half_goal_width=Field.HALF_GOAL_WIDTH,
-            half_defense_length=Field.HALF_DEFENSE_AREA_LENGTH,
-            half_defense_width=Field.HALF_DEFENSE_AREA_WIDTH,
+            half_goal_width=field_dims.half_goal_width,
+            half_defense_length=field_dims.half_defense_area_depth,
+            half_defense_width=field_dims.half_defense_area_width,
             center_circle_radius=0.5,
         )
 
