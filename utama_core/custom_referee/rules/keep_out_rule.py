@@ -15,14 +15,13 @@ from utama_core.entities.referee.referee_command import RefereeCommand
 # ball and the state machine already handles this via StopStep.  Firing a
 # keep-out violation during STOP would overwrite next_command (e.g. replacing
 # PREPARE_KICKOFF_BLUE with DIRECT_FREE_YELLOW), which is wrong.
-# PREPARE_KICKOFF_* and PREPARE_PENALTY_* are excluded for the same reason:
-# robots are actively moving to their formation positions during these states.
-# The state machine gates progression via _kicker_in_centre_circle /
-# _penalty_kicker_ready, so keep-out violations here only cause unnecessary
-# sequence resets.
 _STOPPAGE_COMMANDS = {
     RefereeCommand.DIRECT_FREE_YELLOW,
     RefereeCommand.DIRECT_FREE_BLUE,
+    RefereeCommand.PREPARE_KICKOFF_YELLOW,
+    RefereeCommand.PREPARE_KICKOFF_BLUE,
+    RefereeCommand.PREPARE_PENALTY_YELLOW,
+    RefereeCommand.PREPARE_PENALTY_BLUE,
 }
 
 
@@ -102,6 +101,10 @@ class KeepOutRule(BaseRule):
 def _kicking_team_is_yellow(command: RefereeCommand) -> bool:
     """Return True if the kicking team is yellow, False if blue.
 
-    Only called when command is in _STOPPAGE_COMMANDS (DIRECT_FREE_* only).
+    Only called when command is in _STOPPAGE_COMMANDS, so STOP is never passed.
     """
-    return command == RefereeCommand.DIRECT_FREE_YELLOW
+    return command in (
+        RefereeCommand.DIRECT_FREE_YELLOW,
+        RefereeCommand.PREPARE_KICKOFF_YELLOW,
+        RefereeCommand.PREPARE_PENALTY_YELLOW,
+    )
