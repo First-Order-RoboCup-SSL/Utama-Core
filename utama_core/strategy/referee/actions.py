@@ -171,12 +171,19 @@ def _clear_to_legal_positions(
         if robot_id in exempt_robot_ids:
             continue
 
-        # Start from the intended formation target if provided, otherwise
-        # fall back to the robot's current position.
-        if intended_targets is not None and robot_id in intended_targets:
+        robot_pos = Vector2D(robot.p.x, robot.p.y)
+
+        # If the robot is currently inside any keep-out zone, clear it from its
+        # current position immediately — don't head toward a distant formation
+        # target that requires traversing the exclusion zone first.
+        currently_encroaching = (ball_center is not None and (ball_center - robot_pos).mag() < ball_keep_dist) or (
+            designated_center is not None and (designated_center - robot_pos).mag() < designated_keep_dist
+        )
+
+        if not currently_encroaching and intended_targets is not None and robot_id in intended_targets:
             target = intended_targets[robot_id]
         else:
-            target = Vector2D(robot.p.x, robot.p.y)
+            target = robot_pos
 
         if ball_center is not None:
             target = _project_outside_circle(target, ball_center, ball_keep_dist, ball_fallback)
