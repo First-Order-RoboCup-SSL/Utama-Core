@@ -17,7 +17,6 @@ import py_trees
 from utama_core.config.referee_constants import (
     BALL_KEEP_OUT_DISTANCE,
     BALL_PLACEMENT_DONE_DISTANCE,
-    CLEARANCE_FALLBACK_DIRECTION,
     KICKOFF_DEFENCE_POSITION_RATIOS_OWN_HALF,
     KICKOFF_SUPPORT_POSITION_RATIOS_OWN_HALF,
     OPPONENT_DEFENSE_AREA_KEEP_DISTANCE,
@@ -87,7 +86,7 @@ def _project_outside_circle(
     point: Vector2D,
     center: Vector2D,
     keep_dist: float,
-    fallback_direction: tuple[float, float] = CLEARANCE_FALLBACK_DIRECTION,
+    fallback_direction: tuple[float, float],
 ) -> Vector2D:
     """Project a point to the circle boundary if it lies inside the keep-out radius."""
     offset = point - center
@@ -140,8 +139,14 @@ def _clear_to_legal_positions(
     designated_keep_dist: float | None = None,
     clear_opp_defense_area: bool = False,
     exempt_robot_ids: set[int] | None = None,
+    intended_targets: dict[int, Vector2D] | None = None,
 ) -> py_trees.common.Status:
-    """Move encroaching robots to the nearest legal location and stop the rest."""
+    """Move encroaching robots to the nearest legal location and stop the rest.
+
+    If intended_targets is provided, each robot's clearance starts from its
+    intended formation target rather than its current position, so the clearing
+    pass refines rather than discards the formation intent.
+    """
     game = blackboard.game
     motion_controller = blackboard.motion_controller
     exempt_robot_ids = exempt_robot_ids or set()
@@ -155,25 +160,34 @@ def _clear_to_legal_positions(
     if designated_keep_dist is not None and ref is not None and ref.designated_position is not None:
         designated_center = Vector2D(ref.designated_position[0], ref.designated_position[1])
 
-    # When a robot is exactly coincident with the obstruction, push it toward own half.
+    # When a robot is exactly coincident with an obstruction center (dist == 0),
+    # push it toward own half — robots should be on their side in all restart states.
     own_half_sign = 1.0 if game.my_team_is_right else -1.0
     own_half_fallback = (own_half_sign, 0.0)
+    ball_fallback = own_half_fallback
+    designated_fallback = own_half_fallback
 
     for robot_id, robot in game.friendly_robots.items():
         if robot_id in exempt_robot_ids:
             continue
 
-        target = Vector2D(robot.p.x, robot.p.y)
+        # Start from the intended formation target if provided, otherwise
+        # fall back to the robot's current position.
+        if intended_targets is not None and robot_id in intended_targets:
+            target = intended_targets[robot_id]
+        else:
+            target = Vector2D(robot.p.x, robot.p.y)
+
         if ball_center is not None:
-            target = _project_outside_circle(target, ball_center, ball_keep_dist, own_half_fallback)
+            target = _project_outside_circle(target, ball_center, ball_keep_dist, ball_fallback)
         if designated_center is not None:
-            target = _project_outside_circle(target, designated_center, designated_keep_dist, own_half_fallback)
+            target = _project_outside_circle(target, designated_center, designated_keep_dist, designated_fallback)
         if clear_opp_defense_area:
             target = _project_outside_opp_defense_area(game, target, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
 
         target = _clamp_to_field(target, game)
 
-        if target == robot.p:
+        if target == Vector2D(robot.p.x, robot.p.y):
             blackboard.cmd_map[robot_id] = empty_command(False)
             continue
 
@@ -338,17 +352,15 @@ class PrepareKickoffTheirsStep(AbstractBehaviour):
 
     def update(self) -> py_trees.common.Status:
         game = self.blackboard.game
-        motion_controller = self.blackboard.motion_controller
 
         positions = _formation_positions(game, KICKOFF_DEFENCE_POSITION_RATIOS_OWN_HALF)
-
-        for idx, robot_id in enumerate(sorted(game.friendly_robots.keys())):
-            pos = positions[idx % len(positions)]
-            self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, pos, 0.0)
+        robot_ids = sorted(game.friendly_robots.keys())
+        intended = {robot_id: positions[idx % len(positions)] for idx, robot_id in enumerate(robot_ids)}
 
         return _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            intended_targets=intended,
         )
 
 
