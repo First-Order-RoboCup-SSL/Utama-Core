@@ -64,12 +64,17 @@ def _scaled_position(game, x_ratio: float, y_ratio: float) -> Vector2D:
 
 
 def _ensure_outside_center_circle(target: Vector2D) -> Vector2D:
-    """Project kickoff support points to the centre-circle boundary when needed."""
+    """Project kickoff support points outside the ball keep-out zone if needed.
+
+    Uses BALL_KEEP_OUT_DISTANCE (not just the centre-circle radius) so that
+    formation positions are never closer than our enforced clearance distance,
+    avoiding any need for _clear_to_legal_positions to further adjust them and
+    preventing robots from being placed on a path that crosses the keep-out zone.
+    """
     dist = math.hypot(target.x, target.y)
-    keep_radius = 0.5  # standard SSL centre-circle radius
-    if dist == 0.0 or dist >= keep_radius:
+    if dist == 0.0 or dist >= BALL_KEEP_OUT_DISTANCE:
         return target
-    scale = keep_radius / dist
+    scale = BALL_KEEP_OUT_DISTANCE / dist
     return Vector2D(target.x * scale, target.y * scale)
 
 
