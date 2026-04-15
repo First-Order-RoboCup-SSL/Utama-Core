@@ -58,8 +58,21 @@ class RealRobotController(AbstractRobotController):
         self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
 
     def get_robots_responses(self) -> Optional[List[RobotResponse]]:
-        ### TODO: Not implemented yet
-        return None
+        responses = []
+        while self._serial_port.in_waiting:
+            header = self._serial_port.read()[0]
+            if header != 0xAA:
+                continue
+
+            robot_id = self._serial_port.read()[0]
+            length = self._serial_port.read()[0]
+
+            data = self._serial_port.read(size=length)
+            responses.append(RobotResponse(robot_id, has_ball=data[0] & 0x01 != 0))
+            footer = self._serial_port.read()[0]
+            assert footer == 0x55
+
+        return responses
 
     def send_robot_commands(self) -> None:
         """Sends the robot commands to the appropriate team (yellow or blue)."""
@@ -71,10 +84,6 @@ class RealRobotController(AbstractRobotController):
                 f"Only {len(self._assigned_mapping)} out of {self._n_friendly} robots have been assigned commands. Sending incomplete command packet."
             )
         self._serial_port.write(self._out_packet)
-        self._serial_port.read_all()
-        # data_in = self._serial.read_all()
-        # print(data_in)
-        # TODO: add receiving feedback from the robots
 
         ### update kick and chip trackers. We persist the kick/chip command for KICKER_PERSIST_TIMESTEPS
         ### this feature is to combat packet loss and to ensure the robot does not kick within its cooldown period
