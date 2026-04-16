@@ -11,6 +11,7 @@ from utama_core.entities.referee.stage import Stage
 class RefereeRefiner(BaseRefiner):
     def __init__(self):
         self._referee_records = []
+        self._latest_referee_data: Optional[RefereeData] = None
         self._latest_stage_time_left: float = 0.0
 
     def refine(self, game_frame, data: Optional[RefereeData]):
@@ -26,7 +27,9 @@ class RefereeRefiner(BaseRefiner):
         if data is None:
             return game_frame
 
-        # Always track the latest countdown, even when deduplication skips the record
+        # Always track the latest data so live properties (status_message, etc.)
+        # stay current even when deduplication skips appending a new record.
+        self._latest_referee_data = data
         self._latest_stage_time_left = data.stage_time_left
 
         # Add to history
@@ -40,27 +43,27 @@ class RefereeRefiner(BaseRefiner):
             self._referee_records.append(referee_data)
 
     def source_identifier(self) -> Optional[str]:
-        return self._referee_records[-1].source_identifier if self._referee_records else None
+        return self._latest_referee_data.source_identifier if self._latest_referee_data else None
 
     @property
     def last_time_sent(self) -> float:
-        return self._referee_records[-1].time_sent if self._referee_records else 0.0
+        return self._latest_referee_data.time_sent if self._latest_referee_data else 0.0
 
     @property
     def last_time_received(self) -> float:
-        return self._referee_records[-1].time_received if self._referee_records else 0.0
+        return self._latest_referee_data.time_received if self._latest_referee_data else 0.0
 
     @property
     def last_command(self) -> RefereeCommand:
-        return self._referee_records[-1].referee_command if self._referee_records else RefereeCommand.HALT
+        return self._latest_referee_data.referee_command if self._latest_referee_data else RefereeCommand.HALT
 
     @property
     def last_command_timestamp(self) -> float:
-        return self._referee_records[-1].referee_command_timestamp if self._referee_records else 0.0
+        return self._latest_referee_data.referee_command_timestamp if self._latest_referee_data else 0.0
 
     @property
     def stage(self) -> Stage:
-        return self._referee_records[-1].stage if self._referee_records else Stage.NORMAL_FIRST_HALF_PRE
+        return self._latest_referee_data.stage if self._latest_referee_data else Stage.NORMAL_FIRST_HALF_PRE
 
     @property
     def stage_time_left(self) -> float:
@@ -69,8 +72,8 @@ class RefereeRefiner(BaseRefiner):
     @property
     def blue_team(self) -> TeamInfo:
         return (
-            self._referee_records[-1].blue_team
-            if self._referee_records
+            self._latest_referee_data.blue_team
+            if self._latest_referee_data
             else TeamInfo(
                 name="",
                 score=0,
@@ -86,8 +89,8 @@ class RefereeRefiner(BaseRefiner):
     @property
     def yellow_team(self) -> TeamInfo:
         return (
-            self._referee_records[-1].yellow_team
-            if self._referee_records
+            self._latest_referee_data.yellow_team
+            if self._latest_referee_data
             else TeamInfo(
                 name="",
                 score=0,
@@ -102,27 +105,27 @@ class RefereeRefiner(BaseRefiner):
 
     @property
     def designated_position(self) -> Optional[tuple[float]]:
-        return self._referee_records[-1].designated_position if self._referee_records else None
+        return self._latest_referee_data.designated_position if self._latest_referee_data else None
 
     @property
     def blue_team_on_positive_half(self) -> Optional[bool]:
-        return self._referee_records[-1].blue_team_on_positive_half if self._referee_records else None
+        return self._latest_referee_data.blue_team_on_positive_half if self._latest_referee_data else None
 
     @property
     def next_command(self) -> Optional[RefereeCommand]:
-        return self._referee_records[-1].next_command if self._referee_records else None
+        return self._latest_referee_data.next_command if self._latest_referee_data else None
 
     @property
     def current_action_time_remaining(self) -> Optional[int]:
-        return self._referee_records[-1].current_action_time_remaining if self._referee_records else None
+        return self._latest_referee_data.current_action_time_remaining if self._latest_referee_data else None
 
     @property
     def last_status_message(self) -> Optional[str]:
-        return self._referee_records[-1].status_message if self._referee_records else None
+        return self._latest_referee_data.status_message if self._latest_referee_data else None
 
     @property
     def last_next_command(self) -> Optional[RefereeCommand]:
-        return self._referee_records[-1].next_command if self._referee_records else None
+        return self._latest_referee_data.next_command if self._latest_referee_data else None
 
     @property
     def is_halt(self) -> bool:
