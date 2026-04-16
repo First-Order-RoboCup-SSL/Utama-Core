@@ -15,6 +15,7 @@ from utama_core.config.settings import (
 )
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
+from utama_core.entities.data.referee import RefereeData
 from utama_core.global_utils.math_utils import (
     deg_to_rad,
     normalise_heading_deg,
@@ -243,6 +244,9 @@ class SSLStandardEnv(SSLBaseEnv):
         # Return the complete shared observation
         # note that ball_obs stored in list to standardise with SSLVision
         # As there is sometimes multiple possible positions for the ball
+
+        # Get referee data
+        # current_time = self.time_step * self.steps
 
         # Camera id as 0, only one camera for RSim
         result = (

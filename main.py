@@ -28,7 +28,7 @@ def main():
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         field_bounds=custom_bounds,
         full_field_dims=GREAT_EXHIBITION_FIELD_DIMS,
-        print_real_fps=True,
+        show_live_status=True,
         profiler_name=None,
     )
     runner.my.strategy.render()

@@ -131,5 +131,13 @@ class Field:
         return self._field_dims.full_field
 
     @property
+    def half_defense_area_depth(self) -> float:
+        return self._field_dims.half_defense_area_depth
+
+    @property
+    def half_defense_area_width(self) -> float:
+        return self._field_dims.half_defense_area_width
+
+    @property
     def full_field_bounds(self) -> FieldBounds:
         return self._field_dims.full_field_bounds

@@ -12,7 +12,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--headless",
         action="store_true",
-        default=False,
+        default=True,
         help="Don't display any graphics (runs faster)",
     )
     parser.addoption(

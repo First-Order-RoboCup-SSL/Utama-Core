@@ -53,3 +53,7 @@ class Game:
     @property
     def proximity_lookup(self):
         return self.current.proximity_lookup
+
+    @property
+    def referee(self):
+        return self.current.referee
