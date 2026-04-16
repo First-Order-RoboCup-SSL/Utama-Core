@@ -57,8 +57,8 @@ class RefereeData:
     def __eq__(self, other):
         if not isinstance(other, RefereeData):
             return NotImplemented
-        # game_events, match_type, status_message, source_identifier, and
-        # timestamps are intentionally excluded from equality so they do not
+        # game_events, match_type, status_message, source_identifier, time_sent,
+        # and time_received are intentionally excluded from equality so they do not
         # trigger spurious re-records in RefereeRefiner.
         # TeamInfo has no __eq__ so compare the mutable game-state fields only.
         return (

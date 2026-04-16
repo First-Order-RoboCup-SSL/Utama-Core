@@ -21,13 +21,10 @@ class GameFrame:
     ball: Optional[Ball]
     referee: Optional[RefereeData] = None
 
-    def is_ball_in_goal(self, right_goal: bool) -> bool:
+    def is_ball_in_goal(self, right_goal: bool, field: Field) -> bool:
+        if self.ball is None:
+            return False
         ball_pos = self.ball.p
-        return (
-            ball_pos.x < -self.field.half_length
-            and (ball_pos.y < self.field.half_goal_width and ball_pos.y > -self.field.half_goal_width)
-            and not right_goal
-            or ball_pos.x > self.field.half_length
-            and (ball_pos.y < self.field.half_goal_width and ball_pos.y > -self.field.half_goal_width)
-            and right_goal
+        return (ball_pos.x < -field.half_length and abs(ball_pos.y) < field.half_goal_width and not right_goal) or (
+            ball_pos.x > field.half_length and abs(ball_pos.y) < field.half_goal_width and right_goal
         )

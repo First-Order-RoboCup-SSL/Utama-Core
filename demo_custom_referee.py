@@ -32,6 +32,7 @@ from typing import Optional
 
 import pygame
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.custom_referee import CustomReferee, RefereeGeometry
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game.ball import Ball
@@ -328,8 +329,8 @@ def _build_overlays(
     ovs: list[OverlayObject] = []
 
     # Defense area outlines (purple, always visible)
-    rdx = geo.half_length - 2 * geo.half_defense_length  # 3.5
-    ldx = -geo.half_length + 2 * geo.half_defense_length  # -3.5
+    rdx = geo.half_length - 2 * geo.half_defense_depth  # 3.5
+    ldx = -geo.half_length + 2 * geo.half_defense_depth  # -3.5
 
     for pts in [
         # Right defense area (yellow's goal)
@@ -559,7 +560,7 @@ def main() -> None:
         "tiny": pygame.font.SysFont("monospace", 12),
     }
 
-    geo = RefereeGeometry.from_standard_div_b()
+    geo = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
     referee = _make_referee()
 
     scene_idx = 0

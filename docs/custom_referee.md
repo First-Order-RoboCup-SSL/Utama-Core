@@ -180,15 +180,14 @@ class RefereeGeometry:
     half_length: float           # metres from centre to goal line
     half_width: float            # metres from centre to sideline
     half_goal_width: float       # half the goal opening width
-    half_defense_length: float   # depth of defence area
+    half_defense_depth: float    # depth of defence area
     half_defense_width: float    # half-width of defence area
     center_circle_radius: float  # keep-out radius for kickoffs
 ```
 
-Two convenience constructors:
+Convenience constructor:
 
-- `RefereeGeometry.from_standard_div_b()` — mirrors `Field` constants exactly (9 m × 6 m field).
-- `RefereeGeometry.from_field_bounds(field_bounds)` — derives `half_length`/`half_width` from a `FieldBounds`; uses `Field` constants for goal and defence dimensions.
+- `RefereeGeometry.from_field_dims(field_dims, field_bounds=None)` — builds geometry from a `FieldDimensions` instance. If `field_bounds` is provided, `half_length`/`half_width` are derived from it (useful for sub-field play areas); otherwise the full field extents from `field_dims` are used.
 
 ---
 
