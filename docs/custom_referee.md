@@ -337,7 +337,6 @@ utama_core/custom_referee/
     ├── __init__.py
     ├── profile_loader.py        # load_profile(name|path) → RefereeProfile
     ├── simulation.yaml
-    ├── exhibition.yaml
     └── human.yaml
 
 utama_core/tests/custom_referee/
