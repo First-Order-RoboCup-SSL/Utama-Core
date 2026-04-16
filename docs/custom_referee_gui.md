@@ -174,7 +174,7 @@ canvas auto-scales to match.
 | `half_length` | Distance from centre to goal line | GoalRule, OutOfBoundsRule, DefenseAreaRule |
 | `half_width` | Distance from centre to touch line | OutOfBoundsRule |
 | `half_goal_width` | Half-width of each goal mouth | GoalRule |
-| `half_defense_length` | Depth of defence area | DefenseAreaRule |
+| `half_defense_depth` | Depth of defence area | DefenseAreaRule |
 | `half_defense_width` | Half-width of defence area | DefenseAreaRule |
 | `center_circle_radius` | Centre circle drawn on canvas; reserved for future keep-out rule | — |
 
@@ -284,7 +284,7 @@ geometry:
   half_length: 4.5          # metres from centre to goal line  (full length = 9.0 m)
   half_width: 3.0           # metres from centre to touch line (full width  = 6.0 m)
   half_goal_width: 0.5      # metres from centre of goal mouth to post
-  half_defense_length: 0.5  # depth of defence area from goal line
+  half_defense_depth: 0.5   # depth of defence area from goal line
   half_defense_width: 1.0   # half-width of defence area
   center_circle_radius: 0.5 # used for canvas only (future: keep-out at kickoff)
 
@@ -330,7 +330,7 @@ geometry:
   half_length: 2.0
   half_width: 1.335
   half_goal_width: 0.35
-  half_defense_length: 0.4
+  half_defense_depth: 0.4
   half_defense_width: 0.7
   center_circle_radius: 0.35
 

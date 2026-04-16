@@ -221,7 +221,7 @@ geometry:
   half_length: 4.5
   half_width: 3.0
   half_goal_width: 0.5
-  half_defense_length: 0.5
+  half_defense_depth: 0.5
   half_defense_width: 1.0
   center_circle_radius: 0.5
 rules:

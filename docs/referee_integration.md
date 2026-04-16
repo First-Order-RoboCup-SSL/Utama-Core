@@ -354,7 +354,7 @@ geometry:
   half_length: 4.5          # metres from centre to goal line
   half_width: 3.0           # metres from centre to touch line
   half_goal_width: 0.5      # metres from centre of goal to post
-  half_defense_length: 0.5  # depth of defense area from goal line
+  half_defense_depth: 0.5   # depth of defense area from goal line
   half_defense_width: 1.0   # half-width of defense area
   center_circle_radius: 0.5
 rules:
