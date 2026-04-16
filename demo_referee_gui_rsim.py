@@ -1,7 +1,7 @@
 """demo_referee_gui_rsim.py — CustomReferee + web GUI + StrategyRunner (RSim).
 
 Run:
-    pixi run python utama_core/tests/referee/demo_referee_gui_rsim.py
+    pixi run python demo_referee_gui_rsim.py
     # RSim window opens; open http://localhost:8080 in a browser
 
 What it does:

@@ -454,7 +454,7 @@ class PreparePenaltyTheirsStep(AbstractBehaviour):
 
         # Opponent's penalty mark is in our half, between centre and our goal line.
         opp_penalty_mark_x = _penalty_mark_x(our_goal_x)
-        behind_line_x = opp_penalty_mark_x + sign * PENALTY_BEHIND_MARK_DISTANCE
+        behind_line_x = opp_penalty_mark_x - sign * PENALTY_BEHIND_MARK_DISTANCE
 
         robot_ids = sorted(game.friendly_robots.keys())
         behind_idx = 0

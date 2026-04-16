@@ -41,7 +41,7 @@ def test_resolve_referee_system_defaults_to_none_in_grsim():
     assert StrategyRunner._resolve_referee_system(Mode.GRSIM, None, None) == "none"
 
 
-def test_resolve_referee_system_defaults_to_none_even_when_custom_referee_is_provided():
+def test_resolve_referee_system_rejects_custom_referee_without_explicit_system():
     with pytest.raises(ValueError, match="custom_referee"):
         StrategyRunner._resolve_referee_system(Mode.RSIM, None, object())
 
