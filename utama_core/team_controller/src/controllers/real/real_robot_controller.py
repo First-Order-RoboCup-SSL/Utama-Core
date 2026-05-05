@@ -57,20 +57,51 @@ class RealRobotController(AbstractRobotController):
         # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
         self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
 
-    def get_robots_responses(self) -> Optional[List[RobotResponse]]:
+    def get_robots_responses(self) -> List[RobotResponse]:
+        HEADER = 0xAA
+        FOOTER = 0x55
+        if not hasattr(self, "_buffer"):
+            self._buffer = bytearray()
+
+        # Read whatever is available
+        self._buffer.extend(self._serial_port.read(self._serial_port.in_waiting or 1))
+
         responses = []
-        while self._serial_port.in_waiting:
-            header = self._serial_port.read()[0]
-            if header != 0xAA:
+
+        while True:
+            # Look for header
+            if len(self._buffer) < 1:
+                break
+
+            if self._buffer[0] != HEADER:
+                self._buffer.pop(0)
                 continue
 
-            robot_id = self._serial_port.read()[0]
-            length = self._serial_port.read()[0]
+            # Need at least header + id + length
+            if len(self._buffer) < 3:
+                break
 
-            data = self._serial_port.read(size=length)
-            responses.append(RobotResponse(robot_id, has_ball=data[0] & 0x01 != 0))
-            footer = self._serial_port.read()[0]
-            assert footer == 0x55
+            robot_id = self._buffer[1]
+            length = self._buffer[2]
+
+            packet_len = 1 + 1 + 1 + length + 1  # header + id + len + data + footer
+
+            if len(self._buffer) < packet_len:
+                break  # wait for more data
+
+            # Validate footer
+            if self._buffer[packet_len - 1] != FOOTER:
+                # Corrupted packet → resync
+                self._buffer.pop(0)
+                continue
+
+            # Extract packet
+            data = self._buffer[3 : 3 + length]
+
+            responses.append(RobotResponse(robot_id, has_ball=(data[0] & 0x01) != 0))
+
+            # Remove parsed packet
+            del self._buffer[:packet_len]
 
         return responses
 
