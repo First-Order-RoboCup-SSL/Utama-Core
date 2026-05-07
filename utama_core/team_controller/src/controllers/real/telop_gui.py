@@ -9,6 +9,7 @@ Controls (keyboard or click):
   Esc        — quit
 """
 
+import queue
 import threading
 import time
 import tkinter as tk
@@ -42,7 +43,12 @@ class TeleopGUI:
     def __init__(self, root: tk.Tk, controller: RealRobotController):
         self.root = root
         self.controller = controller
+
+        # Thread safety mechanics
+        self._lock = threading.Lock()
+        self._ui_queue = queue.Queue()
         self.held: set[str] = set()
+
         self.dribble = False
         self.chip = False
         self._running = True
@@ -53,6 +59,7 @@ class TeleopGUI:
 
         self._build_ui()
         self._bind_keys()
+        self._poll_queue()
 
         self._loop_thread = threading.Thread(target=self._control_loop, daemon=True)
         self._loop_thread.start()
@@ -260,35 +267,27 @@ class TeleopGUI:
 
         self.root.bind("<Escape>", lambda e: self._quit())
 
-    def _bind_keys(self):
-        movement = ["w", "a", "s", "d", "q", "e"]
-        for k in movement:
-            self.root.bind(f"<KeyPress-{k}>", lambda e, k=k: self._press(k))
-            self.root.bind(f"<KeyRelease-{k}>", lambda e, k=k: self._release(k))
-            self.root.bind(f"<KeyPress-{k.upper()}>", lambda e, k=k: self._press(k))
-            self.root.bind(f"<KeyRelease-{k.upper()}>", lambda e, k=k: self._release(k))
-
-        self.root.bind("<KeyPress-space>", lambda e: self._press("space"))
-        self.root.bind("<KeyRelease-space>", lambda e: self._release("space"))
-        self.root.bind("<KeyPress-b>", lambda e: self._toggle_dribble())
-        self.root.bind("<KeyPress-c>", lambda e: self._toggle_chip())
-        self.root.bind("<Escape>", lambda e: self._quit())
-
     def _press(self, key: str):
-        self.held.add(key)
+        with self._lock:
+            self.held.add(key)
         self._refresh_key_visuals()
 
     def _release(self, key: str):
-        self.held.discard(key)
+        with self._lock:
+            self.held.discard(key)
         self._refresh_key_visuals()
 
     def _refresh_key_visuals(self):
+        with self._lock:
+            current_held = set(self.held)
+
         for k, btn in self._key_buttons.items():
-            if k in self.held:
+            if k in current_held:
                 btn.configure(bg=ACTIVE, fg="white", highlightbackground=ACTIVE)
             else:
                 btn.configure(bg=SURFACE, fg=TEXT, highlightbackground=BORDER)
-        if "space" in self.held:
+
+        if "space" in current_held:
             self._kick_btn.configure(bg=KICK_C, fg="white", highlightbackground=KICK_C)
         else:
             self._kick_btn.configure(bg=SURFACE, fg=TEXT, highlightbackground=BORDER)
@@ -309,12 +308,29 @@ class TeleopGUI:
 
     # --------------------------------------------------------- Control loop --
 
+    def _poll_queue(self):
+        """Processes UI updates safely on the Tkinter main thread."""
+        try:
+            while True:
+                msg_type, data = self._ui_queue.get_nowait()
+                if msg_type == "readout":
+                    self._update_readout(data)
+                elif msg_type == "feedback":
+                    self._update_feedback(data)
+        except queue.Empty:
+            pass
+
+        if self._running:
+            self.root.after(16, self._poll_queue)
+
     def _control_loop(self):
         dt = 1.0 / LOOP_HZ
         while self._running:
             t0 = time.perf_counter()
 
-            keys = set(self.held)
+            with self._lock:
+                keys = set(self.held)
+
             fwd = MAX_VEL if "w" in keys else (-MAX_VEL if "s" in keys else 0.0)
             left = MAX_VEL if "a" in keys else (-MAX_VEL if "d" in keys else 0.0)
             ang = MAX_ANG_VEL if "q" in keys else (-MAX_ANG_VEL if "e" in keys else 0.0)
@@ -335,9 +351,10 @@ class TeleopGUI:
             self.controller.send_robot_commands()
             print("Sending commands", cmd)
 
-            self.root.after(0, self._update_readout, cmd)
+            # Safely pass updates to the main thread via the queue
+            self._ui_queue.put(("readout", cmd))
             if responses:
-                self.root.after(0, self._update_feedback, responses)
+                self._ui_queue.put(("feedback", responses))
 
             elapsed = time.perf_counter() - t0
             time.sleep(max(0.0, dt - elapsed))
@@ -366,10 +383,16 @@ class TeleopGUI:
 
     def _quit(self):
         self._running = False
+
+        # Ensure the control loop thread fully terminates before destroying Tk root
+        if self._loop_thread.is_alive():
+            self._loop_thread.join(timeout=1.0)
+
         print("\nSending stop commands...")
         for _ in range(10):
             self.controller.add_robot_commands(empty_command(), ROBOT_ID)
             self.controller.send_robot_commands()
+
         self.root.destroy()
 
 
