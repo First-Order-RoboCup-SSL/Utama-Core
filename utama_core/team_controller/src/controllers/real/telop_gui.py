@@ -70,7 +70,14 @@ class TeleopGUI:
 
         self._metrics = {}
         for label, key in [("Forward", "fwd"), ("Left", "left"), ("Angular", "ang")]:
-            col = tk.Frame(status_frame, bg=SURFACE, padx=14, pady=8, highlightbackground=BORDER, highlightthickness=1)
+            col = tk.Frame(
+                status_frame,
+                bg=SURFACE,
+                padx=14,
+                pady=8,
+                highlightbackground=BORDER,
+                highlightthickness=1,
+            )
             col.pack(side="left", expand=True, fill="x", padx=4)
             tk.Label(col, text=label, bg=SURFACE, fg=MUTED, font=("monospace", 10)).pack()
             var = tk.StringVar(value="0.00")
@@ -174,20 +181,37 @@ class TeleopGUI:
             row.pack(fill="x", padx=8, pady=4)
 
             id_lbl = tk.Label(
-                row, text=f"Robot {i}", bg=SURFACE, fg=TEXT, font=("monospace", 11, "bold"), width=8, anchor="w"
+                row,
+                text=f"Robot {i}",
+                bg=SURFACE,
+                fg=TEXT,
+                font=("monospace", 11, "bold"),
+                width=8,
+                anchor="w",
             )
             id_lbl.pack(side="left")
 
             ball_var = tk.StringVar(value="ball: --")
             ball_lbl = tk.Label(
-                row, textvariable=ball_var, bg=SURFACE, fg=MUTED, font=("monospace", 11), width=12, anchor="w"
+                row,
+                textvariable=ball_var,
+                bg=SURFACE,
+                fg=MUTED,
+                font=("monospace", 11),
+                width=12,
+                anchor="w",
             )
             ball_lbl.pack(side="left", padx=(8, 0))
 
             status_var = tk.StringVar(value="no data")
-            tk.Label(row, textvariable=status_var, bg=SURFACE, fg=MUTED, font=("monospace", 10), anchor="e").pack(
-                side="right"
-            )
+            tk.Label(
+                row,
+                textvariable=status_var,
+                bg=SURFACE,
+                fg=MUTED,
+                font=("monospace", 10),
+                anchor="e",
+            ).pack(side="right")
 
             self._fb_ball_vars[i] = ball_var
             self._fb_ball_lbls[i] = ball_lbl
@@ -208,6 +232,33 @@ class TeleopGUI:
             padx=10,
             pady=8,
         ).pack(fill="x")
+
+    def _bind_keys(self):
+        movement = ["w", "a", "s", "d", "q", "e"]
+
+        for key in movement:
+            for k in (key.lower(), key.upper()):
+                self.root.bind(f"<KeyPress-{k}>", lambda e, key=key: self._press(key))
+                self.root.bind(f"<KeyRelease-{k}>", lambda e, key=key: self._release(key))
+
+        special_keys = {
+            "space": (self._press, self._release),
+        }
+
+        for key, (press_fn, release_fn) in special_keys.items():
+            self.root.bind(f"<KeyPress-{key}>", lambda e, k=key, fn=press_fn: fn(k))
+            self.root.bind(f"<KeyRelease-{key}>", lambda e, k=key, fn=release_fn: fn(k))
+
+        toggles = {
+            "b": self._toggle_dribble,
+            "c": self._toggle_chip,
+        }
+
+        for key, fn in toggles.items():
+            for k in (key.lower(), key.upper()):
+                self.root.bind(f"<KeyRelease-{k}>", lambda e, fn=fn: fn())
+
+        self.root.bind("<Escape>", lambda e: self._quit())
 
     def _bind_keys(self):
         movement = ["w", "a", "s", "d", "q", "e"]
@@ -280,8 +331,7 @@ class TeleopGUI:
 
             responses = self.controller.get_robots_responses() or []
 
-            self.controller.add_robot_commands(cmd, 0)
-            self.controller.add_robot_commands(cmd, 1)
+            self.controller.add_robot_commands(cmd, ROBOT_ID)
             self.controller.send_robot_commands()
             print("Sending commands", cmd)
 

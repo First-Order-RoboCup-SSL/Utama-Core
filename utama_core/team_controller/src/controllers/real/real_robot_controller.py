@@ -112,7 +112,7 @@ class RealRobotController(AbstractRobotController):
         # print(binary_representation)
         if len(self._assigned_mapping) != self._n_friendly:
             warnings.warn(
-                f"Only {len(self._assigned_mapping)} out of {self._n_friendly} robots have been assigned commands. Sending incomplete command packet."
+                f"Only {len(self._assigned_mapping)} out of {self._n_friendly} robots have been assigned commands. Sending empty commands for unassigned robots."
             )
         self._serial_port.write(self._out_packet)
 
