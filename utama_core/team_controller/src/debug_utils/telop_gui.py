@@ -163,7 +163,7 @@ class TeleopGUI:
         kick_frame.pack(**pad)
         self._kick_btn = tk.Label(
             kick_frame,
-            text="SPACE  -  kick",
+            text="B  -  kick",
             bg=SURFACE,
             fg=TEXT,
             font=("monospace", 13),
@@ -180,7 +180,7 @@ class TeleopGUI:
 
         self._dribble_btn = tk.Label(
             toggle_frame,
-            text="B  dribble: OFF",
+            text="SPACE  dribble: OFF",
             bg=SURFACE,
             fg=MUTED,
             font=("monospace", 12),
@@ -194,9 +194,9 @@ class TeleopGUI:
 
         self._chip_btn = tk.Label(
             toggle_frame,
-            text="C  chip: OFF",
+            text="C  chip",
             bg=SURFACE,
-            fg=MUTED,
+            fg=TEXT,
             font=("monospace", 12),
             highlightbackground=BORDER,
             highlightthickness=1,
@@ -204,7 +204,6 @@ class TeleopGUI:
             pady=8,
         )
         self._chip_btn.pack(side="left", padx=6)
-        self._chip_btn.bind("<Button-1>", lambda e: self._toggle_chip())
 
         # --- Robot feedback ---
         fb_outer = tk.Frame(self.root, bg=BG)
@@ -275,29 +274,36 @@ class TeleopGUI:
         ).pack(fill="x")
 
     def _bind_keys(self):
+
         movement = ["w", "a", "s", "d", "q", "e"]
 
         for key in movement:
             for k in (key.lower(), key.upper()):
-                self.root.bind(f"<KeyPress-{k}>", lambda e, key=key: self._press(key))
-                self.root.bind(f"<KeyRelease-{k}>", lambda e, key=key: self._release(key))
 
-        special_keys = {
-            "space": (self._press, self._release),
-        }
+                self.root.bind(
+                    f"<KeyPress-{k}>",
+                    lambda e, key=key: self._press(key),
+                )
 
-        for key, (press_fn, release_fn) in special_keys.items():
-            self.root.bind(f"<KeyPress-{key}>", lambda e, k=key, fn=press_fn: fn(k))
-            self.root.bind(f"<KeyRelease-{key}>", lambda e, k=key, fn=release_fn: fn(k))
+                self.root.bind(
+                    f"<KeyRelease-{k}>",
+                    lambda e, key=key: self._release(key),
+                )
 
-        toggles = {
-            "b": self._toggle_dribble,
-            "c": self._toggle_chip,
-        }
+        # Dribbler toggle (Space)
+        self.root.bind("<KeyRelease-space>", lambda e: self._toggle_dribble())
 
-        for key, fn in toggles.items():
-            for k in (key.lower(), key.upper()):
-                self.root.bind(f"<KeyRelease-{k}>", lambda e, fn=fn: fn())
+        # Chip (Press C)
+        self.root.bind("<KeyPress-c>", lambda e: self._press("c"))
+        self.root.bind("<KeyRelease-c>", lambda e: self._release("c"))
+        self.root.bind("<KeyPress-C>", lambda e: self._press("c"))
+        self.root.bind("<KeyRelease-C>", lambda e: self._release("c"))
+
+        # Kick (Press B)
+        self.root.bind("<KeyPress-b>", lambda e: self._press("b"))
+        self.root.bind("<KeyRelease-b>", lambda e: self._release("b"))
+        self.root.bind("<KeyPress-B>", lambda e: self._press("b"))
+        self.root.bind("<KeyRelease-B>", lambda e: self._release("b"))
 
         self.root.bind("<Escape>", lambda e: self._quit())
 
@@ -321,17 +327,24 @@ class TeleopGUI:
             else:
                 btn.configure(bg=SURFACE, fg=TEXT, highlightbackground=BORDER)
 
-        if "space" in current_held:
+        # Kick visual (now bound to B)
+        if "b" in current_held:
             self._kick_btn.configure(bg=KICK_C, fg="white", highlightbackground=KICK_C)
         else:
             self._kick_btn.configure(bg=SURFACE, fg=TEXT, highlightbackground=BORDER)
 
+        # Chip visual (now bound to C)
+        if "c" in current_held:
+            self._chip_btn.configure(bg=KICK_C, fg="white", highlightbackground=KICK_C)
+        else:
+            self._chip_btn.configure(bg=SURFACE, fg=TEXT, highlightbackground=BORDER)
+
     def _toggle_dribble(self):
         self.dribble = not self.dribble
         if self.dribble:
-            self._dribble_btn.configure(text="B  dribble: ON", fg=ON_C, highlightbackground=ON_C)
+            self._dribble_btn.configure(text="SPACE  dribble: ON", fg=ON_C, highlightbackground=ON_C)
         else:
-            self._dribble_btn.configure(text="B  dribble: OFF", fg=MUTED, highlightbackground=BORDER)
+            self._dribble_btn.configure(text="SPACE  dribble: OFF", fg=MUTED, highlightbackground=BORDER)
 
     def _toggle_chip(self):
         self.chip = not self.chip
@@ -368,14 +381,17 @@ class TeleopGUI:
             fwd = MAX_VEL if "w" in keys else (-MAX_VEL if "s" in keys else 0.0)
             left = MAX_VEL if "a" in keys else (-MAX_VEL if "d" in keys else 0.0)
             ang = MAX_ANG_VEL if "q" in keys else (-MAX_ANG_VEL if "e" in keys else 0.0)
-            kick = "space" in keys
+
+            # Updated remapped logic
+            kick = "b" in keys
+            chip = "c" in keys
 
             cmd = RobotCommand(
                 local_forward_vel=fwd,
                 local_left_vel=left,
                 angular_vel=ang,
                 kick=kick,
-                chip=self.chip,
+                chip=chip,
                 dribble=self.dribble,
             )
 
