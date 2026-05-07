@@ -99,15 +99,29 @@ class TeleopGUI:
             [None, "Q", "W", "E", None],
             [None, "A", "S", "D", None],
         ]
-        self._key_buttons: dict[str, tk.Label] = {}
+
+        self._key_buttons = {}
+
         for row_i, row in enumerate(layout):
-            for col_i, k in enumerate(row):
-                if k is None:
-                    tk.Frame(keypad, width=58, height=58, bg=BG).grid(row=row_i, column=col_i, padx=3, pady=3)
+            for col_i, key in enumerate(row):
+
+                if key is None:
+                    tk.Frame(
+                        keypad,
+                        width=58,
+                        height=58,
+                        bg=BG,
+                    ).grid(
+                        row=row_i + 1,
+                        column=col_i,
+                        padx=3,
+                        pady=3,
+                    )
                     continue
+
                 btn = tk.Label(
                     keypad,
-                    text=k,
+                    text=key,
                     width=3,
                     bg=SURFACE,
                     fg=TEXT,
@@ -117,19 +131,39 @@ class TeleopGUI:
                     padx=10,
                     pady=10,
                 )
-                btn.grid(row=row_i, column=col_i, padx=3, pady=3)
-                self._key_buttons[k.lower()] = btn
 
-        # Arrow labels for Q/E
-        tk.Label(keypad, text="↺", bg=BG, fg=MUTED, font=("monospace", 10)).grid(row=2, column=1)
-        tk.Label(keypad, text="↻", bg=BG, fg=MUTED, font=("monospace", 10)).grid(row=2, column=3)
+                btn.grid(
+                    row=row_i + 1,
+                    column=col_i,
+                    padx=3,
+                    pady=3,
+                )
+
+                self._key_buttons[key.lower()] = btn
+
+        # Labels ABOVE Q and E
+        tk.Label(
+            keypad,
+            text="CCW",
+            bg=BG,
+            fg=MUTED,
+            font=("monospace", 10),
+        ).grid(row=0, column=1)
+
+        tk.Label(
+            keypad,
+            text="CW",
+            bg=BG,
+            fg=MUTED,
+            font=("monospace", 10),
+        ).grid(row=0, column=3)
 
         # --- Kick button ---
         kick_frame = tk.Frame(self.root, bg=BG)
         kick_frame.pack(**pad)
         self._kick_btn = tk.Label(
             kick_frame,
-            text="SPACE  —  kick",
+            text="SPACE  -  kick",
             bg=SURFACE,
             fg=TEXT,
             font=("monospace", 13),
