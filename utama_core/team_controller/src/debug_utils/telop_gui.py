@@ -453,8 +453,8 @@ class TeleopGUI:
             with self._lock:
                 keys = set(self.held)
                 # Impulse capture
-                kick = self._kick_impulse
-                chip = self._chip_impulse
+                kick = self._kick_impulse  # don't worry about kick cooldown, handled in controller.
+                chip = self._chip_impulse  # don't worry about kick and chip at same time, handled in controller.
                 self._kick_impulse = False
                 self._chip_impulse = False
 
