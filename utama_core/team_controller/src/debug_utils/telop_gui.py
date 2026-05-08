@@ -1,10 +1,18 @@
+from dataclasses import dataclass
+
+# ============================================================
+# Dummy mode
+# ============================================================
+
+USE_DUMMY_CONTROLLER = False  # dummy controller for checking ui with fake serial data.
+
 """
 Controls (keyboard or click):
   W / S      — forward / reverse
   A / D      — strafe left / right
   Q / E      — rotate CCW / CW
-  Space      — kick
-  B          — toggle dribbler
+  Space      — dribble
+  B          — toggle kick
   C          — toggle chip
   Esc        — quit
 """
@@ -14,18 +22,62 @@ import threading
 import time
 import tkinter as tk
 
-from utama_core.team_controller.src.controllers.real.real_robot_controller import (
-    RealRobotController,
-    RobotCommand,
-    empty_command,
-)
+if not USE_DUMMY_CONTROLLER:
+
+    from utama_core.team_controller.src.controllers.real.real_robot_controller import (
+        RealRobotController,
+        RobotCommand,
+        empty_command,
+    )
+
+else:
+
+    @dataclass
+    class RobotCommand:
+        local_forward_vel: float = 0.0
+        local_left_vel: float = 0.0
+        angular_vel: float = 0.0
+        kick: bool = False
+        chip: bool = False
+        dribble: bool = False
+
+    def empty_command():
+        return RobotCommand()
+
+    class DummyResponse:
+        def __init__(self, robot_id, has_ball=False):
+            self.id = robot_id
+            self.has_ball = has_ball
+
+    class RealRobotController:
+        def __init__(self, is_team_yellow=True, n_friendly=2):
+
+            self.n_friendly = n_friendly
+
+            print("\n[DUMMY CONTROLLER ENABLED]")
+            print("No serial/network/hardware required.\n")
+
+        def get_robots_responses(self):
+
+            # Fake UI feedback
+            return [
+                DummyResponse(0, has_ball=True),
+                DummyResponse(1, has_ball=False),
+            ]
+
+        def add_robot_commands(self, cmd, robot_id):
+            pass
+
+        def send_robot_commands(self):
+            pass
+
 
 # --- Config ---
 ROBOT_ID = 1
 N_FRIENDLY = 2
 IS_YELLOW = True
 LOOP_HZ = 60
-MAX_VEL = -0.1
+MAX_VEL = 0.1
 MAX_ANG_VEL = 1
 
 BG = "#1a1a1a"
@@ -37,6 +89,7 @@ ACTIVE = "#4a90d9"
 KICK_C = "#d94a4a"
 ON_C = "#4ad97a"
 BALL_C = "#d9a84a"
+DUMMY_C = "#d9a84a"  # Orange for dummy warning
 
 
 class TeleopGUI:
@@ -48,9 +101,15 @@ class TeleopGUI:
         self._lock = threading.Lock()
         self._ui_queue = queue.Queue()
         self.held: set[str] = set()
+        self._release_timers: dict[str, str] = {}
 
         self.dribble = False
         self.chip = False
+
+        # Impulse flags
+        self._kick_impulse = False
+        self._chip_impulse = False
+
         self._running = True
 
         root.title("Robot Teleop")
@@ -70,6 +129,18 @@ class TeleopGUI:
 
     def _build_ui(self):
         pad = dict(padx=12, pady=8)
+
+        # --- Dummy Mode Indicator ---
+        if USE_DUMMY_CONTROLLER:
+            dummy_banner = tk.Label(
+                self.root,
+                text="[ DUMMY MODE ACTIVE ]",
+                bg=BG,
+                fg=DUMMY_C,
+                font=("monospace", 10, "bold"),
+                pady=4,
+            )
+            dummy_banner.pack(fill="x")
 
         # --- Status bar ---
         status_frame = tk.Frame(self.root, bg=BG)
@@ -158,49 +229,50 @@ class TeleopGUI:
             font=("monospace", 10),
         ).grid(row=0, column=3)
 
-        # --- Kick button ---
-        kick_frame = tk.Frame(self.root, bg=BG)
-        kick_frame.pack(**pad)
-        self._kick_btn = tk.Label(
-            kick_frame,
-            text="B  -  kick",
+        # --- Space row (Toggle Dribble) ---
+        space_frame = tk.Frame(self.root, bg=BG)
+        space_frame.pack(**pad)
+
+        self._dribble_btn = tk.Label(
+            space_frame,
+            text="SPACE  dribble: OFF",
             bg=SURFACE,
-            fg=TEXT,
+            fg=MUTED,
             font=("monospace", 13),
             highlightbackground=BORDER,
             highlightthickness=1,
             padx=40,
             pady=10,
         )
-        self._kick_btn.pack()
+        self._dribble_btn.pack()
+        self._dribble_btn.bind("<Button-1>", lambda e: self._toggle_dribble())
 
-        # --- Toggle buttons ---
-        toggle_frame = tk.Frame(self.root, bg=BG)
-        toggle_frame.pack(**pad)
+        # --- B and C row (Kick and Chip) ---
+        action_frame = tk.Frame(self.root, bg=BG)
+        action_frame.pack(**pad)
 
-        self._dribble_btn = tk.Label(
-            toggle_frame,
-            text="SPACE  dribble: OFF",
+        self._kick_btn = tk.Label(
+            action_frame,
+            text="B  kick",
             bg=SURFACE,
-            fg=MUTED,
+            fg=TEXT,
             font=("monospace", 12),
             highlightbackground=BORDER,
             highlightthickness=1,
-            padx=16,
+            padx=28,
             pady=8,
         )
-        self._dribble_btn.pack(side="left", padx=6)
-        self._dribble_btn.bind("<Button-1>", lambda e: self._toggle_dribble())
+        self._kick_btn.pack(side="left", padx=6)
 
         self._chip_btn = tk.Label(
-            toggle_frame,
+            action_frame,
             text="C  chip",
             bg=SURFACE,
             fg=TEXT,
             font=("monospace", 12),
             highlightbackground=BORDER,
             highlightthickness=1,
-            padx=16,
+            padx=28,
             pady=8,
         )
         self._chip_btn.pack(side="left", padx=6)
@@ -293,13 +365,13 @@ class TeleopGUI:
         # Dribbler toggle (Space)
         self.root.bind("<KeyRelease-space>", lambda e: self._toggle_dribble())
 
-        # Chip (Press C)
+        # Chip (Impulse C)
         self.root.bind("<KeyPress-c>", lambda e: self._press("c"))
         self.root.bind("<KeyRelease-c>", lambda e: self._release("c"))
         self.root.bind("<KeyPress-C>", lambda e: self._press("c"))
         self.root.bind("<KeyRelease-C>", lambda e: self._release("c"))
 
-        # Kick (Press B)
+        # Kick (Impulse B)
         self.root.bind("<KeyPress-b>", lambda e: self._press("b"))
         self.root.bind("<KeyRelease-b>", lambda e: self._release("b"))
         self.root.bind("<KeyPress-B>", lambda e: self._press("b"))
@@ -309,12 +381,34 @@ class TeleopGUI:
 
     def _press(self, key: str):
         with self._lock:
-            self.held.add(key)
+            # Check for auto-repeat
+            if key in self._release_timers:
+                self.root.after_cancel(self._release_timers.pop(key))
+                return
+
+            # Fresh press
+            if key not in self.held:
+                if key == "b":
+                    self._kick_impulse = True
+                if key == "c":
+                    self._chip_impulse = True
+                self.held.add(key)
+
         self._refresh_key_visuals()
 
     def _release(self, key: str):
+        # Debounce release to filter OS auto-repeat events
+        with self._lock:
+            if key in self._release_timers:
+                self.root.after_cancel(self._release_timers.pop(key))
+
+            timer_id = self.root.after(30, lambda k=key: self._execute_release(k))
+            self._release_timers[key] = timer_id
+
+    def _execute_release(self, key: str):
         with self._lock:
             self.held.discard(key)
+            self._release_timers.pop(key, None)
         self._refresh_key_visuals()
 
     def _refresh_key_visuals(self):
@@ -327,31 +421,12 @@ class TeleopGUI:
             else:
                 btn.configure(bg=SURFACE, fg=TEXT, highlightbackground=BORDER)
 
-        # Kick visual (now bound to B)
-        if "b" in current_held:
-            self._kick_btn.configure(bg=KICK_C, fg="white", highlightbackground=KICK_C)
-        else:
-            self._kick_btn.configure(bg=SURFACE, fg=TEXT, highlightbackground=BORDER)
-
-        # Chip visual (now bound to C)
-        if "c" in current_held:
-            self._chip_btn.configure(bg=KICK_C, fg="white", highlightbackground=KICK_C)
-        else:
-            self._chip_btn.configure(bg=SURFACE, fg=TEXT, highlightbackground=BORDER)
-
     def _toggle_dribble(self):
         self.dribble = not self.dribble
         if self.dribble:
             self._dribble_btn.configure(text="SPACE  dribble: ON", fg=ON_C, highlightbackground=ON_C)
         else:
             self._dribble_btn.configure(text="SPACE  dribble: OFF", fg=MUTED, highlightbackground=BORDER)
-
-    def _toggle_chip(self):
-        self.chip = not self.chip
-        if self.chip:
-            self._chip_btn.configure(text="C  chip: ON", fg=ON_C, highlightbackground=ON_C)
-        else:
-            self._chip_btn.configure(text="C  chip: OFF", fg=MUTED, highlightbackground=BORDER)
 
     # --------------------------------------------------------- Control loop --
 
@@ -377,14 +452,15 @@ class TeleopGUI:
 
             with self._lock:
                 keys = set(self.held)
+                # Impulse capture
+                kick = self._kick_impulse
+                chip = self._chip_impulse
+                self._kick_impulse = False
+                self._chip_impulse = False
 
             fwd = MAX_VEL if "w" in keys else (-MAX_VEL if "s" in keys else 0.0)
             left = MAX_VEL if "a" in keys else (-MAX_VEL if "d" in keys else 0.0)
             ang = MAX_ANG_VEL if "q" in keys else (-MAX_ANG_VEL if "e" in keys else 0.0)
-
-            # Updated remapped logic
-            kick = "b" in keys
-            chip = "c" in keys
 
             cmd = RobotCommand(
                 local_forward_vel=fwd,
@@ -399,7 +475,6 @@ class TeleopGUI:
 
             self.controller.add_robot_commands(cmd, ROBOT_ID)
             self.controller.send_robot_commands()
-            print("Sending commands", cmd)
 
             # Safely pass updates to the main thread via the queue
             self._ui_queue.put(("readout", cmd))
@@ -431,10 +506,20 @@ class TeleopGUI:
             f"  drib={int(cmd.dribble)}  chip={int(cmd.chip)}"
         )
 
+        # UI Flash for impulse feedback
+        if cmd.kick:
+            self._kick_btn.configure(bg=KICK_C, fg="white", highlightbackground=KICK_C)
+        else:
+            self._kick_btn.configure(bg=SURFACE, fg=TEXT, highlightbackground=BORDER)
+
+        if cmd.chip:
+            self._chip_btn.configure(bg=KICK_C, fg="white", highlightbackground=KICK_C)
+        else:
+            self._chip_btn.configure(bg=SURFACE, fg=TEXT, highlightbackground=BORDER)
+
     def _quit(self):
         self._running = False
 
-        # Ensure the control loop thread fully terminates before destroying Tk root
         if self._loop_thread.is_alive():
             self._loop_thread.join(timeout=1.0)
 
