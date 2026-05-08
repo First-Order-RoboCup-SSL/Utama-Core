@@ -60,16 +60,21 @@ class RealRobotController(AbstractRobotController):
     def get_robots_responses(self) -> List[RobotResponse]:
         HEADER = 0xAA
         FOOTER = 0x55
+        MAX_PAYLOAD_LEN = 32  # Sanity limit to prevent buffer bloat
+        MIN_PAYLOAD_LEN = 1  # We expect at least 1 byte for ball status
+
         if not hasattr(self, "_buffer"):
             self._buffer = bytearray()
 
-        # Read whatever is available
-        self._buffer.extend(self._serial_port.read(self._serial_port.in_waiting or 1))
+        # 1. Non-blocking read: Only read if bytes are actually waiting
+        bytes_available = self._serial_port.in_waiting
+        if bytes_available > 0:
+            self._buffer.extend(self._serial_port.read(bytes_available))
 
         responses = []
 
         while True:
-            # Look for header
+            # 2. Look for header
             if len(self._buffer) < 1:
                 break
 
@@ -77,30 +82,39 @@ class RealRobotController(AbstractRobotController):
                 self._buffer.pop(0)
                 continue
 
-            # Need at least header + id + length
+            # 3. Need at least header + id + length
             if len(self._buffer) < 3:
                 break
 
             robot_id = self._buffer[1]
             length = self._buffer[2]
 
-            packet_len = 1 + 1 + 1 + length + 1  # header + id + len + data + footer
-
-            if len(self._buffer) < packet_len:
-                break  # wait for more data
-
-            # Validate footer
-            if self._buffer[packet_len - 1] != FOOTER:
-                # Corrupted packet → resync
+            # 4. Validate length byte before proceeding
+            if length < MIN_PAYLOAD_LEN or length > MAX_PAYLOAD_LEN:
+                # Malformed length; pop the header to resync
                 self._buffer.pop(0)
                 continue
 
-            # Extract packet
+            packet_len = 1 + 1 + 1 + length + 1  # header + id + len + data + footer
+
+            # 5. Wait for the full packet to arrive
+            if len(self._buffer) < packet_len:
+                break
+
+            # 6. Validate footer
+            if self._buffer[packet_len - 1] != FOOTER:
+                # Corrupted packet or offset mismatch; resync
+                self._buffer.pop(0)
+                continue
+
+            # 7. Extract packet data safely
             data = self._buffer[3 : 3 + length]
 
-            responses.append(RobotResponse(robot_id, has_ball=(data[0] & 0x01) != 0))
+            # Guard against IndexError just in case, though validated by 'length' check
+            if len(data) >= 1:
+                responses.append(RobotResponse(robot_id, has_ball=(data[0] & 0x01) != 0))
 
-            # Remove parsed packet
+            # 8. Clear parsed packet from buffer
             del self._buffer[:packet_len]
 
         return responses
@@ -235,20 +249,21 @@ class RealRobotController(AbstractRobotController):
         kicker_byte = 0
         tracker = self._kicker_tracker.get(robot_id)
 
-        # If tracker_entry exists but persistence expired → send empty kicker byte and return
-        if tracker and tracker.remaining_persist <= 0:
-            packet.append(kicker_byte)
-            return packet
+        if tracker:
+            # If a tracker exists, we are either PERSISTING or COOLING DOWN.
+            # We ignore raw c_command inputs until the tracker is removed.
+            kick_active = tracker.remaining_persist > 0 and tracker.is_kick
+            chip_active = tracker.remaining_persist > 0 and not tracker.is_kick
+        else:
+            # No active tracker: we are free to trigger a new action.
+            kick_active = c_command.kick
+            chip_active = c_command.chip
 
-        # Decide whether we're kicking or chipping
-        kick_active = c_command.kick or (tracker and tracker.remaining_persist > 0 and tracker.is_kick)
-
-        chip_active = c_command.chip or (tracker and tracker.remaining_persist > 0 and not tracker.is_kick)
-
+        # Apply bitmasks based on the determined state
         if kick_active:
             kicker_byte |= 0xF0  # upper kicker full power
         elif chip_active:
-            kicker_byte |= 0x0F
+            kicker_byte |= 0x0F  # chip full power
 
         packet.append(kicker_byte)
 
