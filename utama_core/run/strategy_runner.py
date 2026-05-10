@@ -210,8 +210,16 @@ class StrategyRunner:
         self._stop_event = threading.Event()
 
     def _handle_sigint(self, sig, frame):
+        if self._stop_event.is_set():
+            signal.default_int_handler(sig, frame)
         self._stop_event.set()
-        signal.default_int_handler(sig, frame)
+        self._stop_fps_live()
+        print("\nStopping gracefully. Press Ctrl+C again to force quit.", flush=True)
+
+    def _stop_fps_live(self):
+        if self._fps_live:
+            self._fps_live.stop()
+            self._fps_live = None
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -666,8 +674,7 @@ class StrategyRunner:
             self.replay_writer.close()
         if self.rsim_env:
             self.rsim_env.close()
-        if self._fps_live:
-            self._fps_live.stop()
+        self._stop_fps_live()
 
     def run_test(
         self,
@@ -752,7 +759,7 @@ class StrategyRunner:
         """Run the main loop, stepping the game until interrupted.
 
         If an RSim environment is present, it ensures rendering is on. The loop
-        continues until a KeyboardInterrupt is received, after which resources
+        continues until interrupted via SIGINT stop event, after which resources
         (such as replay writer and rsim env) are closed.
         """
         signal.signal(signal.SIGINT, self._handle_sigint)

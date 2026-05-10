@@ -14,7 +14,7 @@ python = "3.11.*"
 numpy = "==2.0.2"
 pygame = "==2.6.1"
 protobuf = "==3.20.2"
-gymnasium = "==1.0.0"
+gymnasium = "==1.3.0"
 pyserial = "==3.5"
 pytest = "==8.3.4"
 ruff = ">=0.9.8"
@@ -42,7 +42,7 @@ cmake = "<3.27"
 libode = ">=0.16.2,<0.17"
 
 [feature.robosim.pypi-dependencies]
-rc-robosim = "<2"
+rc-robosim = ">=1.2,<2"
 numpy = "<=2.0.2"
 
 [tasks]
@@ -56,3 +56,6 @@ precommit-uninstall = "pre-commit uninstall"
 
 [environments]
 robosim = { features = ["robosim"], no-default-feature = true }
+
+[target.linux-64.tasks]
+main = "setsid python -m main"
