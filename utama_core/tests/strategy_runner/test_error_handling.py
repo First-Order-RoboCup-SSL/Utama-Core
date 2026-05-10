@@ -1,5 +1,7 @@
 """Tests for error handling and safety mechanisms in strategies (REAL mode only)."""
 
+import signal
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -45,6 +47,17 @@ def mock_runner():
         runner.my.strategy.robot_controller = MagicMock()
 
         yield runner
+
+
+def assert_zero_velocity_commands(commands_dict, expected_robot_ids):
+    assert set(commands_dict.keys()) == expected_robot_ids
+    for cmd in commands_dict.values():
+        assert cmd.local_forward_vel == 0
+        assert cmd.local_left_vel == 0
+        assert cmd.angular_vel == 0
+        assert not cmd.kick
+        assert not cmd.chip
+        assert not cmd.dribble
 
 
 class TestStopRobotsOnClose:
@@ -100,14 +113,7 @@ class TestStopRobotsOnClose:
 
         controller = mock_runner.my.strategy.robot_controller
         commands_dict = controller.add_robot_commands.call_args[0][0]
-
-        for robot_id, cmd in commands_dict.items():
-            assert cmd.local_forward_vel == 0
-            assert cmd.local_left_vel == 0
-            assert cmd.angular_vel == 0
-            assert not cmd.kick
-            assert not cmd.chip
-            assert not cmd.dribble
+        assert_zero_velocity_commands(commands_dict, {0, 1, 2})
 
     def test_stop_not_called_in_rsim_mode(self, mock_runner):
         mock_runner.mode = Mode.RSIM
@@ -121,6 +127,28 @@ class TestStopRobotsOnClose:
 
 class TestStopRobotsOnError:
     """Tests for stop behavior when errors occur during execution."""
+
+    def test_first_sigint_sets_stop_event_stops_fps_live_and_prints_message(self, mock_runner, capsys):
+        mock_runner._stop_event = threading.Event()
+        fps_live = MagicMock()
+        mock_runner._fps_live = fps_live
+
+        mock_runner._handle_sigint(signal.SIGINT, None)
+
+        assert mock_runner._stop_event.is_set()
+        fps_live.stop.assert_called_once()
+        assert mock_runner._fps_live is None
+        captured = capsys.readouterr()
+        assert "Stopping gracefully" in captured.out
+        assert "Press Ctrl+C again to force quit" in captured.out
+
+    def test_second_sigint_raises_keyboard_interrupt(self, mock_runner):
+        mock_runner._stop_event = threading.Event()
+
+        mock_runner._handle_sigint(signal.SIGINT, None)
+
+        with pytest.raises(KeyboardInterrupt):
+            mock_runner._handle_sigint(signal.SIGINT, None)
 
     def test_stop_on_runtime_exception(self, mock_runner):
         call_count = {"value": 0}
@@ -170,6 +198,23 @@ class TestStopRobotsOnError:
 
         controller = mock_runner.my.strategy.robot_controller
         assert controller.add_robot_commands.call_count >= 1
+
+    def test_run_sends_stop_robot_commands_on_first_sigint_shutdown(self, mock_runner):
+        mock_runner._stop_event = threading.Event()
+
+        def signaled_run_step():
+            mock_runner._handle_sigint(signal.SIGINT, None)
+
+        mock_runner._run_step = signaled_run_step
+
+        mock_runner.run()
+
+        controller = mock_runner.my.strategy.robot_controller
+        assert controller.add_robot_commands.call_count == 20
+        assert controller.send_robot_commands.call_count == 20
+
+        commands_dict = controller.add_robot_commands.call_args[0][0]
+        assert_zero_velocity_commands(commands_dict, {0, 1})
 
 
 if __name__ == "__main__":
