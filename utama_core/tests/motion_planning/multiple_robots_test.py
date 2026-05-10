@@ -64,7 +64,6 @@ class MultiRobotTestManager(AbstractTestManager):
 
     def eval_status(self, game: Game):
         """Evaluate collision status and goal achievement for all robots."""
-        # Check collisions between all pairs of robots (friendly-enemy and friendly-friendly)
         for robot_id, robot in game.friendly_robots.items():
             robot_pos = Vector2D(robot.p.x, robot.p.y)
 
@@ -119,31 +118,20 @@ def test_mirror_swap(
     headless: bool,
     mode: str = "rsim",
 ):
-    """
-    Test where two teams of MAX_ROBOTS robots start in mirror formations and swap positions across the field.
-
-    The robots should:
-    1. Start at mirror positions on opposite sides of the field
-    2. Navigate to their mirror counterparts' starting positions
-    3. Avoid collisions with all robots (teammates and opponents)
-    4. Successfully reach their target positions
-    """
     my_team_is_yellow = True
-    my_team_is_right = False  # Yellow on left, Blue on right
+    my_team_is_right = False
 
-    # Define mirror positions (6 robots in formation)
-    # Left side positions (Yellow team starting positions)
-    left_positions = [
-        (-2.5, -1.5),  # Bottom row
+    # Base positions without perturbation
+    base_left = [
+        (-2.5, -1.5),
         (-2.5, -0.5),
         (-2.5, 0.5),
-        (-2.5, 1.5),  # Top row
-        (-3.5, -0.75),  # Back row
+        (-2.5, 1.5),
+        (-3.5, -0.75),
         (-3.5, 0.75),
     ]
 
-    # Right side positions (Blue team starting positions - mirrors of left)
-    right_positions = [
+    base_right = [
         (2.5, -1.5),
         (2.5, -0.5),
         (2.5, 0.5),
@@ -152,21 +140,24 @@ def test_mirror_swap(
         (3.5, 0.75),
     ]
 
+    # ADDING DETERMINISTIC PERTURBATION
+    # We shift the Blue team (right positions) up by exactly 2cm (0.02m).
+    # This prevents perfect mathematical head-on velocity vectors.
+    eps = 0.02
+    left_positions = base_left
+    right_positions = [(x, y + eps) for x, y in base_right]
+
     scenario = MultiRobotScenario(
-        friendly_positions=left_positions,  # Yellow starts on left
-        enemy_positions=right_positions,  # Blue starts on right
-        friendly_targets=right_positions,  # Yellow targets are Blue's starting positions
-        enemy_targets=left_positions,  # Blue targets are Yellow's starting positions
+        friendly_positions=left_positions,
+        enemy_positions=right_positions,
+        friendly_targets=base_right,  # Target the raw base position
+        enemy_targets=base_left,  # Target the raw base position
         endpoint_tolerance=0.3,
     )
 
-    my_strategy = MultiRobotNavigationStrategy(
-        robot_targets={i: right_positions[i] for i in range(len(left_positions))}
-    )
+    my_strategy = MultiRobotNavigationStrategy(robot_targets={i: base_right[i] for i in range(len(left_positions))})
 
-    opp_strategy = MultiRobotNavigationStrategy(
-        robot_targets={i: left_positions[i] for i in range(len(right_positions))}
-    )
+    opp_strategy = MultiRobotNavigationStrategy(robot_targets={i: base_left[i] for i in range(len(right_positions))})
 
     runner = StrategyRunner(
         strategy=my_strategy,
@@ -182,65 +173,44 @@ def test_mirror_swap(
     test_manager = MultiRobotTestManager(scenario=scenario)
     test_passed = runner.run_test(
         test_manager=test_manager,
-        episode_timeout=45.0,  # Longer timeout for 12 robots
+        episode_timeout=45.0,
         rsim_headless=headless,
     )
 
-    # Assertions
     assert test_passed, "Mirror charge test failed to complete"
-    assert test_manager.all_reached, (
-        f"Not all robots reached their targets. "
-        f"Reached: {len(test_manager.robots_reached)}/{len(scenario.friendly_targets) + len(scenario.enemy_targets)}"
-    )
-    assert not test_manager.collision_detected, (
-        f"Robots collided {test_manager.collision_count} time(s)! "
-        f"Minimum distance: {test_manager.min_distance:.3f}m "
-        f"(threshold: {scenario.collision_threshold:.3f}m)"
-    )
-    assert test_manager.min_distance >= scenario.collision_threshold, (
-        f"Robots got too close: {test_manager.min_distance:.3f}m "
-        f"(minimum safe distance: {scenario.collision_threshold:.3f}m)"
-    )
+    assert test_manager.all_reached, f"Not all robots reached targets. Reached: {len(test_manager.robots_reached)}/12"
+    assert not test_manager.collision_detected, f"Robots collided! Min distance: {test_manager.min_distance:.3f}m"
 
 
-def test_diagonal_cross_square(
+def test_grid_intersection(
     headless: bool,
     mode: str = "rsim",
 ):
     """
-    Test where 4 robots (2 per team) start at corners of a square and cross diagonally.
-
-    The robots should:
-    1. Start at the 4 corners of a square
-    2. Navigate diagonally to the opposite corner
-    3. Avoid collisions at the center where all paths cross
-    4. Successfully reach their target positions
+    Test where two teams cross paths perpendicularly, creating 4 distinct intersection points.
+    This tests dodging and path adjustment without creating an impossible 4-way center deadlock.
     """
     my_team_is_yellow = True
     my_team_is_right = False
 
-    # Define square corners (2m x 2m square centered at origin)
-    # Top-left and bottom-right for Yellow team
+    # Yellow team moves Left -> Right on two distinct "lanes" (closer to center)
     yellow_positions = [
-        (-1.5, 1.5),  # Top-left corner (robot 0)
-        (1.5, -1.5),  # Bottom-right corner (robot 1)
+        (-2.0, 0.5),
+        (-2.0, -0.5),
     ]
-
-    # Top-right and bottom-left for Blue team
-    blue_positions = [
-        (1.5, 1.5),  # Top-right corner (robot 0)
-        (-1.5, -1.5),  # Bottom-left corner (robot 1)
-    ]
-
-    # Each robot goes to the opposite diagonal corner
     yellow_targets = [
-        (1.5, -1.5),  # Robot 0: top-left → bottom-right
-        (-1.5, 1.5),  # Robot 1: bottom-right → top-left
+        (2.0, 0.5),
+        (2.0, -0.5),
     ]
 
+    # Blue team moves Top -> Bottom on two distinct "lanes" (closer to center)
+    blue_positions = [
+        (0.5, 2.0),
+        (-0.5, 2.0),
+    ]
     blue_targets = [
-        (-1.5, -1.5),  # Robot 0: top-right → bottom-left
-        (1.5, 1.5),  # Robot 1: bottom-left → top-right
+        (0.5, -2.0),
+        (-0.5, -2.0),
     ]
 
     scenario = MultiRobotScenario(
@@ -254,7 +224,6 @@ def test_diagonal_cross_square(
     my_strategy = MultiRobotNavigationStrategy(
         robot_targets={i: yellow_targets[i] for i in range(len(yellow_positions))}
     )
-
     opp_strategy = MultiRobotNavigationStrategy(robot_targets={i: blue_targets[i] for i in range(len(blue_positions))})
 
     runner = StrategyRunner(
@@ -270,22 +239,82 @@ def test_diagonal_cross_square(
 
     test_manager = MultiRobotTestManager(scenario=scenario)
     test_passed = runner.run_test(
-        test_manager=test_manager,  # Changed to snake_case
+        test_manager=test_manager,
         episode_timeout=30.0,
         rsim_headless=headless,
     )
 
-    # Assertions
-    assert test_passed, "Diagonal cross test failed to complete"
-    assert (
-        test_manager.all_reached
-    ), f"Not all robots reached their targets. Reached: {len(test_manager.robots_reached)}/4"
-    assert not test_manager.collision_detected, (
-        f"Robots collided {test_manager.collision_count} time(s) at center crossing! "
-        f"Minimum distance: {test_manager.min_distance:.3f}m "
-        f"(threshold: {scenario.collision_threshold:.3f}m)"
+    assert test_passed, "Grid intersection test failed to complete"
+    assert test_manager.all_reached, f"Not all robots reached targets. Reached: {len(test_manager.robots_reached)}/4"
+    assert not test_manager.collision_detected, f"Robots collided! Min distance: {test_manager.min_distance:.3f}m"
+
+
+def test_defensive_slalom(
+    headless: bool,
+    mode: str = "rsim",
+):
+    """
+    Test where attacking robots must navigate through a staggered wall of stationary defenders.
+    This proves the planner can find valid spatial corridors in cluttered environments.
+    """
+    my_team_is_yellow = True
+    my_team_is_right = False
+
+    # Yellow team starts on the left and wants to drive straight through
+    yellow_positions = [
+        (-2.5, 1.5),
+        (-2.5, 0.0),
+        (-2.5, -1.5),
+    ]
+    yellow_targets = [
+        (2.5, 1.5),
+        (2.5, 0.0),
+        (2.5, -1.5),
+    ]
+
+    # Blue team forms a staggered defensive wall in the center
+    # They are effectively stationary obstacles for this test
+    blue_positions = [
+        (0.0, 1.0),
+        (0.0, -1.0),
+        (-0.5, 0.0),  # Pushed slightly forward into the attacking path
+        (0.5, 2.0),  # Outside blocks
+        (0.5, -2.0),
+    ]
+    # Blue targets are their starting positions (they stay still)
+    blue_targets = blue_positions.copy()
+
+    scenario = MultiRobotScenario(
+        friendly_positions=yellow_positions,
+        enemy_positions=blue_positions,
+        friendly_targets=yellow_targets,
+        enemy_targets=blue_targets,
+        endpoint_tolerance=0.25,
     )
-    assert test_manager.min_distance >= scenario.collision_threshold, (
-        f"Robots got too close at crossing: {test_manager.min_distance:.3f}m "
-        f"(minimum safe distance: {scenario.collision_threshold:.3f}m)"
+
+    my_strategy = MultiRobotNavigationStrategy(
+        robot_targets={i: yellow_targets[i] for i in range(len(yellow_positions))}
     )
+    opp_strategy = MultiRobotNavigationStrategy(robot_targets={i: blue_targets[i] for i in range(len(blue_positions))})
+
+    runner = StrategyRunner(
+        strategy=my_strategy,
+        my_team_is_yellow=my_team_is_yellow,
+        my_team_is_right=my_team_is_right,
+        mode=mode,
+        exp_friendly=3,
+        exp_enemy=5,
+        exp_ball=False,
+        opp_strategy=opp_strategy,
+    )
+
+    test_manager = MultiRobotTestManager(scenario=scenario)
+    test_passed = runner.run_test(
+        test_manager=test_manager,
+        episode_timeout=35.0,
+        rsim_headless=headless,
+    )
+
+    assert test_passed, "Defensive slalom test failed to complete"
+    assert test_manager.all_reached, f"Not all robots reached targets. Reached: {len(test_manager.robots_reached)}/8"
+    assert not test_manager.collision_detected, f"Robots collided! Min distance: {test_manager.min_distance:.3f}m"

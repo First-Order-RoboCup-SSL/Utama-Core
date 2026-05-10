@@ -131,7 +131,7 @@ class StrategyRunner:
         full_field_dims: FieldDimensions = STANDARD_FIELD_DIMS,
         field_bounds: Optional[FieldBounds] = None,
         opp_strategy: Optional[AbstractStrategy] = None,
-        control_scheme: str = "pid",  # This is also the default control scheme used in the motion planning tests
+        control_scheme: str = "fpp",  # This is also the default control scheme used in the motion planning tests
         opp_control_scheme: Optional[str] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         print_real_fps: bool = False,  # Turn this on for RSim

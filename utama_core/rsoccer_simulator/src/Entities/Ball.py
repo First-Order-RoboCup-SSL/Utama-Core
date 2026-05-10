@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+
 from numpy.random import normal
+
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 
 
