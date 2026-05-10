@@ -233,3 +233,69 @@ def velocity_to_orientation(p: Tuple[float, float]) -> float:
     if res < 0:
         res += 2 * np.pi
     return res
+
+
+# ---------------------------------------------------------------------------
+# Shared shadow-geometry helpers (used by both goalkeep and defend_parameter)
+# ---------------------------------------------------------------------------
+
+
+def clamp_y(y: float, limit: float) -> float:
+    """Clamp *y* to ``[-limit, limit]``."""
+    return max(-limit, min(limit, y))
+
+
+def intersection_with_x_line(a, b, target_x: float, y_limit: float):
+    """Where line *a* -> *b* crosses ``x = target_x``, y clamped to +/-*y_limit*.
+
+    Returns ``(target_x, clamped_y)``.  If the line is vertical (dx ~ 0),
+    returns the y of *b* clamped.  If the crossing is behind *a* (t < 0),
+    returns the y of *a* clamped.
+    """
+    xa, ya = a
+    xb, yb = b
+    dx = xb - xa
+
+    if abs(dx) < 1e-12:
+        return (target_x, clamp_y(yb, y_limit))
+
+    t = (target_x - xa) / dx
+    if t < 0:
+        return (target_x, clamp_y(ya, y_limit))
+
+    y_intersect = ya + t * (yb - ya)
+    return (target_x, clamp_y(y_intersect, y_limit))
+
+
+def single_defender_stop_y(
+    ball_pos,
+    defender_pos,
+    keeper_x: float,
+    post_limit: float,
+    edge_offset: float,
+) -> float:
+    """Keeper y-position given a single defender's shadow on the keeper line.
+
+    Projects both edges of the defender to find the shadow interval, then
+    positions the keeper in the centre of the largest uncovered gap.
+    """
+    _, yy_top = intersection_with_x_line(
+        (ball_pos.x, ball_pos.y),
+        (defender_pos.x, defender_pos.y + edge_offset),
+        keeper_x,
+        post_limit,
+    )
+    _, yy_bottom = intersection_with_x_line(
+        (ball_pos.x, ball_pos.y),
+        (defender_pos.x, defender_pos.y - edge_offset),
+        keeper_x,
+        post_limit,
+    )
+
+    top_gap_size = max(0, post_limit - yy_top)
+    bottom_gap_size = max(0, yy_bottom - (-post_limit))
+
+    if top_gap_size > bottom_gap_size:
+        return (yy_top + post_limit) / 2
+
+    return (yy_bottom - post_limit) / 2
