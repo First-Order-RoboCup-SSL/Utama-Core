@@ -21,7 +21,7 @@ from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEn
 
 
 class FastPathPlanner:
-    def __init__(self, env: SSLStandardEnv):
+    def __init__(self, env: SSLStandardEnv | None):
         self._env = env
         self.config = config
         self.OBSTACLE_CLEARANCE = self.config.OBSTACLE_CLEARANCE
