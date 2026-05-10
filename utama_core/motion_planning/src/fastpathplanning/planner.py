@@ -62,8 +62,9 @@ class FastPathPlanner:
 
                 obstacle_list.append(obstacle_segment)
 
-                # DRAWING: Show the projected velocity line in Red
-                self._env.draw_line(obstacle_segment, color="Red")
+                # DRAWING: Show the projected velocity line in Red when an RSim renderer is available.
+                if self._env is not None:
+                    self._env.draw_line(obstacle_segment, color="Red")
 
         # Field bounds as obstacles (static, usually not drawn to keep screen clean)
         tl, br = np.array(field_bounds.top_left), np.array(field_bounds.bottom_right)
@@ -270,12 +271,14 @@ class FastPathPlanner:
         # 4. Plan geometric path
         final_trajectory, _ = self.check_segment((our_pos, safe_target), obstacles, 0, safe_target, field_bounds)
 
-        # 5. Draw the resulting safe path segments
-        for i in final_trajectory:
-            self._env.draw_line(i)
+        # 5. Draw the resulting safe path segments when an RSim renderer is available.
+        if self._env is not None:
+            for i in final_trajectory:
+                self._env.draw_line(i)
 
         # 6. Smooth the path and draw the final "Carrot" target in Blue
         new_target = self.smooth_path(final_trajectory, safe_target, our_pos)
-        self._env.draw_line((our_pos, new_target), color="Blue")
+        if self._env is not None:
+            self._env.draw_line((our_pos, new_target), color="Blue")
 
         return new_target
