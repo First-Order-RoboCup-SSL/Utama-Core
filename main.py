@@ -1,5 +1,7 @@
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
+from utama_core.custom_referee import CustomReferee
 from utama_core.entities.game.field import FieldBounds
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay import ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import StrategyRunner
@@ -11,6 +13,9 @@ from utama_core.strategy.examples import (
     StartupStrategy,
     TwoRobotPlacementStrategy,
 )
+
+referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=3, n_robots_blue=3, enable_gui=True)
+referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
 
 
 def main():
@@ -30,6 +35,8 @@ def main():
         full_field_dims=GREAT_EXHIBITION_FIELD_DIMS,
         show_live_status=True,
         profiler_name=None,
+        referee_system="custom",
+        custom_referee=referee,
     )
     runner.my.strategy.render()
     runner.run()
