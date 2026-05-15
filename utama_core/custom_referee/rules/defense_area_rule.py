@@ -15,8 +15,21 @@ _ACTIVE_PLAY_COMMANDS = {
 }
 
 
+def _split_by_color(game_frame: GameFrame):
+    """Return (yellow_robots, blue_robots) as dict_values of Robot."""
+    if game_frame.my_team_is_yellow:
+        return game_frame.friendly_robots.values(), game_frame.enemy_robots.values()
+    else:
+        return game_frame.enemy_robots.values(), game_frame.friendly_robots.values()
+
+
 class DefenseAreaRule(BaseRule):
-    """Detects attacker encroachment or too many defenders in the defense area."""
+    """Detects attacker encroachment or too many defenders in either defense area.
+
+    Checks both teams symmetrically regardless of which team is "friendly",
+    so enforcement is correct whether CustomReferee is stepped from yellow or
+    blue perspective.
+    """
 
     def __init__(self, max_defenders: int = 1, attacker_infringement: bool = True) -> None:
         self._max_defenders = max_defenders
@@ -31,42 +44,53 @@ class DefenseAreaRule(BaseRule):
         if current_command not in _ACTIVE_PLAY_COMMANDS:
             return None
 
-        my_team_is_right = game_frame.my_team_is_right
-        my_team_is_yellow = game_frame.my_team_is_yellow
+        # Derive which side each color defends from the caller's perspective.
+        # yellow_is_right is True when yellow defends the right goal.
+        yellow_is_right = game_frame.my_team_is_right == game_frame.my_team_is_yellow
 
-        # Determine which geometry helper corresponds to "my" defense area.
-        if my_team_is_right:
-            in_my_defense = geometry.is_in_right_defense_area
-            # in_opp_defense = geometry.is_in_left_defense_area
-        else:
-            in_my_defense = geometry.is_in_left_defense_area
-            # in_opp_defense = geometry.is_in_right_defense_area
+        in_yellow_defense = geometry.is_in_right_defense_area if yellow_is_right else geometry.is_in_left_defense_area
+        in_blue_defense = geometry.is_in_left_defense_area if yellow_is_right else geometry.is_in_right_defense_area
 
-        # Check: too many friendly defenders in own area.
-        n_friendly_in_own = sum(1 for r in game_frame.friendly_robots.values() if in_my_defense(r.p.x, r.p.y))
-        if n_friendly_in_own > self._max_defenders:
-            # Opponent gets a free kick.
-            free_kick_cmd = RefereeCommand.DIRECT_FREE_BLUE if my_team_is_yellow else RefereeCommand.DIRECT_FREE_YELLOW
+        yellow_robots, blue_robots = (list(g) for g in _split_by_color(game_frame))
+
+        # --- Yellow defense area ---
+        n_yellow_defenders = sum(1 for r in yellow_robots if in_yellow_defense(r.p.x, r.p.y))
+        if n_yellow_defenders > self._max_defenders:
             return RuleViolation(
                 rule_name="defense_area",
                 suggested_command=RefereeCommand.STOP,
-                next_command=free_kick_cmd,
-                status_message="Too many defenders in own area",
+                next_command=RefereeCommand.DIRECT_FREE_BLUE,
+                status_message="Too many yellow defenders in own area",
             )
 
-        # Check: enemy attacker inside our defense area.
         if self._attacker_infringement:
-            for robot in game_frame.enemy_robots.values():
-                if in_my_defense(robot.p.x, robot.p.y):
-                    # Defending team (friendly) gets the free kick.
-                    free_kick_cmd = (
-                        RefereeCommand.DIRECT_FREE_YELLOW if my_team_is_yellow else RefereeCommand.DIRECT_FREE_BLUE
-                    )
+            for r in blue_robots:
+                if in_yellow_defense(r.p.x, r.p.y):
                     return RuleViolation(
                         rule_name="defense_area",
                         suggested_command=RefereeCommand.STOP,
-                        next_command=free_kick_cmd,
-                        status_message="Attacker in defense area",
+                        next_command=RefereeCommand.DIRECT_FREE_YELLOW,
+                        status_message="Blue attacker in yellow defense area",
+                    )
+
+        # --- Blue defense area ---
+        n_blue_defenders = sum(1 for r in blue_robots if in_blue_defense(r.p.x, r.p.y))
+        if n_blue_defenders > self._max_defenders:
+            return RuleViolation(
+                rule_name="defense_area",
+                suggested_command=RefereeCommand.STOP,
+                next_command=RefereeCommand.DIRECT_FREE_YELLOW,
+                status_message="Too many blue defenders in own area",
+            )
+
+        if self._attacker_infringement:
+            for r in yellow_robots:
+                if in_blue_defense(r.p.x, r.p.y):
+                    return RuleViolation(
+                        rule_name="defense_area",
+                        suggested_command=RefereeCommand.STOP,
+                        next_command=RefereeCommand.DIRECT_FREE_BLUE,
+                        status_message="Yellow attacker in blue defense area",
                     )
 
         return None

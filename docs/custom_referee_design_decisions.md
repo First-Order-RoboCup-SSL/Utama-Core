@@ -46,27 +46,10 @@ and slightly more realistic if desired.
 
 ---
 
-## 4. `KeepOutRule` violation count carries over between command changes
+## 4. ✅ `KeepOutRule` violation count resets on command change — resolved
 
-**File:** `utama_core/custom_referee/rules/keep_out_rule.py`
-
-**Current behaviour:**
-`_violation_count` accumulates across command changes (e.g., transitions from
-`DIRECT_FREE_YELLOW` to `PREPARE_KICKOFF_BLUE`). If a robot was encroaching for 20 frames
-under one command and the command changes, it only needs 10 more frames under the new command
-to trigger a violation.
-
-**Risk level:** Low — the transition cooldown (`_TRANSITION_COOLDOWN = 0.3 s`) means the
-command change and any new violation are unlikely to overlap. Also, robot positions are
-usually compliant after a command transition.
-
-**Options:**
-- **A (current, keep):** Accept the minor inconsistency. The persistence threshold (30 frames)
-  is large enough to make false positives very unlikely.
-- **B (reset on command change):** Track the previous command and reset `_violation_count`
-  whenever `current_command` changes. Clean, low cost.
-
-**Recommendation:** Option B is a one-liner fix with no downside.
+**Resolution:** `CustomReferee.step()` calls `rule.reset()` on every command transition,
+which clears `_violation_count`. No carry-over occurs.
 
 ---
 

@@ -125,7 +125,7 @@ Each rule is a `BaseRule` subclass. Rules are evaluated in priority order; the *
 | 1 | `GoalRule` | `NORMAL_START`, `FORCE_START` |
 | 2 | `OutOfBoundsRule` | `NORMAL_START`, `FORCE_START` |
 | 3 | `DefenseAreaRule` | `NORMAL_START`, `FORCE_START` |
-| 4 | `KeepOutRule` | `STOP`, `DIRECT_FREE_*`, `PREPARE_KICKOFF_*`, `PREPARE_PENALTY_*` |
+| 4 | `KeepOutRule` | `DIRECT_FREE_*`, `PREPARE_KICKOFF_*`, `PREPARE_PENALTY_*` |
 
 ### GoalRule
 
