@@ -68,7 +68,7 @@ class GameStateMachine:
             can_place_ball=True,
             max_allowed_bots=n_robots_yellow,
             bot_substitution_intent=False,
-            bot_substitution_allowed=False,
+            bot_substitution_allowed=True,
             bot_substitutions_left=5,
         )
         self.blue_team = TeamInfo(
@@ -85,7 +85,7 @@ class GameStateMachine:
             can_place_ball=True,
             max_allowed_bots=n_robots_blue,
             bot_substitution_intent=False,
-            bot_substitution_allowed=False,
+            bot_substitution_allowed=True,
             bot_substitutions_left=5,
         )
 
@@ -152,14 +152,6 @@ class GameStateMachine:
         {
             RefereeCommand.BALL_PLACEMENT_YELLOW,
             RefereeCommand.BALL_PLACEMENT_BLUE,
-        }
-    )
-    _SUBSTITUTION_ALLOWED_STAGES = frozenset(
-        {
-            Stage.NORMAL_HALF_TIME,
-            Stage.EXTRA_TIME_BREAK,
-            Stage.EXTRA_HALF_TIME,
-            Stage.PENALTY_SHOOTOUT_BREAK,
         }
     )
 
@@ -536,9 +528,6 @@ class GameStateMachine:
         logger.info("Stage %s → %s", self.stage.name, new_stage.name)
         self.stage = new_stage
         self.stage_start_time = timestamp
-        allowed = new_stage in self._SUBSTITUTION_ALLOWED_STAGES
-        self.yellow_team.bot_substitution_allowed = allowed
-        self.blue_team.bot_substitution_allowed = allowed
 
     # ------------------------------------------------------------------
     # Internal helpers

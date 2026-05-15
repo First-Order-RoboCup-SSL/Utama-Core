@@ -220,18 +220,17 @@ class PositionRefiner(BaseRefiner):
         self, vision_data: VisionData, game_frame: GameFrame
     ) -> Tuple[dict[int, Optional[VisionRobotData]], dict[int, Optional[VisionRobotData]]]:
         """
-        Augment VisionData with None for vanished robots so the Kalman filter knows that data
-        vanished. Robots that disappear during an open substitution window are silently dropped
-        instead of imputed, preventing ghost predictions.
+        Augment the VisionData lists with None for vanished robots so that the Kalman filter
+        knows that data vanished.
 
         Returns:
             Tuple of (yellow_vision_dict, blue_vision_dict) where vanished robots are represented as None.
         """
-        yellow_sub_window = False
-        blue_sub_window = False
-        if game_frame.referee is not None:
-            yellow_sub_window = bool(game_frame.referee.yellow_team.bot_substitution_allowed)
-            blue_sub_window = bool(game_frame.referee.blue_team.bot_substitution_allowed)
+
+        # TODO: major issue is that if we do a robot substitution, the
+        # Kalman filter will think the old robot vanished and a new robot appeared.
+        # needs to be adjusted when referee system is in place.
+        # see issue #107 on GitHub for more details.
 
         yellow_ids_last_frame, blue_ids_last_frame = map_friendly_enemy_to_colors(
             game_frame.my_team_is_yellow,
@@ -239,18 +238,19 @@ class PositionRefiner(BaseRefiner):
             game_frame.enemy_robots.keys(),
         )
 
+        # Current vision IDs
         yellow_present = {r.id for r in vision_data.yellow_robots}
         blue_present = {r.id for r in vision_data.blue_robots}
 
+        # Start with current measurements
         yellow_vision_dict: dict[int, Optional[VisionRobotData]] = {r.id: r for r in vision_data.yellow_robots}
         blue_vision_dict: dict[int, Optional[VisionRobotData]] = {r.id: r for r in vision_data.blue_robots}
 
-        if not yellow_sub_window:
-            for robot_id in yellow_ids_last_frame - yellow_present:
-                yellow_vision_dict[robot_id] = None
-        if not blue_sub_window:
-            for robot_id in blue_ids_last_frame - blue_present:
-                blue_vision_dict[robot_id] = None
+        # Add None for vanished robots
+        for robot_id in yellow_ids_last_frame - yellow_present:
+            yellow_vision_dict[robot_id] = None
+        for robot_id in blue_ids_last_frame - blue_present:
+            blue_vision_dict[robot_id] = None
 
         return yellow_vision_dict, blue_vision_dict
 
