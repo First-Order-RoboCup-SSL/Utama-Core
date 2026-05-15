@@ -14,11 +14,11 @@ from utama_core.strategy.examples import (
     TwoRobotPlacementStrategy,
 )
 
-referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=3, n_robots_blue=3, enable_gui=True)
-referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
-
 
 def main():
+    referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=3, n_robots_blue=3, enable_gui=True)
+    referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+
     # Setup for real testing
     # Custom field size based setup in real
     custom_bounds = FieldBounds(top_left=(-2, 1.5), bottom_right=(1, -1.5))

@@ -191,9 +191,8 @@ class _BallPlacementDispatch(AbstractBehaviour):
         self._theirs = BallPlacementTheirsStep(name="BallPlacementTheirs")
 
     def setup_(self):
-        # Propagate setup to the inner nodes so their blackboards are initialised
-        self._ours.setup(is_opp_strat=False)
-        self._theirs.setup(is_opp_strat=False)
+        self._ours.setup(is_opp_strat=self._is_opp_strat)
+        self._theirs.setup(is_opp_strat=self._is_opp_strat)
 
     def update(self) -> py_trees.common.Status:
         if self._is_yellow_command == self.blackboard.game.my_team_is_yellow:
@@ -214,8 +213,8 @@ class _KickoffDispatch(AbstractBehaviour):
         self._theirs = PrepareKickoffTheirsStep(name="KickoffTheirs")
 
     def setup_(self):
-        self._ours.setup(is_opp_strat=False)
-        self._theirs.setup(is_opp_strat=False)
+        self._ours.setup(is_opp_strat=self._is_opp_strat)
+        self._theirs.setup(is_opp_strat=self._is_opp_strat)
 
     def update(self) -> py_trees.common.Status:
         if self._is_yellow_command == self.blackboard.game.my_team_is_yellow:
@@ -236,8 +235,8 @@ class _PenaltyDispatch(AbstractBehaviour):
         self._theirs = PreparePenaltyTheirsStep(name="PenaltyTheirs")
 
     def setup_(self):
-        self._ours.setup(is_opp_strat=False)
-        self._theirs.setup(is_opp_strat=False)
+        self._ours.setup(is_opp_strat=self._is_opp_strat)
+        self._theirs.setup(is_opp_strat=self._is_opp_strat)
 
     def update(self) -> py_trees.common.Status:
         if self._is_yellow_command == self.blackboard.game.my_team_is_yellow:
@@ -258,8 +257,8 @@ class _DirectFreeDispatch(AbstractBehaviour):
         self._theirs = DirectFreeTheirsStep(name="DirectFreeTheirs")
 
     def setup_(self):
-        self._ours.setup(is_opp_strat=False)
-        self._theirs.setup(is_opp_strat=False)
+        self._ours.setup(is_opp_strat=self._is_opp_strat)
+        self._theirs.setup(is_opp_strat=self._is_opp_strat)
 
     def update(self) -> py_trees.common.Status:
         if self._is_yellow_command == self.blackboard.game.my_team_is_yellow:
