@@ -865,7 +865,7 @@ class StrategyRunner:
         self._draw_rsim_field_bounds_overlay()
 
         if self.referee_system == "custom":
-            ref_data = self.custom_referee.step(self.my.current_game_frame, time.time())
+            ref_data = self.custom_referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
             self.ref_buffer.append(ref_data)
             _ball_placement_next = ref_data.next_command in (
                 RefereeCommand.BALL_PLACEMENT_YELLOW,

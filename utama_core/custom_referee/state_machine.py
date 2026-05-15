@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import logging
 import math
-import time
 from typing import Optional
 
 from utama_core.custom_referee.geometry import RefereeGeometry
@@ -50,9 +49,9 @@ class GameStateMachine:
         self.command_timestamp = 0.0
 
         self.stage = initial_stage
-        self.stage_start_time = (
-            time.time() if initial_time is None else initial_time
-        )
+        # Seeded lazily on the first step() call so that the timebase matches
+        # whatever clock the caller uses (wall time or game.ts).
+        self.stage_start_time: Optional[float] = initial_time
         self.stage_duration = half_duration_seconds
 
         self.yellow_team = TeamInfo(
@@ -163,6 +162,9 @@ class GameStateMachine:
         game_frame: Optional["GameFrame"] = None,
     ) -> RefereeData:
         """Process one tick.  Apply violation if not in cooldown.  Return RefereeData."""
+        if self.stage_start_time is None:
+            self.stage_start_time = current_time
+
         if violation is not None and self._can_transition(current_time):
             self._apply_violation(violation, current_time)
 
