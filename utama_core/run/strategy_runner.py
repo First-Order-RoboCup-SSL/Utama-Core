@@ -13,7 +13,7 @@ from rich.text import Text
 
 from utama_core.config.enums import Mode, mode_str_to_enum
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
-from utama_core.config.formations import get_formations
+from utama_core.config.formations import FormationType, get_formations
 from utama_core.config.physical_constants import MAX_ROBOTS
 from utama_core.config.settings import (
     FPS_PRINT_INTERVAL,
@@ -61,6 +61,7 @@ from utama_core.tests.common.abstract_test_manager import (
 
 if TYPE_CHECKING:
     from utama_core.custom_referee import CustomReferee
+    from utama_core.entities.data.referee import RefereeData
 
 logging.basicConfig(
     filename="Utama.log",
@@ -157,17 +158,20 @@ class StrategyRunner:
         filtering: bool = False,
         referee_system: Optional[str] = None,
         custom_referee: Optional["CustomReferee"] = None,
+        formation_type: Optional[FormationType] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
         self.custom_referee = custom_referee
         self._prev_custom_ref_command: Optional[RefereeCommand] = None
+        self._last_referee_data: Optional["RefereeData"] = None
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
         self.mode: Mode = self._load_mode(mode)
         self.exp_friendly = exp_friendly
         self.exp_enemy = exp_enemy
         self.exp_ball = exp_ball
+        self.formation_type = formation_type
         self.full_field_dims = full_field_dims
         # if field bounds not provided, default to full field dimensions
         self.field_bounds = field_bounds if field_bounds else full_field_dims.full_field_bounds
@@ -423,11 +427,14 @@ class StrategyRunner:
         if self.mode == Mode.REAL:
             return None, None
 
-        right_start, left_start = get_formations(
+        get_formations_kwargs = dict(
             bounds=self.field_bounds,
             n_right=self.exp_friendly if self.my_team_is_right else self.exp_enemy,
             n_left=self.exp_enemy if self.my_team_is_right else self.exp_friendly,
         )
+        if self.formation_type is not None:
+            get_formations_kwargs["formation_type"] = self.formation_type
+        right_start, left_start = get_formations(**get_formations_kwargs)
 
         yellow_start, blue_start = map_left_right_to_colors(
             self.my_team_is_yellow, self.my_team_is_right, right_start, left_start
@@ -888,7 +895,9 @@ class StrategyRunner:
             referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
         else:
             vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
-            referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
+            if self.ref_buffer:
+                self._last_referee_data = self.ref_buffer.popleft()
+            referee_data = self._last_referee_data
 
         # alternate between opp and friendly playing
         if self.toggle_opp_first:
