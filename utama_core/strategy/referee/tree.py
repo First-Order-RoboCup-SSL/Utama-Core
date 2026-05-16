@@ -196,10 +196,8 @@ class _BallPlacementDispatch(AbstractBehaviour):
 
     def update(self) -> py_trees.common.Status:
         if self._is_yellow_command == self.blackboard.game.my_team_is_yellow:
-            self._ours.blackboard = self.blackboard
             return self._ours.update()
         else:
-            self._theirs.blackboard = self.blackboard
             return self._theirs.update()
 
 
@@ -218,10 +216,8 @@ class _KickoffDispatch(AbstractBehaviour):
 
     def update(self) -> py_trees.common.Status:
         if self._is_yellow_command == self.blackboard.game.my_team_is_yellow:
-            self._ours.blackboard = self.blackboard
             return self._ours.update()
         else:
-            self._theirs.blackboard = self.blackboard
             return self._theirs.update()
 
 
@@ -240,10 +236,8 @@ class _PenaltyDispatch(AbstractBehaviour):
 
     def update(self) -> py_trees.common.Status:
         if self._is_yellow_command == self.blackboard.game.my_team_is_yellow:
-            self._ours.blackboard = self.blackboard
             return self._ours.update()
         else:
-            self._theirs.blackboard = self.blackboard
             return self._theirs.update()
 
 
@@ -262,8 +256,6 @@ class _DirectFreeDispatch(AbstractBehaviour):
 
     def update(self) -> py_trees.common.Status:
         if self._is_yellow_command == self.blackboard.game.my_team_is_yellow:
-            self._ours.blackboard = self.blackboard
             return self._ours.update()
         else:
-            self._theirs.blackboard = self.blackboard
             return self._theirs.update()

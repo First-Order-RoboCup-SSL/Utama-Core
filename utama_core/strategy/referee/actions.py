@@ -384,10 +384,11 @@ class PrepareKickoffTheirsStep(AbstractBehaviour):
 class PreparePenaltyOursStep(AbstractBehaviour):
     """Positions robots for our penalty kick.
 
-    Kicker (lowest non-keeper ID): moves to our penalty mark, faces goal.
-    All others: stop on a line behind the penalty mark on our side.
+    Kicker (lowest non-keeper ID): moves to the penalty mark, faces goal.
+    All others: stop on a line behind the penalty mark spread along y.
 
-    Penalty mark is placed halfway between the centre line and the target goal line.
+    Exact placement of non-kicker/non-keeper robots is a strategy decision
+    and can be tuned here by the strategy team.
     """
 
     def update(self) -> py_trees.common.Status:
@@ -436,7 +437,10 @@ class PreparePenaltyTheirsStep(AbstractBehaviour):
     """Positions our robots for the opponent's penalty kick.
 
     Goalkeeper: moves to our goal line centre.
-    All others: move to a line behind the penalty mark on our half.
+    All others: stop on a line behind the penalty mark spread along y.
+
+    Exact placement of non-keeper robots is a strategy decision
+    and can be tuned here by the strategy team.
     """
 
     def update(self) -> py_trees.common.Status:
