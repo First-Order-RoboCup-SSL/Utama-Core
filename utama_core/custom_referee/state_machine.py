@@ -509,6 +509,16 @@ class GameStateMachine:
         self._advance3_ready_since = math.inf
         self._advance4_ready_since = math.inf
 
+        if command in (RefereeCommand.STOP, RefereeCommand.HALT):
+            self._stop_entered_time = timestamp
+        elif command in (
+            RefereeCommand.PREPARE_KICKOFF_YELLOW,
+            RefereeCommand.PREPARE_KICKOFF_BLUE,
+            RefereeCommand.PREPARE_PENALTY_YELLOW,
+            RefereeCommand.PREPARE_PENALTY_BLUE,
+        ):
+            self._prepare_entered_time = timestamp
+
         # Advance PRE stages to their active counterpart when play begins.
         _PRE_TO_ACTIVE = {
             Stage.NORMAL_FIRST_HALF_PRE: Stage.NORMAL_FIRST_HALF,
