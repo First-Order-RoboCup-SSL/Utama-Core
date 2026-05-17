@@ -14,6 +14,7 @@ import math
 
 import py_trees
 
+from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.config.referee_constants import (
     BALL_KEEP_OUT_DISTANCE,
     BALL_PLACEMENT_DONE_DISTANCE,
@@ -116,6 +117,30 @@ def _clamp_to_field(point: Vector2D, game) -> Vector2D:
     )
 
 
+def _is_in_own_defense_area(game, x: float, y: float) -> bool:
+    """Return True if (x, y) is inside our own defense area."""
+    own_goal_sign = 1.0 if game.my_team_is_right else -1.0
+    field_half_length = _field_half_length(game)
+    depth = game.field.half_defense_area_depth
+    width = game.field.half_defense_area_width
+    # Own defense area inner edge (closest to center)
+    inner_x = own_goal_sign * (field_half_length - 2.0 * depth)
+    if own_goal_sign > 0:
+        return x >= inner_x and abs(y) <= width
+    else:
+        return x <= inner_x and abs(y) <= width
+
+
+def _own_defense_area_exit_x(game) -> float:
+    """Return the x-coordinate just outside our own defense area front edge."""
+    own_goal_sign = 1.0 if game.my_team_is_right else -1.0
+    field_half_length = _field_half_length(game)
+    depth = game.field.half_defense_area_depth
+    inner_x = own_goal_sign * (field_half_length - 2.0 * depth)
+    # Step one robot-diameter outside the front edge
+    return inner_x - own_goal_sign * (2 * ROBOT_RADIUS + 0.05)
+
+
 def _project_outside_opp_defense_area(game, point: Vector2D, keep_dist: float) -> Vector2D:
     """Project a point out of the opponent defense area plus the required keep distance."""
     field_half_length = _field_half_length(game)
@@ -143,6 +168,8 @@ def _clear_to_legal_positions(
     ball_keep_dist: float | None = None,
     designated_keep_dist: float | None = None,
     clear_opp_defense_area: bool = False,
+    clear_own_defense_area: bool = False,
+    max_own_defenders: int = 1,
     exempt_robot_ids: set[int] | None = None,
     intended_targets: dict[int, Vector2D] | None = None,
 ) -> py_trees.common.Status:
@@ -151,10 +178,26 @@ def _clear_to_legal_positions(
     If intended_targets is provided, each robot's clearance starts from its
     intended formation target rather than its current position, so the clearing
     pass refines rather than discards the formation intent.
+
+    If clear_own_defense_area is True, robots in excess of max_own_defenders
+    inside our own defense area are pushed out to just outside the front edge.
+    The goalkeeper (lowest-ID robot inside the area) is kept as the allowed defender.
     """
     game = blackboard.game
     motion_controller = blackboard.motion_controller
     exempt_robot_ids = exempt_robot_ids or set()
+
+    # Determine which friendly robots must exit own defense area.
+    own_defense_evict: set[int] = set()
+    if clear_own_defense_area:
+        in_own_area = [
+            rid
+            for rid, robot in game.friendly_robots.items()
+            if rid not in exempt_robot_ids and _is_in_own_defense_area(game, robot.p.x, robot.p.y)
+        ]
+        # Keep the first max_own_defenders (sorted by id) — evict the rest.
+        for rid in sorted(in_own_area)[max_own_defenders:]:
+            own_defense_evict.add(rid)
 
     ball_center = None
     if ball_keep_dist is not None and game.ball is not None:
@@ -190,6 +233,8 @@ def _clear_to_legal_positions(
         else:
             target = robot_pos
 
+        if robot_id in own_defense_evict:
+            target = Vector2D(_own_defense_area_exit_x(game), robot.p.y)
         if ball_center is not None:
             target = _project_outside_circle(target, ball_center, ball_keep_dist, ball_fallback)
         if designated_center is not None:
@@ -238,6 +283,8 @@ class StopStep(AbstractBehaviour):
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
             clear_opp_defense_area=True,
+            clear_own_defense_area=True,
+            max_own_defenders=1,
         )
 
 
@@ -335,23 +382,30 @@ class PrepareKickoffOursStep(AbstractBehaviour):
         robot_ids = sorted(game.friendly_robots.keys())
         kicker_id = robot_ids[0]
 
-        # Support positions depend on which side we defend
-        support_positions = _formation_positions(game, KICKOFF_SUPPORT_POSITION_RATIOS_OWN_HALF)
+        # Kicker: approach from own-half side so the robot doesn't push the ball.
+        own_half_sign = 1.0 if game.my_team_is_right else -1.0
+        kicker_target = Vector2D(own_half_sign * (ROBOT_RADIUS + 0.03), 0.0)
+        goal_x = _field_half_length(game) if not game.my_team_is_right else -_field_half_length(game)
+        oren = math.atan2(0.0 - kicker_target.y, goal_x - kicker_target.x)
+        self.blackboard.cmd_map[kicker_id] = move(game, motion_controller, kicker_id, kicker_target, oren)
 
+        # Support robots: route through _clear_to_legal_positions so their paths
+        # never cut across the keep-out zone even if they start on the enemy half.
+        support_positions = _formation_positions(game, KICKOFF_SUPPORT_POSITION_RATIOS_OWN_HALF)
         support_idx = 0
+        intended: dict[int, Vector2D] = {}
         for robot_id in robot_ids:
             if robot_id == kicker_id:
-                # Approach the ball at centre, face the opponent goal
-                target = Vector2D(0.0, 0.0)
-                goal_x = _field_half_length(game) if not game.my_team_is_right else -_field_half_length(game)
-                oren = math.atan2(0.0 - target.y, goal_x - target.x)
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, target, oren)
-            else:
-                pos = support_positions[support_idx % len(support_positions)]
-                support_idx += 1
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, pos, 0.0)
+                continue
+            intended[robot_id] = support_positions[support_idx % len(support_positions)]
+            support_idx += 1
 
-        return py_trees.common.Status.RUNNING
+        return _clear_to_legal_positions(
+            self.blackboard,
+            ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            exempt_robot_ids={kicker_id},
+            intended_targets=intended,
+        )
 
 
 # ---------------------------------------------------------------------------
