@@ -456,6 +456,23 @@ class GameStateMachine:
         }
     )
 
+    def seed_clock(self, timestamp: float) -> None:
+        """Align all internal timers to *timestamp*.
+
+        Resets every timer that was initialised before the real vision clock
+        was known (construction time) so that durations are measured from the
+        correct timebase.  Safe to call only once, immediately after the first
+        valid game frame is available.
+        """
+        if self.stage_start_time is None:
+            self.stage_start_time = timestamp
+        self.command_timestamp = timestamp
+        # Push all "entered-at" sentinels to the new timebase so that
+        # cooldowns / durations are not immediately satisfied.
+        self._last_transition_time = timestamp - _TRANSITION_COOLDOWN  # allow transitions immediately
+        self._stop_entered_time = timestamp - self._stop_duration_seconds  # won't auto-advance yet
+        self._prepare_entered_time = timestamp - self._prepare_duration_seconds  # same
+
     def set_command(self, command: RefereeCommand, timestamp: float) -> None:
         """Manual override — for operator use or test scripting.
 

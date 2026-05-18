@@ -6,6 +6,7 @@ import time
 import warnings
 from collections import deque
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from rich.live import Live
@@ -21,6 +22,7 @@ from utama_core.config.settings import (
     MAX_GAME_HISTORY,
     TIMESTEP,
 )
+from utama_core.custom_referee import CustomReferee
 from utama_core.data_processing.receivers import RefereeMessageReceiver, VisionReceiver
 from utama_core.data_processing.refiners import (
     PositionRefiner,
@@ -44,6 +46,8 @@ from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import GameGater
+from utama_core.run.game_tracer import GameTracer
+from utama_core.run.referee_source import OfficialReferee, RefereeSource
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import (
     AbstractSimController,
@@ -60,7 +64,6 @@ from utama_core.tests.common.abstract_test_manager import (
 )
 
 if TYPE_CHECKING:
-    from utama_core.custom_referee import CustomReferee
     from utama_core.entities.data.referee import RefereeData
 
 logging.basicConfig(
@@ -118,6 +121,10 @@ class StrategyRunner:
         show_live_status (bool, optional): Whether to show the live terminal status panel.
             This panel includes FPS, referee command, stage, score, time remaining,
             and optional status text. Defaults to False.
+        verbose_trace (bool, optional): Whether to emit a human- and LLM-readable trace of
+            meaningful game-state changes (referee commands, ball possession, role assignments,
+            robot actuations). Trace is written to ``game_trace_<color>.log`` in the working
+            directory and also printed to stderr. Defaults to False.
         print_real_fps (bool, optional): Deprecated alias for `show_live_status`.
         profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
         rsim_noise (RsimGaussianNoise, optional): When running in rsim, add Gaussian noise to balls and robots with the
@@ -126,13 +133,10 @@ class StrategyRunner:
         rsim_vanishing (float, optional): When running in rsim, cause robots and ball to vanish with the given probability.
             Defaults to 0.
         filtering (bool, optional): Turn on Kalman filtering. Defaults to false.
-        referee_system (str, optional): Referee source selector. Valid values are
-            `"none"`, `"official"`, and `"custom"`. When omitted, it defaults to
-            `"none"` and no referee input is consumed unless an explicit referee
-            system is selected.
-        custom_referee (CustomReferee, optional): In-process referee source used instead of the
-            network referee receiver. Works across rsim, grsim, and real modes by pushing RefereeData
-            into ref_buffer each tick before the strategy step.
+        referee (RefereeSource, optional): Referee source.  Pass a ``CustomReferee``
+            instance to use the in-process referee, ``OfficialReferee()`` to consume
+            commands from the SSL game-controller over the network, or ``None``
+            (default) to run without any referee input.
     """
 
     def __init__(
@@ -151,18 +155,17 @@ class StrategyRunner:
         opp_control_scheme: Optional[str] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         show_live_status: bool = False,  # Turn this on for simulator debugging
+        verbose_trace: bool = False,
         print_real_fps: Optional[bool] = None,
         profiler_name: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
         rsim_vanishing: float = 0,
         filtering: bool = False,
-        referee_system: Optional[str] = None,
-        custom_referee: Optional["CustomReferee"] = None,
+        referee: RefereeSource = None,
         formation_type: Optional[FormationType] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
-        self.custom_referee = custom_referee
         self._prev_custom_ref_command: Optional[RefereeCommand] = None
         self._last_referee_data: Optional["RefereeData"] = None
         self.my_team_is_yellow = my_team_is_yellow
@@ -175,17 +178,15 @@ class StrategyRunner:
         self.full_field_dims = full_field_dims
         # if field bounds not provided, default to full field dimensions
         self.field_bounds = field_bounds if field_bounds else full_field_dims.full_field_bounds
-        self.referee_system = self._resolve_referee_system(self.mode, referee_system, custom_referee)
+        self.referee: RefereeSource = self._validate_referee(self.mode, referee)
 
         # Ensure the custom referee's geometry matches the actual field in use.
         # The YAML profile geometry is the fallback for standalone use; here
         # full_field_dims + field_bounds is the single source of truth.
-        if self.referee_system == "custom" and self.custom_referee is not None:
+        if isinstance(self.referee, CustomReferee):
             from utama_core.custom_referee.geometry import RefereeGeometry
 
-            self.custom_referee.override_geometry(
-                RefereeGeometry.from_field_dims(self.full_field_dims, self.field_bounds)
-            )
+            self.referee.override_geometry(RefereeGeometry.from_field_dims(self.full_field_dims, self.field_bounds))
 
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 
@@ -217,6 +218,15 @@ class StrategyRunner:
         # Load all game related data
         self._load_game()
         self._assert_exp_goals()
+
+        # Seed the custom referee's internal clocks from the first real vision
+        # timestamp so all timers are on the same timebase regardless of mode
+        # (rsim sim-time or grsim/real wall-time).
+        # Sim modes start in FORCE_START so play begins immediately; real mode
+        # starts in HALT so the operator can set up before play begins.
+        if isinstance(self.referee, CustomReferee):
+            initial_command = RefereeCommand.HALT if self.mode == Mode.REAL else RefereeCommand.FORCE_START
+            self.referee.seed_clock(self.my.current_game_frame.ts, initial_command)
         self.my.strategy.setup_behaviour_tree(is_opp_strat=False)
         if self.opp:
             self.opp.strategy.setup_behaviour_tree(is_opp_strat=True)
@@ -237,6 +247,29 @@ class StrategyRunner:
             if replay_writer_config
             else None
         )
+
+        # Verbose game-state tracer (one per side, written to separate files)
+        my_color = "yellow" if my_team_is_yellow else "blue"
+        opp_color = "blue" if my_team_is_yellow else "yellow"
+        self.game_tracer = (
+            GameTracer(
+                trace_path=Path(f"game_trace_{my_color}.log"),
+                to_stdout=True,
+                team_color=my_color,
+            )
+            if verbose_trace
+            else None
+        )
+        self.opp_game_tracer = (
+            GameTracer(
+                trace_path=Path(f"game_trace_{opp_color}.log"),
+                to_stdout=True,
+                team_color=opp_color,
+            )
+            if verbose_trace and self.opp is not None
+            else None
+        )
+        self._trace_frame_count = 0
 
         # Live terminal status panel
         self.num_frames_elapsed = 0
@@ -279,36 +312,17 @@ class StrategyRunner:
         return mode
 
     @staticmethod
-    def _resolve_referee_system(
-        mode: Mode,
-        referee_system: Optional[str],
-        custom_referee: Optional["CustomReferee"],
-    ) -> str:
-        """Resolve and validate referee source selection.
-
-        Default behavior:
-          - omitted -> "none"
-        """
-        if referee_system is None:
-            referee_system = "none"
-
-        system = referee_system.lower()
-        if system not in {"none", "official", "custom"}:
-            raise ValueError(f"Unknown referee_system: {referee_system}. Choose from 'none', 'official', or 'custom'.")
-
-        if system == "custom" and custom_referee is None:
-            raise ValueError("referee_system='custom' requires a custom_referee instance.")
-
-        if system != "custom" and custom_referee is not None:
-            raise ValueError(
-                "custom_referee was provided, but referee_system is not 'custom'. "
-                "Use referee_system='custom' or remove custom_referee."
+    def _validate_referee(mode: Mode, referee: RefereeSource) -> RefereeSource:
+        """Validate the referee source against the current mode."""
+        if referee is not None and not isinstance(referee, (OfficialReferee, CustomReferee)):
+            raise TypeError(
+                f"referee must be None, OfficialReferee(), or a CustomReferee instance; got {type(referee).__name__}."
             )
 
-        if system == "official" and mode == Mode.RSIM:
-            raise ValueError("referee_system='official' is not supported in rsim. Use 'none' or 'custom'.")
+        if isinstance(referee, OfficialReferee) and mode == Mode.RSIM:
+            raise ValueError("OfficialReferee is not supported in rsim mode. Use None or a CustomReferee instance.")
 
-        return system
+        return referee
 
     def data_update_listener(self, receiver: VisionReceiver):
         """Listener function to pull vision data from a VisionReceiver.
@@ -502,7 +516,7 @@ class StrategyRunner:
         ref_buffer = deque(maxlen=1)
         if self.mode != Mode.RSIM:
             vision_receiver = VisionReceiver(vision_buffers)
-            if self.referee_system == "official":
+            if isinstance(self.referee, OfficialReferee):
                 referee_receiver = RefereeMessageReceiver(ref_buffer)
                 self.start_threads(vision_receiver, referee_receiver)
             else:
@@ -754,6 +768,10 @@ class StrategyRunner:
             self.rsim_env.close()
         if self._fps_live:
             self._fps_live.stop()
+        if self.game_tracer:
+            self.game_tracer.close()
+        if self.opp_game_tracer:
+            self.opp_game_tracer.close()
 
     def run_test(
         self,
@@ -871,8 +889,8 @@ class StrategyRunner:
         frame_start = time.perf_counter()
         self._draw_rsim_field_bounds_overlay()
 
-        if self.referee_system == "custom":
-            ref_data = self.custom_referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
+        if isinstance(self.referee, CustomReferee):
+            ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
             self.ref_buffer.append(ref_data)
             _ball_placement_next = ref_data.next_command in (
                 RefereeCommand.BALL_PLACEMENT_YELLOW,
@@ -947,11 +965,15 @@ class StrategyRunner:
                 display.append(" Yellow")
                 display.append(f"  |  {stage_min}:{stage_sec:02d} left")
                 display.append("  |  Ref: ")
-                display.append(self.referee_system, style="bold magenta")
-                if self.referee_system == "custom" and self.custom_referee is not None:
+                if isinstance(self.referee, CustomReferee):
+                    display.append("custom", style="bold magenta")
                     display.append(" (")
-                    display.append(self.custom_referee.profile_name, style="magenta")
+                    display.append(self.referee.profile_name, style="magenta")
                     display.append(")")
+                elif isinstance(self.referee, OfficialReferee):
+                    display.append("official", style="bold magenta")
+                else:
+                    display.append("none", style="bold magenta")
 
                 if ref.last_status_message:
                     display.append(f"  |  {ref.last_status_message}", style="dim")
@@ -1015,3 +1037,22 @@ class StrategyRunner:
 
         side.game.add_game_frame(new_game_frame)
         side.strategy.step()
+
+        tracer = self.opp_game_tracer if running_opp else self.game_tracer
+        if tracer is not None:
+            if not running_opp:
+                self._trace_frame_count += 1
+            bb = side.strategy.blackboard
+            try:
+                tactic = bb.tactic
+            except KeyError:
+                tactic = None
+            tracer.step(
+                game_frame=new_game_frame,
+                role_map=bb.role_map or {},
+                cmd_map=bb.cmd_map or {},
+                frame_number=self._trace_frame_count,
+                tactic=tactic,
+                behaviour_tree=side.strategy.behaviour_tree,
+                blackboard=bb,
+            )

@@ -7,8 +7,7 @@ Run:
 What it does:
   - Creates a CustomReferee (human profile) with enable_gui=True so the
     browser panel starts automatically.
-  - Passes the referee to StrategyRunner via custom_referee= with
-    referee_system="custom". StrategyRunner
+  - Passes the referee to StrategyRunner via referee=. StrategyRunner
     calls referee.step() on every tick and handles ball teleports on STOP
     automatically — no patching required.
   - WanderingStrategy is used as the base strategy so robots visibly move and
@@ -65,8 +64,7 @@ def main() -> None:
         control_scheme="pid",
         exp_friendly=N_ROBOTS,
         exp_enemy=N_ROBOTS,
-        referee_system="custom",
-        custom_referee=referee,  # StrategyRunner drives referee.step() each tick
+        referee=referee,  # StrategyRunner drives referee.step() each tick
         show_live_status=True,
         opp_strategy=WanderingStrategy(),
     )

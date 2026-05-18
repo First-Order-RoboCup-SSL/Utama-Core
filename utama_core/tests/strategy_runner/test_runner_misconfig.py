@@ -5,7 +5,9 @@ import pytest
 
 from utama_core.config.enums import Mode
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
+from utama_core.custom_referee import CustomReferee
 from utama_core.entities.game.field import FieldBounds
+from utama_core.run.referee_source import OfficialReferee
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.tests.strategy_runner.strat_runner_test_utils import DummyStrategy
 
@@ -33,42 +35,27 @@ def test_load_mode_invalid(base_runner):
         base_runner._load_mode("invalid_mode")
 
 
-def test_resolve_referee_system_defaults_to_none_in_rsim():
-    assert StrategyRunner._resolve_referee_system(Mode.RSIM, None, None) == "none"
+def test_validate_referee_defaults_to_none_in_rsim():
+    assert StrategyRunner._validate_referee(Mode.RSIM, None) is None
 
 
-def test_resolve_referee_system_defaults_to_none_in_grsim():
-    assert StrategyRunner._resolve_referee_system(Mode.GRSIM, None, None) == "none"
+def test_validate_referee_defaults_to_none_in_grsim():
+    assert StrategyRunner._validate_referee(Mode.GRSIM, None) is None
 
 
-def test_resolve_referee_system_rejects_custom_referee_without_explicit_system():
-    with pytest.raises(ValueError, match="custom_referee"):
-        StrategyRunner._resolve_referee_system(Mode.RSIM, None, object())
+def test_validate_referee_rejects_unknown_type():
+    with pytest.raises(TypeError, match="OfficialReferee"):
+        StrategyRunner._validate_referee(Mode.RSIM, object())
 
 
-def test_resolve_referee_system_rejects_invalid_name():
-    with pytest.raises(ValueError, match="Unknown referee_system"):
-        StrategyRunner._resolve_referee_system(Mode.RSIM, "auto", None)
+def test_validate_referee_rejects_official_in_rsim():
+    with pytest.raises(ValueError, match="OfficialReferee"):
+        StrategyRunner._validate_referee(Mode.RSIM, OfficialReferee())
 
 
-def test_resolve_referee_system_rejects_official_in_rsim():
-    with pytest.raises(ValueError, match="official"):
-        StrategyRunner._resolve_referee_system(Mode.RSIM, "official", None)
-
-
-def test_resolve_referee_system_requires_custom_referee_for_custom_mode():
-    with pytest.raises(ValueError, match="custom_referee"):
-        StrategyRunner._resolve_referee_system(Mode.RSIM, "custom", None)
-
-
-def test_resolve_referee_system_rejects_custom_referee_with_none_mode():
-    with pytest.raises(ValueError, match="custom_referee"):
-        StrategyRunner._resolve_referee_system(Mode.RSIM, "none", object())
-
-
-def test_resolve_referee_system_rejects_custom_referee_with_official_mode():
-    with pytest.raises(ValueError, match="custom_referee"):
-        StrategyRunner._resolve_referee_system(Mode.GRSIM, "official", object())
+def test_validate_referee_accepts_official_in_grsim():
+    result = StrategyRunner._validate_referee(Mode.GRSIM, OfficialReferee())
+    assert isinstance(result, OfficialReferee)
 
 
 def test_setup_vision_and_referee_starts_vision_only_when_referee_none(monkeypatch):
@@ -89,7 +76,7 @@ def test_setup_vision_and_referee_starts_vision_only_when_referee_none(monkeypat
 
     fake_runner = SimpleNamespace(
         mode=Mode.GRSIM,
-        referee_system="none",
+        referee=None,
         start_threads=lambda vision_receiver, referee_receiver=None: started.append(
             (vision_receiver, referee_receiver)
         ),
@@ -122,7 +109,7 @@ def test_setup_vision_and_referee_starts_vision_only_when_referee_custom(monkeyp
 
     fake_runner = SimpleNamespace(
         mode=Mode.REAL,
-        referee_system="custom",
+        referee=MagicMock(spec=CustomReferee),
         start_threads=lambda vision_receiver, referee_receiver=None: started.append(
             (vision_receiver, referee_receiver)
         ),
@@ -153,7 +140,7 @@ def test_setup_vision_and_referee_starts_both_receivers_when_referee_official(mo
 
     fake_runner = SimpleNamespace(
         mode=Mode.GRSIM,
-        referee_system="official",
+        referee=OfficialReferee(),
         start_threads=lambda vision_receiver, referee_receiver=None: started.append(
             (vision_receiver, referee_receiver)
         ),

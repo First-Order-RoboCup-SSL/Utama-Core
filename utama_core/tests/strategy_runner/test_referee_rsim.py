@@ -101,8 +101,7 @@ def _make_runner(referee: CustomReferee, n_friendly: int = 3) -> StrategyRunner:
         exp_friendly=n_friendly,
         exp_enemy=0,
         exp_ball=True,
-        referee_system="custom",
-        custom_referee=referee,
+        referee=referee,
     )
 
 

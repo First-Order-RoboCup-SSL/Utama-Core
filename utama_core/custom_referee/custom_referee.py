@@ -153,6 +153,19 @@ class CustomReferee:
             self._gui_server.notify(result, game_frame)
         return result
 
+    def seed_clock(self, timestamp: float, initial_command: RefereeCommand = RefereeCommand.HALT) -> None:
+        """Align all internal state-machine timers to *timestamp* and apply
+        *initial_command*.
+
+        Called by StrategyRunner after the first valid game frame is available,
+        so the referee's timebase matches game_frame.ts from the very first tick.
+        This handles both rsim (sim-time starting near 0) and grsim/real reuse
+        (wall-clock timestamps that may be far from 0).
+        """
+        self._state.seed_clock(timestamp)
+        if initial_command != RefereeCommand.HALT:
+            self._state.set_command(initial_command, timestamp)
+
     def set_command(self, command: RefereeCommand, timestamp: float) -> None:
         """Manual override — for operator use or test scripting."""
         self._state.set_command(command, timestamp)
