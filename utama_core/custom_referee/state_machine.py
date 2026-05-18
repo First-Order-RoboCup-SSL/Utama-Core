@@ -7,6 +7,7 @@ import logging
 import math
 from typing import Optional
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.profiles.profile_loader import AutoAdvanceConfig
 from utama_core.custom_referee.rules.base_rule import RuleViolation
@@ -388,7 +389,9 @@ class GameStateMachine:
         if not attackers:
             return False
 
-        half_length = self._geometry.half_length if self._geometry is not None else 4.5
+        half_length = (
+            self._geometry.half_length if self._geometry is not None else STANDARD_FIELD_DIMS.full_field_half_length
+        )
         yellow_is_right = game_frame.my_team_is_right == game_frame.my_team_is_yellow
         if kicking_is_yellow:
             goal_sign = -1.0 if yellow_is_right else 1.0
