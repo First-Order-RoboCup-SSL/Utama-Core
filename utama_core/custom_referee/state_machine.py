@@ -372,7 +372,7 @@ class GameStateMachine:
 
     def _kicker_in_centre_circle(self, command: RefereeCommand, game_frame: "GameFrame") -> bool:
         """Return True if at least one robot of the attacking team is inside the centre circle."""
-        r = self._geometry.center_circle_radius if self._geometry is not None else 0.5
+        r = self._geometry.center_circle_radius if self._geometry is not None else 0.5  # fallback for standalone use
         kicking_is_yellow = command == RefereeCommand.PREPARE_KICKOFF_YELLOW
         attackers = (
             game_frame.friendly_robots if kicking_is_yellow == game_frame.my_team_is_yellow else game_frame.enemy_robots

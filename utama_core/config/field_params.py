@@ -26,6 +26,7 @@ class FieldDimensions:
     half_defense_area_depth: float
     half_defense_area_width: float
     half_goal_width: float
+    center_circle_radius: float
 
     # --- Bounds ---
 
@@ -137,6 +138,7 @@ STANDARD_FIELD_DIMS = FieldDimensions(
     half_defense_area_depth=0.5,
     half_defense_area_width=1,
     half_goal_width=0.5,
+    center_circle_radius=0.5,
 )
 
 GREAT_EXHIBITION_FIELD_DIMS = FieldDimensions(
@@ -145,4 +147,5 @@ GREAT_EXHIBITION_FIELD_DIMS = FieldDimensions(
     half_defense_area_depth=0.4,
     half_defense_area_width=0.8,
     half_goal_width=0.5,
+    center_circle_radius=0.3,
 )

@@ -38,7 +38,7 @@ class RefereeGeometry:
             half_goal_width=field_dims.half_goal_width,
             half_defense_depth=field_dims.half_defense_area_depth,
             half_defense_width=field_dims.half_defense_area_width,
-            center_circle_radius=0.5,
+            center_circle_radius=field_dims.center_circle_radius,
         )
 
     # ------------------------------------------------------------------
