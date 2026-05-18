@@ -104,7 +104,7 @@ class RefereeRefiner(BaseRefiner):
         )
 
     @property
-    def designated_position(self) -> Optional[tuple[float]]:
+    def designated_position(self) -> Optional[tuple[float, float]]:
         return self._latest_referee_data.designated_position if self._latest_referee_data else None
 
     @property
