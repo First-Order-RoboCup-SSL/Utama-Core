@@ -33,7 +33,6 @@ Note on ball placement in out-of-bounds:
 """
 
 import math
-import time
 from typing import Optional
 
 import py_trees
@@ -135,7 +134,7 @@ class _BallPlacementManager(AbstractTestManager):
         # Ball far from the placement target
         sim_controller.teleport_ball(-1.0, -1.0)
         # Issue BALL_PLACEMENT directly and set the designated target
-        self._referee.set_command(RefereeCommand.BALL_PLACEMENT_YELLOW, time.time())
+        self._referee.set_command(RefereeCommand.BALL_PLACEMENT_YELLOW, game.ts)
         self._referee._state.ball_placement_target = self.TARGET
 
     def eval_status(self, game: Game) -> TestingStatus:
@@ -201,7 +200,7 @@ class _DirectFreeOursManager(AbstractTestManager):
         sim_controller.teleport_robot(game.my_team_is_yellow, 2, -2.0, -0.5)
         # Ball heading out the top sideline
         sim_controller.teleport_ball(0.0, 2.5, vx=0.0, vy=2.5)
-        self._referee.set_command(RefereeCommand.FORCE_START, time.time())
+        self._referee.set_command(RefereeCommand.FORCE_START, game.ts)
 
     def eval_status(self, game: Game) -> TestingStatus:
         ref = game.referee
@@ -273,7 +272,7 @@ class _DirectFreeTheirsManager(AbstractTestManager):
         sim_controller.teleport_robot(game.my_team_is_yellow, 2, -0.1, 2.3)
         # Ball heading out the top sideline; robot 0 is close enough for last-touch
         sim_controller.teleport_ball(0.0, 2.5, vx=0.0, vy=2.5)
-        self._referee.set_command(RefereeCommand.FORCE_START, time.time())
+        self._referee.set_command(RefereeCommand.FORCE_START, game.ts)
 
     def eval_status(self, game: Game) -> TestingStatus:
         ref = game.referee
@@ -342,7 +341,7 @@ class _KickoffPositioningManager(AbstractTestManager):
         sim_controller.teleport_robot(game.my_team_is_yellow, 1, -0.2, 0.5)
         sim_controller.teleport_robot(game.my_team_is_yellow, 2, -0.2, -0.5)
         sim_controller.teleport_ball(0.0, 0.0)
-        self._referee.set_command(RefereeCommand.PREPARE_KICKOFF_YELLOW, time.time())
+        self._referee.set_command(RefereeCommand.PREPARE_KICKOFF_YELLOW, game.ts)
 
     def eval_status(self, game: Game) -> TestingStatus:
         ref = game.referee

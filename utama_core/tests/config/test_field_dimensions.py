@@ -186,6 +186,28 @@ def test_field_reports_goal_lines_absent_when_bounds_crop_goal_width(
             },
             "should not exceed defense width",
         ),
+        (
+            {
+                "full_field_half_length": 4.5,
+                "full_field_half_width": 3.0,
+                "half_defense_area_depth": 0.5,
+                "half_defense_area_width": 1.0,
+                "half_goal_width": 0.5,
+                "center_circle_radius": 0.0,
+            },
+            "center_circle_radius must be positive",
+        ),
+        (
+            {
+                "full_field_half_length": 4.5,
+                "full_field_half_width": 3.0,
+                "half_defense_area_depth": 0.5,
+                "half_defense_area_width": 1.0,
+                "half_goal_width": 0.5,
+                "center_circle_radius": 3.1,
+            },
+            "must not exceed field half-width",
+        ),
     ],
 )
 def test_invalid_field_dimensions_raise_value_errors(kwargs, error_pattern: str):

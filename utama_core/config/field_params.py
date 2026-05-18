@@ -113,11 +113,17 @@ class FieldDimensions:
         DW = self.half_defense_area_width
         G = self.half_goal_width
 
+        R = self.center_circle_radius
+
         # --- Positivity ---
         if not (L > 0 and W > 0):
             raise ValueError("Field length/width must be positive")
         if not (D > 0 and DW > 0 and G > 0):
             raise ValueError("Goal/defense measurements must be positive")
+        if R <= 0:
+            raise ValueError("center_circle_radius must be positive")
+        if R > W:
+            raise ValueError(f"center_circle_radius {R} must not exceed field half-width {W}")
 
         # --- Fit constraints ---
         if 2 * D > L:
