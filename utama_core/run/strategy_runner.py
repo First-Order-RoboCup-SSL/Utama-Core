@@ -6,7 +6,6 @@ import time
 import warnings
 from collections import deque
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from rich.live import Live
@@ -46,7 +45,6 @@ from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import GameGater
-from utama_core.run.game_tracer import GameTracer
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import (
@@ -121,10 +119,6 @@ class StrategyRunner:
         show_live_status (bool, optional): Whether to show the live terminal status panel.
             This panel includes FPS, referee command, stage, score, time remaining,
             and optional status text. Defaults to False.
-        verbose_trace (bool, optional): Whether to emit a human- and LLM-readable trace of
-            meaningful game-state changes (referee commands, ball possession, role assignments,
-            robot actuations). Trace is written to ``game_trace_<color>.log`` in the working
-            directory and also printed to stderr. Defaults to False.
         print_real_fps (bool, optional): Deprecated alias for `show_live_status`.
         profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
         rsim_noise (RsimGaussianNoise, optional): When running in rsim, add Gaussian noise to balls and robots with the
@@ -155,7 +149,6 @@ class StrategyRunner:
         opp_control_scheme: Optional[str] = None,
         replay_writer_config: Optional[ReplayWriterConfig] = None,
         show_live_status: bool = False,  # Turn this on for simulator debugging
-        verbose_trace: bool = False,
         print_real_fps: Optional[bool] = None,
         profiler_name: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
@@ -247,29 +240,6 @@ class StrategyRunner:
             if replay_writer_config
             else None
         )
-
-        # Verbose game-state tracer (one per side, written to separate files)
-        my_color = "yellow" if my_team_is_yellow else "blue"
-        opp_color = "blue" if my_team_is_yellow else "yellow"
-        self.game_tracer = (
-            GameTracer(
-                trace_path=Path(f"game_trace_{my_color}.log"),
-                to_stdout=True,
-                team_color=my_color,
-            )
-            if verbose_trace
-            else None
-        )
-        self.opp_game_tracer = (
-            GameTracer(
-                trace_path=Path(f"game_trace_{opp_color}.log"),
-                to_stdout=True,
-                team_color=opp_color,
-            )
-            if verbose_trace and self.opp is not None
-            else None
-        )
-        self._trace_frame_count = 0
 
         # Live terminal status panel
         self.num_frames_elapsed = 0
@@ -768,10 +738,6 @@ class StrategyRunner:
             self.rsim_env.close()
         if self._fps_live:
             self._fps_live.stop()
-        if self.game_tracer:
-            self.game_tracer.close()
-        if self.opp_game_tracer:
-            self.opp_game_tracer.close()
 
     def run_test(
         self,
@@ -1037,22 +1003,3 @@ class StrategyRunner:
 
         side.game.add_game_frame(new_game_frame)
         side.strategy.step()
-
-        tracer = self.opp_game_tracer if running_opp else self.game_tracer
-        if tracer is not None:
-            if not running_opp:
-                self._trace_frame_count += 1
-            bb = side.strategy.blackboard
-            try:
-                tactic = bb.tactic
-            except KeyError:
-                tactic = None
-            tracer.step(
-                game_frame=new_game_frame,
-                role_map=bb.role_map or {},
-                cmd_map=bb.cmd_map or {},
-                frame_number=self._trace_frame_count,
-                tactic=tactic,
-                behaviour_tree=side.strategy.behaviour_tree,
-                blackboard=bb,
-            )
