@@ -36,23 +36,20 @@ class GameStateMachine:
         n_robots_yellow: int,
         n_robots_blue: int,
         initial_stage: Stage = Stage.NORMAL_FIRST_HALF_PRE,
-        initial_command: RefereeCommand = RefereeCommand.HALT,
         force_start_after_goal: bool = False,
         stop_duration_seconds: float = 3.0,
         prepare_duration_seconds: float = 3.0,
         kickoff_timeout_seconds: float = 10.0,
         geometry: Optional[RefereeGeometry] = None,
         auto_advance: Optional[AutoAdvanceConfig] = None,
-        initial_time: Optional[float] = None,
     ) -> None:
-        self.command = initial_command
+        self.command = RefereeCommand.HALT
         self.command_counter = 0
         self.command_timestamp = 0.0
 
         self.stage = initial_stage
-        # Seeded lazily on the first step() call so that the timebase matches
-        # whatever clock the caller uses (wall time or game.ts).
-        self.stage_start_time: Optional[float] = initial_time
+        # Seeded by seed_clock() after the first valid game frame is available.
+        self.stage_start_time: Optional[float] = None
         self.stage_duration = half_duration_seconds
 
         self.yellow_team = TeamInfo(

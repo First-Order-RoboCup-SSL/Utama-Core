@@ -67,13 +67,15 @@ def _frame(
 
 
 def _state_machine() -> GameStateMachine:
-    return GameStateMachine(
+    sm = GameStateMachine(
         half_duration_seconds=300.0,
         kickoff_team="yellow",
         n_robots_yellow=3,
         n_robots_blue=3,
-        initial_command=RefereeCommand.NORMAL_START,
     )
+    sm.seed_clock(0.0)
+    sm.set_command(RefereeCommand.NORMAL_START, 0.0)
+    return sm
 
 
 # ---------------------------------------------------------------------------
