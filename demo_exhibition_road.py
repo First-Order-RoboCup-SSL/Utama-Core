@@ -11,8 +11,8 @@ What it does:
     with all rules enabled and human-operator auto-advance settings so a
     festival steward can control the game from the browser GUI.
   - 2v2 format: two yellow robots vs two blue robots, matching the small field.
-  - Strategy_2v2 from Utama-Strategy is used for both sides so the robots
-    play a proper pass-and-shoot game rather than just wandering.
+  - WanderingStrategy is used so robots visibly move and you can watch the
+    RefereeOverride tree interrupt them when you issue commands from the GUI.
   - enable_gui=True starts the browser panel at http://localhost:8080 so the
     crowd can watch the referee state in real time.
 
@@ -24,19 +24,6 @@ Operator workflow:
   5. Goals are detected automatically; the referee waits for the operator to
      advance play (human auto-advance profile).
 """
-
-import sys
-from pathlib import Path
-
-# ---------------------------------------------------------------------------
-# Make Utama-Strategy importable when running from Utama-Core root.
-# Adjust or remove this block if your pixi/venv already has it on sys.path.
-# ---------------------------------------------------------------------------
-_STRATEGY_ROOT = Path(__file__).parent.parent / "Utama-Strategy"
-if _STRATEGY_ROOT.exists() and str(_STRATEGY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_STRATEGY_ROOT))
-
-from utama_strategy.examples.strategy_2v2 import Strategy_2v2
 
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.custom_referee import CustomReferee
@@ -51,6 +38,7 @@ from utama_core.custom_referee.profiles.profile_loader import (
     RulesConfig,
 )
 from utama_core.run import StrategyRunner
+from utama_core.tests.referee.wandering_strategy import WanderingStrategy
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -127,8 +115,8 @@ def main() -> None:
     )
 
     runner = StrategyRunner(
-        strategy=Strategy_2v2(my_team_is_right=MY_TEAM_IS_RIGHT),
-        opp_strategy=Strategy_2v2(my_team_is_right=not MY_TEAM_IS_RIGHT),
+        strategy=WanderingStrategy(),
+        opp_strategy=WanderingStrategy(),
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,
         mode="rsim",
