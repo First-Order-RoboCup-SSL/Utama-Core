@@ -384,7 +384,7 @@ pixi run python demo_referee_gui_rsim.py
 ### What it does
 
 - Creates a `CustomReferee` with `enable_gui=True`, which starts an HTTP server on a background daemon thread.
-- Passes the referee to `StrategyRunner` via `custom_referee=` with `referee_system="custom"`. `StrategyRunner` calls `referee.step()` on every tick and handles ball teleports on `STOP` automatically.
+- Passes the referee to `StrategyRunner` via `referee=`. `StrategyRunner` calls `referee.step()` on every tick and handles ball teleports on `STOP` automatically.
 - Uses `WanderingStrategy` so robots visibly move; the `RefereeOverride` behaviour tree interrupts them when you issue commands from the GUI.
 
 ### Operator workflow

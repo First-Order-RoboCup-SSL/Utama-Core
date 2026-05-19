@@ -274,9 +274,9 @@ game:
 
 2. Edit `my_field.yaml` to match your field and rule requirements.
 
-3. Run the GUI with your profile:
+3. Update `demo_referee_gui_rsim.py` to use your profile (set the module-level `PROFILE` constant to `"my_field.yaml"` or the path you want `load_profile(PROFILE)` to load), then run the GUI:
    ```bash
-   pixi run python demo_referee_gui_rsim.py --profile my_field.yaml
+   pixi run python demo_referee_gui_rsim.py
    ```
 
 ### Annotated YAML template

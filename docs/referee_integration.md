@@ -262,34 +262,27 @@ pixi run python utama_core/tests/referee/demo_referee_gui_rsim.py
 
 ---
 
-## 8. Custom Referee Web GUI (`referee_gui.py`)
+## 8. Custom Referee Web GUI
 
-`referee_gui.py` (project root) is a standalone browser-based operator panel for the
-`CustomReferee`. It requires no npm, no build step, and no dependencies beyond the project's
-existing Python environment.
+The browser-based operator panel is started by passing `enable_gui=True` to `CustomReferee` and then running one of the demo scripts. There is no standalone `referee_gui.py` — the GUI is embedded inside `CustomReferee` itself.
 
-### Starting the server
+### Starting the GUI
+
+Use the provided demo script:
 
 ```bash
-pixi run python referee_gui.py
+pixi run python demo_referee_gui_rsim.py
+# RSim window opens; open http://localhost:8080 in a browser
 ```
 
-Then open **http://localhost:8080** in any browser.
+The demo creates `CustomReferee(enable_gui=True, ...)` and passes it to `StrategyRunner` via the `referee=` argument. To change the profile, port, or robot counts, edit the module-level constants at the top of `demo_referee_gui_rsim.py`:
 
-#### CLI options
-
-| Flag | Default | Description |
+| Constant | Default | Description |
 |---|---|---|
-| `--profile` | `human` | Referee profile: `human`, `simulation`, or path to a YAML file |
-| `--port` | `8080` | HTTP port to listen on |
-| `--yellow-robots` | `3` | Number of yellow robots passed to `CustomReferee` |
-| `--blue-robots` | `3` | Number of blue robots passed to `CustomReferee` |
-
-Example with a non-default profile and port:
-
-```bash
-pixi run python referee_gui.py --profile simulation --port 9090 --yellow-robots 6 --blue-robots 6
-```
+| `PROFILE` | `"human"` | Profile name or path to a YAML file passed to `load_profile()` |
+| `PORT` | `8080` | HTTP port the GUI server listens on |
+| `N_ROBOTS` | `3` | Number of robots per team |
+| `MY_TEAM_IS_YELLOW` | `True` | Which team is ours |
 
 ### Using the GUI
 
@@ -340,11 +333,7 @@ Built-in profiles live in `utama_core/custom_referee/profiles/`:
 | `human` | Goal detection only | No — operator controls the next stage |
 | `simulation` | All four rules (goal, out-of-bounds, defense area, keep-out) | Yes — progresses automatically when restart criteria are met |
 
-To customise, copy a YAML file, edit the values, and pass the path:
-
-```bash
-pixi run python referee_gui.py --profile /path/to/my_profile.yaml
-```
+To customise, copy a YAML file, edit the values, then set `PROFILE` in `demo_referee_gui_rsim.py` to its path:
 
 The YAML structure mirrors the dataclasses in `profile_loader.py`. The `geometry` block is
 optional — all fields default to `STANDARD_FIELD_DIMS` (standard SSL 9×6 m field) if omitted.
@@ -387,7 +376,7 @@ game:
 ### Architecture
 
 ```
-referee_gui.py
+CustomReferee (enable_gui=True)
 │
 ├── _tick_loop (daemon thread, ~30 Hz)
 │   └── CustomReferee.step() → stores latest RefereeData, broadcasts to SSE clients
