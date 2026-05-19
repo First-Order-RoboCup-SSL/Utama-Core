@@ -881,8 +881,14 @@ class StrategyRunner:
         try:
             while not self._stop_event.is_set():
                 self._run_step()
+            # Loop exited via stop_event — check whether a background thread
+            # parked an exception (e.g. geometry mismatch from VisionReceiver).
+            if self._vision_receiver is not None and self._vision_receiver.thread_exception is not None:
+                raise self._vision_receiver.thread_exception
         except Exception:
-            if self._stop_event.is_set():
+            if self._stop_event.is_set() and (
+                self._vision_receiver is None or self._vision_receiver.thread_exception is None
+            ):
                 self.logger.info("Stopping run loop due to interrupt.")
             else:
                 self.logger.exception("Exception occurred during run loop:")
