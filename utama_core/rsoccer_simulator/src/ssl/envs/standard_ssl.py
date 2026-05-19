@@ -98,6 +98,7 @@ class SSLStandardEnv(SSLBaseEnv):
                 "penalty_width": 2 * full_field_dims.half_defense_area_width,
                 "goal_width": 2 * full_field_dims.half_goal_width,
                 "center_circle_r": full_field_dims.center_circle_radius,
+                "goal_depth": full_field_dims.goal_depth,
             }
 
         super().__init__(

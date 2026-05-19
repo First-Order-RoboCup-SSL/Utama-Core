@@ -19,6 +19,7 @@ class RefereeGeometry:
     half_defense_depth: float
     half_defense_width: float
     center_circle_radius: float
+    goal_depth: float = 0.18  # depth of goal box behind the goal line (metres)
 
     @classmethod
     def from_field_dims(cls, field_dims: FieldDimensions, field_bounds: FieldBounds | None = None) -> "RefereeGeometry":
@@ -39,6 +40,7 @@ class RefereeGeometry:
             half_defense_depth=field_dims.half_defense_area_depth,
             half_defense_width=field_dims.half_defense_area_width,
             center_circle_radius=field_dims.center_circle_radius,
+            goal_depth=field_dims.goal_depth,
         )
 
     # ------------------------------------------------------------------

@@ -27,6 +27,7 @@ class FieldDimensions:
     half_defense_area_width: float
     half_goal_width: float
     center_circle_radius: float
+    goal_depth: float = 0.18  # depth of the goal box behind the goal line (metres)
 
     # --- Bounds ---
 
