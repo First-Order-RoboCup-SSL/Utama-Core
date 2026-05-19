@@ -6,57 +6,40 @@ intercepts before this strategy runs, so you can clearly see robots interrupted
 and repositioned by the referee.
 """
 
-import math
-
 import py_trees
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.entities.data.vector import Vector2D
 from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
 
-# One waypoint list per robot (by index into sorted robot IDs).
-# Robots on the right half defend the right goal, so positions are spread
-# across both halves to make motion easy to see.
-_WAYPOINT_SETS = [
+# Waypoints defined as fractions of the standard field half-dimensions
+# (half_length=4.5, half_width=3.0) so they scale correctly to any field.
+# Values are in the range (-1, 1) relative to each half-axis.
+_WAYPOINT_SETS_NORMALISED = [
     # Robot 0 — large figure-8 across the field
-    [
-        Vector2D(-3.0, 1.5),
-        Vector2D(0.0, 0.0),
-        Vector2D(3.0, -1.5),
-        Vector2D(0.0, 0.0),
-    ],
+    [(-0.67, 0.50), (0.0, 0.0), (0.67, -0.50), (0.0, 0.0)],
     # Robot 1 — diagonal patrol
-    [
-        Vector2D(-2.0, -2.0),
-        Vector2D(2.0, 2.0),
-    ],
+    [(-0.44, -0.67), (0.44, 0.67)],
     # Robot 2 — wide horizontal sweep
-    [
-        Vector2D(-3.5, 0.5),
-        Vector2D(3.5, 0.5),
-        Vector2D(3.5, -0.5),
-        Vector2D(-3.5, -0.5),
-    ],
+    [(-0.78, 0.17), (0.78, 0.17), (0.78, -0.17), (-0.78, -0.17)],
     # Robot 3 — small loop near centre
-    [
-        Vector2D(1.0, 1.0),
-        Vector2D(-1.0, 1.0),
-        Vector2D(-1.0, -1.0),
-        Vector2D(1.0, -1.0),
-    ],
+    [(0.22, 0.33), (-0.22, 0.33), (-0.22, -0.33), (0.22, -0.33)],
     # Robot 4 — left-half patrol
-    [
-        Vector2D(-3.0, 0.0),
-        Vector2D(-1.0, 2.0),
-        Vector2D(-1.0, -2.0),
-    ],
+    [(-0.67, 0.0), (-0.22, 0.67), (-0.22, -0.67)],
     # Robot 5 — right-half patrol
-    [
-        Vector2D(3.0, 0.0),
-        Vector2D(1.0, 2.0),
-        Vector2D(1.0, -2.0),
-    ],
+    [(0.67, 0.0), (0.22, 0.67), (0.22, -0.67)],
 ]
+
+
+def _scale_waypoints(
+    field_dims: FieldDimensions,
+) -> list[list[Vector2D]]:
+    """Return waypoint lists scaled to *field_dims*."""
+    L = field_dims.full_field_half_length
+    W = field_dims.full_field_half_width
+    return [[Vector2D(fx * L, fy * W) for fx, fy in pattern] for pattern in _WAYPOINT_SETS_NORMALISED]
+
 
 _ARRIVAL_THRESHOLD = 0.15  # metres — how close counts as "reached"
 
@@ -75,7 +58,7 @@ class WanderingStep(AbstractBehaviour):
         robot_ids = sorted(game.friendly_robots.keys())
 
         for slot, robot_id in enumerate(robot_ids):
-            waypoints = _WAYPOINT_SETS[slot % len(_WAYPOINT_SETS)]
+            waypoints = self.blackboard.strategy._waypoints[slot % len(self.blackboard.strategy._waypoints)]
 
             if robot_id not in self._wp_index:
                 self._wp_index[robot_id] = 0
@@ -100,9 +83,17 @@ class WanderingStep(AbstractBehaviour):
 class WanderingStrategy(AbstractStrategy):
     """Strategy where every robot continuously patrols a set of waypoints.
 
+    Waypoints are scaled to *field_dims* so the strategy works correctly on
+    any field size.  Defaults to STANDARD_FIELD_DIMS when omitted, which
+    preserves the original behaviour for existing callers.
+
     Intended for use with the referee visualisation simulation so that referee
     commands visibly interrupt robot motion.
     """
+
+    def __init__(self, field_dims: FieldDimensions | None = None) -> None:
+        super().__init__()
+        self._waypoints = _scale_waypoints(field_dims or STANDARD_FIELD_DIMS)
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
         return True

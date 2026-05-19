@@ -115,8 +115,8 @@ def main() -> None:
     )
 
     runner = StrategyRunner(
-        strategy=WanderingStrategy(),
-        opp_strategy=WanderingStrategy(),
+        strategy=WanderingStrategy(field_dims=GREAT_EXHIBITION_FIELD_DIMS),
+        opp_strategy=WanderingStrategy(field_dims=GREAT_EXHIBITION_FIELD_DIMS),
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,
         mode="rsim",
