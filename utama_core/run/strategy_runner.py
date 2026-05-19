@@ -176,6 +176,9 @@ class StrategyRunner:
         self.field_bounds = field_bounds if field_bounds else full_field_dims.full_field_bounds
         self.referee: RefereeSource = self._validate_referee(self.mode, referee)
 
+        self._stop_event = threading.Event()
+        self._vision_receiver: Optional[VisionReceiver] = None
+
         if isinstance(self.referee, CustomReferee):
             from utama_core.custom_referee.geometry import RefereeGeometry
 
@@ -255,8 +258,6 @@ class StrategyRunner:
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
-        self._stop_event = threading.Event()
-        self._vision_receiver: Optional[VisionReceiver] = None
 
     def _handle_sigint(self, sig, frame):
         self._stop_event.set()
