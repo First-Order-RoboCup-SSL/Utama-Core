@@ -96,8 +96,8 @@ class WanderingStrategy(AbstractStrategy):
     """
 
     def __init__(self, field_dims: FieldDimensions | None = None) -> None:
-        super().__init__()
         self._waypoints = _scale_waypoints(field_dims or STANDARD_FIELD_DIMS)
+        super().__init__()
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
         return True
