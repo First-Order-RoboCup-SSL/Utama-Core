@@ -381,29 +381,17 @@ _HTML = r"""<!DOCTYPE html>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg:         #111214;
-    --surface:    #18191d;
-    --surface2:   #1e2026;
-    --border:     #2a2d35;
-    --border2:    #363a45;
-    --text:       #d4d6db;
-    --muted:      #606472;
-    --dim:        #3a3d47;
-
-    /* Restrained accent palette — low saturation */
-    --c-halt:     #8b3a3a;   /* dark brick red */
-    --c-stop:     #7a5a2a;   /* dark amber */
-    --c-go:       #2a5a3a;   /* dark sage green */
-    --c-yellow:   #6b5a1a;   /* muted gold */
-    --c-blue:     #1e3d5c;   /* slate blue */
-
-    --c-halt-text:   #e8a0a0;
-    --c-stop-text:   #d4aa6a;
-    --c-go-text:     #7dcca0;
-    --c-yellow-text: #c8a83a;
-    --c-blue-text:   #6aaad4;
-
-    --radius: 5px;
+    --bg:        #1a1a2e;
+    --surface:   #16213e;
+    --border:    #0f3460;
+    --text:      #e0e0e0;
+    --muted:     #888;
+    --yellow:    #f4c542;
+    --blue:      #4da6ff;
+    --red:       #e74c3c;
+    --orange:    #e67e22;
+    --green:     #2ecc71;
+    --radius:    6px;
   }
 
   html, body {
@@ -434,14 +422,13 @@ _HTML = r"""<!DOCTYPE html>
     flex-direction: column;
   }
   .quad-title {
-    padding: 7px 16px;
-    font-size: .6rem;
-    letter-spacing: .14em;
+    padding: 8px 16px;
+    font-size: .65rem;
+    letter-spacing: .12em;
     text-transform: uppercase;
     color: var(--muted);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    background: var(--bg);
   }
 
   /* ── Top-left: field ── */
@@ -488,15 +475,15 @@ _HTML = r"""<!DOCTYPE html>
     text-transform: uppercase;
     margin-bottom: 4px;
   }
-  .team-name.yellow { color: var(--c-yellow-text); }
-  .team-name.blue   { color: var(--c-blue-text); }
+  .team-name.yellow { color: var(--yellow); }
+  .team-name.blue   { color: var(--blue); }
   .score-value {
     font-size: 2.4rem;
     font-weight: 700;
     line-height: 1;
   }
-  .score-value.yellow { color: var(--c-yellow-text); }
-  .score-value.blue   { color: var(--c-blue-text); }
+  .score-value.yellow { color: var(--yellow); }
+  .score-value.blue   { color: var(--blue); }
 
   .info-block {
     padding: 12px 16px;
@@ -525,76 +512,58 @@ _HTML = r"""<!DOCTYPE html>
     display: inline-block;
     padding: 3px 10px;
     border-radius: 4px;
-    font-size: .75rem;
+    font-size: .8rem;
     font-weight: 600;
     letter-spacing: .05em;
     text-transform: uppercase;
     transition: background .2s, color .2s;
-    border: 1px solid transparent;
   }
-  .badge.HALT              { background: var(--c-halt);   color: var(--c-halt-text);   border-color: var(--c-halt-text); }
-  .badge.STOP              { background: var(--c-stop);   color: var(--c-stop-text);   border-color: var(--c-stop-text); }
+  .badge.HALT              { background: var(--red);    color: #fff; }
+  .badge.STOP              { background: var(--orange); color: #fff; }
   .badge.NORMAL_START,
-  .badge.FORCE_START       { background: var(--c-go);     color: var(--c-go-text);     border-color: var(--c-go-text); }
+  .badge.FORCE_START       { background: var(--green);  color: #111; }
   .badge.PREPARE_KICKOFF_YELLOW,
   .badge.DIRECT_FREE_YELLOW,
   .badge.INDIRECT_FREE_YELLOW,
   .badge.PREPARE_PENALTY_YELLOW,
   .badge.BALL_PLACEMENT_YELLOW,
-  .badge.TIMEOUT_YELLOW    { background: var(--c-yellow); color: var(--c-yellow-text); border-color: var(--c-yellow-text); }
+  .badge.TIMEOUT_YELLOW    { background: var(--yellow); color: #111; }
   .badge.PREPARE_KICKOFF_BLUE,
   .badge.DIRECT_FREE_BLUE,
   .badge.INDIRECT_FREE_BLUE,
   .badge.PREPARE_PENALTY_BLUE,
   .badge.BALL_PLACEMENT_BLUE,
-  .badge.TIMEOUT_BLUE      { background: var(--c-blue);   color: var(--c-blue-text);   border-color: var(--c-blue-text); }
-  .badge.unknown           { background: var(--dim); color: var(--muted); }
+  .badge.TIMEOUT_BLUE      { background: var(--blue);   color: #111; }
+  .badge.unknown           { background: #444; color: #ccc; }
 
   .buttons {
-    padding: 14px 16px;
+    padding: 12px 16px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 8px;
     flex-shrink: 0;
-  }
-  .btn-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .btn-group-label {
-    font-size: .58rem;
-    letter-spacing: .14em;
-    text-transform: uppercase;
-    color: var(--muted);
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--border);
   }
   .btn-row { display: flex; flex-wrap: wrap; gap: 6px; }
   button {
-    padding: 8px 16px;
+    padding: 7px 13px;
+    border: 1px solid transparent;
     border-radius: var(--radius);
     font-family: inherit;
-    font-size: .72rem;
+    font-size: .75rem;
     font-weight: 600;
-    letter-spacing: .06em;
+    letter-spacing: .05em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: opacity .15s, transform .1s, background .15s;
-    background: transparent;
+    transition: filter .15s, transform .1s;
   }
   button:active { transform: scale(.96); }
-  button:hover  { opacity: .8; }
-  .btn-halt   { border: 1px solid var(--c-halt-text);   color: var(--c-halt-text); }
-  .btn-halt:hover   { background: var(--c-halt);   opacity: 1; }
-  .btn-stop   { border: 1px solid var(--c-stop-text);   color: var(--c-stop-text); }
-  .btn-stop:hover   { background: var(--c-stop);   opacity: 1; }
-  .btn-go     { border: 1px solid var(--c-go-text);     color: var(--c-go-text); }
-  .btn-go:hover     { background: var(--c-go);     opacity: 1; }
-  .btn-yellow { border: 1px solid var(--c-yellow-text); color: var(--c-yellow-text); }
-  .btn-yellow:hover { background: var(--c-yellow); opacity: 1; }
-  .btn-blue   { border: 1px solid var(--c-blue-text);   color: var(--c-blue-text); }
-  .btn-blue:hover   { background: var(--c-blue);   opacity: 1; }
+  button:hover  { filter: brightness(1.15); }
+  .btn-halt          { background: var(--red);    color: #fff; }
+  .btn-stop          { background: var(--orange); color: #fff; }
+  .btn-normal-start,
+  .btn-force-start   { background: var(--green);  color: #111; }
+  .btn-yellow        { background: var(--yellow); color: #111; }
+  .btn-blue          { background: var(--blue);   color: #111; }
 
   .conn {
     padding: 8px 16px;
@@ -613,7 +582,7 @@ _HTML = r"""<!DOCTYPE html>
     background: #555;
     transition: background .3s;
   }
-  .dot.live { background: var(--c-go-text); }
+  .dot.live { background: var(--green); }
 
   /* ── Bottom-left: event log ── */
   #quad-log {
@@ -635,8 +604,8 @@ _HTML = r"""<!DOCTYPE html>
     padding-bottom: 3px;
   }
   .log-time  { color: var(--muted); margin-right: 6px; }
-  .log-cmd   { color: var(--c-go-text); }
-  .log-score { color: var(--c-yellow-text); }
+  .log-cmd   { color: var(--green); }
+  .log-score { color: var(--yellow); }
   .log-msg   { color: var(--text); opacity: .8; }
 
   /* ── Bottom-right: config ── */
@@ -680,8 +649,8 @@ _HTML = r"""<!DOCTYPE html>
     font-size: .7rem;
     font-weight: 600;
   }
-  .pill.on  { background: #162416; color: var(--c-go-text);     border: 1px solid #2a3e2a; }
-  .pill.off { background: #241616; color: var(--c-halt-text);   border: 1px solid #3e2a2a; }
+  .pill.on  { background: #1a3a1a; color: var(--green); border: 1px solid #2a5a2a; }
+  .pill.off { background: #3a1a1a; color: #c0605a;      border: 1px solid #5a2a2a; }
 </style>
 </head>
 <body>
@@ -731,36 +700,27 @@ _HTML = r"""<!DOCTYPE html>
     </div>
   </div>
   <div class="buttons">
-    <div class="btn-group">
-      <div class="btn-group-label">Game control</div>
-      <div class="btn-row">
-        <button class="btn-halt" onclick="send('HALT')"
-          title="Emergency stop — all robots immediately cease movement.">Halt</button>
-        <button class="btn-stop" onclick="send('STOP')"
-          title="Pause play. Robots slow to ≤1.5 m/s, stay ≥0.5 m from ball.">Stop</button>
-        <button class="btn-go" onclick="send('NORMAL_START')"
-          title="Begin/resume play after kickoff or free kick positioning is complete.">Normal Start</button>
-        <button class="btn-go" onclick="send('FORCE_START')"
-          title="Resume immediately without set-piece positioning (double-touch, stalled play).">Force Start</button>
-      </div>
+    <div class="btn-row">
+      <button class="btn-halt"         onclick="send('HALT')"
+        title="Emergency stop — all robots immediately cease movement.">Halt</button>
+      <button class="btn-stop"         onclick="send('STOP')"
+        title="Pause play. Robots slow to ≤1.5 m/s, stay ≥0.5 m from ball.">Stop</button>
+      <button class="btn-normal-start" onclick="send('NORMAL_START')"
+        title="Begin/resume play after kickoff or free kick positioning is complete.">Normal Start</button>
+      <button class="btn-force-start"  onclick="send('FORCE_START')"
+        title="Resume immediately without set-piece positioning (double-touch, stalled play).">Force Start</button>
     </div>
-    <div class="btn-group">
-      <div class="btn-group-label">Kickoff</div>
-      <div class="btn-row">
-        <button class="btn-yellow" onclick="send('PREPARE_KICKOFF_YELLOW')"
-          title="Award Yellow a kickoff.">Yellow</button>
-        <button class="btn-blue" onclick="send('PREPARE_KICKOFF_BLUE')"
-          title="Award Blue a kickoff.">Blue</button>
-      </div>
+    <div class="btn-row">
+      <button class="btn-yellow" onclick="send('PREPARE_KICKOFF_YELLOW')"
+        title="Award Yellow a kickoff. If game is running, STOP is issued first so robots can clear the ball — then click Normal Start to begin kickoff.">Kickoff Yellow</button>
+      <button class="btn-blue"   onclick="send('PREPARE_KICKOFF_BLUE')"
+        title="Award Blue a kickoff. If game is running, STOP is issued first so robots can clear the ball — then click Normal Start to begin kickoff.">Kickoff Blue</button>
     </div>
-    <div class="btn-group">
-      <div class="btn-group-label">Free Kick</div>
-      <div class="btn-row">
-        <button class="btn-yellow" onclick="send('DIRECT_FREE_YELLOW')"
-          title="Award Yellow a direct free kick.">Yellow</button>
-        <button class="btn-blue" onclick="send('DIRECT_FREE_BLUE')"
-          title="Award Blue a direct free kick.">Blue</button>
-      </div>
+    <div class="btn-row">
+      <button class="btn-yellow" onclick="send('DIRECT_FREE_YELLOW')"
+        title="Award Yellow a direct free kick. If game is running, STOP is issued first so robots can clear — then click Normal Start.">Free Kick Yellow</button>
+      <button class="btn-blue"   onclick="send('DIRECT_FREE_BLUE')"
+        title="Award Blue a direct free kick. If game is running, STOP is issued first so robots can clear — then click Normal Start.">Free Kick Blue</button>
     </div>
   </div>
   <div class="conn">
