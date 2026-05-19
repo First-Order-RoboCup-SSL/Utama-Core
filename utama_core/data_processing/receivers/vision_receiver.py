@@ -1,7 +1,7 @@
 import logging
 import time
 from collections import deque
-from typing import Deque, List
+from typing import Callable, Deque, List, Optional
 
 from utama_core.config.settings import MULTICAST_GROUP, VISION_PORT
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
@@ -18,9 +18,15 @@ class VisionReceiver:
     """Receives protobuf data from SSL Vision over the network, formats into RawData types and passes it over to the
     VisionProcessor."""
 
-    def __init__(self, vision_buffers: List[Deque[RawVisionData]]):
+    def __init__(
+        self,
+        vision_buffers: List[Deque[RawVisionData]],
+        on_geometry: Optional[Callable] = None,
+    ):
         self.net = network_manager.NetworkManager(address=(MULTICAST_GROUP, VISION_PORT), bind_socket=True)
         self.vision_buffers = vision_buffers
+        self._on_geometry = on_geometry
+        self._geometry_fired = False
         self.packet_timestamps = deque()
         self.fps_print_interval = 1  # seconds
         self.last_fps_print_time = time.time()
@@ -48,6 +54,9 @@ class VisionReceiver:
             if data is not None:
                 vision_packet.Clear()
                 vision_packet.ParseFromString(data)
+                if self._on_geometry and not self._geometry_fired and vision_packet.HasField("geometry"):
+                    self._on_geometry(vision_packet.geometry.field)
+                    self._geometry_fired = True
                 # print(vision_packet.detection)
                 self.prev_frame_num = vision_packet.detection.frame_number
                 self._add_detection_to_buffer(vision_packet.detection)

@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import yaml
-
-from utama_core.config.field_params import STANDARD_FIELD_DIMS
-from utama_core.custom_referee.geometry import RefereeGeometry
 
 _PROFILES_DIR = Path(__file__).parent
 
@@ -115,7 +110,6 @@ class GameConfig:
 @dataclass
 class RefereeProfile:
     profile_name: str
-    geometry: RefereeGeometry
     rules: RulesConfig
     game: GameConfig
 
@@ -155,17 +149,6 @@ def load_profile(name_or_path: str) -> RefereeProfile:
 
 
 def _parse_profile(data: dict) -> RefereeProfile:
-    geo_d = data.get("geometry", {})
-    _s = STANDARD_FIELD_DIMS
-    geometry = RefereeGeometry(
-        half_length=geo_d.get("half_length", _s.full_field_half_length),
-        half_width=geo_d.get("half_width", _s.full_field_half_width),
-        half_goal_width=geo_d.get("half_goal_width", _s.half_goal_width),
-        half_defense_depth=geo_d.get("half_defense_depth", _s.half_defense_area_depth),
-        half_defense_width=geo_d.get("half_defense_width", _s.half_defense_area_width),
-        center_circle_radius=geo_d.get("center_circle_radius", _s.center_circle_radius),
-    )
-
     rules_d = data.get("rules", {})
 
     gd = rules_d.get("goal_detection", {})
@@ -224,7 +207,6 @@ def _parse_profile(data: dict) -> RefereeProfile:
 
     return RefereeProfile(
         profile_name=data.get("profile_name", "unknown"),
-        geometry=geometry,
         rules=rules,
         game=game,
     )

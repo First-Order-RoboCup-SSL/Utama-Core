@@ -64,6 +64,8 @@ from utama_core.tests.common.abstract_test_manager import (
 if TYPE_CHECKING:
     from utama_core.entities.data.referee import RefereeData
 
+_GEOMETRY_MATCH_TOLERANCE_M = 0.001  # mm-precision integers from vision → 1 mm tolerance
+
 logging.basicConfig(
     filename="Utama.log",
     level=logging.CRITICAL,
@@ -110,7 +112,9 @@ class StrategyRunner:
         exp_ball (bool): Whether the ball is expected to be present.
                         Only raises error when strategy expects ball but runtime does not provide it.
                         Defaults to True.
-        full_field_dims (FieldDimensions): The dimensions of the full field. Defaults to standard field dimensions.
+        full_field_dims (FieldDimensions): The dimensions of the full field. Defaults to standard
+            field dimensions. For gRSim/Real, this must match the actual field configured in
+            gRSim/SSL-Vision — a RuntimeError is raised on the first vision packet if they differ.
         field_bounds (FieldBounds): Bounds of the subset of the full field being used. Defaults to None (ie full field).
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         control_scheme (str, optional): Name of the motion control scheme to use.
@@ -169,13 +173,9 @@ class StrategyRunner:
         self.exp_ball = exp_ball
         self.formation_type = formation_type
         self.full_field_dims = full_field_dims
-        # if field bounds not provided, default to full field dimensions
         self.field_bounds = field_bounds if field_bounds else full_field_dims.full_field_bounds
         self.referee: RefereeSource = self._validate_referee(self.mode, referee)
 
-        # Ensure the custom referee's geometry matches the actual field in use.
-        # The YAML profile geometry is the fallback for standalone use; here
-        # full_field_dims + field_bounds is the single source of truth.
         if isinstance(self.referee, CustomReferee):
             from utama_core.custom_referee.geometry import RefereeGeometry
 
@@ -185,8 +185,8 @@ class StrategyRunner:
 
         assert_valid_bounding_box(
             self.field_bounds,
-            full_field_dims.full_field_half_length,
-            full_field_dims.full_field_half_width,
+            self.full_field_dims.full_field_half_length,
+            self.full_field_dims.full_field_half_width,
         )
         self.referee_refiner = RefereeRefiner()
 
@@ -477,22 +477,62 @@ class StrategyRunner:
             return None, sim_controller
 
     def _setup_vision_and_referee(self) -> Tuple[deque, deque]:
-        """Setup the vision and referee buffers.
-
-        Returns:
-            tuple: Vision and referee buffers.
-        """
+        """Setup vision and referee buffers, starting network receivers for gRSim/Real."""
         vision_buffers = [deque(maxlen=1) for _ in range(MAX_CAMERAS)]
         ref_buffer = deque(maxlen=1)
         if self.mode != Mode.RSIM:
-            vision_receiver = VisionReceiver(vision_buffers)
+            on_geometry = self._make_geometry_validation_callback()
+            vision_receiver = VisionReceiver(vision_buffers, on_geometry=on_geometry)
             if isinstance(self.referee, OfficialReferee):
-                referee_receiver = RefereeMessageReceiver(ref_buffer)
-                self.start_threads(vision_receiver, referee_receiver)
+                self.start_threads(vision_receiver, RefereeMessageReceiver(ref_buffer))
             else:
                 self.start_threads(vision_receiver)
-
         return vision_buffers, ref_buffer
+
+    def _make_geometry_validation_callback(self):
+        """Return a one-shot callback that validates vision geometry matches full_field_dims.
+
+        Raises RuntimeError if the field size reported by gRSim/SSL-Vision differs from
+        full_field_dims by more than _GEOMETRY_MATCH_TOLERANCE_M metres.
+        """
+
+        def _on_geometry(field_size) -> None:
+            vision_half_length = field_size.field_length / 2000.0
+            vision_half_width = field_size.field_width / 2000.0
+            vision_half_goal_width = field_size.goal_width / 2000.0
+            vision_half_defense_depth = field_size.penalty_area_depth / 2000.0
+            vision_half_defense_width = field_size.penalty_area_width / 2000.0
+            d = self.full_field_dims
+            t = _GEOMETRY_MATCH_TOLERANCE_M
+            mismatches = []
+            if abs(vision_half_length - d.full_field_half_length) > t:
+                mismatches.append(
+                    f"field_length: vision={vision_half_length * 2:.3f}m configured={d.full_field_half_length * 2:.3f}m"
+                )
+            if abs(vision_half_width - d.full_field_half_width) > t:
+                mismatches.append(
+                    f"field_width: vision={vision_half_width * 2:.3f}m configured={d.full_field_half_width * 2:.3f}m"
+                )
+            if abs(vision_half_goal_width - d.half_goal_width) > t:
+                mismatches.append(
+                    f"goal_width: vision={vision_half_goal_width * 2:.3f}m configured={d.half_goal_width * 2:.3f}m"
+                )
+            if abs(vision_half_defense_depth - d.half_defense_area_depth) > t:
+                mismatches.append(
+                    f"penalty_area_depth: vision={vision_half_defense_depth * 2:.3f}m configured={d.half_defense_area_depth * 2:.3f}m"
+                )
+            if abs(vision_half_defense_width - d.half_defense_area_width) > t:
+                mismatches.append(
+                    f"penalty_area_width: vision={vision_half_defense_width * 2:.3f}m configured={d.half_defense_area_width * 2:.3f}m"
+                )
+            if mismatches:
+                raise RuntimeError(
+                    "Field geometry mismatch between full_field_dims and vision packet:\n"
+                    + "\n".join(f"  {m}" for m in mismatches)
+                    + "\nUpdate full_field_dims in StrategyRunner to match the actual field."
+                )
+
+        return _on_geometry
 
     def _assert_exp_robots_and_ball(
         self,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.profiles.profile_loader import (
     RefereeProfile,
@@ -76,7 +77,7 @@ class CustomReferee:
         gui_port: int = 8080,
     ) -> None:
         self._profile_name = profile.profile_name
-        self._geometry: RefereeGeometry = profile.geometry
+        self._geometry: RefereeGeometry = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
         self._rules: List[BaseRule] = _build_active_rules(profile.rules)
         self._state = GameStateMachine(
             half_duration_seconds=profile.game.half_duration_seconds,
@@ -87,18 +88,14 @@ class CustomReferee:
             stop_duration_seconds=profile.game.stop_duration_seconds,
             prepare_duration_seconds=profile.game.prepare_duration_seconds,
             kickoff_timeout_seconds=profile.game.kickoff_timeout_seconds,
-            geometry=profile.geometry,
+            geometry=self._geometry,
             auto_advance=profile.game.auto_advance,
         )
         self._gui_server = None
         if enable_gui:
             # Lazy import to keep this module free of HTTP/GUI dependencies
             # when the GUI is not needed.
-            from utama_core.custom_referee.gui import (
-                _build_config_json,
-                _RefereeGUIServer,
-                attach_gui,
-            )
+            from utama_core.custom_referee.gui import _RefereeGUIServer
 
             self._gui_server = _RefereeGUIServer(self, profile, gui_port, run_tick_loop=False)
             self._gui_server.start()

@@ -215,15 +215,19 @@ referee = CustomReferee.from_profile_name("/path/to/my_profile.yaml")
 
 ### YAML schema
 
+The `geometry` block is optional — all fields default to `STANDARD_FIELD_DIMS` (standard SSL 9×6 m field) if omitted. When running through `StrategyRunner`, geometry is always overridden from `full_field_dims` at startup, so the YAML geometry block only matters when constructing `CustomReferee` standalone (outside `StrategyRunner`).
+
 ```yaml
 profile_name: "simulation"
-geometry:
-  half_length: 4.5
-  half_width: 3.0
-  half_goal_width: 0.5
-  half_defense_depth: 0.5
-  half_defense_width: 1.0
-  center_circle_radius: 0.5
+# geometry block omitted — defaults to STANDARD_FIELD_DIMS
+# Add a geometry block only for standalone use with a non-standard field:
+# geometry:
+#   half_length: 2.0
+#   half_width: 1.5
+#   half_goal_width: 0.5
+#   half_defense_depth: 0.4
+#   half_defense_width: 0.8
+#   center_circle_radius: 0.3
 rules:
   goal_detection:
     enabled: true
@@ -256,18 +260,23 @@ game:
 
 ## Integration with StrategyRunner
 
-`StrategyRunner` accepts an optional `custom_referee` parameter. When set:
+`StrategyRunner` accepts an optional `referee` parameter. Pass a `CustomReferee` instance to use the in-process referee. When set:
 
 1. `RefereeMessageReceiver` is **not** started (no UDP multicast thread).
 2. Each tick, `CustomReferee.step()` is called with `self.my_current_game_frame` and the result is pushed into `ref_buffer` before `_step_game()` reads it.
 3. On the **transition edge** into `STOP` (i.e. the first frame the command becomes `STOP`), if `RefereeData.designated_position` is not `None` and a `sim_controller` is present, the ball is teleported to `designated_position` in the simulator. After a goal this is always `(0.0, 0.0)` — the centre spot.
 
+### Field geometry and `full_field_dims`
+
+`StrategyRunner` overrides the referee's geometry at startup using `full_field_dims` and `field_bounds` — the YAML profile geometry is irrelevant when running through `StrategyRunner`. This ensures the referee always enforces the same field the simulator is actually running.
+
+For **gRSim and Real** modes, `StrategyRunner` also validates the first vision geometry packet against `full_field_dims` and raises `RuntimeError` immediately if they don't match, preventing silent mismatches between configured and actual field size.
+
 ```python
 from utama_core.custom_referee import CustomReferee
-from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 
 referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=3, n_robots_blue=3)
-referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
 
 runner = StrategyRunner(
     strategy=MyStrategy(),
@@ -276,8 +285,8 @@ runner = StrategyRunner(
     mode="rsim",
     exp_friendly=3,
     exp_enemy=3,
-    referee_system="custom",
-    custom_referee=referee,
+    full_field_dims=GREAT_EXHIBITION_FIELD_DIMS,  # referee geometry set from this
+    referee=referee,
 )
 runner.run()
 ```

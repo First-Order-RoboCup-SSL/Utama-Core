@@ -163,11 +163,9 @@ safety and testing. Use `simulation` for simulator, strategy testing, and RL wor
 
 ---
 
-## Changing field dimensions
+## Field dimensions
 
-All six `geometry` fields are in **metres** and are fully dynamic — every rule reads geometry
-on each tick, so changing a value in the profile instantly changes rule behaviour. The field
-canvas auto-scales to match.
+All six geometry fields are in **metres**. The field canvas auto-scales to the active geometry.
 
 | Field | Controls | Rules affected |
 |---|---|---|
@@ -177,6 +175,12 @@ canvas auto-scales to match.
 | `half_defense_depth` | Depth of defence area | DefenseAreaRule |
 | `half_defense_width` | Half-width of defence area | DefenseAreaRule |
 | `center_circle_radius` | Centre circle drawn on canvas; reserved for future keep-out rule | — |
+
+### Where geometry comes from
+
+**When running through `StrategyRunner`** (the normal path): geometry is set from `full_field_dims` at startup and is not read from the YAML profile. The GUI's `/config` endpoint reads `referee.geometry` live, so it always reflects the actual active geometry — including the correct values after `StrategyRunner` overrides them.
+
+**Standalone use** (constructing `CustomReferee` directly without `StrategyRunner`): geometry comes from the `geometry:` block in the YAML profile, defaulting to `STANDARD_FIELD_DIMS` if the block is omitted.
 
 ---
 

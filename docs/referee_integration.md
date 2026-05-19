@@ -346,17 +346,22 @@ To customise, copy a YAML file, edit the values, and pass the path:
 pixi run python referee_gui.py --profile /path/to/my_profile.yaml
 ```
 
-The YAML structure mirrors the dataclasses in `profile_loader.py`:
+The YAML structure mirrors the dataclasses in `profile_loader.py`. The `geometry` block is
+optional — all fields default to `STANDARD_FIELD_DIMS` (standard SSL 9×6 m field) if omitted.
+When running through `StrategyRunner`, geometry is always overridden from `full_field_dims`
+at startup, so the YAML geometry block only matters for standalone use outside `StrategyRunner`.
 
 ```yaml
 profile_name: "my_profile"
-geometry:
-  half_length: 4.5          # metres from centre to goal line
-  half_width: 3.0           # metres from centre to touch line
-  half_goal_width: 0.5      # metres from centre of goal to post
-  half_defense_depth: 0.5   # depth of defense area from goal line
-  half_defense_width: 1.0   # half-width of defense area
-  center_circle_radius: 0.5
+# geometry block omitted — defaults to STANDARD_FIELD_DIMS when running via StrategyRunner.
+# Add only for standalone use with a non-standard field:
+# geometry:
+#   half_length: 2.0          # metres from centre to goal line
+#   half_width: 1.5           # metres from centre to touch line
+#   half_goal_width: 0.5      # metres from centre of goal to post
+#   half_defense_depth: 0.4   # depth of defense area from goal line
+#   half_defense_width: 0.8   # half-width of defense area
+#   center_circle_radius: 0.3
 rules:
   goal_detection:
     enabled: true
@@ -451,7 +456,7 @@ The **Field** panel shows a top-down canvas updated in real time at ~30 Hz via S
 
 | Element | Colour | Notes |
 |---|---|---|
-| Field background | Green | Scaled to profile geometry |
+| Field background | Green | Scaled to active referee geometry (set by StrategyRunner at startup) |
 | Lines / circles | White | Boundary, centre line, centre circle, defence areas |
 | Left goal | Yellow (translucent) | Yellow team's goal (negative x side) |
 | Right goal | Blue (translucent) | Blue team's goal (positive x side) |

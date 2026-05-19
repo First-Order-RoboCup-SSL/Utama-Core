@@ -89,7 +89,7 @@ class _RefereeGUIServer(threading.Thread):
         self._referee = referee
         self._port = port
         self._run_tick_loop = run_tick_loop
-        self._config_json = _build_config_json(profile)
+        self._static_config = _build_static_config(profile)
 
         self._lock = threading.Lock()
         self._ref_data = None
@@ -121,6 +121,19 @@ class _RefereeGUIServer(threading.Thread):
                 self._game_frame = frame
             self._broadcast()
             time.sleep(1 / 30)
+
+    def _build_config_json(self) -> str:
+        g = self._referee.geometry
+        config = dict(self._static_config)
+        config["geometry"] = {
+            "half_length": g.half_length,
+            "half_width": g.half_width,
+            "half_goal_width": g.half_goal_width,
+            "half_defense_depth": g.half_defense_depth,
+            "half_defense_width": g.half_defense_width,
+            "center_circle_radius": g.center_circle_radius,
+        }
+        return json.dumps(config)
 
     # ---- called by external loops to push a new state snapshot ----
 
@@ -178,7 +191,7 @@ class _RefereeGUIServer(threading.Thread):
                 self.wfile.write(body)
 
             def _serve_config(self):
-                body = server_instance._config_json.encode()
+                body = server_instance._build_config_json().encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -311,57 +324,46 @@ def _serialise_state(ref_data, game_frame=None) -> str:
     )
 
 
-def _build_config_json(profile: "RefereeProfile") -> str:
-    g = profile.geometry
+def _build_static_config(profile: "RefereeProfile") -> dict:
     r = profile.rules
     gm = profile.game
-    return json.dumps(
-        {
-            "profile_name": profile.profile_name,
-            "geometry": {
-                "half_length": g.half_length,
-                "half_width": g.half_width,
-                "half_goal_width": g.half_goal_width,
-                "half_defense_depth": g.half_defense_depth,
-                "half_defense_width": g.half_defense_width,
-                "center_circle_radius": g.center_circle_radius,
+    return {
+        "profile_name": profile.profile_name,
+        "rules": {
+            "goal_detection": {
+                "enabled": r.goal_detection.enabled,
+                "cooldown_seconds": r.goal_detection.cooldown_seconds,
             },
-            "rules": {
-                "goal_detection": {
-                    "enabled": r.goal_detection.enabled,
-                    "cooldown_seconds": r.goal_detection.cooldown_seconds,
-                },
-                "out_of_bounds": {
-                    "enabled": r.out_of_bounds.enabled,
-                    "free_kick_assigner": r.out_of_bounds.free_kick_assigner,
-                },
-                "defense_area": {
-                    "enabled": r.defense_area.enabled,
-                    "max_defenders": r.defense_area.max_defenders,
-                    "attacker_infringement": r.defense_area.attacker_infringement,
-                },
-                "keep_out": {
-                    "enabled": r.keep_out.enabled,
-                    "radius_meters": r.keep_out.radius_meters,
-                    "violation_persistence_frames": r.keep_out.violation_persistence_frames,
-                },
+            "out_of_bounds": {
+                "enabled": r.out_of_bounds.enabled,
+                "free_kick_assigner": r.out_of_bounds.free_kick_assigner,
             },
-            "game": {
-                "half_duration_seconds": gm.half_duration_seconds,
-                "kickoff_team": gm.kickoff_team,
-                "force_start_after_goal": gm.force_start_after_goal,
-                "stop_duration_seconds": gm.stop_duration_seconds,
-                "auto_advance": {
-                    "stop_to_next_command": gm.auto_advance.stop_to_next_command,
-                    "prepare_kickoff_to_normal": gm.auto_advance.prepare_kickoff_to_normal,
-                    "prepare_penalty_to_normal": gm.auto_advance.prepare_penalty_to_normal,
-                    "direct_free_to_normal": gm.auto_advance.direct_free_to_normal,
-                    "ball_placement_to_next": gm.auto_advance.ball_placement_to_next,
-                    "normal_start_to_force": gm.auto_advance.normal_start_to_force,
-                },
+            "defense_area": {
+                "enabled": r.defense_area.enabled,
+                "max_defenders": r.defense_area.max_defenders,
+                "attacker_infringement": r.defense_area.attacker_infringement,
             },
-        }
-    )
+            "keep_out": {
+                "enabled": r.keep_out.enabled,
+                "radius_meters": r.keep_out.radius_meters,
+                "violation_persistence_frames": r.keep_out.violation_persistence_frames,
+            },
+        },
+        "game": {
+            "half_duration_seconds": gm.half_duration_seconds,
+            "kickoff_team": gm.kickoff_team,
+            "force_start_after_goal": gm.force_start_after_goal,
+            "stop_duration_seconds": gm.stop_duration_seconds,
+            "auto_advance": {
+                "stop_to_next_command": gm.auto_advance.stop_to_next_command,
+                "prepare_kickoff_to_normal": gm.auto_advance.prepare_kickoff_to_normal,
+                "prepare_penalty_to_normal": gm.auto_advance.prepare_penalty_to_normal,
+                "direct_free_to_normal": gm.auto_advance.direct_free_to_normal,
+                "ball_placement_to_next": gm.auto_advance.ball_placement_to_next,
+                "normal_start_to_force": gm.auto_advance.normal_start_to_force,
+            },
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
