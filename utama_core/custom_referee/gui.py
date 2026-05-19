@@ -132,7 +132,6 @@ class _RefereeGUIServer(threading.Thread):
             "half_defense_depth": g.half_defense_depth,
             "half_defense_width": g.half_defense_width,
             "center_circle_radius": g.center_circle_radius,
-            "goal_depth": g.goal_depth,
         }
         return json.dumps(config)
 
@@ -394,91 +393,67 @@ _HTML = r"""<!DOCTYPE html>
     --radius:    6px;
   }
 
-  html, body {
-    height: 100%;
-  }
-
   body {
     background: var(--bg);
     color: var(--text);
     font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
-    height: 100vh;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    grid-template-areas:
-      "field  controls"
-      "log    config";
-    gap: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+    gap: 20px;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text);
+    opacity: .9;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 640px;
     overflow: hidden;
   }
 
-  /* ── Quadrant base ── */
-  .quad {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-  .quad-title {
-    padding: 8px 16px;
-    font-size: .65rem;
+  .panel-title {
+    padding: 10px 20px;
+    font-size: .7rem;
     letter-spacing: .12em;
     text-transform: uppercase;
     color: var(--muted);
     border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
   }
 
-  /* ── Top-left: field ── */
-  #quad-field {
-    grid-area: field;
-  }
-  #field-canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
-  .field-wrap {
-    flex: 1;
-    min-height: 0;
-    position: relative;
-  }
-  .field-wrap canvas {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-  }
-
-  /* ── Top-right: controls ── */
-  #quad-controls {
-    grid-area: controls;
-    overflow-y: auto;
-  }
   .scoreboard {
     display: grid;
     grid-template-columns: 1fr 1fr;
     border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
   }
+
   .score-cell {
-    padding: 12px 16px;
+    padding: 18px 24px;
     text-align: center;
   }
   .score-cell:first-child { border-right: 1px solid var(--border); }
+
   .team-name {
-    font-size: .7rem;
+    font-size: .75rem;
     letter-spacing: .1em;
     text-transform: uppercase;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
   .team-name.yellow { color: var(--yellow); }
   .team-name.blue   { color: var(--blue); }
+
   .score-value {
-    font-size: 2.4rem;
+    font-size: 3rem;
     font-weight: 700;
     line-height: 1;
   }
@@ -486,23 +461,23 @@ _HTML = r"""<!DOCTYPE html>
   .score-value.blue   { color: var(--blue); }
 
   .info-block {
-    padding: 12px 16px;
+    padding: 16px 24px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
+    gap: 10px;
   }
+
   .info-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: .85rem;
+    font-size: .9rem;
   }
+
   .label {
     color: var(--muted);
-    min-width: 84px;
-    font-size: .7rem;
+    min-width: 90px;
+    font-size: .75rem;
     text-transform: uppercase;
     letter-spacing: .05em;
     flex-shrink: 0;
@@ -510,9 +485,9 @@ _HTML = r"""<!DOCTYPE html>
 
   .badge {
     display: inline-block;
-    padding: 3px 10px;
+    padding: 4px 12px;
     border-radius: 4px;
-    font-size: .8rem;
+    font-size: .85rem;
     font-weight: 600;
     letter-spacing: .05em;
     text-transform: uppercase;
@@ -536,20 +511,68 @@ _HTML = r"""<!DOCTYPE html>
   .badge.TIMEOUT_BLUE      { background: var(--blue);   color: #111; }
   .badge.unknown           { background: #444; color: #ccc; }
 
+  .config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .config-section {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .config-section:nth-child(odd)      { border-right: 1px solid var(--border); }
+  .config-section:nth-last-child(-n+2) { border-bottom: none; }
+
+  .config-section-title {
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .cfg-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: .8rem;
+    padding: 2px 0;
+    gap: 8px;
+  }
+
+  .cfg-key { color: var(--muted); flex-shrink: 0; }
+  .cfg-val { text-align: right; word-break: break-word; }
+
+  .pill {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: .75rem;
+    font-weight: 600;
+  }
+  .pill.on  { background: #1a3a1a; color: var(--green); border: 1px solid #2a5a2a; }
+  .pill.off { background: #3a1a1a; color: #c0605a;      border: 1px solid #5a2a2a; }
+
   .buttons {
-    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 640px;
+    padding: 16px 20px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    flex-shrink: 0;
+    gap: 10px;
   }
-  .btn-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
   button {
-    padding: 7px 13px;
+    padding: 8px 16px;
     border: 1px solid transparent;
     border-radius: var(--radius);
     font-family: inherit;
-    font-size: .75rem;
+    font-size: .8rem;
     font-weight: 600;
     letter-spacing: .05em;
     text-transform: uppercase;
@@ -558,6 +581,7 @@ _HTML = r"""<!DOCTYPE html>
   }
   button:active { transform: scale(.96); }
   button:hover  { filter: brightness(1.15); }
+
   .btn-halt          { background: var(--red);    color: #fff; }
   .btn-stop          { background: var(--orange); color: #fff; }
   .btn-normal-start,
@@ -566,106 +590,38 @@ _HTML = r"""<!DOCTYPE html>
   .btn-blue          { background: var(--blue);   color: #111; }
 
   .conn {
-    padding: 8px 16px;
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: .7rem;
+    font-size: .75rem;
     color: var(--muted);
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
-    margin-top: auto;
   }
   .dot {
-    width: 7px; height: 7px;
+    width: 8px; height: 8px;
     border-radius: 50%;
     background: #555;
     transition: background .3s;
   }
   .dot.live { background: var(--green); }
 
-  /* ── Bottom-left: event log ── */
-  #quad-log {
-    grid-area: log;
-  }
-  .log-entries {
-    overflow-y: auto;
-    flex: 1;
-    min-height: 0;
-    padding: 8px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  .log-entry {
-    font-size: .7rem;
-    line-height: 1.4;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 3px;
-  }
-  .log-time  { color: var(--muted); margin-right: 6px; }
-  .log-cmd   { color: var(--green); }
-  .log-score { color: var(--yellow); }
-  .log-msg   { color: var(--text); opacity: .8; }
-
-  /* ── Bottom-right: config ── */
-  #quad-config {
-    grid-area: config;
-    overflow-y: auto;
-  }
-  .config-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    flex: 1;
-    min-height: 0;
-  }
-  .config-section {
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--border);
-  }
-  .config-section:nth-child(odd)       { border-right: 1px solid var(--border); }
-  .config-section:nth-last-child(-n+2) { border-bottom: none; }
-  .config-section-title {
-    font-size: .63rem;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 6px;
-  }
-  .cfg-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: .75rem;
-    padding: 2px 0;
-    gap: 8px;
-  }
-  .cfg-key { color: var(--muted); flex-shrink: 0; }
-  .cfg-val { text-align: right; word-break: break-word; }
-  .pill {
-    display: inline-block;
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-size: .7rem;
-    font-weight: 600;
-  }
-  .pill.on  { background: #1a3a1a; color: var(--green); border: 1px solid #2a5a2a; }
-  .pill.off { background: #3a1a1a; color: #c0605a;      border: 1px solid #5a2a2a; }
+  /* Phase 2 additions */
+  .viz-row { display:flex; gap:16px; width:100%; max-width:640px; align-items:flex-start; }
+  .field-panel { flex:1 1 0; min-width:0; overflow:hidden; }
+  #field-canvas { display:block; width:100%; height:auto; }
+  .log-panel { flex:1 1 0; min-width:0; display:flex; flex-direction:column; max-height:260px; }
+  .log-entries { overflow-y:auto; flex:1; padding:8px 12px; display:flex; flex-direction:column; gap:4px; }
+  .log-entry { font-size:.72rem; line-height:1.4; border-bottom:1px solid var(--border); padding-bottom:3px; }
+  .log-time { color:var(--muted); margin-right:6px; }
+  .log-cmd  { color:var(--green); }
+  .log-score{ color:var(--yellow); }
+  .log-msg  { color:var(--text); opacity:.8; }
 </style>
 </head>
 <body>
 
-<!-- Top-left: field render -->
-<div class="quad" id="quad-field">
-  <div class="quad-title" id="page-title">Field</div>
-  <div class="field-wrap">
-    <canvas id="field-canvas"></canvas>
-  </div>
-</div>
+<h1 id="page-title">Custom Referee</h1>
 
-<!-- Top-right: scoreboard + game state + buttons -->
-<div class="quad" id="quad-controls">
-  <div class="quad-title">Controls</div>
+<div class="panel">
   <div class="scoreboard">
     <div class="score-cell">
       <div class="team-name yellow">Yellow</div>
@@ -676,6 +632,7 @@ _HTML = r"""<!DOCTYPE html>
       <div class="score-value blue" id="blue-score">—</div>
     </div>
   </div>
+
   <div class="info-block">
     <div class="info-row">
       <span class="label">Command</span>
@@ -696,49 +653,55 @@ _HTML = r"""<!DOCTYPE html>
     </div>
     <div class="info-row" id="status-row" style="display:none">
       <span class="label">Status</span>
-      <span id="status-msg" style="color:var(--muted);font-size:.75rem;"></span>
+      <span id="status-msg" style="color:var(--muted);font-size:.8rem;"></span>
     </div>
-  </div>
-  <div class="buttons">
-    <div class="btn-row">
-      <button class="btn-halt"         onclick="send('HALT')"
-        title="Emergency stop — all robots immediately cease movement.">Halt</button>
-      <button class="btn-stop"         onclick="send('STOP')"
-        title="Pause play. Robots slow to ≤1.5 m/s, stay ≥0.5 m from ball.">Stop</button>
-      <button class="btn-normal-start" onclick="send('NORMAL_START')"
-        title="Begin/resume play after kickoff or free kick positioning is complete.">Normal Start</button>
-      <button class="btn-force-start"  onclick="send('FORCE_START')"
-        title="Resume immediately without set-piece positioning (double-touch, stalled play).">Force Start</button>
-    </div>
-    <div class="btn-row">
-      <button class="btn-yellow" onclick="send('PREPARE_KICKOFF_YELLOW')"
-        title="Award Yellow a kickoff. If game is running, STOP is issued first so robots can clear the ball — then click Normal Start to begin kickoff.">Kickoff Yellow</button>
-      <button class="btn-blue"   onclick="send('PREPARE_KICKOFF_BLUE')"
-        title="Award Blue a kickoff. If game is running, STOP is issued first so robots can clear the ball — then click Normal Start to begin kickoff.">Kickoff Blue</button>
-    </div>
-    <div class="btn-row">
-      <button class="btn-yellow" onclick="send('DIRECT_FREE_YELLOW')"
-        title="Award Yellow a direct free kick. If game is running, STOP is issued first so robots can clear — then click Normal Start.">Free Kick Yellow</button>
-      <button class="btn-blue"   onclick="send('DIRECT_FREE_BLUE')"
-        title="Award Blue a direct free kick. If game is running, STOP is issued first so robots can clear — then click Normal Start.">Free Kick Blue</button>
-    </div>
-  </div>
-  <div class="conn">
-    <div class="dot" id="conn-dot"></div>
-    <span id="conn-label">connecting…</span>
   </div>
 </div>
 
-<!-- Bottom-left: event log -->
-<div class="quad" id="quad-log">
-  <div class="quad-title">Event Log</div>
-  <div class="log-entries" id="log-entries"></div>
+<div class="buttons">
+  <div class="btn-row">
+    <button class="btn-halt"         onclick="send('HALT')"
+      title="Emergency stop — all robots immediately cease movement.">Halt</button>
+    <button class="btn-stop"         onclick="send('STOP')"
+      title="Pause play. Robots slow to ≤1.5 m/s, stay ≥0.5 m from ball.">Stop</button>
+    <button class="btn-normal-start" onclick="send('NORMAL_START')"
+      title="Begin/resume play after kickoff or free kick positioning is complete.">Normal Start</button>
+    <button class="btn-force-start"  onclick="send('FORCE_START')"
+      title="Resume immediately without set-piece positioning (double-touch, stalled play).">Force Start</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn-yellow" onclick="send('PREPARE_KICKOFF_YELLOW')"
+      title="Award Yellow a kickoff. If game is running, STOP is issued first so robots can clear the ball — then click Normal Start to begin kickoff.">Kickoff Yellow</button>
+    <button class="btn-blue"   onclick="send('PREPARE_KICKOFF_BLUE')"
+      title="Award Blue a kickoff. If game is running, STOP is issued first so robots can clear the ball — then click Normal Start to begin kickoff.">Kickoff Blue</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn-yellow" onclick="send('DIRECT_FREE_YELLOW')"
+      title="Award Yellow a direct free kick. If game is running, STOP is issued first so robots can clear — then click Normal Start.">Free Kick Yellow</button>
+    <button class="btn-blue"   onclick="send('DIRECT_FREE_BLUE')"
+      title="Award Blue a direct free kick. If game is running, STOP is issued first so robots can clear — then click Normal Start.">Free Kick Blue</button>
+  </div>
 </div>
 
-<!-- Bottom-right: profile config -->
-<div class="quad" id="quad-config">
-  <div class="quad-title" id="cfg-title">Profile — loading…</div>
+<div class="viz-row">
+  <div class="panel field-panel">
+    <div class="panel-title">Field</div>
+    <canvas id="field-canvas"></canvas>
+  </div>
+  <div class="panel log-panel">
+    <div class="panel-title">Event Log</div>
+    <div class="log-entries" id="log-entries"></div>
+  </div>
+</div>
+
+<div class="panel" id="cfg-panel">
+  <div class="panel-title" id="cfg-title">Profile — loading…</div>
   <div class="config-grid" id="cfg-grid"></div>
+</div>
+
+<div class="conn">
+  <div class="dot" id="conn-dot"></div>
+  <span id="conn-label">connecting…</span>
 </div>
 
 <script>
@@ -760,43 +723,15 @@ function addLog(cssClass, text) {
 
 // --- Canvas globals ---
 let _cfg = null, _lastFrame = {};
-
-function resizeCanvas() {
-  const canvas = document.getElementById('field-canvas');
-  if (!canvas || !_cfg) return;
-  const wrap = canvas.parentElement;
-  const cw = wrap.clientWidth;
-  const ch = wrap.clientHeight;
-  const fieldAspect = (2 * _cfg.half_length) / (2 * _cfg.half_width);
-  const wrapAspect  = cw / ch;
-  let pw, ph;
-  if (wrapAspect > fieldAspect) {
-    // container is wider than the field — constrain by height
-    ph = ch;
-    pw = Math.round(ch * fieldAspect);
-  } else {
-    // container is taller — constrain by width
-    pw = cw;
-    ph = Math.round(cw / fieldAspect);
-  }
-  if (canvas.width !== pw || canvas.height !== ph) {
-    canvas.width  = pw;
-    canvas.height = ph;
-  }
-  // Centre the canvas inside the wrap
-  canvas.style.left = Math.round((cw - pw) / 2) + 'px';
-  canvas.style.top  = Math.round((ch - ph) / 2) + 'px';
-  canvas.style.width  = pw + 'px';
-  canvas.style.height = ph + 'px';
-  drawField(_lastFrame);
-}
-
 function initCanvas(g) {
   _cfg = g;
-  resizeCanvas();
-  new ResizeObserver(resizeCanvas).observe(
-    document.getElementById('field-canvas').parentElement
-  );
+  const canvas = document.getElementById('field-canvas');
+  const CW = 400;
+  const fieldW = 2 * g.half_length;
+  const fieldH = 2 * g.half_width;
+  canvas.width = CW;
+  canvas.height = Math.round(CW * fieldH / fieldW);
+  drawField(_lastFrame);
 }
 
 function drawField(d) {
@@ -838,15 +773,15 @@ function drawField(d) {
   ctx.arc(toX(0), toY(0), 2, 0, 2 * Math.PI);
   ctx.fill();
 
-  // Defence areas — full depth = 2 * half_defense_depth (matches physical model)
-  const dl = 2 * g.half_defense_depth, dw = g.half_defense_width;
+  // Defence areas
+  const dl = g.half_defense_depth, dw = g.half_defense_width;
   // Left (negative x)
   ctx.strokeRect(toX(-g.half_length), toY(dw), dl * scale, 2 * dw * scale);
   // Right (positive x)
   ctx.strokeRect(toX(g.half_length - dl), toY(dw), dl * scale, 2 * dw * scale);
 
-  // Goal bars (depth from geometry, outside field boundary)
-  const goalDepth = g.goal_depth;
+  // Goal bars (10 cm deep, outside field boundary)
+  const goalDepth = 0.1;
   // Left goal (yellow)
   ctx.fillStyle = 'rgba(244,197,66,0.6)';
   ctx.fillRect(toX(-g.half_length - goalDepth), toY(g.half_goal_width),
