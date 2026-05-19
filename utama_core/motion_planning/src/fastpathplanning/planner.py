@@ -272,8 +272,8 @@ class FastPathPlanner:
         final_trajectory, _ = self.check_segment((our_pos, safe_target), obstacles, 0, safe_target, field_bounds)
 
         # 5. Draw the resulting safe path segments
-        for i in final_trajectory:
-            if self._env is not None:
+        if self._env is not None:
+            for i in final_trajectory:
                 self._env.draw_line(i)
 
         # 6. Smooth the path and draw the final "Carrot" target in Blue
