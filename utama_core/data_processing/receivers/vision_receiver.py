@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from collections import deque
 from typing import Callable, Deque, List, Optional
@@ -22,11 +23,16 @@ class VisionReceiver:
         self,
         vision_buffers: List[Deque[RawVisionData]],
         on_geometry: Optional[Callable] = None,
+        stop_event: Optional[threading.Event] = None,
     ):
         self.net = network_manager.NetworkManager(address=(MULTICAST_GROUP, VISION_PORT), bind_socket=True)
         self.vision_buffers = vision_buffers
         self._on_geometry = on_geometry
         self._geometry_fired = False
+        self._stop_event = stop_event
+        # Parked exception from the geometry callback — re-raised in the main
+        # thread by StrategyRunner._run_step() so the process exits cleanly.
+        self.thread_exception: Optional[BaseException] = None
         self.packet_timestamps = deque()
         self.fps_print_interval = 1  # seconds
         self.last_fps_print_time = time.time()
@@ -55,7 +61,13 @@ class VisionReceiver:
                 vision_packet.Clear()
                 vision_packet.ParseFromString(data)
                 if self._on_geometry and not self._geometry_fired and vision_packet.HasField("geometry"):
-                    self._on_geometry(vision_packet.geometry.field)
+                    try:
+                        self._on_geometry(vision_packet.geometry.field)
+                    except Exception as exc:
+                        self.thread_exception = exc
+                        if self._stop_event is not None:
+                            self._stop_event.set()
+                        return
                     self._geometry_fired = True
                 # print(vision_packet.detection)
                 self.prev_frame_num = vision_packet.detection.frame_number

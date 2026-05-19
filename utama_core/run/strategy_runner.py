@@ -256,6 +256,7 @@ class StrategyRunner:
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
         self._stop_event = threading.Event()
+        self._vision_receiver: Optional[VisionReceiver] = None
 
     def _handle_sigint(self, sig, frame):
         self._stop_event.set()
@@ -319,6 +320,11 @@ class StrategyRunner:
             vision_receiver: VisionReceiver to run in a background thread.
             referee_receiver: Optional RefereeMessageReceiver to run in a background thread.
         """
+        # Give the receiver a handle to _stop_event so geometry errors can
+        # signal the main loop to stop and re-raise the exception cleanly.
+        vision_receiver._stop_event = self._stop_event
+        self._vision_receiver = vision_receiver
+
         vision_thread = threading.Thread(target=vision_receiver.pull_game_data)
 
         vision_thread.daemon = True
@@ -893,6 +899,12 @@ class StrategyRunner:
         No return value; updates internal game state and controllers.
         """
         frame_start = time.perf_counter()
+
+        # Re-raise any exception parked by a background thread (e.g. geometry
+        # mismatch from VisionReceiver) so the main loop exits with a clean
+        # traceback instead of crashing somewhere unrelated later.
+        if self._vision_receiver is not None and self._vision_receiver.thread_exception is not None:
+            raise self._vision_receiver.thread_exception
         self._draw_rsim_field_bounds_overlay()
 
         if isinstance(self.referee, CustomReferee):
