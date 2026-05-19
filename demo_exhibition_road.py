@@ -70,12 +70,12 @@ _EXHIBITION_PROFILE = RefereeProfile(
             free_kick_assigner="last_touch",
         ),
         defense_area=DefenseAreaConfig(
-            enabled=True,
+            enabled=False,
             max_defenders=1,  # one robot allowed in own penalty area
             attacker_infringement=True,
         ),
         keep_out=KeepOutConfig(
-            enabled=True,
+            enabled=False,
             radius_meters=0.3,  # scaled down from standard 0.5 m for small field
             violation_persistence_frames=30,
         ),
