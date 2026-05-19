@@ -47,6 +47,10 @@ _ARRIVAL_THRESHOLD = 0.15  # metres — how close counts as "reached"
 class WanderingStep(AbstractBehaviour):
     """Moves each robot through its waypoint list, advancing when it arrives."""
 
+    def __init__(self, waypoints: list[list[Vector2D]], name: str = "WanderingStep"):
+        super().__init__(name=name)
+        self._waypoints = waypoints
+
     def initialise(self):
         # Track waypoint index per robot ID
         self._wp_index: dict[int, int] = {}
@@ -58,7 +62,7 @@ class WanderingStep(AbstractBehaviour):
         robot_ids = sorted(game.friendly_robots.keys())
 
         for slot, robot_id in enumerate(robot_ids):
-            waypoints = self.blackboard.strategy._waypoints[slot % len(self.blackboard.strategy._waypoints)]
+            waypoints = self._waypoints[slot % len(self._waypoints)]
 
             if robot_id not in self._wp_index:
                 self._wp_index[robot_id] = 0
@@ -106,5 +110,5 @@ class WanderingStrategy(AbstractStrategy):
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
         root = py_trees.composites.Sequence(name="WanderingRoot", memory=False)
-        root.add_child(WanderingStep())
+        root.add_child(WanderingStep(self._waypoints))
         return root
