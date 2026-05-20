@@ -180,7 +180,7 @@ All six geometry fields are in **metres**. The field canvas auto-scales to the a
 
 **When running through `StrategyRunner`** (the normal path): geometry is set from `full_field_dims` at startup and is not read from the YAML profile. The GUI's `/config` endpoint reads `referee.geometry` live, so it always reflects the actual active geometry — including the correct values after `StrategyRunner` overrides them.
 
-**Standalone use** (constructing `CustomReferee` directly without `StrategyRunner`): geometry comes from the `geometry:` block in the YAML profile, defaulting to `STANDARD_FIELD_DIMS` if the block is omitted.
+**Standalone use** (constructing `CustomReferee` directly without `StrategyRunner`): geometry defaults to `STANDARD_FIELD_DIMS` if the block is omitted.
 
 ---
 
