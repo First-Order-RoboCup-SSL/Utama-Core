@@ -22,6 +22,7 @@ def mock_runner():
         runner._fps_live = None
         runner._stop_event = MagicMock()
         runner._stop_event.is_set.return_value = False
+        runner._vision_receiver = None
 
         # run() now performs pre-run game setup; keep these tests focused on
         # stop/exception handling by bypassing that heavy integration step.

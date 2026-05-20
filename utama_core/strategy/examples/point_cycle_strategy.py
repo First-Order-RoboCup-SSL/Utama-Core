@@ -125,7 +125,7 @@ class PointCycleStrategy(AbstractStrategy):
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool):
         return True
 
-    def get_min_bounding_zone(self) -> Optional[FieldBounds]:
+    def get_min_bounding_req(self) -> Optional[FieldBounds]:
         """Return the movement bounds."""
         return self.field_bounds
 
