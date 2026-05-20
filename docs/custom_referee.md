@@ -215,19 +215,10 @@ referee = CustomReferee.from_profile_name("/path/to/my_profile.yaml")
 
 ### YAML schema
 
-The `geometry` block is optional — all fields default to `STANDARD_FIELD_DIMS` (standard SSL 9×6 m field) if omitted. When running through `StrategyRunner`, geometry is always overridden from `full_field_dims` at startup, so the YAML geometry block only matters when constructing `CustomReferee` standalone (outside `StrategyRunner`).
+The YAML profile manages rules and game settings. Geometry is always overridden from `full_field_dims` at startup when running through `StrategyRunner`. For standalone use, geometry can be passed explicitly to the `CustomReferee` constructor (and defaults to `STANDARD_FIELD_DIMS`). The YAML profile does not configure geometry.
 
 ```yaml
 profile_name: "simulation"
-# geometry block omitted — defaults to STANDARD_FIELD_DIMS
-# Add a geometry block only for standalone use with a non-standard field:
-# geometry:
-#   half_length: 2.0
-#   half_width: 1.5
-#   half_goal_width: 0.5
-#   half_defense_depth: 0.4
-#   half_defense_width: 0.8
-#   center_circle_radius: 0.3
 rules:
   goal_detection:
     enabled: true
@@ -268,7 +259,7 @@ game:
 
 ### Field geometry and `full_field_dims`
 
-`StrategyRunner` overrides the referee's geometry at startup using `full_field_dims` and `field_bounds` — the YAML profile geometry is irrelevant when running through `StrategyRunner`. This ensures the referee always enforces the same field the simulator is actually running.
+`StrategyRunner` overrides the referee's geometry at startup using `full_field_dims` and `field_bounds`. This ensures the referee always enforces the same field the simulator is actually running.
 
 For **gRSim and Real** modes, `StrategyRunner` also validates the first vision geometry packet against `full_field_dims` and raises `RuntimeError` immediately if they don't match, preventing silent mismatches between configured and actual field size.
 

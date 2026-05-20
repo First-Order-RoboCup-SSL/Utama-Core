@@ -178,9 +178,9 @@ All six geometry fields are in **metres**. The field canvas auto-scales to the a
 
 ### Where geometry comes from
 
-**When running through `StrategyRunner`** (the normal path): geometry is set from `full_field_dims` at startup and is not read from the YAML profile. The GUI's `/config` endpoint reads `referee.geometry` live, so it always reflects the actual active geometry — including the correct values after `StrategyRunner` overrides them.
+**When running through `StrategyRunner`** (the normal path): geometry is set from `full_field_dims` at startup. The GUI's `/config` endpoint reads `referee.geometry` live, so it always reflects the actual active geometry — including the correct values after `StrategyRunner` overrides them.
 
-**Standalone use** (constructing `CustomReferee` directly without `StrategyRunner`): geometry defaults to `STANDARD_FIELD_DIMS` if the block is omitted.
+**Standalone use** (constructing `CustomReferee` directly without `StrategyRunner`): geometry defaults to `STANDARD_FIELD_DIMS` but can be passed explicitly. The YAML profile does not configure geometry.
 
 ---
 
@@ -283,14 +283,6 @@ game:
 
 ```yaml
 profile_name: "my_profile"
-
-geometry:
-  half_length: 4.5          # metres from centre to goal line  (full length = 9.0 m)
-  half_width: 3.0           # metres from centre to touch line (full width  = 6.0 m)
-  half_goal_width: 0.5      # metres from centre of goal mouth to post
-  half_defense_depth: 0.5   # depth of defence area from goal line
-  half_defense_width: 1.0   # half-width of defence area
-  center_circle_radius: 0.5 # used for canvas only (future: keep-out at kickoff)
 
 rules:
   goal_detection:

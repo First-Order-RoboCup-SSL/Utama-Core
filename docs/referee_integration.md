@@ -335,22 +335,12 @@ Built-in profiles live in `utama_core/custom_referee/profiles/`:
 
 To customise, copy a YAML file, edit the values, then set `PROFILE` in `demo_referee_gui_rsim.py` to its path:
 
-The YAML structure mirrors the dataclasses in `profile_loader.py`. The `geometry` block is
-optional — all fields default to `STANDARD_FIELD_DIMS` (standard SSL 9×6 m field) if omitted.
+The YAML structure mirrors the dataclasses in `profile_loader.py`.
 When running through `StrategyRunner`, geometry is always overridden from `full_field_dims`
-at startup, so the YAML geometry block only matters for standalone use outside `StrategyRunner`.
+at startup. For standalone use outside `StrategyRunner`, geometry can be passed to the constructor.
 
 ```yaml
 profile_name: "my_profile"
-# geometry block omitted — defaults to STANDARD_FIELD_DIMS when running via StrategyRunner.
-# Add only for standalone use with a non-standard field:
-# geometry:
-#   half_length: 2.0          # metres from centre to goal line
-#   half_width: 1.5           # metres from centre to touch line
-#   half_goal_width: 0.5      # metres from centre of goal to post
-#   half_defense_depth: 0.4   # depth of defense area from goal line
-#   half_defense_width: 0.8   # half-width of defense area
-#   center_circle_radius: 0.3
 rules:
   goal_detection:
     enabled: true
