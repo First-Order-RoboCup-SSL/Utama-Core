@@ -123,8 +123,8 @@ class FieldDimensions:
             raise ValueError("Goal/defense measurements must be positive")
         if R <= 0:
             raise ValueError("center_circle_radius must be positive")
-        if R > W:
-            raise ValueError(f"center_circle_radius {R} must not exceed field half-width {W}")
+        if R > min(L, W):
+            raise ValueError(f"center_circle_radius {R} must not exceed field half-width {W} or half-length {L}")
 
         # --- Fit constraints ---
         if 2 * D > L:

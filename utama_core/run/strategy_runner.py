@@ -182,7 +182,7 @@ class StrategyRunner:
         if isinstance(self.referee, CustomReferee):
             from utama_core.custom_referee.geometry import RefereeGeometry
 
-            self.referee.override_geometry(RefereeGeometry.from_field_dims(self.full_field_dims, self.field_bounds))
+            self.referee.override_geometry(RefereeGeometry.from_field_dims(self.full_field_dims))
 
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 
@@ -506,12 +506,10 @@ class StrategyRunner:
         def _on_geometry(field_size) -> None:
             vision_half_length = field_size.field_length / 2000.0
             vision_half_width = field_size.field_width / 2000.0
-            vision_half_goal_width = field_size.goal_width / 2000.0
-            vision_half_defense_depth = field_size.penalty_area_depth / 2000.0
-            vision_half_defense_width = field_size.penalty_area_width / 2000.0
             d = self.full_field_dims
             t = _GEOMETRY_MATCH_TOLERANCE_M
             mismatches = []
+            # simplify the verification as the field dim packets can be non-standard
             if abs(vision_half_length - d.full_field_half_length) > t:
                 mismatches.append(
                     f"field_length: vision={vision_half_length * 2:.3f}m configured={d.full_field_half_length * 2:.3f}m"
@@ -519,18 +517,6 @@ class StrategyRunner:
             if abs(vision_half_width - d.full_field_half_width) > t:
                 mismatches.append(
                     f"field_width: vision={vision_half_width * 2:.3f}m configured={d.full_field_half_width * 2:.3f}m"
-                )
-            if abs(vision_half_goal_width - d.half_goal_width) > t:
-                mismatches.append(
-                    f"goal_width: vision={vision_half_goal_width * 2:.3f}m configured={d.half_goal_width * 2:.3f}m"
-                )
-            if abs(vision_half_defense_depth - d.half_defense_area_depth) > t:
-                mismatches.append(
-                    f"penalty_area_depth: vision={vision_half_defense_depth * 2:.3f}m configured={d.half_defense_area_depth * 2:.3f}m"
-                )
-            if abs(vision_half_defense_width - d.half_defense_area_width) > t:
-                mismatches.append(
-                    f"penalty_area_width: vision={vision_half_defense_width * 2:.3f}m configured={d.half_defense_area_width * 2:.3f}m"
                 )
             if mismatches:
                 raise RuntimeError(

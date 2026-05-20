@@ -22,20 +22,15 @@ class RefereeGeometry:
     goal_depth: float = 0.18  # depth of goal box behind the goal line (metres)
 
     @classmethod
-    def from_field_dims(cls, field_dims: FieldDimensions, field_bounds: FieldBounds | None = None) -> "RefereeGeometry":
+    def from_field_dims(cls, field_dims: FieldDimensions) -> "RefereeGeometry":
         """Build geometry from a FieldDimensions instance.
 
-        If field_bounds is provided (e.g. a sub-field play area), half_length and
-        half_width are derived from it; otherwise the full field extents are used.
         All goal/defense dimensions are taken from field_dims so that non-standard
         field sizes are fully supported.
         """
-        bounds = field_bounds or field_dims.full_field_bounds
-        half_length = (bounds.bottom_right[0] - bounds.top_left[0]) / 2.0
-        half_width = (bounds.top_left[1] - bounds.bottom_right[1]) / 2.0
         return cls(
-            half_length=half_length,
-            half_width=half_width,
+            half_length=field_dims.full_field_half_length,
+            half_width=field_dims.full_field_half_width,
             half_goal_width=field_dims.half_goal_width,
             half_defense_depth=field_dims.half_defense_area_depth,
             half_defense_width=field_dims.half_defense_area_width,

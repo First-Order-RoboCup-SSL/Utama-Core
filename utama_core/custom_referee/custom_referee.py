@@ -77,7 +77,9 @@ class CustomReferee:
         gui_port: int = 8080,
     ) -> None:
         self._profile_name = profile.profile_name
-        self._geometry: RefereeGeometry = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
+        self._geometry: RefereeGeometry = RefereeGeometry.from_field_dims(
+            STANDARD_FIELD_DIMS
+        )  # this is overrriden by StrategyRunner
         self._rules: List[BaseRule] = _build_active_rules(profile.rules)
         self._state = GameStateMachine(
             half_duration_seconds=profile.game.half_duration_seconds,

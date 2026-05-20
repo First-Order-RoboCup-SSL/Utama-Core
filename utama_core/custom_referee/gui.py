@@ -292,7 +292,10 @@ def _serialise_robots(game_frame) -> dict:
     def _robot_list(robots_dict):
         return [{"id": r.id, "x": r.p.x, "y": r.p.y, "orientation": r.orientation} for r in robots_dict.values()]
 
-    return {"friendly": _robot_list(game_frame.friendly_robots), "enemy": _robot_list(game_frame.enemy_robots)}
+    return {
+        "friendly": _robot_list(game_frame.friendly_robots),
+        "enemy": _robot_list(game_frame.enemy_robots),
+    }
 
 
 def _serialise_ball(game_frame):
@@ -307,12 +310,15 @@ def _serialise_state(ref_data, game_frame=None) -> str:
         try:
             designated = list(ref_data.designated_position)
         except TypeError:
-            designated = [ref_data.designated_position.x, ref_data.designated_position.y]
+            designated = [
+                ref_data.designated_position.x,
+                ref_data.designated_position.y,
+            ]
 
     return json.dumps(
         {
             "command": ref_data.referee_command.name,
-            "next_command": ref_data.next_command.name if ref_data.next_command else None,
+            "next_command": (ref_data.next_command.name if ref_data.next_command else None),
             "stage": ref_data.stage.name,
             "stage_time_left": ref_data.stage_time_left or 0.0,
             "yellow_score": ref_data.yellow_team.score,
