@@ -187,7 +187,7 @@ class RefereeGeometry:
 
 Convenience constructor:
 
-- `RefereeGeometry.from_field_dims(field_dims, field_bounds=None)` — builds geometry from a `FieldDimensions` instance. If `field_bounds` is provided, `half_length`/`half_width` are derived from it (useful for sub-field play areas); otherwise the full field extents from `field_dims` are used.
+- `RefereeGeometry.from_field_dims(field_dims)` — builds geometry from a `FieldDimensions` instance using the full field extents from `field_dims`.
 
 ---
 
