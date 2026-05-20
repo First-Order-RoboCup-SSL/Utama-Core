@@ -104,7 +104,7 @@ class _ScriptedReferee:
             time_sent=now,
             time_received=now,
             referee_command=cmd,
-            referee_command_timestamp=now,
+            referee_command_timestamp=self._start,
             stage=Stage.NORMAL_FIRST_HALF,
             stage_time_left=300.0,
             blue_team=_team_info(goalkeeper=blue_gk),
