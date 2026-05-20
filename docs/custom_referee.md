@@ -164,7 +164,7 @@ Uses `game_frame.my_team_is_right` to resolve which geometry helper (`is_in_left
 
 ### KeepOutRule
 
-Only active during stoppages (`STOP`, `DIRECT_FREE_*`, `PREPARE_KICKOFF_*`, `PREPARE_PENALTY_*`). Checks that non-kicking-team robots stay outside a configurable `radius_meters` (default 0.5 m) from the ball.
+Only active during restart commands (`DIRECT_FREE_*`, `PREPARE_KICKOFF_*`, `PREPARE_PENALTY_*`). Checks that non-kicking-team robots stay outside a configurable `radius_meters` (default 0.5 m) from the ball. `STOP` is intentionally excluded so the rule does not overwrite `next_command` while robots are clearing.
 
 Uses a persistence counter: a violation is only issued after `violation_persistence_frames` (default 30, ≈ 0.5 s at 60 Hz) **consecutive** frames of encroachment. This avoids false positives from robots passing through the zone.
 
