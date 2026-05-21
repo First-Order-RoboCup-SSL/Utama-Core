@@ -246,6 +246,7 @@ class StrategyRunner:
 
         # Live terminal status panel
         self.num_frames_elapsed = 0
+        self.num_slow_frames = 0  # frames that took longer than TIMESTEP
         self.elapsed_time = 0.0
         self.show_live_status = show_live_status
         self.print_real_fps = show_live_status
@@ -952,16 +953,31 @@ class StrategyRunner:
 
             self.elapsed_time += frame_dt
             self.num_frames_elapsed += 1
+            if frame_dt > TIMESTEP:
+                self.num_slow_frames += 1
 
             if self.elapsed_time >= FPS_PRINT_INTERVAL:
                 fps = self.num_frames_elapsed / self.elapsed_time
+                target_fps = 1.0 / TIMESTEP
+                slow_frames = self.num_slow_frames
+
+                fps_ratio = fps / target_fps
+                if fps_ratio >= 0.95:
+                    fps_style = "bold green"
+                elif fps_ratio >= 0.80:
+                    fps_style = "bold yellow"
+                else:
+                    fps_style = "bold red"
 
                 ref = self.referee_refiner
                 stage_secs = ref.stage_time_left
                 stage_min = int(stage_secs // 60)
                 stage_sec = int(stage_secs % 60)
                 display = Text()
-                display.append(f"FPS: {fps:.1f}", style="bold cyan")
+                display.append(f"FPS: {fps:.1f}", style=fps_style)
+                display.append(f"/{target_fps:.0f}", style="cyan")
+                if slow_frames:
+                    display.append(f" ({slow_frames} slow)", style="bold red")
                 display.append("  |  ")
                 display.append(ref.last_command.name, style="bold yellow")
                 if ref.last_next_command:
@@ -994,6 +1010,7 @@ class StrategyRunner:
 
                 self.elapsed_time = 0.0
                 self.num_frames_elapsed = 0
+                self.num_slow_frames = 0
 
     def _draw_rsim_field_bounds_overlay(self) -> None:
         """Draw active field bounds overlay in RSIM human render mode."""
