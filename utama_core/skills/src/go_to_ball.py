@@ -16,6 +16,7 @@ def go_to_ball(
 
     target_oren = robot.angle_to(ball)
 
+    dribbling = False
     if dribble_when_near:
         distance = robot.distance_to(ball)
         dribbling = distance < dribble_threshold

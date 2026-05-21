@@ -149,10 +149,10 @@ STANDARD_FIELD_DIMS = FieldDimensions(
 )
 
 GREAT_EXHIBITION_FIELD_DIMS = FieldDimensions(
-    full_field_half_length=2.0,
-    full_field_half_width=1.5,
-    half_defense_area_depth=0.4,
-    half_defense_area_width=0.8,
-    half_goal_width=0.5,
+    full_field_half_length=1.5,  # full length 3 m
+    full_field_half_width=1.125,  # full width 2.25 m
+    half_defense_area_depth=0.25,  # defense area depth 0.5 m total
+    half_defense_area_width=0.5,  # defense area length 1 m total along goal line
+    half_goal_width=0.4,  # goal width 0.8 m total
     center_circle_radius=0.3,
 )
