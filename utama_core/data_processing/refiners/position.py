@@ -60,6 +60,7 @@ class PositionRefiner(BaseRefiner):
         full_field_dims: FieldDimensions,
         filtering: bool = True,
         exp_ball: bool = True,
+        id_map: Optional[Dict[int, int]] = None,
     ):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
@@ -80,6 +81,7 @@ class PositionRefiner(BaseRefiner):
         )
 
         self.exp_ball = exp_ball
+        self._id_map: Dict[int, int] = id_map or {}
 
         if self.filtering:
             # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
@@ -238,13 +240,17 @@ class PositionRefiner(BaseRefiner):
             game_frame.enemy_robots.keys(),
         )
 
-        # Current vision IDs
-        yellow_present = {r.id for r in vision_data.yellow_robots}
-        blue_present = {r.id for r in vision_data.blue_robots}
+        # Current vision IDs (after remapping)
+        yellow_present = {self._id_map.get(r.id, r.id) for r in vision_data.yellow_robots}
+        blue_present = {self._id_map.get(r.id, r.id) for r in vision_data.blue_robots}
 
-        # Start with current measurements
-        yellow_vision_dict: dict[int, Optional[VisionRobotData]] = {r.id: r for r in vision_data.yellow_robots}
-        blue_vision_dict: dict[int, Optional[VisionRobotData]] = {r.id: r for r in vision_data.blue_robots}
+        # Start with current measurements (remapped)
+        yellow_vision_dict: dict[int, Optional[VisionRobotData]] = {
+            self._id_map.get(r.id, r.id): self._remap(r) for r in vision_data.yellow_robots
+        }
+        blue_vision_dict: dict[int, Optional[VisionRobotData]] = {
+            self._id_map.get(r.id, r.id): self._remap(r) for r in vision_data.blue_robots
+        }
 
         # Add None for vanished robots
         for robot_id in yellow_ids_last_frame - yellow_present:
@@ -300,6 +306,13 @@ class PositionRefiner(BaseRefiner):
             return None
         return PositionRefiner._ball_from_vision(balls_by_confidence[0])
 
+    def _remap(self, robot: VisionRobotData) -> VisionRobotData:
+        """Return a copy of robot with its id substituted according to id_map, if present."""
+        mapped = self._id_map.get(robot.id, robot.id)
+        if mapped == robot.id:
+            return robot
+        return VisionRobotData(mapped, robot.x, robot.y, robot.orientation)
+
     def _combine_single_team_positions(
         self,
         new_game_robots: Dict[int, Robot],
@@ -307,6 +320,7 @@ class PositionRefiner(BaseRefiner):
         friendly: bool,
     ) -> Dict[int, Robot]:
         for robot in vision_robots:
+            robot = self._remap(robot)
             if robot.id not in new_game_robots:
                 # At the start of the game, we haven't seen anything yet, so just create a new robot
                 new_game_robots[robot.id] = PositionRefiner._robot_from_vision(robot, is_friendly=friendly)

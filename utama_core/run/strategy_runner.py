@@ -160,6 +160,7 @@ class StrategyRunner:
         filtering: bool = False,
         referee: RefereeSource = None,
         formation_type: Optional[FormationType] = None,
+        robot_id_map: Optional[dict[int, int]] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -194,7 +195,7 @@ class StrategyRunner:
         self.referee_refiner = RefereeRefiner()
 
         self.my, self.opp = self._setup_sides_data(
-            strategy, opp_strategy, filtering, control_scheme, opp_control_scheme
+            strategy, opp_strategy, filtering, control_scheme, opp_control_scheme, robot_id_map
         )
 
         ### functions below rely on self.my and self.opp ###
@@ -344,6 +345,7 @@ class StrategyRunner:
         filtering: bool,
         control_scheme: str,
         opp_control_scheme: Optional[str],
+        robot_id_map: Optional[dict[int, int]] = None,
     ) -> Tuple[SideRuntime, Optional[SideRuntime]]:
         """Setup the data structures for both sides (my team and opponent)
         Args:
@@ -360,7 +362,7 @@ class StrategyRunner:
         """
         opp_side = None
         my_pos_ref, my_vel_ref, my_robot_ref = self._init_refiners(
-            self.full_field_dims, filtering=filtering, exp_ball=self.exp_ball
+            self.full_field_dims, filtering=filtering, exp_ball=self.exp_ball, id_map=robot_id_map
         )
         my_motion_controller = get_control_scheme(control_scheme)
         my_strategy.setup_strategy_blackboard(is_opp_strat=False)
@@ -655,6 +657,7 @@ class StrategyRunner:
         field_dims: FieldDimensions,
         filtering: bool,
         exp_ball: bool = True,
+        id_map: Optional[dict[int, int]] = None,
     ) -> tuple[PositionRefiner, VelocityRefiner, RobotInfoRefiner]:
         """
         Initialize the position, velocity, and robot info refiners.
@@ -663,6 +666,9 @@ class StrategyRunner:
             filtering (bool): Whether to use filtering in the position refiner.
             exp_ball (bool): Whether the ball is expected. When False, the position refiner is
                              allowed to return None if no ball is detected in raw vision data.
+            id_map (dict[int, int], optional): Maps vision robot IDs to internal IDs.
+                             E.g. {1: 0} makes the robot seen as ID 1 in vision appear as ID 0
+                             in game state and strategies.
         Returns:
             tuple: The initialized PositionRefiner, VelocityRefiner, and RobotInfoRefiner.
         """
@@ -670,6 +676,7 @@ class StrategyRunner:
             field_dims,
             filtering=filtering,
             exp_ball=exp_ball,
+            id_map=id_map,
         )
         velocity_refiner = VelocityRefiner()
         robot_info_refiner = RobotInfoRefiner()
