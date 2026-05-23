@@ -213,6 +213,11 @@ class StrategyRunner:
             blue_vision_to_cmd_mapping, is_yellow=False
         )
 
+        if self.opp and self.mode == Mode.REAL:
+            self._check_no_cmd_duplicate_if_transmission_sharing(
+                self.yellow_vision_to_cmd_mapping, self.blue_vision_to_cmd_mapping
+            )
+
         self._load_robot_controllers()
 
         # Remove Rsim ball. Rsim does not have the flexibilty to start without a ball.
@@ -302,6 +307,10 @@ class StrategyRunner:
                     raise ValueError(
                         f"vision_to_cmd_mapping cannot have vision IDs greater than {MAX_ROBOT_ID}; got vision ID {vision_id}."
                     )
+                if cmd_id > 0xFF:
+                    raise ValueError(
+                        f"vision_to_cmd_mapping cannot have command IDs greater than 255 (1 byte limit); got command ID {cmd_id}."
+                    )
         else:
             if mapping is not None:
                 raise ValueError(
@@ -310,6 +319,19 @@ class StrategyRunner:
             mapping = {}
 
         return mapping
+
+    def _check_no_cmd_duplicate_if_transmission_sharing(
+        self, yellow_mapping: dict[int, int], blue_mapping: dict[int, int]
+    ):
+        seen = set()
+        dicts = [yellow_mapping, blue_mapping]
+        for d in dicts:
+            for v in d.values():
+                if v in seen:
+                    raise ValueError(
+                        f"vision_to_cmd_mapping for friendly and opponent teams cannot have overlapping command IDs since commands are transmitted together; found overlap in command IDs: {seen}."
+                    )
+                seen.add(v)
 
     def _handle_sigint(self, sig, frame):
         self._stop_event.set()
