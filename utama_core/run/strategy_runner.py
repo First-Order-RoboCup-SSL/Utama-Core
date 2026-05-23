@@ -290,14 +290,6 @@ class StrategyRunner:
                         raise ValueError(
                             "explicit vision_to_cmd_mapping is required for the opponent team in real mode to prevent ID conflicts."
                         )
-                    if len(mapping) != self.exp_enemy and is_yellow ^ self.my_team_is_yellow:
-                        raise ValueError(
-                            "vision_to_cmd_mapping for opponent team must include all expected opponent robots for shared transmission."
-                        )
-                    if len(mapping) != self.exp_friendly and not (is_yellow ^ self.my_team_is_yellow):
-                        raise ValueError(
-                            "vision_to_cmd_mapping for friendly team must include all expected friendly robots for shared transmission."
-                        )
                 else:
                     return {}
             # if we are not running an opp strat, but mapping provided, warn that it will be ignored
@@ -305,6 +297,16 @@ class StrategyRunner:
                 warnings.warn(
                     "vision_to_cmd_mapping is provided but will be ignored since the opponent team is not being controlled."
                 )
+            if self.opp:
+                if len(mapping) != self.exp_enemy and is_yellow ^ self.my_team_is_yellow:
+                    raise ValueError(
+                        "vision_to_cmd_mapping for opponent team must include all expected opponent robots for shared transmission."
+                    )
+                if len(mapping) != self.exp_friendly and not (is_yellow ^ self.my_team_is_yellow):
+                    raise ValueError(
+                        "vision_to_cmd_mapping for friendly team must include all expected friendly robots for shared transmission."
+                    )
+
             if not isinstance(mapping, dict):
                 raise TypeError(
                     f"vision_to_cmd_mapping must be a dictionary mapping vision robot IDs to command robot IDs; got {type(mapping).__name__}."
@@ -487,7 +489,7 @@ class StrategyRunner:
         opponent_responses = []
 
         for response in responses:
-            cmd_id = response.robot_id
+            cmd_id = response.id
 
             if self.my_team_is_yellow:
                 vision_id = self.yellow_cmd_to_vision_mapping.get(cmd_id)
@@ -1074,12 +1076,12 @@ class StrategyRunner:
         # alternate between opp and friendly playing
         if self.toggle_opp_first:
             if self.opp:
-                self._step_game(vision_frames, referee_data, True, responses=opp_res)
-            self._step_game(vision_frames, referee_data, False, responses=friendly_res)
+                self._step_game(vision_frames, referee_data, True, real_responses=opp_res)
+            self._step_game(vision_frames, referee_data, False, real_responses=friendly_res)
         else:
-            self._step_game(vision_frames, referee_data, False, responses=friendly_res)
+            self._step_game(vision_frames, referee_data, False, real_responses=friendly_res)
             if self.opp:
-                self._step_game(vision_frames, referee_data, True, responses=opp_res)
+                self._step_game(vision_frames, referee_data, True, real_responses=opp_res)
         self.toggle_opp_first = not self.toggle_opp_first
 
         # --- rate limiting ---
@@ -1163,7 +1165,7 @@ class StrategyRunner:
         vision_frames: List[RawVisionData],
         referee_data,
         running_opp: bool,
-        responses: Optional[dict[int, RobotResponse]] = None,
+        real_responses: Optional[dict[int, RobotResponse]] = None,
     ):
         """Step the game for the robot controller and strategy.
 
@@ -1171,7 +1173,7 @@ class StrategyRunner:
             vision_frames (List[RawVisionData]): The vision frames.
             referee_data: The referee data from RSim or network receiver.
             running_opp (bool): Whether to run the opponent strategy.
-            responses (Optional[dict[int, RobotResponse]]): The robot responses pulled for real.
+            real_responses (Optional[dict[int, RobotResponse]]): The robot responses pulled for real.
                                                             We use a shared transmitter, so it cannot be pulled per side.
         """
         side = self.opp if running_opp else self.my
@@ -1179,6 +1181,8 @@ class StrategyRunner:
         # Pull responses from robot controller
         if self.mode != Mode.REAL:
             responses = side.strategy.robot_controller.get_robots_responses()
+        else:
+            responses = real_responses if real_responses is not None else {}
 
         # Update game frame with refined information
         new_game_frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
