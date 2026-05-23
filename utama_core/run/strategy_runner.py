@@ -1063,13 +1063,13 @@ class StrategyRunner:
                 self._last_referee_data = self.ref_buffer.popleft()
             referee_data = self._last_referee_data
 
+        friendly_res, opp_res = None, None
         if self.mode == Mode.REAL:
             responses = self.my.strategy.robot_controller.get_robots_responses()
             if self.opp:
                 friendly_res, opp_res = self._split_robot_responses_by_team(responses)
             else:
                 friendly_res = responses
-                opp_res = None
 
         # alternate between opp and friendly playing
         if self.toggle_opp_first:
