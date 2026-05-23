@@ -47,7 +47,7 @@ class RealRobotController(AbstractRobotController):
         self,
         is_team_yellow: bool,
         n_friendly: int,
-        vision_to_cmd_mapping: Dict[str, str],
+        vision_to_cmd_mapping: Optional[Dict[int, int]] = None,
         serial_port: Optional[Serial] = None,
     ):
         super().__init__(is_team_yellow, n_friendly)
@@ -127,8 +127,9 @@ class RealRobotController(AbstractRobotController):
                     warnings.warn(
                         f"Received multiple responses for robot ID {robot_id} in the same cycle. Ignoring subsequent responses."
                     )
-                responses.append(RobotResponse(robot_id, has_ball=(data[0] & 0x01) != 0))
-                responded_ids.add(robot_id)
+                else:
+                    responses.append(RobotResponse(robot_id, has_ball=(data[0] & 0x01) != 0))
+                    responded_ids.add(robot_id)
 
             # 8. Clear parsed packet from buffer
             del self._buffer[:packet_len]
@@ -393,11 +394,11 @@ class RealRobotController(AbstractRobotController):
         return self._in_packet_size
 
     @property
-    def vision_to_cmd_mapping(self) -> Dict[int, RobotCommand]:
+    def vision_to_cmd_mapping(self) -> Dict[int, int]:
         return self._vision_to_cmd_mapping
 
     @property
-    def cmd_to_vision_mapping(self) -> Dict[int, RobotCommand]:
+    def cmd_to_vision_mapping(self) -> Dict[int, int]:
         return self._cmd_to_vision_mapping
 
     @property
