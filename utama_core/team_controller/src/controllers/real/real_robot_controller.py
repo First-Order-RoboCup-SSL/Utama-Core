@@ -60,7 +60,12 @@ class RealRobotController(AbstractRobotController):
         logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
         self._assigned_mapping = {}  # mapping of robot_id to index in the out_packet
         self._vision_to_cmd_mapping = vision_to_cmd_mapping if vision_to_cmd_mapping is not None else {}
-        self._cmd_to_vision_mapping = {v: k for k, v in self._vision_to_cmd_mapping.items()}
+        cmd_to_vision_mapping = {v: k for k, v in self._vision_to_cmd_mapping.items()}
+        if len(cmd_to_vision_mapping) != len(self._vision_to_cmd_mapping):
+            raise ValueError(
+                "vision_to_cmd_mapping must be one-to-one: duplicate command IDs are not allowed."
+            )
+        self._cmd_to_vision_mapping = cmd_to_vision_mapping
 
         # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
         self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
