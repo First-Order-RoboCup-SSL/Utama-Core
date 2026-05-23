@@ -25,7 +25,7 @@ def main() -> None:
         strategy=RobotPlacementStrategy(robot_id=0),
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,
-        mode="rsim",
+        mode="real",
         exp_friendly=N_FRIENDLY,
         exp_enemy=0,
         full_field_dims=GREAT_EXHIBITION_FIELD_DIMS,

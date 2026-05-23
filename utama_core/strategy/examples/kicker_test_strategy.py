@@ -50,7 +50,7 @@ class KickerStep(AbstractBehaviour):
 
         goal_x = game.field.enemy_goal_line[0][0]
         goal = Vector2D(goal_x, 0.0)
-        ball = game.ball.p.to_2d()
+        ball = game.ball.p.to_2d()  # + Vector2D(0, 0.05)  # aim slightly above center for better ball contact
         shoot_oren = ball.angle_to(goal)
 
         if rsim_env:

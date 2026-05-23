@@ -16,7 +16,6 @@ from utama_core.strategy.common.abstract_strategy import (
 from utama_core.strategy.examples.utils import SetBlackboardVariable
 
 _CARRY_DIST = 0.5  # metres to carry the ball forward
-_FETCH_TOL = 0.15  # metres — close enough to start carrying
 _ARRIVE_TOL = 0.10  # metres — done
 
 
@@ -25,7 +24,7 @@ class DribblerStep(AbstractBehaviour):
     Fetch ball without dribbler, carry it forward with dribbler on, then stop.
 
     States:
-        FETCH  — approach ball, dribbler off
+        FETCH  — approach ball until has_ball, dribbler off
         CARRY  — dribbler on, drive forward _CARRY_DIST metres from fetch position
         DONE   — dribbler off, idle
     """
@@ -49,8 +48,7 @@ class DribblerStep(AbstractBehaviour):
 
         if self._state == "FETCH":
             cmd = go_to_ball(game, self.blackboard.motion_controller, robot_id, dribble_when_near=False)
-            dist_to_ball = math.dist((robot.p.x, robot.p.y), (ball.x, ball.y))
-            if dist_to_ball < _FETCH_TOL:
+            if robot.has_ball:
                 # Target is _CARRY_DIST forward (toward enemy goal) from current ball position
                 goal_x = game.field.enemy_goal_line[0][0]
                 forward = 1.0 if goal_x > 0 else -1.0

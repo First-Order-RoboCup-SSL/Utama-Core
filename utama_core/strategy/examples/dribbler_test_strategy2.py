@@ -16,13 +16,12 @@ from utama_core.strategy.common.abstract_strategy import (
 from utama_core.strategy.examples.utils import SetBlackboardVariable
 
 _CARRY_DIST = 0.4  # metres per leg
-_FETCH_TOL = 0.15
 _ARRIVE_TOL = 0.10
 
 
 class DribblerSequenceStep(AbstractBehaviour):
     """
-    Fetch ball, then carry through a fixed sequence of legs, dribbler off when done.
+    Fetch ball until has_ball, then carry through a fixed sequence of legs, dribbler off when done.
 
     Sequence after fetch:
         1. Forward (toward enemy goal)
@@ -62,7 +61,7 @@ class DribblerSequenceStep(AbstractBehaviour):
 
         if self._state == "FETCH":
             cmd = go_to_ball(game, self.blackboard.motion_controller, robot_id, dribble_when_near=False)
-            if math.dist((robot.p.x, robot.p.y), (ball.x, ball.y)) < _FETCH_TOL:
+            if robot.has_ball:
                 goal_x = game.field.enemy_goal_line[0][0]
                 forward = 1.0 if goal_x > 0 else -1.0
                 self._legs = self._build_legs(ball, forward)

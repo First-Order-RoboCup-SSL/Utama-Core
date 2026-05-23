@@ -304,6 +304,10 @@ class RealRobotController(AbstractRobotController):
             chip=command.chip,
             dribble=command.dribble,
         )
+        if command.kick:
+            print(
+                f"Robot {robot_id} command: forward_vel={local_forward_vel}, left_vel={local_left_vel}, angular_vel={angular_vel}, kick={command.kick}, chip={command.chip}, dribble={command.dribble}"
+            )
         return command
 
     def _float16_rep(self, value: float) -> np.uint16:
