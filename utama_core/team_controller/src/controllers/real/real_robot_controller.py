@@ -185,7 +185,7 @@ class RealRobotController(AbstractRobotController):
         if robot_id in self._vision_to_cmd_mapping:
             robot_id = self._vision_to_cmd_mapping[robot_id]
         elif self._sharing_friendly_transmitter:
-            raise ValueError(
+            warnings.warn(
                 f"No explicit mapping provided for opponent {robot_id} on shared transmitter setup. Populate the vision_to_cmd_mapping to resolve this issue."
             )
         if robot_id in self._assigned_mapping:
