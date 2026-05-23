@@ -284,7 +284,7 @@ class StrategyRunner:
                         "explicit vision_to_cmd_mapping is required for the opponent team in real mode to prevent ID conflicts."
                     )
                 else:
-                    mapping = {}
+                    return {}
             # if we are not running an opp strat, but mapping provided, warn that it will be ignored
             if self.opp is None and self.my_team_is_yellow ^ is_yellow:
                 warnings.warn(
@@ -311,14 +311,13 @@ class StrategyRunner:
                     raise ValueError(
                         f"vision_to_cmd_mapping cannot have command IDs greater than 255 (1 byte limit); got command ID {cmd_id}."
                     )
+            return mapping
         else:
             if mapping is not None:
                 raise ValueError(
                     "vision_to_cmd_mapping should not be provided in simulation modes; robot ID mapping is only needed in real mode."
                 )
-            mapping = {}
-
-        return mapping
+            return {}
 
     def _check_no_cmd_duplicate_if_transmission_sharing(
         self, yellow_mapping: dict[int, int], blue_mapping: dict[int, int]
