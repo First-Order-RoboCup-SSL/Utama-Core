@@ -29,7 +29,7 @@ from utama_core.data_processing.refiners import (
     RobotInfoRefiner,
     VelocityRefiner,
 )
-from utama_core.entities.data.command import RobotCommand
+from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameFrame, GameHistory
 from utama_core.entities.game.field import Field, FieldBounds
@@ -136,6 +136,10 @@ class StrategyRunner:
             instance to use the in-process referee, ``OfficialReferee()`` to consume
             commands from the SSL game-controller over the network, or ``None``
             (default) to run without any referee input.
+        yellow_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the yellow team.
+            Required in real mode if the yellow team is being controlled to prevent ID conflicts; ignored otherwise. All robots must be mapped in shared transmission mode.
+        blue_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the blue team.
+            Required in real mode if the blue team is being controlled to prevent ID conflicts; ignored otherwise. All robots must be mapped in shared transmission mode.
     """
 
     def __init__(
@@ -212,6 +216,8 @@ class StrategyRunner:
         self.blue_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
             blue_vision_to_cmd_mapping, is_yellow=False
         )
+        self.yellow_cmd_to_vision_mapping = {v: k for k, v in self.yellow_vision_to_cmd_mapping.items()}
+        self.blue_cmd_to_vision_mapping = {v: k for k, v in self.blue_vision_to_cmd_mapping.items()}
 
         if self.opp and self.mode == Mode.REAL:
             self._check_no_cmd_duplicate_if_transmission_sharing(
@@ -279,10 +285,19 @@ class StrategyRunner:
         if self.mode == Mode.REAL:
             if mapping is None:
                 # if we are running an opp strat, but explicit mapping not provided
-                if self.opp and is_yellow ^ self.my_team_is_yellow:
-                    raise ValueError(
-                        "explicit vision_to_cmd_mapping is required for the opponent team in real mode to prevent ID conflicts."
-                    )
+                if self.opp:
+                    if is_yellow ^ self.my_team_is_yellow:
+                        raise ValueError(
+                            "explicit vision_to_cmd_mapping is required for the opponent team in real mode to prevent ID conflicts."
+                        )
+                    if len(mapping) != self.exp_enemy and is_yellow ^ self.my_team_is_yellow:
+                        raise ValueError(
+                            "vision_to_cmd_mapping for opponent team must include all expected opponent robots for shared transmission."
+                        )
+                    if len(mapping) != self.exp_friendly and not (is_yellow ^ self.my_team_is_yellow):
+                        raise ValueError(
+                            "vision_to_cmd_mapping for friendly team must include all expected friendly robots for shared transmission."
+                        )
                 else:
                     return {}
             # if we are not running an opp strat, but mapping provided, warn that it will be ignored
@@ -461,6 +476,42 @@ class StrategyRunner:
             )
 
         return my_side, opp_side
+
+    def _split_robot_responses_by_team(
+        self, responses: List[RobotResponse]
+    ) -> Tuple[List[RobotResponse], List[RobotResponse]]:
+        """Split a list of RobotResponse objects into separate lists for the friendly and opponent teams
+        based on the robot IDs and the vision.
+        """
+        friendly_responses = []
+        opponent_responses = []
+
+        for response in responses:
+            cmd_id = response.robot_id
+
+            if self.my_team_is_yellow:
+                vision_id = self.yellow_cmd_to_vision_mapping.get(cmd_id)
+
+                if vision_id is not None:
+                    friendly_responses.append(response)
+                elif cmd_id in self.blue_cmd_to_vision_mapping:
+                    opponent_responses.append(response)
+                else:
+                    self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either yellow or blue mapping")
+                    opponent_responses.append(response)  # or skip / raise depending on strictness
+
+            else:
+                vision_id = self.blue_cmd_to_vision_mapping.get(cmd_id)
+
+                if vision_id is not None:
+                    friendly_responses.append(response)
+                elif cmd_id in self.yellow_cmd_to_vision_mapping:
+                    opponent_responses.append(response)
+                else:
+                    self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either blue or yellow mapping")
+                    opponent_responses.append(response)
+
+        return friendly_responses, opponent_responses
 
     def _remove_rsim_ball(self):
         """Removes the ball from the RSim environment by teleporting it off-field."""
@@ -1012,15 +1063,23 @@ class StrategyRunner:
                 self._last_referee_data = self.ref_buffer.popleft()
             referee_data = self._last_referee_data
 
+        if self.mode == Mode.REAL:
+            responses = self.my.strategy.robot_controller.get_robots_responses()
+            if self.opp:
+                friendly_res, opp_res = self._split_robot_responses_by_team(responses)
+            else:
+                friendly_res = responses
+                opp_res = None
+
         # alternate between opp and friendly playing
         if self.toggle_opp_first:
             if self.opp:
-                self._step_game(vision_frames, referee_data, True)
-            self._step_game(vision_frames, referee_data, False)
+                self._step_game(vision_frames, referee_data, True, responses=opp_res)
+            self._step_game(vision_frames, referee_data, False, responses=friendly_res)
         else:
-            self._step_game(vision_frames, referee_data, False)
+            self._step_game(vision_frames, referee_data, False, responses=friendly_res)
             if self.opp:
-                self._step_game(vision_frames, referee_data, True)
+                self._step_game(vision_frames, referee_data, True, responses=opp_res)
         self.toggle_opp_first = not self.toggle_opp_first
 
         # --- rate limiting ---
@@ -1104,6 +1163,7 @@ class StrategyRunner:
         vision_frames: List[RawVisionData],
         referee_data,
         running_opp: bool,
+        responses: Optional[dict[int, RobotResponse]] = None,
     ):
         """Step the game for the robot controller and strategy.
 
@@ -1111,11 +1171,14 @@ class StrategyRunner:
             vision_frames (List[RawVisionData]): The vision frames.
             referee_data: The referee data from RSim or network receiver.
             running_opp (bool): Whether to run the opponent strategy.
+            responses (Optional[dict[int, RobotResponse]]): The robot responses pulled for real.
+                                                            We use a shared transmitter, so it cannot be pulled per side.
         """
         side = self.opp if running_opp else self.my
 
         # Pull responses from robot controller
-        responses = side.strategy.robot_controller.get_robots_responses()
+        if self.mode != Mode.REAL:
+            responses = side.strategy.robot_controller.get_robots_responses()
 
         # Update game frame with refined information
         new_game_frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
