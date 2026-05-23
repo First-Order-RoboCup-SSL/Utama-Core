@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 
+from utama_core.config.physical_constants import MAX_ROBOT_ID
 from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.config.settings import (
     BAUD_RATE,
@@ -24,7 +25,6 @@ from utama_core.team_controller.src.controllers.common.robot_controller_abstract
 
 logger = logging.getLogger(__name__)
 
-# NB: A major assumption is that the robot IDs are 0-5 for the friendly team.
 MAX_VEL = REAL_PARAMS.MAX_VEL
 MAX_ANGULAR_VEL = REAL_PARAMS.MAX_ANGULAR_VEL
 
@@ -44,15 +44,24 @@ class RealRobotController(AbstractRobotController):
         n_robots (int): The number of robots in the team. Directly affects output buffer size. Default is 6.
     """
 
-    def __init__(self, is_team_yellow: bool, n_friendly: int):
+    def __init__(
+        self,
+        is_team_yellow: bool,
+        n_friendly: int,
+        vision_to_cmd_mapping: Optional[Dict[str, str]] = None,
+        serial_port: Optional[Serial] = None,
+    ):
         super().__init__(is_team_yellow, n_friendly)
-        self._serial_port = self._init_serial()
+        self._serial_port = self._init_serial() if serial_port is None else serial_port
+        self._sharing_friendly_transmitter = serial_port is not None
         self._rbt_cmd_size = 10  # packet size for one robot
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the feedback packet received from the robots
         self._robots_info: List[RobotResponse] = [None] * self._n_friendly
         logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
         self._assigned_mapping = {}  # mapping of robot_id to index in the out_packet
+        self._vision_to_cmd_mapping = vision_to_cmd_mapping if vision_to_cmd_mapping is not None else {}
+        self._cmd_to_vision_mapping = {v: k for k, v in self._vision_to_cmd_mapping.items()}
 
         # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
         self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
@@ -112,6 +121,10 @@ class RealRobotController(AbstractRobotController):
 
             # Guard against IndexError just in case, though validated by 'length' check
             if len(data) >= 1:
+                if robot_id in self._vision_to_cmd_mapping:
+                    robot_id = self._vision_to_cmd_mapping[robot_id]
+                elif self._sharing_friendly_transmitter:
+                    robot_id = robot_id - MAX_ROBOT_ID - 1  # reverse offset for shared transmitter
                 responses.append(RobotResponse(robot_id, has_ball=(data[0] & 0x01) != 0))
 
             # 8. Clear parsed packet from buffer
@@ -163,6 +176,13 @@ class RealRobotController(AbstractRobotController):
             robot_id (int): The ID of the robot.
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
+        # for weird mapping cases
+        if robot_id in self._vision_to_cmd_mapping:
+            robot_id = self._vision_to_cmd_mapping[robot_id]
+        elif self._sharing_friendly_transmitter:
+            robot_id = (
+                robot_id + MAX_ROBOT_ID + 1
+            )  # offset robot_id to avoid collision with friendly team when sharing transmitter
         if robot_id in self._assigned_mapping:
             warnings.warn(
                 f"Robot ID {robot_id} has already been assigned a command in this cycle. Overwriting previous command."
@@ -213,8 +233,6 @@ class RealRobotController(AbstractRobotController):
 
     def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
         """Generates the command buffer to be sent to the robot."""
-        assert robot_id < 6, "Invalid robot_id. Must be between 0 and 5."
-
         # endianness: little endian
         packet = bytearray(
             [
@@ -371,6 +389,18 @@ class RealRobotController(AbstractRobotController):
     @property
     def in_packet_size(self) -> int:
         return self._in_packet_size
+
+    @property
+    def vision_to_cmd_mapping(self) -> Dict[int, RobotCommand]:
+        return self._vision_to_cmd_mapping
+
+    @property
+    def cmd_to_vision_mapping(self) -> Dict[int, RobotCommand]:
+        return self._cmd_to_vision_mapping
+
+    @property
+    def sharing_friendly_transmitter(self) -> bool:
+        return self._sharing_friendly_transmitter
 
 
 if __name__ == "__main__":
