@@ -62,9 +62,7 @@ class RealRobotController(AbstractRobotController):
         self._vision_to_cmd_mapping = vision_to_cmd_mapping if vision_to_cmd_mapping is not None else {}
         cmd_to_vision_mapping = {v: k for k, v in self._vision_to_cmd_mapping.items()}
         if len(cmd_to_vision_mapping) != len(self._vision_to_cmd_mapping):
-            raise ValueError(
-                "vision_to_cmd_mapping must be one-to-one: duplicate command IDs are not allowed."
-            )
+            raise ValueError("vision_to_cmd_mapping must be one-to-one: duplicate command IDs are not allowed.")
         self._cmd_to_vision_mapping = cmd_to_vision_mapping
 
         # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
@@ -126,8 +124,7 @@ class RealRobotController(AbstractRobotController):
 
             # Guard against IndexError just in case, though validated by 'length' check
             if len(data) >= 1:
-                if robot_id in self._cmd_to_vision_mapping:
-                    robot_id = self._cmd_to_vision_mapping[robot_id]
+                # remapping to vision ID done in strat runner
                 if robot_id in responded_ids:
                     warnings.warn(
                         f"Received multiple responses for robot ID {robot_id} in the same cycle. Ignoring subsequent responses."
