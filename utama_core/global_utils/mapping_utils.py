@@ -37,13 +37,7 @@ def map_colors_to_friendly_enemy(my_team_is_yellow: bool, yellow_item: T, blue_i
     Returns:
         Tuple[T, T]: A tuple of (friendly_item, enemy_item).
     """
-    if my_team_is_yellow:
-        friendly_item = yellow_item
-        enemy_item = blue_item
-    else:
-        friendly_item = blue_item
-        enemy_item = yellow_item
-    return friendly_item, enemy_item
+    return map_friendly_enemy_to_colors(my_team_is_yellow, yellow_item, blue_item)
 
 
 def map_left_right_to_colors(my_team_is_yellow: bool, my_team_is_right: bool, right_item: T, left_item: T):
