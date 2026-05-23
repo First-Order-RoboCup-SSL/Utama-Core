@@ -81,8 +81,13 @@ class RefereeData:
                 self.stage,
                 self.referee_command,
                 self.referee_command_timestamp,
+                self.yellow_team.score,
+                self.yellow_team.goalkeeper,
+                self.blue_team.score,
+                self.blue_team.goalkeeper,
                 self.designated_position,
                 self.blue_team_on_positive_half,
                 self.next_command,
+                self.current_action_time_remaining,
             )
         )
