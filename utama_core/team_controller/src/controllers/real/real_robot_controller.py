@@ -7,7 +7,6 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 
-from utama_core.config.physical_constants import MAX_ROBOT_ID
 from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.config.settings import (
     BAUD_RATE,
@@ -48,7 +47,7 @@ class RealRobotController(AbstractRobotController):
         self,
         is_team_yellow: bool,
         n_friendly: int,
-        vision_to_cmd_mapping: Optional[Dict[str, str]] = None,
+        vision_to_cmd_mapping: Dict[str, str],
         serial_port: Optional[Serial] = None,
     ):
         super().__init__(is_team_yellow, n_friendly)
@@ -81,6 +80,7 @@ class RealRobotController(AbstractRobotController):
             self._buffer.extend(self._serial_port.read(bytes_available))
 
         responses = []
+        responded_ids = set()
 
         while True:
             # 2. Look for header
@@ -121,11 +121,14 @@ class RealRobotController(AbstractRobotController):
 
             # Guard against IndexError just in case, though validated by 'length' check
             if len(data) >= 1:
-                if robot_id in self._vision_to_cmd_mapping:
-                    robot_id = self._vision_to_cmd_mapping[robot_id]
-                elif self._sharing_friendly_transmitter:
-                    robot_id = robot_id - MAX_ROBOT_ID - 1  # reverse offset for shared transmitter
+                if robot_id in self._cmd_to_vision_mapping:
+                    robot_id = self._cmd_to_vision_mapping[robot_id]
+                if robot_id in responded_ids:
+                    warnings.warn(
+                        f"Received multiple responses for robot ID {robot_id} in the same cycle. Ignoring subsequent responses."
+                    )
                 responses.append(RobotResponse(robot_id, has_ball=(data[0] & 0x01) != 0))
+                responded_ids.add(robot_id)
 
             # 8. Clear parsed packet from buffer
             del self._buffer[:packet_len]
@@ -176,13 +179,12 @@ class RealRobotController(AbstractRobotController):
             robot_id (int): The ID of the robot.
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
-        # for weird mapping cases
         if robot_id in self._vision_to_cmd_mapping:
             robot_id = self._vision_to_cmd_mapping[robot_id]
         elif self._sharing_friendly_transmitter:
-            robot_id = (
-                robot_id + MAX_ROBOT_ID + 1
-            )  # offset robot_id to avoid collision with friendly team when sharing transmitter
+            raise ValueError(
+                f"No explicit mapping provided for opponent {robot_id} on shared transmitter setup. Populate the vision_to_cmd_mapping to resolve this issue."
+            )
         if robot_id in self._assigned_mapping:
             warnings.warn(
                 f"Robot ID {robot_id} has already been assigned a command in this cycle. Overwriting previous command."

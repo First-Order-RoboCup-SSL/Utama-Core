@@ -14,7 +14,7 @@ from rich.text import Text
 from utama_core.config.enums import Mode, mode_str_to_enum
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.formations import FormationType, get_formations
-from utama_core.config.physical_constants import MAX_ROBOTS
+from utama_core.config.physical_constants import MAX_ROBOT_ID, MAX_ROBOTS
 from utama_core.config.settings import (
     FPS_PRINT_INTERVAL,
     MAX_CAMERAS,
@@ -206,16 +206,11 @@ class StrategyRunner:
         self._assert_exp_robots_and_ball(exp_friendly, exp_enemy, exp_ball)
 
         # mapping for mismatch between vision and cmd ids
-        # if only one transmitter available, deconflicting ids is handled in real robot controller
-        self.yellow_vision_to_cmd_mapping = (
-            self._validate_vision_to_cmd_mapping(yellow_vision_to_cmd_mapping, is_yellow=True)
-            if yellow_vision_to_cmd_mapping
-            else {}
+        self.yellow_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
+            yellow_vision_to_cmd_mapping, is_yellow=True
         )
-        self.blue_vision_to_cmd_mapping = (
-            self._validate_vision_to_cmd_mapping(blue_vision_to_cmd_mapping, is_yellow=False)
-            if blue_vision_to_cmd_mapping
-            else {}
+        self.blue_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
+            blue_vision_to_cmd_mapping, is_yellow=False
         )
 
         self._load_robot_controllers()
@@ -275,27 +270,45 @@ class StrategyRunner:
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
 
-    def _validate_vision_to_cmd_mapping(self, mapping: dict[int, int], is_yellow: bool) -> dict[int, int]:
-        if self.mode != Mode.REAL:
-            raise ValueError("vision_to_cmd_mapping is only applicable in real mode.")
-        if self.opp is None and self.my_team_is_yellow ^ is_yellow:
-            raise ValueError(
-                "Provided vision_to_cmd_mapping is for opponent team, but opponent team is not being controlled."
-            )
-
-        if not isinstance(mapping, dict):
-            raise TypeError(
-                f"vision_to_cmd_mapping must be a dictionary mapping vision robot IDs to command robot IDs; got {type(mapping).__name__}."
-            )
-        for vision_id, cmd_id in mapping.items():
-            if not isinstance(vision_id, int) or not isinstance(cmd_id, int):
+    def _validate_vision_to_cmd_mapping(self, mapping: Optional[dict[int, int]], is_yellow: bool) -> dict[int, int]:
+        if self.mode == Mode.REAL:
+            if mapping is None:
+                # if we are running an opp strat, but explicit mapping not provided
+                if self.opp and is_yellow ^ self.my_team_is_yellow:
+                    raise ValueError(
+                        "explicit vision_to_cmd_mapping is required for the opponent team in real mode to prevent ID conflicts."
+                    )
+                else:
+                    mapping = {}
+            # if we are not running an opp strat, but mapping provided, warn that it will be ignored
+            if self.opp is None and self.my_team_is_yellow ^ is_yellow:
+                warnings.warn(
+                    "vision_to_cmd_mapping is provided but will be ignored since the opponent team is not being controlled."
+                )
+            if not isinstance(mapping, dict):
                 raise TypeError(
-                    f"vision_to_cmd_mapping must map integers to integers; got key type {type(vision_id).__name__} and value type {type(cmd_id).__name__}."
+                    f"vision_to_cmd_mapping must be a dictionary mapping vision robot IDs to command robot IDs; got {type(mapping).__name__}."
                 )
-            if vision_id < 0 or cmd_id < 0:
+            for vision_id, cmd_id in mapping.items():
+                if not isinstance(vision_id, int) or not isinstance(cmd_id, int):
+                    raise TypeError(
+                        f"vision_to_cmd_mapping must map integers to integers; got key type {type(vision_id).__name__} and value type {type(cmd_id).__name__}."
+                    )
+                if vision_id < 0 or cmd_id < 0:
+                    raise ValueError(
+                        f"vision_to_cmd_mapping cannot have negative IDs; got vision ID {vision_id} and command ID {cmd_id}."
+                    )
+                if vision_id > MAX_ROBOT_ID:
+                    raise ValueError(
+                        f"vision_to_cmd_mapping cannot have vision IDs greater than {MAX_ROBOT_ID}; got vision ID {vision_id}."
+                    )
+        else:
+            if mapping is not None:
                 raise ValueError(
-                    f"vision_to_cmd_mapping cannot have negative IDs; got vision ID {vision_id} and command ID {cmd_id}."
+                    "vision_to_cmd_mapping should not be provided in simulation modes; robot ID mapping is only needed in real mode."
                 )
+            mapping = {}
+
         return mapping
 
     def _handle_sigint(self, sig, frame):
