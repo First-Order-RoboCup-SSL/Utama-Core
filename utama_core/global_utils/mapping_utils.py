@@ -23,7 +23,7 @@ def map_friendly_enemy_to_colors(my_team_is_yellow: bool, friendly_item: T, enem
     return yellow_item, blue_item
 
 
-# NB: actually map_friendly_enemy_to_colors and map_colours_to_friendly_enemy have the same logic
+# NB: actually map_friendly_enemy_to_colors and map_colors_to_friendly_enemy have the same logic
 
 
 def map_colors_to_friendly_enemy(my_team_is_yellow: bool, yellow_item: T, blue_item: T) -> Tuple[T, T]:
