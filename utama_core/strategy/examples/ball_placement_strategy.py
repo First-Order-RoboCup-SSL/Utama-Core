@@ -96,27 +96,48 @@ class BallPlacementStep(AbstractBehaviour):
     """
 
     def update(self) -> py_trees.common.Status:
-        # TODO: implement ball placement logic here.
-        #
-        # Skeleton to get you started:
-        #
-        #   game = self.blackboard.game
-        #   ref = game.referee
-        #   motion_controller = self.blackboard.motion_controller
-        #
-        #   target = ref.designated_position   # (x, y) or None
-        #   ball   = game.ball                 # Ball | None
-        #
-        #   # Pick placer (closest robot to ball)
-        #   placer_id = min(
-        #       game.friendly_robots,
-        #       key=lambda rid: game.friendly_robots[rid].p.distance_to(ball.p),
-        #   )
-        #
-        #   # Drive placer; clear everyone else
-        #   ...
-        #
-        # Remove this line once you have a real implementation:
+        game = self.blackboard.game
+        ref = game.referee
+        motion_controller = self.blackboard.motion_controller
+
+        if ref is None or game.ball is None or not game.friendly_robots:
+            return self._stop_all()
+
+        target = ref.designated_position
+        if target is None:
+            return self._stop_all()
+
+        target_pos = Vector2D(target[0], target[1])
+        ball = game.ball
+
+        if ball.p.distance_to(target_pos) <= BALL_PLACEMENT_DONE_DISTANCE:
+            return self._stop_all()
+
+        placer_id = min(
+            game.friendly_robots,
+            key=lambda rid: game.friendly_robots[rid].p.distance_to(ball.p),
+        )
+        placer = game.friendly_robots[placer_id]
+
+        target_for_move = target_pos if placer.has_ball else Vector2D(ball.p.x, ball.p.y)
+        orientation = placer.p.angle_to(target_for_move)
+        self.blackboard.cmd_map[placer_id] = move(
+            game,
+            motion_controller,
+            placer_id,
+            target_for_move,
+            orientation,
+            dribbling=True,
+        )
+
+        _clear_to_legal_positions(
+            self.blackboard,
+            ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            exempt_robot_ids={placer_id},
+        )
+        return py_trees.common.Status.RUNNING
+
+    def _stop_all(self) -> py_trees.common.Status:
         game = self.blackboard.game
         for robot_id in game.friendly_robots:
             self.blackboard.cmd_map[robot_id] = empty_command(False)
