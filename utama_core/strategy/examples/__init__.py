@@ -1,4 +1,7 @@
 from utama_core.strategy.examples.defense_strategy import DefenceStrategy
+from utama_core.strategy.examples.deliberate_out_of_bounds_strategy import (
+    DeliberateOutOfBoundsStrategy,
+)
 from utama_core.strategy.examples.go_to_ball_ex import GoToBallExampleStrategy
 from utama_core.strategy.examples.motion_planning.multi_robot_navigation_strategy import (
     MultiRobotNavigationStrategy,
