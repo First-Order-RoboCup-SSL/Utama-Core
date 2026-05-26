@@ -287,7 +287,7 @@ class StrategyRunner:
             if mapping is None:
                 if self.opp:
                     raise ValueError(
-                        f"explicit vision_to_cmd_mapping is required for the {team_name} team in real mode when controlling both teams over shared transmission."
+                        f"explicit vision_to_cmd_mapping is required for the {team_name} team in real mode when controlling both teams."
                     )
                 return {}
             if not isinstance(mapping, dict):
@@ -499,7 +499,6 @@ class StrategyRunner:
                     opponent_responses.append(RobotResponse(opponent_vision_id, has_ball=response.has_ball))
                 else:
                     self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either yellow or blue mapping")
-                    opponent_responses.append(response)  # or skip / raise depending on strictness
 
             else:
                 vision_id = self.blue_cmd_to_vision_mapping.get(cmd_id)
@@ -511,7 +510,6 @@ class StrategyRunner:
                     opponent_responses.append(RobotResponse(opponent_vision_id, has_ball=response.has_ball))
                 else:
                     self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either blue or yellow mapping")
-                    opponent_responses.append(response)
 
         return friendly_responses, opponent_responses
 
