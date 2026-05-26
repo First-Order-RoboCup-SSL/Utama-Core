@@ -337,15 +337,15 @@ class StrategyRunner:
     def _check_no_cmd_duplicate_if_transmission_sharing(
         self, yellow_mapping: dict[int, int], blue_mapping: dict[int, int]
     ):
-        seen: dict[int, str] = {}
+        cmd_id_to_team: dict[int, str] = {}
         dicts = [("yellow", yellow_mapping), ("blue", blue_mapping)]
         for team_name, d in dicts:
             for v in d.values():
-                if v in seen:
+                if v in cmd_id_to_team:
                     raise ValueError(
-                        f"vision_to_cmd_mapping for friendly and opponent teams cannot have overlapping command IDs since commands are transmitted together; duplicate command ID {v} is present in both {seen[v]} and {team_name} mappings."
+                        f"vision_to_cmd_mapping for friendly and opponent teams cannot have overlapping command IDs since commands are transmitted together; duplicate command ID {v} is present in both {cmd_id_to_team[v]} and {team_name} mappings."
                     )
-                seen[v] = team_name
+                cmd_id_to_team[v] = team_name
 
     def _handle_sigint(self, sig, frame):
         self._stop_event.set()
@@ -498,7 +498,9 @@ class StrategyRunner:
                     opponent_vision_id = self.blue_cmd_to_vision_mapping[cmd_id]
                     opponent_responses.append(RobotResponse(opponent_vision_id, has_ball=response.has_ball))
                 else:
-                    self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either yellow or blue mapping")
+                    self.logger.warning(
+                        f"RobotResponse cmd_id={cmd_id} not found in either yellow or blue mapping; dropping response"
+                    )
 
             else:
                 vision_id = self.blue_cmd_to_vision_mapping.get(cmd_id)
@@ -509,7 +511,9 @@ class StrategyRunner:
                     opponent_vision_id = self.yellow_cmd_to_vision_mapping[cmd_id]
                     opponent_responses.append(RobotResponse(opponent_vision_id, has_ball=response.has_ball))
                 else:
-                    self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either blue or yellow mapping")
+                    self.logger.warning(
+                        f"RobotResponse cmd_id={cmd_id} not found in either blue or yellow mapping; dropping response"
+                    )
 
         return friendly_responses, opponent_responses
 
