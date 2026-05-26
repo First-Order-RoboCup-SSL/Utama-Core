@@ -8,7 +8,7 @@ What this sets up
 -----------------
 - Exhibition Road field (4 m × 3 m, ``GREAT_EXHIBITION_FIELD_DIMS``)
 - 2v2 format: two yellow robots (your team) vs two blue robots that
-  deliberately push the ball out of bounds in a top/bottom/left/right cycle
+  deliberately push the ball out once per side, then attack the yellow goal
 - CustomReferee pre-configured with:
     - Goal detection enabled (issues PREPARE_KICKOFF → NORMAL_START cycle)
     - Out-of-bounds enabled (issues STOP → BALL_PLACEMENT_YELLOW → DIRECT_FREE)
@@ -19,11 +19,6 @@ What this sets up
 - Browser GUI at http://localhost:8080 — use "Manual Commands" to fire
   BALL_PLACEMENT_YELLOW at any time and set the target position
 
-Your task
----------
-Open ``utama_core/strategy/examples/ball_placement_strategy.py`` and implement
-``BallPlacementStep.update()``.  Everything else here is already wired up.
-
 Workflow
 --------
 1. Run this script and open http://localhost:8080.
@@ -31,11 +26,9 @@ Workflow
    Commands" panel to issue BALL_PLACEMENT_YELLOW.
 3. Watch one of your robots (yellow) drive to the ball, capture it with the
    dribbler, and carry it to the target circle shown in the GUI.
-4. Iterate until the test suite passes:
-       pixi run pytest utama_core/tests/strategy_runner/test_ball_placement_rsim.py -v
+4. After the referee advances to NORMAL_START, yellow kicks once toward the
+   configured blue robot target.
 """
-
-import py_trees
 
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.custom_referee import CustomReferee
@@ -49,11 +42,10 @@ from utama_core.custom_referee.profiles.profile_loader import (
     RefereeProfile,
     RulesConfig,
 )
-from utama_core.entities.data.command import RobotCommand
-from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
-from utama_core.strategy.common import AbstractBehaviour
-from utama_core.strategy.examples.ball_placement_strategy import BallPlacementStrategy
+from utama_core.strategy.examples.ball_placement_and_kick_strategy import (
+    BallPlacementAndKickStrategy,
+)
 from utama_core.strategy.examples.deliberate_out_of_bounds_strategy import (
     DeliberateOutOfBoundsStrategy,
 )
@@ -66,73 +58,6 @@ GUI_PORT = 8080
 N_ROBOTS = 2
 MY_TEAM_IS_YELLOW = True
 MY_TEAM_IS_RIGHT = True
-
-
-class KickTowardOpponentStep(AbstractBehaviour):
-    """Stay idle except for one kick after a referee-managed restart."""
-
-    _KICK_DISTANCE = 0.22
-
-    def setup_(self):
-        self._seen_first_live_restart = False
-        self._active_restart_timestamp: float | None = None
-        self._kick_sent_for_timestamp: float | None = None
-
-    def update(self) -> py_trees.common.Status:
-        game = self.blackboard.game
-        ref = game.referee
-
-        if ref is None or ref.referee_command != RefereeCommand.NORMAL_START:
-            return py_trees.common.Status.RUNNING
-
-        restart_timestamp = ref.referee_command_timestamp
-        if not self._seen_first_live_restart:
-            self._seen_first_live_restart = True
-            self._active_restart_timestamp = restart_timestamp
-            return py_trees.common.Status.RUNNING
-
-        if restart_timestamp != self._active_restart_timestamp:
-            self._active_restart_timestamp = restart_timestamp
-            self._kick_sent_for_timestamp = None
-
-        if self._kick_sent_for_timestamp == restart_timestamp:
-            return py_trees.common.Status.RUNNING
-
-        if game.ball is None or not game.friendly_robots:
-            return py_trees.common.Status.RUNNING
-
-        kicker_id = min(
-            game.friendly_robots,
-            key=lambda rid: game.friendly_robots[rid].p.distance_to(game.ball.p),
-        )
-        kicker = game.friendly_robots[kicker_id]
-        if kicker.p.distance_to(game.ball.p) > self._KICK_DISTANCE:
-            return py_trees.common.Status.RUNNING
-
-        for robot_id in game.friendly_robots:
-            if robot_id != kicker_id:
-                continue
-
-            self.blackboard.cmd_map[robot_id] = RobotCommand(
-                local_forward_vel=0,
-                local_left_vel=0,
-                angular_vel=0,
-                kick=1,
-                chip=0,
-                dribble=0,
-            )
-            self._kick_sent_for_timestamp = restart_timestamp
-
-        return py_trees.common.Status.RUNNING
-
-
-class BallPlacementAndKickStrategy(BallPlacementStrategy):
-    """Use the built-in referee ball-placement override, then kick toward blue."""
-
-    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        root = py_trees.composites.Sequence(name="PlacementRestartKickRoot", memory=False)
-        root.add_child(KickTowardOpponentStep(name="KickTowardOpponent"))
-        return root
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +126,7 @@ def main() -> None:
 
     runner = StrategyRunner(
         strategy=BallPlacementAndKickStrategy(),
-        # Opponents deliberately create out-of-bounds events in a repeatable
-        # top -> bottom -> left -> right cycle.
+        # Opponents create one out-of-bounds event per side, then attack yellow's goal.
         opp_strategy=DeliberateOutOfBoundsStrategy(field_dims=GREAT_EXHIBITION_FIELD_DIMS),
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,

@@ -301,6 +301,16 @@ class BallPlacementOursStep(AbstractBehaviour):
     designated position. All other robots clear away from the ball.
     """
 
+    _RELEASE_DELAY_SECONDS = 0.25
+
+    def setup_(self):
+        self._release_started_at: float | None = None
+        self._placer_id: int | None = None
+
+    def _reset_release(self) -> None:
+        self._release_started_at = None
+        self._placer_id = None
+
     def update(self) -> py_trees.common.Status:
         game = self.blackboard.game
         ref = game.referee
@@ -309,25 +319,44 @@ class BallPlacementOursStep(AbstractBehaviour):
         # Determine which team is ours
         our_team = ref.yellow_team if game.my_team_is_yellow else ref.blue_team
         if getattr(our_team, "can_place_ball", None) is False:
+            self._reset_release()
             return _all_stop(self.blackboard)
 
         target = ref.designated_position
         if target is None:
+            self._reset_release()
             return _all_stop(self.blackboard)
 
         target_pos = Vector2D(target[0], target[1])
         ball = game.ball
         if ball is None:
+            self._reset_release()
             return _all_stop(self.blackboard)
 
         if ball.p.distance_to(target_pos) <= BALL_PLACEMENT_DONE_DISTANCE:
-            return _all_stop(self.blackboard)
+            if self._release_started_at is None:
+                self._release_started_at = game.ts
+
+            placer_id = self._placer_id
+            if placer_id not in game.friendly_robots:
+                placer_id = min(
+                    game.friendly_robots,
+                    key=lambda rid: game.friendly_robots[rid].p.distance_to(ball.p),
+                )
+
+            hold_dribbler = game.ts - self._release_started_at < self._RELEASE_DELAY_SECONDS
+            for robot_id in game.friendly_robots:
+                self.blackboard.cmd_map[robot_id] = empty_command(hold_dribbler and robot_id == placer_id)
+            return py_trees.common.Status.RUNNING
+
+        self._release_started_at = None
 
         # Pick the placer: robot closest to the ball
         placer_id = min(
             game.friendly_robots,
             key=lambda rid: game.friendly_robots[rid].p.distance_to(ball.p),
         )
+        self._placer_id = placer_id
 
         for robot_id in game.friendly_robots:
             if robot_id == placer_id:
@@ -563,6 +592,11 @@ class DirectFreeOursStep(AbstractBehaviour):
         enemy_id = min(game.enemy_robots, key=lambda rid: game.enemy_robots[rid].p.distance_to(ball_pos))
         return enemy_id, game.enemy_robots[enemy_id]
 
+    def _kick_target_enemy(self, game, ball_pos: Vector2D):
+        if 1 in game.enemy_robots:
+            return 1, game.enemy_robots[1]
+        return self._nearest_enemy_to_ball(game, ball_pos)
+
     def update(self) -> py_trees.common.Status:
         game = self.blackboard.game
         motion_controller = self.blackboard.motion_controller
@@ -578,7 +612,7 @@ class DirectFreeOursStep(AbstractBehaviour):
                 robot = game.friendly_robots[robot_id]
                 ball_pos = Vector2D(ball.p.x, ball.p.y)
                 distance_to_ball = robot.p.distance_to(ball_pos)
-                _, enemy = self._nearest_enemy_to_ball(game, ball_pos)
+                _, enemy = self._kick_target_enemy(game, ball_pos)
 
                 if enemy is None:
                     target_oren = robot.p.angle_to(ball_pos)

@@ -1,3 +1,7 @@
+from utama_core.strategy.examples.ball_placement_and_kick_strategy import (
+    BallPlacementAndKickStrategy,
+    KickAfterDirectFreeStep,
+)
 from utama_core.strategy.examples.defense_strategy import DefenceStrategy
 from utama_core.strategy.examples.deliberate_out_of_bounds_strategy import (
     DeliberateOutOfBoundsStrategy,
