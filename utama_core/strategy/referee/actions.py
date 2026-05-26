@@ -27,7 +27,12 @@ from utama_core.config.referee_constants import (
 )
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.skills.src.utils.move_utils import empty_command, move
+from utama_core.skills.src.utils.move_utils import (
+    empty_command,
+    kick,
+    move,
+    turn_on_spot,
+)
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
 
 
@@ -547,8 +552,21 @@ class DirectFreeOursStep(AbstractBehaviour):
     All other robots stop in place.
     """
 
-    # How far infield from the ball the approach point is placed
-    _APPROACH_OFFSET = 0.15
+    # How close the robot center should get behind the ball before turning/kicking.
+    _APPROACH_OFFSET = ROBOT_RADIUS + 0.03
+    _APPROACH_READY_DISTANCE = 0.04
+    _KICK_READY_DISTANCE = 0.16
+    _FACE_READY_ANGLE = 0.18
+
+    @staticmethod
+    def _angle_error(current: float, target: float) -> float:
+        return math.atan2(math.sin(target - current), math.cos(target - current))
+
+    def _nearest_enemy_to_ball(self, game, ball_pos: Vector2D):
+        if not game.enemy_robots:
+            return None, None
+        enemy_id = min(game.enemy_robots, key=lambda rid: game.enemy_robots[rid].p.distance_to(ball_pos))
+        return enemy_id, game.enemy_robots[enemy_id]
 
     def update(self) -> py_trees.common.Status:
         game = self.blackboard.game
@@ -564,22 +582,33 @@ class DirectFreeOursStep(AbstractBehaviour):
             if robot_id == kicker_id and ball:
                 robot = game.friendly_robots[robot_id]
                 ball_pos = Vector2D(ball.p.x, ball.p.y)
+                distance_to_ball = robot.p.distance_to(ball_pos)
+                _, enemy = self._nearest_enemy_to_ball(game, ball_pos)
 
-                # Compute an approach point offset inward from the nearest boundary,
-                # so the robot never drives through the ball toward the edge.
-                half_length = _field_half_length(game)
-                half_width = _field_half_width(game)
-                # Inward direction: push away from whichever boundary is closest
-                offset_x = 0.0
-                offset_y = 0.0
-                if abs(ball_pos.x) > half_length - 0.5:
-                    offset_x = self._APPROACH_OFFSET * (-1.0 if ball_pos.x > 0 else 1.0)
-                if abs(ball_pos.y) > half_width - 0.5:
-                    offset_y = self._APPROACH_OFFSET * (-1.0 if ball_pos.y > 0 else 1.0)
+                if enemy is None:
+                    target_oren = robot.p.angle_to(ball_pos)
+                else:
+                    target_oren = ball_pos.angle_to(enemy.p)
 
-                approach = Vector2D(ball_pos.x + offset_x, ball_pos.y + offset_y)
-                oren = robot.p.angle_to(approach)
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, approach, oren)
+                kick_dir = Vector2D(math.cos(target_oren), math.sin(target_oren))
+                approach = Vector2D(
+                    ball_pos.x - kick_dir.x * self._APPROACH_OFFSET,
+                    ball_pos.y - kick_dir.y * self._APPROACH_OFFSET,
+                )
+                approach = _clamp_to_field(approach, game)
+                distance_to_approach = robot.p.distance_to(approach)
+                face_error = self._angle_error(robot.orientation, target_oren)
+
+                if distance_to_approach > self._APPROACH_READY_DISTANCE:
+                    self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, approach, target_oren)
+                elif abs(face_error) > self._FACE_READY_ANGLE:
+                    self.blackboard.cmd_map[robot_id] = turn_on_spot(
+                        game, motion_controller, robot_id, target_oren, dribbling=False
+                    )
+                elif distance_to_ball > self._KICK_READY_DISTANCE:
+                    self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, approach, target_oren)
+                else:
+                    self.blackboard.cmd_map[robot_id] = kick()
             else:
                 self.blackboard.cmd_map[robot_id] = empty_command(False)
 
