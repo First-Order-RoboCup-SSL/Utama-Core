@@ -19,13 +19,10 @@ def _angle_delta(target: float, current: float) -> float:
 class DeliberateOutOfBoundsStep(AbstractBehaviour):
     """Line up behind the ball, shove once toward a boundary, then stop."""
 
-    _DIRECTIONS = (
-        Vector2D(0.0, 1.0),
-        Vector2D(0.0, -1.0),
-        Vector2D(-1.0, 0.0),
-        Vector2D(1.0, 0.0),
-    )
+    _TARGETS = ("top", "bottom", "left", "right", "yellow_goal")
     _BOUNDARY_EPSILON = 0.04
+    _GOAL_EPSILON = 0.06
+    _GOAL_MOUTH_CLEARANCE = 0.28
     _APPROACH_BACKOFF = ROBOT_RADIUS + 0.10
     _APPROACH_TOLERANCE = 0.08
     _ALIGN_TOLERANCE_RAD = 0.14
@@ -36,7 +33,7 @@ class DeliberateOutOfBoundsStep(AbstractBehaviour):
     def __init__(self, field_dims: FieldDimensions, name: str = "DeliberateOutOfBoundsStep"):
         super().__init__(name=name)
         self._field_dims = field_dims
-        self._direction_index = 0
+        self._target_index = 0
         self._phase = "approach"
         self._phase_started_at = 0.0
         self._waiting_for_restart = False
@@ -59,12 +56,19 @@ class DeliberateOutOfBoundsStep(AbstractBehaviour):
             else:
                 return self._stop_all()
 
-        direction = self._DIRECTIONS[self._direction_index]
-        if self._has_reached_target_boundary(ball_pos, direction, half_length, half_width):
-            self._direction_index = (self._direction_index + 1) % len(self._DIRECTIONS)
-            self._waiting_for_restart = True
+        target_name = self._TARGETS[self._target_index]
+        if self._has_reached_target(ball_pos, target_name, game, half_length, half_width):
+            if self._target_index < len(self._TARGETS) - 1:
+                self._target_index += 1
+                self._waiting_for_restart = True
             self._phase = "approach"
             return self._stop_all()
+
+        target_point = self._target_point(target_name, ball_pos, game, half_length, half_width)
+        direction = target_point - ball_pos
+        if direction.mag() == 0.0:
+            return self._stop_all()
+        direction = Vector2D(direction.x / direction.mag(), direction.y / direction.mag())
 
         pusher_id = min(
             game.friendly_robots,
@@ -134,20 +138,53 @@ class DeliberateOutOfBoundsStep(AbstractBehaviour):
 
         return py_trees.common.Status.RUNNING
 
-    def _has_reached_target_boundary(
+    def _target_point(
+        self,
+        target_name: str,
+        ball_pos: Vector2D,
+        game,
+        half_length: float,
+        half_width: float,
+    ) -> Vector2D:
+        if target_name == "top":
+            return Vector2D(ball_pos.x, half_width + self._BOUNDARY_EPSILON)
+        if target_name == "bottom":
+            return Vector2D(ball_pos.x, -half_width - self._BOUNDARY_EPSILON)
+        if target_name == "left":
+            return Vector2D(-half_length - self._BOUNDARY_EPSILON, self._safe_touchline_y(ball_pos.y, game))
+        if target_name == "right":
+            return Vector2D(half_length + self._BOUNDARY_EPSILON, self._safe_touchline_y(ball_pos.y, game))
+
+        yellow_is_right = game.my_team_is_right == game.my_team_is_yellow
+        yellow_goal_x = half_length + self._GOAL_EPSILON if yellow_is_right else -half_length - self._GOAL_EPSILON
+        return Vector2D(yellow_goal_x, 0.0)
+
+    def _safe_touchline_y(self, current_y: float, game) -> float:
+        min_abs_y = game.field.half_goal_width + self._GOAL_MOUTH_CLEARANCE
+        sign = 1.0 if current_y >= 0.0 else -1.0
+        return sign * max(abs(current_y), min_abs_y)
+
+    def _has_reached_target(
         self,
         ball_pos: Vector2D,
-        direction: Vector2D,
+        target_name: str,
+        game,
         half_length: float,
         half_width: float,
     ) -> bool:
-        if direction.y > 0.0:
+        if target_name == "top":
             return ball_pos.y >= half_width - self._BOUNDARY_EPSILON
-        if direction.y < 0.0:
+        if target_name == "bottom":
             return ball_pos.y <= -half_width + self._BOUNDARY_EPSILON
-        if direction.x < 0.0:
-            return ball_pos.x <= -half_length + self._BOUNDARY_EPSILON
-        return ball_pos.x >= half_length - self._BOUNDARY_EPSILON
+        if target_name == "left":
+            return ball_pos.x <= -half_length + self._BOUNDARY_EPSILON and abs(ball_pos.y) > game.field.half_goal_width
+        if target_name == "right":
+            return ball_pos.x >= half_length - self._BOUNDARY_EPSILON and abs(ball_pos.y) > game.field.half_goal_width
+
+        yellow_is_right = game.my_team_is_right == game.my_team_is_yellow
+        if yellow_is_right:
+            return ball_pos.x >= half_length - self._GOAL_EPSILON and abs(ball_pos.y) < game.field.half_goal_width
+        return ball_pos.x <= -half_length + self._GOAL_EPSILON and abs(ball_pos.y) < game.field.half_goal_width
 
     def _stop_all(self) -> py_trees.common.Status:
         game = self.blackboard.game
@@ -157,7 +194,7 @@ class DeliberateOutOfBoundsStep(AbstractBehaviour):
 
 
 class DeliberateOutOfBoundsStrategy(AbstractStrategy):
-    """Opponent strategy that pushes the ball out: top, bottom, left, right."""
+    """Opponent strategy that pushes the ball out once per side, then scores on yellow."""
 
     def __init__(self, field_dims: FieldDimensions) -> None:
         self._field_dims = field_dims
