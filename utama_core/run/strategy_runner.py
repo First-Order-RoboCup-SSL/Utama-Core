@@ -283,15 +283,17 @@ class StrategyRunner:
 
     def _validate_vision_to_cmd_mapping(self, mapping: Optional[dict[int, int]], is_yellow: bool) -> dict[int, int]:
         if self.mode == Mode.REAL:
+            team_name = "friendly" if is_yellow == self.my_team_is_yellow else "opponent"
             if mapping is None:
-                # if we are running an opp strat, but explicit mapping not provided
                 if self.opp:
-                    if is_yellow ^ self.my_team_is_yellow:
-                        raise ValueError(
-                            "explicit vision_to_cmd_mapping is required for the opponent team in real mode to prevent ID conflicts."
-                        )
-                else:
-                    return {}
+                    raise ValueError(
+                        f"explicit vision_to_cmd_mapping is required for the {team_name} team in real mode when controlling both teams over shared transmission."
+                    )
+                return {}
+            if not isinstance(mapping, dict):
+                raise TypeError(
+                    f"vision_to_cmd_mapping must be a dictionary mapping vision robot IDs to command robot IDs; got {type(mapping).__name__}."
+                )
             # if we are not running an opp strat, but mapping provided, warn that it will be ignored
             if self.opp is None and self.my_team_is_yellow ^ is_yellow:
                 warnings.warn(
@@ -307,10 +309,6 @@ class StrategyRunner:
                         "vision_to_cmd_mapping for friendly team must include all expected friendly robots for shared transmission."
                     )
 
-            if not isinstance(mapping, dict):
-                raise TypeError(
-                    f"vision_to_cmd_mapping must be a dictionary mapping vision robot IDs to command robot IDs; got {type(mapping).__name__}."
-                )
             for vision_id, cmd_id in mapping.items():
                 if not isinstance(vision_id, int) or not isinstance(cmd_id, int):
                     raise TypeError(
@@ -339,15 +337,15 @@ class StrategyRunner:
     def _check_no_cmd_duplicate_if_transmission_sharing(
         self, yellow_mapping: dict[int, int], blue_mapping: dict[int, int]
     ):
-        seen = set()
-        dicts = [yellow_mapping, blue_mapping]
-        for d in dicts:
+        seen: dict[int, str] = {}
+        dicts = [("yellow", yellow_mapping), ("blue", blue_mapping)]
+        for team_name, d in dicts:
             for v in d.values():
                 if v in seen:
                     raise ValueError(
-                        f"vision_to_cmd_mapping for friendly and opponent teams cannot have overlapping command IDs since commands are transmitted together; found overlap in command IDs: {seen}."
+                        f"vision_to_cmd_mapping for friendly and opponent teams cannot have overlapping command IDs since commands are transmitted together; duplicate command ID {v} is present in both {seen[v]} and {team_name} mappings."
                     )
-                seen.add(v)
+                seen[v] = team_name
 
     def _handle_sigint(self, sig, frame):
         self._stop_event.set()
@@ -495,9 +493,10 @@ class StrategyRunner:
                 vision_id = self.yellow_cmd_to_vision_mapping.get(cmd_id)
 
                 if vision_id is not None:
-                    friendly_responses.append(response)
+                    friendly_responses.append(RobotResponse(vision_id, has_ball=response.has_ball))
                 elif cmd_id in self.blue_cmd_to_vision_mapping:
-                    opponent_responses.append(response)
+                    opponent_vision_id = self.blue_cmd_to_vision_mapping[cmd_id]
+                    opponent_responses.append(RobotResponse(opponent_vision_id, has_ball=response.has_ball))
                 else:
                     self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either yellow or blue mapping")
                     opponent_responses.append(response)  # or skip / raise depending on strictness
@@ -506,9 +505,10 @@ class StrategyRunner:
                 vision_id = self.blue_cmd_to_vision_mapping.get(cmd_id)
 
                 if vision_id is not None:
-                    friendly_responses.append(response)
+                    friendly_responses.append(RobotResponse(vision_id, has_ball=response.has_ball))
                 elif cmd_id in self.yellow_cmd_to_vision_mapping:
-                    opponent_responses.append(response)
+                    opponent_vision_id = self.yellow_cmd_to_vision_mapping[cmd_id]
+                    opponent_responses.append(RobotResponse(opponent_vision_id, has_ball=response.has_ball))
                 else:
                     self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either blue or yellow mapping")
                     opponent_responses.append(response)
@@ -1165,7 +1165,7 @@ class StrategyRunner:
         vision_frames: List[RawVisionData],
         referee_data,
         running_opp: bool,
-        real_responses: Optional[dict[int, RobotResponse]] = None,
+        real_responses: Optional[List[RobotResponse]] = None,
     ):
         """Step the game for the robot controller and strategy.
 
@@ -1173,7 +1173,7 @@ class StrategyRunner:
             vision_frames (List[RawVisionData]): The vision frames.
             referee_data: The referee data from RSim or network receiver.
             running_opp (bool): Whether to run the opponent strategy.
-            real_responses (Optional[dict[int, RobotResponse]]): The robot responses pulled for real.
+            real_responses (Optional[List[RobotResponse]]): The robot responses pulled for real.
                                                             We use a shared transmitter, so it cannot be pulled per side.
         """
         side = self.opp if running_opp else self.my
@@ -1182,7 +1182,7 @@ class StrategyRunner:
         if self.mode != Mode.REAL:
             responses = side.strategy.robot_controller.get_robots_responses()
         else:
-            responses = real_responses if real_responses is not None else {}
+            responses = real_responses if real_responses is not None else []
 
         # Update game frame with refined information
         new_game_frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
