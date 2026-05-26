@@ -343,7 +343,7 @@ class StrategyRunner:
             for v in d.values():
                 if v in cmd_id_to_team:
                     raise ValueError(
-                        f"vision_to_cmd_mapping for friendly and opponent teams cannot have overlapping command IDs since commands are transmitted together; duplicate command ID {v} is present in both {cmd_id_to_team[v]} and {team_name} mappings."
+                        f"vision_to_cmd_mapping for yellow and blue teams cannot have overlapping command IDs since commands are transmitted together; duplicate command ID {v} is present in both {cmd_id_to_team[v]} and {team_name} mappings."
                     )
                 cmd_id_to_team[v] = team_name
 
