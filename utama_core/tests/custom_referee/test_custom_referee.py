@@ -189,6 +189,27 @@ class TestOutOfBoundsRule:
         px, py = violation.designated_position
         assert abs(py) < GEO.half_width  # placed infield
 
+    def test_violation_always_sets_designated_position(self):
+        rule = OutOfBoundsRule()
+        frame = _frame(ball=_ball(4.9, 3.2), my_team_is_yellow=True)
+        violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.designated_position is not None
+
+    def test_violation_next_command_is_direct_free_not_ball_placement(self):
+        rule = OutOfBoundsRule()
+        frame = _frame(ball=_ball(0.0, 3.5), my_team_is_yellow=True)
+        violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.next_command in {
+            RefereeCommand.DIRECT_FREE_YELLOW,
+            RefereeCommand.DIRECT_FREE_BLUE,
+        }
+        assert violation.next_command not in {
+            RefereeCommand.BALL_PLACEMENT_YELLOW,
+            RefereeCommand.BALL_PLACEMENT_BLUE,
+        }
+
 
 # ---------------------------------------------------------------------------
 # DefenseAreaRule

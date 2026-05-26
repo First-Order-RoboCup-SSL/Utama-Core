@@ -492,25 +492,17 @@ The **Event Log** panel shows the 20 most recent events, newest first.
 - **End-to-end ball placement integration test**: The intended test scenario is:
   ball exits field → `STOP` → `BALL_PLACEMENT_YELLOW` → robot physically carries ball to
   `designated_position` → `DIRECT_FREE_YELLOW` → kicker drives to ball → `NORMAL_START`.
-  This was attempted in `utama_core/tests/strategy_runner/test_referee_rsim.py` but deferred
-  because `BallPlacementOursStep` cannot reliably carry the ball in RSim.  The robot drives
-  to `ball.p` with the dribbler on, but the motion controller decelerates to a stop at the
-  ball centre rather than capturing it, causing the robot to push the ball instead of carrying
-  it.  Approaches tried: behind-ball offset (robot stops short), direct drive to ball with
-  face-target orientation (hits ball side-on), proximity fallback for `has_ball` (still pushes).
-  Root cause: the approach, dribbler-capture, and carry phases need a dedicated
-  "get-behind-ball" skill with a slower final-approach speed before this can be tested
-  end-to-end.  Additionally, `OutOfBoundsRule` currently issues `STOP → DIRECT_FREE` directly
-  (no automatic ball placement step), so `BALL_PLACEMENT` must be injected manually via
-  `set_command()` for this scenario.
+  `OutOfBoundsRule` now provides `DIRECT_FREE_*` plus `designated_position`, and the state
+  machine routes `STOP → BALL_PLACEMENT_* → DIRECT_FREE_* → NORMAL_START` automatically when
+  `designated_position` is set. The practical blocker for fully physical end-to-end validation
+  in RSim is still ball-carry reliability (the robot often pushes rather than carries), so
+  transition-order tests should use controlled ball teleportation while carry mechanics are
+  improved.
 
-- **Ball placement before free kick (SSL rule compliance)**: Per the official SSL rulebook,
-  after a ball-out-of-bounds event the correct sequence is `STOP → BALL_PLACEMENT_* →
-  DIRECT_FREE_* → NORMAL_START`, not `STOP → DIRECT_FREE_*` as `OutOfBoundsRule` currently
-  produces.  `OutOfBoundsRule` should be updated to set `suggested_command=STOP` and
-  `next_command=BALL_PLACEMENT_*` (with `designated_position` set to the infield restart
-  spot), so the state machine progresses through ball placement before issuing the free kick.
-  This requires `BallPlacementOursStep` to be working reliably first (see item above).
+- **Ball placement before free kick (SSL rule compliance)**: The referee flow now supports
+  the compliant sequence `STOP → BALL_PLACEMENT_* → DIRECT_FREE_* → NORMAL_START` for
+  out-of-bounds fouls via state-machine routing from `designated_position`. Future work here is
+  mainly to keep this behaviour covered by focused unit/integration tests and avoid regressions.
 
 - **`BallPlacementOursStep` robot carry mechanics**: The current single-robot dribble
   approach does not work reliably — the robot pushes the ball rather than carrying it.

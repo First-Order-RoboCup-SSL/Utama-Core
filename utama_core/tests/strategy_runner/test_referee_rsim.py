@@ -8,10 +8,10 @@ Each test:
 
 Scenarios covered:
   - BALL_PLACEMENT_YELLOW issued directly → closest robot drives to designated target.
-  - Ball exits side boundary → DIRECT_FREE_YELLOW issued → kicker drives to ball.
+  - Ball exits side boundary → full sequence STOP → BALL_PLACEMENT_YELLOW → DIRECT_FREE_YELLOW → NORMAL_START.
   - Ball exits side boundary, robot near ball → DIRECT_FREE_BLUE issued → robots clear keep-out zone.
   - PREPARE_KICKOFF issued → robots reach own-half positions outside centre circle.
-  - Full out-of-bounds sequence: ball exits → STOP → BALL_PLACEMENT → DIRECT_FREE → NORMAL_START.
+  - Full out-of-bounds sequence uses ball teleport to validate transition ordering robustly.
 
 Note on initial commands:
   Out-of-bounds and goal rules only fire during NORMAL_START / FORCE_START, so the
@@ -26,10 +26,9 @@ Note on last-touch tracking:
   With no robot near the ball, last-touch defaults to DIRECT_FREE_YELLOW (ours).
 
 Note on ball placement in out-of-bounds:
-  OutOfBoundsRule issues STOP → DIRECT_FREE directly (no automatic ball placement).
-  Ball placement is only reachable via set_command().  The full-sequence test manually
-  injects BALL_PLACEMENT_YELLOW after the STOP fires, then lets auto-advance carry the
-  state machine through BALL_PLACEMENT → DIRECT_FREE → NORMAL_START.
+  OutOfBoundsRule provides DIRECT_FREE_* plus designated_position; the state machine then
+  routes through STOP → BALL_PLACEMENT_* → DIRECT_FREE_* automatically when placement
+  is required.
 """
 
 import math
@@ -172,34 +171,49 @@ def test_ball_placement_robot_approaches_designated_position(headless):
 
 
 # ---------------------------------------------------------------------------
-# Scenario 2a: our direct free kick — kicker drives toward ball
+# Scenario 2a: full out-of-bounds restart cycle
 # ---------------------------------------------------------------------------
 
 
-class _DirectFreeOursManager(AbstractTestManager):
-    """Ball exits the side boundary with no friendly robot nearby → DIRECT_FREE_YELLOW (ours).
+class _FullOutOfBoundsRestartCycleManager(AbstractTestManager):
+    """Validate STOP → BALL_PLACEMENT_YELLOW → DIRECT_FREE_YELLOW → NORMAL_START ordering.
 
-    With no robot close enough to the ball to register a friendly last-touch,
-    OutOfBoundsRule defaults to DIRECT_FREE_YELLOW.  We verify the kicker
-    drives toward the (now out-of-bounds) ball.
+    Because physical carry in rsim can be flaky, we teleport the ball to the
+    designated placement target once BALL_PLACEMENT_YELLOW is active. This
+    validates end-to-end referee/state-machine transitions deterministically.
     """
 
     n_episodes = 1
-    APPROACH_TOLERANCE = 0.6  # slightly wider: ball may be just outside boundary
+    APPROACH_TOLERANCE = 0.6
+    TARGET_MATCH_TOLERANCE = 0.05
+    EXPECTED_SEQUENCE = [
+        RefereeCommand.STOP,
+        RefereeCommand.BALL_PLACEMENT_YELLOW,
+        RefereeCommand.DIRECT_FREE_YELLOW,
+        RefereeCommand.NORMAL_START,
+    ]
 
     def __init__(self, referee: CustomReferee):
         super().__init__()
         self._referee = referee
+        self._sim_controller: Optional[AbstractSimController] = None
+        self._last_command: Optional[RefereeCommand] = None
+        self._command_sequence: list[RefereeCommand] = []
+        self._teleported_to_target: bool = False
+        self._placement_target: Optional[tuple[float, float]] = None
+        self.ball_reached_target_before_direct_free: bool = False
         self.direct_free_seen: bool = False
+        self.normal_start_seen: bool = False
         self.robot_near_ball: bool = False
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
+        self._sim_controller = sim_controller
         # Keep all robots well away from the ball so last-touch is unknown → DIRECT_FREE_YELLOW
         sim_controller.teleport_robot(game.my_team_is_yellow, 0, -1.5, 0.0)
         sim_controller.teleport_robot(game.my_team_is_yellow, 1, -2.0, 0.5)
         sim_controller.teleport_robot(game.my_team_is_yellow, 2, -2.0, -0.5)
-        # Ball heading out the top sideline
-        sim_controller.teleport_ball(0.0, 2.5, vx=0.0, vy=2.5)
+        # Ball heading out the top sideline quickly
+        sim_controller.teleport_ball(0.0, 2.5, vx=0.0, vy=3.0)
         self._referee.set_command(RefereeCommand.FORCE_START, game.ts)
 
     def eval_status(self, game: Game) -> TestingStatus:
@@ -207,8 +221,32 @@ class _DirectFreeOursManager(AbstractTestManager):
         if ref is None:
             return TestingStatus.IN_PROGRESS
 
-        if ref.referee_command == RefereeCommand.DIRECT_FREE_YELLOW:
+        current_command = ref.referee_command
+        if current_command != self._last_command:
+            self._command_sequence.append(current_command)
+            self._last_command = current_command
+            idx = len(self._command_sequence) - 1
+            if idx < len(self.EXPECTED_SEQUENCE) and current_command != self.EXPECTED_SEQUENCE[idx]:
+                return TestingStatus.FAILURE
+            if idx >= len(self.EXPECTED_SEQUENCE):
+                return TestingStatus.FAILURE
+
+        if current_command == RefereeCommand.BALL_PLACEMENT_YELLOW and not self._teleported_to_target:
+            if ref.designated_position is None or self._sim_controller is None:
+                return TestingStatus.FAILURE
+            self._placement_target = ref.designated_position
+            self._sim_controller.teleport_ball(self._placement_target[0], self._placement_target[1])
+            self._teleported_to_target = True
+
+        if current_command == RefereeCommand.DIRECT_FREE_YELLOW:
             self.direct_free_seen = True
+            if self._placement_target is None or game.ball is None:
+                return TestingStatus.FAILURE
+            dist_to_target = math.hypot(
+                game.ball.p.x - self._placement_target[0],
+                game.ball.p.y - self._placement_target[1],
+            )
+            self.ball_reached_target_before_direct_free = dist_to_target <= self.TARGET_MATCH_TOLERANCE
 
         if not self.direct_free_seen:
             return TestingStatus.IN_PROGRESS
@@ -221,21 +259,36 @@ class _DirectFreeOursManager(AbstractTestManager):
             dist = math.hypot(robot.p.x - ball.p.x, robot.p.y - ball.p.y)
             if dist < self.APPROACH_TOLERANCE:
                 self.robot_near_ball = True
-                return TestingStatus.SUCCESS
+                break
+
+        if current_command == RefereeCommand.NORMAL_START:
+            self.normal_start_seen = True
+            expected = self.EXPECTED_SEQUENCE
+            if self._command_sequence[: len(expected)] != expected:
+                return TestingStatus.FAILURE
+            if not self._teleported_to_target:
+                return TestingStatus.FAILURE
+            if not self.ball_reached_target_before_direct_free:
+                return TestingStatus.FAILURE
+            if not self.robot_near_ball:
+                return TestingStatus.FAILURE
+            return TestingStatus.SUCCESS
 
         return TestingStatus.IN_PROGRESS
 
 
-def test_direct_free_kick_ours_robot_drives_to_ball(headless):
-    """After our direct free kick, the kicker drives toward the ball."""
+def test_full_out_of_bounds_restart_cycle(headless):
+    """Out-of-bounds progresses through STOP→BALL_PLACEMENT→DIRECT_FREE→NORMAL_START in order."""
     referee = CustomReferee.from_profile_name("simulation")
     runner = _make_runner(referee)
-    tm = _DirectFreeOursManager(referee)
+    tm = _FullOutOfBoundsRestartCycleManager(referee)
 
-    passed = runner.run_test(tm, episode_timeout=20.0, rsim_headless=headless)
+    passed = runner.run_test(tm, episode_timeout=35.0, rsim_headless=headless)
 
-    assert tm.direct_free_seen, "CustomReferee never issued DIRECT_FREE_YELLOW"
-    assert tm.robot_near_ball, "No robot drove toward the ball during our direct free kick"
+    assert tm.direct_free_seen, "CustomReferee never issued DIRECT_FREE_YELLOW in the restart cycle"
+    assert tm.normal_start_seen, "CustomReferee never issued NORMAL_START after direct free restart"
+    assert tm.ball_reached_target_before_direct_free, "Ball did not reach designated position before DIRECT_FREE_YELLOW"
+    assert tm.robot_near_ball, "No robot drove toward the ball during DIRECT_FREE_YELLOW"
     assert passed
 
 
@@ -388,28 +441,8 @@ def test_prepare_kickoff_robots_form_on_own_half_outside_circle(headless):
 
 
 # ---------------------------------------------------------------------------
-# Future work: full out-of-bounds sequence integration test
-#
-# Intended scenario:
-#   ball exits → STOP → BALL_PLACEMENT_YELLOW → robot physically carries ball
-#   to designated position → DIRECT_FREE_YELLOW → kicker drives to ball →
-#   NORMAL_START (play resumes)
-#
-# Why it is not implemented yet:
-#   BallPlacementOursStep relies on robot.has_ball (IR sensor) to switch from
-#   approach to carry mode. In rsim the robot drives to ball.p but decelerates
-#   to a stop AT the ball centre rather than past it, so the dribbler never
-#   properly captures the ball — the robot ends up pushing it instead of
-#   carrying it. Several approaches were tried:
-#     - Adding a behind-ball approach offset (robot stopped short with a gap)
-#     - Driving directly into ball.p with face-target orientation (pushed sideways)
-#     - Proximity fallback for has_ball (robot reached ball but pushed it away)
-#   Root cause: the motion controller targets and the dribbler capture
-#   mechanics need tighter integration (approach from behind, slower final
-#   approach speed, or a dedicated "get-behind-ball" skill) before ball
-#   placement via robot carry can be reliably tested end-to-end.
-#
-# Additionally, OutOfBoundsRule currently issues STOP → DIRECT_FREE directly
-# (no automatic ball placement step). Ball placement must be injected manually
-# via set_command(), which makes the test scenario somewhat artificial.
+# NOTE
+# The full out-of-bounds restart-cycle test above uses ball teleportation during
+# BALL_PLACEMENT to make transition-order validation deterministic in rsim.
+# Physical carry reliability remains a separate behavioural concern.
 # ---------------------------------------------------------------------------
