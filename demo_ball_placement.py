@@ -35,8 +35,6 @@ Workflow
        pixi run pytest utama_core/tests/strategy_runner/test_ball_placement_rsim.py -v
 """
 
-import math
-
 import py_trees
 
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
@@ -52,10 +50,8 @@ from utama_core.custom_referee.profiles.profile_loader import (
     RulesConfig,
 )
 from utama_core.entities.data.command import RobotCommand
-from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
-from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common import AbstractBehaviour
 from utama_core.strategy.examples.ball_placement_strategy import BallPlacementStrategy
 from utama_core.strategy.examples.deliberate_out_of_bounds_strategy import (
@@ -72,14 +68,10 @@ MY_TEAM_IS_YELLOW = True
 MY_TEAM_IS_RIGHT = True
 
 
-def _angle_delta(target: float, current: float) -> float:
-    return math.atan2(math.sin(target - current), math.cos(target - current))
-
-
 class KickTowardOpponentStep(AbstractBehaviour):
     """Stay idle except for one kick after a referee-managed restart."""
 
-    _KICK_ALIGNMENT_RAD = 0.25
+    _KICK_DISTANCE = 0.22
 
     def setup_(self):
         self._seen_first_live_restart = False
@@ -88,7 +80,6 @@ class KickTowardOpponentStep(AbstractBehaviour):
 
     def update(self) -> py_trees.common.Status:
         game = self.blackboard.game
-        motion_controller = self.blackboard.motion_controller
         ref = game.referee
 
         if ref is None or ref.referee_command != RefereeCommand.NORMAL_START:
@@ -115,47 +106,24 @@ class KickTowardOpponentStep(AbstractBehaviour):
             key=lambda rid: game.friendly_robots[rid].p.distance_to(game.ball.p),
         )
         kicker = game.friendly_robots[kicker_id]
-        ball_pos = Vector2D(game.ball.p.x, game.ball.p.y)
-        target_pos = self._opponent_target(game, ball_pos)
-        kick_oren = ball_pos.angle_to(target_pos)
+        if kicker.p.distance_to(game.ball.p) > self._KICK_DISTANCE:
+            return py_trees.common.Status.RUNNING
 
         for robot_id in game.friendly_robots:
             if robot_id != kicker_id:
                 continue
 
-            if abs(_angle_delta(kick_oren, kicker.orientation)) <= self._KICK_ALIGNMENT_RAD:
-                self.blackboard.cmd_map[robot_id] = RobotCommand(
-                    local_forward_vel=0,
-                    local_left_vel=0,
-                    angular_vel=0,
-                    kick=1,
-                    chip=0,
-                    dribble=0,
-                )
-                self._kick_sent_for_timestamp = restart_timestamp
-                continue
-
-            self.blackboard.cmd_map[robot_id] = move(
-                game,
-                motion_controller,
-                robot_id,
-                kicker.p,
-                kick_oren,
-                dribbling=False,
+            self.blackboard.cmd_map[robot_id] = RobotCommand(
+                local_forward_vel=0,
+                local_left_vel=0,
+                angular_vel=0,
+                kick=1,
+                chip=0,
+                dribble=0,
             )
+            self._kick_sent_for_timestamp = restart_timestamp
 
         return py_trees.common.Status.RUNNING
-
-    def _opponent_target(self, game, ball_pos: Vector2D) -> Vector2D:
-        if game.enemy_robots:
-            target_robot = min(
-                game.enemy_robots.values(),
-                key=lambda robot: robot.p.distance_to(ball_pos),
-            )
-            return Vector2D(target_robot.p.x, target_robot.p.y)
-
-        goal_x = -game.field.half_length if game.my_team_is_right else game.field.half_length
-        return Vector2D(goal_x, 0.0)
 
 
 class BallPlacementAndKickStrategy(BallPlacementStrategy):

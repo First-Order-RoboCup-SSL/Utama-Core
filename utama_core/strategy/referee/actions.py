@@ -27,12 +27,7 @@ from utama_core.config.referee_constants import (
 )
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.skills.src.utils.move_utils import (
-    empty_command,
-    kick,
-    move,
-    turn_on_spot,
-)
+from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
 
 
@@ -608,7 +603,7 @@ class DirectFreeOursStep(AbstractBehaviour):
                 elif distance_to_ball > self._KICK_READY_DISTANCE:
                     self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, approach, target_oren)
                 else:
-                    self.blackboard.cmd_map[robot_id] = kick()
+                    self.blackboard.cmd_map[robot_id] = empty_command(False)
             else:
                 self.blackboard.cmd_map[robot_id] = empty_command(False)
 
