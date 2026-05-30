@@ -5,12 +5,26 @@ from py_trees.composites import Selector, Sequence
 
 from utama_core.config.enums import Role, Tactic
 from utama_core.entities.data.object import TeamType
+from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.skills.src.block import block_attacker
 from utama_core.skills.src.defend_parameter import defend_parameter
 from utama_core.skills.src.goalkeep import goalkeep
 from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
+
+
+def _assign_roles_dynamic(game: Game) -> dict:
+    goal_line = game.field.my_goal_line
+    gx = (goal_line[0][0] + goal_line[1][0]) / 2
+    gy = (goal_line[0][1] + goal_line[1][1]) / 2
+    goal = Vector2D(gx, gy)
+    robots = sorted(game.friendly_robots.values(), key=lambda r: r.p.distance_to(goal))
+    n = len(robots)
+    if n == 0:
+        return {}
+    roles = [Role.GOALKEEPER] + [Role.DEFENDER] * max(0, n - 2) + [Role.MIDFIELDER]
+    return {r.id: role for r, role in zip(robots, roles)}
 
 
 class FindBlockingTarget(AbstractBehaviour):
@@ -155,11 +169,7 @@ class SetRoles(AbstractBehaviour):
     def update(self) -> py_trees.common.Status:
         self.blackboard.set(
             self.role_map_key,
-            {
-                0: Role.MIDFIELDER,
-                1: Role.DEFENDER,
-                2: Role.GOALKEEPER,
-            },
+            _assign_roles_dynamic(self.blackboard.game),
         )
         return py_trees.common.Status.SUCCESS
 
