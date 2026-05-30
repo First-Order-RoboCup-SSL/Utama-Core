@@ -1073,7 +1073,23 @@ class StrategyRunner:
             if self.opp:
                 friendly_res, opp_res = self._split_robot_responses_by_team(responses)
             else:
-                friendly_res = responses
+                cmd_to_vision = (
+                    self.yellow_cmd_to_vision_mapping
+                    if self.my_team_is_yellow
+                    else self.blue_cmd_to_vision_mapping
+                )
+                if cmd_to_vision:
+                    friendly_res = []
+                    for r in responses:
+                        vision_id = cmd_to_vision.get(r.id)
+                        if vision_id is None:
+                            self.logger.warning(
+                                f"RobotResponse cmd_id={r.id} not found in mapping for controlled team"
+                            )
+                            continue
+                        friendly_res.append(RobotResponse(vision_id, r.has_ball))
+                else:
+                    friendly_res = responses
 
         # alternate between opp and friendly playing
         real = self.mode == Mode.REAL
