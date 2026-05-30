@@ -137,9 +137,9 @@ class StrategyRunner:
             commands from the SSL game-controller over the network, or ``None``
             (default) to run without any referee input.
         yellow_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the yellow team.
-            Required in real mode if the yellow team is being controlled to prevent ID conflicts; ignored otherwise. All robots must be mapped in shared transmission mode.
+            Used only in real mode. In real PVP/shared-transmitter mode, mappings are required for both teams and must include all expected robots.
         blue_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the blue team.
-            Required in real mode if the blue team is being controlled to prevent ID conflicts; ignored otherwise. All robots must be mapped in shared transmission mode.
+            Used only in real mode. In real PVP/shared-transmitter mode, mappings are required for both teams and must include all expected robots.
     """
 
     def __init__(
