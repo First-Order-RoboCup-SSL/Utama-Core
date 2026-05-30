@@ -284,33 +284,41 @@ class StrategyRunner:
     def _validate_vision_to_cmd_mapping(self, mapping: Optional[dict[int, int]], is_yellow: bool) -> dict[int, int]:
         if self.mode == Mode.REAL:
             if mapping is None:
-                # if we are running an opp strat, but explicit mapping not provided
                 if self.opp:
                     if is_yellow ^ self.my_team_is_yellow:
+                        # opponent mapping is required in PVP to prevent ID conflicts
                         raise ValueError(
                             "explicit vision_to_cmd_mapping is required for the opponent team in real mode to prevent ID conflicts."
                         )
+                    else:
+                        # friendly mapping is optional in PVP; default to no remapping
+                        mapping = {}
                 else:
                     return {}
-            # if we are not running an opp strat, but mapping provided, warn that it will be ignored
-            if self.opp is None and self.my_team_is_yellow ^ is_yellow:
-                warnings.warn(
-                    "vision_to_cmd_mapping is provided but will be ignored since the opponent team is not being controlled."
-                )
-            if self.opp:
-                if len(mapping) != self.exp_enemy and is_yellow ^ self.my_team_is_yellow:
-                    raise ValueError(
-                        "vision_to_cmd_mapping for opponent team must include all expected opponent robots for shared transmission."
-                    )
-                if len(mapping) != self.exp_friendly and not (is_yellow ^ self.my_team_is_yellow):
-                    raise ValueError(
-                        "vision_to_cmd_mapping for friendly team must include all expected friendly robots for shared transmission."
-                    )
 
             if not isinstance(mapping, dict):
                 raise TypeError(
                     f"vision_to_cmd_mapping must be a dictionary mapping vision robot IDs to command robot IDs; got {type(mapping).__name__}."
                 )
+
+            # if we are not running an opp strat, but mapping provided, warn that it will be ignored
+            if self.opp is None and self.my_team_is_yellow ^ is_yellow:
+                warnings.warn(
+                    "vision_to_cmd_mapping is provided but will be ignored since the opponent team is not being controlled."
+                )
+
+            if self.opp:
+                if is_yellow ^ self.my_team_is_yellow:
+                    if len(mapping) != self.exp_enemy:
+                        raise ValueError(
+                            "vision_to_cmd_mapping for opponent team must include all expected opponent robots for shared transmission."
+                        )
+                else:
+                    if len(mapping) != self.exp_friendly:
+                        raise ValueError(
+                            "vision_to_cmd_mapping for friendly team must include all expected friendly robots for shared transmission."
+                        )
+
             for vision_id, cmd_id in mapping.items():
                 if not isinstance(vision_id, int) or not isinstance(cmd_id, int):
                     raise TypeError(
@@ -345,7 +353,7 @@ class StrategyRunner:
             for v in d.values():
                 if v in seen:
                     raise ValueError(
-                        f"vision_to_cmd_mapping for friendly and opponent teams cannot have overlapping command IDs since commands are transmitted together; found overlap in command IDs: {seen}."
+                        f"vision_to_cmd_mapping for friendly and opponent teams cannot have overlapping command IDs since commands are transmitted together; duplicate command ID: {v}."
                     )
                 seen.add(v)
 
@@ -493,25 +501,24 @@ class StrategyRunner:
 
             if self.my_team_is_yellow:
                 vision_id = self.yellow_cmd_to_vision_mapping.get(cmd_id)
-
                 if vision_id is not None:
-                    friendly_responses.append(response)
-                elif cmd_id in self.blue_cmd_to_vision_mapping:
-                    opponent_responses.append(response)
+                    friendly_responses.append(RobotResponse(vision_id, response.has_ball))
                 else:
-                    self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either yellow or blue mapping")
-                    opponent_responses.append(response)  # or skip / raise depending on strictness
-
+                    opp_vision_id = self.blue_cmd_to_vision_mapping.get(cmd_id)
+                    if opp_vision_id is not None:
+                        opponent_responses.append(RobotResponse(opp_vision_id, response.has_ball))
+                    else:
+                        self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either yellow or blue mapping")
             else:
                 vision_id = self.blue_cmd_to_vision_mapping.get(cmd_id)
-
                 if vision_id is not None:
-                    friendly_responses.append(response)
-                elif cmd_id in self.yellow_cmd_to_vision_mapping:
-                    opponent_responses.append(response)
+                    friendly_responses.append(RobotResponse(vision_id, response.has_ball))
                 else:
-                    self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either blue or yellow mapping")
-                    opponent_responses.append(response)
+                    opp_vision_id = self.yellow_cmd_to_vision_mapping.get(cmd_id)
+                    if opp_vision_id is not None:
+                        opponent_responses.append(RobotResponse(opp_vision_id, response.has_ball))
+                    else:
+                        self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either blue or yellow mapping")
 
         return friendly_responses, opponent_responses
 

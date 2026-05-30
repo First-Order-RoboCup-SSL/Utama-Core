@@ -57,7 +57,10 @@ class RealRobotController(AbstractRobotController):
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the feedback packet received from the robots
         self._robots_info: List[RobotResponse] = [None] * self._n_friendly
-        logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
+        if serial_port is None:
+            logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
+        else:
+            logger.debug(f"Sharing serial port: {self._serial_port.port}")
         self._assigned_mapping = {}  # mapping of robot_id to index in the out_packet
         self._vision_to_cmd_mapping = vision_to_cmd_mapping if vision_to_cmd_mapping is not None else {}
         cmd_to_vision_mapping = {v: k for k, v in self._vision_to_cmd_mapping.items()}
@@ -124,7 +127,7 @@ class RealRobotController(AbstractRobotController):
 
             # Guard against IndexError just in case, though validated by 'length' check
             if len(data) >= 1:
-                # remapping to vision ID done in strat runner
+                # cmd IDs are returned as-is; StrategyRunner remaps them to vision IDs via _split_robot_responses_by_team
                 if robot_id in responded_ids:
                     warnings.warn(
                         f"Received multiple responses for robot ID {robot_id} in the same cycle. Ignoring subsequent responses."
@@ -186,7 +189,7 @@ class RealRobotController(AbstractRobotController):
             robot_id = self._vision_to_cmd_mapping[robot_id]
         elif self._sharing_friendly_transmitter:
             warnings.warn(
-                f"No explicit mapping provided for opponent {robot_id} on shared transmitter setup. Populate the vision_to_cmd_mapping to resolve this issue."
+                f"Robot ID {robot_id} has no entry in vision_to_cmd_mapping on a shared transmitter setup; command will be sent using the raw vision ID."
             )
         if robot_id in self._assigned_mapping:
             warnings.warn(
