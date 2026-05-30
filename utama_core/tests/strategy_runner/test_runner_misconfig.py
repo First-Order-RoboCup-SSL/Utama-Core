@@ -132,7 +132,9 @@ def test_setup_vision_and_referee_starts_vision_only_when_referee_custom(monkeyp
     assert len(started[0]) == 1
 
 
-def test_setup_vision_and_referee_starts_both_receivers_when_referee_official(monkeypatch):
+def test_setup_vision_and_referee_starts_both_receivers_when_referee_official(
+    monkeypatch,
+):
     from utama_core.run import strategy_runner as runner_mod
 
     started = []
@@ -262,3 +264,135 @@ def test_strategy_runner_bounds_outside_non_standard_field_dims():
             full_field_dims=GREAT_EXHIBITION_FIELD_DIMS,
             field_bounds=too_large_for_custom_dims,
         )
+
+
+def test_validate_vision_to_cmd_mapping_real_not_controlled():
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=None,
+        exp_friendly=3,
+    )
+    result = StrategyRunner._validate_vision_to_cmd_mapping(runner, None, True)
+    assert result == {}
+
+
+def test_validate_vision_to_cmd_mapping_pvp_opp_mapping_missing():
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=True,
+        exp_friendly=3,
+        exp_enemy=3,
+    )
+    with pytest.raises(ValueError, match="required for both teams in real PVP"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, None, False)
+
+
+def test_validate_vision_to_cmd_mapping_pvp_friendly_mapping_missing():
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=True,
+        exp_friendly=3,
+        exp_enemy=3,
+    )
+    with pytest.raises(ValueError, match="required for both teams in real PVP"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, None, True)
+
+
+def test_validate_vision_to_cmd_mapping_type_error():
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=None,
+        exp_friendly=3,
+    )
+    with pytest.raises(TypeError, match="must be a dictionary"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, [], True)
+
+
+def test_validate_vision_to_cmd_mapping_ignored_warning():
+    import warnings
+
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=None,
+        exp_friendly=3,
+    )
+    with pytest.warns(UserWarning, match="vision_to_cmd_mapping is provided but will be ignored"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: 0}, False)
+
+
+def test_validate_vision_to_cmd_mapping_incorrect_length_friendly():
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=True,
+        exp_friendly=3,
+        exp_enemy=3,
+    )
+    with pytest.raises(ValueError, match="must include all expected friendly robots"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: 0, 1: 1}, True)
+
+
+def test_validate_vision_to_cmd_mapping_incorrect_length_enemy():
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=True,
+        exp_friendly=3,
+        exp_enemy=3,
+    )
+    with pytest.raises(ValueError, match="must include all expected opponent robots"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: 0, 1: 1}, False)
+
+
+def test_validate_vision_to_cmd_mapping_invalid_ids():
+    from utama_core.config.physical_constants import MAX_ROBOT_ID
+
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=None,
+        exp_friendly=3,
+    )
+    with pytest.raises(TypeError, match="must map integers to integers"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: "0"}, True)
+    with pytest.raises(ValueError, match="cannot have negative IDs"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, {-1: 0}, True)
+    with pytest.raises(ValueError, match="cannot have vision IDs greater than"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, {MAX_ROBOT_ID + 1: 0}, True)
+    with pytest.raises(ValueError, match="cannot have command IDs greater than 255"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: 256}, True)
+
+
+def test_validate_vision_to_cmd_mapping_sim_mode_raises():
+    runner = SimpleNamespace(
+        mode=Mode.RSIM,
+        my_team_is_yellow=True,
+        opp=None,
+    )
+    with pytest.raises(ValueError, match="should not be provided in simulation modes"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: 0}, True)
+
+
+def test_check_no_cmd_duplicate_if_transmission_sharing():
+    runner = SimpleNamespace()
+
+    # Test valid non-overlapping mappings
+    yellow_mapping = {0: 1, 1: 2}
+    blue_mapping = {0: 3, 1: 4}
+    StrategyRunner._check_no_cmd_duplicate_if_transmission_sharing(runner, yellow_mapping, blue_mapping)
+
+    # Test collision in same team
+    yellow_mapping_duplicate = {0: 1, 1: 1}
+    with pytest.raises(ValueError, match="cannot have overlapping command IDs"):
+        StrategyRunner._check_no_cmd_duplicate_if_transmission_sharing(runner, yellow_mapping_duplicate, blue_mapping)
+
+    # Test collision across teams
+    yellow_mapping = {0: 1, 1: 2}
+    blue_mapping_overlap = {0: 2, 1: 4}
+    with pytest.raises(ValueError, match="cannot have overlapping command IDs"):
+        StrategyRunner._check_no_cmd_duplicate_if_transmission_sharing(runner, yellow_mapping, blue_mapping_overlap)
