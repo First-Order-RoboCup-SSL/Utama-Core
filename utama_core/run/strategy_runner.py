@@ -283,6 +283,7 @@ class StrategyRunner:
 
     def _validate_vision_to_cmd_mapping(self, mapping: Optional[dict[int, int]], is_yellow: bool) -> dict[int, int]:
         if self.mode == Mode.REAL:
+            explicitly_provided = mapping is not None
             if mapping is None:
                 if self.opp:
                     if is_yellow ^ self.my_team_is_yellow:
@@ -307,7 +308,7 @@ class StrategyRunner:
                     "vision_to_cmd_mapping is provided but will be ignored since the opponent team is not being controlled."
                 )
 
-            if self.opp:
+            if self.opp and explicitly_provided:
                 if is_yellow ^ self.my_team_is_yellow:
                     if len(mapping) != self.exp_enemy:
                         raise ValueError(
@@ -1081,14 +1082,15 @@ class StrategyRunner:
                 friendly_res = responses
 
         # alternate between opp and friendly playing
+        real = self.mode == Mode.REAL
         if self.toggle_opp_first:
             if self.opp:
-                self._step_game(vision_frames, referee_data, True, real_responses=opp_res)
-            self._step_game(vision_frames, referee_data, False, real_responses=friendly_res)
+                self._step_game(vision_frames, referee_data, True, real_responses=opp_res if real else None)
+            self._step_game(vision_frames, referee_data, False, real_responses=friendly_res if real else None)
         else:
-            self._step_game(vision_frames, referee_data, False, real_responses=friendly_res)
+            self._step_game(vision_frames, referee_data, False, real_responses=friendly_res if real else None)
             if self.opp:
-                self._step_game(vision_frames, referee_data, True, real_responses=opp_res)
+                self._step_game(vision_frames, referee_data, True, real_responses=opp_res if real else None)
         self.toggle_opp_first = not self.toggle_opp_first
 
         # --- rate limiting ---
@@ -1172,7 +1174,7 @@ class StrategyRunner:
         vision_frames: List[RawVisionData],
         referee_data,
         running_opp: bool,
-        real_responses: Optional[dict[int, RobotResponse]] = None,
+        real_responses: Optional[List[RobotResponse]] = None,
     ):
         """Step the game for the robot controller and strategy.
 
@@ -1180,7 +1182,7 @@ class StrategyRunner:
             vision_frames (List[RawVisionData]): The vision frames.
             referee_data: The referee data from RSim or network receiver.
             running_opp (bool): Whether to run the opponent strategy.
-            real_responses (Optional[dict[int, RobotResponse]]): The robot responses pulled for real.
+            real_responses (Optional[List[RobotResponse]]): The robot responses pulled for real.
                                                             We use a shared transmitter, so it cannot be pulled per side.
         """
         side = self.opp if running_opp else self.my
@@ -1189,7 +1191,7 @@ class StrategyRunner:
         if self.mode != Mode.REAL:
             responses = side.strategy.robot_controller.get_robots_responses()
         else:
-            responses = real_responses if real_responses is not None else {}
+            responses = real_responses if real_responses is not None else []
 
         # Update game frame with refined information
         new_game_frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
