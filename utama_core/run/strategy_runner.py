@@ -286,16 +286,10 @@ class StrategyRunner:
             explicitly_provided = mapping is not None
             if mapping is None:
                 if self.opp:
-                    if is_yellow ^ self.my_team_is_yellow:
-                        # opponent mapping is required in PVP to prevent ID conflicts
-                        raise ValueError(
-                            "explicit vision_to_cmd_mapping is required for the opponent team in real mode to prevent ID conflicts."
-                        )
-                    else:
-                        # friendly mapping is optional in PVP; default to no remapping
-                        mapping = {}
-                else:
-                    return {}
+                    raise ValueError(
+                        "explicit vision_to_cmd_mapping is required for both teams in real PVP/shared-transmitter mode."
+                    )
+                return {}
 
             if not isinstance(mapping, dict):
                 raise TypeError(
