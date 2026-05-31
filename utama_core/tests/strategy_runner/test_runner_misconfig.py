@@ -378,6 +378,65 @@ def test_validate_vision_to_cmd_mapping_sim_mode_raises():
         StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: 0}, True)
 
 
+def test_trusted_ir_robots_yellow_team_is_my_team():
+    """yellow_trusted_ir_robots routes to my refiner when my_team_is_yellow=True."""
+    runner = StrategyRunner(
+        strategy=DummyStrategy(),
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        mode="rsim",
+        exp_friendly=3,
+        exp_enemy=3,
+        yellow_trusted_ir_robots=frozenset({0, 1}),
+    )
+    assert runner.my.robot_info_refiner._trusted_ir_robots == frozenset({0, 1})
+    assert runner.opp is None
+
+
+def test_trusted_ir_robots_blue_team_is_my_team():
+    """blue_trusted_ir_robots routes to my refiner when my_team_is_yellow=False."""
+    runner = StrategyRunner(
+        strategy=DummyStrategy(),
+        my_team_is_yellow=False,
+        my_team_is_right=True,
+        mode="rsim",
+        exp_friendly=3,
+        exp_enemy=3,
+        blue_trusted_ir_robots=frozenset({2}),
+    )
+    assert runner.my.robot_info_refiner._trusted_ir_robots == frozenset({2})
+
+
+def test_trusted_ir_robots_both_teams_pvp():
+    """Both colour params route correctly in PVP mode."""
+    runner = StrategyRunner(
+        strategy=DummyStrategy(),
+        opp_strategy=DummyStrategy(),
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        mode="rsim",
+        exp_friendly=3,
+        exp_enemy=3,
+        yellow_trusted_ir_robots=frozenset({0}),
+        blue_trusted_ir_robots=frozenset({1}),
+    )
+    assert runner.my.robot_info_refiner._trusted_ir_robots == frozenset({0})
+    assert runner.opp.robot_info_refiner._trusted_ir_robots == frozenset({1})
+
+
+def test_trusted_ir_robots_none_by_default():
+    """Default None means trust all IR sensors (backwards-compatible)."""
+    runner = StrategyRunner(
+        strategy=DummyStrategy(),
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        mode="rsim",
+        exp_friendly=3,
+        exp_enemy=3,
+    )
+    assert runner.my.robot_info_refiner._trusted_ir_robots is None
+
+
 def test_check_no_cmd_duplicate_if_transmission_sharing():
     runner = SimpleNamespace()
 

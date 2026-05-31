@@ -6,7 +6,7 @@ import time
 import warnings
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, FrozenSet, List, Optional, Tuple
 
 from rich.live import Live
 from rich.text import Text
@@ -140,6 +140,10 @@ class StrategyRunner:
             Used only in real mode. In real PVP/shared-transmitter mode, mappings are required for both teams and must include all expected robots.
         blue_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the blue team.
             Used only in real mode. In real PVP/shared-transmitter mode, mappings are required for both teams and must include all expected robots.
+        yellow_trusted_ir_robots (FrozenSet[int], optional): Vision IDs of yellow-team robots whose IR (has_ball) sensor
+            is confirmed working.  Robots NOT in this set fall back to vision-proximity inference (~0.13 m).
+            Pass ``None`` (default) to trust all IR sensors — remove this argument once sensors are stable.
+        blue_trusted_ir_robots (FrozenSet[int], optional): Same as ``yellow_trusted_ir_robots`` for the blue team.
     """
 
     def __init__(
@@ -167,6 +171,8 @@ class StrategyRunner:
         formation_type: Optional[FormationType] = None,
         yellow_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
         blue_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
+        yellow_trusted_ir_robots: Optional[FrozenSet[int]] = None,
+        blue_trusted_ir_robots: Optional[FrozenSet[int]] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -200,8 +206,16 @@ class StrategyRunner:
         )
         self.referee_refiner = RefereeRefiner()
 
+        my_trusted_ir = yellow_trusted_ir_robots if my_team_is_yellow else blue_trusted_ir_robots
+        opp_trusted_ir = blue_trusted_ir_robots if my_team_is_yellow else yellow_trusted_ir_robots
         self.my, self.opp = self._setup_sides_data(
-            strategy, opp_strategy, filtering, control_scheme, opp_control_scheme
+            strategy,
+            opp_strategy,
+            filtering,
+            control_scheme,
+            opp_control_scheme,
+            my_trusted_ir_robots=my_trusted_ir,
+            opp_trusted_ir_robots=opp_trusted_ir,
         )
 
         ### functions below rely on self.my and self.opp ###
@@ -436,6 +450,8 @@ class StrategyRunner:
         filtering: bool,
         control_scheme: str,
         opp_control_scheme: Optional[str],
+        my_trusted_ir_robots: Optional[FrozenSet[int]] = None,
+        opp_trusted_ir_robots: Optional[FrozenSet[int]] = None,
     ) -> Tuple[SideRuntime, Optional[SideRuntime]]:
         """Setup the data structures for both sides (my team and opponent)
         Args:
@@ -444,6 +460,8 @@ class StrategyRunner:
             filtering (bool): Whether to use filtering in the position refiners.
             control_scheme (str): Name of the motion control scheme to use for the friendly team.
             opp_control_scheme (Optional[str]): Name of the motion control scheme to use for the opponent team. If not set, uses same as friendly.
+            my_trusted_ir_robots (FrozenSet[int], optional): Vision IDs of friendly robots whose IR sensor is trusted.
+            opp_trusted_ir_robots (FrozenSet[int], optional): Vision IDs of opponent robots whose IR sensor is trusted.
 
         Side effect: Initializes the SideRuntime for both friendly and opponent sides, including their strategies, refiners, and motion controllers.
 
@@ -452,7 +470,10 @@ class StrategyRunner:
         """
         opp_side = None
         my_pos_ref, my_vel_ref, my_robot_ref = self._init_refiners(
-            self.full_field_dims, filtering=filtering, exp_ball=self.exp_ball
+            self.full_field_dims,
+            filtering=filtering,
+            exp_ball=self.exp_ball,
+            trusted_ir_robots=my_trusted_ir_robots,
         )
         my_motion_controller = get_control_scheme(control_scheme)
         my_strategy.setup_strategy_blackboard(is_opp_strat=False)
@@ -466,7 +487,10 @@ class StrategyRunner:
 
         if opp_strategy is not None:
             opp_pos_ref, opp_vel_ref, opp_robot_ref = self._init_refiners(
-                self.full_field_dims, filtering=filtering, exp_ball=self.exp_ball
+                self.full_field_dims,
+                filtering=filtering,
+                exp_ball=self.exp_ball,
+                trusted_ir_robots=opp_trusted_ir_robots,
             )
             opp_motion_controller = (
                 get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
@@ -793,14 +817,17 @@ class StrategyRunner:
         field_dims: FieldDimensions,
         filtering: bool,
         exp_ball: bool = True,
+        trusted_ir_robots: Optional[FrozenSet[int]] = None,
     ) -> tuple[PositionRefiner, VelocityRefiner, RobotInfoRefiner]:
         """
         Initialize the position, velocity, and robot info refiners.
         Args:
-            field_bounds (FieldBounds): The bounds of the field.
+            field_dims (FieldDimensions): The field dimensions.
             filtering (bool): Whether to use filtering in the position refiner.
             exp_ball (bool): Whether the ball is expected. When False, the position refiner is
                              allowed to return None if no ball is detected in raw vision data.
+            trusted_ir_robots (FrozenSet[int], optional): Vision IDs of robots whose IR sensor is trusted.
+                See RobotInfoRefiner for details.
         Returns:
             tuple: The initialized PositionRefiner, VelocityRefiner, and RobotInfoRefiner.
         """
@@ -810,7 +837,7 @@ class StrategyRunner:
             exp_ball=exp_ball,
         )
         velocity_refiner = VelocityRefiner()
-        robot_info_refiner = RobotInfoRefiner()
+        robot_info_refiner = RobotInfoRefiner(trusted_ir_robots=trusted_ir_robots)
 
         return position_refiner, velocity_refiner, robot_info_refiner
 
@@ -1074,18 +1101,14 @@ class StrategyRunner:
                 friendly_res, opp_res = self._split_robot_responses_by_team(responses)
             else:
                 cmd_to_vision = (
-                    self.yellow_cmd_to_vision_mapping
-                    if self.my_team_is_yellow
-                    else self.blue_cmd_to_vision_mapping
+                    self.yellow_cmd_to_vision_mapping if self.my_team_is_yellow else self.blue_cmd_to_vision_mapping
                 )
                 if cmd_to_vision:
                     friendly_res = []
                     for r in responses:
                         vision_id = cmd_to_vision.get(r.id)
                         if vision_id is None:
-                            self.logger.warning(
-                                f"RobotResponse cmd_id={r.id} not found in mapping for controlled team"
-                            )
+                            self.logger.warning(f"RobotResponse cmd_id={r.id} not found in mapping for controlled team")
                             continue
                         friendly_res.append(RobotResponse(vision_id, r.has_ball))
                 else:
