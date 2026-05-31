@@ -51,6 +51,7 @@ There are three tests that must pass before the feature is considered complete:
   3. non-placer robot stays outside the keep-out radius throughout.
 """
 
+import math
 from typing import Optional
 
 import py_trees
@@ -60,7 +61,7 @@ from utama_core.config.referee_constants import (
     BALL_PLACEMENT_DONE_DISTANCE,
 )
 from utama_core.entities.data.vector import Vector2D
-from utama_core.skills.src.utils.move_utils import empty_command, move
+from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
 from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
 from utama_core.strategy.referee.actions import _clear_to_legal_positions
 
@@ -119,16 +120,27 @@ class BallPlacementStep(AbstractBehaviour):
         )
         placer = game.friendly_robots[placer_id]
 
-        target_for_move = target_pos if placer.has_ball else Vector2D(ball.p.x, ball.p.y)
-        orientation = placer.p.angle_to(target_for_move)
-        self.blackboard.cmd_map[placer_id] = move(
-            game,
-            motion_controller,
-            placer_id,
-            target_for_move,
-            orientation,
-            dribbling=True,
-        )
+        _FACE_READY_ANGLE = 0.2
+
+        if placer.has_ball:
+            orientation = placer.p.angle_to(target_pos)
+            face_error = math.atan2(
+                math.sin(orientation - placer.orientation), math.cos(orientation - placer.orientation)
+            )
+            if abs(face_error) > _FACE_READY_ANGLE:
+                self.blackboard.cmd_map[placer_id] = turn_on_spot(
+                    game, motion_controller, placer_id, orientation, dribbling=True
+                )
+            else:
+                self.blackboard.cmd_map[placer_id] = move(
+                    game, motion_controller, placer_id, target_pos, orientation, dribbling=True
+                )
+        else:
+            target_for_move = Vector2D(ball.p.x, ball.p.y)
+            orientation = placer.p.angle_to(target_for_move)
+            self.blackboard.cmd_map[placer_id] = move(
+                game, motion_controller, placer_id, target_for_move, orientation, dribbling=True
+            )
 
         _clear_to_legal_positions(
             self.blackboard,

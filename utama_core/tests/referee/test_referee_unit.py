@@ -450,16 +450,27 @@ class TestBallPlacementOursStep:
         assert cmd_map[1] is not None
 
     def test_robot_with_ball_moves_to_designated_position(self, monkeypatch):
+        import math
+
         from utama_core.strategy.referee import actions as referee_actions
 
-        captured = []
+        move_captured = []
+        turn_captured = []
 
         def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
-            captured.append((robot_id, target_coords, dribbling))
+            move_captured.append((robot_id, target_coords, dribbling))
             return ("move", robot_id)
 
-        monkeypatch.setattr(referee_actions, "move", fake_move)
+        def fake_turn_on_spot(game, motion_controller, robot_id, target_oren, dribbling=False):
+            turn_captured.append((robot_id, dribbling))
+            return ("turn", robot_id)
 
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+        monkeypatch.setattr(referee_actions, "turn_on_spot", fake_turn_on_spot)
+
+        target = (1.5, -0.5)
+        # Orient the robot to face the target so face_error < threshold → move branch.
+        facing = math.atan2(target[1], target[0])
         robots = {
             0: Robot(
                 id=0,
@@ -468,13 +479,13 @@ class TestBallPlacementOursStep:
                 p=Vector2D(0.0, 0.0),
                 v=Vector2D(0.0, 0.0),
                 a=Vector2D(0.0, 0.0),
-                orientation=0.0,
+                orientation=facing,
             )
         }
         referee = _make_referee_data(
             command=RefereeCommand.BALL_PLACEMENT_YELLOW,
         )
-        referee.designated_position = (1.5, -0.5)
+        referee.designated_position = target
         frame = GameFrame(
             ts=0.0,
             my_team_is_yellow=True,
@@ -501,9 +512,11 @@ class TestBallPlacementOursStep:
         status = node.update()
 
         assert status == py_trees.common.Status.RUNNING
-        assert captured[0][0] == 0
-        assert captured[0][1] == Vector2D(1.5, -0.5)
-        assert captured[0][2] is True
+        # Robot already faces target → should call move (not turn_on_spot).
+        assert len(move_captured) >= 1
+        assert move_captured[0][0] == 0
+        assert move_captured[0][1] == Vector2D(1.5, -0.5)
+        assert move_captured[0][2] is True
 
     def test_non_placing_teammate_clears_from_ball(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
