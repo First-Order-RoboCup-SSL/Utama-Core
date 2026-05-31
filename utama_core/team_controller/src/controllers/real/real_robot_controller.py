@@ -10,12 +10,18 @@ from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.config.settings import (
     BAUD_RATE,
+    CONTROL_FREQUENCY,
     KICKER_COOLDOWN_TIMESTEPS,
     KICKER_PERSIST_TIMESTEPS,
     PORT,
     TIMEOUT,
     TIMESTEP,
 )
+
+# Leaky-bucket dribbler thermal limiter defaults.
+# The bucket fills 1 step/step while dribbling, drains 1 step/step while not.
+# When full the dribbler is forced off until the bucket drains below the limit.
+DRIBBLER_MAX_ON_STEPS = int(30 * CONTROL_FREQUENCY)  # 30 s continuous dribble limit
 from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
@@ -70,6 +76,11 @@ class RealRobotController(AbstractRobotController):
 
         # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
         self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
+
+        # leaky-bucket dribbler thermal limiter: accumulated on-steps per robot (cmd ID).
+        # increments every step the dribbler is on, decrements every step it is off.
+        # dribbler is forced off when the bucket reaches DRIBBLER_MAX_ON_STEPS.
+        self._dribbler_steps: Dict[int, int] = {}
 
     def get_robots_responses(self) -> List[RobotResponse]:
         HEADER = 0xAA
@@ -239,6 +250,31 @@ class RealRobotController(AbstractRobotController):
     #         self._robots_info[i] = info
     #         data_in = data_in << 1  # shift to the next robot's data
 
+    def _update_dribbler_bucket(self, robot_id: int, requested: bool) -> bool:
+        """Leaky-bucket thermal limiter for the dribbler.
+
+        Returns True if the dribbler should actually be turned on this step.
+        The bucket fills while dribbling and drains at the same rate while off,
+        so intermittent use is accounted for proportionally.
+        """
+        current = self._dribbler_steps.get(robot_id, 0)
+        at_limit = current >= DRIBBLER_MAX_ON_STEPS
+
+        if requested and not at_limit:
+            self._dribbler_steps[robot_id] = current + 1
+            return True
+        elif requested and at_limit:
+            warnings.warn(
+                f"Robot {robot_id}: dribbler thermal limit reached "
+                f"({DRIBBLER_MAX_ON_STEPS // CONTROL_FREQUENCY}s). "
+                "Forcing dribbler off until bucket drains."
+            )
+            return False
+        else:
+            # Not requested: drain the bucket
+            self._dribbler_steps[robot_id] = max(0, current - 1)
+            return False
+
     def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
         """Generates the command buffer to be sent to the robot."""
         # endianness: little endian
@@ -254,8 +290,10 @@ class RealRobotController(AbstractRobotController):
             ]
         )
 
+        dribble_allowed = self._update_dribbler_bucket(robot_id, c_command.dribble)
+
         dribbler_speed = 0
-        if c_command.dribble:
+        if dribble_allowed:
             dribbler_speed = 0xC000  # set bits 15:14 to 11
             dribbler_speed |= 4095 & 0x3FFF  # set bits 13:0 to 4095
 
