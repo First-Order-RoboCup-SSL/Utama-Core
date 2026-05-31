@@ -144,3 +144,27 @@ def test_mixed_team_trusted_uses_ir_untrusted_uses_vision():
     result = refiner.refine(frame, responses)
     assert result.friendly_robots[0].has_ball is True  # from IR
     assert result.friendly_robots[1].has_ball is True  # from vision (close enough)
+
+
+def test_untrusted_robot_missing_from_responses_uses_vision():
+    """Untrusted robot absent from responses this tick must not keep stale has_ball."""
+    refiner = RobotInfoRefiner(trusted_ir_robots=frozenset({0}))
+    robots = {
+        0: _make_robot(0, 2.0, 0.0, has_ball=False),  # trusted
+        1: _make_robot(1, 0.05, 0.0, has_ball=True),  # untrusted, stale True
+    }
+    frame = _make_frame(robots, ball_pos=(0.0, 0.0))
+    # Robot 1 did not respond this tick (non-blocking poll returned nothing for it).
+    responses = [RobotResponse(id=0, has_ball=False)]
+    result = refiner.refine(frame, responses)
+    # Robot 1 is close to ball → vision inference gives True (not stale, but correct)
+    assert result.friendly_robots[1].has_ball is True
+
+    # Now robot 1 is far from ball; stale value is True but inference should correct it.
+    robots_far = {
+        0: _make_robot(0, 2.0, 0.0, has_ball=False),
+        1: _make_robot(1, 1.0, 0.0, has_ball=True),  # stale True, but now far
+    }
+    frame_far = _make_frame(robots_far, ball_pos=(0.0, 0.0))
+    result_far = refiner.refine(frame_far, [RobotResponse(id=0, has_ball=False)])
+    assert result_far.friendly_robots[1].has_ball is False  # stale cleared by vision
