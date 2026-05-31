@@ -169,6 +169,15 @@ class CustomReferee:
         """Manual override — for operator use or test scripting."""
         self._state.set_command(command, timestamp)
 
+    def force_command(
+        self,
+        command: "RefereeCommand",
+        timestamp: float,
+        ball_placement_target=None,
+    ) -> None:
+        """God-mode override — bypasses the STOP-first guard."""
+        self._state.force_command(command, timestamp, ball_placement_target)
+
     # ------------------------------------------------------------------
     # Properties (read-only access for callers that need to inspect state)
     # ------------------------------------------------------------------

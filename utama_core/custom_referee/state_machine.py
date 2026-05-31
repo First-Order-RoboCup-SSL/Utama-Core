@@ -585,6 +585,30 @@ class GameStateMachine:
 
         logger.info("Referee command manually set to: %s", command.name)
 
+    def force_command(
+        self,
+        command: RefereeCommand,
+        timestamp: float,
+        ball_placement_target: Optional[tuple[float, float]] = None,
+    ) -> None:
+        """Directly set the command, bypassing the STOP-first guard.
+
+        For god-mode / test use only — skips the normal safety interlock that
+        inserts STOP before set-piece commands.
+        """
+        self.command = command
+        self.command_counter += 1
+        self.command_timestamp = timestamp
+        self.next_command = None
+        self._post_ball_placement_command = None
+        self.status_message = None
+        self._advance2_ready_since = math.inf
+        self._advance3_ready_since = math.inf
+        self._advance4_ready_since = math.inf
+        if ball_placement_target is not None:
+            self.ball_placement_target = ball_placement_target
+        logger.info("Referee command force-set to: %s", command.name)
+
     def advance_stage(self, new_stage: Stage, timestamp: float) -> None:
         """Advance the game stage."""
         logger.info("Stage %s → %s", self.stage.name, new_stage.name)
