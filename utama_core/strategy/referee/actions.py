@@ -358,17 +358,28 @@ class BallPlacementOursStep(AbstractBehaviour):
         )
         self._placer_id = placer_id
 
+        _FACE_READY_ANGLE = 0.2
+
         for robot_id in game.friendly_robots:
             if robot_id == placer_id:
                 robot = game.friendly_robots[robot_id]
                 if robot.has_ball:
-                    target_for_move = target_pos
+                    oren = robot.p.angle_to(target_pos)
+                    face_error = math.atan2(math.sin(oren - robot.orientation), math.cos(oren - robot.orientation))
+                    if abs(face_error) > _FACE_READY_ANGLE:
+                        self.blackboard.cmd_map[robot_id] = turn_on_spot(
+                            game, motion_controller, robot_id, oren, dribbling=True
+                        )
+                    else:
+                        self.blackboard.cmd_map[robot_id] = move(
+                            game, motion_controller, robot_id, target_pos, oren, dribbling=True
+                        )
                 else:
                     target_for_move = Vector2D(ball.p.x, ball.p.y)
-                oren = robot.p.angle_to(target_for_move)
-                self.blackboard.cmd_map[robot_id] = move(
-                    game, motion_controller, robot_id, target_for_move, oren, dribbling=True
-                )
+                    oren = robot.p.angle_to(target_for_move)
+                    self.blackboard.cmd_map[robot_id] = move(
+                        game, motion_controller, robot_id, target_for_move, oren, dribbling=True
+                    )
         return _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
