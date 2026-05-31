@@ -229,8 +229,14 @@ class _RefereeGUIServer(threading.Thread):
                 try:
                     payload = json.loads(body)
                     cmd = RefereeCommand[payload["command"]]
+                    designated = payload.get("designated")
                     with server_instance._lock:
-                        server_instance._referee.set_command(cmd, time.time())
+                        ref = server_instance._referee
+                        if designated is not None and hasattr(ref, "force_command"):
+                            target = (float(designated[0]), float(designated[1]))
+                            ref.force_command(cmd, time.time(), ball_placement_target=target)
+                        else:
+                            ref.set_command(cmd, time.time())
                     self.send_response(204)
                     self.end_headers()
                 except (KeyError, ValueError, json.JSONDecodeError) as exc:
@@ -657,6 +663,38 @@ _HTML = r"""<!DOCTYPE html>
   }
   .pill.on  { background: #1a3a1a; color: var(--green); border: 1px solid #2a5a2a; }
   .pill.off { background: #3a1a1a; color: #c0605a;      border: 1px solid #5a2a2a; }
+
+  /* ── God mode ── */
+  .btn-god { background: #4a0d6e; color: #d49eff; border: 1px solid #7a3dae; }
+  .btn-god.active { background: #7a3dae; color: #fff; border-color: #d49eff; }
+
+  #ctx-menu {
+    display: none;
+    position: fixed;
+    z-index: 999;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    min-width: 180px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.5);
+    overflow: hidden;
+  }
+  #ctx-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border-radius: 0;
+    border: none;
+    background: none;
+    color: var(--text);
+    padding: 9px 14px;
+    font-size: .78rem;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+  }
+  #ctx-menu button:hover { background: var(--border); }
+  #ctx-menu .ctx-sep { height: 1px; background: var(--border); margin: 2px 0; }
 </style>
 </head>
 <body>
@@ -728,6 +766,10 @@ _HTML = r"""<!DOCTYPE html>
       <button class="btn-blue"   onclick="send('DIRECT_FREE_BLUE')"
         title="Award Blue a direct free kick. If game is running, STOP is issued first so robots can clear — then click Normal Start.">Free Kick Blue</button>
     </div>
+    <div class="btn-row">
+      <button class="btn-god" id="god-btn" onclick="toggleGod()"
+        title="God mode: right-click anywhere on the field to move the ball or issue ball placement.">God Mode</button>
+    </div>
   </div>
   <div class="conn">
     <div class="dot" id="conn-dot"></div>
@@ -739,6 +781,12 @@ _HTML = r"""<!DOCTYPE html>
 <div class="quad" id="quad-log">
   <div class="quad-title">Event Log</div>
   <div class="log-entries" id="log-entries"></div>
+</div>
+
+<!-- God mode context menu -->
+<div id="ctx-menu">
+  <button onclick="ctxPlaceBallYellow()">Ball placement Yellow here</button>
+  <button onclick="ctxPlaceBallBlue()">Ball placement Blue here</button>
 </div>
 
 <!-- Bottom-right: profile config -->
@@ -1002,6 +1050,80 @@ function cfgRow(key, val) {
 }
 function cfgSection(title, rows) {
   return `<div class="config-section"><div class="config-section-title">${title}</div>${rows}</div>`;
+}
+
+// --- God mode ---
+let _godMode = false;
+let _ctxFieldPos = null; // {x, y} in field coords at last right-click
+
+function toggleGod() {
+  _godMode = !_godMode;
+  const btn = document.getElementById('god-btn');
+  btn.classList.toggle('active', _godMode);
+  btn.title = _godMode
+    ? 'God mode ON — right-click on the field canvas to move the ball.'
+    : 'God mode: right-click anywhere on the field to move the ball or issue ball placement.';
+}
+
+function _canvasToField(canvas, clientX, clientY) {
+  if (!_cfg) return null;
+  const rect = canvas.getBoundingClientRect();
+  const cw = canvas.width, ch = canvas.height;
+  const M = 12;
+  const scale = (cw - 2 * M) / (2 * _cfg.half_length);
+  const px = (clientX - rect.left) * (cw / rect.width);
+  const py = (clientY - rect.top)  * (ch / rect.height);
+  // Inverse of: toX(fx) = M + (fx + half_length) * scale
+  const fx = (px - M) / scale - _cfg.half_length;
+  // Inverse of: toY(fy) = CH - M - (fy + half_width) * scale
+  const fy = (ch - M - py) / scale - _cfg.half_width;
+  return { x: fx, y: fy };
+}
+
+function _hideCtxMenu() {
+  document.getElementById('ctx-menu').style.display = 'none';
+}
+
+document.addEventListener('click', _hideCtxMenu);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') _hideCtxMenu(); });
+
+document.getElementById('field-canvas').addEventListener('contextmenu', function(e) {
+  if (!_godMode) return;
+  e.preventDefault();
+  _ctxFieldPos = _canvasToField(this, e.clientX, e.clientY);
+  if (!_ctxFieldPos) return;
+  const menu = document.getElementById('ctx-menu');
+  menu.style.display = 'block';
+  const mx = Math.min(e.clientX, window.innerWidth  - menu.offsetWidth  - 4);
+  const my = Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 4);
+  menu.style.left = mx + 'px';
+  menu.style.top  = my + 'px';
+});
+
+function ctxPlaceBallYellow() {
+  _hideCtxMenu();
+  if (!_ctxFieldPos) return;
+  fetch('/command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      command: 'BALL_PLACEMENT_YELLOW',
+      designated: [_ctxFieldPos.x, _ctxFieldPos.y],
+    }),
+  }).catch(err => console.error('command error:', err));
+}
+
+function ctxPlaceBallBlue() {
+  _hideCtxMenu();
+  if (!_ctxFieldPos) return;
+  fetch('/command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      command: 'BALL_PLACEMENT_BLUE',
+      designated: [_ctxFieldPos.x, _ctxFieldPos.y],
+    }),
+  }).catch(err => console.error('command error:', err));
 }
 
 fetch('/config').then(r => r.json()).then(c => {

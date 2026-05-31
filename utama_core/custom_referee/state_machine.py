@@ -89,6 +89,7 @@ class GameStateMachine:
 
         self.next_command: Optional[RefereeCommand] = None
         self.ball_placement_target: Optional[tuple[float, float]] = None
+        self._post_ball_placement_command: Optional[RefereeCommand] = None
         self.status_message: Optional[str] = None
 
         # Kickoff team initialised from profile.
@@ -182,7 +183,8 @@ class GameStateMachine:
             self.command_counter += 1
             self.command_timestamp = current_time
             if self.command in self._BALL_PLACEMENT_COMMANDS:
-                self.next_command = RefereeCommand.NORMAL_START
+                self.next_command = self._post_ball_placement_command or RefereeCommand.NORMAL_START
+                self._post_ball_placement_command = None
                 self._advance4_ready_since = math.inf
             elif self.command in self._DIRECT_FREE_COMMANDS:
                 self.next_command = RefereeCommand.NORMAL_START
@@ -306,10 +308,22 @@ class GameStateMachine:
                         self.command.name,
                         self.next_command.name,
                     )
-                    self.command = self.next_command
+                    completed_command = self.next_command
+                    self.command = completed_command
                     self.command_counter += 1
                     self.command_timestamp = current_time
-                    self.next_command = None
+                    if completed_command in self._DIRECT_FREE_COMMANDS:
+                        self.next_command = RefereeCommand.NORMAL_START
+                        self._advance3_ready_since = math.inf
+                    elif (
+                        completed_command in self._PREPARE_KICKOFF_COMMANDS
+                        or completed_command in self._PREPARE_PENALTY_COMMANDS
+                    ):
+                        self.next_command = RefereeCommand.NORMAL_START
+                        self._prepare_entered_time = current_time
+                        self._advance2_ready_since = math.inf
+                    else:
+                        self.next_command = None
                     self._advance4_ready_since = math.inf
                     self.status_message = None
                     self._last_transition_time = current_time
@@ -456,6 +470,25 @@ class GameStateMachine:
         }
     )
 
+    @staticmethod
+    def _ball_placement_command_for(restart_command: Optional[RefereeCommand]) -> Optional[RefereeCommand]:
+        """Return the ball-placement command for the team that owns a restart."""
+        if restart_command in (
+            RefereeCommand.PREPARE_KICKOFF_YELLOW,
+            RefereeCommand.PREPARE_PENALTY_YELLOW,
+            RefereeCommand.DIRECT_FREE_YELLOW,
+            RefereeCommand.INDIRECT_FREE_YELLOW,
+        ):
+            return RefereeCommand.BALL_PLACEMENT_YELLOW
+        if restart_command in (
+            RefereeCommand.PREPARE_KICKOFF_BLUE,
+            RefereeCommand.PREPARE_PENALTY_BLUE,
+            RefereeCommand.DIRECT_FREE_BLUE,
+            RefereeCommand.INDIRECT_FREE_BLUE,
+        ):
+            return RefereeCommand.BALL_PLACEMENT_BLUE
+        return None
+
     def seed_clock(self, timestamp: float) -> None:
         """Align all internal timers to *timestamp*.
 
@@ -493,6 +526,7 @@ class GameStateMachine:
             self.command_counter += 1
             self.command_timestamp = timestamp
             self.next_command = command
+            self._post_ball_placement_command = None
             self.status_message = None
             self._stop_entered_time = timestamp
             return
@@ -513,7 +547,12 @@ class GameStateMachine:
             self.command = self.next_command
             self.command_counter += 1
             self.command_timestamp = timestamp
-            self.next_command = RefereeCommand.NORMAL_START
+            if self.command in self._BALL_PLACEMENT_COMMANDS:
+                self.next_command = self._post_ball_placement_command or RefereeCommand.NORMAL_START
+                self._post_ball_placement_command = None
+                self._advance4_ready_since = math.inf
+            else:
+                self.next_command = RefereeCommand.NORMAL_START
             self.status_message = None
             self._prepare_entered_time = timestamp
             return
@@ -521,6 +560,7 @@ class GameStateMachine:
         self.command = command
         self.command_counter += 1
         self.command_timestamp = timestamp
+        self._post_ball_placement_command = None
         self.status_message = None
         self._advance2_ready_since = math.inf
         self._advance3_ready_since = math.inf
@@ -549,6 +589,34 @@ class GameStateMachine:
                 self.advance_stage(active, timestamp)
 
         logger.info("Referee command manually set to: %s", command.name)
+
+    def force_command(
+        self,
+        command: RefereeCommand,
+        timestamp: float,
+        ball_placement_target: Optional[tuple[float, float]] = None,
+    ) -> None:
+        """Directly set the command, bypassing the STOP-first guard.
+
+        For god-mode / test use only — skips the normal safety interlock that
+        inserts STOP before set-piece commands.
+        """
+        self.command = command
+        self.command_counter += 1
+        self.command_timestamp = timestamp
+        self._post_ball_placement_command = None
+        self.status_message = None
+        self._advance2_ready_since = math.inf
+        self._advance3_ready_since = math.inf
+        self._advance4_ready_since = math.inf
+        if ball_placement_target is not None:
+            self.ball_placement_target = ball_placement_target
+        if command in self._BALL_PLACEMENT_COMMANDS:
+            # Auto-advance 4 requires next_command to be set.
+            self.next_command = RefereeCommand.NORMAL_START
+        else:
+            self.next_command = None
+        logger.info("Referee command force-set to: %s", command.name)
 
     def advance_stage(self, new_stage: Stage, timestamp: float) -> None:
         """Advance the game stage."""
@@ -594,7 +662,10 @@ class GameStateMachine:
         self.command = RefereeCommand.STOP
         self.command_counter += 1
         self.command_timestamp = current_time
-        self.next_command = violation.next_command
+        self.next_command = self._ball_placement_command_for(violation.next_command) or violation.next_command
+        self._post_ball_placement_command = (
+            violation.next_command if self.next_command in self._BALL_PLACEMENT_COMMANDS else None
+        )
         self.ball_placement_target = (0.0, 0.0)
         self.status_message = violation.status_message
         self._stop_entered_time = current_time
@@ -603,7 +674,13 @@ class GameStateMachine:
         self.command = violation.suggested_command
         self.command_counter += 1
         self.command_timestamp = current_time
-        self.next_command = violation.next_command
+        placement_command = (
+            self._ball_placement_command_for(violation.next_command)
+            if violation.designated_position is not None
+            else None
+        )
+        self.next_command = placement_command or violation.next_command
+        self._post_ball_placement_command = violation.next_command if placement_command is not None else None
         self.ball_placement_target = violation.designated_position
         self.status_message = violation.status_message
         logger.info(

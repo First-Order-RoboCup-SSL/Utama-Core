@@ -203,6 +203,7 @@ class AbstractStrategy(ABC):
 
         Setups the blackboard based on if is_opp_strat.
         """
+        self._is_opp_strat = is_opp_strat
         self.blackboard = self._setup_blackboard(is_opp_strat)
 
     def setup_behaviour_tree(self, is_opp_strat: bool):
