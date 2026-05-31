@@ -1,18 +1,13 @@
 import math
-import random
-from typing import Any, Optional
 
 import numpy as np
 import py_trees
 from py_trees.composites import Sequence
 
 from utama_core.config.settings import TIMESTEP
-from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.global_utils.math_utils import Vector2D
 from utama_core.skills.src.utils.move_utils import move
 from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
-
-# from robot_control.src.tests.utils import one_robot_placement
 from utama_core.strategy.common.abstract_strategy import (
     AbstractStrategy,
     SpaceRequirements,
@@ -22,100 +17,82 @@ from utama_core.strategy.examples.utils import (
     SetBlackboardVariable,
 )
 
+_ARRIVE_TOL = 0.1  # metres
+_MARGIN = 0.2  # metres inset from field bounds edges for waypoints
+
 
 class RobotPlacementStep(AbstractBehaviour):
     """
-    A behaviour that commands a robot to move between two specific positions on the field.
+    Cycles a robot through a 3x3 grid of waypoints covering the field bounds,
+    facing the ball at each step.
 
-    **Args:**
-        invert (bool): Whether to invert the robot's movement direction.
-    **Blackboard Interaction:**
-        Reads:
-            - `rd_robot_id` (int): The ID of the robot to check for ball possession. Typically from the `SetBlackboardVariable` node.
-
-    **Returns:**
-        - `py_trees.common.Status.RUNNING`: The behaviour is actively commanding the robot to move.
+    Blackboard reads:
+        - robot_id_key (int): robot to control
+        - field_center_key (tuple): center of the active field bounds
     """
 
     def __init__(self, rd_robot_id: str, field_center_key: str = "FieldCenter"):
         super().__init__()
         self.field_center_key = field_center_key
         self.robot_id_key = rd_robot_id
-        self.initialized = False
-        self.center_x = 0.0
-        self.center_y = 0.0
-        self.tx = 0.0
-        self.ty = 0.0
+        self._waypoints: list[Vector2D] = []
+        self._wp_idx = 0
 
     def setup_(self):
         self.blackboard.register_key(key=self.robot_id_key, access=py_trees.common.Access.READ)
         self.blackboard.register_key(key=self.field_center_key, access=py_trees.common.Access.READ)
 
+    def _build_waypoints(self) -> list[Vector2D]:
+        """3x3 grid inset from the active field bounds, in a snake pattern."""
+        bounds = self.blackboard.game.field.field_bounds
+        x_min = bounds.top_left[0] + _MARGIN
+        x_max = bounds.bottom_right[0] - _MARGIN
+        y_min = bounds.bottom_right[1] + _MARGIN
+        y_max = bounds.top_left[1] - _MARGIN
+
+        xs = [x_min, (x_min + x_max) / 2, x_max]
+        ys = [y_min, (y_min + y_max) / 2, y_max]
+
+        # Snake order: alternate y direction per column to minimise travel
+        points = []
+        for i, x in enumerate(xs):
+            col_ys = ys if i % 2 == 0 else reversed(ys)
+            for y in col_ys:
+                points.append(Vector2D(x, y))
+        return points
+
     def update(self) -> py_trees.common.Status:
-        """Closure which advances the simulation by one step."""
-
-        # Initialize targets if not ready
-        if not self.initialized:
-            try:
-                center = self.blackboard.get(self.field_center_key)
-                if center:
-                    self.center_x, self.center_y = center
-                    self.tx = self.center_x
-                    self.ty = self.center_y + 0.5
-                    self.initialized = True
-            except KeyError:
-                # Center not yet available
-                return py_trees.common.Status.FAILURE
-
-        if not self.initialized:
-            return py_trees.common.Status.FAILURE
-
         game = self.blackboard.game
         rsim_env = self.blackboard.rsim_env
-        id: int = self.blackboard.get(self.robot_id_key)
+        robot_id: int = self.blackboard.get(self.robot_id_key)
 
-        friendly_robots = game.friendly_robots
-        bx, by = game.ball.p.x, game.ball.p.y
-        rp = friendly_robots[id].p
-        cx, cy = rp.x, rp.y
-        error = math.dist((self.tx, self.ty), (cx, cy))
+        if not self._waypoints:
+            try:
+                self.blackboard.get(self.field_center_key)  # wait until center is ready
+            except KeyError:
+                return py_trees.common.Status.FAILURE
+            self._waypoints = self._build_waypoints()
 
-        if game.friendly_robots and game.ball is not None:
-            friendly_robots = game.friendly_robots
-            bx, by = game.ball.p.x, game.ball.p.y
-            rp = friendly_robots[id].p
-            cx, cy, _ = rp.x, rp.y, friendly_robots[id].orientation
-            error = math.dist((self.tx, self.ty), (cx, cy))
+        target = self._waypoints[self._wp_idx]
+        target = Vector2D(0, 0)  # ensure it's a Vector2D, not np array
+        robot = game.friendly_robots[robot_id]
+        ball = game.ball
 
-            # Ensure target x is always the center x
-            self.tx = self.center_x
+        bx, by = ball.p.x, ball.p.y
+        cx, cy = robot.p.x, robot.p.y
+        oren = np.atan2(by - cy, bx - cx)
 
-            switch = error < 0.1
-            if switch:
-                upper_target = self.center_y + 0.5
-                lower_target = self.center_y - 0.5
+        cmd = move(game, self.blackboard.motion_controller, robot_id, target, oren)
 
-                if math.isclose(self.ty, lower_target, abs_tol=0.1):
-                    self.ty = upper_target
-                else:
-                    self.ty = lower_target
+        if rsim_env:
+            rsim_env.draw_point(target.x, target.y, color="red")
+            v = robot.v
+            rsim_env.draw_point(cx + v.x * TIMESTEP * 5, cy + v.y * TIMESTEP * 5, color="green")
 
-            # changed so the robot tracks the ball while moving
-            oren = np.atan2(by - cy, bx - cx)
-            cmd = move(
-                game,
-                self.blackboard.motion_controller,
-                id,
-                Vector2D(self.tx, self.ty),
-                oren,
-            )
-            if rsim_env:
-                rsim_env.draw_point(self.tx, self.ty, color="red")
-                v = game.friendly_robots[id].v
-                p = game.friendly_robots[id].p
-                rsim_env.draw_point(p.x + v.x * TIMESTEP * 5, p.y + v.y * TIMESTEP * 5, color="green")
+        if math.dist((cx, cy), (target.x, target.y)) < _ARRIVE_TOL:
+            self._wp_idx = (self._wp_idx + 1) % len(self._waypoints)
 
-        self.blackboard.cmd_map[id] = cmd
+        self.blackboard.cmd_map[robot_id] = cmd
         return py_trees.common.Status.RUNNING
 
 
