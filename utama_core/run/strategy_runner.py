@@ -6,7 +6,7 @@ import time
 import warnings
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, FrozenSet, List, Optional, Tuple
 
 from rich.live import Live
 from rich.text import Text
@@ -14,7 +14,7 @@ from rich.text import Text
 from utama_core.config.enums import Mode, mode_str_to_enum
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.formations import FormationType, get_formations
-from utama_core.config.physical_constants import MAX_ROBOTS
+from utama_core.config.physical_constants import MAX_ROBOT_ID, MAX_ROBOTS
 from utama_core.config.settings import (
     FPS_PRINT_INTERVAL,
     MAX_CAMERAS,
@@ -29,12 +29,13 @@ from utama_core.data_processing.refiners import (
     RobotInfoRefiner,
     VelocityRefiner,
 )
-from utama_core.entities.data.command import RobotCommand
+from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameFrame, GameHistory
 from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.mapping_utils import (
+    map_colors_to_friendly_enemy,
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
 )
@@ -135,6 +136,14 @@ class StrategyRunner:
             instance to use the in-process referee, ``OfficialReferee()`` to consume
             commands from the SSL game-controller over the network, or ``None``
             (default) to run without any referee input.
+        yellow_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the yellow team.
+            Used only in real mode. In real PVP/shared-transmitter mode, mappings are required for both teams and must include all expected robots.
+        blue_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the blue team.
+            Used only in real mode. In real PVP/shared-transmitter mode, mappings are required for both teams and must include all expected robots.
+        yellow_trusted_ir_robots (FrozenSet[int], optional): Vision IDs of yellow-team robots whose IR (has_ball) sensor
+            is confirmed working.  Robots NOT in this set fall back to vision-proximity inference (~0.13 m).
+            Pass ``None`` (default) to trust all IR sensors — remove this argument once sensors are stable.
+        blue_trusted_ir_robots (FrozenSet[int], optional): Same as ``yellow_trusted_ir_robots`` for the blue team.
     """
 
     def __init__(
@@ -160,6 +169,10 @@ class StrategyRunner:
         filtering: bool = False,
         referee: RefereeSource = None,
         formation_type: Optional[FormationType] = None,
+        yellow_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
+        blue_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
+        yellow_trusted_ir_robots: Optional[FrozenSet[int]] = None,
+        blue_trusted_ir_robots: Optional[FrozenSet[int]] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -193,14 +206,37 @@ class StrategyRunner:
         )
         self.referee_refiner = RefereeRefiner()
 
+        my_trusted_ir = yellow_trusted_ir_robots if my_team_is_yellow else blue_trusted_ir_robots
+        opp_trusted_ir = blue_trusted_ir_robots if my_team_is_yellow else yellow_trusted_ir_robots
         self.my, self.opp = self._setup_sides_data(
-            strategy, opp_strategy, filtering, control_scheme, opp_control_scheme
+            strategy,
+            opp_strategy,
+            filtering,
+            control_scheme,
+            opp_control_scheme,
+            my_trusted_ir_robots=my_trusted_ir,
+            opp_trusted_ir_robots=opp_trusted_ir,
         )
 
         ### functions below rely on self.my and self.opp ###
 
         self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
         self._assert_exp_robots_and_ball(exp_friendly, exp_enemy, exp_ball)
+
+        # mapping for mismatch between vision and cmd ids
+        self.yellow_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
+            yellow_vision_to_cmd_mapping, is_yellow=True
+        )
+        self.blue_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
+            blue_vision_to_cmd_mapping, is_yellow=False
+        )
+        self.yellow_cmd_to_vision_mapping = {v: k for k, v in self.yellow_vision_to_cmd_mapping.items()}
+        self.blue_cmd_to_vision_mapping = {v: k for k, v in self.blue_vision_to_cmd_mapping.items()}
+
+        if self.opp and self.mode == Mode.REAL:
+            self._check_no_cmd_duplicate_if_transmission_sharing(
+                self.yellow_vision_to_cmd_mapping, self.blue_vision_to_cmd_mapping
+            )
 
         self._load_robot_controllers()
 
@@ -258,6 +294,77 @@ class StrategyRunner:
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
+
+    def _validate_vision_to_cmd_mapping(self, mapping: Optional[dict[int, int]], is_yellow: bool) -> dict[int, int]:
+        if self.mode == Mode.REAL:
+            explicitly_provided = mapping is not None
+            if mapping is None:
+                if self.opp:
+                    raise ValueError(
+                        "explicit vision_to_cmd_mapping is required for both teams in real PVP/shared-transmitter mode."
+                    )
+                return {}
+
+            if not isinstance(mapping, dict):
+                raise TypeError(
+                    f"vision_to_cmd_mapping must be a dictionary mapping vision robot IDs to command robot IDs; got {type(mapping).__name__}."
+                )
+
+            # if we are not running an opp strat, but mapping provided, warn that it will be ignored
+            if self.opp is None and self.my_team_is_yellow ^ is_yellow:
+                warnings.warn(
+                    "vision_to_cmd_mapping is provided but will be ignored since the opponent team is not being controlled."
+                )
+
+            if self.opp and explicitly_provided:
+                if is_yellow ^ self.my_team_is_yellow:
+                    if len(mapping) != self.exp_enemy:
+                        raise ValueError(
+                            "vision_to_cmd_mapping for opponent team must include all expected opponent robots for shared transmission."
+                        )
+                else:
+                    if len(mapping) != self.exp_friendly:
+                        raise ValueError(
+                            "vision_to_cmd_mapping for friendly team must include all expected friendly robots for shared transmission."
+                        )
+
+            for vision_id, cmd_id in mapping.items():
+                if not isinstance(vision_id, int) or not isinstance(cmd_id, int):
+                    raise TypeError(
+                        f"vision_to_cmd_mapping must map integers to integers; got key type {type(vision_id).__name__} and value type {type(cmd_id).__name__}."
+                    )
+                if vision_id < 0 or cmd_id < 0:
+                    raise ValueError(
+                        f"vision_to_cmd_mapping cannot have negative IDs; got vision ID {vision_id} and command ID {cmd_id}."
+                    )
+                if vision_id > MAX_ROBOT_ID:
+                    raise ValueError(
+                        f"vision_to_cmd_mapping cannot have vision IDs greater than {MAX_ROBOT_ID}; got vision ID {vision_id}."
+                    )
+                if cmd_id > 0xFF:
+                    raise ValueError(
+                        f"vision_to_cmd_mapping cannot have command IDs greater than 255 (1 byte limit); got command ID {cmd_id}."
+                    )
+            return mapping
+        else:
+            if mapping is not None:
+                raise ValueError(
+                    "vision_to_cmd_mapping should not be provided in simulation modes; robot ID mapping is only needed in real mode."
+                )
+            return {}
+
+    def _check_no_cmd_duplicate_if_transmission_sharing(
+        self, yellow_mapping: dict[int, int], blue_mapping: dict[int, int]
+    ):
+        seen = set()
+        dicts = [yellow_mapping, blue_mapping]
+        for d in dicts:
+            for v in d.values():
+                if v in seen:
+                    raise ValueError(
+                        f"vision_to_cmd_mapping for friendly and opponent teams cannot have overlapping command IDs since commands are transmitted together; duplicate command ID: {v}."
+                    )
+                seen.add(v)
 
     def _handle_sigint(self, sig, frame):
         self._stop_event.set()
@@ -343,6 +450,8 @@ class StrategyRunner:
         filtering: bool,
         control_scheme: str,
         opp_control_scheme: Optional[str],
+        my_trusted_ir_robots: Optional[FrozenSet[int]] = None,
+        opp_trusted_ir_robots: Optional[FrozenSet[int]] = None,
     ) -> Tuple[SideRuntime, Optional[SideRuntime]]:
         """Setup the data structures for both sides (my team and opponent)
         Args:
@@ -351,6 +460,8 @@ class StrategyRunner:
             filtering (bool): Whether to use filtering in the position refiners.
             control_scheme (str): Name of the motion control scheme to use for the friendly team.
             opp_control_scheme (Optional[str]): Name of the motion control scheme to use for the opponent team. If not set, uses same as friendly.
+            my_trusted_ir_robots (FrozenSet[int], optional): Vision IDs of friendly robots whose IR sensor is trusted.
+            opp_trusted_ir_robots (FrozenSet[int], optional): Vision IDs of opponent robots whose IR sensor is trusted.
 
         Side effect: Initializes the SideRuntime for both friendly and opponent sides, including their strategies, refiners, and motion controllers.
 
@@ -359,7 +470,10 @@ class StrategyRunner:
         """
         opp_side = None
         my_pos_ref, my_vel_ref, my_robot_ref = self._init_refiners(
-            self.full_field_dims, filtering=filtering, exp_ball=self.exp_ball
+            self.full_field_dims,
+            filtering=filtering,
+            exp_ball=self.exp_ball,
+            trusted_ir_robots=my_trusted_ir_robots,
         )
         my_motion_controller = get_control_scheme(control_scheme)
         my_strategy.setup_strategy_blackboard(is_opp_strat=False)
@@ -373,7 +487,10 @@ class StrategyRunner:
 
         if opp_strategy is not None:
             opp_pos_ref, opp_vel_ref, opp_robot_ref = self._init_refiners(
-                self.full_field_dims, filtering=filtering, exp_ball=self.exp_ball
+                self.full_field_dims,
+                filtering=filtering,
+                exp_ball=self.exp_ball,
+                trusted_ir_robots=opp_trusted_ir_robots,
             )
             opp_motion_controller = (
                 get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
@@ -388,6 +505,41 @@ class StrategyRunner:
             )
 
         return my_side, opp_side
+
+    def _split_robot_responses_by_team(
+        self, responses: List[RobotResponse]
+    ) -> Tuple[List[RobotResponse], List[RobotResponse]]:
+        """Split a list of RobotResponse objects into separate lists for the friendly and opponent teams
+        based on the robot IDs and the vision.
+        """
+        friendly_responses = []
+        opponent_responses = []
+
+        for response in responses:
+            cmd_id = response.id
+
+            if self.my_team_is_yellow:
+                vision_id = self.yellow_cmd_to_vision_mapping.get(cmd_id)
+                if vision_id is not None:
+                    friendly_responses.append(RobotResponse(vision_id, response.has_ball))
+                else:
+                    opp_vision_id = self.blue_cmd_to_vision_mapping.get(cmd_id)
+                    if opp_vision_id is not None:
+                        opponent_responses.append(RobotResponse(opp_vision_id, response.has_ball))
+                    else:
+                        self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either yellow or blue mapping")
+            else:
+                vision_id = self.blue_cmd_to_vision_mapping.get(cmd_id)
+                if vision_id is not None:
+                    friendly_responses.append(RobotResponse(vision_id, response.has_ball))
+                else:
+                    opp_vision_id = self.yellow_cmd_to_vision_mapping.get(cmd_id)
+                    if opp_vision_id is not None:
+                        opponent_responses.append(RobotResponse(opp_vision_id, response.has_ball))
+                    else:
+                        self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either blue or yellow mapping")
+
+        return friendly_responses, opponent_responses
 
     def _remove_rsim_ball(self):
         """Removes the ball from the RSim environment by teleporting it off-field."""
@@ -632,12 +784,23 @@ class StrategyRunner:
                 )
 
         elif self.mode == Mode.REAL:
+            my_viz_to_cmd_mapping, opp_viz_to_cmd_mapping = map_colors_to_friendly_enemy(
+                self.my_team_is_yellow,
+                self.yellow_vision_to_cmd_mapping,
+                self.blue_vision_to_cmd_mapping,
+            )
             my_robot_controller = RealRobotController(
-                is_team_yellow=self.my_team_is_yellow, n_friendly=self.exp_friendly
+                is_team_yellow=self.my_team_is_yellow,
+                n_friendly=self.exp_friendly,
+                vision_to_cmd_mapping=my_viz_to_cmd_mapping,
             )
             if self.opp:
+                serial = my_robot_controller.serial_port  # share serial connection for efficiency
                 opp_robot_controller = RealRobotController(
-                    is_team_yellow=not self.my_team_is_yellow, n_friendly=self.exp_enemy
+                    is_team_yellow=not self.my_team_is_yellow,
+                    n_friendly=self.exp_enemy,
+                    vision_to_cmd_mapping=opp_viz_to_cmd_mapping,
+                    serial_port=serial,
                 )
 
         else:
@@ -654,14 +817,17 @@ class StrategyRunner:
         field_dims: FieldDimensions,
         filtering: bool,
         exp_ball: bool = True,
+        trusted_ir_robots: Optional[FrozenSet[int]] = None,
     ) -> tuple[PositionRefiner, VelocityRefiner, RobotInfoRefiner]:
         """
         Initialize the position, velocity, and robot info refiners.
         Args:
-            field_bounds (FieldBounds): The bounds of the field.
+            field_dims (FieldDimensions): The field dimensions.
             filtering (bool): Whether to use filtering in the position refiner.
             exp_ball (bool): Whether the ball is expected. When False, the position refiner is
                              allowed to return None if no ball is detected in raw vision data.
+            trusted_ir_robots (FrozenSet[int], optional): Vision IDs of robots whose IR sensor is trusted.
+                See RobotInfoRefiner for details.
         Returns:
             tuple: The initialized PositionRefiner, VelocityRefiner, and RobotInfoRefiner.
         """
@@ -671,7 +837,7 @@ class StrategyRunner:
             exp_ball=exp_ball,
         )
         velocity_refiner = VelocityRefiner()
-        robot_info_refiner = RobotInfoRefiner()
+        robot_info_refiner = RobotInfoRefiner(trusted_ir_robots=trusted_ir_robots)
 
         return position_refiner, velocity_refiner, robot_info_refiner
 
@@ -928,15 +1094,36 @@ class StrategyRunner:
                 self._last_referee_data = self.ref_buffer.popleft()
             referee_data = self._last_referee_data
 
+        friendly_res, opp_res = None, None
+        if self.mode == Mode.REAL:
+            responses = self.my.strategy.robot_controller.get_robots_responses()
+            if self.opp:
+                friendly_res, opp_res = self._split_robot_responses_by_team(responses)
+            else:
+                cmd_to_vision = (
+                    self.yellow_cmd_to_vision_mapping if self.my_team_is_yellow else self.blue_cmd_to_vision_mapping
+                )
+                if cmd_to_vision:
+                    friendly_res = []
+                    for r in responses:
+                        vision_id = cmd_to_vision.get(r.id)
+                        if vision_id is None:
+                            self.logger.warning(f"RobotResponse cmd_id={r.id} not found in mapping for controlled team")
+                            continue
+                        friendly_res.append(RobotResponse(vision_id, r.has_ball))
+                else:
+                    friendly_res = responses
+
         # alternate between opp and friendly playing
+        real = self.mode == Mode.REAL
         if self.toggle_opp_first:
             if self.opp:
-                self._step_game(vision_frames, referee_data, True)
-            self._step_game(vision_frames, referee_data, False)
+                self._step_game(vision_frames, referee_data, True, real_responses=opp_res if real else None)
+            self._step_game(vision_frames, referee_data, False, real_responses=friendly_res if real else None)
         else:
-            self._step_game(vision_frames, referee_data, False)
+            self._step_game(vision_frames, referee_data, False, real_responses=friendly_res if real else None)
             if self.opp:
-                self._step_game(vision_frames, referee_data, True)
+                self._step_game(vision_frames, referee_data, True, real_responses=opp_res if real else None)
         self.toggle_opp_first = not self.toggle_opp_first
 
         # --- rate limiting ---
@@ -1020,6 +1207,7 @@ class StrategyRunner:
         vision_frames: List[RawVisionData],
         referee_data,
         running_opp: bool,
+        real_responses: Optional[List[RobotResponse]] = None,
     ):
         """Step the game for the robot controller and strategy.
 
@@ -1027,11 +1215,16 @@ class StrategyRunner:
             vision_frames (List[RawVisionData]): The vision frames.
             referee_data: The referee data from RSim or network receiver.
             running_opp (bool): Whether to run the opponent strategy.
+            real_responses (Optional[List[RobotResponse]]): The robot responses pulled for real.
+                                                            We use a shared transmitter, so it cannot be pulled per side.
         """
         side = self.opp if running_opp else self.my
 
         # Pull responses from robot controller
-        responses = side.strategy.robot_controller.get_robots_responses()
+        if self.mode != Mode.REAL:
+            responses = side.strategy.robot_controller.get_robots_responses()
+        else:
+            responses = real_responses if real_responses is not None else []
 
         # Update game frame with refined information
         new_game_frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
