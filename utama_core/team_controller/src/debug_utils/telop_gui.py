@@ -53,6 +53,7 @@ else:
         def __init__(self, is_team_yellow=True, n_friendly=2):
 
             self.n_friendly = n_friendly
+            self._dribbler_seconds: dict = {}
 
             print("\n[DUMMY CONTROLLER ENABLED]")
             print("No serial/network/hardware required.\n")
@@ -89,6 +90,7 @@ ACTIVE = "#4a90d9"
 KICK_C = "#d94a4a"
 ON_C = "#4ad97a"
 BALL_C = "#d9a84a"
+HEAT_C = "#d94a4a"  # Red when dribbler near/at thermal limit
 DUMMY_C = "#d9a84a"  # Orange for dummy warning
 
 
@@ -287,6 +289,8 @@ class TeleopGUI:
 
         self._fb_ball_vars: dict[int, tk.StringVar] = {}
         self._fb_ball_lbls: dict[int, tk.Label] = {}
+        self._fb_heat_vars: dict[int, tk.StringVar] = {}
+        self._fb_heat_lbls: dict[int, tk.Label] = {}
         self._fb_status_vars: dict[int, tk.StringVar] = {}
         for i in range(N_FRIENDLY):
             row = tk.Frame(fb_frame, bg=SURFACE)
@@ -315,6 +319,18 @@ class TeleopGUI:
             )
             ball_lbl.pack(side="left", padx=(8, 0))
 
+            heat_var = tk.StringVar(value="heat:  0%")
+            heat_lbl = tk.Label(
+                row,
+                textvariable=heat_var,
+                bg=SURFACE,
+                fg=MUTED,
+                font=("monospace", 11),
+                width=10,
+                anchor="w",
+            )
+            heat_lbl.pack(side="left", padx=(8, 0))
+
             status_var = tk.StringVar(value="no data")
             tk.Label(
                 row,
@@ -327,6 +343,8 @@ class TeleopGUI:
 
             self._fb_ball_vars[i] = ball_var
             self._fb_ball_lbls[i] = ball_lbl
+            self._fb_heat_vars[i] = heat_var
+            self._fb_heat_lbls[i] = heat_lbl
             self._fb_status_vars[i] = status_var
 
         # --- Command readout ---
@@ -485,6 +503,10 @@ class TeleopGUI:
             time.sleep(max(0.0, dt - elapsed))
 
     def _update_feedback(self, responses):
+        from utama_core.team_controller.src.controllers.real.real_robot_controller import (
+            DRIBBLER_MAX_ON_SECONDS,
+        )
+
         for resp in responses:
             if resp.id not in self._fb_ball_vars:
                 continue
@@ -495,6 +517,13 @@ class TeleopGUI:
                 self._fb_ball_vars[resp.id].set("ball: no")
                 self._fb_ball_lbls[resp.id].configure(fg=MUTED)
             self._fb_status_vars[resp.id].set("connected")
+
+            # dribbler heat display
+            bucket = self.controller._dribbler_seconds.get(resp.id, 0.0)
+            pct = int(bucket / DRIBBLER_MAX_ON_SECONDS * 100)
+            self._fb_heat_vars[resp.id].set(f"heat: {pct:3d}%")
+            heat_colour = HEAT_C if pct >= 80 else (BALL_C if pct >= 50 else MUTED)
+            self._fb_heat_lbls[resp.id].configure(fg=heat_colour)
 
     def _update_readout(self, cmd: RobotCommand):
         self._metrics["fwd"].set(f"{cmd.local_forward_vel:+.2f}")

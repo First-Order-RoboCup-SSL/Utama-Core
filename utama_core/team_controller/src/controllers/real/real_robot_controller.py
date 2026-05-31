@@ -19,8 +19,10 @@ from utama_core.config.settings import (
 
 # Leaky-bucket dribbler thermal limiter.
 # The bucket accumulates real seconds while dribbling and drains at the same
-# rate while off.  When full the dribbler is forced off until it drains.
+# rate while off.  When full the dribbler is forced off until the bucket drains
+# to DRIBBLER_RESUME_SECONDS (hysteresis), preventing rapid on/off oscillation.
 DRIBBLER_MAX_ON_SECONDS: float = 30.0
+DRIBBLER_RESUME_SECONDS: float = 15.0  # must drain to 50% before re-enabling
 from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
@@ -81,6 +83,8 @@ class RealRobotController(AbstractRobotController):
         # [0, DRIBBLER_MAX_ON_SECONDS].  Dribbler is forced off when bucket is full.
         self._dribbler_seconds: Dict[int, float] = {}
         self._dribbler_last_tick: Dict[int, float] = {}  # time.monotonic() of last call
+        self._dribbler_limit_warned: set = set()  # robots that have already been warned this event
+        self._dribbler_throttled: set = set()  # robots currently in post-limit cooldown (hysteresis)
 
     def get_robots_responses(self) -> List[RobotResponse]:
         HEADER = 0xAA
@@ -265,19 +269,35 @@ class RealRobotController(AbstractRobotController):
         current = self._dribbler_seconds.get(robot_id, 0.0)
         at_limit = current >= DRIBBLER_MAX_ON_SECONDS
 
-        if requested and not at_limit:
+        if at_limit:
+            self._dribbler_throttled.add(robot_id)
+
+        throttled = robot_id in self._dribbler_throttled
+
+        if requested and not throttled:
             self._dribbler_seconds[robot_id] = min(current + dt, DRIBBLER_MAX_ON_SECONDS)
+            self._dribbler_limit_warned.discard(robot_id)
             return True
-        elif requested and at_limit:
-            warnings.warn(
-                f"Robot {robot_id}: dribbler thermal limit reached "
-                f"({DRIBBLER_MAX_ON_SECONDS:.0f}s). "
-                "Forcing dribbler off until bucket drains."
-            )
+        elif requested and throttled:
+            if robot_id not in self._dribbler_limit_warned:
+                warnings.warn(
+                    f"Robot {robot_id}: dribbler thermal limit reached "
+                    f"({DRIBBLER_MAX_ON_SECONDS:.0f}s). "
+                    f"Forcing dribbler off until bucket drains to {DRIBBLER_RESUME_SECONDS:.0f}s."
+                )
+                self._dribbler_limit_warned.add(robot_id)
+            # still drain while forced off
+            self._dribbler_seconds[robot_id] = max(0.0, current - dt)
+            if self._dribbler_seconds[robot_id] <= DRIBBLER_RESUME_SECONDS:
+                self._dribbler_throttled.discard(robot_id)
+                self._dribbler_limit_warned.discard(robot_id)
             return False
         else:
             # Not requested: drain the bucket
             self._dribbler_seconds[robot_id] = max(0.0, current - dt)
+            if self._dribbler_seconds[robot_id] <= DRIBBLER_RESUME_SECONDS:
+                self._dribbler_throttled.discard(robot_id)
+                self._dribbler_limit_warned.discard(robot_id)
             return False
 
     def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
