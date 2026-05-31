@@ -29,26 +29,34 @@ class RobotInfoRefiner(BaseRefiner):
         self._trusted_ir_robots = trusted_ir_robots
 
     def refine(self, game_frame: GameFrame, robot_responses: List[RobotResponse]):
-        if robot_responses is None or len(robot_responses) == 0:
-            return game_frame
-
         friendly_robots = game_frame.friendly_robots.copy()
-        for robot_response in robot_responses:
-            id = robot_response.id
-            if id not in friendly_robots:
-                warnings.warn(f"Robot ID {id} in robot responses not found in friendly robots. ")
-                continue
 
-            robot = friendly_robots[id]
-            if self._trusted_ir_robots is None or id in self._trusted_ir_robots:
-                has_ball = robot_response.has_ball
-            else:
-                has_ball = self._infer_has_ball(game_frame, robot)
+        # When an allowlist is active, first infer has_ball for every untrusted
+        # robot from vision proximity.  This covers frames where the robot drops
+        # its serial response entirely — without this pass, has_ball would stay
+        # frozen at the previous frame's value instead of being inferred.
+        if self._trusted_ir_robots is not None:
+            for robot_id, robot in friendly_robots.items():
+                if robot_id not in self._trusted_ir_robots:
+                    friendly_robots[robot_id] = replace(robot, has_ball=self._infer_has_ball(game_frame, robot))
 
-            friendly_robots[id] = replace(robot, has_ball=has_ball)
+        # Then overlay IR sensor readings for robots that sent a response.
+        if robot_responses:
+            for robot_response in robot_responses:
+                rid = robot_response.id
+                if rid not in friendly_robots:
+                    warnings.warn(f"Robot ID {rid} in robot responses not found in friendly robots. ")
+                    continue
 
-        new_game_frame = replace(game_frame, friendly_robots=friendly_robots)
-        return new_game_frame
+                robot = friendly_robots[rid]
+                if self._trusted_ir_robots is None or rid in self._trusted_ir_robots:
+                    # Trusted (or trust-all mode): use raw IR reading
+                    friendly_robots[rid] = replace(robot, has_ball=robot_response.has_ball)
+                # Untrusted robots were already handled by the vision-proximity pass above
+
+        if friendly_robots == game_frame.friendly_robots:
+            return game_frame
+        return replace(game_frame, friendly_robots=friendly_robots)
 
     @staticmethod
     def _infer_has_ball(game_frame: GameFrame, robot) -> bool:

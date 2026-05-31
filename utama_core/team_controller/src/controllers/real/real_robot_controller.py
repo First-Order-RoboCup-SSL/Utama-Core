@@ -83,8 +83,8 @@ class RealRobotController(AbstractRobotController):
         # [0, DRIBBLER_MAX_ON_SECONDS].  Dribbler is forced off when bucket is full.
         self._dribbler_seconds: Dict[int, float] = {}
         self._dribbler_last_tick: Dict[int, float] = {}  # time.monotonic() of last call
-        self._dribbler_limit_warned: set = set()  # robots that have already been warned this event
-        self._dribbler_throttled: set = set()  # robots currently in post-limit cooldown (hysteresis)
+        self._dribbler_limit_warned: set[int] = set()  # robots that have already been warned this event
+        self._dribbler_throttled: set[int] = set()  # robots currently in post-limit cooldown (hysteresis)
 
     def get_robots_responses(self) -> List[RobotResponse]:
         HEADER = 0xAA

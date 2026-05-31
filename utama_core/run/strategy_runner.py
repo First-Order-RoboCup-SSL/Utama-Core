@@ -318,15 +318,19 @@ class StrategyRunner:
 
             if self.opp and explicitly_provided:
                 if is_yellow ^ self.my_team_is_yellow:
-                    if len(mapping) != self.exp_enemy:
-                        raise ValueError(
-                            "vision_to_cmd_mapping for opponent team must include all expected opponent robots for shared transmission."
-                        )
+                    exp_count = self.exp_enemy
+                    team_label = "opponent"
                 else:
-                    if len(mapping) != self.exp_friendly:
-                        raise ValueError(
-                            "vision_to_cmd_mapping for friendly team must include all expected friendly robots for shared transmission."
-                        )
+                    exp_count = self.exp_friendly
+                    team_label = "friendly"
+
+                expected_vision_ids = set(range(exp_count))
+                missing = expected_vision_ids - set(mapping.keys())
+                if missing:
+                    raise ValueError(
+                        f"vision_to_cmd_mapping for {team_label} team is missing entries for vision IDs {sorted(missing)}. "
+                        "All expected vision IDs must be mapped for shared-transmitter mode."
+                    )
 
             for vision_id, cmd_id in mapping.items():
                 if not isinstance(vision_id, int) or not isinstance(cmd_id, int):

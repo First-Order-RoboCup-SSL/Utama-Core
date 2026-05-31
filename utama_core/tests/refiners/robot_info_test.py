@@ -62,6 +62,17 @@ def test_empty_responses_returns_frame_unchanged():
     assert refiner.refine(frame, None) is frame
 
 
+def test_untrusted_robot_inferred_even_when_response_dropped():
+    # If a broken robot sends no packet at all, has_ball must still be inferred
+    # from vision proximity rather than left frozen at the previous value.
+    refiner = RobotInfoRefiner(trusted_ir_robots=frozenset())  # no robots trusted
+    # Robot is close to ball; previous has_ball=True (stale) — empty responses this frame
+    frame = _make_frame({0: _make_robot(0, 0.0, 0.0, has_ball=True)}, ball_pos=(2.0, 0.0))
+    result = refiner.refine(frame, [])  # no response arrived
+    # Robot is 2 m away — should be inferred as False, not left as stale True
+    assert result.friendly_robots[0].has_ball is False
+
+
 def test_unknown_robot_id_warns(recwarn):
     refiner = RobotInfoRefiner()
     frame = _make_frame({0: _make_robot(0, 0.0, 0.0)})

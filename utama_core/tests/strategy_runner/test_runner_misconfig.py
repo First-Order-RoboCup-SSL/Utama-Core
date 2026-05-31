@@ -333,7 +333,8 @@ def test_validate_vision_to_cmd_mapping_incorrect_length_friendly():
         exp_friendly=3,
         exp_enemy=3,
     )
-    with pytest.raises(ValueError, match="must include all expected friendly robots"):
+    # {0: 0, 1: 1} covers vision IDs 0 and 1 but is missing ID 2
+    with pytest.raises(ValueError, match="missing entries for vision IDs"):
         StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: 0, 1: 1}, True)
 
 
@@ -345,8 +346,22 @@ def test_validate_vision_to_cmd_mapping_incorrect_length_enemy():
         exp_friendly=3,
         exp_enemy=3,
     )
-    with pytest.raises(ValueError, match="must include all expected opponent robots"):
+    # {0: 0, 1: 1} covers vision IDs 0 and 1 but is missing ID 2
+    with pytest.raises(ValueError, match="missing entries for vision IDs"):
         StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: 0, 1: 1}, False)
+
+
+def test_validate_vision_to_cmd_mapping_correct_count_wrong_keys():
+    # Right number of entries but wrong vision IDs — old length check would pass, new check must catch it.
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=True,
+        exp_friendly=3,
+        exp_enemy=3,
+    )
+    with pytest.raises(ValueError, match="missing entries for vision IDs"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, {5: 0, 6: 1, 7: 2}, True)
 
 
 def test_validate_vision_to_cmd_mapping_invalid_ids():
