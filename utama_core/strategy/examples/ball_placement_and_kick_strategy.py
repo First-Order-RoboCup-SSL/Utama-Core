@@ -5,14 +5,21 @@ from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.strategy.common import AbstractBehaviour
 from utama_core.strategy.examples.ball_placement_strategy import BallPlacementStrategy
 
+_DIRECT_FREE_COMMANDS = frozenset(
+    {
+        RefereeCommand.DIRECT_FREE_YELLOW,
+        RefereeCommand.DIRECT_FREE_BLUE,
+    }
+)
+
 
 class KickAfterDirectFreeStep(AbstractBehaviour):
-    """Kick once on the first NORMAL_START after a referee-managed direct free."""
+    """Kick once on each NORMAL_START that follows a direct-free command."""
 
     _KICK_DISTANCE = 0.22
 
     def setup_(self):
-        self._seen_first_live_restart = False
+        self._prev_command: RefereeCommand | None = None
         self._active_restart_timestamp: float | None = None
         self._kick_sent_for_timestamp: float | None = None
 
@@ -20,15 +27,21 @@ class KickAfterDirectFreeStep(AbstractBehaviour):
         game = self.blackboard.game
         ref = game.referee
 
-        if ref is None or ref.referee_command != RefereeCommand.NORMAL_START:
+        if ref is None:
+            return py_trees.common.Status.RUNNING
+
+        current_command = ref.referee_command
+
+        if current_command != RefereeCommand.NORMAL_START:
+            self._prev_command = current_command
+            return py_trees.common.Status.RUNNING
+
+        # Only kick if we transitioned here from a direct free (not from a kickoff
+        # seed / force-start at game start).
+        if self._prev_command not in _DIRECT_FREE_COMMANDS:
             return py_trees.common.Status.RUNNING
 
         restart_timestamp = ref.referee_command_timestamp
-        if not self._seen_first_live_restart:
-            self._seen_first_live_restart = True
-            self._active_restart_timestamp = restart_timestamp
-            return py_trees.common.Status.RUNNING
-
         if restart_timestamp != self._active_restart_timestamp:
             self._active_restart_timestamp = restart_timestamp
             self._kick_sent_for_timestamp = None

@@ -547,7 +547,12 @@ class GameStateMachine:
             self.command = self.next_command
             self.command_counter += 1
             self.command_timestamp = timestamp
-            self.next_command = RefereeCommand.NORMAL_START
+            if self.command in self._BALL_PLACEMENT_COMMANDS:
+                self.next_command = self._post_ball_placement_command or RefereeCommand.NORMAL_START
+                self._post_ball_placement_command = None
+                self._advance4_ready_since = math.inf
+            else:
+                self.next_command = RefereeCommand.NORMAL_START
             self.status_message = None
             self._prepare_entered_time = timestamp
             return
@@ -599,7 +604,6 @@ class GameStateMachine:
         self.command = command
         self.command_counter += 1
         self.command_timestamp = timestamp
-        self.next_command = None
         self._post_ball_placement_command = None
         self.status_message = None
         self._advance2_ready_since = math.inf
@@ -607,6 +611,11 @@ class GameStateMachine:
         self._advance4_ready_since = math.inf
         if ball_placement_target is not None:
             self.ball_placement_target = ball_placement_target
+        if command in self._BALL_PLACEMENT_COMMANDS:
+            # Auto-advance 4 requires next_command to be set.
+            self.next_command = RefereeCommand.NORMAL_START
+        else:
+            self.next_command = None
         logger.info("Referee command force-set to: %s", command.name)
 
     def advance_stage(self, new_stage: Stage, timestamp: float) -> None:
