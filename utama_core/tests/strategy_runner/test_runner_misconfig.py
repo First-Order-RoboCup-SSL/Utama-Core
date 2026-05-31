@@ -333,8 +333,8 @@ def test_validate_vision_to_cmd_mapping_incorrect_length_friendly():
         exp_friendly=3,
         exp_enemy=3,
     )
-    # {0: 0, 1: 1} covers vision IDs 0 and 1 but is missing ID 2
-    with pytest.raises(ValueError, match="missing entries for vision IDs"):
+    # 2 entries when 3 are expected
+    with pytest.raises(ValueError, match="has 2 entries but 3 robots are expected"):
         StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: 0, 1: 1}, True)
 
 
@@ -346,13 +346,15 @@ def test_validate_vision_to_cmd_mapping_incorrect_length_enemy():
         exp_friendly=3,
         exp_enemy=3,
     )
-    # {0: 0, 1: 1} covers vision IDs 0 and 1 but is missing ID 2
-    with pytest.raises(ValueError, match="missing entries for vision IDs"):
+    # 2 entries when 3 are expected
+    with pytest.raises(ValueError, match="has 2 entries but 3 robots are expected"):
         StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: 0, 1: 1}, False)
 
 
-def test_validate_vision_to_cmd_mapping_correct_count_wrong_keys():
-    # Right number of entries but wrong vision IDs — old length check would pass, new check must catch it.
+def test_validate_vision_to_cmd_mapping_correct_count_non_contiguous_ids_passes_init():
+    # Non-contiguous vision IDs (e.g. real field robots numbered 5,6,7) with the right
+    # count must PASS at init time — coverage against observed IDs is validated later
+    # in _validate_mapping_covers_game_frame() after _load_game().
     runner = SimpleNamespace(
         mode=Mode.REAL,
         my_team_is_yellow=True,
@@ -360,8 +362,32 @@ def test_validate_vision_to_cmd_mapping_correct_count_wrong_keys():
         exp_friendly=3,
         exp_enemy=3,
     )
-    with pytest.raises(ValueError, match="missing entries for vision IDs"):
-        StrategyRunner._validate_vision_to_cmd_mapping(runner, {5: 0, 6: 1, 7: 2}, True)
+    result = StrategyRunner._validate_vision_to_cmd_mapping(runner, {5: 0, 6: 1, 7: 2}, True)
+    assert result == {5: 0, 6: 1, 7: 2}
+
+
+def test_validate_mapping_covers_game_frame_mismatch_raises():
+    from utama_core.run.strategy_runner import StrategyRunner
+
+    runner = SimpleNamespace()
+    with pytest.raises(ValueError, match="missing entries for observed IDs"):
+        StrategyRunner._validate_mapping_covers_game_frame(runner, {0: 0, 1: 1, 2: 2}, {5, 6, 7}, "friendly")
+
+
+def test_validate_mapping_covers_game_frame_match_passes():
+    from utama_core.run.strategy_runner import StrategyRunner
+
+    runner = SimpleNamespace()
+    # Should not raise
+    StrategyRunner._validate_mapping_covers_game_frame(runner, {5: 0, 6: 1, 7: 2}, {5, 6, 7}, "friendly")
+
+
+def test_validate_mapping_covers_game_frame_empty_mapping_passes():
+    from utama_core.run.strategy_runner import StrategyRunner
+
+    runner = SimpleNamespace()
+    # Empty mapping (non-PVP mode) always passes
+    StrategyRunner._validate_mapping_covers_game_frame(runner, {}, {0, 1, 2}, "friendly")
 
 
 def test_validate_vision_to_cmd_mapping_invalid_ids():

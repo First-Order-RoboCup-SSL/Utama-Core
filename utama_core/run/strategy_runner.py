@@ -324,12 +324,15 @@ class StrategyRunner:
                     exp_count = self.exp_friendly
                     team_label = "friendly"
 
-                expected_vision_ids = set(range(exp_count))
-                missing = expected_vision_ids - set(mapping.keys())
-                if missing:
+                # At init time we only know how many robots to expect, not their
+                # actual vision IDs (those are non-contiguous in some deployments).
+                # Check count here; key-coverage against observed IDs happens in
+                # _validate_mapping_covers_game_frame() after _load_game().
+                if len(mapping) != exp_count:
                     raise ValueError(
-                        f"vision_to_cmd_mapping for {team_label} team is missing entries for vision IDs {sorted(missing)}. "
-                        "All expected vision IDs must be mapped for shared-transmitter mode."
+                        f"vision_to_cmd_mapping for {team_label} team has {len(mapping)} entries but "
+                        f"{exp_count} robots are expected. Every robot must have a mapping entry "
+                        "in shared-transmitter mode."
                     )
 
             for vision_id, cmd_id in mapping.items():
@@ -356,6 +359,28 @@ class StrategyRunner:
                     "vision_to_cmd_mapping should not be provided in simulation modes; robot ID mapping is only needed in real mode."
                 )
             return {}
+
+    def _validate_mapping_covers_game_frame(self, mapping: dict[int, int], observed_ids: set[int], team_label: str):
+        """After the first game frame loads, verify the mapping keys match the observed vision IDs.
+
+        Called from _load_game() so we can validate against actual IDs rather than
+        assuming the contiguous 0..n-1 range (which fails non-contiguous deployments).
+        """
+        if not mapping:
+            return
+        missing = observed_ids - mapping.keys()
+        extra = mapping.keys() - observed_ids
+        if missing or extra:
+            parts = []
+            if missing:
+                parts.append(f"missing entries for observed IDs {sorted(missing)}")
+            if extra:
+                parts.append(f"extra entries for unseen IDs {sorted(extra)}")
+            raise ValueError(
+                f"vision_to_cmd_mapping for {team_label} team does not match observed vision IDs: "
+                + "; ".join(parts)
+                + f". Observed IDs: {sorted(observed_ids)}."
+            )
 
     def _check_no_cmd_duplicate_if_transmission_sharing(
         self, yellow_mapping: dict[int, int], blue_mapping: dict[int, int]
@@ -877,6 +902,22 @@ class StrategyRunner:
             self.opp.game_history = GameHistory(MAX_GAME_HISTORY)
             self.opp.game = Game(self.opp.game_history, opp_current_game_frame, field=opp_field)
             self.opp.current_game_frame = opp_current_game_frame
+
+        # Validate mapping key coverage against the real observed vision IDs now
+        # that we have a game frame (at init we only knew the expected count).
+        if self.opp:
+            my_mapping = (
+                self.yellow_vision_to_cmd_mapping if self.my_team_is_yellow else self.blue_vision_to_cmd_mapping
+            )
+            opp_mapping = (
+                self.blue_vision_to_cmd_mapping if self.my_team_is_yellow else self.yellow_vision_to_cmd_mapping
+            )
+            self._validate_mapping_covers_game_frame(
+                my_mapping, set(my_current_game_frame.friendly_robots.keys()), "friendly"
+            )
+            self._validate_mapping_covers_game_frame(
+                opp_mapping, set(opp_current_game_frame.friendly_robots.keys()), "opponent"
+            )
 
         self.my.strategy.load_game(self.my.game)
         if self.opp:

@@ -74,7 +74,6 @@ class RobotPlacementStep(AbstractBehaviour):
             self._waypoints = self._build_waypoints()
 
         target = self._waypoints[self._wp_idx]
-        target = Vector2D(0, 0)  # ensure it's a Vector2D, not np array
         robot = game.friendly_robots[robot_id]
         ball = game.ball
 
