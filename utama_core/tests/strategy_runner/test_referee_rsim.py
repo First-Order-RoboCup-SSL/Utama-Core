@@ -246,15 +246,10 @@ def test_ball_placement_robot_approaches_designated_position(headless):
 
 
 class _DirectFreeOursManager(AbstractTestManager):
-    """Ball exits the side boundary with no friendly robot nearby → DIRECT_FREE_YELLOW (ours).
-
-    With no robot close enough to the ball to register a friendly last-touch,
-    OutOfBoundsRule defaults to DIRECT_FREE_YELLOW.  We verify the kicker
-    drives toward the (now out-of-bounds) ball.
-    """
+    """DIRECT_FREE_YELLOW is injected directly; kicker must drive toward the ball."""
 
     n_episodes = 1
-    APPROACH_TOLERANCE = 0.6  # slightly wider: ball may be just outside boundary
+    APPROACH_TOLERANCE = 0.6
 
     def __init__(self, referee: CustomReferee):
         super().__init__()
@@ -263,13 +258,12 @@ class _DirectFreeOursManager(AbstractTestManager):
         self.robot_near_ball: bool = False
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
-        # Keep all robots well away from the ball so last-touch is unknown → DIRECT_FREE_YELLOW
         sim_controller.teleport_robot(game.my_team_is_yellow, 0, -1.5, 0.0)
         sim_controller.teleport_robot(game.my_team_is_yellow, 1, -2.0, 0.5)
         sim_controller.teleport_robot(game.my_team_is_yellow, 2, -2.0, -0.5)
-        # Ball heading out the top sideline
-        sim_controller.teleport_ball(0.0, 2.5, vx=0.0, vy=2.5)
-        self._referee.set_command(RefereeCommand.FORCE_START, game.ts)
+        sim_controller.teleport_ball(0.0, 0.0)
+        # Inject directly — bypass OOB detection which now routes through ball placement first.
+        self._referee.force_command(RefereeCommand.DIRECT_FREE_YELLOW, game.ts)
 
     def eval_status(self, game: Game) -> TestingStatus:
         ref = game.referee
@@ -314,34 +308,26 @@ def test_direct_free_kick_ours_robot_drives_to_ball(headless):
 
 
 class _DirectFreeTheirsManager(AbstractTestManager):
-    """A robot starts inside the keep-out radius; DIRECT_FREE_BLUE (theirs) is issued.
-
-    We place robot 0 right next to the ball before it exits so last-touch registers
-    as friendly → OutOfBoundsRule issues DIRECT_FREE_BLUE (opponent's free kick).
-    The test verifies that all robots end up outside the keep-out radius.
-    """
+    """DIRECT_FREE_BLUE is injected directly; all robots must clear the keep-out radius."""
 
     n_episodes = 1
-    # All robots must clear beyond this radius from the ball position.
-    CLEAR_TOLERANCE = 0.1  # allowed margin inside keep-out (robots should be well clear)
+    CLEAR_TOLERANCE = 0.1
 
     def __init__(self, referee: CustomReferee):
         super().__init__()
         self._referee = referee
         self.direct_free_seen: bool = False
         self.robots_cleared: bool = False
-        # We record the ball position when DIRECT_FREE_BLUE fires to check clearing.
         self._ball_pos_at_call: Optional[tuple[float, float]] = None
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
-        # Robot 0 is placed right next to the ball — it will register as last-toucher.
-        sim_controller.teleport_robot(game.my_team_is_yellow, 0, 0.0, 2.4)
-        # Robots 1 and 2 also start near the ball path — both inside keep-out.
-        sim_controller.teleport_robot(game.my_team_is_yellow, 1, 0.1, 2.3)
-        sim_controller.teleport_robot(game.my_team_is_yellow, 2, -0.1, 2.3)
-        # Ball heading out the top sideline; robot 0 is close enough for last-touch
-        sim_controller.teleport_ball(0.0, 2.5, vx=0.0, vy=2.5)
-        self._referee.set_command(RefereeCommand.FORCE_START, game.ts)
+        # All robots start inside keep-out radius around the ball.
+        sim_controller.teleport_robot(game.my_team_is_yellow, 0, 0.0, 0.3)
+        sim_controller.teleport_robot(game.my_team_is_yellow, 1, 0.1, -0.3)
+        sim_controller.teleport_robot(game.my_team_is_yellow, 2, -0.1, 0.3)
+        sim_controller.teleport_ball(0.0, 0.0)
+        # Inject directly — bypass OOB detection which now routes through ball placement first.
+        self._referee.force_command(RefereeCommand.DIRECT_FREE_BLUE, game.ts)
 
     def eval_status(self, game: Game) -> TestingStatus:
         ref = game.referee
