@@ -17,7 +17,7 @@ from utama_core.strategy.examples.utils import (
     SetBlackboardVariable,
 )
 
-_ARRIVE_TOL = 0.1  # metres
+_ARRIVE_TOL = 0.15  # metres
 _MARGIN = 0.2  # metres inset from field bounds edges for waypoints
 
 
