@@ -196,6 +196,15 @@ class CustomReferee:
         if status_message is not None:
             self._state.status_message = status_message
 
+    def force_command(
+        self,
+        command: "RefereeCommand",
+        timestamp: float,
+        ball_placement_target=None,
+    ) -> None:
+        """God-mode override — bypasses the STOP-first guard."""
+        self._state.force_command(command, timestamp, ball_placement_target)
+
     # ------------------------------------------------------------------
     # Properties (read-only access for callers that need to inspect state)
     # ------------------------------------------------------------------
