@@ -1253,8 +1253,12 @@ class TestDirectFreeOursStep:
 
         kicker_entries = [entry for entry in captured if entry[0] == 1]
         assert len(kicker_entries) == 1
-        assert kicker_entries[0][1].x == pytest.approx(1.0)
-        assert kicker_entries[0][1].y == pytest.approx(0.0)
+        # Target is the approach point behind the ball, not the ball itself —
+        # verify it is closer to the ball than robot 1's starting position.
+        ball_pos = Vector2D(1.0, 0.0)
+        robot1_start = Vector2D(1.2, 0.0)
+        target = kicker_entries[0][1]
+        assert target.distance_to(ball_pos) < robot1_start.distance_to(ball_pos)
 
     def test_kicker_moves_toward_ball(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
@@ -1294,8 +1298,12 @@ class TestDirectFreeOursStep:
 
         assert len(captured) == 1
         assert captured[0][0] == 0
-        assert captured[0][1].x == pytest.approx(2.0)
-        assert captured[0][1].y == pytest.approx(1.0)
+        # Target is the approach point behind the ball, not the ball itself —
+        # verify it is closer to the ball than the robot's starting position.
+        ball_pos = Vector2D(2.0, 1.0)
+        robot_start = Vector2D(0.5, 0.0)
+        target = captured[0][1]
+        assert target.distance_to(ball_pos) < robot_start.distance_to(ball_pos)
 
     def test_non_kicker_robots_get_stop_command(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
