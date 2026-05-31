@@ -10,7 +10,6 @@ from serial import EIGHTBITS, PARITY_EVEN, STOPBITS_TWO, Serial
 from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.config.settings import (
     BAUD_RATE,
-    CONTROL_FREQUENCY,
     KICKER_COOLDOWN_TIMESTEPS,
     KICKER_PERSIST_TIMESTEPS,
     PORT,
@@ -18,10 +17,10 @@ from utama_core.config.settings import (
     TIMESTEP,
 )
 
-# Leaky-bucket dribbler thermal limiter defaults.
-# The bucket fills 1 step/step while dribbling, drains 1 step/step while not.
-# When full the dribbler is forced off until the bucket drains below the limit.
-DRIBBLER_MAX_ON_STEPS = int(30 * CONTROL_FREQUENCY)  # 30 s continuous dribble limit
+# Leaky-bucket dribbler thermal limiter.
+# The bucket accumulates real seconds while dribbling and drains at the same
+# rate while off.  When full the dribbler is forced off until it drains.
+DRIBBLER_MAX_ON_SECONDS: float = 30.0
 from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
@@ -77,10 +76,11 @@ class RealRobotController(AbstractRobotController):
         # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
         self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
 
-        # leaky-bucket dribbler thermal limiter: accumulated on-steps per robot (cmd ID).
-        # increments every step the dribbler is on, decrements every step it is off.
-        # dribbler is forced off when the bucket reaches DRIBBLER_MAX_ON_STEPS.
-        self._dribbler_steps: Dict[int, int] = {}
+        # leaky-bucket dribbler thermal limiter: accumulated wall-clock seconds per
+        # robot (cmd ID).  Fills while dribbling, drains while off, clamped to
+        # [0, DRIBBLER_MAX_ON_SECONDS].  Dribbler is forced off when bucket is full.
+        self._dribbler_seconds: Dict[int, float] = {}
+        self._dribbler_last_tick: Dict[int, float] = {}  # time.monotonic() of last call
 
     def get_robots_responses(self) -> List[RobotResponse]:
         HEADER = 0xAA
@@ -253,26 +253,31 @@ class RealRobotController(AbstractRobotController):
     def _update_dribbler_bucket(self, robot_id: int, requested: bool) -> bool:
         """Leaky-bucket thermal limiter for the dribbler.
 
-        Returns True if the dribbler should actually be turned on this step.
-        The bucket fills while dribbling and drains at the same rate while off,
-        so intermittent use is accounted for proportionally.
+        Returns True if the dribbler should actually be turned on this call.
+        The bucket accumulates real elapsed seconds while dribbling and drains
+        at the same rate while off, so intermittent use is accounted for
+        proportionally regardless of control-loop frequency.
         """
-        current = self._dribbler_steps.get(robot_id, 0)
-        at_limit = current >= DRIBBLER_MAX_ON_STEPS
+        now = time.monotonic()
+        dt = now - self._dribbler_last_tick.get(robot_id, now)
+        self._dribbler_last_tick[robot_id] = now
+
+        current = self._dribbler_seconds.get(robot_id, 0.0)
+        at_limit = current >= DRIBBLER_MAX_ON_SECONDS
 
         if requested and not at_limit:
-            self._dribbler_steps[robot_id] = current + 1
+            self._dribbler_seconds[robot_id] = min(current + dt, DRIBBLER_MAX_ON_SECONDS)
             return True
         elif requested and at_limit:
             warnings.warn(
                 f"Robot {robot_id}: dribbler thermal limit reached "
-                f"({DRIBBLER_MAX_ON_STEPS // CONTROL_FREQUENCY}s). "
+                f"({DRIBBLER_MAX_ON_SECONDS:.0f}s). "
                 "Forcing dribbler off until bucket drains."
             )
             return False
         else:
             # Not requested: drain the bucket
-            self._dribbler_steps[robot_id] = max(0, current - 1)
+            self._dribbler_seconds[robot_id] = max(0.0, current - dt)
             return False
 
     def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
