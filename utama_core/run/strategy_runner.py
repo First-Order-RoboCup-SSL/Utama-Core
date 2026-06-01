@@ -1093,6 +1093,16 @@ class StrategyRunner:
         finally:
             self.close()
 
+    def step_once(self):
+        """Advance the runner by one strategy/simulation tick.
+
+        This is a public wrapper around the internal single-step loop for
+        deterministic harnesses and scenario runners that need to apply events
+        or assertions between ticks without taking ownership of the runner's
+        game-loop internals.
+        """
+        self._run_step()
+
     def _run_step(self):
         """Perform one tick of the overall game loop.
 
