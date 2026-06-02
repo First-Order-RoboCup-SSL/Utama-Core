@@ -55,6 +55,7 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
         We setup the common blackboard keys to all behaviours.
         """
         is_opp_strategy = kwargs.get("is_opp_strat", False)
+        self._is_opp_strat: bool = is_opp_strategy
         self.blackboard: BaseBlackboard = self.attach_blackboard_client(
             name="GlobalBlackboard", namespace=BLACKBOARD_NAMESPACE_MAP[is_opp_strategy]
         )

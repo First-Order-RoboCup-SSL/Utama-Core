@@ -167,8 +167,8 @@ class RefereeMessageReceiver:
             referee_command_timestamp=self.command_timestamp,
             stage=self.stage,
             stage_time_left=self.stage_time_left,
-            blue_team=self.blue_info,
-            yellow_team=self.yellow_info,
+            blue_team=self.blue_info.snapshot(),
+            yellow_team=self.yellow_info.snapshot(),
             designated_position=designated_position,
             blue_team_on_positive_half=referee_packet.blue_team_on_positive_half,
             next_command=(
@@ -179,6 +179,9 @@ class RefereeMessageReceiver:
                 if referee_packet.HasField("current_action_time_remaining")
                 else None
             ),
+            game_events=list(referee_packet.game_events),
+            match_type=referee_packet.match_type,
+            status_message=referee_packet.status_message if referee_packet.status_message else None,
         )
 
         # add to referee buffer

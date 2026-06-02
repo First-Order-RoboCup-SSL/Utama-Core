@@ -30,9 +30,16 @@ class FormationEntry(NamedTuple):
 
 class FormationType(Enum):
     START_ONE = "START_ONE"
+    START_2V2 = "START_2V2"
 
 
 FORMATIONS = {
+    FormationType.START_2V2: [
+        # Robot 0: goalkeeper — just in front of defense area (normalised x = 0.775 → 1.55m on exhibition field)
+        FormationEntry(0.775, 0.0, np.pi),
+        # Robot 1: field player — centre of own half, clear of keep-out circle
+        FormationEntry(0.3, 0.0, np.pi),
+    ],
     FormationType.START_ONE: [
         FormationEntry(0.9, 0.0, np.pi),
         FormationEntry(0.75, -0.2, np.pi),

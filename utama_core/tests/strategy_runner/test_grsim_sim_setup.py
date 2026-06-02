@@ -57,7 +57,7 @@ def test_grsim_spawn_positions_and_ball_use_field_bounds_center():
         patch.object(
             StrategyRunner,
             "start_threads",
-            lambda self, vision_receiver: None,
+            lambda self, *args: None,
         ),
         patch.object(
             StrategyRunner,
@@ -135,7 +135,7 @@ def test_grsim_exp_ball_false_removes_ball_not_center_teleport():
         patch.object(
             StrategyRunner,
             "start_threads",
-            lambda self, vision_receiver: None,
+            lambda self, *args: None,
         ),
         patch.object(
             StrategyRunner,

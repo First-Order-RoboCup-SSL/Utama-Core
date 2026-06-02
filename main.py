@@ -1,4 +1,5 @@
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
+from utama_core.custom_referee import CustomReferee
 from utama_core.entities.game.field import FieldBounds
 from utama_core.replay import ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
@@ -14,6 +15,8 @@ from utama_core.strategy.examples import (
 
 
 def main():
+    referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=3, n_robots_blue=3, enable_gui=True)
+
     # Setup for real testing
     # Custom field size based setup in real
     custom_bounds = FieldBounds(top_left=(-2, 1.5), bottom_right=(1, -1.5))
@@ -28,8 +31,9 @@ def main():
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
         field_bounds=custom_bounds,
         full_field_dims=GREAT_EXHIBITION_FIELD_DIMS,
-        print_real_fps=True,
+        show_live_status=True,
         profiler_name=None,
+        referee=referee,
     )
     runner.my.strategy.render()
     runner.run()

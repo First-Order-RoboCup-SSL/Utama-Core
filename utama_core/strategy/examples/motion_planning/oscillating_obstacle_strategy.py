@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import time
 from typing import TYPE_CHECKING, List, Optional
 
 import py_trees
@@ -53,18 +52,22 @@ class OscillatingObstacleBehaviour(AbstractBehaviour):
 
     def initialise(self):
         """Record start time when behaviour is initialized."""
-        self.start_time = time.time()
+        # Wait to set start time until the first update to use game.ts
+        self.start_time = None
 
     def update(self) -> py_trees.common.Status:
         """Command robot to oscillate along specified axis."""
         game = self.blackboard.game
         rsim_env = self.blackboard.rsim_env
 
+        if self.start_time is None:
+            self.start_time = game.ts
+
         if not game.friendly_robots or self.obstacle_id not in game.friendly_robots:
             return py_trees.common.Status.RUNNING
 
         # Calculate oscillation based on elapsed time
-        elapsed_time = time.time() - self.start_time
+        elapsed_time = game.ts - self.start_time
         if self.direction_up_or_right:
             offset = self.amplitude * math.sin(self.speed * elapsed_time)
         else:

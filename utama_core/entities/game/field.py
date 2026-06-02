@@ -111,6 +111,10 @@ class Field:
         return self._field_dims.half_goal_width
 
     @property
+    def center_circle_radius(self) -> float:
+        return self._field_dims.center_circle_radius
+
+    @property
     def left_goal_line(self) -> np.ndarray:
         return self._field_dims.left_goal_line
 
@@ -129,6 +133,14 @@ class Field:
     @property
     def full_field(self) -> np.ndarray:
         return self._field_dims.full_field
+
+    @property
+    def half_defense_area_depth(self) -> float:
+        return self._field_dims.half_defense_area_depth
+
+    @property
+    def half_defense_area_width(self) -> float:
+        return self._field_dims.half_defense_area_width
 
     @property
     def full_field_bounds(self) -> FieldBounds:

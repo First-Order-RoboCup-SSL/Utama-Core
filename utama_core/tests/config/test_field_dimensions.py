@@ -22,6 +22,7 @@ from utama_core.entities.game.field import Field
             half_defense_area_depth=0.5,
             half_defense_area_width=1.0,
             half_goal_width=0.5,
+            center_circle_radius=0.5,
         ),
     ],
 )
@@ -40,7 +41,7 @@ def test_full_field_bounds_follow_resized_dimensions(dims: FieldDimensions):
     [
         STANDARD_FIELD_DIMS,
         GREAT_EXHIBITION_FIELD_DIMS,
-        FieldDimensions(5.2, 3.6, 0.7, 1.4, 0.6),
+        FieldDimensions(5.2, 3.6, 0.7, 1.4, 0.6, 0.5),
     ],
 )
 def test_full_field_polygon_matches_dimensions(dims: FieldDimensions):
@@ -51,8 +52,8 @@ def test_full_field_polygon_matches_dimensions(dims: FieldDimensions):
 
 
 def test_goal_lines_shift_when_full_field_is_resized():
-    small = FieldDimensions(3.0, 2.0, 0.5, 1.0, 0.5)
-    large = FieldDimensions(6.0, 2.0, 0.5, 1.0, 0.5)
+    small = FieldDimensions(3.0, 2.0, 0.5, 1.0, 0.5, 0.5)
+    large = FieldDimensions(6.0, 2.0, 0.5, 1.0, 0.5, 0.5)
 
     assert_array_equal(small.right_goal_line, np.array([(3.0, 0.5), (3.0, -0.5)]))
     assert_array_equal(large.right_goal_line, np.array([(6.0, 0.5), (6.0, -0.5)]))
@@ -61,7 +62,7 @@ def test_goal_lines_shift_when_full_field_is_resized():
 
 
 def test_defense_areas_track_resized_full_length():
-    dims = FieldDimensions(5.0, 3.0, 0.75, 1.25, 0.5)
+    dims = FieldDimensions(5.0, 3.0, 0.75, 1.25, 0.5, 0.5)
 
     expected_right = np.array([(5.0, 1.25), (3.5, 1.25), (3.5, -1.25), (5.0, -1.25)])
     expected_left = np.array([(-5.0, 1.25), (-3.5, 1.25), (-3.5, -1.25), (-5.0, -1.25)])
@@ -72,7 +73,7 @@ def test_defense_areas_track_resized_full_length():
 
 @pytest.mark.parametrize("team_is_right", [True, False])
 def test_field_goal_lines_match_resized_dimensions(team_is_right: bool):
-    dims = FieldDimensions(6.0, 4.0, 0.5, 1.0, 0.5)
+    dims = FieldDimensions(6.0, 4.0, 0.5, 1.0, 0.5, 0.5)
     field = Field(
         my_team_is_right=team_is_right,
         field_dims=dims,
@@ -89,7 +90,7 @@ def test_field_goal_lines_match_resized_dimensions(team_is_right: bool):
 
 @pytest.mark.parametrize("team_is_right", [True, False])
 def test_field_reports_goal_lines_present_on_full_resized_bounds(team_is_right: bool):
-    dims = FieldDimensions(6.0, 4.0, 0.5, 1.0, 0.5)
+    dims = FieldDimensions(6.0, 4.0, 0.5, 1.0, 0.5, 0.5)
     field = Field(
         my_team_is_right=team_is_right,
         field_dims=dims,
@@ -104,7 +105,7 @@ def test_field_reports_goal_lines_present_on_full_resized_bounds(team_is_right: 
 def test_field_reports_goal_lines_absent_when_bounds_crop_goal_width(
     team_is_right: bool,
 ):
-    dims = FieldDimensions(6.0, 4.0, 0.5, 1.0, 0.5)
+    dims = FieldDimensions(6.0, 4.0, 0.5, 1.0, 0.5, 0.5)
     cropped_bounds = FieldBounds(top_left=(-6.0, 0.4), bottom_right=(6.0, -0.4))
     field = Field(
         my_team_is_right=team_is_right,
@@ -126,6 +127,7 @@ def test_field_reports_goal_lines_absent_when_bounds_crop_goal_width(
                 "half_defense_area_depth": 0.5,
                 "half_defense_area_width": 1.0,
                 "half_goal_width": 0.5,
+                "center_circle_radius": 0.5,
             },
             "Field length/width must be positive",
         ),
@@ -136,6 +138,7 @@ def test_field_reports_goal_lines_absent_when_bounds_crop_goal_width(
                 "half_defense_area_depth": 0.0,
                 "half_defense_area_width": 1.0,
                 "half_goal_width": 0.5,
+                "center_circle_radius": 0.5,
             },
             "Goal/defense measurements must be positive",
         ),
@@ -146,6 +149,7 @@ def test_field_reports_goal_lines_absent_when_bounds_crop_goal_width(
                 "half_defense_area_depth": 0.6,
                 "half_defense_area_width": 1.0,
                 "half_goal_width": 0.5,
+                "center_circle_radius": 0.5,
             },
             "exceeds field length",
         ),
@@ -156,6 +160,7 @@ def test_field_reports_goal_lines_absent_when_bounds_crop_goal_width(
                 "half_defense_area_depth": 0.5,
                 "half_defense_area_width": 1.1,
                 "half_goal_width": 0.5,
+                "center_circle_radius": 0.5,
             },
             "Defense width .* exceeds field width",
         ),
@@ -166,6 +171,7 @@ def test_field_reports_goal_lines_absent_when_bounds_crop_goal_width(
                 "half_defense_area_depth": 0.5,
                 "half_defense_area_width": 1.0,
                 "half_goal_width": 1.1,
+                "center_circle_radius": 0.5,
             },
             "Goal width .* exceeds field width",
         ),
@@ -176,8 +182,31 @@ def test_field_reports_goal_lines_absent_when_bounds_crop_goal_width(
                 "half_defense_area_depth": 0.5,
                 "half_defense_area_width": 0.6,
                 "half_goal_width": 0.8,
+                "center_circle_radius": 0.5,
             },
             "should not exceed defense width",
+        ),
+        (
+            {
+                "full_field_half_length": 4.5,
+                "full_field_half_width": 3.0,
+                "half_defense_area_depth": 0.5,
+                "half_defense_area_width": 1.0,
+                "half_goal_width": 0.5,
+                "center_circle_radius": 0.0,
+            },
+            "center_circle_radius must be positive",
+        ),
+        (
+            {
+                "full_field_half_length": 4.5,
+                "full_field_half_width": 3.0,
+                "half_defense_area_depth": 0.5,
+                "half_defense_area_width": 1.0,
+                "half_goal_width": 0.5,
+                "center_circle_radius": 3.1,
+            },
+            "must not exceed field half-width",
         ),
     ],
 )
@@ -187,7 +216,7 @@ def test_invalid_field_dimensions_raise_value_errors(kwargs, error_pattern: str)
 
 
 def test_cached_geometry_properties_return_same_objects():
-    dims = FieldDimensions(4.5, 3.0, 0.5, 1.0, 0.5)
+    dims = FieldDimensions(4.5, 3.0, 0.5, 1.0, 0.5, 0.5)
 
     assert dims.full_field is dims.full_field
     assert dims.full_field_bounds is dims.full_field_bounds

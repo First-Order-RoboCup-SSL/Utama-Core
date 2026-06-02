@@ -109,3 +109,25 @@ class TeamInfo:
 
     def add_timeout_time(self, time: int):
         self.timeout_time += time
+
+    def snapshot(self) -> "TeamInfo":
+        """Return a new TeamInfo with a copy of the current state."""
+        return TeamInfo(
+            name=self.name,
+            score=self.score,
+            red_cards=self.red_cards,
+            yellow_card_times=list(self.yellow_card_times),
+            yellow_cards=self.yellow_cards,
+            timeouts=self.timeouts,
+            timeout_time=self.timeout_time,
+            goalkeeper=self.goalkeeper,
+            foul_counter=self.foul_counter,
+            ball_placement_failures=self.ball_placement_failures,
+            can_place_ball=self.can_place_ball,
+            max_allowed_bots=self.max_allowed_bots,
+            bot_substitution_intent=self.bot_substitution_intent,
+            ball_placement_failures_reached=self.ball_placement_failures_reached,
+            bot_substitution_allowed=self.bot_substitution_allowed,
+            bot_substitutions_left=self.bot_substitutions_left,
+            bot_substitution_time_left=self.bot_substitution_time_left,
+        )
