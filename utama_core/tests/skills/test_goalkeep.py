@@ -164,6 +164,94 @@ def test_goalkeep_uses_predicted_intercept_inside_goal(monkeypatch):
     assert captured["target"] == Vector2D(_LEFT_KEEPER_X, 0.2)
 
 
+def test_goalkeep_single_keeper_no_prediction_tracks_ball_y(monkeypatch):
+    game = SimpleNamespace(
+        my_team_is_right=False,
+        field=_std_field(False),
+        friendly_robots={
+            0: SimpleNamespace(p=Vector2D(-4.2, 0.0)),
+        },
+        ball=SimpleNamespace(
+            p=Vector3D(-1.0, 0.2, 0.0),
+            v=Vector3D(1.0, 0.0, 0.0),
+        ),
+    )
+    captured = {}
+
+    monkeypatch.setattr(gk, "predict_ball_pos_at_x", lambda game, x: None)
+
+    def fake_go_to_point(game, motion_controller, robot_id, target, dribbling=False):
+        captured["target"] = target
+        return "sentinel-command"
+
+    monkeypatch.setattr(gk, "go_to_point", fake_go_to_point)
+
+    result = gk.goalkeep(game, motion_controller=object(), robot_id=0)
+
+    assert result == "sentinel-command"
+    assert captured["target"] == Vector2D(_LEFT_KEEPER_X, 0.2)
+
+
+def test_goalkeep_single_keeper_no_prediction_clamps_to_upper_post(monkeypatch):
+    game = SimpleNamespace(
+        my_team_is_right=False,
+        field=_custom_field(-1.5, 0.4),
+        friendly_robots={
+            0: SimpleNamespace(p=Vector2D(-1.35, 0.0)),
+        },
+        ball=SimpleNamespace(
+            p=Vector3D(-0.679, 0.623, 0.0),
+            v=Vector3D(0.078, -2.35, 0.0),
+        ),
+    )
+    captured = {}
+    keeper_x = -1.5 + ROBOT_RADIUS
+    post_limit = 0.4 - ROBOT_RADIUS
+
+    monkeypatch.setattr(gk, "predict_ball_pos_at_x", lambda game, x: None)
+
+    def fake_go_to_point(game, motion_controller, robot_id, target, dribbling=False):
+        captured["target"] = target
+        return "sentinel-command"
+
+    monkeypatch.setattr(gk, "go_to_point", fake_go_to_point)
+
+    gk.goalkeep(game, motion_controller=object(), robot_id=0)
+
+    assert captured["target"].x == pytest.approx(keeper_x)
+    assert captured["target"].y == pytest.approx(post_limit)
+
+
+def test_goalkeep_single_keeper_no_prediction_clamps_to_lower_post(monkeypatch):
+    game = SimpleNamespace(
+        my_team_is_right=False,
+        field=_custom_field(-1.5, 0.4),
+        friendly_robots={
+            0: SimpleNamespace(p=Vector2D(-1.35, 0.0)),
+        },
+        ball=SimpleNamespace(
+            p=Vector3D(-0.626, -0.495, 0.0),
+            v=Vector3D(0.002, 0.001, 0.0),
+        ),
+    )
+    captured = {}
+    keeper_x = -1.5 + ROBOT_RADIUS
+    post_limit = 0.4 - ROBOT_RADIUS
+
+    monkeypatch.setattr(gk, "predict_ball_pos_at_x", lambda game, x: None)
+
+    def fake_go_to_point(game, motion_controller, robot_id, target, dribbling=False):
+        captured["target"] = target
+        return "sentinel-command"
+
+    monkeypatch.setattr(gk, "go_to_point", fake_go_to_point)
+
+    gk.goalkeep(game, motion_controller=object(), robot_id=0)
+
+    assert captured["target"].x == pytest.approx(keeper_x)
+    assert captured["target"].y == pytest.approx(-post_limit)
+
+
 def test_goalkeep_three_robots_uses_midpoint_of_two_shadow_edges(monkeypatch):
     game = SimpleNamespace(
         my_team_is_right=False,

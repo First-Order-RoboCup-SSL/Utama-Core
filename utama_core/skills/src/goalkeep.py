@@ -8,6 +8,7 @@ from utama_core.motion_planning.src.common.motion_controller import MotionContro
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.utils.defense_utils import (
+    clamp_y,
     intersection_with_x_line,
     single_defender_stop_y,
 )
@@ -34,7 +35,9 @@ def goalkeep(
 
     stop_y = 0.0
 
-    if len(game.friendly_robots) == 2:
+    if len(game.friendly_robots) == 1:
+        stop_y = clamp_y(ball_pos.y, post_limit)
+    elif len(game.friendly_robots) == 2:
         try:
             # Check if defender is between ball and goal (side-aware)
             defender_between = (game.my_team_is_right and game.friendly_robots[1].p.x > ball_pos.x) or (
