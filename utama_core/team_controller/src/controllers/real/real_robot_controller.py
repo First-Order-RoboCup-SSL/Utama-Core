@@ -16,6 +16,13 @@ from utama_core.config.settings import (
     TIMEOUT,
     TIMESTEP,
 )
+
+# Leaky-bucket dribbler thermal limiter.
+# The bucket accumulates real seconds while dribbling and drains at the same
+# rate while off.  When full the dribbler is forced off until the bucket drains
+# to DRIBBLER_RESUME_SECONDS (hysteresis), preventing rapid on/off oscillation.
+DRIBBLER_MAX_ON_SECONDS: float = 30.0
+DRIBBLER_RESUME_SECONDS: float = 15.0  # must drain to 50% before re-enabling
 from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
@@ -24,7 +31,6 @@ from utama_core.team_controller.src.controllers.common.robot_controller_abstract
 
 logger = logging.getLogger(__name__)
 
-# NB: A major assumption is that the robot IDs are 0-5 for the friendly team.
 MAX_VEL = REAL_PARAMS.MAX_VEL
 MAX_ANGULAR_VEL = REAL_PARAMS.MAX_ANGULAR_VEL
 
@@ -44,18 +50,41 @@ class RealRobotController(AbstractRobotController):
         n_robots (int): The number of robots in the team. Directly affects output buffer size. Default is 6.
     """
 
-    def __init__(self, is_team_yellow: bool, n_friendly: int):
+    def __init__(
+        self,
+        is_team_yellow: bool,
+        n_friendly: int,
+        vision_to_cmd_mapping: Optional[Dict[int, int]] = None,
+        serial_port: Optional[Serial] = None,
+    ):
         super().__init__(is_team_yellow, n_friendly)
-        self._serial_port = self._init_serial()
+        self._serial_port = self._init_serial() if serial_port is None else serial_port
+        self._sharing_friendly_transmitter = serial_port is not None
         self._rbt_cmd_size = 10  # packet size for one robot
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the feedback packet received from the robots
         self._robots_info: List[RobotResponse] = [None] * self._n_friendly
-        logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
+        if serial_port is None:
+            logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
+        else:
+            logger.debug(f"Sharing serial port: {self._serial_port.port}")
         self._assigned_mapping = {}  # mapping of robot_id to index in the out_packet
+        self._vision_to_cmd_mapping = vision_to_cmd_mapping if vision_to_cmd_mapping is not None else {}
+        cmd_to_vision_mapping = {v: k for k, v in self._vision_to_cmd_mapping.items()}
+        if len(cmd_to_vision_mapping) != len(self._vision_to_cmd_mapping):
+            raise ValueError("vision_to_cmd_mapping must be one-to-one: duplicate command IDs are not allowed.")
+        self._cmd_to_vision_mapping = cmd_to_vision_mapping
 
         # track last kick time for each robot to transmit kick as HIGH for n timesteps after command
         self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
+
+        # leaky-bucket dribbler thermal limiter: accumulated wall-clock seconds per
+        # robot (cmd ID).  Fills while dribbling, drains while off, clamped to
+        # [0, DRIBBLER_MAX_ON_SECONDS].  Dribbler is forced off when bucket is full.
+        self._dribbler_seconds: Dict[int, float] = {}
+        self._dribbler_last_tick: Dict[int, float] = {}  # time.monotonic() of last call
+        self._dribbler_limit_warned: set[int] = set()  # robots that have already been warned this event
+        self._dribbler_throttled: set[int] = set()  # robots currently in post-limit cooldown (hysteresis)
 
     def get_robots_responses(self) -> List[RobotResponse]:
         HEADER = 0xAA
@@ -72,6 +101,7 @@ class RealRobotController(AbstractRobotController):
             self._buffer.extend(self._serial_port.read(bytes_available))
 
         responses = []
+        responded_ids = set()
 
         while True:
             # 2. Look for header
@@ -112,7 +142,14 @@ class RealRobotController(AbstractRobotController):
 
             # Guard against IndexError just in case, though validated by 'length' check
             if len(data) >= 1:
-                responses.append(RobotResponse(robot_id, has_ball=(data[0] & 0x01) != 0))
+                # cmd IDs are returned as-is; StrategyRunner remaps them to vision IDs via _split_robot_responses_by_team
+                if robot_id in responded_ids:
+                    warnings.warn(
+                        f"Received multiple responses for robot ID {robot_id} in the same cycle. Ignoring subsequent responses."
+                    )
+                else:
+                    responses.append(RobotResponse(robot_id, has_ball=(data[0] & 0x01) != 0))
+                    responded_ids.add(robot_id)
 
             # 8. Clear parsed packet from buffer
             del self._buffer[:packet_len]
@@ -163,6 +200,12 @@ class RealRobotController(AbstractRobotController):
             robot_id (int): The ID of the robot.
             command (RobotCommand): A named tuple containing the robot command with keys: 'local_forward_vel', 'local_left_vel', 'angular_vel', 'kick', 'chip', 'dribble'.
         """
+        if robot_id in self._vision_to_cmd_mapping:
+            robot_id = self._vision_to_cmd_mapping[robot_id]
+        elif self._sharing_friendly_transmitter:
+            warnings.warn(
+                f"Robot ID {robot_id} has no entry in vision_to_cmd_mapping on a shared transmitter setup; command will be sent using the raw vision ID."
+            )
         if robot_id in self._assigned_mapping:
             warnings.warn(
                 f"Robot ID {robot_id} has already been assigned a command in this cycle. Overwriting previous command."
@@ -211,10 +254,54 @@ class RealRobotController(AbstractRobotController):
     #         self._robots_info[i] = info
     #         data_in = data_in << 1  # shift to the next robot's data
 
+    def _update_dribbler_bucket(self, robot_id: int, requested: bool) -> bool:
+        """Leaky-bucket thermal limiter for the dribbler.
+
+        Returns True if the dribbler should actually be turned on this call.
+        The bucket accumulates real elapsed seconds while dribbling and drains
+        at the same rate while off, so intermittent use is accounted for
+        proportionally regardless of control-loop frequency.
+        """
+        now = time.monotonic()
+        dt = now - self._dribbler_last_tick.get(robot_id, now)
+        self._dribbler_last_tick[robot_id] = now
+
+        current = self._dribbler_seconds.get(robot_id, 0.0)
+        at_limit = current >= DRIBBLER_MAX_ON_SECONDS
+
+        if at_limit:
+            self._dribbler_throttled.add(robot_id)
+
+        throttled = robot_id in self._dribbler_throttled
+
+        if requested and not throttled:
+            self._dribbler_seconds[robot_id] = min(current + dt, DRIBBLER_MAX_ON_SECONDS)
+            self._dribbler_limit_warned.discard(robot_id)
+            return True
+        elif requested and throttled:
+            if robot_id not in self._dribbler_limit_warned:
+                warnings.warn(
+                    f"Robot {robot_id}: dribbler thermal limit reached "
+                    f"({DRIBBLER_MAX_ON_SECONDS:.0f}s). "
+                    f"Forcing dribbler off until bucket drains to {DRIBBLER_RESUME_SECONDS:.0f}s."
+                )
+                self._dribbler_limit_warned.add(robot_id)
+            # still drain while forced off
+            self._dribbler_seconds[robot_id] = max(0.0, current - dt)
+            if self._dribbler_seconds[robot_id] <= DRIBBLER_RESUME_SECONDS:
+                self._dribbler_throttled.discard(robot_id)
+                self._dribbler_limit_warned.discard(robot_id)
+            return False
+        else:
+            # Not requested: drain the bucket
+            self._dribbler_seconds[robot_id] = max(0.0, current - dt)
+            if self._dribbler_seconds[robot_id] <= DRIBBLER_RESUME_SECONDS:
+                self._dribbler_throttled.discard(robot_id)
+                self._dribbler_limit_warned.discard(robot_id)
+            return False
+
     def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
         """Generates the command buffer to be sent to the robot."""
-        assert robot_id < 6, "Invalid robot_id. Must be between 0 and 5."
-
         # endianness: little endian
         packet = bytearray(
             [
@@ -228,8 +315,10 @@ class RealRobotController(AbstractRobotController):
             ]
         )
 
+        dribble_allowed = self._update_dribbler_bucket(robot_id, c_command.dribble)
+
         dribbler_speed = 0
-        if c_command.dribble:
+        if dribble_allowed:
             dribbler_speed = 0xC000  # set bits 15:14 to 11
             dribbler_speed |= 4095 & 0x3FFF  # set bits 13:0 to 4095
 
@@ -371,6 +460,18 @@ class RealRobotController(AbstractRobotController):
     @property
     def in_packet_size(self) -> int:
         return self._in_packet_size
+
+    @property
+    def vision_to_cmd_mapping(self) -> Dict[int, int]:
+        return self._vision_to_cmd_mapping
+
+    @property
+    def cmd_to_vision_mapping(self) -> Dict[int, int]:
+        return self._cmd_to_vision_mapping
+
+    @property
+    def sharing_friendly_transmitter(self) -> bool:
+        return self._sharing_friendly_transmitter
 
 
 if __name__ == "__main__":

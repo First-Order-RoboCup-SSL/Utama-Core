@@ -50,6 +50,7 @@ class RSimSubprocessWrapper:
             text=True,
             bufsize=1,
             env=env,
+            cwd=project_root,
         )
 
     def step(self, commands: np.ndarray):

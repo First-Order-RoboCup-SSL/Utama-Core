@@ -43,3 +43,8 @@ class RSimController(AbstractSimController):
     @property
     def env(self):
         return self._env
+
+    @property
+    def latest_sent_commands(self):
+        """Most recent low-level rSim commands, if a frame has been stepped."""
+        return self._env.sent_commands
