@@ -1,3 +1,5 @@
+import math
+
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
@@ -14,7 +16,8 @@ def go_to_ball(
     ball = game.ball.p.to_2d()
     robot = game.friendly_robots[robot_id].p
 
-    target_oren = robot.angle_to(ball)
+    # Kicker/dribbler is on the back of the robot; approach with back facing ball.
+    target_oren = (robot.angle_to(ball) + math.pi) % (2 * math.pi) - math.pi
 
     if dribble_when_near:
         distance = robot.distance_to(ball)
