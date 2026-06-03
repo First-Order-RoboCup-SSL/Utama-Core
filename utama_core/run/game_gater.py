@@ -56,8 +56,14 @@ class GameGater:
 
         def print_current_vision(game_frame: GameFrame):
             print("Waiting for valid game frame...")
-            print(f"Friendly robots: {len(game_frame.friendly_robots)}/{exp_friendly}")
-            print(f"Enemy robots: {len(game_frame.enemy_robots)}/{exp_enemy}")
+            friendly_ids = sorted(game_frame.friendly_robots.keys())
+            enemy_ids = sorted(game_frame.enemy_robots.keys())
+            print(f"Friendly robots: {len(game_frame.friendly_robots)}/{exp_friendly}  observed IDs: {friendly_ids}")
+            if my_vision_to_cmd_mapping is not None:
+                print(f"  expected IDs (from mapping): {sorted(my_vision_to_cmd_mapping.keys())}")
+            print(f"Enemy robots: {len(game_frame.enemy_robots)}/{exp_enemy}  observed IDs: {enemy_ids}")
+            if opp_vision_to_cmd_mapping is not None:
+                print(f"  expected IDs (from mapping): {sorted(opp_vision_to_cmd_mapping.keys())}")
             print(f"Ball present: {game_frame.ball is not None} (exp: {exp_ball})\n")
 
         def _add_frame(my_game_frame: GameFrame, opp_game_frame: GameFrame) -> Tuple[GameFrame, Optional[GameFrame]]:

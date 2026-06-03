@@ -188,6 +188,34 @@ def test_out_of_bounds_friendly_not_added():
     assert 1 not in result.friendly_robots
 
 
+def test_allowlist_filters_stray_yellow_robot():
+    # Vision sees yellow IDs 0 and 1; allowlist only permits ID 0.
+    raw_yellow = [RawRobotData(0, -1, -1, 0, 1), RawRobotData(1, -2, -2, 0, 1)]
+    raw_balls = [RawBallData(0, 0, 0, 0)]
+    frames = [RawVisionData(0, raw_yellow, [], raw_balls, 0)]
+
+    p = PositionRefiner(full_field_dims, allowed_yellow_ids=frozenset({0}))
+    g = GameFrame(0, True, True, {}, {}, bfac(0, 0))
+    result = p.refine(g, frames)
+
+    assert 0 in result.friendly_robots
+    assert 1 not in result.friendly_robots
+
+
+def test_no_allowlist_passes_all_robots():
+    # Without an allowlist, both IDs should be present.
+    raw_yellow = [RawRobotData(0, -1, -1, 0, 1), RawRobotData(1, -2, -2, 0, 1)]
+    raw_balls = [RawBallData(0, 0, 0, 0)]
+    frames = [RawVisionData(0, raw_yellow, [], raw_balls, 0)]
+
+    p = PositionRefiner(full_field_dims)
+    g = GameFrame(0, True, True, {}, {}, bfac(0, 0))
+    result = p.refine(g, frames)
+
+    assert 0 in result.friendly_robots
+    assert 1 in result.friendly_robots
+
+
 if __name__ == "__main__":
     test_combining_single_team_combines_single_robot()
     test_combining_with_robot_not_in_game_adds()
