@@ -21,7 +21,7 @@ from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEn
 
 
 class FastPathPlanner:
-    def __init__(self, env: SSLStandardEnv):
+    def __init__(self, env: SSLStandardEnv | None):
         self._env = env
         self.config = config
         self.OBSTACLE_CLEARANCE = self.config.OBSTACLE_CLEARANCE
@@ -62,15 +62,13 @@ class FastPathPlanner:
 
                 obstacle_list.append(obstacle_segment)
 
-                # DRAWING: Show the projected velocity line in Red
-                self._env.draw_line(obstacle_segment, color="Red")
-
         # Field bounds as obstacles (static, usually not drawn to keep screen clean)
         tl, br = np.array(field_bounds.top_left), np.array(field_bounds.bottom_right)
         tr = np.array([field_bounds.bottom_right[0], field_bounds.top_left[1]])
         bl = np.array([field_bounds.top_left[0], field_bounds.bottom_right[1]])
 
         obstacle_list.extend([(tl, tr), (tr, br), (br, bl), (bl, tl)])
+
         return obstacle_list
 
     def _find_subgoal(
@@ -214,11 +212,10 @@ class FastPathPlanner:
         direction = trajectory[0][1] - robot_position
         unit_vec = direction / np.linalg.norm(direction)
         new_target = robot_position + unit_vec * self.PROJECTION_DISTANCE
-
+        return new_target
         # Removed redundant math ops by caching distance calls here too
         dist_new_target = distance(new_target, robot_position)
         dist_trajectory = distance(robot_position, trajectory[0][1])
-
         if dist_new_target < dist_trajectory:
             return trajectory[0][1]
         else:
@@ -239,7 +236,7 @@ class FastPathPlanner:
                     if np.linalg.norm(push_dir) == 0:
                         push_dir = robot_pos - closest_pt
                     unit_push = push_dir / np.linalg.norm(push_dir)
-                    safe_target = closest_pt + unit_push * (self.OBSTACLE_CLEARANCE * 1.05)
+                    safe_target = closest_pt - unit_push * (self.OBSTACLE_CLEARANCE * 1.05)
                     collision_found = True
             if not collision_found:
                 break
@@ -270,12 +267,14 @@ class FastPathPlanner:
         # 4. Plan geometric path
         final_trajectory, _ = self.check_segment((our_pos, safe_target), obstacles, 0, safe_target, field_bounds)
 
-        # 5. Draw the resulting safe path segments
-        for i in final_trajectory:
-            self._env.draw_line(i)
+        # 5. Draw the resulting safe path segments when an RSim renderer is available.
+        if self._env is not None:
+            for i in final_trajectory:
+                self._env.draw_line(i)
 
         # 6. Smooth the path and draw the final "Carrot" target in Blue
         new_target = self.smooth_path(final_trajectory, safe_target, our_pos)
-        self._env.draw_line((our_pos, new_target), color="Blue")
+        if self._env is not None:
+            self._env.draw_line((our_pos, new_target), color="Blue")
 
         return new_target
