@@ -53,6 +53,10 @@ GUI_PORT = 8080
 MY_TEAM_IS_YELLOW = True
 MY_TEAM_IS_RIGHT = True
 
+YELLOW_VISION_TO_CMD: dict[int, int] = {
+    1: 3,  # vision 1 → firmware 3
+}
+
 # ---------------------------------------------------------------------------
 # Referee profile
 #
@@ -123,6 +127,7 @@ def main() -> None:
         exp_enemy=0,
         full_field_dims=GREAT_EXHIBITION_FIELD_DIMS,
         referee=referee,
+        yellow_vision_to_cmd_mapping=YELLOW_VISION_TO_CMD,
         show_live_status=True,
     )
 
