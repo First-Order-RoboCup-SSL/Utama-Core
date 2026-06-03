@@ -5,6 +5,8 @@ import random
 from dataclasses import dataclass
 from typing import Dict
 
+import numpy as np
+
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
@@ -139,6 +141,9 @@ def test_random_movement_same_team(
     n_robots = 2
 
     seed = 42
+
+    random.seed(seed)
+    np.random.seed(seed)
 
     scenario = RandomMovementScenario(
         n_robots=n_robots,
