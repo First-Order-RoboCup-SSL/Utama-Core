@@ -208,15 +208,6 @@ class StrategyRunner:
 
         my_trusted_ir = yellow_trusted_ir_robots if my_team_is_yellow else blue_trusted_ir_robots
         opp_trusted_ir = blue_trusted_ir_robots if my_team_is_yellow else yellow_trusted_ir_robots
-
-        # Derive per-color roster allowlists from the vision→cmd mappings (real mode only).
-        # Any robot ID seen by vision that is not in the allowlist is silently dropped so that
-        # stray detections from robots not in play never pollute the game state.
-        _allowed_yellow = (
-            frozenset(yellow_vision_to_cmd_mapping.keys()) if yellow_vision_to_cmd_mapping is not None else None
-        )
-        _allowed_blue = frozenset(blue_vision_to_cmd_mapping.keys()) if blue_vision_to_cmd_mapping is not None else None
-
         self.my, self.opp = self._setup_sides_data(
             strategy,
             opp_strategy,
@@ -225,8 +216,6 @@ class StrategyRunner:
             opp_control_scheme,
             my_trusted_ir_robots=my_trusted_ir,
             opp_trusted_ir_robots=opp_trusted_ir,
-            allowed_yellow_ids=_allowed_yellow,
-            allowed_blue_ids=_allowed_blue,
         )
 
         ### functions below rely on self.my and self.opp ###
@@ -492,8 +481,6 @@ class StrategyRunner:
         opp_control_scheme: Optional[str],
         my_trusted_ir_robots: Optional[FrozenSet[int]] = None,
         opp_trusted_ir_robots: Optional[FrozenSet[int]] = None,
-        allowed_yellow_ids: Optional[FrozenSet[int]] = None,
-        allowed_blue_ids: Optional[FrozenSet[int]] = None,
     ) -> Tuple[SideRuntime, Optional[SideRuntime]]:
         """Setup the data structures for both sides (my team and opponent)
         Args:
@@ -504,8 +491,6 @@ class StrategyRunner:
             opp_control_scheme (Optional[str]): Name of the motion control scheme to use for the opponent team. If not set, uses same as friendly.
             my_trusted_ir_robots (FrozenSet[int], optional): Vision IDs of friendly robots whose IR sensor is trusted.
             opp_trusted_ir_robots (FrozenSet[int], optional): Vision IDs of opponent robots whose IR sensor is trusted.
-            allowed_yellow_ids (FrozenSet[int], optional): Vision IDs of yellow robots in play; others are ignored.
-            allowed_blue_ids (FrozenSet[int], optional): Vision IDs of blue robots in play; others are ignored.
 
         Side effect: Initializes the SideRuntime for both friendly and opponent sides, including their strategies, refiners, and motion controllers.
 
@@ -518,8 +503,6 @@ class StrategyRunner:
             filtering=filtering,
             exp_ball=self.exp_ball,
             trusted_ir_robots=my_trusted_ir_robots,
-            allowed_yellow_ids=allowed_yellow_ids,
-            allowed_blue_ids=allowed_blue_ids,
         )
         my_motion_controller = get_control_scheme(control_scheme)
         my_strategy.setup_strategy_blackboard(is_opp_strat=False)
@@ -537,8 +520,6 @@ class StrategyRunner:
                 filtering=filtering,
                 exp_ball=self.exp_ball,
                 trusted_ir_robots=opp_trusted_ir_robots,
-                allowed_yellow_ids=allowed_yellow_ids,
-                allowed_blue_ids=allowed_blue_ids,
             )
             opp_motion_controller = (
                 get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
@@ -866,8 +847,6 @@ class StrategyRunner:
         filtering: bool,
         exp_ball: bool = True,
         trusted_ir_robots: Optional[FrozenSet[int]] = None,
-        allowed_yellow_ids: Optional[FrozenSet[int]] = None,
-        allowed_blue_ids: Optional[FrozenSet[int]] = None,
     ) -> tuple[PositionRefiner, VelocityRefiner, RobotInfoRefiner]:
         """
         Initialize the position, velocity, and robot info refiners.
@@ -878,10 +857,6 @@ class StrategyRunner:
                              allowed to return None if no ball is detected in raw vision data.
             trusted_ir_robots (FrozenSet[int], optional): Vision IDs of robots whose IR sensor is trusted.
                 See RobotInfoRefiner for details.
-            allowed_yellow_ids (FrozenSet[int], optional): Vision IDs of yellow robots that are in play.
-                Any robot ID seen by vision that is not in this set will be ignored.
-            allowed_blue_ids (FrozenSet[int], optional): Vision IDs of blue robots that are in play.
-                Any robot ID seen by vision that is not in this set will be ignored.
         Returns:
             tuple: The initialized PositionRefiner, VelocityRefiner, and RobotInfoRefiner.
         """
@@ -889,8 +864,6 @@ class StrategyRunner:
             field_dims,
             filtering=filtering,
             exp_ball=exp_ball,
-            allowed_yellow_ids=allowed_yellow_ids,
-            allowed_blue_ids=allowed_blue_ids,
         )
         velocity_refiner = VelocityRefiner()
         robot_info_refiner = RobotInfoRefiner(trusted_ir_robots=trusted_ir_robots)
