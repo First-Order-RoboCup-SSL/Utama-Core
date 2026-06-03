@@ -22,7 +22,7 @@ def main():
     custom_bounds = FieldBounds(top_left=(-2, 1.5), bottom_right=(1, -1.5))
 
     runner = StrategyRunner(
-        strategy=RandomMovementStrategy(n_robots=2, field_bounds=custom_bounds, endpoint_tolerance=0.1, seed=42),
+        strategy=StartupStrategy(),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",
