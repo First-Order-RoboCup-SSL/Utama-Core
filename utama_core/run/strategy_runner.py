@@ -209,13 +209,31 @@ class StrategyRunner:
         my_trusted_ir = yellow_trusted_ir_robots if my_team_is_yellow else blue_trusted_ir_robots
         opp_trusted_ir = blue_trusted_ir_robots if my_team_is_yellow else yellow_trusted_ir_robots
 
-        # Derive per-color roster allowlists from the vision→cmd mappings (real mode only).
+        # Set self.opp to a sentinel before mapping validation so _validate_vision_to_cmd_mapping
+        # can check whether an opponent strategy is present (full SideRuntime is set later).
+        self.opp = opp_strategy  # temporary sentinel; overwritten by _setup_sides_data below
+
+        # Validate and store mappings before constructing refiners so that the
+        # allowlists passed to PositionRefiner are always derived from validated data.
+        self.yellow_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
+            yellow_vision_to_cmd_mapping, is_yellow=True
+        )
+        self.blue_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
+            blue_vision_to_cmd_mapping, is_yellow=False
+        )
+        self.yellow_cmd_to_vision_mapping = {v: k for k, v in self.yellow_vision_to_cmd_mapping.items()}
+        self.blue_cmd_to_vision_mapping = {v: k for k, v in self.blue_vision_to_cmd_mapping.items()}
+
+        if self.opp and self.mode == Mode.REAL:
+            self._check_no_cmd_duplicate_if_transmission_sharing(
+                self.yellow_vision_to_cmd_mapping, self.blue_vision_to_cmd_mapping
+            )
+
+        # Derive per-color roster allowlists from the validated mappings (real mode only).
         # Any robot ID seen by vision that is not in the allowlist is silently dropped so that
         # stray detections from robots not in play never pollute the game state.
-        _allowed_yellow = (
-            frozenset(yellow_vision_to_cmd_mapping.keys()) if yellow_vision_to_cmd_mapping is not None else None
-        )
-        _allowed_blue = frozenset(blue_vision_to_cmd_mapping.keys()) if blue_vision_to_cmd_mapping is not None else None
+        _allowed_yellow = frozenset(self.yellow_vision_to_cmd_mapping) or None
+        _allowed_blue = frozenset(self.blue_vision_to_cmd_mapping) or None
 
         self.my, self.opp = self._setup_sides_data(
             strategy,
@@ -233,21 +251,6 @@ class StrategyRunner:
 
         self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
         self._assert_exp_robots_and_ball(exp_friendly, exp_enemy, exp_ball)
-
-        # mapping for mismatch between vision and cmd ids
-        self.yellow_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
-            yellow_vision_to_cmd_mapping, is_yellow=True
-        )
-        self.blue_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
-            blue_vision_to_cmd_mapping, is_yellow=False
-        )
-        self.yellow_cmd_to_vision_mapping = {v: k for k, v in self.yellow_vision_to_cmd_mapping.items()}
-        self.blue_cmd_to_vision_mapping = {v: k for k, v in self.blue_vision_to_cmd_mapping.items()}
-
-        if self.opp and self.mode == Mode.REAL:
-            self._check_no_cmd_duplicate_if_transmission_sharing(
-                self.yellow_vision_to_cmd_mapping, self.blue_vision_to_cmd_mapping
-            )
 
         self._load_robot_controllers()
 
