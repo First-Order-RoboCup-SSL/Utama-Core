@@ -46,6 +46,7 @@ from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import GameGater
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
+from utama_core.run.vision_stream import GameFrameRenderer, RSimVisionStreamServer
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import (
     AbstractSimController,
@@ -135,6 +136,9 @@ class StrategyRunner:
             instance to use the in-process referee, ``OfficialReferee()`` to consume
             commands from the SSL game-controller over the network, or ``None``
             (default) to run without any referee input.
+        enable_vision_stream (bool, optional): Start a browser stream that renders
+            the current game frame using RSim-style graphics without opening RSim.
+            Defaults to True.
     """
 
     def __init__(
@@ -160,6 +164,9 @@ class StrategyRunner:
         filtering: bool = False,
         referee: RefereeSource = None,
         formation_type: Optional[FormationType] = None,
+        enable_vision_stream: bool = True,
+        vision_stream_http_port: int = 8765,
+        vision_stream_websocket_port: int = 8766,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -178,6 +185,8 @@ class StrategyRunner:
 
         self._stop_event = threading.Event()
         self._vision_receiver: Optional[VisionReceiver] = None
+        self.vision_stream: Optional[RSimVisionStreamServer] = None
+        self._vision_stream_renderer: Optional[GameFrameRenderer] = None
 
         if isinstance(self.referee, CustomReferee):
             from utama_core.custom_referee.geometry import RefereeGeometry
@@ -214,6 +223,8 @@ class StrategyRunner:
         # Load all game related data
         self._load_game()
         self._assert_exp_goals()
+        if enable_vision_stream:
+            self._start_vision_stream(vision_stream_http_port, vision_stream_websocket_port)
 
         # Seed the custom referee's internal clocks from the first real vision
         # timestamp so all timers are on the same timebase regardless of mode
@@ -258,6 +269,23 @@ class StrategyRunner:
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
+
+    def _start_vision_stream(self, http_port: int, websocket_port: int) -> None:
+        """Start the browser stream that mirrors refined game frames."""
+        try:
+            self._vision_stream_renderer = GameFrameRenderer(self.full_field_dims)
+            self.vision_stream = RSimVisionStreamServer(
+                http_port=http_port,
+                websocket_port=websocket_port,
+            )
+            self.vision_stream.start()
+            self._publish_vision_stream_frame()
+            self.logger.info("Vision stream available at %s", self.vision_stream.url)
+            print(f"Vision stream available at {self.vision_stream.url}")
+        except Exception:
+            self.vision_stream = None
+            self._vision_stream_renderer = None
+            self.logger.warning("Vision stream could not be started; continuing without browser video.", exc_info=True)
 
     def _handle_sigint(self, sig, frame):
         self._stop_event.set()
@@ -767,6 +795,8 @@ class StrategyRunner:
                 self.profiler.dump_stats(f"{self.profiler_name}.prof")
         if self.replay_writer:
             self.replay_writer.close()
+        if self.vision_stream:
+            self.vision_stream.stop()
         if self.rsim_env:
             self.rsim_env.close()
         if self._fps_live:
@@ -938,6 +968,7 @@ class StrategyRunner:
             if self.opp:
                 self._step_game(vision_frames, referee_data, True)
         self.toggle_opp_first = not self.toggle_opp_first
+        self._publish_vision_stream_frame()
 
         # --- rate limiting ---
         if self.mode != Mode.RSIM:
@@ -994,6 +1025,35 @@ class StrategyRunner:
 
                 self.elapsed_time = 0.0
                 self.num_frames_elapsed = 0
+
+    def _publish_vision_stream_frame(self) -> None:
+        """Publish the latest refined game frame to the browser stream."""
+        if self.vision_stream is None or self._vision_stream_renderer is None or self.my.current_game_frame is None:
+            return
+
+        self.vision_stream.publish_status(self._vision_stream_status())
+        frame = self._vision_stream_renderer.render(self.my.current_game_frame)
+        self.vision_stream.publish_rgb_frame(frame)
+
+    def _vision_stream_status(self) -> dict[str, object]:
+        """Build status metadata shown above the browser stream."""
+        stage_secs = max(0.0, self.referee_refiner.stage_time_left)
+        stage_min = int(stage_secs // 60)
+        stage_sec = int(stage_secs % 60)
+
+        my_strategy = self.my.strategy.__class__.__name__
+        opp_strategy = self.opp.strategy.__class__.__name__ if self.opp else "N/A"
+        strategy_yellow = my_strategy if self.my_team_is_yellow else opp_strategy
+        strategy_blue = opp_strategy if self.my_team_is_yellow else my_strategy
+
+        return {
+            "time_left": f"{stage_min}:{stage_sec:02d}",
+            "score_blue": self.referee_refiner.blue_team.score,
+            "score_yellow": self.referee_refiner.yellow_team.score,
+            "strategy_blue": strategy_blue,
+            "strategy_yellow": strategy_yellow,
+            "mode": self.mode.value,
+        }
 
     def _draw_rsim_field_bounds_overlay(self) -> None:
         """Draw active field bounds overlay in RSIM human render mode."""
