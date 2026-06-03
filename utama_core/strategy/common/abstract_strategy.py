@@ -12,6 +12,7 @@ from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PAT
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import Field, FieldBounds
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.math_utils import (
     assert_contains,
     assert_valid_bounding_box,
@@ -19,6 +20,7 @@ from utama_core.global_utils.math_utils import (
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command
+from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
 from utama_core.strategy.common.base_blackboard import BaseBlackboard
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
@@ -73,6 +75,55 @@ class SpaceRequirements:
     min_width: float
 
 
+_REFEREE_STOPPAGE_COMMANDS = frozenset(
+    {
+        RefereeCommand.HALT,
+        RefereeCommand.STOP,
+        RefereeCommand.PREPARE_KICKOFF_YELLOW,
+        RefereeCommand.PREPARE_KICKOFF_BLUE,
+        RefereeCommand.PREPARE_PENALTY_YELLOW,
+        RefereeCommand.PREPARE_PENALTY_BLUE,
+        RefereeCommand.DIRECT_FREE_YELLOW,
+        RefereeCommand.DIRECT_FREE_BLUE,
+        RefereeCommand.INDIRECT_FREE_YELLOW,
+        RefereeCommand.INDIRECT_FREE_BLUE,
+        RefereeCommand.TIMEOUT_YELLOW,
+        RefereeCommand.TIMEOUT_BLUE,
+        RefereeCommand.GOAL_YELLOW,
+        RefereeCommand.GOAL_BLUE,
+        RefereeCommand.BALL_PLACEMENT_YELLOW,
+        RefereeCommand.BALL_PLACEMENT_BLUE,
+    }
+)
+
+
+class _ResetStrategyOnRefereeStoppage(AbstractBehaviour):
+    """Invalidate a strategy subtree once for each new referee stoppage token."""
+
+    def __init__(self, target: py_trees.behaviour.Behaviour, name: str = "ResetStrategyOnRefereeStoppage"):
+        super().__init__(name=name)
+        self.target = target
+        self._last_reset_token: tuple[RefereeCommand, float | None] | None = None
+
+    def update(self) -> py_trees.common.Status:
+        game = self.blackboard.game
+        referee = getattr(game, "referee", None)
+        if referee is None:
+            return py_trees.common.Status.SUCCESS
+
+        command = getattr(referee, "referee_command", None)
+        if command not in _REFEREE_STOPPAGE_COMMANDS:
+            return py_trees.common.Status.SUCCESS
+
+        token = (command, getattr(referee, "referee_command_timestamp", None))
+        if token != self._last_reset_token:
+            if self.target.status != py_trees.common.Status.INVALID:
+                self.target.stop(py_trees.common.Status.INVALID)
+            self._last_reset_token = token
+
+        return py_trees.common.Status.SUCCESS
+
+
 @dataclass
 class AbstractStrategy(ABC):
     """
@@ -95,10 +146,19 @@ class AbstractStrategy(ABC):
         strategy_subtree = self.create_behaviour_tree()
 
         # Wrap the user's strategy tree with the referee override layer (Option B).
-        # The root Selector checks referee commands first; if none match (e.g. NORMAL_START
-        # or FORCE_START), it falls through to the strategy subtree.
+        # The reset guard invalidates any running strategy memory as soon as a
+        # stoppage command arrives. The root Selector checks referee commands next;
+        # if none match (e.g. NORMAL_START or FORCE_START), it falls through to the
+        # freshly reset strategy subtree.
         root = py_trees.composites.Selector(name="Root", memory=False)
-        root.add_children([build_referee_override_tree(), strategy_subtree])
+        referee_reset_and_override = py_trees.composites.Sequence(name="RefereeResetAndOverride", memory=False)
+        referee_reset_and_override.add_children(
+            [
+                _ResetStrategyOnRefereeStoppage(strategy_subtree),
+                build_referee_override_tree(),
+            ]
+        )
+        root.add_children([referee_reset_and_override, strategy_subtree])
 
         self.behaviour_tree = py_trees.trees.BehaviourTree(root)
 
