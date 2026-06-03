@@ -308,11 +308,16 @@ class StrategyRunner:
 
     def _validate_vision_to_cmd_mapping(self, mapping: Optional[dict[int, int]], is_yellow: bool) -> dict[int, int]:
         if self.mode == Mode.REAL:
-            explicitly_provided = mapping is not None
+            is_my_team_color = is_yellow == self.my_team_is_yellow
             if mapping is None:
                 if self.opp:
                     raise ValueError(
                         "explicit vision_to_cmd_mapping is required for both teams in real PVP/shared-transmitter mode."
+                    )
+                if is_my_team_color:
+                    raise ValueError(
+                        "vision_to_cmd_mapping is required for the friendly team in real mode. "
+                        "Provide a mapping from vision robot IDs to firmware command IDs."
                     )
                 return {}
 
@@ -321,19 +326,22 @@ class StrategyRunner:
                     f"vision_to_cmd_mapping must be a dictionary mapping vision robot IDs to command robot IDs; got {type(mapping).__name__}."
                 )
 
-            # if we are not running an opp strat, but mapping provided, warn that it will be ignored
+            # if we are not running an opp strat, but the opponent-color mapping provided, warn it will be ignored
             if self.opp is None and self.my_team_is_yellow ^ is_yellow:
                 warnings.warn(
                     "vision_to_cmd_mapping is provided but will be ignored since the opponent team is not being controlled."
                 )
 
-            if self.opp and explicitly_provided:
-                if is_yellow ^ self.my_team_is_yellow:
-                    exp_count = self.exp_enemy
-                    team_label = "opponent"
-                else:
+            # Count check: mapping must have exactly as many entries as expected robots for that team.
+            # Applied in both PVP and single-team real mode; the opponent-color mapping is skipped
+            # when there is no opp strategy (already warned above).
+            if is_my_team_color or self.opp:
+                if is_my_team_color:
                     exp_count = self.exp_friendly
                     team_label = "friendly"
+                else:
+                    exp_count = self.exp_enemy
+                    team_label = "opponent"
 
                 # At init time we only know how many robots to expect, not their
                 # actual vision IDs (those are non-contiguous in some deployments).
@@ -342,8 +350,7 @@ class StrategyRunner:
                 if len(mapping) != exp_count:
                     raise ValueError(
                         f"vision_to_cmd_mapping for {team_label} team has {len(mapping)} entries but "
-                        f"{exp_count} robots are expected. Every robot must have a mapping entry "
-                        "in shared-transmitter mode."
+                        f"{exp_count} robots are expected. Mapping must include every robot in play."
                     )
 
             for vision_id, cmd_id in mapping.items():
@@ -932,19 +939,21 @@ class StrategyRunner:
 
         # Validate mapping key coverage against the real observed vision IDs now
         # that we have a game frame (at init we only knew the expected count).
-        if self.opp:
+        # Applies in both PVP and single-team real mode.
+        if self.mode == Mode.REAL:
             my_mapping = (
                 self.yellow_vision_to_cmd_mapping if self.my_team_is_yellow else self.blue_vision_to_cmd_mapping
-            )
-            opp_mapping = (
-                self.blue_vision_to_cmd_mapping if self.my_team_is_yellow else self.yellow_vision_to_cmd_mapping
             )
             self._validate_mapping_covers_game_frame(
                 my_mapping, set(my_current_game_frame.friendly_robots.keys()), "friendly"
             )
-            self._validate_mapping_covers_game_frame(
-                opp_mapping, set(opp_current_game_frame.friendly_robots.keys()), "opponent"
-            )
+            if self.opp:
+                opp_mapping = (
+                    self.blue_vision_to_cmd_mapping if self.my_team_is_yellow else self.yellow_vision_to_cmd_mapping
+                )
+                self._validate_mapping_covers_game_frame(
+                    opp_mapping, set(opp_current_game_frame.friendly_robots.keys()), "opponent"
+                )
 
         self.my.strategy.load_game(self.my.game)
         if self.opp:
