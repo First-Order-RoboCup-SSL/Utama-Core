@@ -1,5 +1,5 @@
 import time
-from typing import Deque, List, Optional, Tuple
+from typing import Deque, Dict, List, Optional, Tuple
 
 from utama_core.data_processing.refiners import PositionRefiner
 from utama_core.entities.data.raw_vision import RawVisionData
@@ -8,6 +8,29 @@ from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 
 
 class GameGater:
+    @staticmethod
+    def _validate_mapping_covers_game_frame(mapping: Dict[int, int], observed_ids: set, team_label: str) -> None:
+        """Verify that mapping keys exactly match observed vision IDs in the first game frame.
+
+        Raises ValueError if any robot visible in the frame has no mapping entry,
+        or if the mapping names IDs that were not observed.
+        """
+        if not mapping:
+            return
+        missing = observed_ids - mapping.keys()
+        extra = mapping.keys() - observed_ids
+        if missing or extra:
+            parts = []
+            if missing:
+                parts.append(f"missing entries for observed IDs {sorted(missing)}")
+            if extra:
+                parts.append(f"extra entries for unseen IDs {sorted(extra)}")
+            raise ValueError(
+                f"vision_to_cmd_mapping for {team_label} team does not match observed vision IDs: "
+                + "; ".join(parts)
+                + f". Observed IDs: {sorted(observed_ids)}."
+            )
+
     @staticmethod
     def wait_until_game_valid(
         my_team_is_yellow: bool,
@@ -20,6 +43,8 @@ class GameGater:
         is_pvp: bool,
         rsim_env: SSLBaseEnv = None,
         wait_before_warn: float = 3.0,
+        my_vision_to_cmd_mapping: Optional[Dict[int, int]] = None,
+        opp_vision_to_cmd_mapping: Optional[Dict[int, int]] = None,
     ) -> Tuple[GameFrame, Optional[GameFrame]]:
         """
         Waits until the game frame has the expected number of robots and a ball.
@@ -87,5 +112,21 @@ class GameGater:
             raise ValueError(f"Too many friendly robots: {len(my_game_frame.friendly_robots)} > {exp_friendly}")
         if len(my_game_frame.enemy_robots) > exp_enemy:
             raise ValueError(f"Too many enemy robots: {len(my_game_frame.enemy_robots)} > {exp_enemy}")
+
+        # Validate that the vision→cmd mapping keys exactly match the observed robot IDs.
+        # Done here (after first valid frame) because actual vision IDs are non-contiguous
+        # in some deployments and are not known until a real frame arrives.
+        if my_vision_to_cmd_mapping is not None:
+            GameGater._validate_mapping_covers_game_frame(
+                my_vision_to_cmd_mapping,
+                set(my_game_frame.friendly_robots.keys()),
+                "friendly",
+            )
+        if opp_vision_to_cmd_mapping is not None and opp_game_frame is not None:
+            GameGater._validate_mapping_covers_game_frame(
+                opp_vision_to_cmd_mapping,
+                set(opp_game_frame.friendly_robots.keys()),
+                "opponent",
+            )
 
         return my_game_frame, opp_game_frame

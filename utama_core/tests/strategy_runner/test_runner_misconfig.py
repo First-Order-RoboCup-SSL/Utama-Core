@@ -403,27 +403,24 @@ def test_validate_vision_to_cmd_mapping_correct_count_non_contiguous_ids_passes_
 
 
 def test_validate_mapping_covers_game_frame_mismatch_raises():
-    from utama_core.run.strategy_runner import StrategyRunner
+    from utama_core.run.game_gater import GameGater
 
-    runner = SimpleNamespace()
     with pytest.raises(ValueError, match="missing entries for observed IDs"):
-        StrategyRunner._validate_mapping_covers_game_frame(runner, {0: 0, 1: 1, 2: 2}, {5, 6, 7}, "friendly")
+        GameGater._validate_mapping_covers_game_frame({0: 0, 1: 1, 2: 2}, {5, 6, 7}, "friendly")
 
 
 def test_validate_mapping_covers_game_frame_match_passes():
-    from utama_core.run.strategy_runner import StrategyRunner
+    from utama_core.run.game_gater import GameGater
 
-    runner = SimpleNamespace()
     # Should not raise
-    StrategyRunner._validate_mapping_covers_game_frame(runner, {5: 0, 6: 1, 7: 2}, {5, 6, 7}, "friendly")
+    GameGater._validate_mapping_covers_game_frame({5: 0, 6: 1, 7: 2}, {5, 6, 7}, "friendly")
 
 
 def test_validate_mapping_covers_game_frame_empty_mapping_passes():
-    from utama_core.run.strategy_runner import StrategyRunner
+    from utama_core.run.game_gater import GameGater
 
-    runner = SimpleNamespace()
     # Empty mapping (non-PVP mode) always passes
-    StrategyRunner._validate_mapping_covers_game_frame(runner, {}, {0, 1, 2}, "friendly")
+    GameGater._validate_mapping_covers_game_frame({}, {0, 1, 2}, "friendly")
 
 
 def test_validate_vision_to_cmd_mapping_invalid_ids():
