@@ -60,6 +60,8 @@ class PositionRefiner(BaseRefiner):
         full_field_dims: FieldDimensions,
         filtering: bool = True,
         exp_ball: bool = True,
+        allowed_yellow_ids: Optional[frozenset[int]] = None,
+        allowed_blue_ids: Optional[frozenset[int]] = None,
     ):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
@@ -80,6 +82,8 @@ class PositionRefiner(BaseRefiner):
         )
 
         self.exp_ball = exp_ball
+        self.allowed_yellow_ids = allowed_yellow_ids
+        self.allowed_blue_ids = allowed_blue_ids
 
         if self.filtering:
             # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
@@ -238,13 +242,22 @@ class PositionRefiner(BaseRefiner):
             game_frame.enemy_robots.keys(),
         )
 
-        # Current vision IDs
-        yellow_present = {r.id for r in vision_data.yellow_robots}
-        blue_present = {r.id for r in vision_data.blue_robots}
+        # Current vision IDs (filtered to roster if provided)
+        yellow_robots = vision_data.yellow_robots
+        blue_robots = vision_data.blue_robots
+        if self.allowed_yellow_ids is not None:
+            yellow_robots = [r for r in yellow_robots if r.id in self.allowed_yellow_ids]
+            yellow_ids_last_frame = yellow_ids_last_frame & self.allowed_yellow_ids
+        if self.allowed_blue_ids is not None:
+            blue_robots = [r for r in blue_robots if r.id in self.allowed_blue_ids]
+            blue_ids_last_frame = blue_ids_last_frame & self.allowed_blue_ids
+
+        yellow_present = {r.id for r in yellow_robots}
+        blue_present = {r.id for r in blue_robots}
 
         # Start with current measurements
-        yellow_vision_dict: dict[int, Optional[VisionRobotData]] = {r.id: r for r in vision_data.yellow_robots}
-        blue_vision_dict: dict[int, Optional[VisionRobotData]] = {r.id: r for r in vision_data.blue_robots}
+        yellow_vision_dict: dict[int, Optional[VisionRobotData]] = {r.id: r for r in yellow_robots}
+        blue_vision_dict: dict[int, Optional[VisionRobotData]] = {r.id: r for r in blue_robots}
 
         # Add None for vanished robots
         for robot_id in yellow_ids_last_frame - yellow_present:
@@ -329,6 +342,13 @@ class PositionRefiner(BaseRefiner):
         else:
             old_yellow_robots = game_frame.enemy_robots.copy()
             old_blue_robots = game_frame.friendly_robots.copy()
+
+        if self.allowed_yellow_ids is not None:
+            yellow_vision_robots = [r for r in yellow_vision_robots if r.id in self.allowed_yellow_ids]
+            old_yellow_robots = {k: v for k, v in old_yellow_robots.items() if k in self.allowed_yellow_ids}
+        if self.allowed_blue_ids is not None:
+            blue_vision_robots = [r for r in blue_vision_robots if r.id in self.allowed_blue_ids]
+            old_blue_robots = {k: v for k, v in old_blue_robots.items() if k in self.allowed_blue_ids}
 
         new_yellow_robots = self._combine_single_team_positions(
             old_yellow_robots,
