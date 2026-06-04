@@ -19,7 +19,6 @@ import py_trees
 
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.strategy.referee.actions import (
-    BallObscuredStep,
     BallPlacementOursStep,
     BallPlacementTheirsStep,
     DirectFreeOursStep,
@@ -55,13 +54,12 @@ def build_referee_override_tree() -> py_trees.composites.Selector:
 
     Priority order (top = highest):
       1. HALT           — immediate stop, no exceptions
-      2. BALL_OBSCURED  — scatter east/west, approach ball from north
-      3. STOP           — slowed stop, keep distance from ball
-      4. TIMEOUT        — idle (same as STOP)
-      5. BALL_PLACEMENT — ours or theirs
-      6. PREPARE_KICKOFF
-      7. PREPARE_PENALTY
-      8. DIRECT_FREE
+      2. STOP           — slowed stop, keep distance from ball
+      3. TIMEOUT        — idle (same as STOP)
+      4. BALL_PLACEMENT — ours or theirs
+      5. PREPARE_KICKOFF
+      6. PREPARE_PENALTY
+      7. DIRECT_FREE
     """
     override = py_trees.composites.Selector(name="RefereeOverride", memory=False)
 
@@ -74,16 +72,7 @@ def build_referee_override_tree() -> py_trees.composites.Selector:
         )
     )
 
-    # 2. BALL_OBSCURED — scatter east/west to clear camera sightline, then approach from north
-    override.add_child(
-        _make_subtree(
-            "BallObscured",
-            CheckRefereeCommand(RefereeCommand.BALL_OBSCURED),
-            BallObscuredStep(name="BallObscuredStep"),
-        )
-    )
-
-    # 3. STOP
+    # 2. STOP
     override.add_child(
         _make_subtree(
             "Stop",
@@ -92,7 +81,7 @@ def build_referee_override_tree() -> py_trees.composites.Selector:
         )
     )
 
-    # 4. TIMEOUT (yellow or blue — same behaviour: idle)
+    # 3. TIMEOUT (yellow or blue — same behaviour: idle)
     override.add_child(
         _make_subtree(
             "Timeout",

@@ -24,10 +24,6 @@ _BALL_CLEAR_DIST = 0.5  # metres — all robots must be this far from ball befor
 _KICKER_READY_DIST = 0.3  # metres — kicker must be within this distance to trigger free kick start
 _PLACEMENT_DONE_DIST = 0.15  # metres — ball within this dist of target → placement complete
 _AUTO_ADVANCE_DELAY = 2.0  # seconds — readiness must be sustained this long before play starts
-_BALL_OBSCURED_TIMEOUT = 5.0  # seconds of missing ball during play before scatter triggers
-_BALL_VISIBLE_DEBOUNCE = 0.5  # seconds ball must be continuously visible before resuming play
-_APPROACH_DONE_DIST = 0.25  # metres — closest friendly robot to ball to trigger FORCE_START
-_PLAY_COMMANDS = frozenset({RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START})
 
 
 class GameStateMachine:
@@ -127,10 +123,6 @@ class GameStateMachine:
 
         # Per-transition enable flags (default: all on).
         self._auto_advance = auto_advance if auto_advance is not None else AutoAdvanceConfig()
-
-        # Ball-obscured recovery timers.
-        self._ball_missing_since: float = math.inf
-        self._ball_visible_since: float = math.inf
 
     # ------------------------------------------------------------------
     # Public API
@@ -363,55 +355,6 @@ class GameStateMachine:
             self._last_transition_time = current_time
             logger.info("Auto-advanced STOP → FORCE_START after goal (force-start profile mode)")
 
-        # ----------------------------------------------------------------
-        # Auto-advance 6a: NORMAL_START|FORCE_START → BALL_OBSCURED
-        # Fires when ball has been None for > _BALL_OBSCURED_TIMEOUT.
-        # GoalRule/OutOfBoundsRule take priority: if they detect a violation
-        # the command transitions away and the timer resets naturally.
-        # ----------------------------------------------------------------
-        if self.command in _PLAY_COMMANDS:
-            if game_frame is not None and game_frame.ball is None:
-                if self._ball_missing_since == math.inf:
-                    self._ball_missing_since = current_time
-                elif (current_time - self._ball_missing_since) >= _BALL_OBSCURED_TIMEOUT:
-                    logger.info("Ball missing for %.1fs — issuing BALL_OBSCURED", _BALL_OBSCURED_TIMEOUT)
-                    self.command = RefereeCommand.BALL_OBSCURED
-                    self.command_counter += 1
-                    self.command_timestamp = current_time
-                    self._ball_missing_since = math.inf
-                    self._ball_visible_since = math.inf
-                    self._last_transition_time = current_time
-            else:
-                self._ball_missing_since = math.inf
-        elif self.command != RefereeCommand.BALL_OBSCURED:
-            self._ball_missing_since = math.inf
-
-        # ----------------------------------------------------------------
-        # Auto-advance 6b: BALL_OBSCURED → FORCE_START
-        # Fires when ball is visible for > _BALL_VISIBLE_DEBOUNCE AND the
-        # closest friendly robot is within _APPROACH_DONE_DIST of the ball.
-        # ----------------------------------------------------------------
-        if self.command == RefereeCommand.BALL_OBSCURED:
-            if game_frame is not None and game_frame.ball is not None:
-                if self._ball_visible_since == math.inf:
-                    self._ball_visible_since = current_time
-                ball_pos = game_frame.ball.p
-                closest_dist = min(
-                    (math.hypot(r.p.x - ball_pos.x, r.p.y - ball_pos.y) for r in game_frame.friendly_robots.values()),
-                    default=math.inf,
-                )
-                if (
-                    current_time - self._ball_visible_since
-                ) >= _BALL_VISIBLE_DEBOUNCE and closest_dist <= _APPROACH_DONE_DIST:
-                    logger.info("Ball recovered — auto-advancing BALL_OBSCURED → FORCE_START")
-                    self.command = RefereeCommand.FORCE_START
-                    self.command_counter += 1
-                    self.command_timestamp = current_time
-                    self._ball_visible_since = math.inf
-                    self._last_transition_time = current_time
-            else:
-                self._ball_visible_since = math.inf
-
         return self._generate_referee_data(current_time)
 
     def _all_robots_clear(self, game_frame: "GameFrame") -> bool:
@@ -529,8 +472,6 @@ class GameStateMachine:
         self._last_transition_time = timestamp - _TRANSITION_COOLDOWN  # allow transitions immediately
         self._stop_entered_time = timestamp - self._stop_duration_seconds  # won't auto-advance yet
         self._prepare_entered_time = timestamp - self._prepare_duration_seconds  # same
-        self._ball_missing_since = math.inf
-        self._ball_visible_since = math.inf
 
     def set_command(self, command: RefereeCommand, timestamp: float) -> None:
         """Manual override — for operator use or test scripting.

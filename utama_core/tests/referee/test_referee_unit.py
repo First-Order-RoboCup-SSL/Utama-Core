@@ -908,9 +908,9 @@ class TestRefereeOverrideTreeStructure:
     def test_root_name(self):
         assert self.tree.name == "RefereeOverride"
 
-    def test_has_twelve_children(self):
-        # HALT, BALL_OBSCURED, STOP, TIMEOUT, BALL_PLACEMENT×2, KICKOFF×2, PENALTY×2, DIRECT_FREE×2
-        assert len(self.tree.children) == 12
+    def test_has_eleven_children(self):
+        # HALT, STOP, TIMEOUT, BALL_PLACEMENT×2, KICKOFF×2, PENALTY×2, DIRECT_FREE×2
+        assert len(self.tree.children) == 11
 
     def test_each_child_is_sequence(self):
         for child in self.tree.children:
@@ -929,18 +929,13 @@ class TestRefereeOverrideTreeStructure:
         condition = first_seq.children[0]
         assert RefereeCommand.HALT in condition.expected_commands
 
-    def test_ball_obscured_is_second(self):
+    def test_stop_is_second(self):
         second_seq = self.tree.children[1]
         condition = second_seq.children[0]
-        assert RefereeCommand.BALL_OBSCURED in condition.expected_commands
-
-    def test_stop_is_third(self):
-        third_seq = self.tree.children[2]
-        condition = third_seq.children[0]
         assert RefereeCommand.STOP in condition.expected_commands
 
     def test_timeout_handles_both_colours(self):
-        timeout_seq = self.tree.children[3]
+        timeout_seq = self.tree.children[2]
         condition = timeout_seq.children[0]
         assert RefereeCommand.TIMEOUT_YELLOW in condition.expected_commands
         assert RefereeCommand.TIMEOUT_BLUE in condition.expected_commands

@@ -602,57 +602,6 @@ class DirectFreeTheirsStep(AbstractBehaviour):
 
 
 # ---------------------------------------------------------------------------
-# BALL_OBSCURED — scatter east/west, then approach ball from north
-# ---------------------------------------------------------------------------
-
-_SCATTER_X_RATIO = 0.4  # fraction of half-length for scatter targets
-_CAMERA_APPROACH_OFFSET = Vector2D(0.0, 0.3)  # camera is south; approach ball from north (+y)
-
-
-class BallObscuredStep(AbstractBehaviour):
-    """Two-phase recovery when the ball is obscured from the single south-facing camera.
-
-    Scatter phase (ball is None): robots move to x-axis positions (east/west) to clear
-    the camera's north-south line of sight.
-
-    Approach phase (ball reappears): the closest robot approaches from the north
-    (camera-safe direction) while others hold their scatter position. The state machine
-    auto-advances to FORCE_START once the robot is within 0.25 m of the ball.
-    """
-
-    def update(self) -> py_trees.common.Status:
-        game = self.blackboard.game
-        motion_controller = self.blackboard.motion_controller
-        robot_ids = sorted(game.friendly_robots.keys())
-        scatter_x = _field_half_length(game) * _SCATTER_X_RATIO
-
-        if game.ball is None:
-            scatter_targets = [
-                _clamp_to_field(Vector2D(-scatter_x, 0.0), game),
-                _clamp_to_field(Vector2D(+scatter_x, 0.0), game),
-            ]
-            for i, robot_id in enumerate(robot_ids):
-                target = scatter_targets[i % 2]
-                oren = game.friendly_robots[robot_id].p.angle_to(target)
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, target, oren)
-        else:
-            ball_pos = Vector2D(game.ball.p.x, game.ball.p.y)
-            approacher_id = min(
-                robot_ids,
-                key=lambda rid: game.friendly_robots[rid].p.distance_to(ball_pos),
-            )
-            approach_target = _clamp_to_field(ball_pos + _CAMERA_APPROACH_OFFSET, game)
-            for robot_id in robot_ids:
-                if robot_id == approacher_id:
-                    oren = game.friendly_robots[robot_id].p.angle_to(ball_pos)
-                    self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, approach_target, oren)
-                else:
-                    self.blackboard.cmd_map[robot_id] = empty_command(False)
-
-        return py_trees.common.Status.RUNNING
-
-
-# ---------------------------------------------------------------------------
 # Helper: resolve bilateral commands
 # ---------------------------------------------------------------------------
 
