@@ -369,7 +369,7 @@ class GameStateMachine:
         # GoalRule/OutOfBoundsRule take priority: if they detect a violation
         # the command transitions away and the timer resets naturally.
         # ----------------------------------------------------------------
-        if self._auto_advance.ball_obscured_recovery and self.command in _PLAY_COMMANDS:
+        if self.command in _PLAY_COMMANDS:
             if game_frame is not None and game_frame.ball is None:
                 if self._ball_missing_since == math.inf:
                     self._ball_missing_since = current_time
@@ -391,7 +391,7 @@ class GameStateMachine:
         # Fires when ball is visible for > _BALL_VISIBLE_DEBOUNCE AND the
         # closest friendly robot is within _APPROACH_DONE_DIST of the ball.
         # ----------------------------------------------------------------
-        if self._auto_advance.ball_obscured_recovery and self.command == RefereeCommand.BALL_OBSCURED:
+        if self.command == RefereeCommand.BALL_OBSCURED:
             if game_frame is not None and game_frame.ball is not None:
                 if self._ball_visible_since == math.inf:
                     self._ball_visible_since = current_time

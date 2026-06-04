@@ -79,9 +79,6 @@ class AutoAdvanceConfig:
     # NORMAL_START → FORCE_START after kickoff_timeout_seconds if ball hasn't
     # moved (catches a stuck kickoff).
     normal_start_to_force: bool = True
-    # NORMAL_START|FORCE_START → BALL_OBSCURED when ball is missing for
-    # _BALL_OBSCURED_TIMEOUT seconds (single-camera occlusion recovery).
-    ball_obscured_recovery: bool = False
 
 
 @dataclass
@@ -197,7 +194,6 @@ def _parse_profile(data: dict) -> RefereeProfile:
         direct_free_to_normal=aa.get("direct_free_to_normal", True),
         ball_placement_to_next=aa.get("ball_placement_to_next", True),
         normal_start_to_force=aa.get("normal_start_to_force", True),
-        ball_obscured_recovery=aa.get("ball_obscured_recovery", False),
     )
     game = GameConfig(
         half_duration_seconds=game_d.get("half_duration_seconds", 300.0),
