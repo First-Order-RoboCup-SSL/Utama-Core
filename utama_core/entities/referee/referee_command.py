@@ -22,6 +22,7 @@ class RefereeCommand(Enum):
     GOAL_BLUE = 15  # deprecated
     BALL_PLACEMENT_YELLOW = 16
     BALL_PLACEMENT_BLUE = 17
+    BALL_OBSCURED = 18
 
     @staticmethod
     def from_id(command_id: int):
