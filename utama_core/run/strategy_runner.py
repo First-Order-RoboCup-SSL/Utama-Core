@@ -232,8 +232,10 @@ class StrategyRunner:
         # Derive per-color roster allowlists from the validated mappings (real mode only).
         # Any robot ID seen by vision that is not in the allowlist is silently dropped so that
         # stray detections from robots not in play never pollute the game state.
+        # Blue filtering is only applied when there is an opponent strategy — in single-team
+        # mode blue robots are tracked as enemies and must not be filtered out.
         _allowed_yellow = frozenset(self.yellow_vision_to_cmd_mapping) or None
-        _allowed_blue = frozenset(self.blue_vision_to_cmd_mapping) or None
+        _allowed_blue = (frozenset(self.blue_vision_to_cmd_mapping) or None) if opp_strategy is not None else None
 
         self.my, self.opp = self._setup_sides_data(
             strategy,
