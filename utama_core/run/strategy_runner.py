@@ -209,13 +209,31 @@ class StrategyRunner:
         my_trusted_ir = yellow_trusted_ir_robots if my_team_is_yellow else blue_trusted_ir_robots
         opp_trusted_ir = blue_trusted_ir_robots if my_team_is_yellow else yellow_trusted_ir_robots
 
-        # Derive per-color roster allowlists from the vision→cmd mappings (real mode only).
+        # Set self.opp to a sentinel before mapping validation so _validate_vision_to_cmd_mapping
+        # can check whether an opponent strategy is present (full SideRuntime is set later).
+        self.opp = opp_strategy  # temporary sentinel; overwritten by _setup_sides_data below
+
+        # Validate and store mappings before constructing refiners so that the
+        # allowlists passed to PositionRefiner are always derived from validated data.
+        self.yellow_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
+            yellow_vision_to_cmd_mapping, is_yellow=True
+        )
+        self.blue_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
+            blue_vision_to_cmd_mapping, is_yellow=False
+        )
+        self.yellow_cmd_to_vision_mapping = {v: k for k, v in self.yellow_vision_to_cmd_mapping.items()}
+        self.blue_cmd_to_vision_mapping = {v: k for k, v in self.blue_vision_to_cmd_mapping.items()}
+
+        if self.opp and self.mode == Mode.REAL:
+            self._check_no_cmd_duplicate_if_transmission_sharing(
+                self.yellow_vision_to_cmd_mapping, self.blue_vision_to_cmd_mapping
+            )
+
+        # Derive per-color roster allowlists from the validated mappings (real mode only).
         # Any robot ID seen by vision that is not in the allowlist is silently dropped so that
         # stray detections from robots not in play never pollute the game state.
-        _allowed_yellow = (
-            frozenset(yellow_vision_to_cmd_mapping.keys()) if yellow_vision_to_cmd_mapping is not None else None
-        )
-        _allowed_blue = frozenset(blue_vision_to_cmd_mapping.keys()) if blue_vision_to_cmd_mapping is not None else None
+        _allowed_yellow = frozenset(self.yellow_vision_to_cmd_mapping) or None
+        _allowed_blue = frozenset(self.blue_vision_to_cmd_mapping) or None
 
         self.my, self.opp = self._setup_sides_data(
             strategy,
@@ -233,21 +251,6 @@ class StrategyRunner:
 
         self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
         self._assert_exp_robots_and_ball(exp_friendly, exp_enemy, exp_ball)
-
-        # mapping for mismatch between vision and cmd ids
-        self.yellow_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
-            yellow_vision_to_cmd_mapping, is_yellow=True
-        )
-        self.blue_vision_to_cmd_mapping = self._validate_vision_to_cmd_mapping(
-            blue_vision_to_cmd_mapping, is_yellow=False
-        )
-        self.yellow_cmd_to_vision_mapping = {v: k for k, v in self.yellow_vision_to_cmd_mapping.items()}
-        self.blue_cmd_to_vision_mapping = {v: k for k, v in self.blue_vision_to_cmd_mapping.items()}
-
-        if self.opp and self.mode == Mode.REAL:
-            self._check_no_cmd_duplicate_if_transmission_sharing(
-                self.yellow_vision_to_cmd_mapping, self.blue_vision_to_cmd_mapping
-            )
 
         self._load_robot_controllers()
 
@@ -308,11 +311,16 @@ class StrategyRunner:
 
     def _validate_vision_to_cmd_mapping(self, mapping: Optional[dict[int, int]], is_yellow: bool) -> dict[int, int]:
         if self.mode == Mode.REAL:
-            explicitly_provided = mapping is not None
+            is_my_team_color = is_yellow == self.my_team_is_yellow
             if mapping is None:
                 if self.opp:
                     raise ValueError(
                         "explicit vision_to_cmd_mapping is required for both teams in real PVP/shared-transmitter mode."
+                    )
+                if is_my_team_color:
+                    raise ValueError(
+                        "vision_to_cmd_mapping is required for the friendly team in real mode. "
+                        "Provide a mapping from vision robot IDs to firmware command IDs."
                     )
                 return {}
 
@@ -321,19 +329,22 @@ class StrategyRunner:
                     f"vision_to_cmd_mapping must be a dictionary mapping vision robot IDs to command robot IDs; got {type(mapping).__name__}."
                 )
 
-            # if we are not running an opp strat, but mapping provided, warn that it will be ignored
+            # if we are not running an opp strat, but the opponent-color mapping provided, warn it will be ignored
             if self.opp is None and self.my_team_is_yellow ^ is_yellow:
                 warnings.warn(
                     "vision_to_cmd_mapping is provided but will be ignored since the opponent team is not being controlled."
                 )
 
-            if self.opp and explicitly_provided:
-                if is_yellow ^ self.my_team_is_yellow:
-                    exp_count = self.exp_enemy
-                    team_label = "opponent"
-                else:
+            # Count check: mapping must have exactly as many entries as expected robots for that team.
+            # Applied in both PVP and single-team real mode; the opponent-color mapping is skipped
+            # when there is no opp strategy (already warned above).
+            if is_my_team_color or self.opp:
+                if is_my_team_color:
                     exp_count = self.exp_friendly
                     team_label = "friendly"
+                else:
+                    exp_count = self.exp_enemy
+                    team_label = "opponent"
 
                 # At init time we only know how many robots to expect, not their
                 # actual vision IDs (those are non-contiguous in some deployments).
@@ -342,8 +353,7 @@ class StrategyRunner:
                 if len(mapping) != exp_count:
                     raise ValueError(
                         f"vision_to_cmd_mapping for {team_label} team has {len(mapping)} entries but "
-                        f"{exp_count} robots are expected. Every robot must have a mapping entry "
-                        "in shared-transmitter mode."
+                        f"{exp_count} robots are expected. Mapping must include every robot in play."
                     )
 
             for vision_id, cmd_id in mapping.items():
@@ -370,28 +380,6 @@ class StrategyRunner:
                     "vision_to_cmd_mapping should not be provided in simulation modes; robot ID mapping is only needed in real mode."
                 )
             return {}
-
-    def _validate_mapping_covers_game_frame(self, mapping: dict[int, int], observed_ids: set[int], team_label: str):
-        """After the first game frame loads, verify the mapping keys match the observed vision IDs.
-
-        Called from _load_game() so we can validate against actual IDs rather than
-        assuming the contiguous 0..n-1 range (which fails non-contiguous deployments).
-        """
-        if not mapping:
-            return
-        missing = observed_ids - mapping.keys()
-        extra = mapping.keys() - observed_ids
-        if missing or extra:
-            parts = []
-            if missing:
-                parts.append(f"missing entries for observed IDs {sorted(missing)}")
-            if extra:
-                parts.append(f"extra entries for unseen IDs {sorted(extra)}")
-            raise ValueError(
-                f"vision_to_cmd_mapping for {team_label} team does not match observed vision IDs: "
-                + "; ".join(parts)
-                + f". Observed IDs: {sorted(observed_ids)}."
-            )
 
     def _check_no_cmd_duplicate_if_transmission_sharing(
         self, yellow_mapping: dict[int, int], blue_mapping: dict[int, int]
@@ -911,6 +899,13 @@ class StrategyRunner:
 
         Side effect: Populates game, game_history and current_game_frame on self.my (and self.opp if present).
         """
+        my_mapping = self.yellow_vision_to_cmd_mapping if self.my_team_is_yellow else self.blue_vision_to_cmd_mapping
+        opp_mapping = (
+            (self.blue_vision_to_cmd_mapping if self.my_team_is_yellow else self.yellow_vision_to_cmd_mapping)
+            if self.opp
+            else None
+        )
+
         my_current_game_frame, opp_current_game_frame = GameGater.wait_until_game_valid(
             self.my_team_is_yellow,
             self.my_team_is_right,
@@ -921,6 +916,8 @@ class StrategyRunner:
             self.my.position_refiner,
             is_pvp=self.opp is not None,
             rsim_env=self.rsim_env,
+            my_vision_to_cmd_mapping=my_mapping if self.mode == Mode.REAL else None,
+            opp_vision_to_cmd_mapping=opp_mapping if self.mode == Mode.REAL else None,
         )
 
         self.my.position_refiner.start_filtering()
@@ -937,22 +934,6 @@ class StrategyRunner:
             self.opp.game_history = GameHistory(MAX_GAME_HISTORY)
             self.opp.game = Game(self.opp.game_history, opp_current_game_frame, field=opp_field)
             self.opp.current_game_frame = opp_current_game_frame
-
-        # Validate mapping key coverage against the real observed vision IDs now
-        # that we have a game frame (at init we only knew the expected count).
-        if self.opp:
-            my_mapping = (
-                self.yellow_vision_to_cmd_mapping if self.my_team_is_yellow else self.blue_vision_to_cmd_mapping
-            )
-            opp_mapping = (
-                self.blue_vision_to_cmd_mapping if self.my_team_is_yellow else self.yellow_vision_to_cmd_mapping
-            )
-            self._validate_mapping_covers_game_frame(
-                my_mapping, set(my_current_game_frame.friendly_robots.keys()), "friendly"
-            )
-            self._validate_mapping_covers_game_frame(
-                opp_mapping, set(opp_current_game_frame.friendly_robots.keys()), "opponent"
-            )
 
         self.my.strategy.load_game(self.my.game)
         if self.opp:

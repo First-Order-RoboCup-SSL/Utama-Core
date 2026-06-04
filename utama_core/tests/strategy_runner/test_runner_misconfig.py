@@ -266,15 +266,51 @@ def test_strategy_runner_bounds_outside_non_standard_field_dims():
         )
 
 
-def test_validate_vision_to_cmd_mapping_real_not_controlled():
+def test_validate_vision_to_cmd_mapping_real_opponent_not_controlled():
+    # Opponent color mapping not required in single-team real mode
     runner = SimpleNamespace(
         mode=Mode.REAL,
         my_team_is_yellow=True,
         opp=None,
-        exp_friendly=3,
+        exp_friendly=1,
     )
-    result = StrategyRunner._validate_vision_to_cmd_mapping(runner, None, True)
+    result = StrategyRunner._validate_vision_to_cmd_mapping(runner, None, False)
     assert result == {}
+
+
+def test_validate_vision_to_cmd_mapping_real_friendly_mapping_required():
+    # Friendly mapping is required in single-team real mode
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=None,
+        exp_friendly=1,
+    )
+    with pytest.raises(ValueError, match="vision_to_cmd_mapping is required for the friendly team"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, None, True)
+
+
+def test_validate_vision_to_cmd_mapping_single_team_count_check():
+    # Single-team real mode: mapping count must match exp_friendly
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=None,
+        exp_friendly=1,
+    )
+    with pytest.raises(ValueError, match="has 2 entries but 1 robots are expected"):
+        StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: 0, 1: 1}, True)
+
+
+def test_validate_vision_to_cmd_mapping_single_team_correct_count_passes():
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=None,
+        exp_friendly=1,
+    )
+    result = StrategyRunner._validate_vision_to_cmd_mapping(runner, {1: 0}, True)
+    assert result == {1: 0}
 
 
 def test_validate_vision_to_cmd_mapping_pvp_opp_mapping_missing():
@@ -367,37 +403,35 @@ def test_validate_vision_to_cmd_mapping_correct_count_non_contiguous_ids_passes_
 
 
 def test_validate_mapping_covers_game_frame_mismatch_raises():
-    from utama_core.run.strategy_runner import StrategyRunner
+    from utama_core.run.game_gater import GameGater
 
-    runner = SimpleNamespace()
     with pytest.raises(ValueError, match="missing entries for observed IDs"):
-        StrategyRunner._validate_mapping_covers_game_frame(runner, {0: 0, 1: 1, 2: 2}, {5, 6, 7}, "friendly")
+        GameGater._validate_mapping_covers_game_frame({0: 0, 1: 1, 2: 2}, {5, 6, 7}, "friendly")
 
 
 def test_validate_mapping_covers_game_frame_match_passes():
-    from utama_core.run.strategy_runner import StrategyRunner
+    from utama_core.run.game_gater import GameGater
 
-    runner = SimpleNamespace()
     # Should not raise
-    StrategyRunner._validate_mapping_covers_game_frame(runner, {5: 0, 6: 1, 7: 2}, {5, 6, 7}, "friendly")
+    GameGater._validate_mapping_covers_game_frame({5: 0, 6: 1, 7: 2}, {5, 6, 7}, "friendly")
 
 
 def test_validate_mapping_covers_game_frame_empty_mapping_passes():
-    from utama_core.run.strategy_runner import StrategyRunner
+    from utama_core.run.game_gater import GameGater
 
-    runner = SimpleNamespace()
     # Empty mapping (non-PVP mode) always passes
-    StrategyRunner._validate_mapping_covers_game_frame(runner, {}, {0, 1, 2}, "friendly")
+    GameGater._validate_mapping_covers_game_frame({}, {0, 1, 2}, "friendly")
 
 
 def test_validate_vision_to_cmd_mapping_invalid_ids():
     from utama_core.config.physical_constants import MAX_ROBOT_ID
 
+    # Use exp_friendly=1 so single-entry mappings pass the count check and hit the type/value checks
     runner = SimpleNamespace(
         mode=Mode.REAL,
         my_team_is_yellow=True,
         opp=None,
-        exp_friendly=3,
+        exp_friendly=1,
     )
     with pytest.raises(TypeError, match="must map integers to integers"):
         StrategyRunner._validate_vision_to_cmd_mapping(runner, {0: "0"}, True)
