@@ -232,8 +232,10 @@ class StrategyRunner:
         # Derive per-color roster allowlists from the validated mappings (real mode only).
         # Any robot ID seen by vision that is not in the allowlist is silently dropped so that
         # stray detections from robots not in play never pollute the game state.
+        # Blue filtering is only applied when there is an opponent strategy — in single-team
+        # mode blue robots are tracked as enemies and must not be filtered out.
         _allowed_yellow = frozenset(self.yellow_vision_to_cmd_mapping) or None
-        _allowed_blue = frozenset(self.blue_vision_to_cmd_mapping) or None
+        _allowed_blue = (frozenset(self.blue_vision_to_cmd_mapping) or None) if opp_strategy is not None else None
 
         self.my, self.opp = self._setup_sides_data(
             strategy,
@@ -395,8 +397,16 @@ class StrategyRunner:
                 seen.add(v)
 
     def _handle_sigint(self, sig, frame):
+        if self._stop_event.is_set():
+            signal.default_int_handler(sig, frame)
         self._stop_event.set()
-        signal.default_int_handler(sig, frame)
+        self._stop_fps_live()
+        print("\nStopping gracefully. Press Ctrl+C again to force quit.", flush=True)
+
+    def _stop_fps_live(self):
+        if self._fps_live:
+            self._fps_live.stop()
+            self._fps_live = None
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -988,8 +998,7 @@ class StrategyRunner:
             self.replay_writer.close()
         if self.rsim_env:
             self.rsim_env.close()
-        if self._fps_live:
-            self._fps_live.stop()
+        self._stop_fps_live()
 
     def run_test(
         self,
@@ -1074,7 +1083,7 @@ class StrategyRunner:
         """Run the main loop, stepping the game until interrupted.
 
         If an RSim environment is present, it ensures rendering is on. The loop
-        continues until a KeyboardInterrupt is received, after which resources
+        continues until interrupted via SIGINT stop event, after which resources
         (such as replay writer and rsim env) are closed.
         """
         signal.signal(signal.SIGINT, self._handle_sigint)
@@ -1100,6 +1109,16 @@ class StrategyRunner:
                 raise
         finally:
             self.close()
+
+    def step_once(self):
+        """Advance the runner by one strategy/simulation tick.
+
+        This is a public wrapper around the internal single-step loop for
+        deterministic harnesses and scenario runners that need to apply events
+        or assertions between ticks without taking ownership of the runner's
+        game-loop internals.
+        """
+        self._run_step()
 
     def _run_step(self):
         """Perform one tick of the overall game loop.

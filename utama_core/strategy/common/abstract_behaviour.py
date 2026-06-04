@@ -4,6 +4,7 @@ import py_trees
 
 from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP
 from utama_core.strategy.common.base_blackboard import BaseBlackboard
+from utama_core.strategy.common.blackboard_contract import register_blackboard_contract
 
 
 class AbstractBehaviour(py_trees.behaviour.Behaviour):
@@ -83,6 +84,7 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
             key="tactic",
             access=py_trees.common.Access.READ,
         )
+        register_blackboard_contract(self)
         self.setup_()
 
     # prevent overriding of setup method

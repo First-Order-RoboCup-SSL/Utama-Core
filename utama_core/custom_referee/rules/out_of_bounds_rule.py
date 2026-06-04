@@ -15,7 +15,7 @@ _ACTIVE_PLAY_COMMANDS = {
     RefereeCommand.FORCE_START,
 }
 
-_INFIELD_OFFSET = 0.1  # metres inside the boundary for free-kick placement
+_INFIELD_OFFSET = 0.25  # metres inside the boundary for a playable free-kick placement
 
 
 class OutOfBoundsRule(BaseRule):

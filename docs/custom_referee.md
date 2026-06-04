@@ -151,7 +151,7 @@ Fires when `abs(ball.p.x) > half_length` (not in a goal) or `abs(ball.p.y) > hal
 1. Checking `robot.has_ball` (reliable IR sensor on friendly robots).
 2. Falling back to the closest robot within 0.15 m.
 
-The non-touching team receives the `DIRECT_FREE_*`. The `designated_position` is placed 0.1 m infield from the nearest boundary point.
+The non-touching team receives the `DIRECT_FREE_*`. The `designated_position` is placed 0.25 m infield from the nearest boundary point so the restart is playable by the robot/dribbler geometry.
 
 ### DefenseAreaRule
 

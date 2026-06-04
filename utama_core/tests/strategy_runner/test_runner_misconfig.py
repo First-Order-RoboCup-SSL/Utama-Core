@@ -389,8 +389,8 @@ def test_validate_vision_to_cmd_mapping_incorrect_length_enemy():
 
 def test_validate_vision_to_cmd_mapping_correct_count_non_contiguous_ids_passes_init():
     # Non-contiguous vision IDs (e.g. real field robots numbered 5,6,7) with the right
-    # count must PASS at init time — coverage against observed IDs is validated later
-    # in _validate_mapping_covers_game_frame() after _load_game().
+    # count must PASS at init time — the allowlist derived from the mapping ensures only
+    # those IDs are accepted from vision at runtime.
     runner = SimpleNamespace(
         mode=Mode.REAL,
         my_team_is_yellow=True,
@@ -480,6 +480,24 @@ def test_trusted_ir_robots_blue_team_is_my_team():
         blue_trusted_ir_robots=frozenset({2}),
     )
     assert runner.my.robot_info_refiner._trusted_ir_robots == frozenset({2})
+
+
+def test_blue_allowlist_not_set_in_single_team_real_mode():
+    # In single-team real mode, blue robots are tracked as enemies and must not be filtered.
+    # _allowed_blue must be None even when blue_vision_to_cmd_mapping resolves to {}.
+    runner = SimpleNamespace(
+        mode=Mode.REAL,
+        my_team_is_yellow=True,
+        opp=None,
+        exp_friendly=1,
+        exp_enemy=0,
+    )
+    # Validate mapping returns {} for blue (no opp, mapping=None)
+    blue_mapping = StrategyRunner._validate_vision_to_cmd_mapping(runner, None, is_yellow=False)
+    assert blue_mapping == {}
+    # Simulate the allowlist derivation: empty mapping with no opp → None, not frozenset()
+    _allowed_blue = (frozenset(blue_mapping) or None) if runner.opp is not None else None
+    assert _allowed_blue is None
 
 
 def test_trusted_ir_robots_both_teams_pvp():

@@ -119,20 +119,4 @@ class GameGater:
         if len(my_game_frame.enemy_robots) > exp_enemy:
             raise ValueError(f"Too many enemy robots: {len(my_game_frame.enemy_robots)} > {exp_enemy}")
 
-        # Validate that the vision→cmd mapping keys exactly match the observed robot IDs.
-        # Done here (after first valid frame) because actual vision IDs are non-contiguous
-        # in some deployments and are not known until a real frame arrives.
-        if my_vision_to_cmd_mapping is not None:
-            GameGater._validate_mapping_covers_game_frame(
-                my_vision_to_cmd_mapping,
-                set(my_game_frame.friendly_robots.keys()),
-                "friendly",
-            )
-        if opp_vision_to_cmd_mapping is not None and opp_game_frame is not None:
-            GameGater._validate_mapping_covers_game_frame(
-                opp_vision_to_cmd_mapping,
-                set(opp_game_frame.friendly_robots.keys()),
-                "opponent",
-            )
-
         return my_game_frame, opp_game_frame

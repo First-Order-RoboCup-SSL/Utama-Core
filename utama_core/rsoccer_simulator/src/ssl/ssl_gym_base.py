@@ -4,6 +4,7 @@
 #    - To create your wrapper from env to communcation, use inherit from this class!
 """
 
+import random
 from typing import List, Optional
 
 import numpy as np
@@ -99,6 +100,10 @@ class SSLBaseEnv:
         return observation, reward, done, False, {}
 
     def reset(self, *, seed=None, options=None):
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
+
         self.steps = 0
         self.last_frame = None
         self.sent_commands = None
