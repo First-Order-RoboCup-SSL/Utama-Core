@@ -27,14 +27,12 @@ class FastPathPlanningController(MotionController):
         target_pos: Vector2D,
         target_oren: float,
     ) -> tuple[Vector2D, float]:
-        field = game.field
 
-        field_bounds = field.field_bounds
         robot = game.friendly_robots[robot_id]
 
         oren = self.pid_oren.calculate(target_oren, robot.orientation, robot_id)
 
-        pos = self.fpp._path_to(game, robot_id, target_pos, field_bounds)
+        pos = self.fpp._path_to(game, robot_id, target_pos)
         vel = self.pid_trans.calculate(pos, robot.p, robot_id)
 
         return vel, oren

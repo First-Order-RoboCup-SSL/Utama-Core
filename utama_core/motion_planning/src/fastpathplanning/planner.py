@@ -5,7 +5,7 @@ import numpy as np  # type: ignore
 
 from utama_core.config.settings import CONTROL_FREQUENCY
 from utama_core.entities.game import Game
-from utama_core.entities.game.field import FieldBounds
+from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.global_utils.math_utils import (
     closest_point_on_segment,
     distance,
@@ -42,8 +42,42 @@ class FastPathPlanner:
         max_y = max(field_bounds.top_left[1], field_bounds.bottom_right[1])
         return min_x <= x <= max_x and min_y <= y <= max_y
 
+    def is_point_in_defense_area(
+        self,
+        point: np.ndarray | Tuple[float, float],
+        defense_area: np.ndarray,
+    ) -> bool:
+        """Return True if a point lies inside the rectangular defense area."""
+        x, y = float(point[0]), float(point[1])
+        min_x = float(np.min(defense_area[:, 0]))
+        max_x = float(np.max(defense_area[:, 0]))
+        min_y = float(np.min(defense_area[:, 1]))
+        max_y = float(np.max(defense_area[:, 1]))
+        return min_x <= x <= max_x and min_y <= y <= max_y
+
+    def _add_opponent_defense_area_obstacles(
+        self,
+        robot_pos: np.ndarray,
+        defense_area: np.ndarray,
+        obstacle_list: List[Tuple[np.ndarray, np.ndarray]],
+    ) -> List[Tuple[np.ndarray, np.ndarray]]:
+        """Add opponent defense area boundary segments to the obstacle list."""
+        if defense_area.shape[0] < 4:
+            return obstacle_list
+
+        tl, tr, br, bl = defense_area
+        if distance_point_to_segment(robot_pos, tl, tr) < self.LOOK_AHEAD_RANGE:
+            obstacle_list.append((tl, tr))
+        if distance_point_to_segment(robot_pos, tr, br) < self.LOOK_AHEAD_RANGE:
+            obstacle_list.append((tr, br))
+        if distance_point_to_segment(robot_pos, br, bl) < self.LOOK_AHEAD_RANGE:
+            obstacle_list.append((br, bl))
+        if distance_point_to_segment(robot_pos, bl, tl) < self.LOOK_AHEAD_RANGE:
+            obstacle_list.append((bl, tl))
+        return obstacle_list
+
     def _get_obstacles(
-        self, game: Game, robot_id: int, our_pos: np.ndarray, field_bounds: FieldBounds
+        self, game: Game, robot_id: int, our_pos: np.ndarray, field_bounds: FieldBounds, defense_area: np.ndarray
     ) -> List[Tuple[np.ndarray, np.ndarray]]:
         """
         Compiles obstacles and draws projected velocity lines in Red.
@@ -67,7 +101,17 @@ class FastPathPlanner:
         tr = np.array([field_bounds.bottom_right[0], field_bounds.top_left[1]])
         bl = np.array([field_bounds.top_left[0], field_bounds.bottom_right[1]])
 
-        obstacle_list.extend([(tl, tr), (tr, br), (br, bl), (bl, tl)])
+        if distance_point_to_segment(our_pos, tl, tr) < self.LOOK_AHEAD_RANGE:
+            obstacle_list.append((tl, tr))
+        if distance_point_to_segment(our_pos, tr, br) < self.LOOK_AHEAD_RANGE:
+            obstacle_list.append((tr, br))
+        if distance_point_to_segment(our_pos, br, bl) < self.LOOK_AHEAD_RANGE:
+            obstacle_list.append((br, bl))
+        if distance_point_to_segment(our_pos, bl, tl) < self.LOOK_AHEAD_RANGE:
+            obstacle_list.append((bl, tl))
+
+        # Add opponent defense area boundaries as static obstacles.
+        obstacle_list = self._add_opponent_defense_area_obstacles(our_pos, defense_area, obstacle_list)
 
         return obstacle_list
 
@@ -153,6 +197,7 @@ class FastPathPlanner:
         recursion_length: int,
         target: np.ndarray,
         field_bounds: FieldBounds,
+        defense_area: np.ndarray,
     ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float]:
         """
         Recursively checks a segment for collisions and generates subgoals with
@@ -171,39 +216,43 @@ class FastPathPlanner:
 
         left_valid = self.is_point_in_field(subgoal_left, field_bounds)
         right_valid = self.is_point_in_field(subgoal_right, field_bounds)
-
+        left_valid_defense_area = not self.is_point_in_defense_area(subgoal_left, defense_area)
+        right_valid_defense_area = not self.is_point_in_defense_area(subgoal_right, defense_area)
         best_subgoal = None
 
-        # Heuristic: Pick the valid subgoal closest to the ultimate destination
-        if left_valid and right_valid:
-            if distance(subgoal_left, target) < distance(subgoal_right, target):
-                best_subgoal = subgoal_left
-            else:
-                best_subgoal = subgoal_right
-        elif left_valid:
+        if left_valid and left_valid_defense_area:
             best_subgoal = subgoal_left
-        elif right_valid:
+        elif right_valid and right_valid_defense_area:
             best_subgoal = subgoal_right
+
+        if best_subgoal is not None:
+            seg1, len1 = self.check_segment(
+                (segment[0], best_subgoal), obstacles, recursion_length + 1, target, field_bounds, defense_area
+            )
+            seg2, len2 = self.check_segment(
+                (best_subgoal, segment[1]), obstacles, recursion_length + 1, target, field_bounds, defense_area
+            )
+            return seg1 + seg2, len1 + len2
+
         else:
-            return [segment], segment_length
-
-        # Recursively check the two halves of the selected detour
-        seg1, len1 = self.check_segment(
-            (segment[0], best_subgoal),
-            obstacles,
-            recursion_length + 1,
-            target,
-            field_bounds,
-        )
-        seg2, len2 = self.check_segment(
-            (best_subgoal, segment[1]),
-            obstacles,
-            recursion_length + 1,
-            target,
-            field_bounds,
-        )
-
-        return seg1 + seg2, len1 + len2
+            left_seg1, left_len1 = self.check_segment(
+                (segment[0], subgoal_left), obstacles, recursion_length + 1, target, field_bounds, defense_area
+            )
+            left_seg2, left_len2 = self.check_segment(
+                (subgoal_left, segment[1]), obstacles, recursion_length + 1, target, field_bounds, defense_area
+            )
+            right_seg1, right_len1 = self.check_segment(
+                (segment[0], subgoal_right), obstacles, recursion_length + 1, target, field_bounds, defense_area
+            )
+            right_seg2, right_len2 = self.check_segment(
+                (subgoal_right, segment[1]), obstacles, recursion_length + 1, target, field_bounds, defense_area
+            )
+            left_len = left_len1 + left_len2
+            right_len = right_len1 + right_len2
+            if left_len < right_len:
+                return left_seg1 + left_seg2, left_len
+            else:
+                return right_seg1 + right_seg2, right_len
 
     def smooth_path(self, trajectory, target, robot_position) -> np.ndarray:
         if len(trajectory) == 1:
@@ -247,7 +296,6 @@ class FastPathPlanner:
         game: Game,
         robot_id: int,
         target: Tuple[float, float],
-        field_bounds: FieldBounds,
     ):
         """
         Main entry point. Clears cache, sanitizes target, and plans path.
@@ -257,15 +305,19 @@ class FastPathPlanner:
         robot = game.friendly_robots[robot_id]
         our_pos = np.array([robot.p.x, robot.p.y])
         raw_target = np.array(target)
+        field_bounds = game.field.field_bounds
+        defense_area = game.field.enemy_defense_area
 
         # 1. Get obstacles and draw Red velocity lines
-        obstacles = self._get_obstacles(game, robot_id, our_pos, field_bounds)
+        obstacles = self._get_obstacles(game, robot_id, our_pos, field_bounds, defense_area)
 
         # 3. Sanitize target (Critical for velocity obstacles)
         safe_target = self.sanitize_target(raw_target, obstacles, our_pos)
 
         # 4. Plan geometric path
-        final_trajectory, _ = self.check_segment((our_pos, safe_target), obstacles, 0, safe_target, field_bounds)
+        final_trajectory, _ = self.check_segment(
+            (our_pos, safe_target), obstacles, 0, safe_target, field_bounds, defense_area
+        )
 
         # 5. Draw the resulting safe path segments when an RSim renderer is available.
         if self._env is not None:
