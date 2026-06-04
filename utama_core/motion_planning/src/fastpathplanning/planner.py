@@ -220,11 +220,14 @@ class FastPathPlanner:
         right_valid_defense_area = not self.is_point_in_defense_area(subgoal_right, defense_area)
         best_subgoal = None
 
-        if left_valid and left_valid_defense_area:
+        if left_valid and left_valid_defense_area and right_valid and right_valid_defense_area:
+            pass
+        elif left_valid and left_valid_defense_area:
             best_subgoal = subgoal_left
         elif right_valid and right_valid_defense_area:
             best_subgoal = subgoal_right
-
+        else:
+            return [segment], segment_length
         if best_subgoal is not None:
             seg1, len1 = self.check_segment(
                 (segment[0], best_subgoal), obstacles, recursion_length + 1, target, field_bounds, defense_area
