@@ -135,15 +135,18 @@ class GameFrameRenderer:
         n = _TRAIL_LENGTH
         for trail in self._trails.values():
             pts = list(trail)
-            for i, (px, py, color) in enumerate(pts):
-                # oldest = index 0, newest = last; skip the newest (robot body covers it)
-                if i == len(pts) - 1:
-                    continue
-                t = i / max(n - 1, 1)
-                alpha = int(_TRAIL_MIN_ALPHA + t * (_TRAIL_MAX_ALPHA - _TRAIL_MIN_ALPHA))
-                radius = max(1, int(_TRAIL_RADIUS * (0.4 + 0.6 * t)))
-                r, g, b = color[:3]
-                pygame.draw.circle(self._overlay, (r, g, b, alpha), (px, py), radius)
+            if len(pts) < 2:
+                continue
+            color = pts[-1][2]
+            r, g, b = color[:3]
+            for i in range(len(pts) - 1):
+                t0 = i / max(n - 1, 1)
+                t1 = (i + 1) / max(n - 1, 1)
+                alpha = int(_TRAIL_MIN_ALPHA + t1 * (_TRAIL_MAX_ALPHA - _TRAIL_MIN_ALPHA))
+                width = max(1, int(_TRAIL_RADIUS * (0.4 + 0.6 * t0)))
+                p0 = (pts[i][0], pts[i][1])
+                p1 = (pts[i + 1][0], pts[i + 1][1])
+                pygame.draw.line(self._overlay, (r, g, b, alpha), p0, p1, width)
 
     # ------------------------------------------------------------------
     # Kick annotations
@@ -164,19 +167,9 @@ class GameFrameRenderer:
         still_alive = []
         for ann in self._kick_annotations:
             t = ann.ttl / _KICK_TTL_FRAMES  # 1.0 = fresh, 0.0 = expired
-            alpha = int(255 * t)
-            # draw dashed line by sampling points along the segment
-            ox, oy = ann.origin
-            dx, dy = ann.dest[0] - ox, ann.dest[1] - oy
-            length = math.hypot(dx, dy)
-            if length > 0:
-                steps = max(2, int(length / 8))
-                for s in range(steps):
-                    frac = s / steps
-                    if int(frac * 10) % 2 == 0:  # dashes every other segment
-                        px = int(ox + frac * dx)
-                        py = int(oy + frac * dy)
-                        pygame.draw.circle(self._overlay, (255, 200, 50, alpha), (px, py), 2)
+            alpha = int(220 * t)
+            width = max(1, int(3 * t))
+            pygame.draw.line(self._overlay, (255, 200, 50, alpha), ann.origin, ann.dest, width)
             ann.ttl -= 1
             if ann.ttl > 0:
                 still_alive.append(ann)
