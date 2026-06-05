@@ -324,7 +324,7 @@ class StrategyRunner:
     def _start_vision_stream(self, http_port: int) -> None:
         """Start the browser stream that mirrors refined game frames."""
         try:
-            self._vision_stream_renderer = GameFrameRenderer(self.full_field_dims)
+            self._vision_stream_renderer = GameFrameRenderer(self.full_field_dims, scale=300.0)
             self.vision_stream = RSimVisionStreamServer(
                 http_port=http_port,
             )
