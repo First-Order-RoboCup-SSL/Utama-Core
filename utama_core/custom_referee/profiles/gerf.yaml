@@ -1,4 +1,4 @@
-profile_name: "gefr"
+profile_name: "gerf"
 rules:
   goal_detection:
     enabled: true
