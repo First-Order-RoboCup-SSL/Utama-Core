@@ -191,7 +191,7 @@ class GameFrameRenderer:
         render_robot_cls(
             x,
             y,
-            np.rad2deg(robot.orientation),
+            np.rad2deg(-robot.orientation),  # negate: field is y-up, screen is y-down
             self._field_renderer.scale,
             robot.id,
             color,
