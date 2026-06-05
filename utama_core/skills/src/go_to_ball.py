@@ -27,8 +27,8 @@ def go_to_ball(
     # Kicker/dribbler is on the back of the robot; approach with back facing ball.
     target_oren = (robot.angle_to(ball) + math.pi) % (2 * math.pi) - math.pi
 
-    distance = robot.distance_to(ball)
-    dribbling = dribble_when_near and distance < dribble_threshold
+    # Dribbler runs the whole approach so it is already spinning at contact.
+    dribbling = dribble_when_near
 
     if dribbling:
         # Move target past ball center so the robot drives through to dribbler contact.

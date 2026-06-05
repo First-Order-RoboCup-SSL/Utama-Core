@@ -2,7 +2,7 @@ from typing import Tuple
 
 import numpy as np
 
-from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -56,22 +56,29 @@ def turn_on_spot(
     dribbling: bool = False,
 ) -> RobotCommand:
     """
-    Turns the robot on the spot to face the target orientation. If the robot has the ball, it will pivot on the ball.
+    Turns the robot on the spot to face the target orientation.
+    When the robot is in dribbler contact with the ball, pivots around the ball
+    rather than the robot's own center.
     """
-    RADIUS_MODIFIER = 1.35
+    PIVOT_RADIUS = ROBOT_RADIUS + BALL_RADIUS  # distance from robot center to ball center at contact
+
+    robot = game.friendly_robots[robot_id]
+    ball = game.ball
 
     turn = move(
         game=game,
         motion_controller=motion_controller,
         robot_id=robot_id,
-        target_coords=game.friendly_robots[robot_id].p,
+        target_coords=robot.p,
         target_oren=target_oren,
         dribbling=dribbling,
     )
 
-    if game.friendly_robots[robot_id].has_ball:
+    # Pivot around the ball when the robot is in dribbler contact (IR or visual proximity).
+    in_contact = robot.has_ball or (ball is not None and robot.p.distance_to(ball.p.to_2d()) < PIVOT_RADIUS + 0.03)
+    if in_contact:
         angular_vel = turn.angular_vel
-        local_left_vel = -angular_vel * RADIUS_MODIFIER * ROBOT_RADIUS
+        local_left_vel = -angular_vel * PIVOT_RADIUS
         turn = turn._replace(local_left_vel=local_left_vel)
 
     return turn
