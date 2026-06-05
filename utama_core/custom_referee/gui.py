@@ -907,13 +907,59 @@ let _currentCmd = null;
 let _myTeamIsRight = false;
 let _myTeamIsYellow = true;
 
+function _fieldView(g) {
+  const goalDepth = Math.max(0, Number(g.goal_depth) || 0);
+  return {
+    minX: -g.half_length - goalDepth,
+    maxX:  g.half_length + goalDepth,
+    minY: -g.half_width,
+    maxY:  g.half_width,
+    width: 2 * (g.half_length + goalDepth),
+    height: 2 * g.half_width,
+    goalDepth,
+  };
+}
+
+function _fieldTransform(canvas) {
+  if (!canvas || !_cfg) return null;
+  const view = _fieldView(_cfg);
+  const M = 12;
+  const usableW = Math.max(1, canvas.width - 2 * M);
+  const usableH = Math.max(1, canvas.height - 2 * M);
+  const scale = Math.min(usableW / view.width, usableH / view.height);
+  const originX = (canvas.width - view.width * scale) / 2;
+  const originY = (canvas.height - view.height * scale) / 2;
+
+  return {
+    scale,
+    toX(fx) {
+      const displayX = _myTeamIsRight ? fx : -fx;
+      return originX + (displayX - view.minX) * scale;
+    },
+    toY(fy) {
+      return originY + (view.maxY - fy) * scale;
+    },
+    toField(px, py) {
+      let fx = view.minX + (px - originX) / scale;
+      if (!_myTeamIsRight) fx = -fx;
+      const fy = view.maxY - (py - originY) / scale;
+      return { x: fx, y: fy };
+    },
+  };
+}
+
+function _yellowIsRight() {
+  return _myTeamIsRight === _myTeamIsYellow;
+}
+
 function resizeCanvas() {
   const canvas = document.getElementById('field-canvas');
   if (!canvas || !_cfg) return;
   const wrap = canvas.parentElement;
   const cw = wrap.clientWidth;
   const ch = wrap.clientHeight;
-  const fieldAspect = (2 * _cfg.half_length) / (2 * _cfg.half_width);
+  const view = _fieldView(_cfg);
+  const fieldAspect = view.width / view.height;
   const wrapAspect  = cw / ch;
   let pw, ph;
   if (wrapAspect > fieldAspect) {
@@ -951,14 +997,30 @@ function drawField(d) {
   const ctx = canvas.getContext('2d');
   const g = _cfg;
   const CW = canvas.width, CH = canvas.height;
-  const M = 12;
-  const scale = (CW - 2 * M) / (2 * g.half_length);
+  const tx = _fieldTransform(canvas);
+  if (!tx) return;
+  const scale = tx.scale;
+  const toX = tx.toX;
+  const toY = tx.toY;
 
-  function toX(fx) {
-    const sx = _myTeamIsRight ? fx : -fx;
-    return M + (sx + g.half_length) * scale;
+  function rectBounds(x1, y1, x2, y2) {
+    const px1 = toX(x1), px2 = toX(x2);
+    const py1 = toY(y1), py2 = toY(y2);
+    return {
+      x: Math.min(px1, px2),
+      y: Math.min(py1, py2),
+      w: Math.abs(px2 - px1),
+      h: Math.abs(py2 - py1),
+    };
   }
-  function toY(fy) { return CH - M - (fy + g.half_width) * scale; }
+  function strokeWorldRect(x1, y1, x2, y2) {
+    const r = rectBounds(x1, y1, x2, y2);
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+  }
+  function fillWorldRect(x1, y1, x2, y2) {
+    const r = rectBounds(x1, y1, x2, y2);
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+  }
 
   // Green background
   ctx.fillStyle = '#2d7a2d';
@@ -967,8 +1029,7 @@ function drawField(d) {
   // Field boundary
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 1.5;
-  ctx.strokeRect(toX(-g.half_length), toY(g.half_width),
-                 2 * g.half_length * scale, 2 * g.half_width * scale);
+  strokeWorldRect(-g.half_length, -g.half_width, g.half_length, g.half_width);
 
   // Centre line
   ctx.beginPath();
@@ -990,20 +1051,20 @@ function drawField(d) {
   // Defence areas — full depth = 2 * half_defense_depth (matches physical model)
   const dl = 2 * g.half_defense_depth, dw = g.half_defense_width;
   // Left (negative x)
-  ctx.strokeRect(toX(-g.half_length), toY(dw), dl * scale, 2 * dw * scale);
+  strokeWorldRect(-g.half_length, -dw, -g.half_length + dl, dw);
   // Right (positive x)
-  ctx.strokeRect(toX(g.half_length - dl), toY(dw), dl * scale, 2 * dw * scale);
+  strokeWorldRect(g.half_length - dl, -dw, g.half_length, dw);
 
   // Goal bars (depth from geometry, outside field boundary)
-  const goalDepth = g.goal_depth;
-  // Yellow goal (left side of field coords)
-  ctx.fillStyle = 'rgba(244,197,66,0.6)';
-  ctx.fillRect(toX(-g.half_length - goalDepth), toY(g.half_goal_width),
-               goalDepth * scale, 2 * g.half_goal_width * scale);
-  // Blue goal (right side of field coords)
-  ctx.fillStyle = 'rgba(77,166,255,0.6)';
-  ctx.fillRect(toX(g.half_length), toY(g.half_goal_width),
-               goalDepth * scale, 2 * g.half_goal_width * scale);
+  const goalDepth = Math.max(0, Number(g.goal_depth) || 0);
+  const yellowGoal = 'rgba(244,197,66,0.6)';
+  const blueGoal = 'rgba(77,166,255,0.6)';
+  ctx.fillStyle = _yellowIsRight() ? blueGoal : yellowGoal;
+  fillWorldRect(-g.half_length - goalDepth, -g.half_goal_width,
+                -g.half_length, g.half_goal_width);
+  ctx.fillStyle = _yellowIsRight() ? yellowGoal : blueGoal;
+  fillWorldRect(g.half_length, -g.half_goal_width,
+                g.half_length + goalDepth, g.half_goal_width);
 
   // Designated position marker
   if (d.designated) {
@@ -1119,11 +1180,16 @@ es.onmessage = (ev) => {
   }
 
   // Update team orientation and context menu labels
+  let teamLayoutChanged = false;
   if (d.my_team_is_right !== undefined && d.my_team_is_right !== _myTeamIsRight) {
     _myTeamIsRight = d.my_team_is_right;
-    _updateCtxMenuLabels();
+    teamLayoutChanged = true;
   }
-  if (d.my_team_is_yellow !== undefined) _myTeamIsYellow = d.my_team_is_yellow;
+  if (d.my_team_is_yellow !== undefined && d.my_team_is_yellow !== _myTeamIsYellow) {
+    _myTeamIsYellow = d.my_team_is_yellow;
+    teamLayoutChanged = true;
+  }
+  if (teamLayoutChanged) _updateCtxMenuLabels();
 
   // Robot status panel
   renderStatus(d);
@@ -1171,16 +1237,11 @@ function _canvasToField(canvas, clientX, clientY) {
   if (!_cfg) return null;
   const rect = canvas.getBoundingClientRect();
   const cw = canvas.width, ch = canvas.height;
-  const M = 12;
-  const scale = (cw - 2 * M) / (2 * _cfg.half_length);
+  const tx = _fieldTransform(canvas);
+  if (!tx) return null;
   const px = (clientX - rect.left) * (cw / rect.width);
   const py = (clientY - rect.top)  * (ch / rect.height);
-  // Inverse of toX (with optional flip)
-  let fx = (px - M) / scale - _cfg.half_length;
-  if (!_myTeamIsRight) fx = -fx;
-  // Inverse of toY
-  const fy = (ch - M - py) / scale - _cfg.half_width;
-  return { x: fx, y: fy };
+  return tx.toField(px, py);
 }
 
 function _hideCtxMenu() {
@@ -1219,8 +1280,9 @@ document.getElementById('field-canvas').addEventListener('contextmenu', function
 });
 
 function _updateCtxMenuLabels() {
-  const leftTeam  = _myTeamIsRight ? 'Yellow' : 'Blue';
-  const rightTeam = _myTeamIsRight ? 'Blue'   : 'Yellow';
+  const yellowIsRight = _yellowIsRight();
+  const leftTeam  = yellowIsRight ? 'Blue'   : 'Yellow';
+  const rightTeam = yellowIsRight ? 'Yellow' : 'Blue';
   document.getElementById('ctx-place-left').textContent  = 'Ball placement ' + leftTeam  + ' here';
   document.getElementById('ctx-place-right').textContent = 'Ball placement ' + rightTeam + ' here';
 }
@@ -1228,8 +1290,9 @@ function _updateCtxMenuLabels() {
 function ctxPlace(side) {
   _hideCtxMenu();
   if (!_ctxFieldPos) return;
-  const leftCmd  = _myTeamIsRight ? 'BALL_PLACEMENT_YELLOW' : 'BALL_PLACEMENT_BLUE';
-  const rightCmd = _myTeamIsRight ? 'BALL_PLACEMENT_BLUE'   : 'BALL_PLACEMENT_YELLOW';
+  const yellowIsRight = _yellowIsRight();
+  const leftCmd  = yellowIsRight ? 'BALL_PLACEMENT_BLUE'   : 'BALL_PLACEMENT_YELLOW';
+  const rightCmd = yellowIsRight ? 'BALL_PLACEMENT_YELLOW' : 'BALL_PLACEMENT_BLUE';
   const command = (side === 'left') ? leftCmd : rightCmd;
   fetch('/command', {
     method: 'POST',
