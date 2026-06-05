@@ -58,4 +58,4 @@ precommit-uninstall = "pre-commit uninstall"
 robosim = { features = ["robosim"], no-default-feature = true }
 
 [target.linux-64.tasks]
-main = "setsid python -m main"
+main = "python -m main"
