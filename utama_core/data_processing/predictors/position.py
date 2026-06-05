@@ -3,7 +3,6 @@ from typing import Optional
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 
-
 _MIN_BALL_SPEED_X = 0.1  # m/s — below this, treat ball as stationary (filters real-hardware noise)
 
 
