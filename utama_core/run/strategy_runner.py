@@ -166,7 +166,6 @@ class StrategyRunner:
         formation_type: Optional[FormationType] = None,
         enable_vision_stream: bool = True,
         vision_stream_http_port: int = 8765,
-        vision_stream_websocket_port: int = 8766,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -224,7 +223,7 @@ class StrategyRunner:
         self._load_game()
         self._assert_exp_goals()
         if enable_vision_stream:
-            self._start_vision_stream(vision_stream_http_port, vision_stream_websocket_port)
+            self._start_vision_stream(vision_stream_http_port)
 
         # Seed the custom referee's internal clocks from the first real vision
         # timestamp so all timers are on the same timebase regardless of mode
@@ -270,13 +269,12 @@ class StrategyRunner:
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
 
-    def _start_vision_stream(self, http_port: int, websocket_port: int) -> None:
+    def _start_vision_stream(self, http_port: int) -> None:
         """Start the browser stream that mirrors refined game frames."""
         try:
             self._vision_stream_renderer = GameFrameRenderer(self.full_field_dims)
             self.vision_stream = RSimVisionStreamServer(
                 http_port=http_port,
-                websocket_port=websocket_port,
             )
             self.vision_stream.start()
             self._publish_vision_stream_frame()
@@ -1053,7 +1051,62 @@ class StrategyRunner:
             "strategy_blue": strategy_blue,
             "strategy_yellow": strategy_yellow,
             "mode": self.mode.value,
+            "annotations": self._vision_stream_annotations(),
         }
+
+    def _vision_stream_annotations(self) -> list[dict]:
+        """Build per-robot label annotations for the overlay canvas.
+
+        Returns a list of dicts with keys: id, team ("friendly"/"enemy"), px, py
+        (pixel coords in the renderer's coordinate space), label (role string).
+        Returns an empty list if the renderer or game frame is not available.
+        """
+        renderer = self._vision_stream_renderer
+        game_frame = self.my.current_game_frame
+        if renderer is None or game_frame is None:
+            return []
+
+        # Read role_map and optional passer/receiver from blackboard (best-effort).
+        role_map: dict = {}
+        passer_id: int | None = None
+        receiver_id: int | None = None
+        try:
+            bb = self.my.strategy.blackboard
+            if bb is not None:
+                role_map = bb.role_map or {}
+                passer_id = bb.get("passer_id")
+                receiver_id = bb.get("receiver_id")
+        except Exception:
+            pass
+
+        _ROLE_LABELS = {
+            "GOALKEEPER": "GK",
+            "DEFENDER": "DEF",
+            "STRIKER": "STR",
+            "MIDFIELDER": "MID",
+        }
+
+        annotations = []
+        for robot in game_frame.friendly_robots.values():
+            label = ""
+            if robot.id == passer_id:
+                label = "PASSER"
+            elif robot.id == receiver_id:
+                label = "RECEIVER"
+            else:
+                role = role_map.get(robot.id)
+                if role is not None:
+                    label = _ROLE_LABELS.get(role.name, role.name)
+            px, py = renderer._pos_transform(robot.p.x, -robot.p.y)
+            annotations.append({"id": robot.id, "team": "friendly", "px": px, "py": py, "label": label})
+
+        for robot in game_frame.enemy_robots.values():
+            role = role_map.get(robot.id)
+            label = _ROLE_LABELS.get(role.name, role.name) if role is not None else ""
+            px, py = renderer._pos_transform(robot.p.x, -robot.p.y)
+            annotations.append({"id": robot.id, "team": "enemy", "px": px, "py": py, "label": label})
+
+        return annotations
 
     def _draw_rsim_field_bounds_overlay(self) -> None:
         """Draw active field bounds overlay in RSIM human render mode."""
