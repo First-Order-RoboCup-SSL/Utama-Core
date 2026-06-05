@@ -415,7 +415,7 @@ class RSimVisionStreamServer:
       margin: 0;
       min-height: 100vh;
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto auto 1fr;
       gap: 8px;
       padding: 12px 16px;
     }
@@ -531,13 +531,31 @@ class RSimVisionStreamServer:
       pointer-events: none;
       border-color: transparent;
     }
+
+    /* ── Commentary bar ─────────────────────────────────── */
+    #commentary-bar {
+      width: min(100%, 960px);
+      margin: 0 auto;
+      background: #1e242c;
+      border: 1px solid #343b45;
+      border-radius: 8px;
+      padding: 8px 16px;
+      text-align: center;
+      font-size: 14px;
+      font-style: italic;
+      color: #c8d6e5;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
   </style>
 </head>
 <body>
   <div id="scoreboard">
     <!-- Blue team -->
     <div class="team-block blue">
-      <div class="team-name" id="blue-strategy">Blue</div>
+      <div class="team-name" id="blue-team">Blue</div>
       <div class="team-score" id="blue-score">0</div>
       <div class="cards" id="blue-cards"></div>
     </div>
@@ -554,11 +572,13 @@ class RSimVisionStreamServer:
 
     <!-- Yellow team -->
     <div class="team-block yellow">
-      <div class="team-name" id="yellow-strategy">Yellow</div>
+      <div class="team-name" id="yellow-team">Yellow</div>
       <div class="team-score" id="yellow-score">0</div>
       <div class="cards" id="yellow-cards"></div>
     </div>
   </div>
+
+  <div id="commentary-bar">Welcome to the match!</div>
 
   <main>
     <div id="canvas-wrap">
@@ -593,12 +613,15 @@ class RSimVisionStreamServer:
       document.getElementById("time-left").textContent = info.time_left ?? "--:--";
       document.getElementById("blue-score").textContent = info.score_blue ?? 0;
       document.getElementById("yellow-score").textContent = info.score_yellow ?? 0;
-      document.getElementById("blue-strategy").textContent = info.strategy_blue ?? "Blue";
-      document.getElementById("yellow-strategy").textContent = info.strategy_yellow ?? "Yellow";
+      document.getElementById("blue-team").textContent = info.team_blue ?? "Blue";
+      document.getElementById("yellow-team").textContent = info.team_yellow ?? "Yellow";
       const spd = info.ball_speed;
       document.getElementById("ball-speed").textContent = spd != null ? spd.toFixed(2) : "—";
       renderCards("blue-cards", info.yellow_cards_blue ?? 0, info.red_cards_blue ?? 0);
       renderCards("yellow-cards", info.yellow_cards_yellow ?? 0, info.red_cards_yellow ?? 0);
+      if (info.commentary) {
+        document.getElementById("commentary-bar").textContent = info.commentary;
+      }
       latestAnnotations = info.annotations ?? [];
       drawAnnotations();
     }

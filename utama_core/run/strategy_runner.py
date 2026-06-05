@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from utama_core.entities.data.referee import RefereeData
 
 _GEOMETRY_MATCH_TOLERANCE_M = 0.001  # mm-precision integers from vision → 1 mm tolerance
+_VS_KICK_THRESHOLD = 0.5  # m/s — ball speed above this triggers kick commentary
 
 logging.basicConfig(
     filename="Utama.log",
@@ -184,6 +185,13 @@ class StrategyRunner:
 
         self._prev_custom_ref_command: Optional[RefereeCommand] = None
         self._last_referee_data: Optional["RefereeData"] = None
+        self._vs_team_names: tuple[str, str] = self._assign_team_names()
+        self._vs_commentary: str = "Welcome to the match!"
+        self._vs_commentary_until: float = 0.0
+        self._vs_prev_score: tuple[int, int] = (0, 0)
+        self._vs_prev_ball_speed: float = 0.0
+        self._vs_idle_index: int = 0
+        self._vs_idle_next: float = 0.0
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
         self.mode: Mode = self._load_mode(mode)
@@ -1293,25 +1301,120 @@ class StrategyRunner:
         frame = self._vision_stream_renderer.render(self.my.current_game_frame)
         self.vision_stream.publish_rgb_frame(frame)
 
+    _VS_TEAM_NAMES = [
+        "FC Recursion",
+        "Real Segfault",
+        "Borussia Debugmund",
+        "Manchester Bytecode",
+        "Inter Malloc",
+        "Atletico del Stack",
+        "Null Pointer United",
+        "Schalke 0x04",
+        "Deportivo Kernel",
+        "Racing Club de Runtime",
+        "Galactic Overhead",
+        "Ajax Exception",
+        "Off-by-One City",
+        "SV Deadlock",
+        "Infinite Loop FC",
+    ]
+
+    _VS_IDLE_LINES = [
+        "The robots are thinking...",
+        "Calculating optimal trajectory",
+        "Both sides plotting their next move",
+        "The crowd holds its breath",
+        "Pure silicon determination out there",
+        "No human reflexes required",
+        "Running at full clock speed",
+        "Algorithms at war",
+        "404: defence not found",
+        "This is peak robot football",
+    ]
+
+    _VS_KICK_LINES = [
+        "What a strike!",
+        "They've let it fly!",
+        "Big boot from the robot!",
+        "The ball is moving!",
+        "Powerful kick!",
+        "Sending it downfield!",
+    ]
+
+    _VS_GOAL_LINES_YELLOW = [
+        "GOAL! Yellow draws blood!",
+        "Yellow scores! Unbelievable!",
+        "The yellow machine delivers!",
+        "Yellow puts it in the net!",
+    ]
+
+    _VS_GOAL_LINES_BLUE = [
+        "GOAL! Blue strikes back!",
+        "Blue finds the net!",
+        "Brilliant from the blue side!",
+        "Blue pulls one back!",
+    ]
+
+    @staticmethod
+    def _assign_team_names() -> tuple[str, str]:
+        import random
+
+        pool = list(StrategyRunner._VS_TEAM_NAMES)
+        random.shuffle(pool)
+        return pool[0], pool[1]
+
+    def _update_vs_commentary(self, ball_speed: float | None, score_blue: int, score_yellow: int) -> None:
+        import random
+
+        now = time.monotonic()
+        score = (score_blue, score_yellow)
+
+        # Goal scored — highest priority
+        if score != self._vs_prev_score:
+            if score[1] > self._vs_prev_score[1]:
+                line = random.choice(self._VS_GOAL_LINES_YELLOW)
+            else:
+                line = random.choice(self._VS_GOAL_LINES_BLUE)
+            self._vs_commentary = line
+            self._vs_commentary_until = now + 5.0
+            self._vs_prev_score = score
+            self._vs_prev_ball_speed = ball_speed or 0.0
+            return
+
+        self._vs_prev_score = score
+
+        # Kick detected
+        prev_spd = self._vs_prev_ball_speed
+        cur_spd = ball_speed or 0.0
+        self._vs_prev_ball_speed = cur_spd
+        if cur_spd > _VS_KICK_THRESHOLD and prev_spd <= _VS_KICK_THRESHOLD:
+            if now >= self._vs_commentary_until:
+                self._vs_commentary = random.choice(self._VS_KICK_LINES)
+                self._vs_commentary_until = now + 2.5
+
+        # Idle rotation
+        if now >= self._vs_idle_next:
+            if now >= self._vs_commentary_until:
+                self._vs_commentary = self._VS_IDLE_LINES[self._vs_idle_index % len(self._VS_IDLE_LINES)]
+                self._vs_idle_index += 1
+            self._vs_idle_next = now + 6.0
+
     def _vision_stream_status(self) -> dict[str, object]:
         """Build status metadata shown above the browser stream."""
         stage_secs = max(0.0, self.referee_refiner.stage_time_left)
         stage_min = int(stage_secs // 60)
         stage_sec = int(stage_secs % 60)
 
-        my_strategy = self.my.strategy.__class__.__name__
-        opp_strategy = self.opp.strategy.__class__.__name__ if self.opp else "N/A"
-        strategy_yellow = my_strategy if self.my_team_is_yellow else opp_strategy
-        strategy_blue = opp_strategy if self.my_team_is_yellow else my_strategy
-
         blue = self.referee_refiner.blue_team
         yellow = self.referee_refiner.yellow_team
 
         ball = self.my.current_game_frame.ball if self.my.current_game_frame else None
-        if ball is not None:
-            ball_speed = (ball.v.x**2 + ball.v.y**2) ** 0.5
-        else:
-            ball_speed = None
+        ball_speed = (ball.v.x**2 + ball.v.y**2) ** 0.5 if ball is not None else None
+
+        name_yellow, name_blue = (
+            self._vs_team_names if self.my_team_is_yellow else (self._vs_team_names[1], self._vs_team_names[0])
+        )
+        self._update_vs_commentary(ball_speed, blue.score, yellow.score)
 
         return {
             "time_left": f"{stage_min}:{stage_sec:02d}",
@@ -1321,10 +1424,11 @@ class StrategyRunner:
             "yellow_cards_yellow": yellow.yellow_cards,
             "red_cards_blue": blue.red_cards,
             "red_cards_yellow": yellow.red_cards,
-            "strategy_blue": strategy_blue,
-            "strategy_yellow": strategy_yellow,
+            "team_blue": name_blue,
+            "team_yellow": name_yellow,
             "mode": self.mode.value,
             "ball_speed": round(ball_speed, 2) if ball_speed is not None else None,
+            "commentary": self._vs_commentary,
             "annotations": self._vision_stream_annotations(),
         }
 
