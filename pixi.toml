@@ -3,7 +3,7 @@ name = "Utama-Core"
 channels = ["https://prefix.dev/conda-forge"]
 platforms = ["linux-64", "osx-arm64"]
 preview = ["pixi-build"]
-version = "1.11.9"
+version = "1.11.11"
 
 [pypi-dependencies]
 lenses = ">=1.2.0"
@@ -28,7 +28,7 @@ rich = ">=14.2.0,<15"
 
 [package]
 name = "Utama-Core"
-version = "1.11.9"
+version = "1.11.11"
 
 [package.build]
 backend = { name = "pixi-build-python", version = "*" }
@@ -58,4 +58,4 @@ precommit-uninstall = "pre-commit uninstall"
 robosim = { features = ["robosim"], no-default-feature = true }
 
 [target.linux-64.tasks]
-main = "setsid python -m main"
+main = "python -m main"
