@@ -56,6 +56,10 @@ class GameFrameRenderer:
         self._surface = pygame.Surface(self._field_renderer.window_size)
         self._overlay = pygame.Surface(self._field_renderer.window_size, pygame.SRCALPHA)
 
+        # Pre-render the static field once and reuse every frame
+        self._field_cache = pygame.Surface(self._field_renderer.window_size)
+        self._field_renderer.draw(self._field_cache)
+
         # robot_id -> deque of (px, py) pixel positions
         self._trails: Dict[int, deque] = {}
         # active kick annotations
@@ -75,7 +79,7 @@ class GameFrameRenderer:
         if enemy_color is None:
             enemy_color = COLORS["BLUE"] if game_frame.my_team_is_yellow else COLORS["YELLOW"]
 
-        self._field_renderer.draw(self._surface)
+        self._surface.blit(self._field_cache, (0, 0))
         self._overlay.fill((0, 0, 0, 0))
 
         # --- Trails ---
@@ -103,10 +107,7 @@ class GameFrameRenderer:
 
         self._surface.blit(self._overlay, (0, 0))
 
-        return np.transpose(
-            np.array(self._pygame.surfarray.pixels3d(self._surface)),
-            axes=(1, 0, 2),
-        ).copy()
+        return np.ascontiguousarray(self._pygame.surfarray.pixels3d(self._surface).transpose(1, 0, 2))
 
     # ------------------------------------------------------------------
     # Trails
@@ -257,6 +258,13 @@ class RSimVisionStreamServer:
         with self._sse_lock:
             self._sse_clients.clear()
 
+    def is_due(self) -> bool:
+        """Return True if enough time has elapsed to render and publish a new frame."""
+        if self._server is None:
+            return False
+        min_interval = 1.0 / self.max_fps if self.max_fps > 0 else 0.0
+        return (time.monotonic() - self._last_publish_time) >= min_interval
+
     def publish_rgb_frame(self, frame: np.ndarray) -> None:
         """Publish an RGB frame rendered from the latest game state.
 
@@ -266,14 +274,9 @@ class RSimVisionStreamServer:
         if self._server is None:
             return
 
-        now = time.monotonic()
-        min_interval = 1.0 / self.max_fps if self.max_fps > 0 else 0.0
-        if now - self._last_publish_time < min_interval:
-            return
-        self._last_publish_time = now
-
+        self._last_publish_time = time.monotonic()
         height, width = frame.shape[:2]
-        payload = struct.pack("!II", width, height) + np.ascontiguousarray(frame[:, :, :3]).tobytes()
+        payload = struct.pack("!II", width, height) + frame[:, :, :3].tobytes()
         with self._frame_condition:
             self._latest_frame = payload
             self._frame_condition.notify_all()

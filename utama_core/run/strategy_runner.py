@@ -1287,7 +1287,8 @@ class StrategyRunner:
         """Publish the latest refined game frame to the browser stream."""
         if self.vision_stream is None or self._vision_stream_renderer is None or self.my.current_game_frame is None:
             return
-
+        if not self.vision_stream.is_due():
+            return
         self.vision_stream.publish_status(self._vision_stream_status())
         frame = self._vision_stream_renderer.render(self.my.current_game_frame)
         self.vision_stream.publish_rgb_frame(frame)
