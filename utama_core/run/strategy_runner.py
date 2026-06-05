@@ -1502,7 +1502,15 @@ class StrategyRunner:
         if not isinstance(self.referee, CustomReferee):
             return
         bt_nodes: dict[int, list[str]] = {}
-        node_by_id = {n.id: n for n in self.my.strategy.behaviour_tree.root.iterate()}
+        # Build node lookup and parent map
+        node_by_id = {}
+        parent_of = {}
+        for n in self.my.strategy.behaviour_tree.root.iterate():
+            node_by_id[n.id] = n
+            if hasattr(n, "children"):
+                for child in n.children:
+                    parent_of[child.id] = n.id
+        # Find RUNNING leaf nodes with robot_id, trace path to root
         for node_id, status in self._bt_snapshot.visited.items():
             if status.name != "RUNNING":
                 continue
@@ -1510,19 +1518,27 @@ class StrategyRunner:
             if node is None:
                 continue
             rid = None
-            # Try debug_state first (has robot_id for nodes that set it)
             if hasattr(node, "debug_state"):
                 state = node.debug_state()
                 if state and "robot_id" in state:
                     rid = state["robot_id"]
-            # Fallback: read robot_id from blackboard via the node's key spec
             if rid is None and hasattr(node, "robot_id_key"):
                 try:
                     rid = node.blackboard.get(node.robot_id_key)
                 except Exception:
                     pass
             if rid is not None:
-                bt_nodes.setdefault(rid, []).append(node.name)
+                # Walk up to root, collect path
+                path = []
+                cur = node_id
+                while cur is not None:
+                    n = node_by_id.get(cur)
+                    if n is None:
+                        break
+                    path.append(n.name)
+                    cur = parent_of.get(cur)
+                path.reverse()
+                bt_nodes.setdefault(rid, []).append(" › ".join(path))
         self.referee.set_bt_data(bt_nodes)
 
     def _vision_stream_roster(self) -> list[dict]:

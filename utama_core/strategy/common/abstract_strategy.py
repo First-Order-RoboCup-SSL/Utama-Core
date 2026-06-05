@@ -79,7 +79,6 @@ _REFEREE_STOPPAGE_COMMANDS = frozenset(
     {
         RefereeCommand.HALT,
         RefereeCommand.STOP,
-        RefereeCommand.FORCE_START,
         RefereeCommand.PREPARE_KICKOFF_YELLOW,
         RefereeCommand.PREPARE_KICKOFF_BLUE,
         RefereeCommand.PREPARE_PENALTY_YELLOW,
