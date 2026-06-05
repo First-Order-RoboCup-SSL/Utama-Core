@@ -113,22 +113,22 @@ class GameFrameRenderer:
     # ------------------------------------------------------------------
 
     def _update_trails(self, game_frame, friendly_color, enemy_color) -> None:
-        all_robots = [(robot, friendly_color) for robot in game_frame.friendly_robots.values()] + [
-            (robot, enemy_color) for robot in game_frame.enemy_robots.values()
+        all_robots = [(robot, friendly_color, True) for robot in game_frame.friendly_robots.values()] + [
+            (robot, enemy_color, False) for robot in game_frame.enemy_robots.values()
         ]
-        seen_ids = set()
-        for robot, color in all_robots:
+        seen_keys = set()
+        for robot, color, is_friendly in all_robots:
             px, py = self._pos_transform(robot.p.x, -robot.p.y)
-            rid = robot.id
-            seen_ids.add(rid)
-            if rid not in self._trails:
-                self._trails[rid] = deque(maxlen=_TRAIL_LENGTH)
-            self._trails[rid].append((px, py, color))
+            key = (is_friendly, robot.id)
+            seen_keys.add(key)
+            if key not in self._trails:
+                self._trails[key] = deque(maxlen=_TRAIL_LENGTH)
+            self._trails[key].append((px, py, color))
 
         # prune robots that disappeared
-        for rid in list(self._trails):
-            if rid not in seen_ids:
-                del self._trails[rid]
+        for key in list(self._trails):
+            if key not in seen_keys:
+                del self._trails[key]
 
     def _draw_trails(self) -> None:
         pygame = self._pygame
