@@ -901,12 +901,18 @@ class StrategyRunner:
 
         Side effect: Populates game, game_history and current_game_frame on self.my (and self.opp if present).
         """
-        my_mapping = self.yellow_vision_to_cmd_mapping if self.my_team_is_yellow else self.blue_vision_to_cmd_mapping
-        opp_mapping = (
-            (self.blue_vision_to_cmd_mapping if self.my_team_is_yellow else self.yellow_vision_to_cmd_mapping)
-            if self.opp
-            else None
-        )
+        if self.mode == Mode.REAL:
+            my_mapping = (
+                self.yellow_vision_to_cmd_mapping if self.my_team_is_yellow else self.blue_vision_to_cmd_mapping
+            )
+            opp_mapping = (
+                (self.blue_vision_to_cmd_mapping if self.my_team_is_yellow else self.yellow_vision_to_cmd_mapping)
+                if self.opp
+                else {}
+            )
+        else:
+            my_mapping = None
+            opp_mapping = None
 
         my_current_game_frame, opp_current_game_frame = GameGater.wait_until_game_valid(
             self.my_team_is_yellow,
@@ -918,8 +924,8 @@ class StrategyRunner:
             self.my.position_refiner,
             is_pvp=self.opp is not None,
             rsim_env=self.rsim_env,
-            my_vision_to_cmd_mapping=my_mapping if self.mode == Mode.REAL else None,
-            opp_vision_to_cmd_mapping=opp_mapping if self.mode == Mode.REAL else None,
+            my_vision_to_cmd_mapping=my_mapping,
+            opp_vision_to_cmd_mapping=opp_mapping,
         )
 
         self.my.position_refiner.start_filtering()
@@ -1190,12 +1196,32 @@ class StrategyRunner:
         real = self.mode == Mode.REAL
         if self.toggle_opp_first:
             if self.opp:
-                self._step_game(vision_frames, referee_data, True, real_responses=opp_res if real else None)
-            self._step_game(vision_frames, referee_data, False, real_responses=friendly_res if real else None)
+                self._step_game(
+                    vision_frames,
+                    referee_data,
+                    True,
+                    real_responses=opp_res if real else None,
+                )
+            self._step_game(
+                vision_frames,
+                referee_data,
+                False,
+                real_responses=friendly_res if real else None,
+            )
         else:
-            self._step_game(vision_frames, referee_data, False, real_responses=friendly_res if real else None)
+            self._step_game(
+                vision_frames,
+                referee_data,
+                False,
+                real_responses=friendly_res if real else None,
+            )
             if self.opp:
-                self._step_game(vision_frames, referee_data, True, real_responses=opp_res if real else None)
+                self._step_game(
+                    vision_frames,
+                    referee_data,
+                    True,
+                    real_responses=opp_res if real else None,
+                )
         self.toggle_opp_first = not self.toggle_opp_first
 
         # --- rate limiting ---
