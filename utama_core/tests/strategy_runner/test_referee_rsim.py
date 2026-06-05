@@ -37,13 +37,19 @@ from typing import Optional
 
 import py_trees
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.custom_referee import CustomReferee
+from utama_core.custom_referee.geometry import RefereeGeometry
+from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run.strategy_runner import StrategyRunner
+from utama_core.skills.src.go_to_ball import go_to_ball
+from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.strategy.examples.utils import SetBlackboardVariable
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
@@ -78,6 +84,69 @@ class _IdleStrategy(AbstractStrategy):
 
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
         return True
+
+    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
+        return True
+
+    def get_min_bounding_req(self) -> Optional[FieldBounds]:
+        return None
+
+
+class _StateHasBall(AbstractBehaviour):
+    def __init__(self, robot_id_key: str, name: str = "StateHasBall"):
+        super().__init__(name=name)
+        self.robot_id_key = robot_id_key
+
+    def setup_(self):
+        self.blackboard.register_key(key=self.robot_id_key, access=py_trees.common.Access.READ)
+
+    def update(self) -> py_trees.common.Status:
+        robot_id = self.blackboard.get(self.robot_id_key)
+        robot = self.blackboard.game.friendly_robots[robot_id]
+        return py_trees.common.Status.SUCCESS if robot.has_ball else py_trees.common.Status.FAILURE
+
+
+class _GoToBallUntilStatePossession(AbstractBehaviour):
+    def __init__(self, robot_id_key: str, name: str = "GoToBallUntilStatePossession"):
+        super().__init__(name=name)
+        self.robot_id_key = robot_id_key
+
+    def setup_(self):
+        self.blackboard.register_key(key=self.robot_id_key, access=py_trees.common.Access.READ)
+
+    def update(self) -> py_trees.common.Status:
+        robot_id = self.blackboard.get(self.robot_id_key)
+        self.blackboard.cmd_map[robot_id] = go_to_ball(self.blackboard.game, self.blackboard.motion_controller, robot_id)
+        return py_trees.common.Status.RUNNING
+
+
+class _StateGoToBallStrategy(AbstractStrategy):
+    exp_ball: bool = True
+
+    def __init__(self, robot_id: int):
+        self.robot_id = robot_id
+        self.robot_id_key = "robot_id"
+        super().__init__()
+
+    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
+        root = py_trees.composites.Sequence(name="StateGoToBallRoot", memory=True)
+        go_to_ball_until_possession = py_trees.composites.Selector(name="StateGoToBall", memory=False)
+        go_to_ball_until_possession.add_children(
+            [
+                _StateHasBall(robot_id_key=self.robot_id_key),
+                _GoToBallUntilStatePossession(robot_id_key=self.robot_id_key),
+            ]
+        )
+        root.add_children(
+            [
+                SetBlackboardVariable(name="SetRobotID", variable_name=self.robot_id_key, value=self.robot_id),
+                go_to_ball_until_possession,
+            ]
+        )
+        return root
+
+    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
+        return n_runtime_friendly == 1
 
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
         return True
@@ -177,15 +246,10 @@ def test_ball_placement_robot_approaches_designated_position(headless):
 
 
 class _DirectFreeOursManager(AbstractTestManager):
-    """Ball exits the side boundary with no friendly robot nearby → DIRECT_FREE_YELLOW (ours).
-
-    With no robot close enough to the ball to register a friendly last-touch,
-    OutOfBoundsRule defaults to DIRECT_FREE_YELLOW.  We verify the kicker
-    drives toward the (now out-of-bounds) ball.
-    """
+    """DIRECT_FREE_YELLOW is injected directly; kicker must drive toward the ball."""
 
     n_episodes = 1
-    APPROACH_TOLERANCE = 0.6  # slightly wider: ball may be just outside boundary
+    APPROACH_TOLERANCE = 0.6
 
     def __init__(self, referee: CustomReferee):
         super().__init__()
@@ -194,13 +258,12 @@ class _DirectFreeOursManager(AbstractTestManager):
         self.robot_near_ball: bool = False
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
-        # Keep all robots well away from the ball so last-touch is unknown → DIRECT_FREE_YELLOW
         sim_controller.teleport_robot(game.my_team_is_yellow, 0, -1.5, 0.0)
         sim_controller.teleport_robot(game.my_team_is_yellow, 1, -2.0, 0.5)
         sim_controller.teleport_robot(game.my_team_is_yellow, 2, -2.0, -0.5)
-        # Ball heading out the top sideline
-        sim_controller.teleport_ball(0.0, 2.5, vx=0.0, vy=2.5)
-        self._referee.set_command(RefereeCommand.FORCE_START, game.ts)
+        sim_controller.teleport_ball(0.0, 0.0)
+        # Inject directly — bypass OOB detection which now routes through ball placement first.
+        self._referee.force_command(RefereeCommand.DIRECT_FREE_YELLOW, game.ts)
 
     def eval_status(self, game: Game) -> TestingStatus:
         ref = game.referee
@@ -245,34 +308,26 @@ def test_direct_free_kick_ours_robot_drives_to_ball(headless):
 
 
 class _DirectFreeTheirsManager(AbstractTestManager):
-    """A robot starts inside the keep-out radius; DIRECT_FREE_BLUE (theirs) is issued.
-
-    We place robot 0 right next to the ball before it exits so last-touch registers
-    as friendly → OutOfBoundsRule issues DIRECT_FREE_BLUE (opponent's free kick).
-    The test verifies that all robots end up outside the keep-out radius.
-    """
+    """DIRECT_FREE_BLUE is injected directly; all robots must clear the keep-out radius."""
 
     n_episodes = 1
-    # All robots must clear beyond this radius from the ball position.
-    CLEAR_TOLERANCE = 0.1  # allowed margin inside keep-out (robots should be well clear)
+    CLEAR_TOLERANCE = 0.1
 
     def __init__(self, referee: CustomReferee):
         super().__init__()
         self._referee = referee
         self.direct_free_seen: bool = False
         self.robots_cleared: bool = False
-        # We record the ball position when DIRECT_FREE_BLUE fires to check clearing.
         self._ball_pos_at_call: Optional[tuple[float, float]] = None
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
-        # Robot 0 is placed right next to the ball — it will register as last-toucher.
-        sim_controller.teleport_robot(game.my_team_is_yellow, 0, 0.0, 2.4)
-        # Robots 1 and 2 also start near the ball path — both inside keep-out.
-        sim_controller.teleport_robot(game.my_team_is_yellow, 1, 0.1, 2.3)
-        sim_controller.teleport_robot(game.my_team_is_yellow, 2, -0.1, 2.3)
-        # Ball heading out the top sideline; robot 0 is close enough for last-touch
-        sim_controller.teleport_ball(0.0, 2.5, vx=0.0, vy=2.5)
-        self._referee.set_command(RefereeCommand.FORCE_START, game.ts)
+        # All robots start inside keep-out radius around the ball.
+        sim_controller.teleport_robot(game.my_team_is_yellow, 0, 0.0, 0.3)
+        sim_controller.teleport_robot(game.my_team_is_yellow, 1, 0.1, -0.3)
+        sim_controller.teleport_robot(game.my_team_is_yellow, 2, -0.1, 0.3)
+        sim_controller.teleport_ball(0.0, 0.0)
+        # Inject directly — bypass OOB detection which now routes through ball placement first.
+        self._referee.force_command(RefereeCommand.DIRECT_FREE_BLUE, game.ts)
 
     def eval_status(self, game: Game) -> TestingStatus:
         ref = game.referee
@@ -385,6 +440,69 @@ def test_prepare_kickoff_robots_form_on_own_half_outside_circle(headless):
 
     assert tm.kickoff_command_seen, "CustomReferee never issued a PREPARE_KICKOFF command"
     assert passed, "Robots did not sustain a legal kickoff formation for the required number of frames"
+
+
+# ---------------------------------------------------------------------------
+# Scenario 4: out-of-bounds restart spot can be played
+# ---------------------------------------------------------------------------
+
+
+class _RestartSpotCaptureManager(AbstractTestManager):
+    """Places the ball at the out-of-bounds restart spot and verifies capture.
+
+    This guards against restart positions that are technically infield but too
+    close to the wall for the robot/dribbler geometry to acquire the ball.
+    """
+
+    n_episodes = 1
+
+    def __init__(self, restart_spot: tuple[float, float]):
+        super().__init__()
+        self.restart_spot = restart_spot
+        self.robot_has_ball = False
+        self.min_distance_to_ball = math.inf
+
+    def reset_field(self, sim_controller: AbstractSimController, game: Game):
+        target_x, target_y = self.restart_spot
+        sim_controller.teleport_robot(game.my_team_is_yellow, 0, target_x, target_y - 0.9, math.pi / 2)
+        sim_controller.teleport_ball(target_x, target_y)
+
+    def eval_status(self, game: Game) -> TestingStatus:
+        robot = game.friendly_robots[0]
+        ball = game.ball
+        self.min_distance_to_ball = min(
+            self.min_distance_to_ball,
+            math.hypot(robot.p.x - ball.p.x, robot.p.y - ball.p.y),
+        )
+        if robot.has_ball:
+            self.robot_has_ball = True
+            return TestingStatus.SUCCESS
+        return TestingStatus.IN_PROGRESS
+
+
+def test_out_of_bounds_restart_spot_is_capturable_by_go_to_ball(headless):
+    geometry = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
+    restart_spot = OutOfBoundsRule._nearest_infield_point(0.0, geometry.half_width + 0.5, geometry)
+
+    runner = StrategyRunner(
+        strategy=_StateGoToBallStrategy(robot_id=0),
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        mode="rsim",
+        exp_friendly=1,
+        exp_enemy=0,
+        exp_ball=True,
+        referee=None,
+    )
+    tm = _RestartSpotCaptureManager(restart_spot)
+
+    passed = runner.run_test(tm, episode_timeout=5.0, rsim_headless=headless)
+
+    assert tm.robot_has_ball, (
+        "Robot could not acquire the out-of-bounds restart ball at "
+        f"{restart_spot}; closest approach was {tm.min_distance_to_ball:.3f} m"
+    )
+    assert passed
 
 
 # ---------------------------------------------------------------------------

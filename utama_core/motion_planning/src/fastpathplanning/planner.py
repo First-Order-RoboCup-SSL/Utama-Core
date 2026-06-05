@@ -21,7 +21,7 @@ from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEn
 
 
 class FastPathPlanner:
-    def __init__(self, env: SSLStandardEnv):
+    def __init__(self, env: SSLStandardEnv | None):
         self._env = env
         self.config = config
         self.OBSTACLE_CLEARANCE = self.config.OBSTACLE_CLEARANCE
@@ -62,7 +62,7 @@ class FastPathPlanner:
 
                 obstacle_list.append(obstacle_segment)
 
-                # DRAWING: Show the projected velocity line in Red
+                # DRAWING: Show the projected velocity line in Red when an RSim renderer is available.
                 if self._env is not None:
                     self._env.draw_line(obstacle_segment, color="Red")
 
@@ -271,7 +271,7 @@ class FastPathPlanner:
         # 4. Plan geometric path
         final_trajectory, _ = self.check_segment((our_pos, safe_target), obstacles, 0, safe_target, field_bounds)
 
-        # 5. Draw the resulting safe path segments
+        # 5. Draw the resulting safe path segments when an RSim renderer is available.
         if self._env is not None:
             for i in final_trajectory:
                 self._env.draw_line(i)

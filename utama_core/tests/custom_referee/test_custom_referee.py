@@ -309,7 +309,7 @@ class TestGameStateMachine:
         assert sm.yellow_team.score == 1
         assert sm.blue_team.score == 0
         assert data.referee_command == RefereeCommand.STOP
-        assert data.next_command == RefereeCommand.PREPARE_KICKOFF_BLUE
+        assert data.next_command == RefereeCommand.BALL_PLACEMENT_BLUE
 
     def test_goal_increments_blue_score(self):
         from utama_core.custom_referee.rules.base_rule import RuleViolation
@@ -435,7 +435,7 @@ class TestCustomReferee:
         assert isinstance(data, RefereeData)
         assert data.source_identifier == "custom_referee"
 
-    def test_simulation_goal_auto_advances_to_prepare_kickoff_and_scores(self):
+    def test_simulation_goal_auto_advances_to_ball_placement_and_scores(self):
         referee = CustomReferee.from_profile_name("simulation")
         referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
 
@@ -443,10 +443,10 @@ class TestCustomReferee:
         frame = _frame(ball=_ball(5.0, 0.0), my_team_is_yellow=True, my_team_is_right=True, ts=10.0)
         data = referee.step(frame, current_time=10.0)
 
-        assert data.referee_command == RefereeCommand.PREPARE_KICKOFF_YELLOW
+        assert data.referee_command == RefereeCommand.BALL_PLACEMENT_YELLOW
         assert data.blue_team.score == 1
         assert data.yellow_team.score == 0
-        assert data.next_command == RefereeCommand.NORMAL_START
+        assert data.next_command == RefereeCommand.PREPARE_KICKOFF_YELLOW
 
     def test_human_profile_no_oob(self):
         """Human profile disables out-of-bounds — ball outside must not trigger."""
@@ -472,25 +472,25 @@ class TestCustomReferee:
         goal_frame = _frame(ball=_ball(5.0, 0.0), my_team_is_yellow=True, my_team_is_right=True, ts=10.0)
         data = referee.step(goal_frame, current_time=10.0)
         assert data.referee_command == RefereeCommand.STOP
-        assert data.next_command == RefereeCommand.PREPARE_KICKOFF_YELLOW
+        assert data.next_command == RefereeCommand.BALL_PLACEMENT_YELLOW
 
         # Still in STOP later — operator must choose the next command.
         still_stop = referee.step(_frame(ball=_ball(0.0, 0.0), ts=70.0), current_time=70.0)
         assert still_stop.referee_command == RefereeCommand.STOP
 
-    def test_simulation_stays_in_prepare_kickoff_after_goal_without_ready_kicker(self):
-        """Simulation mode auto-advances into PREPARE_KICKOFF and waits there until ready."""
+    def test_simulation_stays_in_ball_placement_after_goal_until_ball_is_placed(self):
+        """Simulation mode auto-advances into BALL_PLACEMENT and waits for the ball at centre."""
         referee = CustomReferee.from_profile_name("simulation")
         referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
 
         goal_frame = _frame(ball=_ball(5.0, 0.0), my_team_is_yellow=True, my_team_is_right=True, ts=10.0)
         referee.step(goal_frame, current_time=10.0)
 
-        # With no kicker in the centre circle, the state remains in PREPARE_KICKOFF.
-        data = referee.step(_frame(ball=_ball(0.0, 0.0), ts=70.0), current_time=70.0)
-        assert data.referee_command == RefereeCommand.PREPARE_KICKOFF_YELLOW
+        data = referee.step(_frame(ball=_ball(1.0, 0.0), ts=70.0), current_time=70.0)
+        assert data.referee_command == RefereeCommand.BALL_PLACEMENT_YELLOW
+        assert data.next_command == RefereeCommand.PREPARE_KICKOFF_YELLOW
 
-    def test_simulation_oob_auto_advances_to_direct_free_and_then_normal_start(self):
+    def test_simulation_oob_auto_advances_to_ball_placement_then_direct_free(self):
         referee = CustomReferee.from_profile_name("simulation")
         referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
 
@@ -504,11 +504,11 @@ class TestCustomReferee:
 
         out_frame = _frame(ball=_ball(0.0, 3.5), my_team_is_yellow=True, ts=10.0)
         data = referee.step(out_frame, current_time=10.0)
-        assert data.referee_command == RefereeCommand.DIRECT_FREE_BLUE
-        assert data.next_command == RefereeCommand.NORMAL_START
+        assert data.referee_command == RefereeCommand.BALL_PLACEMENT_BLUE
+        assert data.next_command == RefereeCommand.DIRECT_FREE_BLUE
 
         ready_frame = _frame(
-            ball=_ball(0.0, 0.0),
+            ball=_ball(0.0, 2.9),
             friendly_robots={0: _robot(0, 1.0, 0.0, is_friendly=True)},
             enemy_robots={0: _robot(0, 0.1, 0.0, is_friendly=False)},
             my_team_is_yellow=True,
@@ -516,7 +516,8 @@ class TestCustomReferee:
         )
         referee.step(ready_frame, current_time=20.0)
         data = referee.step(ready_frame, current_time=23.0)
-        assert data.referee_command == RefereeCommand.NORMAL_START
+        assert data.referee_command == RefereeCommand.DIRECT_FREE_BLUE
+        assert data.next_command == RefereeCommand.NORMAL_START
 
     def test_human_manual_direct_free_stays_in_stop_until_operator_advances(self):
         referee = CustomReferee.from_profile_name("human")

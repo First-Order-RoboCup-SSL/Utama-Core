@@ -144,6 +144,11 @@ class RSimRobotController(AbstractRobotController):
         return self._env
 
     @property
+    def latest_sent_commands(self):
+        """Most recent low-level rSim commands, if a frame has been stepped."""
+        return self._env.sent_commands
+
+    @property
     def robots_info(self):
         return self._robots_info
 

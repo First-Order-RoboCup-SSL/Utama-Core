@@ -165,9 +165,45 @@ class CustomReferee:
         if initial_command != RefereeCommand.HALT:
             self._state.set_command(initial_command, timestamp)
 
-    def set_command(self, command: RefereeCommand, timestamp: float) -> None:
-        """Manual override — for operator use or test scripting."""
+    def set_command(
+        self,
+        command: RefereeCommand,
+        timestamp: float,
+        designated_position: Optional[tuple[float, float]] = None,
+        next_command: Optional[RefereeCommand] = None,
+        status_message: Optional[str] = None,
+    ) -> None:
+        """Manual override for operator use or test scripting.
+
+        Args:
+            command: Referee command to apply.
+            timestamp: Timestamp to associate with the command transition.
+            designated_position: Optional ball placement/free-kick target to
+                expose through ``RefereeData.designated_position``.
+            next_command: Optional queued command to expose through
+                ``RefereeData.next_command``.
+            status_message: Optional human-readable referee status.
+
+        The optional fields are intentionally thin wrappers around the custom
+        referee state machine so integration tests and scenario runners do not
+        need to reach into private ``_state`` attributes.
+        """
         self._state.set_command(command, timestamp)
+        if designated_position is not None:
+            self._state.ball_placement_target = designated_position
+        if next_command is not None:
+            self._state.next_command = next_command
+        if status_message is not None:
+            self._state.status_message = status_message
+
+    def force_command(
+        self,
+        command: "RefereeCommand",
+        timestamp: float,
+        ball_placement_target=None,
+    ) -> None:
+        """God-mode override — bypasses the STOP-first guard."""
+        self._state.force_command(command, timestamp, ball_placement_target)
 
     # ------------------------------------------------------------------
     # Properties (read-only access for callers that need to inspect state)
