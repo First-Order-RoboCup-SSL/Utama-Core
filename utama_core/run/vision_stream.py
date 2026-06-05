@@ -328,7 +328,10 @@ class RSimVisionStreamServer:
                 if not cache:
                     self.send_header("Cache-Control", "no-store")
                 self.end_headers()
-                self.wfile.write(body)
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError, OSError):
+                    pass
 
             def _serve_index(self) -> None:
                 self._send_body(server_instance._index_html().encode("utf-8"), "text/html; charset=utf-8")
