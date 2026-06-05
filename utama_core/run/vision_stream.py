@@ -8,19 +8,13 @@ import math
 import struct
 import threading
 import time
-from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
-
-_TRAIL_LENGTH = 20  # frames kept per robot
-_TRAIL_MIN_ALPHA = 20  # oldest point alpha (0-255)
-_TRAIL_MAX_ALPHA = 180  # newest point alpha (0-255)
-_TRAIL_RADIUS = 3  # pixels
 
 _KICK_SPEED_THRESHOLD = 0.5  # m/s — ball speed above this triggers annotation
 _KICK_TTL_FRAMES = 45  # frames the kick line stays visible (~1.5s at 30fps)
@@ -60,9 +54,6 @@ class GameFrameRenderer:
         self._field_cache = pygame.Surface(self._field_renderer.window_size)
         self._field_renderer.draw(self._field_cache)
 
-        # robot_id -> deque of (px, py) pixel positions
-        self._trails: Dict[int, deque] = {}
-        # active kick annotations
         self._kick_annotations: List[_KickAnnotation] = []
         self._prev_ball_speed_sq: float = 0.0
 
@@ -81,10 +72,6 @@ class GameFrameRenderer:
 
         self._surface.blit(self._field_cache, (0, 0))
         self._overlay.fill((0, 0, 0, 0))
-
-        # --- Trails ---
-        self._update_trails(game_frame, friendly_color, enemy_color)
-        self._draw_trails()
 
         # --- Robots ---
         for robot in game_frame.friendly_robots.values():
@@ -108,46 +95,6 @@ class GameFrameRenderer:
         self._surface.blit(self._overlay, (0, 0))
 
         return np.ascontiguousarray(self._pygame.surfarray.pixels3d(self._surface).transpose(1, 0, 2))
-
-    # ------------------------------------------------------------------
-    # Trails
-    # ------------------------------------------------------------------
-
-    def _update_trails(self, game_frame, friendly_color, enemy_color) -> None:
-        all_robots = [(robot, friendly_color, True) for robot in game_frame.friendly_robots.values()] + [
-            (robot, enemy_color, False) for robot in game_frame.enemy_robots.values()
-        ]
-        seen_keys = set()
-        for robot, color, is_friendly in all_robots:
-            px, py = self._pos_transform(robot.p.x, -robot.p.y)
-            key = (is_friendly, robot.id)
-            seen_keys.add(key)
-            if key not in self._trails:
-                self._trails[key] = deque(maxlen=_TRAIL_LENGTH)
-            self._trails[key].append((px, py, color))
-
-        # prune robots that disappeared
-        for key in list(self._trails):
-            if key not in seen_keys:
-                del self._trails[key]
-
-    def _draw_trails(self) -> None:
-        pygame = self._pygame
-        n = _TRAIL_LENGTH
-        for trail in self._trails.values():
-            pts = list(trail)
-            if len(pts) < 2:
-                continue
-            color = pts[-1][2]
-            r, g, b = color[:3]
-            for i in range(len(pts) - 1):
-                t0 = i / max(n - 1, 1)
-                t1 = (i + 1) / max(n - 1, 1)
-                alpha = int(_TRAIL_MIN_ALPHA + t1 * (_TRAIL_MAX_ALPHA - _TRAIL_MIN_ALPHA))
-                width = max(1, int(_TRAIL_RADIUS * (0.4 + 0.6 * t0)))
-                p0 = (pts[i][0], pts[i][1])
-                p1 = (pts[i + 1][0], pts[i + 1][1])
-                pygame.draw.line(self._overlay, (r, g, b, alpha), p0, p1, width)
 
     # ------------------------------------------------------------------
     # Kick annotations
@@ -415,7 +362,7 @@ class RSimVisionStreamServer:
       margin: 0;
       min-height: 100vh;
       display: grid;
-      grid-template-rows: auto auto 1fr;
+      grid-template-rows: auto auto auto 1fr;
       gap: 8px;
       padding: 12px 16px;
     }
@@ -549,6 +496,35 @@ class RSimVisionStreamServer:
       align-items: center;
       justify-content: center;
     }
+
+    /* ── Roster panel ───────────────────────────────────── */
+    #roster {
+      width: min(100%, 960px);
+      margin: 0 auto;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .player-card {
+      background: #1e242c;
+      border: 1px solid #343b45;
+      border-radius: 8px;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .player-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .player-dot.yellow { background: #FFD700; }
+    .player-dot.blue   { background: #4FC3F7; }
+    .player-name { font-weight: 600; color: #f1f4f8; }
+    .player-status { color: #8fa1b3; font-size: 11px; }
   </style>
 </head>
 <body>
@@ -579,6 +555,7 @@ class RSimVisionStreamServer:
   </div>
 
   <div id="commentary-bar">Welcome to the match!</div>
+  <div id="roster"></div>
 
   <main>
     <div id="canvas-wrap">
@@ -621,6 +598,19 @@ class RSimVisionStreamServer:
       renderCards("yellow-cards", info.yellow_cards_yellow ?? 0, info.red_cards_yellow ?? 0);
       if (info.commentary) {
         document.getElementById("commentary-bar").textContent = info.commentary;
+      }
+      if (info.roster) {
+        const roster = document.getElementById("roster");
+        roster.innerHTML = "";
+        for (const p of info.roster) {
+          const card = document.createElement("div");
+          card.className = "player-card";
+          card.innerHTML =
+            `<span class="player-dot ${p.team}"></span>` +
+            `<span class="player-name">${p.name}</span>` +
+            `<span class="player-status">${p.status}</span>`;
+          roster.appendChild(card);
+        }
       }
       latestAnnotations = info.annotations ?? [];
       drawAnnotations();

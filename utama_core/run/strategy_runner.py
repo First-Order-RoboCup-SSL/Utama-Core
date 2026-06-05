@@ -192,6 +192,8 @@ class StrategyRunner:
         self._vs_prev_ball_speed: float = 0.0
         self._vs_idle_index: int = 0
         self._vs_idle_next: float = 0.0
+        # (is_friendly, robot_id) -> footballer name
+        self._vs_robot_names: dict[tuple[bool, int], str] = {}
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
         self.mode: Mode = self._load_mode(mode)
@@ -1355,6 +1357,29 @@ class StrategyRunner:
         "Blue pulls one back!",
     ]
 
+    _VS_FOOTBALLER_NAMES = [
+        "Messi",
+        "Ronaldo",
+        "Mbappé",
+        "Neymar",
+        "Haaland",
+        "Benzema",
+        "Modric",
+        "De Bruyne",
+        "Salah",
+        "Lewandowski",
+        "Kylian",
+        "Vinicius",
+        "Pedri",
+        "Bellingham",
+        "Osimhen",
+        "Courtois",
+        "Alisson",
+        "Neuer",
+        "ter Stegen",
+        "Oblak",
+    ]
+
     @staticmethod
     def _assign_team_names() -> tuple[str, str]:
         import random
@@ -1430,21 +1455,55 @@ class StrategyRunner:
             "ball_speed": round(ball_speed, 2) if ball_speed is not None else None,
             "commentary": self._vs_commentary,
             "annotations": self._vision_stream_annotations(),
+            "roster": self._vision_stream_roster(),
         }
 
-    def _vision_stream_annotations(self) -> list[dict]:
-        """Build per-robot label annotations for the overlay canvas.
+    def _get_robot_name(self, is_friendly: bool, robot_id: int) -> str:
+        key = (is_friendly, robot_id)
+        if key not in self._vs_robot_names:
+            used = set(self._vs_robot_names.values())
+            pool = [n for n in self._VS_FOOTBALLER_NAMES if n not in used]
+            if not pool:
+                pool = self._VS_FOOTBALLER_NAMES
+            import random
 
-        Returns a list of dicts with keys: id, team ("friendly"/"enemy"), px, py
-        (pixel coords in the renderer's coordinate space), label (role string).
-        Returns an empty list if the renderer or game frame is not available.
-        """
+            self._vs_robot_names[key] = random.choice(pool)
+        return self._vs_robot_names[key]
+
+    def _vision_stream_annotations(self) -> list[dict]:
+        """Build per-robot label annotations (footballer name) for the overlay canvas."""
         renderer = self._vision_stream_renderer
         game_frame = self.my.current_game_frame
         if renderer is None or game_frame is None:
             return []
 
-        # Read role_map and optional passer/receiver from blackboard (best-effort).
+        annotations = []
+        for robot in game_frame.friendly_robots.values():
+            name = self._get_robot_name(True, robot.id)
+            px, py = renderer._pos_transform(robot.p.x, -robot.p.y)
+            annotations.append({"id": robot.id, "team": "friendly", "px": px, "py": py, "label": name})
+
+        for robot in game_frame.enemy_robots.values():
+            name = self._get_robot_name(False, robot.id)
+            px, py = renderer._pos_transform(robot.p.x, -robot.p.y)
+            annotations.append({"id": robot.id, "team": "enemy", "px": px, "py": py, "label": name})
+
+        return annotations
+
+    def _vision_stream_roster(self) -> list[dict]:
+        """Build the player roster list shown below the scoreboard."""
+        game_frame = self.my.current_game_frame
+        if game_frame is None:
+            return []
+
+        _ROLE_LABELS = {
+            "GOALKEEPER": "Goalkeeper",
+            "DEFENDER": "Defender",
+            "STRIKER": "Striker",
+            "MIDFIELDER": "Midfielder",
+            "UNASSIGNED": "On field",
+        }
+
         role_map: dict = {}
         passer_id: int | None = None
         receiver_id: int | None = None
@@ -1457,34 +1516,29 @@ class StrategyRunner:
         except Exception:
             pass
 
-        _ROLE_LABELS = {
-            "GOALKEEPER": "GK",
-            "DEFENDER": "DEF",
-            "STRIKER": "STR",
-            "MIDFIELDER": "MID",
-        }
-
-        annotations = []
+        roster = []
         for robot in game_frame.friendly_robots.values():
-            label = ""
+            name = self._get_robot_name(True, robot.id)
             if robot.id == passer_id:
-                label = "PASSER"
+                status = "Passing"
             elif robot.id == receiver_id:
-                label = "RECEIVER"
+                status = "Receiving"
             else:
                 role = role_map.get(robot.id)
-                if role is not None:
-                    label = _ROLE_LABELS.get(role.name, role.name)
-            px, py = renderer._pos_transform(robot.p.x, -robot.p.y)
-            annotations.append({"id": robot.id, "team": "friendly", "px": px, "py": py, "label": label})
+                status = _ROLE_LABELS.get(role.name, "On field") if role else "On field"
+            roster.append(
+                {"name": name, "team": "yellow" if game_frame.my_team_is_yellow else "blue", "status": status}
+            )
 
         for robot in game_frame.enemy_robots.values():
+            name = self._get_robot_name(False, robot.id)
             role = role_map.get(robot.id)
-            label = _ROLE_LABELS.get(role.name, role.name) if role is not None else ""
-            px, py = renderer._pos_transform(robot.p.x, -robot.p.y)
-            annotations.append({"id": robot.id, "team": "enemy", "px": px, "py": py, "label": label})
+            status = _ROLE_LABELS.get(role.name, "On field") if role else "On field"
+            roster.append(
+                {"name": name, "team": "blue" if game_frame.my_team_is_yellow else "yellow", "status": status}
+            )
 
-        return annotations
+        return roster
 
     def _draw_rsim_field_bounds_overlay(self) -> None:
         """Draw active field bounds overlay in RSIM human render mode."""
