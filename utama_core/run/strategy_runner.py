@@ -299,6 +299,12 @@ class StrategyRunner:
         if self.opp:
             self.opp.strategy.setup_behaviour_tree(is_opp_strat=True)
 
+        # SnapshotVisitor for real-time behaviour tree visualization
+        from py_trees.visitors import SnapshotVisitor
+
+        self._bt_snapshot = SnapshotVisitor()
+        self.my.strategy.behaviour_tree.add_visitor(self._bt_snapshot)
+
         self.toggle_opp_first = False  # used to alternate the order of opp and friendly in run
 
         if print_real_fps is not None:
@@ -1236,6 +1242,7 @@ class StrategyRunner:
                 self._step_game(vision_frames, referee_data, True, real_responses=opp_res if real else None)
         self.toggle_opp_first = not self.toggle_opp_first
         self._publish_vision_stream_frame()
+        self._push_bt_nodes_to_referee()
 
         # --- rate limiting ---
         if self.mode != Mode.RSIM:
@@ -1489,6 +1496,34 @@ class StrategyRunner:
             annotations.append({"id": robot.id, "team": "enemy", "px": px, "py": py, "label": name})
 
         return annotations
+
+    def _push_bt_nodes_to_referee(self) -> None:
+        """Extract per-robot RUNNING BT nodes and push to CustomReferee for GUI display."""
+        if not isinstance(self.referee, CustomReferee):
+            return
+        bt_nodes: dict[int, list[str]] = {}
+        node_by_id = {n.id: n for n in self.my.strategy.behaviour_tree.root.iterate()}
+        for node_id, status in self._bt_snapshot.visited.items():
+            if status.name != "RUNNING":
+                continue
+            node = node_by_id.get(node_id)
+            if node is None:
+                continue
+            rid = None
+            # Try debug_state first (has robot_id for nodes that set it)
+            if hasattr(node, "debug_state"):
+                state = node.debug_state()
+                if state and "robot_id" in state:
+                    rid = state["robot_id"]
+            # Fallback: read robot_id from blackboard via the node's key spec
+            if rid is None and hasattr(node, "robot_id_key"):
+                try:
+                    rid = node.blackboard.get(node.robot_id_key)
+                except Exception:
+                    pass
+            if rid is not None:
+                bt_nodes.setdefault(rid, []).append(node.name)
+        self.referee.set_bt_data(bt_nodes)
 
     def _vision_stream_roster(self) -> list[dict]:
         """Build the player roster list shown below the scoreboard."""

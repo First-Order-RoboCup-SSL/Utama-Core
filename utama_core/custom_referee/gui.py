@@ -94,6 +94,7 @@ class _RefereeGUIServer(threading.Thread):
         self._lock = threading.Lock()
         self._ref_data = None
         self._game_frame = None  # Optional[GameFrame]
+        self._bt_data: dict = {}
         self._sse_clients: List = []
         self._sse_lock = threading.Lock()
 
@@ -138,11 +139,13 @@ class _RefereeGUIServer(threading.Thread):
 
     # ---- called by external loops to push a new state snapshot ----
 
-    def notify(self, ref_data, game_frame=None) -> None:
+    def notify(self, ref_data, game_frame=None, bt_data=None) -> None:
         """Push a RefereeData snapshot from an external game loop."""
         with self._lock:
             self._ref_data = ref_data
             self._game_frame = game_frame
+            if bt_data is not None:
+                self._bt_data = bt_data
         self._broadcast()
 
     # ---- SSE broadcast ----
@@ -151,10 +154,11 @@ class _RefereeGUIServer(threading.Thread):
         with self._lock:
             data = self._ref_data
             frame = self._game_frame
+            bt = self._bt_data
         if data is None:
             return
 
-        payload = ("data: " + _serialise_state(data, frame) + "\n\n").encode()
+        payload = ("data: " + _serialise_state(data, frame, bt) + "\n\n").encode()
         dead: List = []
 
         with self._sse_lock:
@@ -296,7 +300,18 @@ def _serialise_robots(game_frame) -> dict:
         return {"friendly": [], "enemy": []}
 
     def _robot_list(robots_dict):
-        return [{"id": r.id, "x": r.p.x, "y": r.p.y, "orientation": r.orientation} for r in robots_dict.values()]
+        return [
+            {
+                "id": r.id,
+                "x": r.p.x,
+                "y": r.p.y,
+                "vx": r.v.x,
+                "vy": r.v.y,
+                "orientation": r.orientation,
+                "has_ball": r.has_ball,
+            }
+            for r in robots_dict.values()
+        ]
 
     return {
         "friendly": _robot_list(game_frame.friendly_robots),
@@ -307,10 +322,10 @@ def _serialise_robots(game_frame) -> dict:
 def _serialise_ball(game_frame):
     if game_frame is None or game_frame.ball is None:
         return None
-    return {"x": game_frame.ball.p.x, "y": game_frame.ball.p.y}
+    return {"x": game_frame.ball.p.x, "y": game_frame.ball.p.y, "vx": game_frame.ball.v.x, "vy": game_frame.ball.v.y}
 
 
-def _serialise_state(ref_data, game_frame=None) -> str:
+def _serialise_state(ref_data, game_frame=None, bt_data=None) -> str:
     designated = None
     if ref_data.designated_position is not None:
         try:
@@ -331,8 +346,11 @@ def _serialise_state(ref_data, game_frame=None) -> str:
             "blue_score": ref_data.blue_team.score,
             "designated": designated,
             "status_message": ref_data.status_message,
+            "my_team_is_right": getattr(game_frame, "my_team_is_right", False),
+            "my_team_is_yellow": getattr(game_frame, "my_team_is_yellow", True),
             "robots": _serialise_robots(game_frame),
             "ball": _serialise_ball(game_frame),
+            "bt_nodes": bt_data or {},
         }
     )
 
@@ -596,29 +614,60 @@ _HTML = r"""<!DOCTYPE html>
   }
   .dot.live { background: var(--green); }
 
-  /* ── Bottom-left: event log ── */
-  #quad-log {
+  /* ── Bottom-left: robot status ── */
+  #quad-status {
     grid-area: log;
   }
-  .log-entries {
+  .status-entries {
     overflow-y: auto;
     flex: 1;
     min-height: 0;
-    padding: 8px 12px;
+    padding: 6px 10px;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
   }
-  .log-entry {
-    font-size: .7rem;
-    line-height: 1.4;
+  .status-section-title {
+    font-size: .6rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 4px 0 2px;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 3px;
+    margin-bottom: 2px;
   }
-  .log-time  { color: var(--muted); margin-right: 6px; }
-  .log-cmd   { color: var(--green); }
-  .log-score { color: var(--yellow); }
-  .log-msg   { color: var(--text); opacity: .8; }
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .68rem;
+    line-height: 1.4;
+    padding: 1px 0;
+  }
+  .status-bot-id {
+    font-weight: 700;
+    min-width: 16px;
+    text-align: right;
+  }
+  .status-bot-id.friendly { color: var(--yellow); }
+  .status-bot-id.enemy    { color: var(--blue); }
+  .status-pos { color: var(--text); opacity: .85; }
+  .status-vel { color: var(--muted); }
+  .status-ball-indicator {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+  }
+  .status-bt {
+    font-size: .6rem;
+    color: var(--orange);
+    padding-left: 22px;
+    line-height: 1.3;
+    opacity: .85;
+  }
 
   /* ── Bottom-right: config ── */
   #quad-config {
@@ -774,19 +823,20 @@ _HTML = r"""<!DOCTYPE html>
   <div class="conn">
     <div class="dot" id="conn-dot"></div>
     <span id="conn-label">connecting…</span>
+    <span style="margin-left:auto;color:var(--muted);font-size:.6rem;">Space = Halt / Resume</span>
   </div>
 </div>
 
-<!-- Bottom-left: event log -->
-<div class="quad" id="quad-log">
-  <div class="quad-title">Event Log</div>
-  <div class="log-entries" id="log-entries"></div>
+<!-- Bottom-left: robot status -->
+<div class="quad" id="quad-status">
+  <div class="quad-title">Robot Status</div>
+  <div class="status-entries" id="status-entries"></div>
 </div>
 
 <!-- God mode context menu -->
 <div id="ctx-menu">
-  <button onclick="ctxPlaceBallYellow()">Ball placement Yellow here</button>
-  <button onclick="ctxPlaceBallBlue()">Ball placement Blue here</button>
+  <button id="ctx-place-left" onclick="ctxPlace('left')">Ball placement here</button>
+  <button id="ctx-place-right" onclick="ctxPlace('right')">Ball placement here</button>
 </div>
 
 <!-- Bottom-right: profile config -->
@@ -796,24 +846,66 @@ _HTML = r"""<!DOCTYPE html>
 </div>
 
 <script>
-// --- Event log state ---
-const MAX_LOG = 20;
-let _prevCmd = null, _prevYS = null, _prevBS = null, _prevStatusMsg = null;
+// --- Robot status rendering ---
+function renderStatus(d) {
+  const c = document.getElementById('status-entries');
+  if (!c) return;
+  let html = '';
 
-function _now() {
-  return new Date().toLocaleTimeString('en-GB', {hour12:false});
-}
-function addLog(cssClass, text) {
-  const c = document.getElementById('log-entries');
-  const e = document.createElement('div');
-  e.className = 'log-entry';
-  e.innerHTML = `<span class="log-time">${_now()}</span><span class="${cssClass}">${text}</span>`;
-  c.insertBefore(e, c.firstChild);
-  while (c.children.length > MAX_LOG) c.removeChild(c.lastChild);
+  // Ball
+  html += '<div class="status-section-title">Ball</div>';
+  if (d.ball) {
+    html += '<div class="status-row"><span class="status-pos">('
+      + d.ball.x.toFixed(3) + ', ' + d.ball.y.toFixed(3)
+      + ')</span><span class="status-vel">v=('
+      + d.ball.vx.toFixed(2) + ', ' + d.ball.vy.toFixed(2)
+      + ')</span></div>';
+  } else {
+    html += '<div class="status-row"><span class="status-pos">—</span></div>';
+  }
+
+  // Friendly robots
+  const friendly = (d.robots && d.robots.friendly) || [];
+  const btNodes = d.bt_nodes || {};
+  html += '<div class="status-section-title">Friendly (' + friendly.length + ')</div>';
+  if (friendly.length === 0) {
+    html += '<div class="status-row"><span class="status-pos">none</span></div>';
+  }
+  for (const bot of friendly) {
+    html += '<div class="status-row">'
+      + '<span class="status-bot-id friendly">' + bot.id + '</span>'
+      + '<span class="status-pos">(' + bot.x.toFixed(3) + ', ' + bot.y.toFixed(3) + ')</span>'
+      + '<span class="status-vel">v=(' + bot.vx.toFixed(2) + ', ' + bot.vy.toFixed(2) + ')</span>'
+      + (bot.has_ball ? '<span class="status-ball-indicator" title="has ball"></span>' : '')
+      + '</div>';
+    const nodes = btNodes[bot.id];
+    if (nodes && nodes.length > 0) {
+      html += '<div class="status-bt">' + nodes.join(' › ') + '</div>';
+    }
+  }
+
+  // Enemy robots
+  const enemy = (d.robots && d.robots.enemy) || [];
+  html += '<div class="status-section-title">Enemy (' + enemy.length + ')</div>';
+  if (enemy.length === 0) {
+    html += '<div class="status-row"><span class="status-pos">none</span></div>';
+  }
+  for (const bot of enemy) {
+    html += '<div class="status-row">'
+      + '<span class="status-bot-id enemy">' + bot.id + '</span>'
+      + '<span class="status-pos">(' + bot.x.toFixed(3) + ', ' + bot.y.toFixed(3) + ')</span>'
+      + '<span class="status-vel">v=(' + bot.vx.toFixed(2) + ', ' + bot.vy.toFixed(2) + ')</span>'
+      + '</div>';
+  }
+
+  c.innerHTML = html;
 }
 
 // --- Canvas globals ---
 let _cfg = null, _lastFrame = {};
+let _currentCmd = null;
+let _myTeamIsRight = false;
+let _myTeamIsYellow = true;
 
 function resizeCanvas() {
   const canvas = document.getElementById('field-canvas');
@@ -862,7 +954,10 @@ function drawField(d) {
   const M = 12;
   const scale = (CW - 2 * M) / (2 * g.half_length);
 
-  function toX(fx) { return M + (fx + g.half_length) * scale; }
+  function toX(fx) {
+    const sx = _myTeamIsRight ? fx : -fx;
+    return M + (sx + g.half_length) * scale;
+  }
   function toY(fy) { return CH - M - (fy + g.half_width) * scale; }
 
   // Green background
@@ -901,11 +996,11 @@ function drawField(d) {
 
   // Goal bars (depth from geometry, outside field boundary)
   const goalDepth = g.goal_depth;
-  // Left goal (yellow)
+  // Yellow goal (left side of field coords)
   ctx.fillStyle = 'rgba(244,197,66,0.6)';
   ctx.fillRect(toX(-g.half_length - goalDepth), toY(g.half_goal_width),
                goalDepth * scale, 2 * g.half_goal_width * scale);
-  // Right goal (blue)
+  // Blue goal (right side of field coords)
   ctx.fillStyle = 'rgba(77,166,255,0.6)';
   ctx.fillRect(toX(g.half_length), toY(g.half_goal_width),
                goalDepth * scale, 2 * g.half_goal_width * scale);
@@ -926,32 +1021,37 @@ function drawField(d) {
   const robots = d.robots;
   if (robots) {
     const r = 5; // robot radius px
-    // Enemy (blue)
+    // Color depends on which team is yours
+    const friendlyColor = _myTeamIsYellow ? '#f4c542' : '#4da6ff';
+    const friendlyStroke = _myTeamIsYellow ? '#111' : '#fff';
+    const enemyColor = _myTeamIsYellow ? '#4da6ff' : '#f4c542';
+    const enemyStroke = _myTeamIsYellow ? '#fff' : '#111';
+    // Enemy
     for (const bot of (robots.enemy || [])) {
       const cx = toX(bot.x), cy = toY(bot.y);
-      ctx.fillStyle = '#4da6ff';
+      ctx.fillStyle = enemyColor;
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2*Math.PI); ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.8;
+      ctx.strokeStyle = enemyStroke; ctx.lineWidth = 0.8;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.lineTo(cx + r * Math.cos(bot.orientation), cy - r * Math.sin(bot.orientation));
       ctx.stroke();
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = enemyStroke;
       ctx.font = '7px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(bot.id, cx, cy - r - 1);
     }
-    // Friendly (yellow)
+    // Friendly
     for (const bot of (robots.friendly || [])) {
       const cx = toX(bot.x), cy = toY(bot.y);
-      ctx.fillStyle = '#f4c542';
+      ctx.fillStyle = friendlyColor;
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2*Math.PI); ctx.fill();
-      ctx.strokeStyle = '#111'; ctx.lineWidth = 0.8;
+      ctx.strokeStyle = friendlyStroke; ctx.lineWidth = 0.8;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.lineTo(cx + r * Math.cos(bot.orientation), cy - r * Math.sin(bot.orientation));
       ctx.stroke();
-      ctx.fillStyle = '#111';
+      ctx.fillStyle = friendlyStroke;
       ctx.font = '7px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(bot.id, cx, cy - r - 1);
@@ -989,6 +1089,7 @@ es.onmessage = (ev) => {
   const badge = document.getElementById('cmd-badge');
   badge.textContent = (d.command ?? '—').replace(/_/g, ' ');
   badge.className = 'badge ' + (d.command ?? 'unknown');
+  _currentCmd = d.command;
 
   document.getElementById('next-cmd').textContent =
     d.next_command ? d.next_command.replace(/_/g, ' ') : '—';
@@ -1013,18 +1114,19 @@ es.onmessage = (ev) => {
   if (d.status_message) {
     document.getElementById('status-row').style.display = '';
     document.getElementById('status-msg').textContent = d.status_message;
-    if (d.status_message !== _prevStatusMsg) { addLog('log-msg', d.status_message); _prevStatusMsg = d.status_message; }
   } else {
     document.getElementById('status-row').style.display = 'none';
   }
 
-  // Event log tracking
-  if (_prevCmd !== null && d.command !== _prevCmd) addLog('log-cmd', d.command.replace(/_/g,' '));
-  _prevCmd = d.command;
-  if (_prevYS !== null && d.yellow_score !== _prevYS) addLog('log-score','Yellow '+d.yellow_score);
-  _prevYS = d.yellow_score;
-  if (_prevBS !== null && d.blue_score !== _prevBS) addLog('log-score','Blue '+d.blue_score);
-  _prevBS = d.blue_score;
+  // Update team orientation and context menu labels
+  if (d.my_team_is_right !== undefined && d.my_team_is_right !== _myTeamIsRight) {
+    _myTeamIsRight = d.my_team_is_right;
+    _updateCtxMenuLabels();
+  }
+  if (d.my_team_is_yellow !== undefined) _myTeamIsYellow = d.my_team_is_yellow;
+
+  // Robot status panel
+  renderStatus(d);
 
   // Canvas update
   _lastFrame = d;
@@ -1073,9 +1175,10 @@ function _canvasToField(canvas, clientX, clientY) {
   const scale = (cw - 2 * M) / (2 * _cfg.half_length);
   const px = (clientX - rect.left) * (cw / rect.width);
   const py = (clientY - rect.top)  * (ch / rect.height);
-  // Inverse of: toX(fx) = M + (fx + half_length) * scale
-  const fx = (px - M) / scale - _cfg.half_length;
-  // Inverse of: toY(fy) = CH - M - (fy + half_width) * scale
+  // Inverse of toX (with optional flip)
+  let fx = (px - M) / scale - _cfg.half_length;
+  if (!_myTeamIsRight) fx = -fx;
+  // Inverse of toY
   const fy = (ch - M - py) / scale - _cfg.half_width;
   return { x: fx, y: fy };
 }
@@ -1085,7 +1188,22 @@ function _hideCtxMenu() {
 }
 
 document.addEventListener('click', _hideCtxMenu);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') _hideCtxMenu(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') _hideCtxMenu();
+  // Space → HALT, or FORCE_START if already in HALT
+  if (e.key === ' ') {
+    e.preventDefault();
+    if (_currentCmd === 'HALT') {
+      send('FORCE_START');
+      const btn = document.querySelector('.btn-force-start');
+      if (btn) { btn.style.boxShadow = '0 0 12px 4px rgba(46,204,113,.8)'; setTimeout(() => btn.style.boxShadow = '', 300); }
+    } else {
+      send('HALT');
+      const btn = document.querySelector('.btn-halt');
+      if (btn) { btn.style.boxShadow = '0 0 12px 4px rgba(231,76,60,.8)'; setTimeout(() => btn.style.boxShadow = '', 300); }
+    }
+  }
+});
 
 document.getElementById('field-canvas').addEventListener('contextmenu', function(e) {
   if (!_godMode) return;
@@ -1100,31 +1218,27 @@ document.getElementById('field-canvas').addEventListener('contextmenu', function
   menu.style.top  = my + 'px';
 });
 
-function ctxPlaceBallYellow() {
+function _updateCtxMenuLabels() {
+  const leftTeam  = _myTeamIsRight ? 'Yellow' : 'Blue';
+  const rightTeam = _myTeamIsRight ? 'Blue'   : 'Yellow';
+  document.getElementById('ctx-place-left').textContent  = 'Ball placement ' + leftTeam  + ' here';
+  document.getElementById('ctx-place-right').textContent = 'Ball placement ' + rightTeam + ' here';
+}
+
+function ctxPlace(side) {
   _hideCtxMenu();
   if (!_ctxFieldPos) return;
+  const leftCmd  = _myTeamIsRight ? 'BALL_PLACEMENT_YELLOW' : 'BALL_PLACEMENT_BLUE';
+  const rightCmd = _myTeamIsRight ? 'BALL_PLACEMENT_BLUE'   : 'BALL_PLACEMENT_YELLOW';
+  const command = (side === 'left') ? leftCmd : rightCmd;
   fetch('/command', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      command: 'BALL_PLACEMENT_YELLOW',
-      designated: [_ctxFieldPos.x, _ctxFieldPos.y],
-    }),
+    body: JSON.stringify({ command, designated: [_ctxFieldPos.x, _ctxFieldPos.y] }),
   }).catch(err => console.error('command error:', err));
 }
 
-function ctxPlaceBallBlue() {
-  _hideCtxMenu();
-  if (!_ctxFieldPos) return;
-  fetch('/command', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      command: 'BALL_PLACEMENT_BLUE',
-      designated: [_ctxFieldPos.x, _ctxFieldPos.y],
-    }),
-  }).catch(err => console.error('command error:', err));
-}
+_updateCtxMenuLabels();
 
 fetch('/config').then(r => r.json()).then(c => {
   document.getElementById('page-title').textContent = 'Custom Referee — ' + c.profile_name;
