@@ -116,7 +116,9 @@ class _GoToBallUntilStatePossession(AbstractBehaviour):
 
     def update(self) -> py_trees.common.Status:
         robot_id = self.blackboard.get(self.robot_id_key)
-        self.blackboard.cmd_map[robot_id] = go_to_ball(self.blackboard.game, self.blackboard.motion_controller, robot_id)
+        self.blackboard.cmd_map[robot_id] = go_to_ball(
+            self.blackboard.game, self.blackboard.motion_controller, robot_id
+        )
         return py_trees.common.Status.RUNNING
 
 
