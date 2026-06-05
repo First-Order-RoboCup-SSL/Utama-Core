@@ -1303,13 +1303,27 @@ class StrategyRunner:
         strategy_yellow = my_strategy if self.my_team_is_yellow else opp_strategy
         strategy_blue = opp_strategy if self.my_team_is_yellow else my_strategy
 
+        blue = self.referee_refiner.blue_team
+        yellow = self.referee_refiner.yellow_team
+
+        ball = self.my.current_game_frame.ball if self.my.current_game_frame else None
+        if ball is not None:
+            ball_speed = (ball.v.x**2 + ball.v.y**2) ** 0.5
+        else:
+            ball_speed = None
+
         return {
             "time_left": f"{stage_min}:{stage_sec:02d}",
-            "score_blue": self.referee_refiner.blue_team.score,
-            "score_yellow": self.referee_refiner.yellow_team.score,
+            "score_blue": blue.score,
+            "score_yellow": yellow.score,
+            "yellow_cards_blue": blue.yellow_cards,
+            "yellow_cards_yellow": yellow.yellow_cards,
+            "red_cards_blue": blue.red_cards,
+            "red_cards_yellow": yellow.red_cards,
             "strategy_blue": strategy_blue,
             "strategy_yellow": strategy_yellow,
             "mode": self.mode.value,
+            "ball_speed": round(ball_speed, 2) if ball_speed is not None else None,
             "annotations": self._vision_stream_annotations(),
         }
 

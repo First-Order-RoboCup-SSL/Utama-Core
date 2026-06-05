@@ -417,47 +417,103 @@ class RSimVisionStreamServer:
       min-height: 100vh;
       display: grid;
       grid-template-rows: auto 1fr;
-      gap: 12px;
-      padding: 16px;
-    }
-    #stream-info {
-      display: grid;
-      gap: 12px;
-      grid-template-columns: minmax(160px, 1fr) minmax(180px, 240px) minmax(160px, 1fr);
-      align-items: start;
-      width: min(100%, 980px);
-      margin: 0 auto;
-      min-width: 0;
-    }
-    .team-panel, #time-box {
-      display: grid;
       gap: 8px;
-      min-width: 0;
+      padding: 12px 16px;
     }
-    #time-box {
+
+    /* ── Scoreboard ─────────────────────────────────────── */
+    #scoreboard {
+      width: min(100%, 960px);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
       align-items: center;
-      justify-items: center;
+      gap: 8px;
     }
-    .info-box {
-      background: #1e242c;
-      border: 1px solid #343b45;
-      border-radius: 10px;
-      padding: 10px 14px;
-      min-width: 0;
-      width: 100%;
+    .team-block {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
-    #time-box .info-box { text-align: center; }
-    .info-title {
-      color: #8fa1b3;
+    .team-block.blue  { align-items: flex-start; }
+    .team-block.yellow { align-items: flex-end; }
+    .team-name {
       font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 4px;
+      letter-spacing: 0.1em;
+      color: #8fa1b3;
     }
+    .team-score {
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 800;
+      line-height: 1;
+    }
+    .team-block.blue  .team-score { color: #4FC3F7; }
+    .team-block.yellow .team-score { color: #FFD700; }
+    .team-strategy {
+      font-size: 12px;
+      color: #8fa1b3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;
+    }
+    .cards {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .team-block.yellow .cards { justify-content: flex-end; }
+    .card {
+      display: inline-block;
+      width: 10px;
+      height: 14px;
+      border-radius: 2px;
+    }
+    .card.yellow-card { background: #FFD700; }
+    .card.red-card    { background: #e53935; }
+
+    /* ── Centre column ───────────────────────────────────── */
+    #centre {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    #dash {
+      font-size: clamp(32px, 5vw, 60px);
+      font-weight: 300;
+      color: #4a5568;
+      line-height: 1;
+    }
+    #time-left {
+      font-size: clamp(18px, 2.5vw, 28px);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: #f1f4f8;
+    }
+    #ball-speed-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+    #ball-speed {
+      font-size: 20px;
+      font-weight: 700;
+      color: #f97316;
+      min-width: 3ch;
+      text-align: right;
+    }
+    .unit {
+      font-size: 11px;
+      color: #8fa1b3;
+    }
+
+    /* ── Canvas ─────────────────────────────────────────── */
     main {
       display: grid;
       place-items: center;
-      padding: 16px;
+      padding: 8px 0;
     }
     #canvas-wrap {
       position: relative;
@@ -479,34 +535,32 @@ class RSimVisionStreamServer:
   </style>
 </head>
 <body>
-  <div id="stream-info">
-    <div class="team-panel">
-      <div class="info-box">
-        <div class="info-title">Blue Strategy</div>
-        <div id="blue-strategy">N/A</div>
-      </div>
-      <div class="info-box">
-        <div class="info-title">Blue Score</div>
-        <div id="blue-score">0</div>
+  <div id="scoreboard">
+    <!-- Blue team -->
+    <div class="team-block blue">
+      <div class="team-name" id="blue-strategy">Blue</div>
+      <div class="team-score" id="blue-score">0</div>
+      <div class="cards" id="blue-cards"></div>
+    </div>
+
+    <!-- Centre: time + dash + ball speed -->
+    <div id="centre">
+      <div id="time-left">--:--</div>
+      <div id="dash">—</div>
+      <div id="ball-speed-wrap">
+        <span id="ball-speed">—</span>
+        <span class="unit">m/s</span>
       </div>
     </div>
-    <div id="time-box">
-      <div class="info-box">
-        <div class="info-title">Time</div>
-        <div id="time-left">--:--</div>
-      </div>
-    </div>
-    <div class="team-panel">
-      <div class="info-box">
-        <div class="info-title">Yellow Score</div>
-        <div id="yellow-score">0</div>
-      </div>
-      <div class="info-box">
-        <div class="info-title">Yellow Strategy</div>
-        <div id="yellow-strategy">N/A</div>
-      </div>
+
+    <!-- Yellow team -->
+    <div class="team-block yellow">
+      <div class="team-name" id="yellow-strategy">Yellow</div>
+      <div class="team-score" id="yellow-score">0</div>
+      <div class="cards" id="yellow-cards"></div>
     </div>
   </div>
+
   <main>
     <div id="canvas-wrap">
       <canvas id="stream"></canvas>
@@ -519,20 +573,33 @@ class RSimVisionStreamServer:
     const overlay = document.getElementById("overlay");
     const octx = overlay.getContext("2d");
 
-    const timeLeft = document.getElementById("time-left");
-    const blueScore = document.getElementById("blue-score");
-    const yellowScore = document.getElementById("yellow-score");
-    const blueStrategy = document.getElementById("blue-strategy");
-    const yellowStrategy = document.getElementById("yellow-strategy");
-
     let latestAnnotations = [];
 
+    function renderCards(containerId, yellowCount, redCount) {
+      const el = document.getElementById(containerId);
+      el.innerHTML = "";
+      for (let i = 0; i < redCount; i++) {
+        const c = document.createElement("span");
+        c.className = "card red-card";
+        el.appendChild(c);
+      }
+      for (let i = 0; i < yellowCount; i++) {
+        const c = document.createElement("span");
+        c.className = "card yellow-card";
+        el.appendChild(c);
+      }
+    }
+
     function updateStatus(info) {
-      timeLeft.textContent = info.time_left ?? "--:--";
-      blueScore.textContent = info.score_blue ?? 0;
-      yellowScore.textContent = info.score_yellow ?? 0;
-      blueStrategy.textContent = info.strategy_blue ?? "N/A";
-      yellowStrategy.textContent = info.strategy_yellow ?? "N/A";
+      document.getElementById("time-left").textContent = info.time_left ?? "--:--";
+      document.getElementById("blue-score").textContent = info.score_blue ?? 0;
+      document.getElementById("yellow-score").textContent = info.score_yellow ?? 0;
+      document.getElementById("blue-strategy").textContent = info.strategy_blue ?? "Blue";
+      document.getElementById("yellow-strategy").textContent = info.strategy_yellow ?? "Yellow";
+      const spd = info.ball_speed;
+      document.getElementById("ball-speed").textContent = spd != null ? spd.toFixed(2) : "—";
+      renderCards("blue-cards", info.yellow_cards_blue ?? 0, info.red_cards_blue ?? 0);
+      renderCards("yellow-cards", info.yellow_cards_yellow ?? 0, info.red_cards_yellow ?? 0);
       latestAnnotations = info.annotations ?? [];
       drawAnnotations();
     }
