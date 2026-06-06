@@ -1,6 +1,5 @@
 import cProfile
 import logging
-import math
 import signal
 import threading
 import time
@@ -250,13 +249,6 @@ class StrategyRunner:
         self.logger = logging.getLogger(__name__)
 
         self._prev_custom_ref_command: Optional[RefereeCommand] = None
-        # Ball watchdog: (last_known_pos, timestamp) — reset whenever the ball moves
-        # or the referee command changes.  Triggers a recovery kickoff when the ball
-        # has not moved for _BALL_WATCHDOG_TIMEOUT seconds during active play.
-        self._ball_watchdog_pos: Optional[tuple[float, float]] = None
-        self._ball_watchdog_ts: float = -999.0
-        self._BALL_WATCHDOG_TIMEOUT: float = 5.0
-        self._BALL_WATCHDOG_MOVE_THRESH: float = 0.05  # metres
         self._last_referee_data: Optional["RefereeData"] = None
         self._vs_team_names: tuple[str, str] = self._assign_team_names()
         self._vs_commentary: str = "Welcome to the match!"
@@ -1300,57 +1292,6 @@ class StrategyRunner:
                 x, y = ref_data.designated_position
                 self.sim_controller.teleport_ball(x, y)
             self._prev_custom_ref_command = ref_data.referee_command
-
-            # ------------------------------------------------------------------
-            # Ball watchdog: recover from a missing or permanently-stuck ball.
-            # Only active during live play (NORMAL_START / FORCE_START) and only
-            # when a sim controller is available to teleport the ball back.
-            # ------------------------------------------------------------------
-            _ACTIVE_PLAY = {RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START}
-            if self.sim_controller is not None and ref_data.referee_command in _ACTIVE_PLAY:
-                ball = self.my.current_game_frame.ball
-                current_ts = self.my.current_game_frame.ts
-                if ball is not None:
-                    ball_pos = (ball.p.x, ball.p.y)
-                    if self._ball_watchdog_pos is None:
-                        self._ball_watchdog_pos = ball_pos
-                        self._ball_watchdog_ts = current_ts
-                    else:
-                        moved = math.hypot(
-                            ball_pos[0] - self._ball_watchdog_pos[0],
-                            ball_pos[1] - self._ball_watchdog_pos[1],
-                        )
-                        if moved >= self._BALL_WATCHDOG_MOVE_THRESH:
-                            self._ball_watchdog_pos = ball_pos
-                            self._ball_watchdog_ts = current_ts
-                        elif (current_ts - self._ball_watchdog_ts) >= self._BALL_WATCHDOG_TIMEOUT:
-                            self.logger.warning(
-                                "Ball watchdog: ball stuck at (%.2f, %.2f) for %.1fs — recovering.",
-                                ball_pos[0],
-                                ball_pos[1],
-                                current_ts - self._ball_watchdog_ts,
-                            )
-                            cx, cy = self.field_bounds.center
-                            self.sim_controller.teleport_ball(cx, cy)
-                            self.referee.force_command(RefereeCommand.FORCE_START, current_ts)
-                            self._ball_watchdog_pos = (cx, cy)
-                            self._ball_watchdog_ts = current_ts
-                else:
-                    # Ball has gone missing entirely — recover immediately
-                    current_ts = self.my.current_game_frame.ts
-                    if (
-                        self._ball_watchdog_ts < 0
-                        or (current_ts - self._ball_watchdog_ts) >= self._BALL_WATCHDOG_TIMEOUT
-                    ):
-                        self.logger.warning("Ball watchdog: ball missing — recovering.")
-                        cx, cy = self.field_bounds.center
-                        self.sim_controller.teleport_ball(cx, cy)
-                        self.referee.force_command(RefereeCommand.FORCE_START, current_ts)
-                        self._ball_watchdog_pos = (cx, cy)
-                        self._ball_watchdog_ts = current_ts
-            else:
-                # Reset the watchdog snapshot whenever we leave active play
-                self._ball_watchdog_pos = None
 
         if self.mode == Mode.RSIM:
             obs = self.rsim_env._frame_to_observations()
