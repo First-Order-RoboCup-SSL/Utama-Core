@@ -53,7 +53,6 @@ else:
         def __init__(self, is_team_yellow=True, n_friendly=2):
 
             self.n_friendly = n_friendly
-            self._dribbler_seconds: dict = {}
 
             print("\n[DUMMY CONTROLLER ENABLED]")
             print("No serial/network/hardware required.\n")
@@ -74,12 +73,14 @@ else:
 
 
 # --- Config ---
-ROBOT_ID = 1
-N_FRIENDLY = 2
+ROBOT_ID = 0
+N_FRIENDLY = 4
 IS_YELLOW = True
 LOOP_HZ = 60
 MAX_VEL = 0.1
+FAST_VEL = 0.5
 MAX_ANG_VEL = 1
+CONNECTION_TIMEOUT = 0.5  # seconds without a response before a robot is marked disconnected
 
 BG = "#1a1a1a"
 SURFACE = "#2a2a2a"
@@ -90,7 +91,6 @@ ACTIVE = "#4a90d9"
 KICK_C = "#d94a4a"
 ON_C = "#4ad97a"
 BALL_C = "#d9a84a"
-HEAT_C = "#d94a4a"  # Red when dribbler near/at thermal limit
 DUMMY_C = "#d9a84a"  # Orange for dummy warning
 
 
@@ -107,6 +107,12 @@ class TeleopGUI:
 
         self.dribble = False
         self.chip = False
+        self._shift_held = False
+        self.active_robot_id = ROBOT_ID
+
+        # Per-robot connection tracking
+        self._last_seen: dict[int, float] = {}
+        self._last_has_ball: dict[int, bool] = {}
 
         # Impulse flags
         self._kick_impulse = False
@@ -289,9 +295,9 @@ class TeleopGUI:
 
         self._fb_ball_vars: dict[int, tk.StringVar] = {}
         self._fb_ball_lbls: dict[int, tk.Label] = {}
-        self._fb_heat_vars: dict[int, tk.StringVar] = {}
-        self._fb_heat_lbls: dict[int, tk.Label] = {}
         self._fb_status_vars: dict[int, tk.StringVar] = {}
+        self._fb_rows: dict[int, tk.Frame] = {}
+        self._fb_id_lbls: dict[int, tk.Label] = {}
         for i in range(N_FRIENDLY):
             row = tk.Frame(fb_frame, bg=SURFACE)
             row.pack(fill="x", padx=8, pady=4)
@@ -319,33 +325,28 @@ class TeleopGUI:
             )
             ball_lbl.pack(side="left", padx=(8, 0))
 
-            heat_var = tk.StringVar(value="heat:  0%")
-            heat_lbl = tk.Label(
-                row,
-                textvariable=heat_var,
-                bg=SURFACE,
-                fg=MUTED,
-                font=("monospace", 11),
-                width=10,
-                anchor="w",
-            )
-            heat_lbl.pack(side="left", padx=(8, 0))
-
             status_var = tk.StringVar(value="no data")
-            tk.Label(
+            status_lbl = tk.Label(
                 row,
                 textvariable=status_var,
                 bg=SURFACE,
                 fg=MUTED,
                 font=("monospace", 10),
                 anchor="e",
-            ).pack(side="right")
+            )
+            status_lbl.pack(side="right")
+
+            # Click anywhere on the row to make this robot active.
+            for widget in (row, id_lbl, ball_lbl, status_lbl):
+                widget.bind("<Button-1>", lambda e, rid=i: self._set_active_robot(rid))
 
             self._fb_ball_vars[i] = ball_var
             self._fb_ball_lbls[i] = ball_lbl
-            self._fb_heat_vars[i] = heat_var
-            self._fb_heat_lbls[i] = heat_lbl
             self._fb_status_vars[i] = status_var
+            self._fb_rows[i] = row
+            self._fb_id_lbls[i] = id_lbl
+
+        self._refresh_active_robot()
 
         # --- Command readout ---
         readout_frame = tk.Frame(self.root, bg=SURFACE, highlightbackground=BORDER, highlightthickness=1)
@@ -395,7 +396,39 @@ class TeleopGUI:
         self.root.bind("<KeyPress-B>", lambda e: self._press("b"))
         self.root.bind("<KeyRelease-B>", lambda e: self._release("b"))
 
+        # Shift boost
+        self.root.bind("<KeyPress-Shift_L>", lambda e: self._set_shift(True))
+        self.root.bind("<KeyRelease-Shift_L>", lambda e: self._set_shift(False))
+        self.root.bind("<KeyPress-Shift_R>", lambda e: self._set_shift(True))
+        self.root.bind("<KeyRelease-Shift_R>", lambda e: self._set_shift(False))
+
+        # Number keys select the active robot
+        for i in range(min(N_FRIENDLY, 10)):
+            self.root.bind(f"<KeyPress-{i}>", lambda e, rid=i: self._set_active_robot(rid))
+
         self.root.bind("<Escape>", lambda e: self._quit())
+
+    def _set_shift(self, value: bool):
+        with self._lock:
+            self._shift_held = value
+
+    def _set_active_robot(self, robot_id: int):
+        if robot_id < 0 or robot_id >= N_FRIENDLY:
+            return
+        with self._lock:
+            self.active_robot_id = robot_id
+        self._refresh_active_robot()
+
+    def _refresh_active_robot(self):
+        with self._lock:
+            active = self.active_robot_id
+        for rid, id_lbl in self._fb_id_lbls.items():
+            if rid == active:
+                id_lbl.configure(fg=ACTIVE)
+                self._fb_rows[rid].configure(bg=BORDER)
+            else:
+                id_lbl.configure(fg=TEXT)
+                self._fb_rows[rid].configure(bg=SURFACE)
 
     def _press(self, key: str):
         with self._lock:
@@ -470,14 +503,17 @@ class TeleopGUI:
 
             with self._lock:
                 keys = set(self.held)
+                shift = self._shift_held
+                active_id = self.active_robot_id
                 # Impulse capture
                 kick = self._kick_impulse  # don't worry about kick cooldown, handled in controller.
                 chip = self._chip_impulse  # don't worry about kick and chip at same time, handled in controller.
                 self._kick_impulse = False
                 self._chip_impulse = False
 
-            fwd = MAX_VEL if "w" in keys else (-MAX_VEL if "s" in keys else 0.0)
-            left = MAX_VEL if "a" in keys else (-MAX_VEL if "d" in keys else 0.0)
+            vel = FAST_VEL if shift else MAX_VEL
+            fwd = vel if "w" in keys else (-vel if "s" in keys else 0.0)
+            left = vel if "a" in keys else (-vel if "d" in keys else 0.0)
             ang = MAX_ANG_VEL if "q" in keys else (-MAX_ANG_VEL if "e" in keys else 0.0)
 
             cmd = RobotCommand(
@@ -491,39 +527,47 @@ class TeleopGUI:
 
             responses = self.controller.get_robots_responses() or []
 
-            self.controller.add_robot_commands(cmd, ROBOT_ID)
+            for rid in range(N_FRIENDLY):
+                self.controller.add_robot_commands(cmd if rid == active_id else empty_command(), rid)
             self.controller.send_robot_commands()
+
+            now = time.perf_counter()
+            for resp in responses:
+                self._last_seen[resp.id] = now
+                self._last_has_ball[resp.id] = resp.has_ball
+
+            feedback = [
+                (
+                    i,
+                    self._last_has_ball.get(i, False),
+                    i in self._last_seen and (now - self._last_seen[i]) < CONNECTION_TIMEOUT,
+                )
+                for i in range(N_FRIENDLY)
+            ]
 
             # Safely pass updates to the main thread via the queue
             self._ui_queue.put(("readout", cmd))
-            if responses:
-                self._ui_queue.put(("feedback", responses))
+            self._ui_queue.put(("feedback", feedback))
 
             elapsed = time.perf_counter() - t0
             time.sleep(max(0.0, dt - elapsed))
 
-    def _update_feedback(self, responses):
-        from utama_core.team_controller.src.controllers.real.real_robot_controller import (
-            DRIBBLER_MAX_ON_SECONDS,
-        )
-
-        for resp in responses:
-            if resp.id not in self._fb_ball_vars:
+    def _update_feedback(self, feedback):
+        for robot_id, has_ball, connected in feedback:
+            if robot_id not in self._fb_ball_vars:
                 continue
-            if resp.has_ball:
-                self._fb_ball_vars[resp.id].set("ball: YES")
-                self._fb_ball_lbls[resp.id].configure(fg=BALL_C)
+            if not connected:
+                self._fb_ball_vars[robot_id].set("ball: --")
+                self._fb_ball_lbls[robot_id].configure(fg=MUTED)
+                self._fb_status_vars[robot_id].set("no data")
+                continue
+            if has_ball:
+                self._fb_ball_vars[robot_id].set("ball: YES")
+                self._fb_ball_lbls[robot_id].configure(fg=BALL_C)
             else:
-                self._fb_ball_vars[resp.id].set("ball: no")
-                self._fb_ball_lbls[resp.id].configure(fg=MUTED)
-            self._fb_status_vars[resp.id].set("connected")
-
-            # dribbler heat display
-            bucket = self.controller._dribbler_seconds.get(resp.id, 0.0)
-            pct = int(bucket / DRIBBLER_MAX_ON_SECONDS * 100)
-            self._fb_heat_vars[resp.id].set(f"heat: {pct:3d}%")
-            heat_colour = HEAT_C if pct >= 80 else (BALL_C if pct >= 50 else MUTED)
-            self._fb_heat_lbls[resp.id].configure(fg=heat_colour)
+                self._fb_ball_vars[robot_id].set("ball: no")
+                self._fb_ball_lbls[robot_id].configure(fg=MUTED)
+            self._fb_status_vars[robot_id].set("connected")
 
     def _update_readout(self, cmd: RobotCommand):
         self._metrics["fwd"].set(f"{cmd.local_forward_vel:+.2f}")
@@ -554,7 +598,8 @@ class TeleopGUI:
 
         print("\nSending stop commands...")
         for _ in range(10):
-            self.controller.add_robot_commands(empty_command(), ROBOT_ID)
+            for rid in range(N_FRIENDLY):
+                self.controller.add_robot_commands(empty_command(), rid)
             self.controller.send_robot_commands()
 
         self.root.destroy()
