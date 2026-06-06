@@ -171,7 +171,7 @@ class StrategyRunner:
         profiler_name: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
         rsim_vanishing: float = 0,
-        filtering: bool = False,
+        filtering: bool = True,
         referee: RefereeSource = None,
         formation_type: Optional[FormationType] = None,
         enable_vision_stream: bool = True,

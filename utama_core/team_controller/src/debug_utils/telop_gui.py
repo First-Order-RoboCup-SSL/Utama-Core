@@ -255,6 +255,17 @@ class TeleopGUI:
         self._dribble_btn.pack()
         self._dribble_btn.bind("<Button-1>", lambda e: self._toggle_dribble())
 
+        self._dribbler_timer = tk.StringVar(value="dribbler limit: --")
+        self._dribbler_timer_lbl = tk.Label(
+            space_frame,
+            textvariable=self._dribbler_timer,
+            bg=BG,
+            fg=MUTED,
+            font=("monospace", 10),
+            pady=4,
+        )
+        self._dribbler_timer_lbl.pack()
+
         # --- B and C row (Kick and Chip) ---
         action_frame = tk.Frame(self.root, bg=BG)
         action_frame.pack(**pad)
@@ -490,6 +501,8 @@ class TeleopGUI:
                     self._update_readout(data)
                 elif msg_type == "feedback":
                     self._update_feedback(data)
+                elif msg_type == "dribbler_status":
+                    self._update_dribbler_status(*data)
         except queue.Empty:
             pass
 
@@ -530,6 +543,7 @@ class TeleopGUI:
             for rid in range(N_FRIENDLY):
                 self.controller.add_robot_commands(cmd if rid == active_id else empty_command(), rid)
             self.controller.send_robot_commands()
+            dribbler_status = self._get_dribbler_status(active_id)
 
             now = time.perf_counter()
             for resp in responses:
@@ -548,6 +562,7 @@ class TeleopGUI:
             # Safely pass updates to the main thread via the queue
             self._ui_queue.put(("readout", cmd))
             self._ui_queue.put(("feedback", feedback))
+            self._ui_queue.put(("dribbler_status", (active_id, dribbler_status)))
 
             elapsed = time.perf_counter() - t0
             time.sleep(max(0.0, dt - elapsed))
@@ -568,6 +583,31 @@ class TeleopGUI:
                 self._fb_ball_vars[robot_id].set("ball: no")
                 self._fb_ball_lbls[robot_id].configure(fg=MUTED)
             self._fb_status_vars[robot_id].set("connected")
+
+    def _get_dribbler_status(self, robot_id: int):
+        get_status = getattr(self.controller, "get_dribbler_limiter_status", None)
+        if get_status is None:
+            return None
+        return get_status(robot_id)
+
+    def _update_dribbler_status(self, robot_id: int, status):
+        if status is None:
+            self._dribbler_timer.set("dribbler limit: --")
+            self._dribbler_timer_lbl.configure(fg=MUTED)
+            return
+
+        if status.throttled:
+            self._dribbler_timer.set(f"R{robot_id} cooldown: {status.seconds_until_resume:04.1f}s")
+            self._dribbler_timer_lbl.configure(fg=KICK_C)
+            return
+
+        self._dribbler_timer.set(f"R{robot_id} limit: {status.seconds_until_limit:05.1f}s left")
+        if status.seconds_until_limit <= 10.0:
+            self._dribbler_timer_lbl.configure(fg=BALL_C)
+        elif self.dribble:
+            self._dribbler_timer_lbl.configure(fg=ON_C)
+        else:
+            self._dribbler_timer_lbl.configure(fg=MUTED)
 
     def _update_readout(self, cmd: RobotCommand):
         self._metrics["fwd"].set(f"{cmd.local_forward_vel:+.2f}")

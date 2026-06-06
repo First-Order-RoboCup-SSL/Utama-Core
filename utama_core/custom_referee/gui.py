@@ -325,6 +325,56 @@ def _serialise_ball(game_frame):
     return {"x": game_frame.ball.p.x, "y": game_frame.ball.p.y, "vx": game_frame.ball.v.x, "vy": game_frame.ball.v.y}
 
 
+def _serialise_vector(vector):
+    if vector is None:
+        return None
+    data = {"x": vector.x, "y": vector.y}
+    if hasattr(vector, "z"):
+        data["z"] = vector.z
+    return data
+
+
+def _serialise_game_frame_robot(robot) -> dict:
+    return {
+        "id": robot.id,
+        "is_friendly": robot.is_friendly,
+        "has_ball": robot.has_ball,
+        "p": _serialise_vector(robot.p),
+        "v": _serialise_vector(robot.v),
+        "a": _serialise_vector(robot.a),
+        "orientation": robot.orientation,
+    }
+
+
+def _serialise_game_frame_ball(ball) -> Optional[dict]:
+    if ball is None:
+        return None
+    return {
+        "p": _serialise_vector(ball.p),
+        "v": _serialise_vector(ball.v),
+        "a": _serialise_vector(ball.a),
+    }
+
+
+def _serialise_game_frame(game_frame) -> Optional[dict]:
+    if game_frame is None:
+        return None
+    return {
+        "type": "GameFrame",
+        "ts": game_frame.ts,
+        "my_team_is_yellow": game_frame.my_team_is_yellow,
+        "my_team_is_right": game_frame.my_team_is_right,
+        "friendly_robots": {
+            robot_id: _serialise_game_frame_robot(robot) for robot_id, robot in game_frame.friendly_robots.items()
+        },
+        "enemy_robots": {
+            robot_id: _serialise_game_frame_robot(robot) for robot_id, robot in game_frame.enemy_robots.items()
+        },
+        "ball": _serialise_game_frame_ball(game_frame.ball),
+        "referee": repr(game_frame.referee) if game_frame.referee is not None else None,
+    }
+
+
 def _serialise_state(ref_data, game_frame=None, bt_data=None) -> str:
     designated = None
     if ref_data.designated_position is not None:
@@ -350,6 +400,7 @@ def _serialise_state(ref_data, game_frame=None, bt_data=None) -> str:
             "my_team_is_yellow": getattr(game_frame, "my_team_is_yellow", True),
             "robots": _serialise_robots(game_frame),
             "ball": _serialise_ball(game_frame),
+            "game_frame": _serialise_game_frame(game_frame),
             "bt_nodes": bt_data or {},
         }
     )
@@ -620,8 +671,8 @@ _HTML = r"""<!DOCTYPE html>
   }
   .status-entries {
     overflow-y: auto;
-    flex: 1;
-    min-height: 0;
+    flex: 0 0 auto;
+    max-height: 45%;
     padding: 6px 10px;
     display: flex;
     flex-direction: column;
@@ -667,6 +718,51 @@ _HTML = r"""<!DOCTYPE html>
     padding-left: 22px;
     line-height: 1.3;
     opacity: .85;
+  }
+  .game-frame-log {
+    border-top: 1px solid var(--border);
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .game-frame-log-title {
+    font-size: .6rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 7px 10px 5px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .game-frame-log-entries {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .game-frame-entry {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: rgba(0, 0, 0, .12);
+    padding: 6px 7px;
+  }
+  .game-frame-entry-head {
+    color: var(--muted);
+    font-size: .58rem;
+    letter-spacing: .05em;
+    margin-bottom: 4px;
+  }
+  .game-frame-entry pre {
+    color: var(--text);
+    font-family: inherit;
+    font-size: .62rem;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   /* ── Bottom-right: config ── */
@@ -831,6 +927,10 @@ _HTML = r"""<!DOCTYPE html>
 <div class="quad" id="quad-status">
   <div class="quad-title">Robot Status</div>
   <div class="status-entries" id="status-entries"></div>
+  <div class="game-frame-log">
+    <div class="game-frame-log-title">Game Frame Log</div>
+    <div class="game-frame-log-entries" id="game-frame-log"></div>
+  </div>
 </div>
 
 <!-- God mode context menu -->
@@ -899,6 +999,51 @@ function renderStatus(d) {
   }
 
   c.innerHTML = html;
+}
+
+const GAME_FRAME_LOG_INTERVAL_MS = 2000;
+const GAME_FRAME_LOG_LIMIT = 8;
+let _lastGameFrameLoggedAt = 0;
+
+function _gameFrameLogLabel(frame) {
+  const ts = Number(frame && frame.ts);
+  if (!Number.isFinite(ts)) return 'ts=—';
+
+  const date = new Date(ts * 1000);
+  const looksLikeEpochSeconds =
+    !Number.isNaN(date.getTime()) && date.getFullYear() >= 2020 && date.getFullYear() <= 2100;
+  const tsLabel = 'ts=' + ts.toFixed(3);
+  return looksLikeEpochSeconds
+    ? date.toLocaleTimeString() + ' · ' + tsLabel
+    : tsLabel;
+}
+
+function logGameFrame(d) {
+  const frame = d.game_frame;
+  const c = document.getElementById('game-frame-log');
+  if (!c || !frame) return;
+
+  const now = Date.now();
+  if (_lastGameFrameLoggedAt && now - _lastGameFrameLoggedAt < GAME_FRAME_LOG_INTERVAL_MS) return;
+  _lastGameFrameLoggedAt = now;
+
+  const entry = document.createElement('div');
+  entry.className = 'game-frame-entry';
+
+  const head = document.createElement('div');
+  head.className = 'game-frame-entry-head';
+  head.textContent = _gameFrameLogLabel(frame);
+
+  const body = document.createElement('pre');
+  body.textContent = JSON.stringify(frame, null, 2);
+
+  entry.appendChild(head);
+  entry.appendChild(body);
+  c.prepend(entry);
+
+  while (c.children.length > GAME_FRAME_LOG_LIMIT) {
+    c.removeChild(c.lastElementChild);
+  }
 }
 
 // --- Canvas globals ---
@@ -1193,6 +1338,7 @@ es.onmessage = (ev) => {
 
   // Robot status panel
   renderStatus(d);
+  logGameFrame(d);
 
   // Canvas update
   _lastFrame = d;

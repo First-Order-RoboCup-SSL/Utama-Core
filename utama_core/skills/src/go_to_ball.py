@@ -10,7 +10,7 @@ from utama_core.skills.src.utils.move_utils import move
 # Overshoot past ball center so the DWA keeps driving until the robot makes
 # contact. The dribbler-on approach can push further; the dribbler-off approach
 # just nudges past the ball center instead of settling short.
-_APPROACH_OVERSHOOT_M = ROBOT_RADIUS * 0.5
+_APPROACH_OVERSHOOT_M = ROBOT_RADIUS * 0
 _DRIBBLE_OVERSHOOT_M = ROBOT_RADIUS * (1 / 10)
 
 

@@ -18,11 +18,12 @@ from utama_core.config.settings import (
 )
 
 # Leaky-bucket dribbler thermal limiter.
-# The bucket accumulates real seconds while dribbling and drains at the same
-# rate while off.  When full the dribbler is forced off until the bucket drains
-# to DRIBBLER_RESUME_SECONDS (hysteresis), preventing rapid on/off oscillation.
-DRIBBLER_MAX_ON_SECONDS: float = 30.0
-DRIBBLER_RESUME_SECONDS: float = 15.0  # must drain to 50% before re-enabling
+# The bucket accumulates real seconds while dribbling and drains faster while
+# off.  When full the dribbler is forced off until the bucket drains to
+# DRIBBLER_RESUME_SECONDS (hysteresis), preventing rapid on/off oscillation.
+DRIBBLER_MAX_ON_SECONDS: float = 120.0
+DRIBBLER_DRAIN_RATE: float = 2.0  # bucket seconds drained per real second
+DRIBBLER_RESUME_SECONDS: float = 10.0
 from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
@@ -40,6 +41,17 @@ class KickTrackerEntry:
     remaining_persist: int
     remaining_cooldown: int
     is_kick: bool  # True for kick, False for chip
+
+
+@dataclasses.dataclass(frozen=True)
+class DribblerLimiterStatus:
+    bucket_seconds: float
+    max_on_seconds: float
+    resume_seconds: float
+    drain_rate: float
+    throttled: bool
+    seconds_until_limit: float
+    seconds_until_resume: float
 
 
 class RealRobotController(AbstractRobotController):
@@ -79,8 +91,9 @@ class RealRobotController(AbstractRobotController):
         self._kicker_tracker: Dict[int, KickTrackerEntry] = {}
 
         # leaky-bucket dribbler thermal limiter: accumulated wall-clock seconds per
-        # robot (cmd ID).  Fills while dribbling, drains while off, clamped to
-        # [0, DRIBBLER_MAX_ON_SECONDS].  Dribbler is forced off when bucket is full.
+        # robot (cmd ID).  Fills while dribbling, drains while off or throttled,
+        # clamped to [0, DRIBBLER_MAX_ON_SECONDS].  Dribbler is forced off when
+        # bucket is full.
         self._dribbler_seconds: Dict[int, float] = {}
         self._dribbler_last_tick: Dict[int, float] = {}  # time.monotonic() of last call
         self._dribbler_limit_warned: set[int] = set()  # robots that have already been warned this event
@@ -259,8 +272,9 @@ class RealRobotController(AbstractRobotController):
 
         Returns True if the dribbler should actually be turned on this call.
         The bucket accumulates real elapsed seconds while dribbling and drains
-        at the same rate while off, so intermittent use is accounted for
-        proportionally regardless of control-loop frequency.
+        at DRIBBLER_DRAIN_RATE times real time while off or throttled, so
+        intermittent use is accounted for proportionally regardless of
+        control-loop frequency.
         """
         now = time.monotonic()
         dt = now - self._dribbler_last_tick.get(robot_id, now)
@@ -287,18 +301,38 @@ class RealRobotController(AbstractRobotController):
                 )
                 self._dribbler_limit_warned.add(robot_id)
             # still drain while forced off
-            self._dribbler_seconds[robot_id] = max(0.0, current - dt)
+            self._dribbler_seconds[robot_id] = max(0.0, current - dt * DRIBBLER_DRAIN_RATE)
             if self._dribbler_seconds[robot_id] <= DRIBBLER_RESUME_SECONDS:
                 self._dribbler_throttled.discard(robot_id)
                 self._dribbler_limit_warned.discard(robot_id)
             return False
         else:
             # Not requested: drain the bucket
-            self._dribbler_seconds[robot_id] = max(0.0, current - dt)
+            self._dribbler_seconds[robot_id] = max(0.0, current - dt * DRIBBLER_DRAIN_RATE)
             if self._dribbler_seconds[robot_id] <= DRIBBLER_RESUME_SECONDS:
                 self._dribbler_throttled.discard(robot_id)
                 self._dribbler_limit_warned.discard(robot_id)
             return False
+
+    def get_dribbler_limiter_status(self, robot_id: int) -> DribblerLimiterStatus:
+        """Return the current dribbler limiter state for a robot command ID."""
+        command_robot_id = self._vision_to_cmd_mapping.get(robot_id, robot_id)
+        bucket_seconds = self._dribbler_seconds.get(command_robot_id, 0.0)
+        throttled = command_robot_id in self._dribbler_throttled
+        seconds_until_limit = max(0.0, DRIBBLER_MAX_ON_SECONDS - bucket_seconds)
+        if throttled:
+            seconds_until_resume = max(0.0, (bucket_seconds - DRIBBLER_RESUME_SECONDS) / DRIBBLER_DRAIN_RATE)
+        else:
+            seconds_until_resume = 0.0
+        return DribblerLimiterStatus(
+            bucket_seconds=bucket_seconds,
+            max_on_seconds=DRIBBLER_MAX_ON_SECONDS,
+            resume_seconds=DRIBBLER_RESUME_SECONDS,
+            drain_rate=DRIBBLER_DRAIN_RATE,
+            throttled=throttled,
+            seconds_until_limit=seconds_until_limit,
+            seconds_until_resume=seconds_until_resume,
+        )
 
     def _generate_command_buffer(self, robot_id: int, c_command: RobotCommand) -> bytes:
         """Generates the command buffer to be sent to the robot."""

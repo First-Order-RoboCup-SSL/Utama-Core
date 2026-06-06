@@ -75,7 +75,7 @@ def turn_on_spot(
     )
 
     # Pivot around the ball when the robot is in dribbler contact (IR or visual proximity).
-    in_contact = robot.has_ball or (ball is not None and robot.p.distance_to(ball.p.to_2d()) < PIVOT_RADIUS + 0.03)
+    in_contact = robot.has_ball or (ball is not None and robot.p.distance_to(ball.p.to_2d()) < PIVOT_RADIUS)
     if in_contact:
         angular_vel = turn.angular_vel
         local_left_vel = -angular_vel * PIVOT_RADIUS
