@@ -95,6 +95,7 @@ class CustomReferee:
         )
         self._gui_server = None
         self._bt_nodes_per_robot: dict[int, list[str]] = {}
+        self._robot_feedback_data: list[dict] = []
         if enable_gui:
             # Lazy import to keep this module free of HTTP/GUI dependencies
             # when the GUI is not needed.
@@ -150,7 +151,7 @@ class CustomReferee:
             for rule in self._rules:
                 rule.reset()
         if self._gui_server is not None:
-            self._gui_server.notify(result, game_frame, self._bt_nodes_per_robot)
+            self._gui_server.notify(result, game_frame, self._bt_nodes_per_robot, self._robot_feedback_data)
         return result
 
     def set_bt_data(self, bt_nodes_per_robot: dict[int, list[str]]) -> None:
@@ -159,6 +160,13 @@ class CustomReferee:
         Called by StrategyRunner after each behaviour tree tick.
         """
         self._bt_nodes_per_robot = bt_nodes_per_robot
+
+    def set_robot_feedback_data(self, robot_feedback_data: list[dict]) -> None:
+        """Set raw robot-controller feedback rows for GUI display.
+
+        Called by StrategyRunner in real mode after polling the controller port.
+        """
+        self._robot_feedback_data = [dict(row) for row in robot_feedback_data]
 
     def seed_clock(self, timestamp: float, initial_command: RefereeCommand = RefereeCommand.HALT) -> None:
         """Align all internal state-machine timers to *timestamp* and apply

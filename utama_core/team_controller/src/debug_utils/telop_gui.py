@@ -22,6 +22,8 @@ import threading
 import time
 import tkinter as tk
 
+from utama_core.config.settings import ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS
+
 if not USE_DUMMY_CONTROLLER:
 
     from utama_core.team_controller.src.controllers.real.real_robot_controller import (
@@ -80,7 +82,7 @@ LOOP_HZ = 60
 MAX_VEL = 0.1
 FAST_VEL = 0.5
 MAX_ANG_VEL = 1
-CONNECTION_TIMEOUT = 0.5  # seconds without a response before a robot is marked disconnected
+CONNECTION_TIMEOUT = ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS
 
 BG = "#1a1a1a"
 SURFACE = "#2a2a2a"

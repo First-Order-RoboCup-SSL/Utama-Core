@@ -19,6 +19,7 @@ from utama_core.config.settings import (
     FPS_PRINT_INTERVAL,
     MAX_CAMERAS,
     MAX_GAME_HISTORY,
+    ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS,
     TIMESTEP,
 )
 from utama_core.custom_referee import CustomReferee
@@ -77,6 +78,70 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)  # If this is within the class, or define it globally in the module
 logging.captureWarnings(True)
+
+
+@dataclass(slots=True)
+class _RobotPortFeedbackState:
+    port_id: int
+    has_ball: bool
+    last_seen: float
+
+
+def _record_robot_feedback_responses(
+    feedback_by_port_id: dict[int, _RobotPortFeedbackState],
+    responses: List[RobotResponse],
+    now: float,
+) -> None:
+    for response in responses or []:
+        feedback_by_port_id[response.id] = _RobotPortFeedbackState(
+            port_id=response.id,
+            has_ball=bool(response.has_ball),
+            last_seen=now,
+        )
+
+
+def _build_robot_feedback_snapshot(
+    feedback_by_port_id: dict[int, _RobotPortFeedbackState],
+    *,
+    now: float,
+    my_team_is_yellow: bool,
+    yellow_cmd_to_vision_mapping: dict[int, int],
+    blue_cmd_to_vision_mapping: dict[int, int],
+    timeout_seconds: float = ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS,
+) -> list[dict]:
+    snapshot = []
+    port_ids = set(feedback_by_port_id) | set(yellow_cmd_to_vision_mapping) | set(blue_cmd_to_vision_mapping)
+    for port_id in sorted(port_ids):
+        state = feedback_by_port_id.get(port_id)
+        if state is None:
+            item = {
+                "port_id": port_id,
+                "has_ball": False,
+                "connected": False,
+                "age_seconds": None,
+            }
+        else:
+            age_seconds = max(0.0, now - state.last_seen)
+            item = {
+                "port_id": state.port_id,
+                "has_ball": state.has_ball,
+                "connected": age_seconds < timeout_seconds,
+                "age_seconds": age_seconds,
+            }
+
+        yellow_vision_id = yellow_cmd_to_vision_mapping.get(port_id)
+        blue_vision_id = blue_cmd_to_vision_mapping.get(port_id)
+        if yellow_vision_id is not None:
+            item["team_color"] = "yellow"
+            item["team"] = "friendly" if my_team_is_yellow else "enemy"
+            item["vision_id"] = yellow_vision_id
+        elif blue_vision_id is not None:
+            item["team_color"] = "blue"
+            item["team"] = "enemy" if my_team_is_yellow else "friendly"
+            item["vision_id"] = blue_vision_id
+
+        snapshot.append(item)
+    return snapshot
 
 
 @dataclass(slots=True)
@@ -194,6 +259,8 @@ class StrategyRunner:
         self._vs_idle_next: float = 0.0
         # (is_friendly, robot_id) -> footballer name
         self._vs_robot_names: dict[tuple[bool, int], str] = {}
+        self._robot_feedback_by_port_id: dict[int, _RobotPortFeedbackState] = {}
+        self._robot_feedback_snapshot: list[dict] = []
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
         self.mode: Mode = self._load_mode(mode)
@@ -628,6 +695,20 @@ class StrategyRunner:
                         self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either blue or yellow mapping")
 
         return friendly_responses, opponent_responses
+
+    def _update_robot_feedback_snapshot(self, responses: List[RobotResponse], now: float) -> None:
+        _record_robot_feedback_responses(self._robot_feedback_by_port_id, responses, now)
+        self._robot_feedback_snapshot = _build_robot_feedback_snapshot(
+            self._robot_feedback_by_port_id,
+            now=now,
+            my_team_is_yellow=self.my_team_is_yellow,
+            yellow_cmd_to_vision_mapping=self.yellow_cmd_to_vision_mapping,
+            blue_cmd_to_vision_mapping=self.blue_cmd_to_vision_mapping,
+        )
+
+    def _push_robot_feedback_to_referee(self) -> None:
+        if isinstance(self.referee, CustomReferee):
+            self.referee.set_robot_feedback_data(self._robot_feedback_snapshot)
 
     def _remove_rsim_ball(self):
         """Removes the ball from the RSim environment by teleporting it off-field."""
@@ -1188,6 +1269,12 @@ class StrategyRunner:
             raise self._vision_receiver.thread_exception
         self._draw_rsim_field_bounds_overlay()
 
+        raw_robot_responses: List[RobotResponse] = []
+        if self.mode == Mode.REAL:
+            raw_robot_responses = self.my.strategy.robot_controller.get_robots_responses() or []
+            self._update_robot_feedback_snapshot(raw_robot_responses, frame_start)
+            self._push_robot_feedback_to_referee()
+
         if isinstance(self.referee, CustomReferee):
             ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
             self.ref_buffer.append(ref_data)
@@ -1218,7 +1305,7 @@ class StrategyRunner:
 
         friendly_res, opp_res = None, None
         if self.mode == Mode.REAL:
-            responses = self.my.strategy.robot_controller.get_robots_responses()
+            responses = raw_robot_responses
             if self.opp:
                 friendly_res, opp_res = self._split_robot_responses_by_team(responses)
             else:

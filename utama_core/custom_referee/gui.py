@@ -95,6 +95,7 @@ class _RefereeGUIServer(threading.Thread):
         self._ref_data = None
         self._game_frame = None  # Optional[GameFrame]
         self._bt_data: dict = {}
+        self._robot_feedback_data: list[dict] = []
         self._sse_clients: List = []
         self._sse_lock = threading.Lock()
 
@@ -139,13 +140,15 @@ class _RefereeGUIServer(threading.Thread):
 
     # ---- called by external loops to push a new state snapshot ----
 
-    def notify(self, ref_data, game_frame=None, bt_data=None) -> None:
+    def notify(self, ref_data, game_frame=None, bt_data=None, robot_feedback_data=None) -> None:
         """Push a RefereeData snapshot from an external game loop."""
         with self._lock:
             self._ref_data = ref_data
             self._game_frame = game_frame
             if bt_data is not None:
                 self._bt_data = bt_data
+            if robot_feedback_data is not None:
+                self._robot_feedback_data = [dict(row) for row in robot_feedback_data]
         self._broadcast()
 
     # ---- SSE broadcast ----
@@ -155,10 +158,11 @@ class _RefereeGUIServer(threading.Thread):
             data = self._ref_data
             frame = self._game_frame
             bt = self._bt_data
+            robot_feedback = self._robot_feedback_data
         if data is None:
             return
 
-        payload = ("data: " + _serialise_state(data, frame, bt) + "\n\n").encode()
+        payload = ("data: " + _serialise_state(data, frame, bt, robot_feedback) + "\n\n").encode()
         dead: List = []
 
         with self._sse_lock:
@@ -375,7 +379,7 @@ def _serialise_game_frame(game_frame) -> Optional[dict]:
     }
 
 
-def _serialise_state(ref_data, game_frame=None, bt_data=None) -> str:
+def _serialise_state(ref_data, game_frame=None, bt_data=None, robot_feedback_data=None) -> str:
     designated = None
     if ref_data.designated_position is not None:
         try:
@@ -402,6 +406,7 @@ def _serialise_state(ref_data, game_frame=None, bt_data=None) -> str:
             "ball": _serialise_ball(game_frame),
             "game_frame": _serialise_game_frame(game_frame),
             "bt_nodes": bt_data or {},
+            "robot_feedback": robot_feedback_data or [],
         }
     )
 
@@ -704,6 +709,33 @@ _HTML = r"""<!DOCTYPE html>
   .status-bot-id.enemy    { color: var(--blue); }
   .status-pos { color: var(--text); opacity: .85; }
   .status-vel { color: var(--muted); }
+  .status-feedback-id {
+    font-weight: 700;
+    color: var(--text);
+    min-width: 54px;
+  }
+  .status-feedback-meta {
+    color: var(--muted);
+    font-size: .62rem;
+  }
+  .status-feedback-ball {
+    min-width: 54px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .status-feedback-ball.yes { color: var(--orange); }
+  .status-pill {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: .58rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .status-pill.connected { background: #17361f; color: var(--green); border: 1px solid #245c33; }
+  .status-pill.disconnected { background: #3a1a1a; color: #c0605a; border: 1px solid #5a2a2a; }
+  .status-pill.ball { background: #3a2a13; color: var(--orange); border: 1px solid #73501b; }
   .status-ball-indicator {
     display: inline-block;
     width: 7px;
@@ -946,11 +978,52 @@ _HTML = r"""<!DOCTYPE html>
 </div>
 
 <script>
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // --- Robot status rendering ---
 function renderStatus(d) {
   const c = document.getElementById('status-entries');
   if (!c) return;
   let html = '';
+
+  // Controller feedback from the robot port
+  const feedback = d.robot_feedback || [];
+  html += '<div class="status-section-title">Controller Feedback (' + feedback.length + ')</div>';
+  if (feedback.length === 0) {
+    html += '<div class="status-row"><span class="status-pos">none</span></div>';
+  }
+  for (const row of feedback) {
+    const age = Number(row.age_seconds);
+    const ageLabel = Number.isFinite(age) ? age.toFixed(2) + 's' : '--';
+    const robotId = row.vision_id !== undefined && row.vision_id !== null ? row.vision_id : row.port_id;
+    const robotLabel = row.team_color
+      ? row.team_color.charAt(0).toUpperCase() + row.team_color.slice(1) + ' Robot ' + robotId
+      : 'Robot ' + robotId;
+    const ballLabel = row.connected ? (row.has_ball ? 'ball: YES' : 'ball: no') : 'ball: --';
+    let mapped = 'unmapped';
+    if (row.vision_id !== undefined && row.vision_id !== null) {
+      const bits = [];
+      if (row.team) bits.push(row.team);
+      if (row.team_color) bits.push(row.team_color);
+      mapped = bits.join(' / ');
+    }
+    html += '<div class="status-row">'
+      + '<span class="status-feedback-id">' + escapeHtml(robotLabel) + '</span>'
+      + '<span class="status-feedback-ball ' + (row.connected && row.has_ball ? 'yes' : '') + '">'
+      + escapeHtml(ballLabel) + '</span>'
+      + '<span class="status-pill ' + (row.connected ? 'connected' : 'disconnected') + '">'
+      + (row.connected ? 'connected' : 'no data') + '</span>'
+      + '<span class="status-feedback-meta">port ' + escapeHtml(row.port_id) + ' · '
+      + escapeHtml(mapped) + ' · age ' + escapeHtml(ageLabel) + '</span>'
+      + '</div>';
+  }
 
   // Ball
   html += '<div class="status-section-title">Ball</div>';
