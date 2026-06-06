@@ -1278,19 +1278,15 @@ class StrategyRunner:
         if isinstance(self.referee, CustomReferee):
             ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
             self.ref_buffer.append(ref_data)
-            _ball_placement_next = ref_data.next_command in (
-                RefereeCommand.BALL_PLACEMENT_YELLOW,
-                RefereeCommand.BALL_PLACEMENT_BLUE,
-            )
             if (
                 self.sim_controller is not None
                 and ref_data.referee_command == RefereeCommand.STOP
                 and ref_data.designated_position is not None
                 and self._prev_custom_ref_command != RefereeCommand.STOP
-                and not _ball_placement_next
             ):
                 x, y = ref_data.designated_position
                 self.sim_controller.teleport_ball(x, y)
+                self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
             self._prev_custom_ref_command = ref_data.referee_command
 
         if self.mode == Mode.RSIM:
@@ -1478,26 +1474,10 @@ class StrategyRunner:
     ]
 
     _VS_FOOTBALLER_NAMES = [
-        "Messi",
-        "Ronaldo",
-        "Mbappé",
-        "Neymar",
-        "Haaland",
-        "Benzema",
-        "Modric",
-        "De Bruyne",
-        "Salah",
-        "Lewandowski",
-        "Kylian",
-        "Vinicius",
-        "Pedri",
-        "Bellingham",
-        "Osimhen",
-        "Courtois",
-        "Alisson",
-        "Neuer",
-        "ter Stegen",
-        "Oblak",
+        "Martin",
+        "Fred",
+        "Joel",
+        "Louis",
     ]
 
     @staticmethod

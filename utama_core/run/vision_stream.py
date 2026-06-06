@@ -361,16 +361,15 @@ class RSimVisionStreamServer:
     body {
       margin: 0;
       min-height: 100vh;
-      display: grid;
-      grid-template-rows: auto auto auto 1fr;
+      display: flex;
+      flex-direction: column;
       gap: 8px;
       padding: 12px 16px;
     }
 
     /* ── Scoreboard ─────────────────────────────────────── */
     #scoreboard {
-      width: min(100%, 960px);
-      margin: 0 auto;
+      width: 100%;
       display: grid;
       grid-template-columns: 1fr auto 1fr;
       align-items: center;
@@ -455,34 +454,17 @@ class RSimVisionStreamServer:
       color: #8fa1b3;
     }
 
-    /* ── Canvas ─────────────────────────────────────────── */
-    main {
+    /* ── Middle row: commentary + rosters ──────────────── */
+    #middle-row {
       display: grid;
-      place-items: center;
-      padding: 8px 0;
-    }
-    #canvas-wrap {
-      position: relative;
-      width: min(100%, 1200px);
-    }
-    #stream, #overlay {
-      display: block;
+      grid-template-columns: 160px 1fr 160px;
+      gap: 10px;
+      align-items: start;
       width: 100%;
-      height: auto;
-      border: 1px solid #343b45;
-    }
-    #stream { background: #0b0d0f; }
-    #overlay {
-      position: absolute;
-      top: 0; left: 0;
-      pointer-events: none;
-      border-color: transparent;
     }
 
     /* ── Commentary bar ─────────────────────────────────── */
     #commentary-bar {
-      width: min(100%, 960px);
-      margin: 0 auto;
       background: #1e242c;
       border: 1px solid #343b45;
       border-radius: 8px;
@@ -497,34 +479,64 @@ class RSimVisionStreamServer:
       justify-content: center;
     }
 
-    /* ── Roster panel ───────────────────────────────────── */
-    #roster {
-      width: min(100%, 960px);
-      margin: 0 auto;
+    /* ── Roster panels ──────────────────────────────────── */
+    .roster-panel {
       display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 4px;
     }
-    .player-card {
-      background: #1e242c;
-      border: 1px solid #343b45;
-      border-radius: 8px;
-      padding: 6px 12px;
+    .roster-panel.left  { align-items: flex-start; }
+    .roster-panel.right { align-items: flex-end; }
+    .roster-header {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #8fa1b3;
+      padding: 0 4px 4px;
+    }
+    .roster-panel.right .roster-header { text-align: right; }
+    .roster-row {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 13px;
+      gap: 6px;
+      background: #1e242c;
+      border: 1px solid #2a3140;
+      border-radius: 6px;
+      padding: 5px 10px;
+      width: 100%;
     }
-    .player-dot {
-      width: 10px;
-      height: 10px;
+    .roster-panel.right .roster-row { flex-direction: row-reverse; }
+    .roster-dot {
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .player-dot.yellow { background: #FFD700; }
-    .player-dot.blue   { background: #4FC3F7; }
-    .player-name { font-weight: 600; color: #f1f4f8; }
-    .player-status { color: #8fa1b3; font-size: 11px; }
+    .roster-dot.yellow { background: #FFD700; }
+    .roster-dot.blue   { background: #4FC3F7; }
+    .roster-info { display: flex; flex-direction: column; gap: 1px; }
+    .roster-panel.right .roster-info { align-items: flex-end; }
+    .roster-name  { font-size: 13px; font-weight: 600; color: #f1f4f8; }
+    .roster-role  { font-size: 10px; color: #8fa1b3; }
+
+    /* ── Canvas (full width at bottom) ─────────────────── */
+    #canvas-wrap {
+      position: relative;
+      width: 100%;
+    }
+    #stream, #overlay {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid #343b45;
+    }
+    #stream { background: #0b0d0f; }
+    #overlay {
+      position: absolute;
+      top: 0; left: 0;
+      pointer-events: none;
+      border-color: transparent;
+    }
   </style>
 </head>
 <body>
@@ -554,15 +566,27 @@ class RSimVisionStreamServer:
     </div>
   </div>
 
-  <div id="commentary-bar">Welcome to the match!</div>
-  <div id="roster"></div>
-
-  <main>
-    <div id="canvas-wrap">
-      <canvas id="stream"></canvas>
-      <canvas id="overlay"></canvas>
+  <div id="middle-row">
+    <!-- Left roster (Blue) -->
+    <div class="roster-panel left" id="roster-left">
+      <div class="roster-header" id="roster-left-header">Blue</div>
     </div>
-  </main>
+
+    <!-- Commentary bar -->
+    <div id="commentary-bar">Welcome to the match!</div>
+
+    <!-- Right roster (Yellow) -->
+    <div class="roster-panel right" id="roster-right">
+      <div class="roster-header" id="roster-right-header">Yellow</div>
+    </div>
+  </div>
+
+  <!-- Full-width field canvas -->
+  <div id="canvas-wrap">
+    <canvas id="stream"></canvas>
+    <canvas id="overlay"></canvas>
+  </div>
+
   <script>
     const canvas = document.getElementById("stream");
     const ctx = canvas.getContext("2d");
@@ -586,6 +610,25 @@ class RSimVisionStreamServer:
       }
     }
 
+    function buildRosterPanel(panelId, headerId, players, teamColor) {
+      const panel = document.getElementById(panelId);
+      // Remove all rows but keep the header
+      const header = document.getElementById(headerId);
+      panel.innerHTML = "";
+      panel.appendChild(header);
+      for (const p of players) {
+        const row = document.createElement("div");
+        row.className = "roster-row";
+        row.innerHTML =
+          `<span class="roster-dot ${teamColor}"></span>` +
+          `<span class="roster-info">` +
+            `<span class="roster-name">${p.name}</span>` +
+            `<span class="roster-role">${p.status}</span>` +
+          `</span>`;
+        panel.appendChild(row);
+      }
+    }
+
     function updateStatus(info) {
       document.getElementById("time-left").textContent = info.time_left ?? "--:--";
       document.getElementById("blue-score").textContent = info.score_blue ?? 0;
@@ -600,17 +643,12 @@ class RSimVisionStreamServer:
         document.getElementById("commentary-bar").textContent = info.commentary;
       }
       if (info.roster) {
-        const roster = document.getElementById("roster");
-        roster.innerHTML = "";
-        for (const p of info.roster) {
-          const card = document.createElement("div");
-          card.className = "player-card";
-          card.innerHTML =
-            `<span class="player-dot ${p.team}"></span>` +
-            `<span class="player-name">${p.name}</span>` +
-            `<span class="player-status">${p.status}</span>`;
-          roster.appendChild(card);
-        }
+        const bluePlayers  = info.roster.filter(p => p.team === "blue");
+        const yellowPlayers = info.roster.filter(p => p.team === "yellow");
+        document.getElementById("roster-left-header").textContent = info.team_blue ?? "Blue";
+        document.getElementById("roster-right-header").textContent = info.team_yellow ?? "Yellow";
+        buildRosterPanel("roster-left",  "roster-left-header",  bluePlayers,   "blue");
+        buildRosterPanel("roster-right", "roster-right-header", yellowPlayers, "yellow");
       }
       latestAnnotations = info.annotations ?? [];
       drawAnnotations();
