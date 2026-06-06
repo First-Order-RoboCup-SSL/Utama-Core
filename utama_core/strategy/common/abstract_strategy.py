@@ -1,4 +1,5 @@
 import logging
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional, cast
@@ -165,6 +166,14 @@ class AbstractStrategy(ABC):
         ### These attributes are set by the StrategyRunner before the strategy is run. ###
         self.robot_controller: AbstractRobotController = None
         self.blackboard: BaseBlackboard = None
+
+        # Robot-stuck watchdog: maps robot_id → (last_x, last_y, timestamp).
+        # When every active robot has been stationary for _STUCK_TIMEOUT seconds,
+        # the BT root is invalidated so all memory is cleared and the tree
+        # replans from scratch on the next tick.
+        self._stuck_positions: dict[int, tuple[float, float, float]] = {}
+        self._STUCK_TIMEOUT: float = 6.0  # seconds before BT reset
+        self._STUCK_MOVE_THRESH: float = 0.04  # metres — below this counts as stationary
 
     ### START OF FUNCTIONS TO BE IMPLEMENTED BY YOUR STRATEGY ###
 
@@ -339,12 +348,58 @@ class AbstractStrategy(ABC):
         self.blackboard.set("game", game, overwrite=True)
         self.assert_field_requirements(game)
 
+    def _check_stuck_watchdog(self, game: Game) -> bool:
+        """Return True and reset the BT if all active robots have been stationary too long.
+
+        Only considers robots that are active (present in game.friendly_robots).
+        Goalkeeper-only stationarity is excluded — a parked keeper is not stuck.
+        Resets the BT root to INVALID so all memory is cleared on the next tick.
+        """
+        if not game.friendly_robots:
+            return False
+
+        current_ts = game.ts
+        non_keeper_ids = [
+            rid
+            for rid, role in self.blackboard.role_map.items()
+            if role != Role.GOALKEEPER and rid in game.friendly_robots
+        ]
+        # If every robot is a goalkeeper (shouldn't happen in 6v6), fall back to all robots
+        check_ids = non_keeper_ids if non_keeper_ids else list(game.friendly_robots.keys())
+
+        all_stuck = True
+        for robot_id in check_ids:
+            robot = game.friendly_robots[robot_id]
+            rx, ry = robot.p.x, robot.p.y
+            if robot_id in self._stuck_positions:
+                lx, ly, lt = self._stuck_positions[robot_id]
+                if math.hypot(rx - lx, ry - ly) >= self._STUCK_MOVE_THRESH:
+                    self._stuck_positions[robot_id] = (rx, ry, current_ts)
+                    all_stuck = False
+                elif (current_ts - lt) < self._STUCK_TIMEOUT:
+                    all_stuck = False
+                # else: this robot is stuck — keep all_stuck=True and continue checking
+            else:
+                self._stuck_positions[robot_id] = (rx, ry, current_ts)
+                all_stuck = False
+
+        if all_stuck and check_ids:
+            logger.warning(
+                "Robot stuck watchdog: all non-goalkeeper robots stationary for >= %.1fs — resetting BT.",
+                self._STUCK_TIMEOUT,
+            )
+            self.behaviour_tree.root.stop(py_trees.common.Status.INVALID)
+            # Clear stuck tracking so the timeout restarts fresh after the reset
+            self._stuck_positions.clear()
+            return True
+        return False
+
     def step(self):
-        # start_time = time.time()
         game = self.blackboard.game
 
         self.blackboard.cmd_map = {robot_id: None for robot_id in game.friendly_robots}
 
+        self._check_stuck_watchdog(game)
         self.behaviour_tree.tick()
 
         for robot_id, values in self.blackboard.cmd_map.items():
