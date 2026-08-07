@@ -1051,9 +1051,9 @@ function renderStatus(d) {
       + '<span class="status-vel">v=(' + bot.vx.toFixed(2) + ', ' + bot.vy.toFixed(2) + ')</span>'
       + (bot.has_ball ? '<span class="status-ball-indicator" title="has ball"></span>' : '')
       + '</div>';
-    const nodes = btNodes[bot.id];
+    const nodes = btNodes[String(bot.id)];
     if (nodes && nodes.length > 0) {
-      html += '<div class="status-bt">' + nodes.join(' › ') + '</div>';
+      html += '<div class="status-bt">' + nodes.map(escapeHtml).join('<br>') + '</div>';
     }
   }
 

@@ -1278,15 +1278,31 @@ class StrategyRunner:
         if isinstance(self.referee, CustomReferee):
             ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
             self.ref_buffer.append(ref_data)
-            if (
-                self.sim_controller is not None
-                and ref_data.referee_command == RefereeCommand.STOP
-                and ref_data.designated_position is not None
-                and self._prev_custom_ref_command != RefereeCommand.STOP
-            ):
-                x, y = ref_data.designated_position
-                self.sim_controller.teleport_ball(x, y)
-                self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
+            _BALL_PLACEMENT_COMMANDS = (
+                RefereeCommand.BALL_PLACEMENT_YELLOW,
+                RefereeCommand.BALL_PLACEMENT_BLUE,
+            )
+            if self.sim_controller is not None and ref_data.designated_position is not None:
+                if (
+                    ref_data.referee_command == RefereeCommand.STOP
+                    and self._prev_custom_ref_command != RefereeCommand.STOP
+                ):
+                    # On transition into STOP with a designated position, teleport
+                    # the ball immediately and skip straight to FORCE_START so
+                    # simulation doesn't wait for physical ball placement.
+                    x, y = ref_data.designated_position
+                    self.sim_controller.teleport_ball(x, y)
+                    self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
+                elif (
+                    ref_data.referee_command in _BALL_PLACEMENT_COMMANDS
+                    and self._prev_custom_ref_command not in _BALL_PLACEMENT_COMMANDS
+                ):
+                    # On transition into BALL_PLACEMENT, teleport the ball to the
+                    # designated position and let the state machine auto-advance.
+                    # Robots cannot physically retrieve an out-of-bounds ball in
+                    # simulation, so we simulate placement instantly.
+                    x, y = ref_data.designated_position
+                    self.sim_controller.teleport_ball(x, y)
             self._prev_custom_ref_command = ref_data.referee_command
 
         if self.mode == Mode.RSIM:
@@ -1603,33 +1619,36 @@ class StrategyRunner:
             if hasattr(n, "children"):
                 for child in n.children:
                     parent_of[child.id] = n.id
-        # Find RUNNING leaf nodes with robot_id, trace path to root
+        # Find RUNNING leaf nodes, walk up to root to collect path and robot_id.
+        # robot_id may live on any ancestor (not just the leaf), so we scan the
+        # full path rather than stopping at the leaf node.
         for node_id, status in self._bt_snapshot.visited.items():
             if status.name != "RUNNING":
                 continue
             node = node_by_id.get(node_id)
             if node is None:
                 continue
+            # Walk from leaf to root: collect path names and search for robot_id.
+            path = []
             rid = None
-            if hasattr(node, "debug_state"):
-                state = node.debug_state()
-                if state and "robot_id" in state:
-                    rid = state["robot_id"]
-            if rid is None and hasattr(node, "robot_id_key"):
-                try:
-                    rid = node.blackboard.get(node.robot_id_key)
-                except Exception:
-                    pass
+            cur = node_id
+            while cur is not None:
+                n = node_by_id.get(cur)
+                if n is None:
+                    break
+                path.append(n.name)
+                if rid is None:
+                    if hasattr(n, "debug_state"):
+                        state = n.debug_state()
+                        if state and "robot_id" in state:
+                            rid = state["robot_id"]
+                    if rid is None and hasattr(n, "robot_id_key"):
+                        try:
+                            rid = n.blackboard.get(n.robot_id_key)
+                        except Exception:
+                            pass
+                cur = parent_of.get(cur)
             if rid is not None:
-                # Walk up to root, collect path
-                path = []
-                cur = node_id
-                while cur is not None:
-                    n = node_by_id.get(cur)
-                    if n is None:
-                        break
-                    path.append(n.name)
-                    cur = parent_of.get(cur)
                 path.reverse()
                 bt_nodes.setdefault(rid, []).append(" › ".join(path))
         self.referee.set_bt_data(bt_nodes)

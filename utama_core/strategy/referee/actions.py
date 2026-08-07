@@ -375,7 +375,7 @@ class BallPlacementOursStep(AbstractBehaviour):
                             game, motion_controller, robot_id, target_pos, oren, dribbling=True
                         )
                 else:
-                    target_for_move = Vector2D(ball.p.x, ball.p.y)
+                    target_for_move = _clamp_to_field(Vector2D(ball.p.x, ball.p.y), game)
                     oren = robot.p.angle_to(target_for_move)
                     self.blackboard.cmd_map[robot_id] = move(
                         game, motion_controller, robot_id, target_for_move, oren, dribbling=True
