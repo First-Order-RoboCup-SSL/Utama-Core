@@ -113,12 +113,15 @@ alongside it in code.
 
 ---
 
-## 5. ✅ Settled — Single-writer partition; one Tactic claims the whole outfield pool
+## 5. ✅ Settled, later generalized (§11) — Single-writer partition
 
 **Decision:** every outfield robot maps to exactly one Tactic per tick (robot 0 /
 goalkeeper is pinned separately and never scheduled). For this pass, exactly **one** Tactic
 is active at a time, claiming the entire outfield pool — there is no concurrent
 multi-Tactic partitioning (e.g. 3 robots on attack while 2 hold defence, simultaneously).
+**Superseded by §11**: `Strategy` was later generalized to run N≥1 Tactics concurrently:
+what follows in this section is the original single-Tactic reasoning, which still holds as
+the N=1 case of that generalization, not as a separate mechanism.
 
 **Why this avoids real shared-resource concurrency, not just simplifies it:** the hard
 version of concurrency (locks, races, deadlock) arises when multiple independent actors can
@@ -156,14 +159,16 @@ the plain version, not in anticipation of one.
 
 ---
 
-## 7. Deferred — Splitting policy across concurrent Tactics
+## 7. Deferred, then resolved — Splitting policy across concurrent Tactics
 
-See §5. Not building a scheduler-level priority cascade for splitting the robot pool across
-multiple simultaneously active Tactics. The chosen interim approach is to write
-**robot-count-agnostic** Tactics that claim whatever pool they're given and behave sensibly
-regardless of size, keeping any such complexity local to one Tactic's own logic rather than
-centralising it in the scheduler where it would entangle with every other Tactic kind's
-demands.
+See §5. Originally deferred: not building a scheduler-level priority cascade for splitting
+the robot pool across multiple simultaneously active Tactics, on the grounds that no two
+concrete Tactic kinds existed yet to force the question, and robot-count-agnostic Tactics
+were a sufficient interim answer. **Superseded by §11** once a genuine 5-robot
+attack/defense split became a real, concrete requirement — see §11 for the resolution.
+Robot-count-agnostic Tactics remain the right approach *within* a group (this section's
+original point stands unchanged for that); what changed is that the pool can now be split
+into more than one group at all.
 
 ## 8. Deferred — Zombie/orphan robot cleanup
 
@@ -225,13 +230,164 @@ their own `kernel.Strategy` with a real `Picker` rather than use this helper.
 
 ---
 
+## Ported tactics inventory
+
+Beyond the three tactics ported alongside the kernel itself (`GoalkeeperTactic`,
+`TwoRobotAttackTactic`, `DribbleTactic`), a survey of both repos' `plays/`, `strategies/`,
+`examples/`, and `behaviours/` directories (across `Utama-Strategy`'s `spike/functional-strategy`
+branch and several feature branches: `feat/dribbling`, `feat/pass`, `feat/pose`, `test/goalkeep`,
+plus Utama-Core's own branch history) turned up:
+
+- **`DefenseTactic`** (`utama_core/tactics/defense.py`) — ported from
+  `utama_strategy.examples.defense_strategy.DefenceStrategy`. The original was almost entirely
+  role-assignment plumbing around one already-self-contained skill function,
+  `utama_core.skills.src.defend_parameter.defend_parameter`, which already lived in Core and did
+  not itself need porting. Fills a real gap: no defensive positioning existed anywhere in the
+  kernel before this. Carries over a pre-existing quirk unchanged (see the class docstring): the
+  2-defender dynamic side-selection triggers on the whole team's robot count being exactly 2, not
+  on how many robots this tactic was handed — correct for the original dedicated-defense
+  strategy, not necessarily once a defense tactic runs alongside other concurrent tactics.
+- **Not ported, candidates for later:** an off-ball "go-to-space" positioning tactic
+  (`feat/pass` branch — scores open space by passing-lane openness, opponent race-to-point, goal
+  threat, teammate spacing) and a 2v1 attack variant with a fast/slow-kicker recharge-cooldown
+  role split (`plays/attack2v1.py`). Both are genuinely distinct from what's ported but were
+  left for a follow-up pass — the former needs verification against the current `Game` API since
+  it lives on a stale branch, the latter needs its cooldown timer reworked to live in `mem`.
+- **Not ported, rejected as redundant:** `plays/pose.py`/`plays/receive.py` (subsumed by
+  `two_robot_attack`'s existing setup-phase movement), the older random-target dribble picker in
+  `utils/dribble_utils.py` (superseded by the already-ported `DribbleTactic`'s fixed
+  rectangle-corner pattern), and all of Utama-Core's own non-`spike/tactic-kernel` branches
+  (vision/UI/referee infra only, no tactical logic).
+
+---
+
+## 11. ✅ Settled — `Strategy` generalized to run N≥1 Tactics concurrently
+
+**Decision:** `Strategy` (§5) itself was generalized to run more than one `Tactic` at once
+by splitting the outfield pool into named tactic slots each tick, rather than building this
+as a second, separate scheduler class. This is the concrete resolution of §7's deferral,
+forced by a genuine requirement: a 5-outfield-robot (6-total, goalkeeper pinned) strategy
+where some robots attack (`LeadAndSupportTactic`) while others defend
+(`ShadowAndMarkTactic`) concurrently, not one full-pool Tactic switching wholesale between
+the two.
+
+**One class, not two.** An earlier pass at this built a second class, `PartitionedStrategy`,
+kept separate from `Strategy` on the reasoning that `Strategy`'s `Picker` (one `TacticId`
+out) and a group-partition picker (a full partition out) were different-shaped decisions.
+That reasoning didn't hold up: a single-tactic pick is just the degenerate case of a
+partition with one non-empty part (`{"only": all_robots}`), and carrying two schedulers
+with near-identical tick loops (referee handling, barrier reset, per-slot committed-veto
+logic) was duplicated machinery for one capability at two different N, which cuts against
+the standing minimalism preference (see [[feedback_minimal_architecture]]) more than the
+"different-shaped decision" argument justified keeping them apart. `Strategy` now always
+operates on a partition (`GroupPicker`); the single-active-tactic case is reproduced exactly
+via `Strategy.single_tactic_picker(picker)`, which adapts the original
+`(Game, Optional[TacticId]) -> TacticId` shape into a trivial one-slot `GroupPicker` — so
+existing single-tactic callers change their construction call, not their picker logic.
+
+**The single-writer invariant is preserved, not weakened.** A `GroupPicker` still decides
+the *entire* outfield pool's assignment in one place, once per tick, before any Tactic in
+any slot runs — structurally identical to the original single-Tactic design, just producing
+N≥1 slots instead of always exactly 1. There is still no tick in which two Tactics could
+contend for the same robot.
+
+**Per-slot `committed()`, not pool-wide.** One slot's Tactic returning `committed()` only
+pins *that slot's* robot set; it has no bearing on any other slot's assignment. The
+`GroupPicker` contract reflects this directly: it is only ever handed the *free* robot
+pool — outfield robots not currently pinned by a committed slot — and must return a
+partition that exactly covers that free pool, nothing more. This was chosen over an
+earlier draft where the picker proposed a partition of the *entire* pool and the kernel
+tried to reconcile it against pinned slots after the fact — that required guessing at
+ambiguous cases (what if the picker's proposal disagreed with a pin?) instead of making
+disagreement structurally impossible. The final contract cannot express a bad proposal for
+a committed slot: the picker never sees committed slots' robots as available, so it cannot
+suggest reassigning them, only strictly define what happens to the rest.
+
+**`single_tactic_picker`'s "currently active" state is read from `Strategy`, not tracked
+separately.** A first version of the adapter kept its own `active_id` inside the closure,
+updated each time it was called. This desynced from `Strategy`'s actual state the moment a
+caller replaced the picker mid-run (a fresh closure starts with no memory of what was
+previously active) — caught by a test that swapped pickers after a tactic released its
+commitment, which should have handed control to the newly-preferred tactic immediately but
+didn't. Fixed by reading the previously active id out of `prev_partition` (which `Strategy`
+always passes to the picker) instead of closure-local state, since `Strategy` is the single
+source of truth for what was active.
+
+**A slot dropped from the partition must be cleared, not left stale.** A second, related
+bug: when a tactic id is simply absent from a tick's partition (its robots went to another
+slot, or the picker stopped naming it), nothing in the main tick loop touches that slot at
+all — it isn't "assigned an empty set," it's just not mentioned. A naive port kept the
+slot's previous `assigned_robots` untouched in that case, which broke `active_tactic_id` for
+single-tactic callers (the old, no-longer-active tactic still looked "assigned"). Fixed by
+explicitly zeroing any slot's `assigned_robots`/`mem`/`committed_ticks` when its id is absent
+from the current tick's partition.
+
+**A slot assigned zero robots is not ticked.** Discovered while testing: comparing an empty
+`frozenset()` assignment against a slot's *initial* default (also `frozenset()`) looks like
+"no change," so a naive reset-on-change check would call `tactic.tick()` with an empty robot
+tuple and `mem=None` on a slot's first zero-robot tick — meaningless, and a guaranteed crash
+for any Tactic that reads `robot_ids[0]`. Fixed by skipping `tick()` entirely for any slot
+with an empty assignment, and only calling `make_initial_mem()` when a slot's new assignment
+is non-empty.
+
+**Barrier reset still clears everything, unconditionally.** A referee restart clears every
+slot's `mem` and every slot's `committed()` pin at once — a partial reset that left one
+slot's commitment standing would reintroduce a targeted-eviction-shaped mechanism through
+the back door, which §4 already rejected under the `SIGKILL` framing.
+
+**Validation is loud, not best-effort.** `Strategy.tick()` raises if a `GroupPicker`'s
+combined output (free-pool partition, merged with pinned committed slots) is not an exact,
+disjoint cover of the outfield pool, or if it names a tactic id that was never registered,
+or if it tries to assign robots to a currently-committed slot.
+
+**Not built:** any priority/scoring system for *how* the split is decided — the picker used
+for the 5-robot case (`_possession_split_picker` in `kernel_strategy.py`) is a single-signal
+rule (whichever side is closer to the ball) with two fixed splits, not a tunable allocator.
+Consistent with the standing rejection of bid/fitness-scoring machinery below; this section
+is the mechanism for running a split, not a policy for choosing one.
+
+---
+
+## 12. Ported tactics — 5-robot pool: `LeadAndSupportTactic` and `ShadowAndMarkTactic`
+
+Two new tactics, written from scratch rather than ported/renamed from Utama-Strategy's
+`plays/`/`strategies/` (the team explicitly did not want a "2v1"/"go-to-space"-style
+carryover) — reusing existing motion/geometry primitives (`go_to_ball`, `go_to_point`,
+`defend_parameter`, `game.proximity_lookup`, `shared/pass_and_score_geometry`'s shot-finding
+functions) since those are fundamental building blocks, not tactical decisions.
+
+- **`LeadAndSupportTactic`** (`utama_core/tactics/lead_and_support.py`) — one ball-carrying
+  leader (closest-to-ball, re-evaluated except while committed) dribbles/shoots toward
+  goal; every other assigned robot continuously re-picks the best open support point,
+  scored on lane-openness, shot-openness from that point, and forward progress. Named for
+  what it does (one robot leads, the rest support), not a robot count or sports-formation
+  term. Robot-count-agnostic (1 robot: leader only, no supports, up through however many
+  assigned) per §7's original, still-standing local-agnosticism stance.
+- **`ShadowAndMarkTactic`** (`utama_core/tactics/shadow_and_mark.py`) — the first two
+  assigned robots shadow the shot line via the existing `defend_parameter` (unchanged,
+  same as `DefenseTactic`); any further robots each mark the nearest not-yet-marked
+  opponent, greedily, per tick. Built because `defend_parameter` itself has no concept of
+  a 3rd+ defender — calling it per-robot for a larger defensive group would send every
+  robot to the same post rather than spreading coverage. Marking assignment is not sticky
+  (a marker can switch targets tick-to-tick); acceptable since marking carries no
+  phase/commitment state to disrupt, revisit only if mark-flapping proves to be a real
+  observed problem.
+- **`build_split_shape_kernel_strategy`** (`utama_core/kernel/kernel_strategy.py`) wires
+  both into a `Strategy` (§11) with `_possession_split_picker`, usable as a
+  `KernelStrategy`'s `build_kernel_strategy` argument exactly like the existing
+  `build_default_kernel_strategy` single-tactic factory.
+
+---
+
 ## Explicitly rejected (do not reintroduce without a concrete forcing case)
 
 - **Bid / fitness-scoring + arbiter** for choosing the active Tactic — recognised as
   equivalent to OS priority-preemption scheduling; more machinery than the current Tactic
-  count justifies.
-- **Timeout / forced eviction on `committed()`** — see §3.
-- **Concurrent multi-Tactic partitioning** — see §5, §7.
+  count justifies. Applies equally to `Strategy`'s multi-slot `GroupPicker` (§11) — the
+  5-robot split picker is a one-signal rule, not a scored allocator.
+- **Timeout / forced eviction on `committed()`** — see §3. Applies per-slot in the
+  multi-Tactic case too (§11): a stuck committed slot is a bug to fix in that slot's
+  Tactic, not a case for scheduler-side eviction.
 - **`@Configurable`-style live-tuning/config system** — Sumatra-specific infrastructure
   judged out of scope at current scale.
 - **Scheduling quantum / reduced check frequency** — solves a context-switch cost this

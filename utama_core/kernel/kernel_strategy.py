@@ -24,16 +24,20 @@ import py_trees
 
 from utama_core.config.enums import Role
 from utama_core.entities.data.command import RobotCommand
+from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
 from utama_core.kernel.context import KernelContext
 from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
+from utama_core.kernel.tactic import RobotId
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.common.abstract_strategy import (
     AbstractStrategy,
     SpaceRequirements,
 )
 from utama_core.tactics.goalkeeper import GoalkeeperTactic
+from utama_core.tactics.lead_and_support import LeadAndSupportTactic
+from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 from utama_core.tactics.two_robot_attack import TwoRobotAttackTactic
 
 
@@ -129,7 +133,90 @@ def build_default_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
         ctx = KernelContext(motion_controller=motion_controller, rsim_env=rsim_env)
         return KernelSchedulerStrategy(
             tactics={"two_robot_attack": TwoRobotAttackTactic()},
-            picker=lambda game, active: "two_robot_attack",
+            group_picker=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "two_robot_attack"),
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
+def _possession_split_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+) -> dict[str, frozenset[RobotId]]:
+    """Whichever side is closer to the ball decides posture; the split is fixed once decided.
+
+    Deliberately the simplest rule that gives the split-shape scheduler
+    something real to react to, not a scored/tunable allocator (see the
+    design doc's stance against bid/fitness-scoring machinery) — one signal
+    (which team is closer to the ball), two fixed splits. Ties and an
+    unreadable proximity lookup default to the more conservative
+    (defense-heavy) split.
+
+    Only emits a key for a tactic it is actually assigning free robots to —
+    never a zero-robot entry, since `Strategy` treats every key in a
+    `GroupPicker`'s return value as "I am claiming this tactic id right now,"
+    and a present-but-empty entry for a tactic committed and pinned
+    elsewhere would collide with that pin.
+
+    Never re-proposes a tactic id that is currently pinned by a commitment.
+    With exactly two ids and a binary split, this picker cannot tell from
+    `free_robots` alone whether "attack" is absent because it's pinned
+    elsewhere (holding robots outside the free pool) or because this picker
+    itself chose to leave it empty last tick — but `prev_partition` (the full
+    previous partition `Strategy` always passes in, including pinned
+    entries) does distinguish the two: if "attack" held a non-empty set last
+    tick and none of the free pool overlaps that set, "attack" must still be
+    pinned with it, and this picker must leave "attack" out entirely rather
+    than propose a *second*, conflicting claim on the same tactic id.
+    """
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    prev_partition = prev_partition or {}
+    pinned_ids = {tid for tid, robots in prev_partition.items() if robots and not (robots & free_robots)}
+
+    _friendly_closest, friendly_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.FRIENDLY)
+    _enemy_closest, enemy_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
+    friendly_has_ball_edge = friendly_dist < enemy_dist
+
+    if "attack" in pinned_ids:
+        return {"defense": frozenset(ordered)}
+    if "defense" in pinned_ids:
+        return {"attack": frozenset(ordered)}
+
+    attack_count = (len(ordered) + 1) // 2 + 1 if friendly_has_ball_edge else len(ordered) // 2 - 1
+    attack_count = max(0, min(len(ordered), attack_count))
+
+    partition = {}
+    if attack_count > 0:
+        partition["attack"] = frozenset(ordered[:attack_count])
+    if attack_count < len(ordered):
+        partition["defense"] = frozenset(ordered[attack_count:])
+    return partition
+
+
+def build_split_shape_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """5-robot (or fewer) split-shape `Strategy` factory.
+
+    Wires `LeadAndSupportTactic` ("attack") and `ShadowAndMarkTactic`
+    ("defense") as two concurrently active slots, split by
+    `_possession_split_picker`. This is the concrete forcing case the design
+    doc's §7 deferral was waiting on — see §11 for the full rationale.
+
+    Returns a `build_kernel_strategy(game, motion_controller, rsim_env)`
+    callable suitable for `KernelStrategy`'s constructor argument of the
+    same name.
+    """
+
+    def _build(game: Game, motion_controller: MotionController, rsim_env: object | None) -> KernelSchedulerStrategy:
+        ctx = KernelContext(motion_controller=motion_controller, rsim_env=rsim_env)
+        return KernelSchedulerStrategy(
+            tactics={"attack": LeadAndSupportTactic(), "defense": ShadowAndMarkTactic()},
+            group_picker=_possession_split_picker,
             outfield_robot_ids=outfield_robot_ids,
             ctx=ctx,
         )

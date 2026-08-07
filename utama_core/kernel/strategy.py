@@ -1,13 +1,26 @@
-"""`Strategy` — the per-team-color scheduler that decides which `Tactic` runs.
+"""`Strategy` — the per-team-color scheduler that decides which `Tactic`(s) run.
 
-Single active tactic at a time, claiming the whole outfield robot pool
-(robot 0 / goalkeeper is pinned separately and never scheduled). No
-concurrent multi-tactic partitioning, no bid/fitness scoring, no state
-machine — a plain, hand-written picker function decides which tactic is
-active each tick, and this class enforces the invariants around that
-decision: `committed()` is an absolute veto, `mem` resets exactly when a
-tactic's assigned robot set changes (compared as sets, not tuples), and a
-referee barrier reset clears everything unconditionally.
+Runs N>=1 Tactics concurrently, each claiming a disjoint slice of the
+outfield robot pool (robot 0 / goalkeeper is pinned separately and never
+scheduled). The single-writer partition invariant is what makes this safe at
+any N: one scheduling pass decides the *entire* partition before any Tactic
+runs, so there is never a window where two Tactics could contend for the
+same robot — this was true for N=1 and remains true unchanged for N>1.
+
+No bid/fitness scoring, no state machine — a plain, hand-written
+`GroupPicker` function decides how to split the *free* robot pool (robots no
+committed Tactic is currently pinning) across tactic slots each tick, and
+this class enforces the invariants around that decision: `committed()` is an
+absolute per-slot veto, `mem` resets exactly when a slot's assigned robot set
+changes (compared as sets, not tuples), and a referee barrier reset clears
+everything, in every slot, unconditionally.
+
+The single-active-tactic case (all outfield robots always in one slot) is
+not a separate mechanism — it is what you get from a `GroupPicker` that only
+ever returns one non-empty group. `Strategy.single_tactic_picker` builds
+exactly that from a simpler `(Game, Optional[TacticId]) -> TacticId`
+function, for callers with only one tactic kind active at a time who would
+otherwise have to write a trivial one-group `GroupPicker` themselves.
 """
 
 from __future__ import annotations
@@ -24,11 +37,23 @@ from utama_core.kernel.tactic import RobotId, Tactic, TacticId
 
 logger = logging.getLogger(__name__)
 
-# A picker decides which tactic should be active this tick, given the game
-# state and the currently active tactic (None on the very first tick or
-# right after a reset). It returns the TacticId to activate. It does NOT
-# decide the robot pool — that's a fixed, kernel-owned set handed to
-# `Strategy` at construction (everything but the pinned goalkeeper).
+# A GroupPicker partitions the *free* outfield pool (robots not currently
+# pinned by a committed tactic slot — see `Strategy._choose_partition`) into
+# named tactic slots every tick, given the game state, the free robot pool,
+# and the previous full partition (None on the first tick or right after a
+# barrier reset). It must return a partition that exactly covers
+# `free_robot_ids` — every free robot in exactly one slot, no slot given a
+# robot outside that pool. `Strategy.tick()` raises if it doesn't. Committed
+# slots are never passed to the picker as available; it only ever decides
+# what happens to the robots nobody has vetoed keeping.
+GroupPicker = Callable[
+    [Game, frozenset[RobotId], Optional[dict[TacticId, frozenset[RobotId]]]], dict[TacticId, frozenset[RobotId]]
+]
+
+# The original single-tactic picker shape: decide which one TacticId should
+# own the *entire* outfield pool this tick, given the currently active one
+# (None on the first tick or right after a reset). Adapted into a
+# `GroupPicker` by `Strategy.single_tactic_picker`.
 Picker = Callable[[Game, Optional[TacticId]], TacticId]
 
 
@@ -41,26 +66,83 @@ class _TacticSlot:
 
 
 class Strategy:
+    """Runs one Tactic per slot, with each slot's robot pool decided fresh each tick.
+
+    `committed()`/`mem`-reset semantics are per-slot, not pool-wide: one slot
+    being committed only blocks *that slot's* robots from being reassigned;
+    it has no bearing on any other slot. This is the direct consequence of
+    preserving the single-writer invariant per-slot instead of per-pool. A
+    barrier reset still clears every slot unconditionally — a referee
+    restart makes every slot's in-progress action moot at once, not just one.
+    """
+
     def __init__(
         self,
         tactics: dict[TacticId, Tactic],
-        picker: Picker,
+        group_picker: GroupPicker,
         outfield_robot_ids: tuple[RobotId, ...],
         ctx: KernelContext,
     ):
         if not tactics:
             raise ValueError("Strategy needs at least one registered tactic")
-        self._slots: dict[TacticId, _TacticSlot] = {tid: _TacticSlot(tactic=t) for tid, t in tactics.items()}
-        self._picker = picker
-        self._outfield_robot_ids = tuple(outfield_robot_ids)
+        self._tactics = dict(tactics)
+        self._group_picker = group_picker
+        self._outfield_robot_ids = frozenset(outfield_robot_ids)
         self._ctx = ctx
 
-        self._active_tactic_id: Optional[TacticId] = None
+        self._slots: dict[TacticId, _TacticSlot] = {}
+        self._prev_partition: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._prev_referee_command = None
+
+    @staticmethod
+    def single_tactic_picker(picker: Picker) -> GroupPicker:
+        """Adapt a single-tactic `Picker` into a `GroupPicker` for `Strategy`.
+
+        The adapted picker always assigns the *entire* free pool to whichever
+        `TacticId` the wrapped `picker` chooses — reproducing the original
+        single-active-tactic behaviour exactly. "Currently active" is read
+        from `prev_partition` (the previous tick's full partition, which
+        `Strategy` always passes in) rather than kept as separate state
+        inside this closure — `Strategy` is the single source of truth for
+        what was active, so this stays correct even if a caller swaps in a
+        new picker mid-run.
+
+        When the active tactic is committed, the whole outfield pool is
+        pinned to it and the free pool handed to this picker is empty; in
+        that case the wrapped `picker` is not called at all (mirroring the
+        original `Strategy`, which never consulted the picker while the
+        active tactic was committed).
+        """
+
+        def _group_picker(
+            game: Game, free_robots: frozenset[RobotId], prev_partition: Optional[dict[TacticId, frozenset[RobotId]]]
+        ) -> dict[TacticId, frozenset[RobotId]]:
+            if not free_robots:
+                return {}
+            prev_active_id = next(iter(prev_partition), None) if prev_partition else None
+            active_id = picker(game, prev_active_id)
+            return {active_id: free_robots}
+
+        return _group_picker
+
+    @property
+    def active_partition(self) -> dict[TacticId, frozenset[RobotId]]:
+        return {tid: slot.assigned_robots for tid, slot in self._slots.items() if slot.assigned_robots}
 
     @property
     def active_tactic_id(self) -> Optional[TacticId]:
-        return self._active_tactic_id
+        """The single occupied slot's id, for single-tactic-shaped callers.
+
+        Only meaningful when at most one slot ever holds robots at a time
+        (e.g. a `Strategy` built via `single_tactic_picker`). With a real
+        multi-slot partition this returns whichever slot happened to be
+        checked as non-empty first — multi-tactic callers should use
+        `active_partition` instead.
+        """
+        for tid, slot in self._slots.items():
+            if slot.assigned_robots:
+                return tid
+        return None
 
     def tick(self, game: Game) -> dict[RobotId, RobotCommand]:
         referee = getattr(game, "referee", None)
@@ -77,41 +159,111 @@ class Strategy:
                 # issues motion commands while play is stopped.
                 return {}
 
-        active_id = self._choose_active_tactic(game)
-        slot = self._slots[active_id]
+        partition = self._choose_partition(game)
+        self._validate_partition(partition)
 
-        if slot.assigned_robots != frozenset(self._outfield_robot_ids):
-            slot.mem = slot.tactic.make_initial_mem()
-            slot.assigned_robots = frozenset(self._outfield_robot_ids)
-            slot.committed_ticks = 0
+        # Any existing slot not mentioned in this tick's partition has lost
+        # every robot it had (the picker gave its robots to someone else, or
+        # simply stopped naming it) — clear it explicitly. `partition` only
+        # ever contains pinned/committed slots plus whatever the picker named
+        # this tick, so a slot's absence is itself the "you now have zero
+        # robots" signal, not something the main loop below would otherwise see.
+        for tactic_id, slot in self._slots.items():
+            if tactic_id not in partition and slot.assigned_robots:
+                slot.mem = None
+                slot.assigned_robots = frozenset()
+                slot.committed_ticks = 0
 
-        commands, slot.mem = slot.tactic.tick(game, self._ctx, self._outfield_robot_ids, slot.mem)
-        self._active_tactic_id = active_id
+        commands: dict[RobotId, RobotCommand] = {}
+        for tactic_id, robot_ids in partition.items():
+            slot = self._slot_for(tactic_id)
+
+            if slot.assigned_robots != robot_ids:
+                slot.mem = slot.tactic.make_initial_mem() if robot_ids else None
+                slot.assigned_robots = robot_ids
+                slot.committed_ticks = 0
+
+            if not robot_ids:
+                # A slot with no robots this tick has nothing to tick —
+                # ticking a tactic with an empty robot set and no mem is
+                # meaningless, not just a degenerate case of the normal path.
+                continue
+
+            ordered_robots = tuple(sorted(robot_ids))
+            slot_commands, slot.mem = slot.tactic.tick(game, self._ctx, ordered_robots, slot.mem)
+            commands.update(slot_commands)
+
+        self._prev_partition = partition
         return commands
 
-    def _choose_active_tactic(self, game: Game) -> TacticId:
-        if self._active_tactic_id is not None:
-            active_slot = self._slots[self._active_tactic_id]
-            if active_slot.tactic.committed(game, active_slot.mem):
-                active_slot.committed_ticks += 1
-                if active_slot.committed_ticks % 100 == 0:
+    def _slot_for(self, tactic_id: TacticId) -> _TacticSlot:
+        if tactic_id not in self._tactics:
+            raise KeyError(f"picker chose unregistered tactic id {tactic_id!r}")
+        if tactic_id not in self._slots:
+            self._slots[tactic_id] = _TacticSlot(tactic=self._tactics[tactic_id])
+        return self._slots[tactic_id]
+
+    def _choose_partition(self, game: Game) -> dict[TacticId, frozenset[RobotId]]:
+        """Pin any committed slot's robots, then ask the picker to partition the rest.
+
+        A slot whose active Tactic is `committed()` keeps exactly the robot
+        set it already has — the picker only ever sees the robots nobody has
+        vetoed keeping, mirroring the absolute per-tactic veto (design doc
+        §3), now scoped to one slot instead of always the whole pool.
+        """
+        pinned: dict[TacticId, frozenset[RobotId]] = {}
+        for tactic_id, slot in self._slots.items():
+            if not slot.assigned_robots:
+                continue
+            if slot.tactic.committed(game, slot.mem):
+                slot.committed_ticks += 1
+                if slot.committed_ticks % 100 == 0:
                     logger.warning(
                         "tactic %r has blocked reassignment for %d consecutive ticks — "
                         "if this keeps climbing, its committed() logic is likely stuck",
-                        self._active_tactic_id,
-                        active_slot.committed_ticks,
+                        tactic_id,
+                        slot.committed_ticks,
                     )
-                return self._active_tactic_id
-            active_slot.committed_ticks = 0
+                pinned[tactic_id] = slot.assigned_robots
+            else:
+                slot.committed_ticks = 0
 
-        candidate_id = self._picker(game, self._active_tactic_id)
-        if candidate_id not in self._slots:
-            raise KeyError(f"picker chose unregistered tactic id {candidate_id!r}")
-        return candidate_id
+        pinned_robots = frozenset().union(*pinned.values()) if pinned else frozenset()
+        free_robots = self._outfield_robot_ids - pinned_robots
+
+        free_partition = self._group_picker(game, free_robots, self._prev_partition)
+
+        result = dict(pinned)
+        for tactic_id, robots in free_partition.items():
+            if tactic_id in pinned:
+                raise ValueError(
+                    f"picker assigned robots to tactic {tactic_id!r}, which is currently committed "
+                    "and must not be reassigned"
+                )
+            result[tactic_id] = robots
+        return result
+
+    def _validate_partition(self, partition: dict[TacticId, frozenset[RobotId]]) -> None:
+        seen: set[RobotId] = set()
+        for tactic_id, robots in partition.items():
+            if tactic_id not in self._tactics:
+                raise KeyError(f"picker chose unregistered tactic id {tactic_id!r}")
+            overlap = seen & robots
+            if overlap:
+                raise ValueError(f"picker assigned robot(s) {sorted(overlap)} to more than one tactic in the same tick")
+            seen |= robots
+
+        if seen != self._outfield_robot_ids:
+            missing = self._outfield_robot_ids - seen
+            extra = seen - self._outfield_robot_ids
+            raise ValueError(
+                "picker's partition is not an exhaustive, exact cover of the outfield pool "
+                f"(missing={sorted(missing)}, unexpected={sorted(extra)})"
+            )
 
     def _barrier_reset(self) -> None:
         for slot in self._slots.values():
             slot.mem = None
             slot.assigned_robots = frozenset()
             slot.committed_ticks = 0
-        self._active_tactic_id = None
+        self._prev_partition = None
