@@ -1,5 +1,17 @@
+import py_trees
+
+
 class DummyStrategy:
     exp_ball: bool = True  # Not relevant for these tests
+
+    def __init__(self):
+        # StrategyRunner.__init__ unconditionally does
+        # `self.my.strategy.behaviour_tree.add_visitor(...)` for BT
+        # visualization — a real (if trivial) BehaviourTree is needed here,
+        # not just duck-typing the rest of AbstractStrategy's interface.
+        self.behaviour_tree = py_trees.trees.BehaviourTree(
+            py_trees.composites.Selector(name="DummyStrategyUnusedRoot", memory=False)
+        )
 
     def assert_exp_robots(self, exp_friendly, exp_enemy):
         return True

@@ -1607,8 +1607,20 @@ class StrategyRunner:
         return annotations
 
     def _push_bt_nodes_to_referee(self) -> None:
-        """Extract per-robot RUNNING BT nodes and push to CustomReferee for GUI display."""
+        """Extract per-robot debug status and push to CustomReferee for GUI display.
+
+        Strategies that aren't behaviour-tree-based (e.g. `KernelStrategy`)
+        have no `RUNNING` BT nodes to walk. Any strategy may instead expose a
+        `debug_status() -> dict[int, list[str]]` method to report its own
+        equivalent of "what is this robot's tactic doing right now" — used
+        in preference to the BT walk below when present, so the same GUI
+        panel works for both without either strategy family needing to know
+        about the other.
+        """
         if not isinstance(self.referee, CustomReferee):
+            return
+        if hasattr(self.my.strategy, "debug_status"):
+            self.referee.set_bt_data(self.my.strategy.debug_status())
             return
         bt_nodes: dict[int, list[str]] = {}
         # Build node lookup and parent map

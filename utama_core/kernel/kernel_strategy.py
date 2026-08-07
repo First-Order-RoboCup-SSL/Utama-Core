@@ -113,6 +113,23 @@ class KernelStrategy(AbstractStrategy):
 
         self.robot_controller.send_robot_commands()
 
+    def debug_status(self) -> dict[int, list[str]]:
+        """Per-robot `["<tactic>", "committed"?]` for GUI display.
+
+        The Tactic model's analog of `StrategyRunner._push_bt_nodes_to_referee`'s
+        BT-node breadcrumb — there is no behaviour tree to walk here, so this
+        reports which tactic slot each robot currently belongs to and whether
+        that slot is `committed()` (the actual "why won't this reassign"
+        signal in this model), rather than any tactic-internal phase detail.
+        """
+        game = self.blackboard.game
+        status: dict[int, list[str]] = {self._goalkeeper_id: ["goalkeeper"]}
+        for tactic_id, info in self._kernel_strategy.slot_status(game).items():
+            label = tactic_id if not info["committed"] else f"{tactic_id} (committed)"
+            for robot_id in info["robots"]:
+                status[robot_id] = [label]
+        return status
+
 
 def build_default_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """Minimal, single-tactic-pool `Strategy` factory: everyone attacks.

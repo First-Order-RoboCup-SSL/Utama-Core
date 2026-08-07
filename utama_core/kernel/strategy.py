@@ -129,6 +129,19 @@ class Strategy:
     def active_partition(self) -> dict[TacticId, frozenset[RobotId]]:
         return {tid: slot.assigned_robots for tid, slot in self._slots.items() if slot.assigned_robots}
 
+    def slot_status(self, game: Game) -> dict[TacticId, dict]:
+        """Per-active-slot debug info: robots held and whether it's currently committed.
+
+        Read-only reporting, not used by `tick()` itself — for callers that
+        want to display "what is this robot's tactic doing right now"
+        without reaching into `_slots` directly (e.g. a GUI debug panel).
+        """
+        return {
+            tid: {"robots": slot.assigned_robots, "committed": slot.tactic.committed(game, slot.mem)}
+            for tid, slot in self._slots.items()
+            if slot.assigned_robots
+        }
+
     @property
     def active_tactic_id(self) -> Optional[TacticId]:
         """The single occupied slot's id, for single-tactic-shaped callers.
