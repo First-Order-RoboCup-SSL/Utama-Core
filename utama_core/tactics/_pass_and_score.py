@@ -1,0 +1,245 @@
+"""Shared pass-and-score phase machinery used by `two_robot_attack`.
+
+Ported from `utama_strategy.functional.strategies.pass_and_score` — only the
+pieces `two_robot_attack` actually calls (`PassAndScoreMem`, `_setup_positions`,
+`run_setup_phase`, `_pass_exec`, `_score_goal`). The original module's own
+`PassAndScoreStrategy` class (a standalone fixed-assignment tactic) is not
+ported in this pass — out of scope; port it if/when a caller needs a
+fixed-pair pass tactic distinct from `two_robot_attack`'s dynamic assignment.
+
+Leading underscore: this is `two_robot_attack`'s private implementation
+detail, not a tactic of its own and not meant to be imported elsewhere.
+"""
+
+from __future__ import annotations
+
+import random
+from dataclasses import dataclass, field
+from typing import Optional
+
+from utama_core.entities.data.command import RobotCommand
+from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.game import Game
+from utama_core.kernel.context import KernelContext
+from utama_core.shared.field_scaling import scale_point_from_standard_field
+from utama_core.shared.pass_and_score_geometry import (
+    at_target,
+    enemy_goal_line,
+    find_best_shot,
+    has_ball,
+    intercept_point,
+    oriented_towards,
+    score_pass_setup,
+)
+from utama_core.skills.src.go_to_ball import go_to_ball
+from utama_core.skills.src.utils.move_utils import (
+    empty_command,
+    kick,
+    move,
+    turn_on_spot,
+)
+
+_MIN_SETUP_CLEARANCE = 0.35  # metres — must be > FPP's SAFE_OBSTACLES_RADIUS (0.26 m)
+_SETUP_SAMPLE_COUNT = 48
+_SETUP_SAMPLE_RADIUS_PASSER = 0.6
+_SETUP_SAMPLE_RADIUS_RECEIVER = 0.8
+
+
+def _scaled_setup_positions(passer_pos: Vector2D, receiver_pos: Vector2D, game: Game) -> tuple[Vector2D, Vector2D]:
+    scaled_passer = scale_point_from_standard_field(passer_pos, game.field)
+    scaled_receiver = scale_point_from_standard_field(receiver_pos, game.field)
+    if game.my_team_is_right:
+        return Vector2D(-scaled_passer.x, scaled_passer.y), Vector2D(-scaled_receiver.x, scaled_receiver.y)
+    return scaled_passer, scaled_receiver
+
+
+def _sample_near(base: Vector2D, radius: float, rng: random.Random) -> Vector2D:
+    import math
+
+    angle = rng.uniform(0.0, 2.0 * math.pi)
+    distance = radius * (rng.random() ** 0.5)
+    return Vector2D(base.x + distance * math.cos(angle), base.y + distance * math.sin(angle))
+
+
+def choose_setup_positions(
+    game: Game,
+    base_passer: Vector2D,
+    base_receiver: Vector2D,
+    rng: random.Random,
+    sample_count: int = _SETUP_SAMPLE_COUNT,
+) -> tuple[Vector2D, Vector2D]:
+    best: Optional[tuple[Vector2D, Vector2D, float]] = None
+    for passer, receiver in _candidate_pairs(game, base_passer, base_receiver, rng, sample_count):
+        result = score_pass_setup(game, passer, receiver)
+        if result is not None and (best is None or result.score > best[2]):
+            best = (passer, receiver, result.score)
+    if best is None:
+        return base_passer, base_receiver
+    return best[0], best[1]
+
+
+def _candidate_pairs(game, base_passer, base_receiver, rng, sample_count):
+    from utama_core.shared.pass_and_score_geometry import clamp_to_field
+
+    yield base_passer, base_receiver
+    for _ in range(sample_count):
+        passer = clamp_to_field(_sample_near(base_passer, _SETUP_SAMPLE_RADIUS_PASSER, rng), game)
+        receiver = clamp_to_field(_sample_near(base_receiver, _SETUP_SAMPLE_RADIUS_RECEIVER, rng), game)
+        yield passer, receiver
+
+
+@dataclass
+class PassAndScoreMem:
+    phase: str = "setup"  # "setup" -> "pass_then_score" -> "score" -> (goal_scored)
+    passer_position: Optional[Vector2D] = None
+    receiver_position: Optional[Vector2D] = None
+    locked_assignment: Optional[tuple[int, int]] = None
+    rng: random.Random = field(default_factory=random.Random)
+    goal_scored: bool = False
+
+
+def _setup_positions(
+    game: Game,
+    mem: PassAndScoreMem,
+    passer_id: int,
+    receiver_id: int,
+    base_passer_pos: Vector2D,
+    base_receiver_pos: Vector2D,
+    dynamic_setup: bool,
+) -> PassAndScoreMem:
+    assignment = (passer_id, receiver_id)
+    if mem.locked_assignment == assignment and mem.passer_position is not None:
+        return mem
+
+    base_passer, base_receiver = _scaled_setup_positions(base_passer_pos, base_receiver_pos, game)
+    if dynamic_setup:
+        passer_pos, receiver_pos = choose_setup_positions(game, base_passer, base_receiver, mem.rng)
+    else:
+        passer_pos, receiver_pos = base_passer, base_receiver
+
+    mem.locked_assignment = assignment
+    mem.passer_position = passer_pos
+    mem.receiver_position = receiver_pos
+    return mem
+
+
+def _move_to(game: Game, ctx: KernelContext, robot_id: int, target: Vector2D) -> tuple[RobotCommand, bool]:
+    robot = game.friendly_robots[robot_id]
+    target_oren = robot.p.angle_to(game.ball.p.to_2d())
+    arrived = at_target(game, robot_id, target)
+    command = move(
+        game=game,
+        motion_controller=ctx.motion_controller,
+        robot_id=robot_id,
+        target_coords=target,
+        target_oren=target_oren,
+    )
+    return command, arrived
+
+
+def _hold_or_acquire_ball(game: Game, ctx: KernelContext, robot_id: int) -> RobotCommand:
+    if has_ball(game, robot_id):
+        return empty_command(dribbler_on=True)
+    return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id)
+
+
+def run_setup_phase(
+    game: Game,
+    ctx: KernelContext,
+    passer_id: int,
+    receiver_id: int,
+    mem: "PassAndScoreMem",
+) -> tuple[dict[int, RobotCommand], bool]:
+    """Move passer (carrying the ball) and receiver to their setup positions.
+
+    Returns (commands, phase_complete).
+    """
+    if has_ball(game, passer_id):
+        passer_cmd, passer_arrived = _move_to(game, ctx, passer_id, mem.passer_position)
+    else:
+        passer_cmd = _hold_or_acquire_ball(game, ctx, passer_id)
+        passer_arrived = False
+
+    receiver_cmd, receiver_arrived = _move_to(game, ctx, receiver_id, mem.receiver_position)
+
+    return {passer_id: passer_cmd, receiver_id: receiver_cmd}, passer_arrived and receiver_arrived
+
+
+def _pass_exec(
+    game: Game,
+    ctx: KernelContext,
+    passer_id: int,
+    receiver_id: int,
+) -> tuple[dict[int, RobotCommand], bool]:
+    """Synchronized aiming, intercept positioning, and kick. Returns (commands, pass_complete)."""
+    intercept_pos, intercept_oren = intercept_point(game, passer_id, receiver_id)
+
+    passer_target_oren = game.friendly_robots[passer_id].p.angle_to(intercept_pos)
+    passer_aimed = oriented_towards(game, passer_id, passer_target_oren)
+    passer_has_ball = has_ball(game, passer_id)
+
+    commands: dict[int, RobotCommand] = {}
+
+    if not passer_has_ball:
+        commands[passer_id] = go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=passer_id)
+    elif not passer_aimed:
+        commands[passer_id] = turn_on_spot(
+            game=game,
+            motion_controller=ctx.motion_controller,
+            robot_id=passer_id,
+            target_oren=passer_target_oren,
+            dribbling=True,
+        )
+    else:
+        commands[passer_id] = empty_command(dribbler_on=True)
+
+    receiver_at_intercept = at_target(game, receiver_id, intercept_pos)
+    receiver_facing_pass = oriented_towards(game, receiver_id, intercept_oren)
+    receiver_ready = receiver_at_intercept and receiver_facing_pass
+
+    if not receiver_at_intercept:
+        commands[receiver_id] = move(
+            game=game,
+            motion_controller=ctx.motion_controller,
+            robot_id=receiver_id,
+            target_coords=intercept_pos,
+            target_oren=intercept_oren,
+        )
+    elif not receiver_facing_pass:
+        commands[receiver_id] = turn_on_spot(
+            game=game, motion_controller=ctx.motion_controller, robot_id=receiver_id, target_oren=intercept_oren
+        )
+    else:
+        commands[receiver_id] = empty_command(dribbler_on=True)
+
+    ready_to_kick = passer_has_ball and passer_aimed and receiver_ready
+    if ready_to_kick:
+        commands[passer_id] = kick()
+
+    receiver_has_ball = has_ball(game, receiver_id, visual=True)
+    pass_complete = receiver_has_ball
+    return commands, pass_complete
+
+
+def _score_goal(game: Game, ctx: KernelContext, robot_id: int) -> tuple[RobotCommand, bool]:
+    goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
+    robot = game.friendly_robots[robot_id]
+    best_shot_y, _gap = find_best_shot(robot.p, list(game.enemy_robots.values()), goal_x, goal_y1, goal_y2)
+    if best_shot_y is None:
+        return empty_command(dribbler_on=True), False
+
+    target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y))
+    if not has_ball(game, robot_id):
+        return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id), False
+    if not oriented_towards(game, robot_id, target_oren):
+        return (
+            turn_on_spot(
+                game=game,
+                motion_controller=ctx.motion_controller,
+                robot_id=robot_id,
+                target_oren=target_oren,
+                dribbling=True,
+            ),
+            False,
+        )
+    return kick(), True

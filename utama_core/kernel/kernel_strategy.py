@@ -1,0 +1,137 @@
+"""`KernelStrategy` — adapts a `kernel.Strategy` to the `AbstractStrategy`/`StrategyRunner` contract.
+
+`StrategyRunner` only knows how to drive an `AbstractStrategy`: it calls
+`setup_strategy_blackboard`, `load_game`, `load_robot_controller`,
+`load_motion_controller`, and once per tick, `step()`. Rather than build a
+second runner for the Tactic model, this class satisfies that same contract
+so `StrategyRunner` can drive it unmodified — `step()` is overridden to tick
+the kernel `Strategy` (and the pinned goalkeeper) directly, bypassing
+py_trees/blackboard entirely for command computation. `create_behaviour_tree`
+still needs to return *something* because `AbstractStrategy.__init__` always
+builds one (used only for the unused referee-override subtree machinery);
+an empty Selector is enough since `step()` never ticks it.
+
+Robot 0 is always the goalkeeper, ticked directly and never handed to the
+kernel `Strategy` — see `tactics/goalkeeper.py` and the "Tactics as
+Processes" design note, section 1.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+import py_trees
+
+from utama_core.config.enums import Role
+from utama_core.entities.data.command import RobotCommand
+from utama_core.entities.game import Game
+from utama_core.entities.game.field import FieldBounds
+from utama_core.kernel.context import KernelContext
+from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
+from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.strategy.common.abstract_strategy import (
+    AbstractStrategy,
+    SpaceRequirements,
+)
+from utama_core.tactics.goalkeeper import GoalkeeperTactic
+from utama_core.tactics.two_robot_attack import TwoRobotAttackTactic
+
+
+class KernelStrategy(AbstractStrategy):
+    """`AbstractStrategy` subclass that delegates ticking to a `kernel.Strategy`.
+
+    Args:
+        build_kernel_strategy: called once, after `load_game`, as
+            `build_kernel_strategy(game, motion_controller, rsim_env) ->
+            kernel.Strategy`. Deferred to a factory (rather than passed
+            pre-built) because the motion controller is only available on
+            the blackboard once `StrategyRunner` calls `load_motion_controller`
+            — which happens before `load_game` in `StrategyRunner.__init__`,
+            so it's safe to read here, but not at `KernelStrategy.__init__`.
+        goalkeeper_id: robot ID pinned to the goalkeeper tactic, outside the
+            kernel scheduler. Defaults to 0 per SSL/team convention.
+        exp_ball: forwarded to `AbstractStrategy`.
+    """
+
+    def __init__(
+        self,
+        build_kernel_strategy,
+        goalkeeper_id: int = 0,
+        exp_ball: bool = True,
+    ):
+        self.exp_ball = exp_ball
+        self._build_kernel_strategy = build_kernel_strategy
+        self._kernel_strategy: Optional[KernelSchedulerStrategy] = None
+        self._goalkeeper = GoalkeeperTactic(robot_id=goalkeeper_id)
+        self._goalkeeper_id = goalkeeper_id
+        self._goalkeeper_mem = self._goalkeeper.make_initial_mem()
+        super().__init__()
+
+    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
+        # step() is fully overridden and never ticks this; AbstractStrategy's
+        # __init__ requires a tree to exist regardless.
+        return py_trees.composites.Selector(name="KernelStrategyUnusedRoot", memory=False)
+
+    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
+        return True
+
+    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
+        return True
+
+    def get_min_bounding_req(self) -> Optional[FieldBounds | SpaceRequirements]:
+        return None
+
+    def load_game(self, game: Game):
+        super().load_game(game)
+        if self._kernel_strategy is None:
+            motion_controller = self.blackboard.motion_controller
+            rsim_env = self.blackboard.rsim_env
+            self._kernel_strategy = self._build_kernel_strategy(game, motion_controller, rsim_env)
+
+    def step(self):
+        game = self.blackboard.game
+
+        outfield_commands = self._kernel_strategy.tick(game)
+        gk_commands, self._goalkeeper_mem = self._goalkeeper.tick(
+            game, self._kernel_strategy._ctx, (self._goalkeeper_id,), self._goalkeeper_mem
+        )
+
+        cmd_map: dict[int, RobotCommand] = {}
+        cmd_map.update(outfield_commands)
+        cmd_map.update(gk_commands)
+
+        for robot_id in game.friendly_robots:
+            if robot_id in cmd_map:
+                self.robot_controller.add_robot_commands(cmd_map[robot_id], robot_id)
+            else:
+                role = Role.GOALKEEPER if robot_id == self._goalkeeper_id else Role.UNASSIGNED
+                self.robot_controller.add_robot_commands(self.execute_default_action(game, role, robot_id), robot_id)
+
+        self.robot_controller.send_robot_commands()
+
+
+def build_default_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """Minimal, single-tactic-pool `Strategy` factory: everyone attacks.
+
+    Only one real multi-robot tactic exists so far (`two_robot_attack`), so
+    the picker has nothing to choose between yet — per the design doc's
+    "splitting policy" deferral, this deliberately does not invent an
+    allocation policy ahead of a second concrete tactic that would need one.
+    Callers with more than one outfield tactic should build their own
+    `kernel.Strategy` with a real `Picker` instead of using this helper.
+
+    Returns a `build_kernel_strategy(game, motion_controller, rsim_env)`
+    callable suitable for `KernelStrategy`'s constructor argument of the
+    same name.
+    """
+
+    def _build(game: Game, motion_controller: MotionController, rsim_env: object | None) -> KernelSchedulerStrategy:
+        ctx = KernelContext(motion_controller=motion_controller, rsim_env=rsim_env)
+        return KernelSchedulerStrategy(
+            tactics={"two_robot_attack": TwoRobotAttackTactic()},
+            picker=lambda game, active: "two_robot_attack",
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
