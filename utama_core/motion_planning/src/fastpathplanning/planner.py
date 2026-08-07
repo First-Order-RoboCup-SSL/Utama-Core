@@ -3,6 +3,7 @@ from typing import List, Tuple
 
 import numpy as np  # type: ignore
 
+from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.config.settings import CONTROL_FREQUENCY
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
@@ -42,6 +43,65 @@ class FastPathPlanner:
         max_y = max(field_bounds.top_left[1], field_bounds.bottom_right[1])
         return min_x <= x <= max_x and min_y <= y <= max_y
 
+    def _enemy_defense_rect(self, game: Game, margin: float) -> Tuple[float, float, float, float]:
+        """(min_x, max_x, min_y, max_y) of the opponent's defense area, inflated
+        outward by `margin`.
+
+        Every call site currently passes `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE`
+        (the same standoff `actions.py` uses during restarts) — a smaller or
+        zero margin was tried for the target-legality checks specifically
+        (letting a target sit right at the bare rule boundary) but measured to
+        still let a fast, head-on approach cross several centimetres into the
+        real defense area under PID tracking overshoot; preventing the actual
+        SSL violation took priority. KNOWN TRADE-OFF: this also redirects a
+        target placed deliberately at/near the exact boundary line even when
+        that target isn't itself a violation — e.g. `test_mirror_swap`'s
+        formation spots at (3.5, ±0.75), which sit precisely on a
+        standard-field defense area's edge, now fail that (synthetic, not
+        real-gameplay) test. `margin` is kept as a parameter rather than
+        hardcoded so a future, better-tuned fix (e.g. a velocity-aware margin)
+        can revisit this per call site without re-deriving the rectangle logic.
+
+        Kept as an explicit rectangle rather than only as obstacle line
+        segments: `sanitize_target` pushes a target away from a *nearby*
+        segment, but a target deep in the *interior* of an enclosed rectangle
+        can be farther than `OBSTACLE_CLEARANCE` from every one of its four
+        edges, so the segment-only check never triggers for it at all (found
+        via a target set at the defense area's exact center — it passed
+        through sanitize_target completely untouched). The rectangle form
+        lets `_path_to` check "is this point inside?" directly and project it
+        to the nearest edge before anything else runs.
+        """
+        corners = game.field.enemy_defense_area
+        min_x = min(c[0] for c in corners) - margin
+        max_x = max(c[0] for c in corners) + margin
+        min_y = min(c[1] for c in corners) - margin
+        max_y = max(c[1] for c in corners) + margin
+        return min_x, max_x, min_y, max_y
+
+    def _project_outside_rect(self, point: np.ndarray, rect: Tuple[float, float, float, float]) -> np.ndarray:
+        """Push `point` to the nearest edge of `rect` if it lies inside; otherwise return it unchanged."""
+        min_x, max_x, min_y, max_y = rect
+        x, y = point[0], point[1]
+        if not (min_x <= x <= max_x and min_y <= y <= max_y):
+            return point
+
+        # Distance to each of the 4 edges; move along whichever is nearest.
+        dist_to_edge = {
+            "left": x - min_x,
+            "right": max_x - x,
+            "bottom": y - min_y,
+            "top": max_y - y,
+        }
+        nearest = min(dist_to_edge, key=dist_to_edge.get)
+        if nearest == "left":
+            return np.array([min_x, y])
+        if nearest == "right":
+            return np.array([max_x, y])
+        if nearest == "bottom":
+            return np.array([x, min_y])
+        return np.array([x, max_y])
+
     def _get_obstacles(
         self, game: Game, robot_id: int, our_pos: np.ndarray, field_bounds: FieldBounds
     ) -> List[Tuple[np.ndarray, np.ndarray]]:
@@ -72,6 +132,22 @@ class FastPathPlanner:
         bl = np.array([field_bounds.top_left[0], field_bounds.bottom_right[1]])
 
         obstacle_list.extend([(tl, tr), (tr, br), (br, bl), (bl, tl)])
+
+        # Opponent's defense area is off-limits to every non-goalkeeper robot
+        # at all times during live play (SSL rules) — no per-tactic exception
+        # exists, so this belongs at the planner level rather than something
+        # every tactic has to remember to avoid itself. Our own defense area
+        # is deliberately NOT added here: our own goalkeeper (and, briefly,
+        # any outfield robot legally retrieving the ball from it) needs to be
+        # able to enter it, and this planner has no notion of "except the
+        # goalkeeper" to carve that out safely.
+        min_x, max_x, min_y, max_y = self._enemy_defense_rect(game, margin=OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+        c0 = np.array([min_x, max_y])
+        c1 = np.array([max_x, max_y])
+        c2 = np.array([max_x, min_y])
+        c3 = np.array([min_x, min_y])
+        obstacle_list.extend([(c0, c1), (c1, c2), (c2, c3), (c3, c0)])
+
         return obstacle_list
 
     def _find_subgoal(
@@ -208,13 +284,46 @@ class FastPathPlanner:
 
         return seg1 + seg2, len1 + len2
 
-    def smooth_path(self, trajectory, target, robot_position) -> np.ndarray:
+    def _clamp_to_obstacle_clearance(
+        self, origin: np.ndarray, unit_vec: np.ndarray, max_distance: float, obstacles: List
+    ) -> float:
+        """Shrink `max_distance` so the point `origin + unit_vec * distance` never lands
+        inside `OBSTACLE_CLEARANCE` of any obstacle segment.
+
+        `smooth_path`'s projected carrot is otherwise unchecked — it is derived fresh from
+        `robot_position` and `PROJECTION_DISTANCE` alone, not from `check_segment`'s already
+        obstacle-aware trajectory, so nothing stops it from overshooting past a nearby
+        obstacle when the robot is already close to one (found via the opponent-defense-area
+        obstacle: a robot approaching it head-on crossed the boundary by several centimetres
+        even though the underlying trajectory correctly routed around it).
+        """
+        clamped = max_distance
+        for o in obstacles:
+            end_point = origin + unit_vec * clamped
+            if distance_point_to_segment(end_point, o[0], o[1]) >= self.OBSTACLE_CLEARANCE:
+                continue
+            # Binary search along the ray for the furthest distance that still
+            # keeps clearance — cheap, bounded, and avoids deriving a closed-form
+            # ray/segment-clearance solution for what is a rare correction path.
+            lo, hi = 0.0, clamped
+            for _ in range(12):
+                mid = (lo + hi) / 2.0
+                point = origin + unit_vec * mid
+                if distance_point_to_segment(point, o[0], o[1]) >= self.OBSTACLE_CLEARANCE:
+                    lo = mid
+                else:
+                    hi = mid
+            clamped = min(clamped, lo)
+        return clamped
+
+    def smooth_path(self, trajectory, target, robot_position, obstacles: List) -> np.ndarray:
         if len(trajectory) == 1:
             return target
 
         direction = trajectory[0][1] - robot_position
         unit_vec = direction / np.linalg.norm(direction)
-        new_target = robot_position + unit_vec * self.PROJECTION_DISTANCE
+        safe_distance = self._clamp_to_obstacle_clearance(robot_position, unit_vec, self.PROJECTION_DISTANCE, obstacles)
+        new_target = robot_position + unit_vec * safe_distance
 
         # Removed redundant math ops by caching distance calls here too
         dist_new_target = distance(new_target, robot_position)
@@ -289,6 +398,27 @@ class FastPathPlanner:
         # 1. Get obstacles and draw Red velocity lines
         obstacles = self._get_obstacles(game, robot_id, our_pos, field_bounds)
 
+        # 2. A target inside the (enclosed) opponent defense area needs its own
+        # check: `sanitize_target` below only reacts to a target close to an
+        # obstacle *line*, so a point deep in a rectangle's interior — farther
+        # than OBSTACLE_CLEARANCE from all four edges — passes through it
+        # completely untouched (confirmed with a target at the rectangle's
+        # exact center). Project it to the nearest edge first so the rest of
+        # the pipeline only ever has to reason about a target near a boundary.
+        # Uses the inflated margin, not the bare boundary: KNOWN TRADE-OFF —
+        # this also redirects a target placed deliberately at/near the exact
+        # boundary line (e.g. `test_mirror_swap`'s formation spots at
+        # (3.5, ±0.75), which sit precisely on a standard-field defense area's
+        # edge) even though that target isn't itself a rule violation. Chosen
+        # anyway because the smaller, boundary-exact margin was tried and
+        # measured to still let a fast, head-on approach cross several
+        # centimetres into the real defense area (see git history / design
+        # doc) — preventing the actual SSL violation took priority over this
+        # synthetic test's exact-boundary formation targets.
+        raw_target = self._project_outside_rect(
+            raw_target, self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+        )
+
         # 3. Sanitize target — skip boundary walls so robots can reach the ball near touchlines
         safe_target = self.sanitize_target(raw_target, obstacles, our_pos, field_bounds)
 
@@ -301,7 +431,28 @@ class FastPathPlanner:
                 self._env.draw_line(i)
 
         # 6. Smooth the path and draw the final "Carrot" target in Blue
-        new_target = self.smooth_path(final_trajectory, safe_target, our_pos)
+        new_target = self.smooth_path(final_trajectory, safe_target, our_pos, obstacles)
+
+        # 7. Last-line safety net, specific to the defense-area rectangle: the
+        # smoothing/blending steps above (subgoal search, carrot projection,
+        # final subgoal/carrot averaging) each place intermediate points right
+        # at OBSTACLE_CLEARANCE from a line obstacle by design, and none of
+        # them are individually checked against being *inside* an enclosed
+        # rectangle afterward — found by tracing a real crossing where the
+        # final blended waypoint landed a few centimetres inside the rule
+        # boundary despite every upstream step "correctly" respecting
+        # clearance from the lines it was reasoning about individually.
+        # Projecting the final result away from the rectangle is cheap and
+        # certain, versus continuing to chase which specific blend step needs
+        # its own clearance check. Same inflated-margin trade-off as the
+        # interior-target check above (see its comment) — this is a waypoint
+        # the robot is actively driving toward, not a stationary destination,
+        # so a smaller margin was measured to still let the robot cross the
+        # real boundary under momentum.
+        new_target = self._project_outside_rect(
+            new_target, self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+        )
+
         if self._env is not None:
             self._env.draw_line((our_pos, new_target), color="Blue")
 

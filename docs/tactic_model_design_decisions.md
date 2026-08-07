@@ -111,6 +111,12 @@ is a real decision, not something with an obviously correct answer derivable fro
 alone — see the implementation for the concrete mapping chosen and the reasoning recorded
 alongside it in code.
 
+**Gap this table alone doesn't close:** a barrier reset clears scheduling state (`mem`,
+commitments) but says nothing about what a robot should *physically do* while a restart
+command is active — a Tactic ticking normally during e.g. the opponent's ball placement
+would still drive straight at the ball, an SSL rule violation, not just a scheduling
+wrinkle. See §13 for the override that actually closes this.
+
 ---
 
 ## 5. ✅ Settled, later generalized (§11) — Single-writer partition
@@ -376,6 +382,162 @@ functions) since those are fundamental building blocks, not tactical decisions.
   both into a `Strategy` (§11) with `_possession_split_picker`, usable as a
   `KernelStrategy`'s `build_kernel_strategy` argument exactly like the existing
   `build_default_kernel_strategy` single-tactic factory.
+
+---
+
+## 13. ✅ Settled — Referee-restart legality override, reusing the BT path's `actions.py`
+
+**Problem:** §4's barrier reset only ever cleared scheduling state. Nothing stopped a
+Tactic from ticking its ordinary logic during `PREPARE_KICKOFF_*`/`BALL_PLACEMENT_*`/
+`DIRECT_FREE_*`/`PREPARE_PENALTY_*` — e.g. `LeadAndSupportTactic`'s leader driving
+straight at the ball during the opponent's ball placement. Noticed only once the kernel
+model was actually run against a real referee sequence, not caught by any scheduling-level
+test, because scheduling was working exactly as designed — it was simply never asked to
+cover this.
+
+**Decision: reuse, don't reinvent.** The BT path (`utama_core/strategy/referee/
+{actions,tree}.py`) already solves this correctly and is already tested
+(`test_referee_unit.py`, `test_referee_rsim.py`, `test_ball_placement_rsim.py`) — a
+priority Selector matches the live `RefereeCommand` and, when matched, takes over every
+friendly robot's command for that tick via `*Step` classes (`_clear_to_legal_positions`,
+`_project_outside_circle`, formation-position helpers), bypassing the strategy tree
+entirely. Rebuilding equivalent keep-out-distance geometry inside the kernel model purely
+to avoid a py_trees dependency would be duplicated logic with its own, separate bug
+surface — worse than the coupling it avoids.
+
+**Mechanism (`utama_core/kernel/referee_override.py`):** the `*Step` classes are
+`AbstractBehaviour` (py_trees) subclasses, but every one of them touches exactly three
+`blackboard` attributes — `game`, `motion_controller`, `cmd_map` — nothing else (verified
+by grep, not assumed). `RefereeOverride` is a plain class holding one long-lived instance
+of each relevant Step (long-lived because `BallPlacementOursStep` carries cross-tick state
+— `_release_started_at`/`_placer_id` — that a fresh instance every tick would silently
+discard, re-triggering its release-delay logic every single tick). Its `tick()` builds a
+minimal duck-typed shim exposing just those three attributes, assigns it as the Step's
+`.blackboard`, calls `.update()`, and returns the resulting `cmd_map`.
+
+**Wiring:** `Strategy.tick()` checks `is_override_command(current_command)` right after
+the existing pause check (`is_paused`) and before `_choose_partition` — if it matches, the
+override computes every outfield robot's command for that tick and no Tactic ticks at all
+that tick. Slots already had `mem`/commitments cleared by the barrier-reset transition on
+the way in (§4); once the restart ends (`NORMAL_START`/`FORCE_START` arriving from a
+non-barrier-tier command — see `classify_transition`), ticking simply resumes normally
+with fresh `mem`, so there is nothing further to reconcile. `HALT`/`STOP`/`TIMEOUT_*` are
+deliberately *not* routed through the override — `is_paused` already satisfies "stop
+issuing motion" more directly by returning `{}`, matching the BT path's own `StopStep`
+being just "stop cold, which happens to also satisfy the keep-distance rule."
+
+**Goalkeeper:** `KernelStrategy.step()` ticks `GoalkeeperTactic` for robot 0 separately
+from `Strategy` (§10's design). During an override, `RefereeOverride`'s Step classes
+already compute a command for every `game.friendly_robots` id including the goalkeeper
+(mirroring the BT path, which does the same) — so `KernelStrategy.step()` skips its own
+goalkeeper tick whenever the override produced a command for that id, rather than
+overwriting the override's placement with normal ball-tracking logic mid-restart.
+
+**Follow-up fix:** `GoalkeeperTactic` was initially still ticked unconditionally during
+`HALT`/`STOP` (unlike the outfield pool, which `is_paused` already froze) — a pre-existing
+gap, not introduced by this change, but inherited silently at first. `KernelStrategy.step()`
+now also checks `is_paused(current_command)` before ticking the goalkeeper, skipping to the
+same `execute_default_action` → `empty_command(False)` fallback the outfield pool already
+uses during a pause.
+
+**A restart arriving mid-commitment is not a distinct case to test.** Considered whether a
+Tactic that is `committed()` when a restart begins needs special handling (e.g. does the
+override correctly override a stubborn committed slot). It cannot come up: `Strategy.tick()`
+runs the barrier reset (unconditionally clearing every slot's `mem`/commitment) strictly
+before checking `is_override_command` (see the wiring above), both on the very same tick the
+restart command first arrives. By the time the override branch can possibly run, no slot has
+been ticked since the reset, so there is no committed state left to override — this is a
+structural guarantee from ordering, not a case needing its own test.
+
+**Back-to-back restarts (no intervening `NORMAL_START`)** — e.g. a kickoff foul immediately
+becoming a ball placement — are handled correctly: each new `RefereeCommand` re-runs
+`classify_transition`/the barrier reset and `RefereeOverride._step_for` re-dispatches to
+that command's own Step on the very next tick, with no memory of the previous restart's
+target. Verified at the `Strategy.tick()`/command-dict level
+(`test_back_to_back_restarts_dispatch_a_fresh_step_each_time`) rather than by watching rsim
+robot positions settle — the ball itself can drift for several seconds after a restart (a
+known rsim convergence quirk, see `dribble.py`'s KNOWN ISSUE note), which makes "did the
+robot's position stabilize" an unreliable proxy for "did the override actually switch,"
+even though the switch itself is instant and correct.
+
+---
+
+## 14. ✅ Settled, with a known trade-off — Opponent defense-area avoidance at the planner level
+
+**Found via a live grsim run** of the split-shape strategy (`demo_split_shape_match.py`),
+watched through the referee GUI: an outfield attacker chasing the ball drove straight into
+the opponent's defense area — an SSL rule violation the referee flagged directly ("Yellow
+attacker in blue defense area"). Neither §13's referee-restart override nor any Tactic had
+anything to do with this — it's a live-play rule (applies during `NORMAL_START`/`FORCE_START`,
+not a restart), and nothing anywhere in the codebase enforced it: not the BT path (only
+`StopStep` clears the opponent's defense area, and only during `STOP`), not any tactic, not
+the motion planner (`FastPathPlanner._get_obstacles` treated only robots and the field
+boundary as obstacles).
+
+**Decision:** fix it once, at the planner level (`utama_core/motion_planning/src/
+fastpathplanning/planner.py`), not per-tactic — the rule applies to every non-goalkeeper
+robot unconditionally, so it belongs where all tactics' motion already funnels through,
+not as something each tactic author has to remember. The opponent's defense area becomes a
+rectangular obstacle; the friendly defense area is deliberately NOT added (the goalkeeper,
+ticked outside `Strategy` per §10, needs to enter it, and this planner has no notion of
+"except the goalkeeper").
+
+**Three distinct planner gaps, found in sequence, not one:**
+
+1. **No obstacle at all** for the opponent's defense area — the base bug. Fixed by adding it
+   to `_get_obstacles`.
+2. **`sanitize_target` only reacts to a target near an obstacle *line***, not one *inside* an
+   *enclosed* rectangle — a target placed at the defense area's exact center is farther than
+   `OBSTACLE_CLEARANCE` from all four edges simultaneously, so the segment-only check never
+   fires. Fixed by adding `_enemy_defense_rect`/`_project_outside_rect`, an explicit
+   inside-the-rectangle check applied to the raw target before the rest of the pipeline runs.
+3. **`smooth_path`'s projected "carrot"** (`PROJECTION_DISTANCE` = 1m along the direction to
+   the first waypoint) is derived fresh from the robot's live position every tick, entirely
+   unchecked against obstacles — confirmed by tracing a real crossing where the final,
+   already-"smoothed" waypoint landed several centimetres inside the rule boundary even
+   though the underlying `check_segment` trajectory correctly routed around it. This is a
+   pre-existing gap in shared smoothing logic (affects any close obstacle, not just this
+   one), only now exposed because a defense area sits still and close for long enough to
+   matter — most obstacles (moving robots) rarely do. Fixed with a second, final
+   `_project_outside_rect` safety net after smoothing, rather than chasing every individual
+   unguarded point inside `check_segment`/`smooth_path`'s recursive subgoal search.
+
+**Known trade-off, accepted:** the margin needed to actually stop the violation
+(`OPPONENT_DEFENSE_AREA_KEEP_DISTANCE`, reused from `actions.py`'s restart-time standoff) is
+large enough that it also redirects a target placed deliberately at/near the exact boundary
+line — `utama_core/tests/motion_planning/multiple_robots_test.py::test_mirror_swap`'s
+formation targets at `(3.5, ±0.75)` sit precisely on a standard-field defense area's edge,
+and now fail. A zero-margin ("bare rule boundary") version of the same checks was tried and
+measured to still let a fast, head-on approach cross several centimetres into the real
+defense area — preventing the actual SSL violation took priority over that synthetic test's
+exact-boundary targets. `_enemy_defense_rect(game, margin)` keeps `margin` as an explicit
+parameter (rather than hardcoding the standoff into the geometry) specifically so a future,
+better-tuned fix — e.g. a velocity-aware margin, or fixing the overshoot at its true source
+inside `smooth_path` rather than papering over it with a final clamp — can revisit each call
+site independently without re-deriving the rectangle logic.
+
+**A second, distinct violation surfaced by the same grsim run:** "Too many yellow defenders in
+own area" — a different SSL rule (max 1 non-goalkeeper robot in *your own* defense area, vs.
+§14's "opponent's area, zero robots ever") that §14's planner-level fix has no bearing on at
+all, since it only concerns which robot is allowed to be somewhere, not a universal
+geometric constraint the shared planner can arbitrate.
+
+**Root cause:** `ShadowAndMarkTactic`'s fallback for a marker with no opponent left to mark
+called `defend_parameter` again — the same shot-shadowing call the two real shadow-defenders
+use. Once a team has more than 2 robots, `defend_parameter`'s side-selection degrades to a
+fixed `post_limit if robot_id == 1 else -post_limit` (see its source) — keyed purely off the
+raw `robot_id`, with no notion of "which slot is calling me." A fallback marker therefore
+lands on whichever post its numeric ID happens to map to, which very likely already belongs
+to one of the two real shadow-defenders, converging multiple robots right at the edge of our
+own defense area at once.
+
+**Fix:** `_fallback_hold_target` — an open-space holding point roughly a third of the way
+from the defense area's front edge to the centre line (clearly outside it, unlike
+`defend_parameter`'s shadow post which sits only `ROBOT_RADIUS` outside on purpose), stacked
+above/below the ball's `y` by index so multiple unmatched markers don't collide with each
+other either. Does not touch `defend_parameter` itself — that function's behaviour for the
+1-2 shadow-defender case is correct and unchanged; only `ShadowAndMarkTactic`'s own fallback
+path was wrong.
 
 ---
 

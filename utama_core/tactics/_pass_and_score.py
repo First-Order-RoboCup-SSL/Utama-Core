@@ -13,6 +13,7 @@ detail, not a tactic of its own and not meant to be imported elsewhere.
 
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass, field
 from typing import Optional
@@ -24,6 +25,7 @@ from utama_core.kernel.context import KernelContext
 from utama_core.shared.field_scaling import scale_point_from_standard_field
 from utama_core.shared.pass_and_score_geometry import (
     at_target,
+    clamp_to_field,
     enemy_goal_line,
     find_best_shot,
     has_ball,
@@ -54,8 +56,6 @@ def _scaled_setup_positions(passer_pos: Vector2D, receiver_pos: Vector2D, game: 
 
 
 def _sample_near(base: Vector2D, radius: float, rng: random.Random) -> Vector2D:
-    import math
-
     angle = rng.uniform(0.0, 2.0 * math.pi)
     distance = radius * (rng.random() ** 0.5)
     return Vector2D(base.x + distance * math.cos(angle), base.y + distance * math.sin(angle))
@@ -79,8 +79,6 @@ def choose_setup_positions(
 
 
 def _candidate_pairs(game, base_passer, base_receiver, rng, sample_count):
-    from utama_core.shared.pass_and_score_geometry import clamp_to_field
-
     yield base_passer, base_receiver
     for _ in range(sample_count):
         passer = clamp_to_field(_sample_near(base_passer, _SETUP_SAMPLE_RADIUS_PASSER, rng), game)

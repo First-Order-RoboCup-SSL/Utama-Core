@@ -25,7 +25,7 @@ carrier during a pass).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from utama_core.entities.data.command import RobotCommand
@@ -46,7 +46,6 @@ from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.utils.move_utils import empty_command, kick, turn_on_spot
 
-_SUPPORT_SAMPLE_COUNT = 24
 _MIN_SUPPORT_SEPARATION = 0.9  # metres — supports must not crowd each other or the leader
 _SUPPORT_FORWARD_BIAS = 0.35  # weight favouring support points closer to the enemy goal
 
@@ -127,7 +126,6 @@ def choose_leader(game: Game, robot_ids: tuple[int, ...]) -> int:
 @dataclass
 class LeadAndSupportMem:
     leader_id: Optional[int] = None
-    assigned_robots: tuple[int, ...] = field(default_factory=tuple)
 
 
 class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
@@ -155,7 +153,6 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
     ) -> tuple[dict[RobotId, RobotCommand], LeadAndSupportMem]:
         if mem.leader_id is None or mem.leader_id not in robot_ids or not self.committed(game, mem):
             mem.leader_id = choose_leader(game, robot_ids)
-        mem.assigned_robots = robot_ids
 
         leader_id = mem.leader_id
         support_ids = tuple(rid for rid in robot_ids if rid != leader_id)

@@ -21,6 +21,14 @@ ever returns one non-empty group. `Strategy.single_tactic_picker` builds
 exactly that from a simpler `(Game, Optional[TacticId]) -> TacticId`
 function, for callers with only one tactic kind active at a time who would
 otherwise have to write a trivial one-group `GroupPicker` themselves.
+
+Referee restarts (kickoff/ball-placement/free-kick/penalty) are handled
+before any tactic ticks at all, not by a tactic: `kernel.referee_override`
+reuses the BT path's existing `actions.py` Step classes (keep-out-distance
+geometry, formation positions) to take over every outfield robot's command
+for the duration of the restart, the same way `build_referee_override_tree`
+does for the BT path. See `_OVERRIDE_COMMANDS` there and `referee_reset.py`
+for how this fits with the barrier-reset/pause tiers.
 """
 
 from __future__ import annotations
@@ -32,6 +40,7 @@ from typing import Callable, Optional
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
+from utama_core.kernel.referee_override import RefereeOverride, is_override_command
 from utama_core.kernel.referee_reset import ResetTier, classify_transition, is_paused
 from utama_core.kernel.tactic import RobotId, Tactic, TacticId
 
@@ -93,6 +102,7 @@ class Strategy:
         self._slots: dict[TacticId, _TacticSlot] = {}
         self._prev_partition: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._prev_referee_command = None
+        self._referee_override = RefereeOverride()
 
     @staticmethod
     def single_tactic_picker(picker: Picker) -> GroupPicker:
@@ -171,6 +181,16 @@ class Strategy:
                 # Pause: mem and commitments survive untouched, but no tactic
                 # issues motion commands while play is stopped.
                 return {}
+
+            if is_override_command(current_command):
+                # Restart in progress (kickoff/placement/free-kick/penalty):
+                # legal positioning takes over every outfield robot for this
+                # tick, same as the BT path's RefereeOverride Selector. Slots
+                # already had their mem/commitments cleared by the barrier
+                # reset on the transition in; tactics simply don't tick while
+                # this is active, so there is nothing further to reconcile
+                # once the restart ends and normal picking resumes.
+                return self._referee_override.tick(game, self._ctx.motion_controller, current_command)
 
         partition = self._choose_partition(game)
         self._validate_partition(partition)

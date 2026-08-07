@@ -79,6 +79,34 @@ def test_more_markers_than_enemies_still_produces_commands_for_all(outnumbering_
     assert set(commands.keys()) == {1, 2, 3, 4}
 
 
+def test_unmatched_markers_hold_clear_of_own_defense_area(outnumbering_runner):
+    """Regression test: an unmatched marker's fallback used to call
+    `defend_parameter` again, converging on the same post as a real shadow
+    defender and violating the "max 1 non-goalkeeper defender in own area"
+    rule (found via a live grsim run — see `shadow_and_mark.py`'s docstring).
+    With 1 enemy and 4 friendly outfield robots, robots 3 and 4 both fall
+    back — their targets must land outside our own defense area."""
+    game = outnumbering_runner.my.game
+
+    from utama_core.tactics.shadow_and_mark import _fallback_hold_target
+
+    fallback_0 = _fallback_hold_target(game, 0)
+    fallback_1 = _fallback_hold_target(game, 1)
+
+    corners = game.field.my_defense_area
+    min_x = min(c[0] for c in corners)
+    max_x = max(c[0] for c in corners)
+    min_y = min(c[1] for c in corners)
+    max_y = max(c[1] for c in corners)
+
+    for target in (fallback_0, fallback_1):
+        inside = min_x <= target.x <= max_x and min_y <= target.y <= max_y
+        assert not inside, f"fallback target {target} lands inside our own defense area"
+
+    # Also must not coincide with each other (would still cluster two robots).
+    assert fallback_0.distance_to(fallback_1) > 0.1
+
+
 def test_never_commits(game):
     tactic = ShadowAndMarkTactic()
     mem = tactic.make_initial_mem()

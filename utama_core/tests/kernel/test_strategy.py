@@ -179,11 +179,14 @@ def test_barrier_reset_clears_mem_and_overrides_commitment():
     strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
     assert strategy.active_tactic_id == "a"
 
-    # Barrier-tier transition: entering BALL_PLACEMENT_YELLOW from NORMAL_START.
-    strategy.tick(_FakeGame(RefereeCommand.BALL_PLACEMENT_YELLOW))
+    # Barrier-tier transition: entering GOAL_YELLOW from NORMAL_START. (Not
+    # BALL_PLACEMENT/KICKOFF/etc — those are also referee-override commands,
+    # see test_override_command_bypasses_tactics_but_still_barrier_resets,
+    # and would make the picker's tactic never tick at all here.)
+    strategy.tick(_FakeGame(RefereeCommand.GOAL_YELLOW))
     # Barrier reset clears the active tactic and all slot state; the tick
     # after a barrier-entry command choose freshly via the picker again.
-    # BALL_PLACEMENT itself is not a pause command, so ticking continues.
+    # GOAL_YELLOW itself is not a pause command, so ticking continues.
     assert strategy.active_tactic_id == "b"
     assert other_tactic.mem_creations == 1
 
@@ -387,8 +390,11 @@ def test_barrier_reset_clears_all_tactics_and_unpins_commitments():
     strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
     assert calls[-1] == frozenset()  # both robots pinned to "a"
 
-    # Barrier-tier transition clears the pin unconditionally.
-    strategy.tick(_FakeGame(RefereeCommand.BALL_PLACEMENT_YELLOW))
+    # Barrier-tier transition clears the pin unconditionally. GOAL_YELLOW, not
+    # a referee-override command, so the picker still runs this tick (see
+    # test_override_command_bypasses_tactics_but_still_barrier_resets for the
+    # override-command case, where the picker is deliberately not called).
+    strategy.tick(_FakeGame(RefereeCommand.GOAL_YELLOW))
     assert calls[-1] == frozenset({1, 2})  # "a" no longer holds anything pinned
 
 

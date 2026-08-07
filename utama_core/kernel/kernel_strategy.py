@@ -28,6 +28,8 @@ from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
 from utama_core.kernel.context import KernelContext
+from utama_core.kernel.referee_override import is_override_command
+from utama_core.kernel.referee_reset import is_paused
 from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.kernel.tactic import RobotId
 from utama_core.motion_planning.src.common.motion_controller import MotionController
@@ -96,13 +98,32 @@ class KernelStrategy(AbstractStrategy):
         game = self.blackboard.game
 
         outfield_commands = self._kernel_strategy.tick(game)
-        gk_commands, self._goalkeeper_mem = self._goalkeeper.tick(
-            game, self._kernel_strategy._ctx, (self._goalkeeper_id,), self._goalkeeper_mem
-        )
 
         cmd_map: dict[int, RobotCommand] = {}
         cmd_map.update(outfield_commands)
-        cmd_map.update(gk_commands)
+
+        # During a referee-restart override, `outfield_commands` already covers
+        # every friendly robot including the goalkeeper (the BT-path Step
+        # classes this delegates to compute for all of `game.friendly_robots`,
+        # not just the outfield pool) — ticking GoalkeeperTactic on top would
+        # overwrite that with normal ball-tracking logic mid-restart.
+        #
+        # During HALT/STOP, the goalkeeper must stop issuing motion commands
+        # for the same reason `Strategy.tick()` freezes the outfield pool via
+        # `is_paused` — skipping the tick here falls through to
+        # `execute_default_action` below, which returns `empty_command(False)`,
+        # the correct "stop" command.
+        referee = getattr(game, "referee", None)
+        current_command = getattr(referee, "referee_command", None) if referee is not None else None
+        if (
+            not is_override_command(current_command)
+            and not is_paused(current_command)
+            and self._goalkeeper_id not in cmd_map
+        ):
+            gk_commands, self._goalkeeper_mem = self._goalkeeper.tick(
+                game, self._kernel_strategy._ctx, (self._goalkeeper_id,), self._goalkeeper_mem
+            )
+            cmd_map.update(gk_commands)
 
         for robot_id in game.friendly_robots:
             if robot_id in cmd_map:
