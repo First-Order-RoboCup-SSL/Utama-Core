@@ -19,7 +19,7 @@ def main():
 
     # Setup for real testing
     # Custom field size based setup in real
-    custom_bounds = FieldBounds(top_left=(-2, 1.5), bottom_right=(1, -1.5))
+    # custom_bounds = FieldBounds(top_left=(-1.5, 1.125), bottom_right=(1.5, 1.125))
 
     runner = StrategyRunner(
         strategy=StartupStrategy(),
@@ -29,7 +29,7 @@ def main():
         exp_friendly=2,
         exp_enemy=0,
         replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
-        field_bounds=custom_bounds,
+        # field_bounds=custom_bounds,
         full_field_dims=GREAT_EXHIBITION_FIELD_DIMS,
         show_live_status=True,
         profiler_name=None,

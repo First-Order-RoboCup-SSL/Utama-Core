@@ -31,6 +31,7 @@ MAX_BALL_SPEED = 3.0  # m/s
 BAUD_RATE = 115200
 PORT = "/dev/ttyACM0"
 TIMEOUT = 0.1
+ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS = 0.5
 KICKER_COOLDOWN_TIME = 1  # in seconds to prevent kicker from being actuated too frequently
 KICKER_COOLDOWN_TIMESTEPS = int(KICKER_COOLDOWN_TIME * CONTROL_FREQUENCY)  # in timesteps
 KICKER_PERSIST_TIMESTEPS = 10  # in timesteps to persist the kick command

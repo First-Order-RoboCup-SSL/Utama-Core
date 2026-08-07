@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from utama_core.team_controller.src.controllers.real.real_robot_controller import (
+    DRIBBLER_DRAIN_RATE,
     DRIBBLER_MAX_ON_SECONDS,
     DRIBBLER_RESUME_SECONDS,
     RealRobotController,
@@ -41,15 +42,21 @@ def test_dribbler_allowed_when_bucket_empty(controller):
     assert _tick(controller, 0, requested=True, dt=1.0) is True
 
 
+def test_limiter_uses_expected_thresholds():
+    assert DRIBBLER_MAX_ON_SECONDS == pytest.approx(120.0)
+    assert DRIBBLER_DRAIN_RATE == pytest.approx(2.0)
+    assert DRIBBLER_RESUME_SECONDS == pytest.approx(10.0)
+
+
 def test_bucket_fills_by_elapsed_seconds(controller):
     _tick(controller, 0, requested=True, dt=5.0)
     assert controller._dribbler_seconds[0] == pytest.approx(5.0)
 
 
-def test_bucket_drains_by_elapsed_seconds(controller):
+def test_bucket_drains_by_configured_rate(controller):
     controller._dribbler_seconds[0] = 20.0
     _tick(controller, 0, requested=False, dt=7.0)
-    assert controller._dribbler_seconds[0] == pytest.approx(13.0)
+    assert controller._dribbler_seconds[0] == pytest.approx(6.0)
 
 
 def test_bucket_floors_at_zero(controller):
@@ -65,6 +72,27 @@ def test_dribbler_off_returns_false(controller):
 def test_bucket_does_not_overfill(controller):
     _tick(controller, 0, requested=True, dt=DRIBBLER_MAX_ON_SECONDS * 2)
     assert controller._dribbler_seconds[0] == pytest.approx(DRIBBLER_MAX_ON_SECONDS)
+
+
+def test_status_reports_remaining_time_to_limit(controller):
+    controller._dribbler_seconds[0] = 30.0
+    status = controller.get_dribbler_limiter_status(0)
+    assert status.bucket_seconds == pytest.approx(30.0)
+    assert status.max_on_seconds == pytest.approx(DRIBBLER_MAX_ON_SECONDS)
+    assert status.resume_seconds == pytest.approx(DRIBBLER_RESUME_SECONDS)
+    assert status.drain_rate == pytest.approx(DRIBBLER_DRAIN_RATE)
+    assert status.throttled is False
+    assert status.seconds_until_limit == pytest.approx(90.0)
+    assert status.seconds_until_resume == pytest.approx(0.0)
+
+
+def test_status_reports_remaining_real_cooldown_time(controller):
+    controller._dribbler_seconds[0] = DRIBBLER_MAX_ON_SECONDS
+    controller._dribbler_throttled.add(0)
+    status = controller.get_dribbler_limiter_status(0)
+    expected_cooldown = (DRIBBLER_MAX_ON_SECONDS - DRIBBLER_RESUME_SECONDS) / DRIBBLER_DRAIN_RATE
+    assert status.throttled is True
+    assert status.seconds_until_resume == pytest.approx(expected_cooldown)
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +138,12 @@ def test_throttled_robot_resumes_at_resume_threshold(controller):
     _tick(controller, 0, requested=True, dt=0.0)  # trigger throttle
 
     # drain to exactly the resume threshold
-    _tick(controller, 0, requested=False, dt=DRIBBLER_MAX_ON_SECONDS - DRIBBLER_RESUME_SECONDS)
+    _tick(
+        controller,
+        0,
+        requested=False,
+        dt=(DRIBBLER_MAX_ON_SECONDS - DRIBBLER_RESUME_SECONDS) / DRIBBLER_DRAIN_RATE,
+    )
     assert controller._dribbler_seconds[0] == pytest.approx(DRIBBLER_RESUME_SECONDS)
     # now requesting dribble should be allowed
     assert _tick(controller, 0, requested=True, dt=1.0) is True
@@ -121,7 +154,7 @@ def test_bucket_drains_while_throttled(controller):
     controller._dribbler_seconds[0] = DRIBBLER_MAX_ON_SECONDS
     _tick(controller, 0, requested=True, dt=0.0)  # throttle
     _tick(controller, 0, requested=True, dt=5.0)
-    assert controller._dribbler_seconds[0] == pytest.approx(DRIBBLER_MAX_ON_SECONDS - 5.0)
+    assert controller._dribbler_seconds[0] == pytest.approx(DRIBBLER_MAX_ON_SECONDS - 10.0)
 
 
 def test_no_oscillation_at_limit(controller):
@@ -149,10 +182,10 @@ def test_dribbler_fully_recovers_after_drain(controller):
 
 
 def test_limit_hit_at_correct_wall_time(controller):
-    # 29s → allowed, fills to 29s
-    assert _tick(controller, 0, requested=True, dt=29.0) is True
-    assert controller._dribbler_seconds[0] == pytest.approx(29.0)
-    # 1s more fills to 30s (cap) → still allowed (not yet at limit at entry)
+    # 119s -> allowed, fills to 119s
+    assert _tick(controller, 0, requested=True, dt=119.0) is True
+    assert controller._dribbler_seconds[0] == pytest.approx(119.0)
+    # 1s more fills to 120s (cap) -> still allowed (not yet at limit at entry)
     assert _tick(controller, 0, requested=True, dt=1.0) is True
     assert controller._dribbler_seconds[0] == pytest.approx(DRIBBLER_MAX_ON_SECONDS)
     # next tick: at limit → forced off

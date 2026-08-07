@@ -19,6 +19,7 @@ from utama_core.config.settings import (
     FPS_PRINT_INTERVAL,
     MAX_CAMERAS,
     MAX_GAME_HISTORY,
+    ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS,
     TIMESTEP,
 )
 from utama_core.custom_referee import CustomReferee
@@ -47,6 +48,7 @@ from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import GameGater
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
+from utama_core.run.vision_stream import GameFrameRenderer, RSimVisionStreamServer
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import (
     AbstractSimController,
@@ -66,6 +68,7 @@ if TYPE_CHECKING:
     from utama_core.entities.data.referee import RefereeData
 
 _GEOMETRY_MATCH_TOLERANCE_M = 0.001  # mm-precision integers from vision → 1 mm tolerance
+_VS_KICK_THRESHOLD = 0.5  # m/s — ball speed above this triggers kick commentary
 
 logging.basicConfig(
     filename="Utama.log",
@@ -75,6 +78,70 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)  # If this is within the class, or define it globally in the module
 logging.captureWarnings(True)
+
+
+@dataclass(slots=True)
+class _RobotPortFeedbackState:
+    port_id: int
+    has_ball: bool
+    last_seen: float
+
+
+def _record_robot_feedback_responses(
+    feedback_by_port_id: dict[int, _RobotPortFeedbackState],
+    responses: List[RobotResponse],
+    now: float,
+) -> None:
+    for response in responses or []:
+        feedback_by_port_id[response.id] = _RobotPortFeedbackState(
+            port_id=response.id,
+            has_ball=bool(response.has_ball),
+            last_seen=now,
+        )
+
+
+def _build_robot_feedback_snapshot(
+    feedback_by_port_id: dict[int, _RobotPortFeedbackState],
+    *,
+    now: float,
+    my_team_is_yellow: bool,
+    yellow_cmd_to_vision_mapping: dict[int, int],
+    blue_cmd_to_vision_mapping: dict[int, int],
+    timeout_seconds: float = ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS,
+) -> list[dict]:
+    snapshot = []
+    port_ids = set(feedback_by_port_id) | set(yellow_cmd_to_vision_mapping) | set(blue_cmd_to_vision_mapping)
+    for port_id in sorted(port_ids):
+        state = feedback_by_port_id.get(port_id)
+        if state is None:
+            item = {
+                "port_id": port_id,
+                "has_ball": False,
+                "connected": False,
+                "age_seconds": None,
+            }
+        else:
+            age_seconds = max(0.0, now - state.last_seen)
+            item = {
+                "port_id": state.port_id,
+                "has_ball": state.has_ball,
+                "connected": age_seconds < timeout_seconds,
+                "age_seconds": age_seconds,
+            }
+
+        yellow_vision_id = yellow_cmd_to_vision_mapping.get(port_id)
+        blue_vision_id = blue_cmd_to_vision_mapping.get(port_id)
+        if yellow_vision_id is not None:
+            item["team_color"] = "yellow"
+            item["team"] = "friendly" if my_team_is_yellow else "enemy"
+            item["vision_id"] = yellow_vision_id
+        elif blue_vision_id is not None:
+            item["team_color"] = "blue"
+            item["team"] = "enemy" if my_team_is_yellow else "friendly"
+            item["vision_id"] = blue_vision_id
+
+        snapshot.append(item)
+    return snapshot
 
 
 @dataclass(slots=True)
@@ -136,6 +203,9 @@ class StrategyRunner:
             instance to use the in-process referee, ``OfficialReferee()`` to consume
             commands from the SSL game-controller over the network, or ``None``
             (default) to run without any referee input.
+        enable_vision_stream (bool, optional): Start a browser stream that renders
+            the current game frame using RSim-style graphics without opening RSim.
+            Defaults to True.
         yellow_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the yellow team.
             Used only in real mode. In real PVP/shared-transmitter mode, mappings are required for both teams and must include all expected robots.
         blue_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the blue team.
@@ -166,9 +236,11 @@ class StrategyRunner:
         profiler_name: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
         rsim_vanishing: float = 0,
-        filtering: bool = False,
+        filtering: bool = True,
         referee: RefereeSource = None,
         formation_type: Optional[FormationType] = None,
+        enable_vision_stream: bool = True,
+        vision_stream_http_port: int = 8765,
         yellow_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
         blue_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
         yellow_trusted_ir_robots: Optional[FrozenSet[int]] = None,
@@ -178,6 +250,17 @@ class StrategyRunner:
 
         self._prev_custom_ref_command: Optional[RefereeCommand] = None
         self._last_referee_data: Optional["RefereeData"] = None
+        self._vs_team_names: tuple[str, str] = self._assign_team_names()
+        self._vs_commentary: str = "Welcome to the match!"
+        self._vs_commentary_until: float = 0.0
+        self._vs_prev_score: tuple[int, int] = (0, 0)
+        self._vs_prev_ball_speed: float = 0.0
+        self._vs_idle_index: int = 0
+        self._vs_idle_next: float = 0.0
+        # (is_friendly, robot_id) -> footballer name
+        self._vs_robot_names: dict[tuple[bool, int], str] = {}
+        self._robot_feedback_by_port_id: dict[int, _RobotPortFeedbackState] = {}
+        self._robot_feedback_snapshot: list[dict] = []
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
         self.mode: Mode = self._load_mode(mode)
@@ -191,6 +274,8 @@ class StrategyRunner:
 
         self._stop_event = threading.Event()
         self._vision_receiver: Optional[VisionReceiver] = None
+        self.vision_stream: Optional[RSimVisionStreamServer] = None
+        self._vision_stream_renderer: Optional[GameFrameRenderer] = None
 
         if isinstance(self.referee, CustomReferee):
             from utama_core.custom_referee.geometry import RefereeGeometry
@@ -266,6 +351,8 @@ class StrategyRunner:
         # Load all game related data
         self._load_game()
         self._assert_exp_goals()
+        if enable_vision_stream:
+            self._start_vision_stream(vision_stream_http_port)
 
         # Seed the custom referee's internal clocks from the first real vision
         # timestamp so all timers are on the same timebase regardless of mode
@@ -278,6 +365,12 @@ class StrategyRunner:
         self.my.strategy.setup_behaviour_tree(is_opp_strat=False)
         if self.opp:
             self.opp.strategy.setup_behaviour_tree(is_opp_strat=True)
+
+        # SnapshotVisitor for real-time behaviour tree visualization
+        from py_trees.visitors import SnapshotVisitor
+
+        self._bt_snapshot = SnapshotVisitor()
+        self.my.strategy.behaviour_tree.add_visitor(self._bt_snapshot)
 
         self.toggle_opp_first = False  # used to alternate the order of opp and friendly in run
 
@@ -310,6 +403,22 @@ class StrategyRunner:
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
+
+    def _start_vision_stream(self, http_port: int) -> None:
+        """Start the browser stream that mirrors refined game frames."""
+        try:
+            self._vision_stream_renderer = GameFrameRenderer(self.full_field_dims, scale=300.0)
+            self.vision_stream = RSimVisionStreamServer(
+                http_port=http_port,
+            )
+            self.vision_stream.start()
+            self._publish_vision_stream_frame()
+            self.logger.info("Vision stream available at %s", self.vision_stream.url)
+            print(f"Vision stream available at {self.vision_stream.url}")
+        except Exception:
+            self.vision_stream = None
+            self._vision_stream_renderer = None
+            self.logger.warning("Vision stream could not be started; continuing without browser video.", exc_info=True)
 
     def _validate_vision_to_cmd_mapping(self, mapping: Optional[dict[int, int]], is_yellow: bool) -> dict[int, int]:
         if self.mode == Mode.REAL:
@@ -586,6 +695,20 @@ class StrategyRunner:
                         self.logger.warning(f"RobotResponse cmd_id={cmd_id} not found in either blue or yellow mapping")
 
         return friendly_responses, opponent_responses
+
+    def _update_robot_feedback_snapshot(self, responses: List[RobotResponse], now: float) -> None:
+        _record_robot_feedback_responses(self._robot_feedback_by_port_id, responses, now)
+        self._robot_feedback_snapshot = _build_robot_feedback_snapshot(
+            self._robot_feedback_by_port_id,
+            now=now,
+            my_team_is_yellow=self.my_team_is_yellow,
+            yellow_cmd_to_vision_mapping=self.yellow_cmd_to_vision_mapping,
+            blue_cmd_to_vision_mapping=self.blue_cmd_to_vision_mapping,
+        )
+
+    def _push_robot_feedback_to_referee(self) -> None:
+        if isinstance(self.referee, CustomReferee):
+            self.referee.set_robot_feedback_data(self._robot_feedback_snapshot)
 
     def _remove_rsim_ball(self):
         """Removes the ball from the RSim environment by teleporting it off-field."""
@@ -1002,6 +1125,8 @@ class StrategyRunner:
                 self.profiler.dump_stats(f"{self.profiler_name}.prof")
         if self.replay_writer:
             self.replay_writer.close()
+        if self.vision_stream:
+            self.vision_stream.stop()
         if self.rsim_env:
             self.rsim_env.close()
         self._stop_fps_live()
@@ -1144,22 +1269,40 @@ class StrategyRunner:
             raise self._vision_receiver.thread_exception
         self._draw_rsim_field_bounds_overlay()
 
+        raw_robot_responses: List[RobotResponse] = []
+        if self.mode == Mode.REAL:
+            raw_robot_responses = self.my.strategy.robot_controller.get_robots_responses() or []
+            self._update_robot_feedback_snapshot(raw_robot_responses, frame_start)
+            self._push_robot_feedback_to_referee()
+
         if isinstance(self.referee, CustomReferee):
             ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
             self.ref_buffer.append(ref_data)
-            _ball_placement_next = ref_data.next_command in (
+            _BALL_PLACEMENT_COMMANDS = (
                 RefereeCommand.BALL_PLACEMENT_YELLOW,
                 RefereeCommand.BALL_PLACEMENT_BLUE,
             )
-            if (
-                self.sim_controller is not None
-                and ref_data.referee_command == RefereeCommand.STOP
-                and ref_data.designated_position is not None
-                and self._prev_custom_ref_command != RefereeCommand.STOP
-                and not _ball_placement_next
-            ):
-                x, y = ref_data.designated_position
-                self.sim_controller.teleport_ball(x, y)
+            if self.sim_controller is not None and ref_data.designated_position is not None:
+                if (
+                    ref_data.referee_command == RefereeCommand.STOP
+                    and self._prev_custom_ref_command != RefereeCommand.STOP
+                ):
+                    # On transition into STOP with a designated position, teleport
+                    # the ball immediately and skip straight to FORCE_START so
+                    # simulation doesn't wait for physical ball placement.
+                    x, y = ref_data.designated_position
+                    self.sim_controller.teleport_ball(x, y)
+                    self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
+                elif (
+                    ref_data.referee_command in _BALL_PLACEMENT_COMMANDS
+                    and self._prev_custom_ref_command not in _BALL_PLACEMENT_COMMANDS
+                ):
+                    # On transition into BALL_PLACEMENT, teleport the ball to the
+                    # designated position and let the state machine auto-advance.
+                    # Robots cannot physically retrieve an out-of-bounds ball in
+                    # simulation, so we simulate placement instantly.
+                    x, y = ref_data.designated_position
+                    self.sim_controller.teleport_ball(x, y)
             self._prev_custom_ref_command = ref_data.referee_command
 
         if self.mode == Mode.RSIM:
@@ -1174,7 +1317,7 @@ class StrategyRunner:
 
         friendly_res, opp_res = None, None
         if self.mode == Mode.REAL:
-            responses = self.my.strategy.robot_controller.get_robots_responses()
+            responses = raw_robot_responses
             if self.opp:
                 friendly_res, opp_res = self._split_robot_responses_by_team(responses)
             else:
@@ -1223,6 +1366,8 @@ class StrategyRunner:
                     real_responses=opp_res if real else None,
                 )
         self.toggle_opp_first = not self.toggle_opp_first
+        self._publish_vision_stream_frame()
+        self._push_bt_nodes_to_referee()
 
         # --- rate limiting ---
         if self.mode != Mode.RSIM:
@@ -1279,6 +1424,284 @@ class StrategyRunner:
 
                 self.elapsed_time = 0.0
                 self.num_frames_elapsed = 0
+
+    def _publish_vision_stream_frame(self) -> None:
+        """Publish the latest refined game frame to the browser stream."""
+        if self.vision_stream is None or self._vision_stream_renderer is None or self.my.current_game_frame is None:
+            return
+        if not self.vision_stream.is_due():
+            return
+        self.vision_stream.publish_status(self._vision_stream_status())
+        frame = self._vision_stream_renderer.render(self.my.current_game_frame)
+        self.vision_stream.publish_rgb_frame(frame)
+
+    _VS_TEAM_NAMES = [
+        "FC Recursion",
+        "Real Segfault",
+        "Borussia Debugmund",
+        "Manchester Bytecode",
+        "Inter Malloc",
+        "Atletico del Stack",
+        "Null Pointer United",
+        "Schalke 0x04",
+        "Deportivo Kernel",
+        "Racing Club de Runtime",
+        "Galactic Overhead",
+        "Ajax Exception",
+        "Off-by-One City",
+        "SV Deadlock",
+        "Infinite Loop FC",
+    ]
+
+    _VS_IDLE_LINES = [
+        "The robots are thinking...",
+        "Calculating optimal trajectory",
+        "Both sides plotting their next move",
+        "The crowd holds its breath",
+        "Pure silicon determination out there",
+        "No human reflexes required",
+        "Running at full clock speed",
+        "Algorithms at war",
+        "404: defence not found",
+        "This is peak robot football",
+    ]
+
+    _VS_KICK_LINES = [
+        "What a strike!",
+        "They've let it fly!",
+        "Big boot from the robot!",
+        "The ball is moving!",
+        "Powerful kick!",
+        "Sending it downfield!",
+    ]
+
+    _VS_GOAL_LINES_YELLOW = [
+        "GOAL! Yellow draws blood!",
+        "Yellow scores! Unbelievable!",
+        "The yellow machine delivers!",
+        "Yellow puts it in the net!",
+    ]
+
+    _VS_GOAL_LINES_BLUE = [
+        "GOAL! Blue strikes back!",
+        "Blue finds the net!",
+        "Brilliant from the blue side!",
+        "Blue pulls one back!",
+    ]
+
+    _VS_FOOTBALLER_NAMES = [
+        "Martin",
+        "Fred",
+        "Joel",
+        "Louis",
+    ]
+
+    @staticmethod
+    def _assign_team_names() -> tuple[str, str]:
+        import random
+
+        pool = list(StrategyRunner._VS_TEAM_NAMES)
+        random.shuffle(pool)
+        return pool[0], pool[1]
+
+    def _update_vs_commentary(self, ball_speed: float | None, score_blue: int, score_yellow: int) -> None:
+        import random
+
+        now = time.monotonic()
+        score = (score_blue, score_yellow)
+
+        # Goal scored — highest priority
+        if score != self._vs_prev_score:
+            if score[1] > self._vs_prev_score[1]:
+                line = random.choice(self._VS_GOAL_LINES_YELLOW)
+            else:
+                line = random.choice(self._VS_GOAL_LINES_BLUE)
+            self._vs_commentary = line
+            self._vs_commentary_until = now + 5.0
+            self._vs_prev_score = score
+            self._vs_prev_ball_speed = ball_speed or 0.0
+            return
+
+        self._vs_prev_score = score
+
+        # Kick detected
+        prev_spd = self._vs_prev_ball_speed
+        cur_spd = ball_speed or 0.0
+        self._vs_prev_ball_speed = cur_spd
+        if cur_spd > _VS_KICK_THRESHOLD and prev_spd <= _VS_KICK_THRESHOLD:
+            if now >= self._vs_commentary_until:
+                self._vs_commentary = random.choice(self._VS_KICK_LINES)
+                self._vs_commentary_until = now + 2.5
+
+        # Idle rotation
+        if now >= self._vs_idle_next:
+            if now >= self._vs_commentary_until:
+                self._vs_commentary = self._VS_IDLE_LINES[self._vs_idle_index % len(self._VS_IDLE_LINES)]
+                self._vs_idle_index += 1
+            self._vs_idle_next = now + 6.0
+
+    def _vision_stream_status(self) -> dict[str, object]:
+        """Build status metadata shown above the browser stream."""
+        stage_secs = max(0.0, self.referee_refiner.stage_time_left)
+        stage_min = int(stage_secs // 60)
+        stage_sec = int(stage_secs % 60)
+
+        blue = self.referee_refiner.blue_team
+        yellow = self.referee_refiner.yellow_team
+
+        ball = self.my.current_game_frame.ball if self.my.current_game_frame else None
+        ball_speed = (ball.v.x**2 + ball.v.y**2) ** 0.5 if ball is not None else None
+
+        name_yellow, name_blue = (
+            self._vs_team_names if self.my_team_is_yellow else (self._vs_team_names[1], self._vs_team_names[0])
+        )
+        self._update_vs_commentary(ball_speed, blue.score, yellow.score)
+
+        return {
+            "time_left": f"{stage_min}:{stage_sec:02d}",
+            "score_blue": blue.score,
+            "score_yellow": yellow.score,
+            "yellow_cards_blue": blue.yellow_cards,
+            "yellow_cards_yellow": yellow.yellow_cards,
+            "red_cards_blue": blue.red_cards,
+            "red_cards_yellow": yellow.red_cards,
+            "team_blue": name_blue,
+            "team_yellow": name_yellow,
+            "mode": self.mode.value,
+            "ball_speed": round(ball_speed, 2) if ball_speed is not None else None,
+            "commentary": self._vs_commentary,
+            "annotations": self._vision_stream_annotations(),
+            "roster": self._vision_stream_roster(),
+        }
+
+    def _get_robot_name(self, is_friendly: bool, robot_id: int) -> str:
+        key = (is_friendly, robot_id)
+        if key not in self._vs_robot_names:
+            used = set(self._vs_robot_names.values())
+            pool = [n for n in self._VS_FOOTBALLER_NAMES if n not in used]
+            if not pool:
+                pool = self._VS_FOOTBALLER_NAMES
+            import random
+
+            self._vs_robot_names[key] = random.choice(pool)
+        return self._vs_robot_names[key]
+
+    def _vision_stream_annotations(self) -> list[dict]:
+        """Build per-robot label annotations (footballer name) for the overlay canvas."""
+        renderer = self._vision_stream_renderer
+        game_frame = self.my.current_game_frame
+        if renderer is None or game_frame is None:
+            return []
+
+        annotations = []
+        for robot in game_frame.friendly_robots.values():
+            name = self._get_robot_name(True, robot.id)
+            px, py = renderer._pos_transform(robot.p.x, -robot.p.y)
+            annotations.append({"id": robot.id, "team": "friendly", "px": px, "py": py, "label": name})
+
+        for robot in game_frame.enemy_robots.values():
+            name = self._get_robot_name(False, robot.id)
+            px, py = renderer._pos_transform(robot.p.x, -robot.p.y)
+            annotations.append({"id": robot.id, "team": "enemy", "px": px, "py": py, "label": name})
+
+        return annotations
+
+    def _push_bt_nodes_to_referee(self) -> None:
+        """Extract per-robot RUNNING BT nodes and push to CustomReferee for GUI display."""
+        if not isinstance(self.referee, CustomReferee):
+            return
+        bt_nodes: dict[int, list[str]] = {}
+        # Build node lookup and parent map
+        node_by_id = {}
+        parent_of = {}
+        for n in self.my.strategy.behaviour_tree.root.iterate():
+            node_by_id[n.id] = n
+            if hasattr(n, "children"):
+                for child in n.children:
+                    parent_of[child.id] = n.id
+        # Find RUNNING leaf nodes, walk up to root to collect path and robot_id.
+        # robot_id may live on any ancestor (not just the leaf), so we scan the
+        # full path rather than stopping at the leaf node.
+        for node_id, status in self._bt_snapshot.visited.items():
+            if status.name != "RUNNING":
+                continue
+            node = node_by_id.get(node_id)
+            if node is None:
+                continue
+            # Walk from leaf to root: collect path names and search for robot_id.
+            path = []
+            rid = None
+            cur = node_id
+            while cur is not None:
+                n = node_by_id.get(cur)
+                if n is None:
+                    break
+                path.append(n.name)
+                if rid is None:
+                    if hasattr(n, "debug_state"):
+                        state = n.debug_state()
+                        if state and "robot_id" in state:
+                            rid = state["robot_id"]
+                    if rid is None and hasattr(n, "robot_id_key"):
+                        try:
+                            rid = n.blackboard.get(n.robot_id_key)
+                        except Exception:
+                            pass
+                cur = parent_of.get(cur)
+            if rid is not None:
+                path.reverse()
+                bt_nodes.setdefault(rid, []).append(" › ".join(path))
+        self.referee.set_bt_data(bt_nodes)
+
+    def _vision_stream_roster(self) -> list[dict]:
+        """Build the player roster list shown below the scoreboard."""
+        game_frame = self.my.current_game_frame
+        if game_frame is None:
+            return []
+
+        _ROLE_LABELS = {
+            "GOALKEEPER": "Goalkeeper",
+            "DEFENDER": "Defender",
+            "STRIKER": "Striker",
+            "MIDFIELDER": "Midfielder",
+            "UNASSIGNED": "On field",
+        }
+
+        role_map: dict = {}
+        passer_id: int | None = None
+        receiver_id: int | None = None
+        try:
+            bb = self.my.strategy.blackboard
+            if bb is not None:
+                role_map = bb.role_map or {}
+                passer_id = bb.get("passer_id")
+                receiver_id = bb.get("receiver_id")
+        except Exception:
+            pass
+
+        roster = []
+        for robot in game_frame.friendly_robots.values():
+            name = self._get_robot_name(True, robot.id)
+            if robot.id == passer_id:
+                status = "Passing"
+            elif robot.id == receiver_id:
+                status = "Receiving"
+            else:
+                role = role_map.get(robot.id)
+                status = _ROLE_LABELS.get(role.name, "On field") if role else "On field"
+            roster.append(
+                {"name": name, "team": "yellow" if game_frame.my_team_is_yellow else "blue", "status": status}
+            )
+
+        for robot in game_frame.enemy_robots.values():
+            name = self._get_robot_name(False, robot.id)
+            role = role_map.get(robot.id)
+            status = _ROLE_LABELS.get(role.name, "On field") if role else "On field"
+            roster.append(
+                {"name": name, "team": "blue" if game_frame.my_team_is_yellow else "yellow", "status": status}
+            )
+
+        return roster
 
     def _draw_rsim_field_bounds_overlay(self) -> None:
         """Draw active field bounds overlay in RSIM human render mode."""

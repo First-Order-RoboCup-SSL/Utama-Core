@@ -226,14 +226,38 @@ class FastPathPlanner:
             point = closest_point_on_segment(new_target, trajectory[1][0], trajectory[1][1])
             return (point + new_target) / 2.0
 
-    def sanitize_target(self, target: np.ndarray, obstacles: List, robot_pos: np.ndarray) -> np.ndarray:
+    def sanitize_target(
+        self, target: np.ndarray, obstacles: List, robot_pos: np.ndarray, field_bounds: FieldBounds | None = None
+    ) -> np.ndarray:
         """
-        Ensures the target isn't inside a velocity line or field bound.
+        Ensures the target isn't inside a velocity-line obstacle.
+
+        Field boundary walls are intentionally excluded here: the ball can
+        legally be near the touchline and the robot must be able to reach it.
+        Boundary walls are still used in path collision detection so the planner
+        never routes *through* the wall — they just don't repel the target.
         """
+        if field_bounds is not None:
+            # Build the set of field-boundary segments so we can skip them below.
+            tl = np.array(field_bounds.top_left)
+            br = np.array(field_bounds.bottom_right)
+            tr = np.array([br[0], tl[1]])
+            bl = np.array([tl[0], br[1]])
+            boundary_segments = {
+                (tuple(tl), tuple(tr)),
+                (tuple(tr), tuple(br)),
+                (tuple(br), tuple(bl)),
+                (tuple(bl), tuple(tl)),
+            }
+        else:
+            boundary_segments = set()
+
         safe_target = np.copy(target)
         for _ in range(5):
             collision_found = False
             for o in obstacles:
+                if (tuple(o[0]), tuple(o[1])) in boundary_segments:
+                    continue
                 if distance_point_to_segment(safe_target, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
                     closest_pt = closest_point_on_segment(safe_target, o[0], o[1])
                     push_dir = safe_target - closest_pt
@@ -265,8 +289,8 @@ class FastPathPlanner:
         # 1. Get obstacles and draw Red velocity lines
         obstacles = self._get_obstacles(game, robot_id, our_pos, field_bounds)
 
-        # 3. Sanitize target (Critical for velocity obstacles)
-        safe_target = self.sanitize_target(raw_target, obstacles, our_pos)
+        # 3. Sanitize target — skip boundary walls so robots can reach the ball near touchlines
+        safe_target = self.sanitize_target(raw_target, obstacles, our_pos, field_bounds)
 
         # 4. Plan geometric path
         final_trajectory, _ = self.check_segment((our_pos, safe_target), obstacles, 0, safe_target, field_bounds)
