@@ -5,7 +5,7 @@ is exercised in Utama-Strategy's `test_two_robot_attack_functional.py`, which
 requires `StrategyRunner` + rsim (`mode="rsim"`) — standing that up inside
 Utama-Core is out of scope for this pass. What's tested here instead is the
 part that doesn't need simulation: `assign_passer_receiver`'s ball-proximity
-logic and `committed()`'s phase gating, which are plain functions over a
+logic and `is_committed()`'s phase gating, which are plain functions over a
 `Game`-shaped object and don't need real motion execution to verify.
 """
 
@@ -77,20 +77,20 @@ def test_assign_passer_receiver_falls_back_when_ball_lookup_empty():
 
 def test_committed_is_false_before_any_assignment():
     tactic = TwoRobotAttackTactic()
-    mem = tactic.make_initial_mem()
-    assert tactic.committed(game=None, mem=mem) is False
+    mem = tactic.initial_mem()
+    assert tactic.is_committed(game=None, mem=mem) is False
 
 
 def test_committed_is_false_during_setup_phase():
     tactic = TwoRobotAttackTactic()
     mem = TwoRobotAttackMem(pass_and_score=PassAndScoreMem(phase="setup"), assigned_pair=(1, 2))
-    assert tactic.committed(game=None, mem=mem) is False
+    assert tactic.is_committed(game=None, mem=mem) is False
 
 
 def test_committed_is_true_once_past_setup_phase():
     tactic = TwoRobotAttackTactic()
     mem = TwoRobotAttackMem(pass_and_score=PassAndScoreMem(phase="pass_then_score"), assigned_pair=(1, 2))
-    assert tactic.committed(game=None, mem=mem) is True
+    assert tactic.is_committed(game=None, mem=mem) is True
 
     mem.pass_and_score.phase = "score"
-    assert tactic.committed(game=None, mem=mem) is True
+    assert tactic.is_committed(game=None, mem=mem) is True

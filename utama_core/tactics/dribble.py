@@ -110,7 +110,7 @@ class DribbleTactic(BaseTactic[DribbleMem]):
     def __init__(self, rect_x_frac: float = _RECT_X_FRAC, rect_y_frac: float = _RECT_Y_FRAC):
         self.corners = _make_corners(rect_x_frac, rect_y_frac)
 
-    def make_initial_mem(self) -> DribbleMem:
+    def initial_mem(self) -> DribbleMem:
         return DribbleMem(final_target=self.corners[0])
 
     def tick(

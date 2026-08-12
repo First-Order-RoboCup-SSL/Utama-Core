@@ -40,14 +40,14 @@ def _ctx(runner) -> KernelContext:
 
 def test_produces_a_command_for_every_assigned_robot(game, runner):
     tactic = LeadAndSupportTactic()
-    mem = tactic.make_initial_mem()
+    mem = tactic.initial_mem()
     commands, mem = tactic.tick(game, _ctx(runner), (1, 2, 3, 4), mem)
     assert set(commands.keys()) == {1, 2, 3, 4}
 
 
 def test_single_robot_has_no_supports_but_still_gets_a_command(game, runner):
     tactic = LeadAndSupportTactic()
-    mem = tactic.make_initial_mem()
+    mem = tactic.initial_mem()
     commands, mem = tactic.tick(game, _ctx(runner), (1,), mem)
     assert set(commands.keys()) == {1}
     assert mem.leader_id == 1
@@ -55,12 +55,12 @@ def test_single_robot_has_no_supports_but_still_gets_a_command(game, runner):
 
 def test_leader_is_closest_robot_to_ball(game, runner):
     tactic = LeadAndSupportTactic()
-    mem = tactic.make_initial_mem()
+    mem = tactic.initial_mem()
     _commands, mem = tactic.tick(game, _ctx(runner), (1, 2, 3, 4), mem)
     assert mem.leader_id in (1, 2, 3, 4)
 
 
 def test_not_committed_before_leader_has_ball(game, runner):
     tactic = LeadAndSupportTactic()
-    mem = tactic.make_initial_mem()
-    assert tactic.committed(game, mem) is False
+    mem = tactic.initial_mem()
+    assert tactic.is_committed(game, mem) is False

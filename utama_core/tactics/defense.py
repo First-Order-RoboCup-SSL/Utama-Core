@@ -45,7 +45,7 @@ class DefenseTactic(BaseTactic[DefenseMem]):
     case yet — flagging so it isn't mistaken for new behaviour.
     """
 
-    def make_initial_mem(self) -> DefenseMem:
+    def initial_mem(self) -> DefenseMem:
         return DefenseMem()
 
     def tick(

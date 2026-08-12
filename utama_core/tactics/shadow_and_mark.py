@@ -107,7 +107,7 @@ class ShadowAndMarkTactic(BaseTactic[ShadowAndMarkMem]):
     mark-flapping is observed to be a real problem.
     """
 
-    def make_initial_mem(self) -> ShadowAndMarkMem:
+    def initial_mem(self) -> ShadowAndMarkMem:
         return ShadowAndMarkMem()
 
     def tick(

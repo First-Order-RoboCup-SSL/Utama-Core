@@ -9,7 +9,7 @@ therefore not registered with `Strategy` as a normal tactic competing for
 the outfield robot pool; a caller ticks it directly for robot 0, once per
 game tick, alongside whatever `Strategy` decides for the outfield robots.
 
-It still exposes the same `tick`/`make_initial_mem`/`committed` shape as any
+It still exposes the same `tick`/`initial_mem`/`committed` shape as any
 other tactic (matching `kernel.tactic.Tactic`) purely for consistency of
 authoring style — not because the kernel schedules it.
 """
@@ -37,7 +37,7 @@ class GoalkeeperTactic(BaseTactic[GoalkeeperMem]):
     def __init__(self, robot_id: int = 0):
         self.robot_id = robot_id
 
-    def make_initial_mem(self) -> GoalkeeperMem:
+    def initial_mem(self) -> GoalkeeperMem:
         return GoalkeeperMem()
 
     def tick(

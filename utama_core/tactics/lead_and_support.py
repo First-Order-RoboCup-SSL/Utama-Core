@@ -16,7 +16,7 @@ reinvented.
 Robot-count-agnostic per the design doc's §7 stance (no scheduler-level
 splitting policy yet): works with 1 robot (leader only, no support) up to
 however many are assigned. Leader role is re-evaluated every tick except
-while `committed()` — see below — mirroring `two_robot_attack`'s setup-phase
+while `is_committed()` — see below — mirroring `two_robot_attack`'s setup-phase
 gating, generalized: once the leader has the ball and is not merely passing
 setup, re-picking "closest to ball" every tick is wrong for the same reason
 it was wrong there (the ball is transiently closer to a receiver than the
@@ -135,15 +135,15 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
     otherwise it holds the ball while supports resettle. There is no
     passing/receiving handoff sequencing here (unlike `two_robot_attack`) —
     supports exist to occupy space and pull opponents out of position, not
-    to be passed to. `committed()` covers only "leader has the ball and is
+    to be passed to. `is_committed()` covers only "leader has the ball and is
     lined up to shoot," a short-lived window, so this tactic is rarely a
     long-term blocker on reassignment.
     """
 
-    def make_initial_mem(self) -> LeadAndSupportMem:
+    def initial_mem(self) -> LeadAndSupportMem:
         return LeadAndSupportMem()
 
-    def committed(self, game: Game, mem: LeadAndSupportMem) -> bool:
+    def is_committed(self, game: Game, mem: LeadAndSupportMem) -> bool:
         if mem.leader_id is None:
             return False
         return has_ball(game, mem.leader_id)
@@ -151,7 +151,7 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
     def tick(
         self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: LeadAndSupportMem
     ) -> tuple[dict[RobotId, RobotCommand], LeadAndSupportMem]:
-        if mem.leader_id is None or mem.leader_id not in robot_ids or not self.committed(game, mem):
+        if mem.leader_id is None or mem.leader_id not in robot_ids or not self.is_committed(game, mem):
             mem.leader_id = choose_leader(game, robot_ids)
 
         leader_id = mem.leader_id

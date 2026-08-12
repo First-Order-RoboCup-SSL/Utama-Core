@@ -40,14 +40,14 @@ def _ctx(runner) -> KernelContext:
 
 def test_two_shadow_defenders_only(game, runner):
     tactic = ShadowAndMarkTactic()
-    mem = tactic.make_initial_mem()
+    mem = tactic.initial_mem()
     commands, mem = tactic.tick(game, _ctx(runner), (1, 2), mem)
     assert set(commands.keys()) == {1, 2}
 
 
 def test_extra_defenders_get_marking_commands(game, runner):
     tactic = ShadowAndMarkTactic()
-    mem = tactic.make_initial_mem()
+    mem = tactic.initial_mem()
     commands, mem = tactic.tick(game, _ctx(runner), (1, 2, 3, 4), mem)
     assert set(commands.keys()) == {1, 2, 3, 4}
 
@@ -74,7 +74,7 @@ def outnumbering_runner():
 def test_more_markers_than_enemies_still_produces_commands_for_all(outnumbering_runner):
     game = outnumbering_runner.my.game
     tactic = ShadowAndMarkTactic()
-    mem = tactic.make_initial_mem()
+    mem = tactic.initial_mem()
     commands, mem = tactic.tick(game, _ctx(outnumbering_runner), (1, 2, 3, 4), mem)
     assert set(commands.keys()) == {1, 2, 3, 4}
 
@@ -109,5 +109,5 @@ def test_unmatched_markers_hold_clear_of_own_defense_area(outnumbering_runner):
 
 def test_never_commits(game):
     tactic = ShadowAndMarkTactic()
-    mem = tactic.make_initial_mem()
-    assert tactic.committed(game, mem) is False
+    mem = tactic.initial_mem()
+    assert tactic.is_committed(game, mem) is False

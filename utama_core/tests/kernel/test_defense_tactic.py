@@ -41,14 +41,14 @@ def _ctx(runner) -> KernelContext:
 
 def test_defense_tactic_produces_a_command_for_each_assigned_robot(game, runner):
     tactic = DefenseTactic()
-    mem = tactic.make_initial_mem()
+    mem = tactic.initial_mem()
     commands, mem = tactic.tick(game, _ctx(runner), (1, 2), mem)
     assert set(commands.keys()) == {1, 2}
 
 
 def test_defense_tactic_single_defender(game, runner):
     tactic = DefenseTactic()
-    mem = tactic.make_initial_mem()
+    mem = tactic.initial_mem()
     commands, mem = tactic.tick(game, _ctx(runner), (1,), mem)
     assert set(commands.keys()) == {1}
 
@@ -56,5 +56,5 @@ def test_defense_tactic_single_defender(game, runner):
 def test_defense_tactic_never_commits(game):
     """No phase state — always freely reassignable, unlike two_robot_attack."""
     tactic = DefenseTactic()
-    mem = tactic.make_initial_mem()
-    assert tactic.committed(game, mem) is False
+    mem = tactic.initial_mem()
+    assert tactic.is_committed(game, mem) is False

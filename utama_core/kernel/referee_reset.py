@@ -9,7 +9,7 @@ argument):
 
 1. Barrier reset — the previous tick's in-progress actions stop being
    meaningful for *everyone* at once. All tactics' `mem` resets and every
-   `committed()` veto is overridden, unconditionally. This is not a targeted
+   `is_committed()` veto is overridden, unconditionally. This is not a targeted
    eviction of one stuck tactic; it's the game itself entering a new phase.
    Trigger: transitioning INTO a command that represents the start of a new
    phase of play — a kickoff/penalty/free-kick/ball-placement restart, or a
@@ -21,7 +21,7 @@ argument):
    command doesn't change there is nothing to classify).
 
 2. Pause (SIGSTOP/CONT-style) — `HALT`/`STOP`. The game freezes and later
-   resumes from the *same* state. `mem` and `committed()` must survive this
+   resumes from the *same* state. `mem` and `is_committed()` must survive this
    untouched — a tactic mid-pass should pick up exactly where it left off
    once play resumes. The only thing that must change during a pause is that
    no tactic should be issuing live motion commands; that's a kernel-loop
@@ -77,7 +77,7 @@ _BARRIER_ENTRY_COMMANDS = frozenset(
 # case and must not reset anything.
 _RESUME_COMMANDS = frozenset({RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START})
 
-# Commands that pause play without starting a new phase. `mem`/`committed()`
+# Commands that pause play without starting a new phase. `mem`/`is_committed()`
 # must survive these untouched; only live command issuance should stop.
 _PAUSE_COMMANDS = frozenset({RefereeCommand.HALT, RefereeCommand.STOP})
 

@@ -6,7 +6,7 @@ stand-in is enough to exercise the scheduling invariants in isolation.
 
 Covers both shapes `Strategy` supports: the single-active-tactic case (via
 `Strategy.single_tactic_picker`, the historical `Picker` API) and genuine
-concurrent multi-tactic partitions (via a raw `GroupPicker`).
+concurrent multi-tactic partitions (via a raw `Partitioner`).
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class RecordingTactic(BaseTactic[RecordingMem]):
         self.mem_creations = 0
         self.last_robot_ids: tuple[int, ...] = ()
 
-    def make_initial_mem(self) -> RecordingMem:
+    def initial_mem(self) -> RecordingMem:
         self.mem_creations += 1
         return RecordingMem()
 
@@ -54,7 +54,7 @@ class RecordingTactic(BaseTactic[RecordingMem]):
         self.last_robot_ids = robot_ids
         return {rid: f"cmd-{rid}" for rid in robot_ids}, mem
 
-    def committed(self, game, mem) -> bool:
+    def is_committed(self, game, mem) -> bool:
         return self._committed
 
 
@@ -152,7 +152,7 @@ def test_committed_tactic_releases_once_it_stops_committing():
     assert strategy.active_tactic_id == "b"
     other_tactic._committed = False
 
-    # ...then releases the instant committed() flips back to False, and the
+    # ...then releases the instant is_committed() flips back to False, and the
     # picker's ("a") choice takes effect on the very next tick.
     strategy._group_picker = Strategy.single_tactic_picker(lambda game, active: "a")
     strategy.tick(_FakeGame())
@@ -234,7 +234,7 @@ def test_requires_at_least_one_tactic():
         )
 
 
-# --- genuine concurrent multi-tactic partition shape (raw GroupPicker) ---
+# --- genuine concurrent multi-tactic partition shape (raw Partitioner) ---
 
 
 def _even_split_picker(game, free_robots, prev_partition):
@@ -305,7 +305,7 @@ def test_committed_group_keeps_its_robots_while_other_group_still_reassigns():
     # gave it robots (bypassing the picker, since this test only cares about
     # the pinning behaviour once "a" already holds robots and commits).
     strategy._slot_for("a").assigned_robots = frozenset({1, 2})
-    strategy._slot_for("a").mem = committed_tactic.make_initial_mem()
+    strategy._slot_for("a").mem = committed_tactic.initial_mem()
 
     strategy.tick(_FakeGame())
     # "a" is committed and pinned to {1,2}; picker only ever sees {3,4} now.
@@ -327,7 +327,7 @@ def test_picker_assigning_to_a_committed_tactic_raises():
         ctx=_ctx(),
     )
     strategy._slot_for("a").assigned_robots = frozenset({1, 2})
-    strategy._slot_for("a").mem = committed_tactic.make_initial_mem()
+    strategy._slot_for("a").mem = committed_tactic.initial_mem()
 
     with pytest.raises(ValueError, match="committed"):
         strategy.tick(_FakeGame())
@@ -385,7 +385,7 @@ def test_barrier_reset_clears_all_tactics_and_unpins_commitments():
     strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
     # Seed "a" as committed and holding both robots.
     strategy._slot_for("a").assigned_robots = frozenset({1, 2})
-    strategy._slot_for("a").mem = committed_tactic.make_initial_mem()
+    strategy._slot_for("a").mem = committed_tactic.initial_mem()
 
     strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
     assert calls[-1] == frozenset()  # both robots pinned to "a"

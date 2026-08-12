@@ -2,7 +2,7 @@
 
 No py_trees, no blackboard, no state-machine base class. `mem` is a plain
 dataclass a Tactic defines for itself; the kernel never inspects its fields,
-it only ever replaces it wholesale (via `make_initial_mem()`) or threads it
+it only ever replaces it wholesale (via `initial_mem()`) or threads it
 through unchanged (via `tick()`).
 
 A `Tactic` does not know which robots it has until the kernel calls `tick()`
@@ -27,7 +27,7 @@ TacticId = str
 class Tactic(Protocol[MemT]):
     """Structural contract a tactic must satisfy. Not required to subclass this."""
 
-    def make_initial_mem(self) -> MemT:
+    def initial_mem(self) -> MemT:
         """Fresh state for this tactic. Called whenever its robot assignment changes."""
         ...
 
@@ -37,7 +37,7 @@ class Tactic(Protocol[MemT]):
         """Compute this tick's commands for `robot_ids` and the next `mem`."""
         ...
 
-    def committed(self, game: Game, mem: MemT) -> bool:
+    def is_committed(self, game: Game, mem: MemT) -> bool:
         """True if the kernel must not reassign this tactic's robots right now.
 
         Self-declared and absolute: while this returns True, the scheduler
@@ -68,10 +68,10 @@ class BaseTactic(Generic[MemT]):
 
     Purely optional — a tactic only needs to structurally match `Tactic`, not
     inherit from anything. This exists so most tactics can skip writing
-    `committed`/`suggest_next` boilerplate when the defaults are fine.
+    `is_committed`/`suggest_next` boilerplate when the defaults are fine.
     """
 
-    def committed(self, game: Game, mem: MemT) -> bool:
+    def is_committed(self, game: Game, mem: MemT) -> bool:
         return False
 
     def suggest_next(self, game: Game, mem: MemT) -> Optional[TacticId]:

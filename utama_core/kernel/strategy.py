@@ -8,19 +8,19 @@ runs, so there is never a window where two Tactics could contend for the
 same robot — this was true for N=1 and remains true unchanged for N>1.
 
 No bid/fitness scoring, no state machine — a plain, hand-written
-`GroupPicker` function decides how to split the *free* robot pool (robots no
+`Partitioner` function decides how to split the *free* robot pool (robots no
 committed Tactic is currently pinning) across tactic slots each tick, and
-this class enforces the invariants around that decision: `committed()` is an
-absolute per-slot veto, `mem` resets exactly when a slot's assigned robot set
-changes (compared as sets, not tuples), and a referee barrier reset clears
-everything, in every slot, unconditionally.
+this class enforces the invariants around that decision: `is_committed()` is
+an absolute per-slot veto, `mem` resets exactly when a slot's assigned robot
+set changes (compared as sets, not tuples), and a referee barrier reset
+clears everything, in every slot, unconditionally.
 
 The single-active-tactic case (all outfield robots always in one slot) is
-not a separate mechanism — it is what you get from a `GroupPicker` that only
+not a separate mechanism — it is what you get from a `Partitioner` that only
 ever returns one non-empty group. `Strategy.single_tactic_picker` builds
 exactly that from a simpler `(Game, Optional[TacticId]) -> TacticId`
 function, for callers with only one tactic kind active at a time who would
-otherwise have to write a trivial one-group `GroupPicker` themselves.
+otherwise have to write a trivial one-group `Partitioner` themselves.
 
 Referee restarts (kickoff/ball-placement/free-kick/penalty) are handled
 before any tactic ticks at all, not by a tactic: `kernel.referee_override`
@@ -46,23 +46,23 @@ from utama_core.kernel.tactic import RobotId, Tactic, TacticId
 
 logger = logging.getLogger(__name__)
 
-# A GroupPicker partitions the *free* outfield pool (robots not currently
+# A Partitioner partitions the *free* outfield pool (robots not currently
 # pinned by a committed tactic slot — see `Strategy._choose_partition`) into
 # named tactic slots every tick, given the game state, the free robot pool,
 # and the previous full partition (None on the first tick or right after a
 # barrier reset). It must return a partition that exactly covers
 # `free_robot_ids` — every free robot in exactly one slot, no slot given a
 # robot outside that pool. `Strategy.tick()` raises if it doesn't. Committed
-# slots are never passed to the picker as available; it only ever decides
-# what happens to the robots nobody has vetoed keeping.
-GroupPicker = Callable[
+# slots are never passed to the partitioner as available; it only ever
+# decides what happens to the robots nobody has vetoed keeping.
+Partitioner = Callable[
     [Game, frozenset[RobotId], Optional[dict[TacticId, frozenset[RobotId]]]], dict[TacticId, frozenset[RobotId]]
 ]
 
 # The original single-tactic picker shape: decide which one TacticId should
 # own the *entire* outfield pool this tick, given the currently active one
 # (None on the first tick or right after a reset). Adapted into a
-# `GroupPicker` by `Strategy.single_tactic_picker`.
+# `Partitioner` by `Strategy.single_tactic_picker`.
 Picker = Callable[[Game, Optional[TacticId]], TacticId]
 
 
@@ -77,18 +77,19 @@ class _TacticSlot:
 class Strategy:
     """Runs one Tactic per slot, with each slot's robot pool decided fresh each tick.
 
-    `committed()`/`mem`-reset semantics are per-slot, not pool-wide: one slot
-    being committed only blocks *that slot's* robots from being reassigned;
-    it has no bearing on any other slot. This is the direct consequence of
-    preserving the single-writer invariant per-slot instead of per-pool. A
-    barrier reset still clears every slot unconditionally — a referee
-    restart makes every slot's in-progress action moot at once, not just one.
+    `is_committed()`/`mem`-reset semantics are per-slot, not pool-wide: one
+    slot being committed only blocks *that slot's* robots from being
+    reassigned; it has no bearing on any other slot. This is the direct
+    consequence of preserving the single-writer invariant per-slot instead of
+    per-pool. A barrier reset still clears every slot unconditionally — a
+    referee restart makes every slot's in-progress action moot at once, not
+    just one.
     """
 
     def __init__(
         self,
         tactics: dict[TacticId, Tactic],
-        group_picker: GroupPicker,
+        group_picker: Partitioner,
         outfield_robot_ids: tuple[RobotId, ...],
         ctx: KernelContext,
     ):
@@ -105,8 +106,8 @@ class Strategy:
         self._referee_override = RefereeOverride()
 
     @staticmethod
-    def single_tactic_picker(picker: Picker) -> GroupPicker:
-        """Adapt a single-tactic `Picker` into a `GroupPicker` for `Strategy`.
+    def single_tactic_picker(picker: Picker) -> Partitioner:
+        """Adapt a single-tactic `Picker` into a `Partitioner` for `Strategy`.
 
         The adapted picker always assigns the *entire* free pool to whichever
         `TacticId` the wrapped `picker` chooses — reproducing the original
@@ -147,7 +148,7 @@ class Strategy:
         without reaching into `_slots` directly (e.g. a GUI debug panel).
         """
         return {
-            tid: {"robots": slot.assigned_robots, "committed": slot.tactic.committed(game, slot.mem)}
+            tid: {"robots": slot.assigned_robots, "committed": slot.tactic.is_committed(game, slot.mem)}
             for tid, slot in self._slots.items()
             if slot.assigned_robots
         }
@@ -212,7 +213,7 @@ class Strategy:
             slot = self._slot_for(tactic_id)
 
             if slot.assigned_robots != robot_ids:
-                slot.mem = slot.tactic.make_initial_mem() if robot_ids else None
+                slot.mem = slot.tactic.initial_mem() if robot_ids else None
                 slot.assigned_robots = robot_ids
                 slot.committed_ticks = 0
 
@@ -239,21 +240,22 @@ class Strategy:
     def _choose_partition(self, game: Game) -> dict[TacticId, frozenset[RobotId]]:
         """Pin any committed slot's robots, then ask the picker to partition the rest.
 
-        A slot whose active Tactic is `committed()` keeps exactly the robot
-        set it already has — the picker only ever sees the robots nobody has
-        vetoed keeping, mirroring the absolute per-tactic veto (design doc
-        §3), now scoped to one slot instead of always the whole pool.
+        A slot whose active Tactic is `is_committed()` keeps exactly the
+        robot set it already has — the picker only ever sees the robots
+        nobody has vetoed keeping, mirroring the absolute per-tactic veto
+        (design doc §3), now scoped to one slot instead of always the whole
+        pool.
         """
         pinned: dict[TacticId, frozenset[RobotId]] = {}
         for tactic_id, slot in self._slots.items():
             if not slot.assigned_robots:
                 continue
-            if slot.tactic.committed(game, slot.mem):
+            if slot.tactic.is_committed(game, slot.mem):
                 slot.committed_ticks += 1
                 if slot.committed_ticks % 100 == 0:
                     logger.warning(
                         "tactic %r has blocked reassignment for %d consecutive ticks — "
-                        "if this keeps climbing, its committed() logic is likely stuck",
+                        "if this keeps climbing, its is_committed() logic is likely stuck",
                         tactic_id,
                         slot.committed_ticks,
                     )

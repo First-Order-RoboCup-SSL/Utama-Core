@@ -1,7 +1,7 @@
 """Referee-restart legality override for the kernel model.
 
 `Strategy.tick()` (and `referee_reset.py`) only handle the *scheduling*
-question — wiping `mem`/`committed()` on a barrier reset, freezing motion
+question — wiping `mem`/`is_committed()` on a barrier reset, freezing motion
 entirely on HALT/STOP. They say nothing about *what a robot should physically
 do* during a restart, so left alone, a Tactic's normal logic keeps running
 during e.g. an opponent's ball placement — driving straight at the ball,

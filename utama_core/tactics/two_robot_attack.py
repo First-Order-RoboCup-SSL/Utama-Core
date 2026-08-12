@@ -4,7 +4,7 @@ Ported from `utama_strategy.functional.strategies.two_robot_attack`.
 Closest-robot-to-ball becomes passer, the other receiver, then runs a
 setup -> pass -> score sequence.
 
-This is the concrete source of the `committed()` concept in the kernel
+This is the concrete source of the `is_committed()` concept in the kernel
 design: role assignment is only safe to re-run during the "setup" phase.
 Once the passer has picked up the ball and the pass sequence has started,
 re-running closest-to-ball every tick is wrong — the ball is briefly closer
@@ -12,7 +12,7 @@ to the receiver than the passer for most of the pass by design — which
 would otherwise flip roles mid-pass. The original functional spike guarded
 this with an inline phase check
 (`if mem.assigned_pair is None or mem.pass_and_score.phase == "setup":`)
-before deciding whether to re-run `assign_passer_receiver`. `committed()`
+before deciding whether to re-run `assign_passer_receiver`. `is_committed()`
 is that same check, exposed to the kernel so reassignment of this tactic's
 robots is refused (not just role reassignment *within* the tactic) for as
 long as it's true.
@@ -69,10 +69,10 @@ class TwoRobotAttackTactic(BaseTactic[TwoRobotAttackMem]):
         self.receiver_pos = receiver_pos
         self.dynamic_setup = dynamic_setup
 
-    def make_initial_mem(self) -> TwoRobotAttackMem:
+    def initial_mem(self) -> TwoRobotAttackMem:
         return TwoRobotAttackMem(pass_and_score=PassAndScoreMem())
 
-    def committed(self, game: Game, mem: TwoRobotAttackMem) -> bool:
+    def is_committed(self, game: Game, mem: TwoRobotAttackMem) -> bool:
         if mem is None or mem.assigned_pair is None:
             return False
         return mem.pass_and_score.phase != "setup"

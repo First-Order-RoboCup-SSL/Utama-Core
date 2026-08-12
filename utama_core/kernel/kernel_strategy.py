@@ -70,7 +70,7 @@ class KernelStrategy(AbstractStrategy):
         self._kernel_strategy: Optional[KernelSchedulerStrategy] = None
         self._goalkeeper = GoalkeeperTactic(robot_id=goalkeeper_id)
         self._goalkeeper_id = goalkeeper_id
-        self._goalkeeper_mem = self._goalkeeper.make_initial_mem()
+        self._goalkeeper_mem = self._goalkeeper.initial_mem()
         super().__init__()
 
     def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
@@ -140,7 +140,7 @@ class KernelStrategy(AbstractStrategy):
         The Tactic model's analog of `StrategyRunner._push_bt_nodes_to_referee`'s
         BT-node breadcrumb — there is no behaviour tree to walk here, so this
         reports which tactic slot each robot currently belongs to and whether
-        that slot is `committed()` (the actual "why won't this reassign"
+        that slot is `is_committed()` (the actual "why won't this reassign"
         signal in this model), rather than any tactic-internal phase detail.
         """
         game = self.blackboard.game
@@ -195,7 +195,7 @@ def _possession_split_picker(
 
     Only emits a key for a tactic it is actually assigning free robots to —
     never a zero-robot entry, since `Strategy` treats every key in a
-    `GroupPicker`'s return value as "I am claiming this tactic id right now,"
+    `Partitioner`'s return value as "I am claiming this tactic id right now,"
     and a present-but-empty entry for a tactic committed and pinned
     elsewhere would collide with that pin.
 
