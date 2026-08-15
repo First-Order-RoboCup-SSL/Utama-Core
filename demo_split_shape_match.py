@@ -8,7 +8,7 @@ Runs for a fixed wall-clock duration rather than `runner.run()`'s
 run-until-SIGINT, so it terminates on its own.
 
 The referee GUI (enable_gui=True) shows a live per-robot debug panel via
-`KernelStrategy.debug_status()` — which tactic slot each robot is in, and
+`AbstractStrategy.debug_status()` — which tactic slot each robot is in, and
 whether that slot is currently `committed()` (the "why won't this robot get
 reassigned" signal in this model, since there's no BT node to point at).
 Open http://localhost:8080 while this is running.
@@ -17,18 +17,16 @@ Open http://localhost:8080 while this is running.
 import time
 
 from utama_core.custom_referee import CustomReferee
-from utama_core.kernel.kernel_strategy import (
-    KernelStrategy,
-    build_split_shape_kernel_strategy,
-)
+from utama_core.kernel.kernel_strategy import build_split_shape_kernel_strategy
 from utama_core.run import StrategyRunner
+from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 DURATION_SECONDS = 90
 
 
 def main():
-    my_strategy = KernelStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
-    opp_strategy = KernelStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
+    my_strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
+    opp_strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
 
     referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=6, n_robots_blue=6, enable_gui=True)
 

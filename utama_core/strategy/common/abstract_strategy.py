@@ -1,64 +1,39 @@
-import logging
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Optional, cast
+"""`AbstractStrategy` — base class for kernel-tactic strategies run by `StrategyRunner`.
 
-import py_trees
-import pydot
-from py_trees import utilities as py_trees_utilities
+`StrategyRunner` drives a strategy through a fixed contract: `load_rsim_env`,
+`load_robot_controller`, `load_motion_controller`, `load_game`, `assert_exp_robots`,
+`assert_exp_goals`, and once per tick, `step()`. A concrete `AbstractStrategy` wraps a
+`kernel.Strategy` (see `utama_core.kernel.strategy`): `step()` ticks that `Strategy` (plus
+the goalkeeper, pinned outside the kernel scheduler) directly every frame.
+
+Robot 0 is always the goalkeeper, ticked directly and never handed to the kernel
+`Strategy` — see `tactics/goalkeeper.py` and the "Tactics as Processes" design note,
+section 1.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
 
 from utama_core.config.enums import Role
-from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP, RENDER_BASE_PATH
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.entities.game.field import Field, FieldBounds
-from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.math_utils import (
     assert_contains,
     assert_valid_bounding_box,
 )
+from utama_core.kernel.referee_override import is_override_command
+from utama_core.kernel.referee_reset import is_paused
+from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command
-from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
-from utama_core.strategy.common.base_blackboard import BaseBlackboard
+from utama_core.tactics.goalkeeper import GoalkeeperTactic
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
-
-logger = logging.getLogger(__name__)
-
-
-def _prune_base_blackboard_elements(graph: pydot.Dot) -> None:
-    """Strip BaseBlackboard artifacts from the rendered DOT graph."""
-    prunable_names = BaseBlackboard.base_keys() | BaseBlackboard.base_client_names()
-    if not prunable_names:
-        return
-
-    name_cache: dict[str, str] = {}
-
-    def should_prune(name: str) -> bool:
-        if name in name_cache:
-            normalised = name_cache[name]
-        else:
-            normalised = name.strip('"')
-            if normalised.startswith("/"):
-                normalised = normalised.rsplit("/", 1)[-1]
-            name_cache[name] = normalised
-        return normalised in prunable_names
-
-    for edge in list(graph.get_edges()):
-        if should_prune(edge.get_source()) or should_prune(edge.get_destination()):
-            graph.del_edge(edge.get_source(), edge.get_destination())
-
-    def prune_nodes(container: pydot.Dot) -> None:
-        for node in list(container.get_nodes()):
-            if should_prune(node.get_name()):
-                container.del_node(node)
-        for subgraph in container.get_subgraphs():
-            prune_nodes(subgraph)
-
-    prune_nodes(graph)
 
 
 @dataclass(slots=True, frozen=True)
@@ -75,175 +50,78 @@ class SpaceRequirements:
     min_width: float
 
 
-_REFEREE_STOPPAGE_COMMANDS = frozenset(
-    {
-        RefereeCommand.HALT,
-        RefereeCommand.STOP,
-        RefereeCommand.PREPARE_KICKOFF_YELLOW,
-        RefereeCommand.PREPARE_KICKOFF_BLUE,
-        RefereeCommand.PREPARE_PENALTY_YELLOW,
-        RefereeCommand.PREPARE_PENALTY_BLUE,
-        RefereeCommand.DIRECT_FREE_YELLOW,
-        RefereeCommand.DIRECT_FREE_BLUE,
-        RefereeCommand.INDIRECT_FREE_YELLOW,
-        RefereeCommand.INDIRECT_FREE_BLUE,
-        RefereeCommand.TIMEOUT_YELLOW,
-        RefereeCommand.TIMEOUT_BLUE,
-        RefereeCommand.GOAL_YELLOW,
-        RefereeCommand.GOAL_BLUE,
-        RefereeCommand.BALL_PLACEMENT_YELLOW,
-        RefereeCommand.BALL_PLACEMENT_BLUE,
-    }
-)
+class AbstractStrategy:
+    """Kernel-tactic strategy base class, driven by `StrategyRunner`.
 
-
-class _ResetStrategyOnRefereeStoppage(AbstractBehaviour):
-    """Invalidate a strategy subtree once for each new referee stoppage token."""
-
-    def __init__(self, target: py_trees.behaviour.Behaviour, name: str = "ResetStrategyOnRefereeStoppage"):
-        super().__init__(name=name)
-        self.target = target
-        self._last_reset_token: tuple[RefereeCommand, float | None] | None = None
-
-    def update(self) -> py_trees.common.Status:
-        game = self.blackboard.game
-        referee = getattr(game, "referee", None)
-        if referee is None:
-            return py_trees.common.Status.SUCCESS
-
-        command = getattr(referee, "referee_command", None)
-        if command not in _REFEREE_STOPPAGE_COMMANDS:
-            return py_trees.common.Status.SUCCESS
-
-        token = (command, getattr(referee, "referee_command_timestamp", None))
-        if token != self._last_reset_token:
-            if self.target.status != py_trees.common.Status.INVALID:
-                self.target.stop(py_trees.common.Status.INVALID)
-            self._last_reset_token = token
-
-        return py_trees.common.Status.SUCCESS
-
-
-@dataclass
-class AbstractStrategy(ABC):
-    """
-    Base class for team strategies backed by behaviour trees.
+    Args:
+        build_kernel_strategy: called once, from `load_motion_controller`, as
+            `build_kernel_strategy(motion_controller) -> kernel.Strategy`.
+            Deferred to a factory (rather than passed pre-built) only because
+            `AbstractStrategy.__init__` itself runs before `StrategyRunner` has
+            injected anything — `Strategy.__init__` never reads `game`, only
+            `motion_controller`, so the `Strategy` can be built as soon as
+            `load_motion_controller` fires, without waiting for `load_game`.
+        goalkeeper_id: robot ID pinned to the goalkeeper tactic, outside the
+            kernel scheduler. Defaults to 0 per SSL/team convention.
+        exp_ball: whether the strategy expects the ball to be present on the
+            field. If True, and StrategyRunner's exp_ball is False, StrategyRunner
+            will raise an error and not run the strategy. If False, but the ball
+            exists, we will just rock on.
     """
 
-    ### To be specified in your abstract strategy ###
-    # whether the strategy expects the ball to be present on the field
-    # if True, and strat_runner exp_ball is False, strat_runner will raise an error and not run the strategy
-    # if False, but ball exists, we will just rock on!
-    exp_ball: bool = True
-    #################################################
-
-    def __init__(self):
-        # Lazy import to break the circular dependency:
-        # abstract_strategy → referee.tree → referee.conditions → abstract_behaviour
-        #                                                        → strategy.common.__init__ → abstract_strategy
-        from utama_core.strategy.referee.tree import build_referee_override_tree
-
-        strategy_subtree = self.create_behaviour_tree()
-
-        # Wrap the user's strategy tree with the referee override layer (Option B).
-        # The reset guard invalidates any running strategy memory as soon as a
-        # stoppage command arrives. The root Selector checks referee commands next;
-        # if none match (e.g. NORMAL_START or FORCE_START), it falls through to the
-        # freshly reset strategy subtree.
-        root = py_trees.composites.Selector(name="Root", memory=False)
-        referee_reset_and_override = py_trees.composites.Sequence(name="RefereeResetAndOverride", memory=False)
-        referee_reset_and_override.add_children(
-            [
-                _ResetStrategyOnRefereeStoppage(strategy_subtree),
-                build_referee_override_tree(),
-            ]
-        )
-        root.add_children([referee_reset_and_override, strategy_subtree])
-
-        self.behaviour_tree = py_trees.trees.BehaviourTree(root)
+    def __init__(
+        self,
+        build_kernel_strategy,
+        goalkeeper_id: int = 0,
+        exp_ball: bool = True,
+    ):
+        self.exp_ball = exp_ball
+        self._build_kernel_strategy = build_kernel_strategy
+        self._kernel_strategy: Optional[KernelSchedulerStrategy] = None
+        self._goalkeeper = GoalkeeperTactic(robot_id=goalkeeper_id)
+        self._goalkeeper_id = goalkeeper_id
+        self._goalkeeper_mem = self._goalkeeper.initial_mem()
 
         ### These attributes are set by the StrategyRunner before the strategy is run. ###
-        self.robot_controller: AbstractRobotController = None
-        self.blackboard: BaseBlackboard = None
+        self.robot_controller: Optional[AbstractRobotController] = None
+        self.motion_controller: Optional[MotionController] = None
+        self.rsim_env: Optional[SSLBaseEnv] = None
+        self.game: Optional[Game] = None
 
-    ### START OF FUNCTIONS TO BE IMPLEMENTED BY YOUR STRATEGY ###
-
-    @abstractmethod
-    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        """
-        Create and return the root behaviour for this strategy.
-
-        The tree should be structured in two conceptual phases:
-        1. Game analysis and role assignment (populate `blackboard.role_map`).
-        2. Tactical execution (set per-robot commands in `blackboard.cmd_map`).
-        """
-        ...
-
-    @abstractmethod
     def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
-        """
-        Validate that the number of friendly and enemy robots matches the strategy's expectations.
+        """Validate that the number of friendly and enemy robots matches the strategy's
+        expectations. Kernel strategies accept any robot count by default — override to
+        enforce a specific constraint."""
+        return True
 
-        This method is called once during initialization. Implementations can enforce
-        specific constraints on the number of robots the strategy supports.
-        An external guard already ensures that 1 ≤ robots ≤ 6, so only apply
-        additional checks if needed.
-
-        Args:
-            n_runtime_friendly: Number of friendly robots available during the match.
-            n_runtime_enemy: Number of opponent robots available during the match.
-
-        Returns:
-            bool: True if the robot counts are as expected, False otherwise.
-        """
-        ...
-
-    @abstractmethod
     def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
-        """
-        Validate that the field configuration includes the expected goals.
+        """Validate that the field configuration includes the expected goals. Kernel
+        strategies accept any goal configuration by default — override to enforce a
+        specific constraint."""
+        return True
 
-        Implementations should verify that the strategy can operate correctly
-        given whether our own and the opponent’s goal lines are present.
-
-        Args:
-            includes_my_goal_line: True if the field includes our own goal line.
-            includes_opp_goal_line: True if the field includes the opponent’s goal line.
-
-        Returns:
-            bool: True if the field configuration matches the strategy’s expectations, False otherwise.
-        """
-        ...
-
-    @abstractmethod
     def get_min_bounding_req(self) -> Optional[FieldBounds | SpaceRequirements]:
-        """
-        Return the minimum field region required by the strategy.
+        """Return the minimum field region required by the strategy.
 
         If the strategy only operates within a subset of the full field, return
         a `FieldBounds` object defining that region. Otherwise, return `None`
-        to indicate no restriction.
+        to indicate no restriction (the default).
 
-        This method is called during `load_game()`, when the blackboard is already initialized,
-        so `game` is available.
+        This method is called during `load_game()`, when `self.game` is already
+        populated.
 
         Note:
-            The bounding zone should be defined in field coordinates (i.e., absolute positions).
-
-        Returns:
-            Optional[FieldBounds | SpaceRequirements]:
-                A `FieldBounds` object specifying the required region, a `SpaceRequirements`
-                object specifying minimum length and width, or `None` if no specific region is required.
+            The bounding zone should be defined in field coordinates (i.e., absolute
+            positions).
         """
-        ...
+        return None
 
     def execute_default_action(self, game: Game, role: Role, robot_id: int) -> RobotCommand:
         """
-        Provide a fallback command for robots without assignments.
+        Provide a fallback command for robots without a tactic-assigned command.
 
-        Invoked after the tree tick for any robot that did not receive a
-        command via `blackboard.cmd_map`. Override to implement a safer or
-        more appropriate default behaviour.
+        Invoked once per tick for any robot `step()` didn't otherwise cover.
+        Override to implement a safer or more appropriate default behaviour.
 
         Args:
             game: Current game state snapshot.
@@ -255,44 +133,20 @@ class AbstractStrategy(ABC):
         """
         return empty_command(False)
 
-    ### END OF STRATEGY IMPLEMENTATION ###
-
-    def setup_strategy_blackboard(self, is_opp_strat: bool):
-        """
-        Must be called before blackboard can be used.
-
-        Setups the blackboard based on if is_opp_strat.
-        """
-        self._is_opp_strat = is_opp_strat
-        self.blackboard = self._setup_blackboard(is_opp_strat)
-
-    def setup_behaviour_tree(self, is_opp_strat: bool):
-        """
-        Must be called before strategy can be run.
-
-        Setups the behaviour tree based on if is_opp_strat.
-        """
-        self.behaviour_tree.setup(is_opp_strat=is_opp_strat)
-
     def load_rsim_env(self, env: SSLBaseEnv):
-        """
-        Called by StrategyRunner: Load the RSim environment into the blackboard.
-        """
-        self.blackboard.set("rsim_env", env, overwrite=True)
-        self.blackboard.register_key(key="rsim_env", access=py_trees.common.Access.READ)
+        """Called by StrategyRunner: store the RSim environment."""
+        self.rsim_env = env
 
     def load_robot_controller(self, robot_controller: AbstractRobotController):
-        """
-        Called by StrategyRunner: Load the robot controller into the class.
-        """
+        """Called by StrategyRunner: store the robot controller."""
         self.robot_controller = robot_controller
 
     def load_motion_controller(self, motion_controller: MotionController):
-        """
-        Called by StrategyRunner: Load the Motion Controller into the blackboard.
-        """
-        self.blackboard.set("motion_controller", motion_controller, overwrite=True)
-        self.blackboard.register_key(key="motion_controller", access=py_trees.common.Access.READ)
+        """Called by StrategyRunner: store the motion controller and build the
+        kernel `Strategy` (see class docstring for why this, not `load_game`,
+        is the right timing)."""
+        self.motion_controller = motion_controller
+        self._kernel_strategy = self._build_kernel_strategy(motion_controller)
 
     def assert_field_requirements(self, game: Game):
         """
@@ -331,102 +185,66 @@ class AbstractStrategy(ABC):
                     )
 
     def load_game(self, game: Game):
-        """
-        Called by StrategyRunner: Load the game object into the blackboard.
+        """Called by StrategyRunner: store the game object.
 
-        We do not set to READ after, as we TestManager may reset the game object for the new episode.
+        TestManager may reset the game object for a new episode, so this is a
+        plain attribute set, re-called every episode, not a one-time init.
         """
-        self.blackboard.set("game", game, overwrite=True)
+        self.game = game
         self.assert_field_requirements(game)
 
     def step(self):
-        # start_time = time.time()
-        game = self.blackboard.game
+        game = self.game
 
-        self.blackboard.cmd_map = {robot_id: None for robot_id in game.friendly_robots}
+        outfield_commands = self._kernel_strategy.tick(game)
 
-        self.behaviour_tree.tick()
+        cmd_map: dict[int, RobotCommand] = {}
+        cmd_map.update(outfield_commands)
 
-        for robot_id, values in self.blackboard.cmd_map.items():
-            if values is not None:
-                self.robot_controller.add_robot_commands(values, robot_id)
+        # During a referee-restart override, `outfield_commands` already covers
+        # every friendly robot including the goalkeeper (the override's Step
+        # classes compute for all of `game.friendly_robots`, not just the
+        # outfield pool) — ticking GoalkeeperTactic on top would overwrite that
+        # with normal ball-tracking logic mid-restart.
+        #
+        # During HALT/STOP, the goalkeeper must stop issuing motion commands
+        # for the same reason `Strategy.tick()` freezes the outfield pool via
+        # `is_paused` — skipping the tick here falls through to
+        # `execute_default_action` below, which returns `empty_command(False)`,
+        # the correct "stop" command.
+        referee = getattr(game, "referee", None)
+        current_command = getattr(referee, "referee_command", None) if referee is not None else None
+        if (
+            not is_override_command(current_command)
+            and not is_paused(current_command)
+            and self._goalkeeper_id not in cmd_map
+        ):
+            gk_commands, self._goalkeeper_mem = self._goalkeeper.tick(
+                game, self._kernel_strategy._ctx, (self._goalkeeper_id,), self._goalkeeper_mem
+            )
+            cmd_map.update(gk_commands)
 
-            # if the robot is not assigned a command, execute the default action
+        for robot_id in game.friendly_robots:
+            if robot_id in cmd_map:
+                self.robot_controller.add_robot_commands(cmd_map[robot_id], robot_id)
             else:
-                if robot_id not in self.blackboard.role_map:
-                    role = Role.UNASSIGNED
-                else:
-                    role = self.blackboard.role_map[robot_id]
-                cmd = self.execute_default_action(game, role, robot_id)
-                self.robot_controller.add_robot_commands(cmd, robot_id)
+                role = Role.GOALKEEPER if robot_id == self._goalkeeper_id else Role.UNASSIGNED
+                self.robot_controller.add_robot_commands(self.execute_default_action(game, role, robot_id), robot_id)
+
         self.robot_controller.send_robot_commands()
 
-        # end_time = time.time()
-        # logger.info(
-        #     "Behaviour Tree %s executed in %f secs",
-        #     self.behaviour_tree.__class__.__name__,
-        #     end_time - start_time,
-        # )
+    def debug_status(self) -> dict[int, list[str]]:
+        """Per-robot `["<tactic>", "committed"?]` for GUI display.
 
-    def _setup_blackboard(self, is_opp_strat: bool) -> BaseBlackboard:
-        """Sets up the blackboard with the necessary keys for the strategy."""
-
-        blackboard = py_trees.blackboard.Client(
-            name="GlobalBlackboard", namespace=BLACKBOARD_NAMESPACE_MAP[is_opp_strat]
-        )
-        blackboard.register_key(key="game", access=py_trees.common.Access.WRITE)
-        blackboard.register_key(key="cmd_map", access=py_trees.common.Access.WRITE)
-
-        blackboard.register_key(key="role_map", access=py_trees.common.Access.WRITE)
-        blackboard.register_key(key="tactic", access=py_trees.common.Access.WRITE)
-        blackboard.role_map = {}
-
-        blackboard.register_key(key="rsim_env", access=py_trees.common.Access.WRITE)
-        blackboard.rsim_env = None  # set to None by default
-        blackboard.register_key(key="motion_controller", access=py_trees.common.Access.WRITE)
-
-        blackboard: BaseBlackboard = cast(BaseBlackboard, blackboard)
-        return blackboard
-
-    def render(
-        self,
-        name: Optional[str] = None,
-        visibility_level: py_trees.common.VisibilityLevel = py_trees.common.VisibilityLevel.DETAIL,
-        with_blackboard_variables: bool = True,
-        with_qualified_names: bool = False,
-    ):
+        Reports which tactic slot each robot currently belongs to and whether
+        that slot is `is_committed()` (the actual "why won't this reassign"
+        signal in this model) — used by `StrategyRunner._push_bt_nodes_to_referee`
+        for the debug GUI panel.
         """
-        Renders a dot, png, and svg file of the behaviour tree in the directory specified by `RENDER_BASE_PATH`.
-        - `name` (str, optional): The name of the output files. If None, uses the class name.
-        - `visibility_level` (py_trees.common.VisibilityLevel): The visibility level for the rendering. Default is DETAIL.
-        - `with_blackboard_variables` (bool): Whether to include blackboard variables in the rendering. Default is True.
-        - `with_qualified_names` (bool): Whether to use qualified names in the rendering. Default is False.
-        """
-        RENDER_BASE_PATH.mkdir(parents=True, exist_ok=True)
-        name = self.__class__.__name__ if name is None else name
-
-        graph = py_trees.display.dot_tree(
-            root=self.behaviour_tree.root,
-            visibility_level=visibility_level,
-            with_blackboard_variables=with_blackboard_variables,
-            with_qualified_names=with_qualified_names,
-        )
-
-        if with_blackboard_variables:
-            _prune_base_blackboard_elements(graph)
-
-        filename_wo_extension = py_trees_utilities.get_valid_filename(name)
-
-        for extension, writer in {
-            "dot": graph.write_dot,
-            "png": graph.write_png,
-            "svg": graph.write_svg,
-        }.items():
-            output_path = RENDER_BASE_PATH / f"{filename_wo_extension}.{extension}"
-            try:
-                writer(output_path.as_posix())
-            except (AssertionError, OSError, FileNotFoundError):
-                logger.warning(
-                    "skipping %s export; Graphviz 'dot' executable not available",
-                    extension,
-                )
+        game = self.game
+        status: dict[int, list[str]] = {self._goalkeeper_id: ["goalkeeper"]}
+        for tactic_id, info in self._kernel_strategy.slot_status(game).items():
+            label = tactic_id if not info["committed"] else f"{tactic_id} (committed)"
+            for robot_id in info["robots"]:
+                status[robot_id] = [label]
+        return status

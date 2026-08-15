@@ -25,7 +25,6 @@ from __future__ import annotations
 import pytest
 
 from utama_core.kernel.kernel_strategy import (
-    KernelStrategy,
     _fixed_ratio_picker,
     _three_way_picker,
     build_give_and_go_solo_kernel_strategy,
@@ -36,6 +35,7 @@ from utama_core.kernel.kernel_strategy import (
     build_three_slot_kernel_strategy,
 )
 from utama_core.kernel.strategy import Strategy
+from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 _OUTFIELD_IDS = (1, 2, 3, 4, 5)
 
@@ -56,7 +56,7 @@ def make_runner():
     made = []
 
     def _make(build_kernel_strategy_factory):
-        strategy = KernelStrategy(build_kernel_strategy=build_kernel_strategy_factory(_OUTFIELD_IDS))
+        strategy = AbstractStrategy(build_kernel_strategy=build_kernel_strategy_factory(_OUTFIELD_IDS))
         r = StrategyRunner(
             strategy=strategy,
             my_team_is_yellow=True,

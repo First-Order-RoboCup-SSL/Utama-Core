@@ -1,28 +1,26 @@
-"""Integration test: `KernelStrategy` driven by a real `StrategyRunner` in rsim.
+"""Integration test: `AbstractStrategy` driven by a real `StrategyRunner` in rsim.
 
 Exercises the actual `StrategyRunner` call sequence (`load_robot_controller` /
 `load_motion_controller` before `load_game`, then repeated `step_once()`)
-against `KernelStrategy`, not just the adapter in isolation — this is the
-thing `test_strategy.py`/`test_two_robot_attack_tactic.py` don't cover: that
-the kernel `Strategy` actually gets wired up correctly through
-`AbstractStrategy`'s blackboard/robot_controller plumbing.
+against `AbstractStrategy`, not just the kernel `Strategy` in isolation — this
+is the thing `test_strategy.py`/`test_two_robot_attack_tactic.py` don't
+cover: that the kernel `Strategy` actually gets wired up correctly through
+`AbstractStrategy`'s robot_controller/motion_controller plumbing.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from utama_core.kernel.kernel_strategy import (
-    KernelStrategy,
-    build_default_kernel_strategy,
-)
+from utama_core.kernel.kernel_strategy import build_default_kernel_strategy
+from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 
 @pytest.fixture
 def kernel_runner():
     from utama_core.run.strategy_runner import StrategyRunner
 
-    strategy = KernelStrategy(build_kernel_strategy=build_default_kernel_strategy((1, 2)))
+    strategy = AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy((1, 2)))
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,
@@ -64,11 +62,10 @@ def test_kernel_strategy_outfield_tactic_gets_ticked(kernel_runner):
 
 
 def test_kernel_strategy_is_built_by_load_motion_controller_alone():
-    """Direct unit-level check (no rsim, no full runner) that `KernelStrategy`
+    """Direct unit-level check (no rsim, no full runner) that `AbstractStrategy`
     doesn't need `load_game` at all to build its `kernel.Strategy` — only
     `load_motion_controller`, called with a bare stand-in object."""
-    strategy = KernelStrategy(build_kernel_strategy=build_default_kernel_strategy((1, 2)))
-    strategy.setup_strategy_blackboard(is_opp_strat=False)
+    strategy = AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy((1, 2)))
     assert strategy._kernel_strategy is None
 
     strategy.load_motion_controller(motion_controller=object())

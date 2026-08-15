@@ -1,4 +1,4 @@
-"""Tests for `KernelStrategy.debug_status()` / `Strategy.slot_status()` — the
+"""Tests for `AbstractStrategy.debug_status()` / `Strategy.slot_status()` — the
 Tactic model's replacement for `_push_bt_nodes_to_referee`'s BT-node walk,
 used to show "what is this robot's tactic doing right now" in the referee
 GUI when there is no behaviour tree to walk.
@@ -8,17 +8,15 @@ from __future__ import annotations
 
 import pytest
 
-from utama_core.kernel.kernel_strategy import (
-    KernelStrategy,
-    build_split_shape_kernel_strategy,
-)
+from utama_core.kernel.kernel_strategy import build_split_shape_kernel_strategy
+from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 
 @pytest.fixture
 def split_shape_runner():
     from utama_core.run.strategy_runner import StrategyRunner
 
-    strategy = KernelStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
+    strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,

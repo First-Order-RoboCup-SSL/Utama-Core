@@ -64,6 +64,24 @@ an isolated cleanup pass (previously attempted inline alongside unrelated rsim-e
 cleanup and reverted because the diffs got entangled — see kernel-cleanup commit
 history around `97839a6`). Should be its own PR, not mixed with other work.
 
+## AbstractStrategy follow-ups (from the BT-removal rewrite)
+
+Deferred during the `AbstractStrategy` rewrite (merging `KernelStrategy` into it,
+dropping py_trees) — not urgent, revisit once there's a concrete forcing case:
+
+- `goalkeeper_id`/`exp_ball` as `AbstractStrategy.__init__` params: `goalkeeper_id`
+  has zero real overrides today (every `build_*_kernel_strategy` factory uses the
+  default `0`) — worth reconsidering whether it belongs as a constructor param at
+  all, or should just be hardcoded until a config actually needs a different
+  keeper id. `exp_ball` is genuinely read by `StrategyRunner`'s validation before
+  any tactic runs, so it likely does need to live somewhere the runner can see it
+  — but worth a closer look at whether the constructor is the right place once
+  more of `AbstractStrategy`'s shape has settled.
+- `KernelContext` — reconsider whether it's still needed as a wrapper once the
+  BT-removal pass is fully done. It exists to thread `motion_controller` through
+  every `Tactic.tick()` call; worth checking whether that indirection earns its
+  keep once `AbstractStrategy` itself is simpler.
+
 ## Developer documentation
 
 Beyond `tactic_model_design_decisions.md` (internal decision log, not onboarding

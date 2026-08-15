@@ -362,15 +362,6 @@ class StrategyRunner:
         if isinstance(self.referee, CustomReferee):
             initial_command = RefereeCommand.HALT if self.mode == Mode.REAL else RefereeCommand.FORCE_START
             self.referee.seed_clock(self.my.current_game_frame.ts, initial_command)
-        self.my.strategy.setup_behaviour_tree(is_opp_strat=False)
-        if self.opp:
-            self.opp.strategy.setup_behaviour_tree(is_opp_strat=True)
-
-        # SnapshotVisitor for real-time behaviour tree visualization
-        from py_trees.visitors import SnapshotVisitor
-
-        self._bt_snapshot = SnapshotVisitor()
-        self.my.strategy.behaviour_tree.add_visitor(self._bt_snapshot)
 
         self.toggle_opp_first = False  # used to alternate the order of opp and friendly in run
 
@@ -629,7 +620,6 @@ class StrategyRunner:
             allowed_blue_ids=allowed_blue_ids,
         )
         my_motion_controller = get_control_scheme(control_scheme)
-        my_strategy.setup_strategy_blackboard(is_opp_strat=False)
         my_side = SideRuntime(
             strategy=my_strategy,
             position_refiner=my_pos_ref,
@@ -650,7 +640,6 @@ class StrategyRunner:
             opp_motion_controller = (
                 get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
             )
-            opp_strategy.setup_strategy_blackboard(is_opp_strat=True)
             opp_side = SideRuntime(
                 strategy=opp_strategy,
                 position_refiner=opp_pos_ref,
@@ -1607,63 +1596,15 @@ class StrategyRunner:
         return annotations
 
     def _push_bt_nodes_to_referee(self) -> None:
-        """Extract per-robot debug status and push to CustomReferee for GUI display.
+        """Push per-robot debug status to CustomReferee for GUI display.
 
-        Strategies that aren't behaviour-tree-based (e.g. `KernelStrategy`)
-        have no `RUNNING` BT nodes to walk. Any strategy may instead expose a
-        `debug_status() -> dict[int, list[str]]` method to report its own
-        equivalent of "what is this robot's tactic doing right now" — used
-        in preference to the BT walk below when present, so the same GUI
-        panel works for both without either strategy family needing to know
-        about the other.
+        Every strategy is kernel-based now and exposes
+        `debug_status() -> dict[int, list[str]]` to report "what is this
+        robot's tactic doing right now" for the debug GUI panel.
         """
         if not isinstance(self.referee, CustomReferee):
             return
-        if hasattr(self.my.strategy, "debug_status"):
-            self.referee.set_bt_data(self.my.strategy.debug_status())
-            return
-        bt_nodes: dict[int, list[str]] = {}
-        # Build node lookup and parent map
-        node_by_id = {}
-        parent_of = {}
-        for n in self.my.strategy.behaviour_tree.root.iterate():
-            node_by_id[n.id] = n
-            if hasattr(n, "children"):
-                for child in n.children:
-                    parent_of[child.id] = n.id
-        # Find RUNNING leaf nodes, walk up to root to collect path and robot_id.
-        # robot_id may live on any ancestor (not just the leaf), so we scan the
-        # full path rather than stopping at the leaf node.
-        for node_id, status in self._bt_snapshot.visited.items():
-            if status.name != "RUNNING":
-                continue
-            node = node_by_id.get(node_id)
-            if node is None:
-                continue
-            # Walk from leaf to root: collect path names and search for robot_id.
-            path = []
-            rid = None
-            cur = node_id
-            while cur is not None:
-                n = node_by_id.get(cur)
-                if n is None:
-                    break
-                path.append(n.name)
-                if rid is None:
-                    if hasattr(n, "debug_state"):
-                        state = n.debug_state()
-                        if state and "robot_id" in state:
-                            rid = state["robot_id"]
-                    if rid is None and hasattr(n, "robot_id_key"):
-                        try:
-                            rid = n.blackboard.get(n.robot_id_key)
-                        except Exception:
-                            pass
-                cur = parent_of.get(cur)
-            if rid is not None:
-                path.reverse()
-                bt_nodes.setdefault(rid, []).append(" › ".join(path))
-        self.referee.set_bt_data(bt_nodes)
+        self.referee.set_bt_data(self.my.strategy.debug_status())
 
     def _vision_stream_roster(self) -> list[dict]:
         """Build the player roster list shown below the scoreboard."""

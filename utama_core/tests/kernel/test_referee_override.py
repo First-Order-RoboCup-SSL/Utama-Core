@@ -1,6 +1,6 @@
 """Integration tests for the kernel model's referee-restart override.
 
-Uses a real rsim `Game` (via `KernelStrategy`/`StrategyRunner`) rather than a
+Uses a real rsim `Game` (via `AbstractStrategy`/`StrategyRunner`) rather than a
 hand-built fake, since the override delegates to `strategy/referee/actions.py`
 Step classes that read a wide slice of `Game` (field dims, friendly_robots,
 ball, referee.designated_position, ...) — reproducing that surface with a
@@ -31,17 +31,15 @@ from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.kernel.kernel_strategy import (
-    KernelStrategy,
-    build_split_shape_kernel_strategy,
-)
+from utama_core.kernel.kernel_strategy import build_split_shape_kernel_strategy
+from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 
 @pytest.fixture
 def split_shape_runner():
     from utama_core.run.strategy_runner import StrategyRunner
 
-    strategy = KernelStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
+    strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,

@@ -1,155 +1,26 @@
-"""`KernelStrategy` — adapts a `kernel.Strategy` to the `AbstractStrategy`/`StrategyRunner` contract.
+"""Kernel `Strategy` factories — `build_kernel_strategy(motion_controller) -> kernel.Strategy`
+callables suitable for `AbstractStrategy`'s constructor argument of the same name.
 
-`StrategyRunner` only knows how to drive an `AbstractStrategy`: it calls
-`setup_strategy_blackboard`, `load_game`, `load_robot_controller`,
-`load_motion_controller`, and once per tick, `step()`. Rather than build a
-second runner for the Tactic model, this class satisfies that same contract
-so `StrategyRunner` can drive it unmodified — `step()` is overridden to tick
-the kernel `Strategy` (and the pinned goalkeeper) directly, bypassing
-py_trees/blackboard entirely for command computation. `create_behaviour_tree`
-still needs to return *something* because `AbstractStrategy.__init__` always
-builds one (used only for the unused referee-override subtree machinery);
-an empty Selector is enough since `step()` never ticks it.
-
-Robot 0 is always the goalkeeper, ticked directly and never handed to the
-kernel `Strategy` — see `tactics/goalkeeper.py` and the "Tactics as
-Processes" design note, section 1.
+See `utama_core.strategy.common.abstract_strategy.AbstractStrategy` for the class that
+consumes these and drives them under `StrategyRunner`.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-import py_trees
-
-from utama_core.config.enums import Role
-from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
-from utama_core.entities.game.field import FieldBounds
 from utama_core.kernel.context import KernelContext
-from utama_core.kernel.referee_override import is_override_command
-from utama_core.kernel.referee_reset import is_paused
 from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.kernel.tactic import RobotId
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.strategy.common.abstract_strategy import (
-    AbstractStrategy,
-    SpaceRequirements,
-)
 from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
-from utama_core.tactics.goalkeeper import GoalkeeperTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 from utama_core.tactics.two_robot_attack import TwoRobotAttackTactic
-
-
-class KernelStrategy(AbstractStrategy):
-    """`AbstractStrategy` subclass that delegates ticking to a `kernel.Strategy`.
-
-    Args:
-        build_kernel_strategy: called once, from `load_motion_controller`, as
-            `build_kernel_strategy(motion_controller) -> kernel.Strategy`.
-            Deferred to a factory (rather than passed pre-built) only because
-            `KernelStrategy.__init__` itself runs before `StrategyRunner` has
-            injected anything — `Strategy.__init__` never reads `game`, only
-            `motion_controller`, so the `Strategy` can be built as soon as
-            `load_motion_controller` fires, without waiting for `load_game`.
-        goalkeeper_id: robot ID pinned to the goalkeeper tactic, outside the
-            kernel scheduler. Defaults to 0 per SSL/team convention.
-        exp_ball: forwarded to `AbstractStrategy`.
-    """
-
-    def __init__(
-        self,
-        build_kernel_strategy,
-        goalkeeper_id: int = 0,
-        exp_ball: bool = True,
-    ):
-        self.exp_ball = exp_ball
-        self._build_kernel_strategy = build_kernel_strategy
-        self._kernel_strategy: Optional[KernelSchedulerStrategy] = None
-        self._goalkeeper = GoalkeeperTactic(robot_id=goalkeeper_id)
-        self._goalkeeper_id = goalkeeper_id
-        self._goalkeeper_mem = self._goalkeeper.initial_mem()
-        super().__init__()
-
-    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        # step() is fully overridden and never ticks this; AbstractStrategy's
-        # __init__ requires a tree to exist regardless.
-        return py_trees.composites.Selector(name="KernelStrategyUnusedRoot", memory=False)
-
-    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
-        return True
-
-    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
-        return True
-
-    def get_min_bounding_req(self) -> Optional[FieldBounds | SpaceRequirements]:
-        return None
-
-    def load_motion_controller(self, motion_controller: MotionController):
-        super().load_motion_controller(motion_controller)
-        self._kernel_strategy = self._build_kernel_strategy(motion_controller)
-
-    def step(self):
-        game = self.blackboard.game
-
-        outfield_commands = self._kernel_strategy.tick(game)
-
-        cmd_map: dict[int, RobotCommand] = {}
-        cmd_map.update(outfield_commands)
-
-        # During a referee-restart override, `outfield_commands` already covers
-        # every friendly robot including the goalkeeper (the BT-path Step
-        # classes this delegates to compute for all of `game.friendly_robots`,
-        # not just the outfield pool) — ticking GoalkeeperTactic on top would
-        # overwrite that with normal ball-tracking logic mid-restart.
-        #
-        # During HALT/STOP, the goalkeeper must stop issuing motion commands
-        # for the same reason `Strategy.tick()` freezes the outfield pool via
-        # `is_paused` — skipping the tick here falls through to
-        # `execute_default_action` below, which returns `empty_command(False)`,
-        # the correct "stop" command.
-        referee = getattr(game, "referee", None)
-        current_command = getattr(referee, "referee_command", None) if referee is not None else None
-        if (
-            not is_override_command(current_command)
-            and not is_paused(current_command)
-            and self._goalkeeper_id not in cmd_map
-        ):
-            gk_commands, self._goalkeeper_mem = self._goalkeeper.tick(
-                game, self._kernel_strategy._ctx, (self._goalkeeper_id,), self._goalkeeper_mem
-            )
-            cmd_map.update(gk_commands)
-
-        for robot_id in game.friendly_robots:
-            if robot_id in cmd_map:
-                self.robot_controller.add_robot_commands(cmd_map[robot_id], robot_id)
-            else:
-                role = Role.GOALKEEPER if robot_id == self._goalkeeper_id else Role.UNASSIGNED
-                self.robot_controller.add_robot_commands(self.execute_default_action(game, role, robot_id), robot_id)
-
-        self.robot_controller.send_robot_commands()
-
-    def debug_status(self) -> dict[int, list[str]]:
-        """Per-robot `["<tactic>", "committed"?]` for GUI display.
-
-        The Tactic model's analog of `StrategyRunner._push_bt_nodes_to_referee`'s
-        BT-node breadcrumb — there is no behaviour tree to walk here, so this
-        reports which tactic slot each robot currently belongs to and whether
-        that slot is `is_committed()` (the actual "why won't this reassign"
-        signal in this model), rather than any tactic-internal phase detail.
-        """
-        game = self.blackboard.game
-        status: dict[int, list[str]] = {self._goalkeeper_id: ["goalkeeper"]}
-        for tactic_id, info in self._kernel_strategy.slot_status(game).items():
-            label = tactic_id if not info["committed"] else f"{tactic_id} (committed)"
-            for robot_id in info["robots"]:
-                status[robot_id] = [label]
-        return status
 
 
 def build_default_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
@@ -163,7 +34,7 @@ def build_default_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     `kernel.Strategy` with a real `Picker` instead of using this helper.
 
     Returns a `build_kernel_strategy(motion_controller)`
-    callable suitable for `KernelStrategy`'s constructor argument of the
+    callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
@@ -253,7 +124,7 @@ def build_split_shape_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     doc's §7 deferral was waiting on — see §11 for the full rationale.
 
     Returns a `build_kernel_strategy(motion_controller)`
-    callable suitable for `KernelStrategy`'s constructor argument of the
+    callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
@@ -326,7 +197,7 @@ def build_press_and_pass_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     `StrategyRunner` instead of only unit-level `tick()` calls.
 
     Returns a `build_kernel_strategy(motion_controller)`
-    callable suitable for `KernelStrategy`'s constructor argument of the
+    callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
@@ -413,7 +284,7 @@ def build_high_press_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     the Tactic roster.
 
     Returns a `build_kernel_strategy(motion_controller)`
-    callable suitable for `KernelStrategy`'s constructor argument of the
+    callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
@@ -440,7 +311,7 @@ def build_low_block_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     newer, more elaborate Tactics used elsewhere in this file.
 
     Returns a `build_kernel_strategy(motion_controller)`
-    callable suitable for `KernelStrategy`'s constructor argument of the
+    callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
@@ -516,7 +387,7 @@ def build_three_slot_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     `partition.items()` generically) but nothing had tested until now.
 
     Returns a `build_kernel_strategy(motion_controller)`
-    callable suitable for `KernelStrategy`'s constructor argument of the
+    callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
@@ -547,7 +418,7 @@ def build_give_and_go_solo_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     weights without a defensive Tactic's behaviour as a confound).
 
     Returns a `build_kernel_strategy(motion_controller)`
-    callable suitable for `KernelStrategy`'s constructor argument of the
+    callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
