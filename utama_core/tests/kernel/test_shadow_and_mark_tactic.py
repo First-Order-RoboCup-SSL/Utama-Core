@@ -35,7 +35,7 @@ def game(runner):
 
 def _ctx(runner) -> KernelContext:
     motion_controller = runner.my.motion_controller(runner.mode, runner.rsim_env)
-    return KernelContext(motion_controller=motion_controller, rsim_env=runner.rsim_env)
+    return KernelContext(motion_controller=motion_controller)
 
 
 def test_two_shadow_defenders_only(game, runner):

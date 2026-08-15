@@ -15,4 +15,3 @@ from utama_core.motion_planning.src.common.motion_controller import MotionContro
 @dataclass
 class KernelContext:
     motion_controller: MotionController
-    rsim_env: object | None = None

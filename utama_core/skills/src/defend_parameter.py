@@ -5,7 +5,6 @@ from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.utils.defense_utils import (
     clamp_y,
@@ -113,7 +112,6 @@ def defend_parameter(
     game: Game,
     motion_controller: MotionController,
     robot_id: int,
-    env: Optional[SSLStandardEnv] = None,
     goal_frame_y: Optional[float] = None,
 ):
     ball_pos = game.ball.p.to_2d()

@@ -168,7 +168,8 @@ def build_default_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(game: Game, motion_controller: MotionController, rsim_env: object | None) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller, rsim_env=rsim_env)
+        del rsim_env  # unused now that KernelContext no longer carries it
+        ctx = KernelContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"two_robot_attack": TwoRobotAttackTactic()},
             group_picker=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "two_robot_attack"),
@@ -251,7 +252,8 @@ def build_split_shape_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(game: Game, motion_controller: MotionController, rsim_env: object | None) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller, rsim_env=rsim_env)
+        del rsim_env  # unused now that KernelContext no longer carries it
+        ctx = KernelContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": LeadAndSupportTactic(), "defense": ShadowAndMarkTactic()},
             group_picker=_possession_split_picker,

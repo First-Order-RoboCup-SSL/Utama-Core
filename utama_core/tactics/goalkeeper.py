@@ -43,7 +43,7 @@ class GoalkeeperTactic(BaseTactic[GoalkeeperMem]):
     def tick(
         self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: GoalkeeperMem
     ) -> tuple[dict[RobotId, RobotCommand], GoalkeeperMem]:
-        command = goalkeep(game, ctx.motion_controller, self.robot_id, env=ctx.rsim_env)
+        command = goalkeep(game, ctx.motion_controller, self.robot_id)
         if command is None:
             command = empty_command(False)
         return {self.robot_id: command}, mem

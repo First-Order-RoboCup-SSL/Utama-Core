@@ -51,8 +51,5 @@ class DefenseTactic(BaseTactic[DefenseMem]):
     def tick(
         self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: DefenseMem
     ) -> tuple[dict[RobotId, RobotCommand], DefenseMem]:
-        commands = {
-            robot_id: defend_parameter(game, ctx.motion_controller, robot_id, env=ctx.rsim_env)
-            for robot_id in robot_ids
-        }
+        commands = {robot_id: defend_parameter(game, ctx.motion_controller, robot_id) for robot_id in robot_ids}
         return commands, mem

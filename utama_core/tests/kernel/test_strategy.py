@@ -59,7 +59,7 @@ class RecordingTactic(BaseTactic[RecordingMem]):
 
 
 def _ctx() -> KernelContext:
-    return KernelContext(motion_controller=None, rsim_env=None)
+    return KernelContext(motion_controller=None)
 
 
 # --- single-active-tactic shape (Strategy.single_tactic_picker) ---
