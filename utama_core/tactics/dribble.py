@@ -20,7 +20,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
-from utama_core.kernel.tactic import BaseTactic, RobotId
+from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.shared.pass_and_score_geometry import at_target, has_ball
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.utils.move_utils import empty_command, move
@@ -107,6 +107,8 @@ def _make_corners(rect_x_frac: float, rect_y_frac: float) -> list[Vector2D]:
 
 
 class DribbleTactic(BaseTactic[DribbleMem]):
+    tag = TacticTag.MIXED
+
     def __init__(self, rect_x_frac: float = _RECT_X_FRAC, rect_y_frac: float = _RECT_Y_FRAC):
         self.corners = _make_corners(rect_x_frac, rect_y_frac)
 

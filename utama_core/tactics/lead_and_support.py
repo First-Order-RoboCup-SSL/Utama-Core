@@ -33,7 +33,7 @@ from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
-from utama_core.kernel.tactic import BaseTactic, RobotId
+from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.shared.pass_and_score_geometry import (
     enemy_goal_line,
     enemy_positions,
@@ -139,6 +139,8 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
     lined up to shoot," a short-lived window, so this tactic is rarely a
     long-term blocker on reassignment.
     """
+
+    tag = TacticTag.ATTACK
 
     def initial_mem(self) -> LeadAndSupportMem:
         return LeadAndSupportMem()

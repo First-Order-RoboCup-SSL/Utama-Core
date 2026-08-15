@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
-from utama_core.kernel.tactic import BaseTactic, RobotId
+from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.skills.src.defend_parameter import defend_parameter
 
 
@@ -44,6 +44,8 @@ class DefenseTactic(BaseTactic[DefenseMem]):
     of the dynamic side choice. Not fixed here since it wasn't a forcing
     case yet — flagging so it isn't mistaken for new behaviour.
     """
+
+    tag = TacticTag.DEFENSE
 
     def initial_mem(self) -> DefenseMem:
         return DefenseMem()

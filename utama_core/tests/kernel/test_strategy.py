@@ -19,7 +19,7 @@ import pytest
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.kernel.context import KernelContext
 from utama_core.kernel.strategy import Strategy
-from utama_core.kernel.tactic import BaseTactic
+from utama_core.kernel.tactic import BaseTactic, TacticTag
 
 
 @dataclass
@@ -38,10 +38,13 @@ class RecordingMem:
 
 
 class RecordingTactic(BaseTactic[RecordingMem]):
-    """Counts ticks and initial-mem creations; never commits by default."""
+    """Counts ticks and initial-mem creations; never commits/always applicable by default."""
 
-    def __init__(self, committed: bool = False):
+    tag = TacticTag.MIXED
+
+    def __init__(self, committed: bool = False, applicable: bool = True):
         self._committed = committed
+        self._applicable = applicable
         self.mem_creations = 0
         self.last_robot_ids: tuple[int, ...] = ()
 
@@ -56,6 +59,9 @@ class RecordingTactic(BaseTactic[RecordingMem]):
 
     def is_committed(self, game, mem) -> bool:
         return self._committed
+
+    def applicable(self, game) -> bool:
+        return self._applicable
 
 
 def _ctx() -> KernelContext:
@@ -396,6 +402,109 @@ def test_barrier_reset_clears_all_tactics_and_unpins_commitments():
     # override-command case, where the picker is deliberately not called).
     strategy.tick(_FakeGame(RefereeCommand.GOAL_YELLOW))
     assert calls[-1] == frozenset({1, 2})  # "a" no longer holds anything pinned
+
+
+# --- applicable() filtering (design doc §15) ---
+
+
+def test_inapplicable_tactic_is_never_proposed_robots():
+    """A Partitioner that (incorrectly) proposes robots for an inapplicable,
+    non-committed tactic gets a loud ValueError, not a silent bad assignment.
+    """
+    tactic_a = RecordingTactic(applicable=False)
+    tactic_b = RecordingTactic()
+
+    def picker(game, free_robots, prev):
+        return {"a": free_robots}
+
+    strategy = Strategy(
+        tactics={"a": tactic_a, "b": tactic_b},
+        group_picker=picker,
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    with pytest.raises(ValueError, match="applicable"):
+        strategy.tick(_FakeGame())
+
+
+def test_inapplicable_tactic_with_no_robots_proposed_does_not_raise():
+    """applicable()=False only matters if a Partitioner actually tries to use
+    that tactic id — an inapplicable tactic simply never receiving robots is
+    fine, not an error condition by itself.
+    """
+    tactic_a = RecordingTactic(applicable=False)
+    tactic_b = RecordingTactic()
+
+    def picker(game, free_robots, prev):
+        return {"b": free_robots}  # never names "a"
+
+    strategy = Strategy(
+        tactics={"a": tactic_a, "b": tactic_b},
+        group_picker=picker,
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    commands = strategy.tick(_FakeGame())
+    assert set(commands.keys()) == {1, 2}
+    assert tactic_a.mem_creations == 0
+
+
+def test_committed_tactic_is_never_asked_applicable():
+    """is_committed() short-circuits before applicable() is even consulted —
+    a commitment protects an in-progress action regardless of whether the
+    tactic would still call itself applicable if asked (design doc §15).
+    """
+    committed_tactic = RecordingTactic(committed=True, applicable=False)
+    other_tactic = RecordingTactic()
+
+    def picker(game, free_robots, prev):
+        return {"b": free_robots}
+
+    strategy = Strategy(
+        tactics={"a": committed_tactic, "b": other_tactic},
+        group_picker=picker,
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy._slot_for("a").assigned_robots = frozenset({1, 2})
+    strategy._slot_for("a").mem = committed_tactic.initial_mem()
+
+    # Must not raise: "a" is committed, so its applicable()=False is never
+    # consulted and it stays pinned exactly as any committed tactic would.
+    strategy.tick(_FakeGame())
+    assert strategy.active_partition.get("a") == frozenset({1, 2})
+
+
+def test_tactic_becomes_reassignable_once_commitment_and_applicability_both_allow():
+    """Once a commitment ends, applicable() is asked for the first time and
+    the tactic is evicted immediately if it says False — no special-casing
+    needed for "committed but no longer applicable" (design doc §15).
+    """
+    tactic_a = RecordingTactic(committed=True, applicable=False)
+    tactic_b = RecordingTactic()
+
+    def picker(game, free_robots, prev):
+        return {"b": free_robots}
+
+    strategy = Strategy(
+        tactics={"a": tactic_a, "b": tactic_b},
+        group_picker=picker,
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy._slot_for("a").assigned_robots = frozenset({1, 2})
+    strategy._slot_for("a").mem = tactic_a.initial_mem()
+
+    # Still committed: "a" stays pinned even though it's not applicable.
+    strategy.tick(_FakeGame())
+    assert strategy.active_partition.get("a") == frozenset({1, 2})
+
+    # Commitment ends, but "a" is still inapplicable — picker never names it
+    # again ("b" claims everything), so "a" is simply dropped, no error.
+    tactic_a._committed = False
+    strategy.tick(_FakeGame())
+    assert "a" not in strategy.active_partition
+    assert strategy.active_partition.get("b") == frozenset({1, 2})
 
 
 def test_pause_freezes_without_resetting_any_tactic():

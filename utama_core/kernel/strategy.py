@@ -245,6 +245,13 @@ class Strategy:
         nobody has vetoed keeping, mirroring the absolute per-tactic veto
         (design doc §3), now scoped to one slot instead of always the whole
         pool.
+
+        A tactic that is not currently committed is additionally filtered
+        out of the picker's candidate set entirely when `applicable(game)`
+        is False (design doc §15) — a precondition on being assigned at all,
+        checked only for non-committed tactics, never overriding a
+        commitment. The picker is only ever handed tactic ids that are both
+        registered and currently applicable.
         """
         pinned: dict[TacticId, frozenset[RobotId]] = {}
         for tactic_id, slot in self._slots.items():
@@ -266,6 +273,12 @@ class Strategy:
         pinned_robots = frozenset().union(*pinned.values()) if pinned else frozenset()
         free_robots = self._outfield_robot_ids - pinned_robots
 
+        applicable_tactic_ids = {
+            tactic_id
+            for tactic_id, tactic in self._tactics.items()
+            if tactic_id not in pinned and tactic.applicable(game)
+        }
+
         free_partition = self._group_picker(game, free_robots, self._prev_partition)
 
         result = dict(pinned)
@@ -274,6 +287,11 @@ class Strategy:
                 raise ValueError(
                     f"picker assigned robots to tactic {tactic_id!r}, which is currently committed "
                     "and must not be reassigned"
+                )
+            if robots and tactic_id in self._tactics and tactic_id not in applicable_tactic_ids:
+                raise ValueError(
+                    f"picker assigned robots to tactic {tactic_id!r}, which is not currently "
+                    "applicable() — a Partitioner must not propose robots for an inapplicable tactic"
                 )
             result[tactic_id] = robots
         return result

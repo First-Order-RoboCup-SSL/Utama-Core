@@ -31,7 +31,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
-from utama_core.kernel.tactic import BaseTactic, RobotId
+from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.skills.src.defend_parameter import defend_parameter
 from utama_core.skills.src.go_to_point import go_to_point
 
@@ -106,6 +106,8 @@ class ShadowAndMarkTactic(BaseTactic[ShadowAndMarkMem]):
     to disrupt (unlike `LeadAndSupportTactic`'s leader role); revisit only if
     mark-flapping is observed to be a real problem.
     """
+
+    tag = TacticTag.DEFENSE
 
     def initial_mem(self) -> ShadowAndMarkMem:
         return ShadowAndMarkMem()

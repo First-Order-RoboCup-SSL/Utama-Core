@@ -545,12 +545,145 @@ path was wrong.
 
 - **Bid / fitness-scoring + arbiter** for choosing the active Tactic — recognised as
   equivalent to OS priority-preemption scheduling; more machinery than the current Tactic
-  count justifies. Applies equally to `Strategy`'s multi-slot `GroupPicker` (§11) — the
-  5-robot split picker is a one-signal rule, not a scored allocator.
-- **Timeout / forced eviction on `committed()`** — see §3. Applies per-slot in the
+  count justifies. Applies equally to `Strategy`'s multi-slot `Partitioner` (§11) — the
+  5-robot split picker is a one-signal rule, not a scored allocator. Revisited and
+  reaffirmed in §15 at much larger assumed Tactic counts (tens to hundreds) — the rejection
+  held up even under that stress test; see §15 for why and for the boolean alternative
+  adopted instead.
+- **Timeout / forced eviction on `is_committed()`** — see §3. Applies per-slot in the
   multi-Tactic case too (§11): a stuck committed slot is a bug to fix in that slot's
-  Tactic, not a case for scheduler-side eviction.
+  Tactic, not a case for scheduler-side eviction. Partially reopened in §15 as a
+  self-declared commitment horizon (not an externally-tuned timeout) — see §15's open item.
 - **`@Configurable`-style live-tuning/config system** — Sumatra-specific infrastructure
   judged out of scope at current scale.
 - **Scheduling quantum / reduced check frequency** — solves a context-switch cost this
   system doesn't have; checking assignment every tick is already free here.
+
+---
+
+## 15. ✅ Settled — Tactic selection at scale: `applicable()` + a closed tag set, not scoring
+
+**Context.** Sections 1–14 assumed a handful of hand-written Tactics (currently four:
+`GoalkeeperTactic`, `TwoRobotAttackTactic`, `LeadAndSupportTactic`, `ShadowAndMarkTactic`),
+each wired into a `Strategy` via a hand-written `Partitioner` covering exactly that Tactic
+set. The team's longer-term direction is agentic/automated Tactic authoring and strategy
+research at a scale where the Tactic count (`T`) is unknown in advance and could reach the
+tens or hundreds, generated and tested by coding agents doing automated strategy search
+rather than exclusively by hand. This section is the resolution of that forward-looking
+design conversation — see git history / session log around 2026-08-15 for the full
+deliberation this compresses.
+
+**The problem, stated precisely.** A `Partitioner` today conflates two decisions in one
+hand-written function: *which subset of registered Tactics is even active this tick*, and
+*how to split robots across that subset*. At `T`=2–3 this is free — one function, a couple
+of branches. It stops scaling combinatorially: hand-writing a distinct `Partitioner` per
+desired Tactic subset is `O(2^T)` in the worst case, intractable once `T` is large.
+
+**Decision: split into two stages — eligibility filtering, then allocation — and keep the
+scale-sensitive part (filtering) boolean, not scored.**
+
+1. **Eligibility filtering (new, `O(T)`):** every `Tactic` gains a mandatory, self-declared
+   `applicable(game) -> bool` — "is it sensible for me to *begin* running right now?" This
+   is a precondition check on entry, asked once per Tactic per tick, independent of every
+   other registered Tactic. A generic, Tactic-count-agnostic filter step removes any
+   currently-unassigned, non-`is_committed()` Tactic whose `applicable()` returns `False`
+   from the candidate pool before a `Partitioner` ever sees it. This is the mechanism that
+   actually kills the `O(2^T)` blowup: adding Tactic #200 to the registry never requires
+   writing or editing a `Partitioner` — only registering the Tactic and tagging it (below).
+2. **Allocation (unchanged, still hand-written and small):** a `Partitioner` still decides
+   how to split robots across the *already-filtered* candidate set, exactly as today. This
+   stage is deliberately **not** generalized in this pass — see "Explicitly deferred" below.
+
+**Why a boolean precondition, not a float or ordinal score.** A scored/ranked selector
+(`desirability(game) -> float`, take the top-K) was seriously considered and is, honestly,
+a bid/fitness-scoring arbiter under a different name — exactly the mechanism §3/the
+rejections list above already rejected once at small `T`. Re-examined at large, possibly
+agent-authored `T`, the rejection holds for a sharper reason than "more machinery than
+justified": a continuous *or* ordinal self-reported score is **structurally unfalsifiable**.
+An agent-authored Tactic optimizing its own score in isolation, with no view of the rest of
+the catalog, has every incentive to report high confidence, and nothing in a float or a
+4-value ordinal (`none/low/high/exclusive`) stops that — an ordinal doesn't fix
+miscalibration, it relocates it and adds false safety, while also destroying the ability to
+recalibrate later the way a continuous float could be (rank-normalized, shrunk toward a
+prior, given a per-Tactic learned offset). A boolean precondition has neither problem: it is
+a local, falsifiable, unit-testable claim ("needs ≥2 robots and the ball in our half"), not
+a comparative judgement against Tactics its author has never seen. This mirrors
+`is_committed()`'s own existing philosophy (§3) — self-declared, queried fresh every tick,
+no persistent flag to get wrong — extended to a second, narrower question.
+
+**Why this doesn't violate the standing minimalism rule
+([[feedback_minimal_architecture]]).** `applicable()` is not new machinery in the sense §6
+and the rejections list warn against — it is one additional boolean method on the existing
+`Tactic` protocol, defaulting to `True` (always applicable) so every currently-ported Tactic
+needs zero changes to keep working, plus one generic filter step ahead of the existing,
+unchanged `Partitioner` call. Nothing about a ranking policy, a selector abstraction, or a
+pluggable scoring mechanism is being built now — those remain deferred (below) until a real
+`T` in the range of ~15–20 makes hand-written `Partitioner`s per subset actually hurt, which
+has not happened yet at `T`=4.
+
+**Decision: a closed tag vocabulary, not an open one.** Each `Tactic` also declares a tag
+from a small, fixed, closed set — `attack`, `defense`, `mixed` — chosen deliberately over an
+open/extensible vocabulary. A closed set gives a `Partitioner` a stable vocabulary to
+allocate against (e.g. "give the `attack`-tagged candidates 60% of the free pool") instead
+of hardcoded Tactic-id string branches, so a same-tagged Tactic #47 can be added to the
+registry without touching allocation code at all. An open vocabulary was rejected as
+premature generality with no consumer yet — nothing today would read a tag outside the
+three values, and per the standing minimalism rule that's a reason not to build it, not a
+reason to build it "just in case." Revisit only if a concrete Tactic genuinely does not fit
+any of the three, not in anticipation of one.
+
+**`applicable()` and `is_committed()` compose as an entry gate and an exit gate, not two
+views of one decision.** They answer different questions, asked of different subsets of
+slots, and interact in only one place:
+
+- `is_committed()` is checked first, per **currently-assigned** slot (as today, §3/§11's
+  `_choose_partition`-equivalent logic), and is absolute: if `True`, the slot is pinned and
+  `applicable()` is not consulted at all. Mid-action interruption is exactly what
+  `is_committed()` exists to prevent, and that does not change.
+- `applicable()` only ever gates slots that are **not currently committed** — i.e. it
+  decides who is eligible to be (re)assigned this tick, never whether an in-progress,
+  protected action should continue.
+- No special case is needed for "committed, but no longer applicable were it asked": the
+  tick after a commitment ends, `applicable()` is asked for the first time and evicts the
+  Tactic from the candidate pool if it says `False` — this falls directly out of the
+  ordering above, not out of any additional logic. A long-committed Tactic is therefore
+  evicted at the earliest tick it is safe to touch, exactly the intended behaviour, for
+  free.
+
+**Explicitly deferred out of this pass (do not build without a further forcing case):**
+
+- **A pluggable/generic selection mechanism** (rank-and-cutoff, a swappable
+  state-machine/Bayes-opt/LLM-driven selector, etc.) consuming `applicable()` results. The
+  boolean filter plus the existing hand-written `Partitioner` is judged sufficient while
+  `T` stays small (currently 4). Build this only once a real Tactic count makes hand-written
+  per-subset `Partitioner`s genuinely painful — estimated informally around `T`≈15–20, not a
+  hard threshold.
+- **A per-Tactic robot-count bound** (`min_robots`/`max_robots`) as a separate static
+  declaration alongside `applicable()`. Flagged as likely worth adding — it catches an
+  applicable-but-under-resourced Tactic before assignment rather than via a crash or silent
+  misbehaviour inside `tick()` — but not yet agreed or built; revisit alongside the next
+  Tactic whose behaviour genuinely depends on a minimum robot count beyond what
+  `LeadAndSupportTactic`'s existing 1-to-N agnosticism already tolerates.
+- **An offline Tactic-evaluation loop** (running a Tactic against recorded/simulated game
+  states outside the match loop, independent of in-match selection). Raised as likely the
+  actual leverage point for agentic strategy research — probably higher-impact than in-match
+  selection machinery — but out of scope for this pass; no concrete design yet.
+- **Scheduler-level (as opposed to Tactic-level) agentic design** — e.g. having an agent
+  design or tune the `Partitioner`/selection policy itself, not just author more Tactics.
+  Deliberately sequenced after Tactic-level scale: the single-writer partition invariant
+  (§5/§11) already guarantees a buggy *Tactic* cannot corrupt another Tactic's scheduling,
+  but that safety property does not extend to a buggy *scheduler* — a bad allocation policy
+  is a global failure, not a local one. Revisit once Tactic diversity and real match data
+  exist to define what a scheduler-level objective should even optimize for; building that
+  now would mean optimizing blind.
+
+**Open item, explicitly not resolved by this section:** `is_committed()`'s existing
+unbounded-veto behaviour (§3) remains a known risk that grows with `T`, independent of
+everything above — a single buggy or agent-authored Tactic that never returns `False` from
+`is_committed()` still has no kernel-level recourse beyond the existing debug-logging
+mitigation (§3). A self-declared commitment horizon (the Tactic states a maximum commitment
+length *at commit time*; the kernel enforces that self-declared bound, as opposed to an
+externally-tuned timeout the team already rejected in §3) was raised as a candidate fix that
+would preserve the self-declaration philosophy rather than abandon it, but is **not
+designed or built** — tracked here so it is not silently lost, not because a decision was
+reached.

@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
-from utama_core.kernel.tactic import BaseTactic, RobotId
+from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.skills.src.goalkeep import goalkeep
 from utama_core.skills.src.utils.move_utils import empty_command
 
@@ -33,6 +33,8 @@ class GoalkeeperMem:
 
 class GoalkeeperTactic(BaseTactic[GoalkeeperMem]):
     """One robot, tracks and blocks the ball at the goal line. Never kicks."""
+
+    tag = TacticTag.DEFENSE
 
     def __init__(self, robot_id: int = 0):
         self.robot_id = robot_id

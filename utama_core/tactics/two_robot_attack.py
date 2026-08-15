@@ -28,7 +28,7 @@ from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
-from utama_core.kernel.tactic import BaseTactic, RobotId
+from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.tactics._pass_and_score import (
     PassAndScoreMem,
     _pass_exec,
@@ -58,6 +58,8 @@ class TwoRobotAttackMem:
 
 class TwoRobotAttackTactic(BaseTactic[TwoRobotAttackMem]):
     """Two attacking robots, dynamic passer/receiver role by ball proximity."""
+
+    tag = TacticTag.ATTACK
 
     def __init__(
         self,
