@@ -49,14 +49,19 @@ logger = logging.getLogger(__name__)
 # A Partitioner partitions the *free* outfield pool (robots not currently
 # pinned by a committed tactic slot — see `Strategy._choose_partition`) into
 # named tactic slots every tick, given the game state, the free robot pool,
-# and the previous full partition (None on the first tick or right after a
-# barrier reset). It must return a partition that exactly covers
+# the previous full partition (None on the first tick or right after a
+# barrier reset), and the set of tactic ids currently applicable() (design
+# doc §15) — a tactic id absent from this set must not be given any robots
+# this tick, whether because it isn't registered or because its applicable()
+# just returned False. It must return a partition that exactly covers
 # `free_robot_ids` — every free robot in exactly one slot, no slot given a
-# robot outside that pool. `Strategy.tick()` raises if it doesn't. Committed
+# robot outside that pool, and no non-empty slot for a tactic id outside
+# `applicable_tactic_ids`. `Strategy.tick()` raises if it doesn't. Committed
 # slots are never passed to the partitioner as available; it only ever
 # decides what happens to the robots nobody has vetoed keeping.
 Partitioner = Callable[
-    [Game, frozenset[RobotId], Optional[dict[TacticId, frozenset[RobotId]]]], dict[TacticId, frozenset[RobotId]]
+    [Game, frozenset[RobotId], Optional[dict[TacticId, frozenset[RobotId]]], frozenset[TacticId]],
+    dict[TacticId, frozenset[RobotId]],
 ]
 
 # The original single-tactic picker shape: decide which one TacticId should
@@ -89,14 +94,14 @@ class Strategy:
     def __init__(
         self,
         tactics: dict[TacticId, Tactic],
-        group_picker: Partitioner,
+        partitioner: Partitioner,
         outfield_robot_ids: tuple[RobotId, ...],
         ctx: KernelContext,
     ):
         if not tactics:
             raise ValueError("Strategy needs at least one registered tactic")
         self._tactics = dict(tactics)
-        self._group_picker = group_picker
+        self._partitioner = partitioner
         self._outfield_robot_ids = frozenset(outfield_robot_ids)
         self._ctx = ctx
 
@@ -123,10 +128,22 @@ class Strategy:
         that case the wrapped `picker` is not called at all (mirroring the
         original `Strategy`, which never consulted the picker while the
         active tactic was committed).
+
+        Does not filter by `applicable_tactic_ids` itself — it can't
+        distinguish "the wrapped picker named an unregistered tactic" (a
+        bug, must raise `KeyError` same as ever) from "it named a
+        registered but currently inapplicable one" (`applicable_tactic_ids`
+        alone can't tell those apart, since it's already a subset of
+        registered ids by construction). `Strategy._choose_partition`'s own
+        validation already raises the right error for both cases, so this
+        wrapper is deliberately naive and lets that validation decide.
         """
 
-        def _group_picker(
-            game: Game, free_robots: frozenset[RobotId], prev_partition: Optional[dict[TacticId, frozenset[RobotId]]]
+        def _partitioner(
+            game: Game,
+            free_robots: frozenset[RobotId],
+            prev_partition: Optional[dict[TacticId, frozenset[RobotId]]],
+            applicable_tactic_ids: frozenset[TacticId],
         ) -> dict[TacticId, frozenset[RobotId]]:
             if not free_robots:
                 return {}
@@ -134,7 +151,7 @@ class Strategy:
             active_id = picker(game, prev_active_id)
             return {active_id: free_robots}
 
-        return _group_picker
+        return _partitioner
 
     @property
     def active_partition(self) -> dict[TacticId, frozenset[RobotId]]:
@@ -250,8 +267,10 @@ class Strategy:
         out of the picker's candidate set entirely when `applicable(game)`
         is False (design doc §15) — a precondition on being assigned at all,
         checked only for non-committed tactics, never overriding a
-        commitment. The picker is only ever handed tactic ids that are both
-        registered and currently applicable.
+        commitment. `applicable_tactic_ids` is passed to the picker so it
+        can respect this itself; `Strategy` also validates the picker's
+        return value against it afterward, since a `Partitioner` is a plain
+        function and nothing stops one from ignoring its own inputs.
         """
         pinned: dict[TacticId, frozenset[RobotId]] = {}
         for tactic_id, slot in self._slots.items():
@@ -279,7 +298,7 @@ class Strategy:
             if tactic_id not in pinned and tactic.applicable(game)
         }
 
-        free_partition = self._group_picker(game, free_robots, self._prev_partition)
+        free_partition = self._partitioner(game, free_robots, self._prev_partition, frozenset(applicable_tactic_ids))
 
         result = dict(pinned)
         for tactic_id, robots in free_partition.items():

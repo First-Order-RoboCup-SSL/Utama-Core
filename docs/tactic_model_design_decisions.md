@@ -286,12 +286,12 @@ with near-identical tick loops (referee handling, barrier reset, per-slot commit
 logic) was duplicated machinery for one capability at two different N, which cuts against
 the standing minimalism preference (see [[feedback_minimal_architecture]]) more than the
 "different-shaped decision" argument justified keeping them apart. `Strategy` now always
-operates on a partition (`GroupPicker`); the single-active-tactic case is reproduced exactly
+operates on a partition (`Partitioner`); the single-active-tactic case is reproduced exactly
 via `Strategy.single_tactic_picker(picker)`, which adapts the original
-`(Game, Optional[TacticId]) -> TacticId` shape into a trivial one-slot `GroupPicker` — so
+`(Game, Optional[TacticId]) -> TacticId` shape into a trivial one-slot `Partitioner` — so
 existing single-tactic callers change their construction call, not their picker logic.
 
-**The single-writer invariant is preserved, not weakened.** A `GroupPicker` still decides
+**The single-writer invariant is preserved, not weakened.** A `Partitioner` still decides
 the *entire* outfield pool's assignment in one place, once per tick, before any Tactic in
 any slot runs — structurally identical to the original single-Tactic design, just producing
 N≥1 slots instead of always exactly 1. There is still no tick in which two Tactics could
@@ -299,7 +299,7 @@ contend for the same robot.
 
 **Per-slot `committed()`, not pool-wide.** One slot's Tactic returning `committed()` only
 pins *that slot's* robot set; it has no bearing on any other slot's assignment. The
-`GroupPicker` contract reflects this directly: it is only ever handed the *free* robot
+`Partitioner` contract reflects this directly: it is only ever handed the *free* robot
 pool — outfield robots not currently pinned by a committed slot — and must return a
 partition that exactly covers that free pool, nothing more. This was chosen over an
 earlier draft where the picker proposed a partition of the *entire* pool and the kernel
@@ -341,7 +341,7 @@ slot's `mem` and every slot's `committed()` pin at once — a partial reset that
 slot's commitment standing would reintroduce a targeted-eviction-shaped mechanism through
 the back door, which §4 already rejected under the `SIGKILL` framing.
 
-**Validation is loud, not best-effort.** `Strategy.tick()` raises if a `GroupPicker`'s
+**Validation is loud, not best-effort.** `Strategy.tick()` raises if a `Partitioner`'s
 combined output (free-pool partition, merged with pinned committed slots) is not an exact,
 disjoint cover of the outfield pool, or if it names a tactic id that was never registered,
 or if it tries to assign robots to a currently-committed slot.
@@ -663,7 +663,14 @@ slots, and interact in only one place:
   applicable-but-under-resourced Tactic before assignment rather than via a crash or silent
   misbehaviour inside `tick()` — but not yet agreed or built; revisit alongside the next
   Tactic whose behaviour genuinely depends on a minimum robot count beyond what
-  `LeadAndSupportTactic`'s existing 1-to-N agnosticism already tolerates.
+  `LeadAndSupportTactic`'s existing 1-to-N agnosticism already tolerates. **This is no longer
+  purely hypothetical**: building `build_low_block_kernel_strategy` (§17) hit exactly this gap
+  — `TwoRobotAttackTactic.tick()` unconditionally reads `robot_ids[1]` and crashes with
+  `IndexError` if handed only 1 robot, which a naive fixed-ratio `Partitioner` did. Worked
+  around at the call site (`_fixed_ratio_picker`'s `min_attack` parameter, known only by the
+  caller, not the Tactic) rather than fixed properly, since the proper fix is this deferred
+  item. `test_all_strategy_configs.py`'s `test_fixed_ratio_picker_low_block_split_respects_min_attack_floor`
+  is a regression guard for the workaround, not a substitute for the real fix.
 - **An offline Tactic-evaluation loop** (running a Tactic against recorded/simulated game
   states outside the match loop, independent of in-match selection). Raised as likely the
   actual leverage point for agentic strategy research — probably higher-impact than in-match
@@ -687,3 +694,98 @@ externally-tuned timeout the team already rejected in §3) was raised as a candi
 would preserve the self-declaration philosophy rather than abandon it, but is **not
 designed or built** — tracked here so it is not silently lost, not because a decision was
 reached.
+
+## 16. ✅ Settled — One `Partitioner` per `Strategy` config, not one general-purpose scheduler; tag stays declared-but-unconsumed
+
+**Context.** §15 shipped `applicable()` (eligibility filtering, real and in use) and a closed
+`TacticTag` vocabulary (allocation vocabulary, declared on every Tactic but not yet read by
+any allocation code — see git history / session log around 2026-08-15). A follow-up
+discussion asked directly: is `Partitioner` still doing both selection *and* allocation, and
+isn't tag the thing that was supposed to let one `Partitioner` scale across many Tactics
+without hardcoding ids? Tracing the actual code answered both questions and prompted a
+scope decision that hadn't been made explicitly before.
+
+**What the trace found.** Selection already happens before a `Partitioner` ever runs —
+`Strategy._choose_partition` computes `applicable_tactic_ids` from every registered Tactic's
+`applicable(game)` and passes it in as a fourth argument; a `Partitioner` only ever performs
+Stage 2 (allocation). That part of §15's two-stage decomposition is real and working. Tag,
+however, is inert: every Tactic declares one (`grep`-confirmed — `TacticTag` appears in every
+`tactics/*.py` file only as a class-attribute declaration), but no `Partitioner`, no
+`Strategy` internals, and no test ever reads `tactic.tag` to make a decision. Every
+`Partitioner` written so far (`_possession_split_picker`, `_press_and_pass_split_picker`,
+`Strategy.single_tactic_picker`'s wrapper) still allocates by hardcoded tactic-id string
+(`"attack"`, `"defense"`), which happens to coincide 1:1 with tag today only because each
+`Strategy` config currently has exactly one Tactic per tag.
+
+**Decision: stop treating "the scheduler" as one mechanism that needs to scale to arbitrary
+Tactic combinations.** Each `Strategy` config (`build_split_shape_kernel_strategy`,
+`build_press_and_pass_kernel_strategy`, and whatever configs follow) owns its own small,
+hand-written `Partitioner`, correct only for the specific Tactic set it wires together — not
+a shared, general-purpose allocator responsible for handling every possible Tactic
+combination. `_possession_split_picker` does not need to know anything about
+`PressAndContainTactic`'s applicability quirks; `_press_and_pass_split_picker` does not need
+to generalize to Tactics it has never seen. Adding a new `Strategy` config means writing a new
+`Partitioner`, not extending an existing one to cover more cases. This is not a retreat from
+§15 — eligibility filtering via `applicable()` still does the real work of keeping Tactic
+authoring itself `O(T)` — it is a scope narrowing of what allocation was ever expected to be:
+disposable, config-local logic, not shared infrastructure.
+
+**Consequence for tag: stays in the vocabulary, does not get wired into allocation code yet.**
+If the answer to "how many Tactics does one `Partitioner` need to allocate across" is "however
+many one specific, hand-authored `Strategy` config wires together" rather than "arbitrarily
+many, generically," then a generic tag-based grouping helper
+(e.g. `tactics_with_tag(tag) -> frozenset[TacticId]`, filtered by `applicable_tactic_ids`) has
+no real consumer yet — every config today still has exactly one Tactic per tag, so allocating
+by tag and allocating by hardcoded id are equivalent, and building the generic version would
+be exactly the "infrastructure with no consumer" the standing minimalism rule
+([[feedback_minimal_architecture]]) warns against. Tag remains declared (still mandatory on
+every Tactic, still useful as a human-readable classification when skimming the registry) but
+deliberately **not** consumed by any allocation code in this pass. Revisit — and only then
+build the generic helper — once a real `Strategy` config needs to allocate across more than
+one same-tagged Tactic at a time (e.g. two different DEFENSE-tagged Tactics competing for the
+same defensive slot), which has not happened yet.
+
+## 17. Six example `Strategy` configs in `kernel_strategy.py`, and what each demonstrates
+
+Per §16's decision (one hand-written `Partitioner` per config, not a shared general-purpose
+scheduler), the roster of `build_*_kernel_strategy` factories grew to six, each exercising a
+different combination of Tactics and/or `Partitioner` mechanics rather than being interchangeable
+variations on one idea:
+
+- **`build_default_kernel_strategy`** — single Tactic (`TwoRobotAttackTactic`), via
+  `Strategy.single_tactic_picker`. The original, minimal config; no real allocation decision.
+- **`build_split_shape_kernel_strategy`** — two concurrent slots (`LeadAndSupportTactic`/
+  `ShadowAndMarkTactic`), split by `_possession_split_picker` (possession-edge reactive).
+- **`build_press_and_pass_kernel_strategy`** — two concurrent slots (`GiveAndGoTactic`/
+  `PressAndContainTactic`), split by `_press_and_pass_split_picker` — the first `Partitioner`
+  to actually consult `applicable_tactic_ids` (§15/§16), since `PressAndContainTactic` is the
+  first Tactic whose `applicable()` isn't always `True`.
+- **`build_high_press_kernel_strategy`** — same Tactic pair as `press_and_pass`, but split by
+  `_fixed_ratio_picker` (attack_fraction=0.8) instead — a deliberately *non-reactive* posture,
+  built specifically to demonstrate that the same Tactic roster can be driven by a mechanically
+  different `Partitioner`; the scheduling *policy* varies between example strategies
+  independently of the Tactic roster.
+- **`build_low_block_kernel_strategy`** — the original `TwoRobotAttackTactic`/`DefenseTactic`
+  pairing (§1/§2), split by `_fixed_ratio_picker` (attack_fraction=0.2, floored at
+  `min_attack=2`) — a conservative counterpart to `high_press`. Surfaced the undeclared
+  per-Tactic robot-count-bound gap tracked above.
+- **`build_three_slot_kernel_strategy`** — three concurrent slots (`PressAndContainTactic`/
+  `ShadowAndMarkTactic`/`GiveAndGoTactic`), split by `_three_way_picker`. First config to
+  actually exercise `Strategy` with more than two concurrent slots; nothing in
+  `Strategy`/`_validate_partition` was ever hardcoded to two; nothing had tested N>2 until this.
+- **`build_give_and_go_solo_kernel_strategy`** — single-Tactic baseline for `GiveAndGoTactic`
+  (mirrors `build_default_kernel_strategy`'s shape), useful for isolated tuning/benchmarking of
+  that Tactic without a defensive Tactic's behaviour as a confound.
+
+**Testing note.** These six configs, plus the six standalone Tactics that aren't pinned
+goalkeepers, were originally tested one file per config/Tactic (mirroring the very first such
+test, `test_split_shape_kernel_strategy.py`). That pattern was replaced with two table-driven
+suites, `test_all_tactics.py` and `test_all_strategy_configs.py`, once the file count made the
+duplication obvious — a shared parametrized table asserting the same generic properties (Tactic:
+declares a tag, `is_committed()` returns a bool, produces a command per assigned robot, survives
+two consecutive ticks; config: builds, runs 30 ticks without raising, partition is an exhaustive
+cover, goalkeeper never appears in it) catches the same class of regression the low-block
+`IndexError` was, without hand-writing it per Tactic/config. Behavior specific to one Tactic or
+config (leader-by-ball-proximity, the shadow-and-mark fallback-hold regression, exact
+`_fixed_ratio_picker`/`_three_way_picker` split ratios) stays as its own test alongside the
+table, not forced into it.
