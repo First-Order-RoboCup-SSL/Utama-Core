@@ -50,13 +50,13 @@ class KernelStrategy(AbstractStrategy):
     """`AbstractStrategy` subclass that delegates ticking to a `kernel.Strategy`.
 
     Args:
-        build_kernel_strategy: called once, after `load_game`, as
-            `build_kernel_strategy(game, motion_controller) -> kernel.Strategy`.
-            Deferred to a factory (rather than passed pre-built) because the
-            motion controller is only available on the blackboard once
-            `StrategyRunner` calls `load_motion_controller` — which happens
-            before `load_game` in `StrategyRunner.__init__`, so it's safe to
-            read here, but not at `KernelStrategy.__init__`.
+        build_kernel_strategy: called once, from `load_motion_controller`, as
+            `build_kernel_strategy(motion_controller) -> kernel.Strategy`.
+            Deferred to a factory (rather than passed pre-built) only because
+            `KernelStrategy.__init__` itself runs before `StrategyRunner` has
+            injected anything — `Strategy.__init__` never reads `game`, only
+            `motion_controller`, so the `Strategy` can be built as soon as
+            `load_motion_controller` fires, without waiting for `load_game`.
         goalkeeper_id: robot ID pinned to the goalkeeper tactic, outside the
             kernel scheduler. Defaults to 0 per SSL/team convention.
         exp_ball: forwarded to `AbstractStrategy`.
@@ -90,11 +90,9 @@ class KernelStrategy(AbstractStrategy):
     def get_min_bounding_req(self) -> Optional[FieldBounds | SpaceRequirements]:
         return None
 
-    def load_game(self, game: Game):
-        super().load_game(game)
-        if self._kernel_strategy is None:
-            motion_controller = self.blackboard.motion_controller
-            self._kernel_strategy = self._build_kernel_strategy(game, motion_controller)
+    def load_motion_controller(self, motion_controller: MotionController):
+        super().load_motion_controller(motion_controller)
+        self._kernel_strategy = self._build_kernel_strategy(motion_controller)
 
     def step(self):
         game = self.blackboard.game
@@ -164,12 +162,12 @@ def build_default_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     Callers with more than one outfield tactic should build their own
     `kernel.Strategy` with a real `Picker` instead of using this helper.
 
-    Returns a `build_kernel_strategy(game, motion_controller)`
+    Returns a `build_kernel_strategy(motion_controller)`
     callable suitable for `KernelStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(game: Game, motion_controller: MotionController) -> KernelSchedulerStrategy:
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
         ctx = KernelContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"two_robot_attack": TwoRobotAttackTactic()},
@@ -254,12 +252,12 @@ def build_split_shape_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     `_possession_split_picker`. This is the concrete forcing case the design
     doc's §7 deferral was waiting on — see §11 for the full rationale.
 
-    Returns a `build_kernel_strategy(game, motion_controller)`
+    Returns a `build_kernel_strategy(motion_controller)`
     callable suitable for `KernelStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(game: Game, motion_controller: MotionController) -> KernelSchedulerStrategy:
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
         ctx = KernelContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": LeadAndSupportTactic(), "defense": ShadowAndMarkTactic()},
@@ -327,12 +325,12 @@ def build_press_and_pass_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     lets the give-and-go/press-and-contain tactics be driven end to end via
     `StrategyRunner` instead of only unit-level `tick()` calls.
 
-    Returns a `build_kernel_strategy(game, motion_controller)`
+    Returns a `build_kernel_strategy(motion_controller)`
     callable suitable for `KernelStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(game: Game, motion_controller: MotionController) -> KernelSchedulerStrategy:
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
         ctx = KernelContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": GiveAndGoTactic(), "defense": PressAndContainTactic()},
@@ -414,12 +412,12 @@ def build_high_press_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     scheduling *policy* is what varies between example strategies, not just
     the Tactic roster.
 
-    Returns a `build_kernel_strategy(game, motion_controller)`
+    Returns a `build_kernel_strategy(motion_controller)`
     callable suitable for `KernelStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(game: Game, motion_controller: MotionController) -> KernelSchedulerStrategy:
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
         ctx = KernelContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": GiveAndGoTactic(), "defense": PressAndContainTactic()},
@@ -441,12 +439,12 @@ def build_low_block_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     they were designed to be (§1/§2's original pairing) rather than the
     newer, more elaborate Tactics used elsewhere in this file.
 
-    Returns a `build_kernel_strategy(game, motion_controller)`
+    Returns a `build_kernel_strategy(motion_controller)`
     callable suitable for `KernelStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(game: Game, motion_controller: MotionController) -> KernelSchedulerStrategy:
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
         ctx = KernelContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": TwoRobotAttackTactic(), "defense": DefenseTactic()},
@@ -517,12 +515,12 @@ def build_three_slot_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     kernel has always structurally supported (`_validate_partition` iterates
     `partition.items()` generically) but nothing had tested until now.
 
-    Returns a `build_kernel_strategy(game, motion_controller)`
+    Returns a `build_kernel_strategy(motion_controller)`
     callable suitable for `KernelStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(game: Game, motion_controller: MotionController) -> KernelSchedulerStrategy:
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
         ctx = KernelContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
@@ -548,12 +546,12 @@ def build_give_and_go_solo_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     posture (e.g. tuning `_MAX_HOPS_PER_POSSESSION` or the support-scoring
     weights without a defensive Tactic's behaviour as a confound).
 
-    Returns a `build_kernel_strategy(game, motion_controller)`
+    Returns a `build_kernel_strategy(motion_controller)`
     callable suitable for `KernelStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(game: Game, motion_controller: MotionController) -> KernelSchedulerStrategy:
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
         ctx = KernelContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": GiveAndGoTactic()},

@@ -36,7 +36,10 @@ def kernel_runner():
     runner.close()
 
 
-def test_kernel_strategy_builds_kernel_strategy_on_load_game(kernel_runner):
+def test_kernel_strategy_builds_kernel_strategy_on_load_motion_controller(kernel_runner):
+    """As soon as `load_motion_controller` fires (earlier than `load_game` in
+    `StrategyRunner.__init__`) — `Strategy.__init__` never reads `game`, only
+    `motion_controller`, so there is no need to wait for `load_game`."""
     strategy = kernel_runner.my.strategy
     assert strategy._kernel_strategy is not None
 
@@ -58,3 +61,15 @@ def test_kernel_strategy_outfield_tactic_gets_ticked(kernel_runner):
     kernel_runner.step_once()
     strategy = kernel_runner.my.strategy
     assert strategy._kernel_strategy.active_tactic_id == "two_robot_attack"
+
+
+def test_kernel_strategy_is_built_by_load_motion_controller_alone():
+    """Direct unit-level check (no rsim, no full runner) that `KernelStrategy`
+    doesn't need `load_game` at all to build its `kernel.Strategy` — only
+    `load_motion_controller`, called with a bare stand-in object."""
+    strategy = KernelStrategy(build_kernel_strategy=build_default_kernel_strategy((1, 2)))
+    strategy.setup_strategy_blackboard(is_opp_strat=False)
+    assert strategy._kernel_strategy is None
+
+    strategy.load_motion_controller(motion_controller=object())
+    assert strategy._kernel_strategy is not None

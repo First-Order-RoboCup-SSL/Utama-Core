@@ -211,9 +211,17 @@ simply never ticked.
 but `KernelStrategy` doesn't have one at construction time — `StrategyRunner` only injects it
 via `load_motion_controller()` onto the blackboard. Confirmed from `StrategyRunner.__init__`'s
 call order that `_load_robot_controllers()` (which calls `load_motion_controller`) always runs
-before `_load_game()`. `KernelStrategy` therefore defers building its `kernel.Strategy` until
-`load_game()` is called, reading `self.blackboard.motion_controller` at that point rather than
-requiring it be passed in some other way.
+before `_load_game()`. **Originally** (this section, when first written) `KernelStrategy`
+deferred building its `kernel.Strategy` until `load_game()` — under the mistaken assumption
+that `kernel.Strategy.__init__` needed `game`. It doesn't: `Strategy.__init__` only stores
+`tactics`, `partitioner`, `outfield_robot_ids`, and `ctx` — `game` is only ever read later, by
+`tick(game)`. Corrected (see git history around this doc's later revisions): `KernelStrategy`
+now overrides `load_motion_controller()` itself and builds the `kernel.Strategy` there, as soon
+as the motion controller is available — `build_kernel_strategy`'s signature is
+`(motion_controller) -> kernel.Strategy`, no `game` or `rsim_env` parameter at all. This was
+caught by a direct question ("is there no way to init motion_controller earlier?") rather than
+independently — worth noting since it's exactly the kind of unverified claim this doc otherwise
+tries to avoid; the original version had never actually checked what `Strategy.__init__` reads.
 
 **Referee-command mapping validated against the SSL referee state machine:** the barrier/pause
 tiers in §4 were cross-checked against the official referee-command transition diagram
