@@ -6,11 +6,13 @@ from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.run import StrategyRunner
-from utama_core.strategy.examples import SimpleNavigationStrategy
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
+)
+from utama_core.tests.motion_planning._kernel_test_strategies import (
+    single_robot_go_to_point_strategy,
 )
 
 
@@ -142,7 +144,7 @@ def test_collision_avoidance_goal_to_goal(
     # Use RobotPlacementStrategy which will move robot to target
     # We need to modify it slightly for this test
     runner = StrategyRunner(
-        strategy=SimpleNavigationStrategy(
+        strategy=single_robot_go_to_point_strategy(
             robot_id=robot_id,
             target_position=scenario.target_position,
             target_orientation=0.0,
@@ -192,7 +194,7 @@ def test_simple_straight_line_no_obstacles(
     )
 
     runner = StrategyRunner(
-        strategy=SimpleNavigationStrategy(
+        strategy=single_robot_go_to_point_strategy(
             robot_id=robot_id,
             target_position=scenario.target_position,
             target_orientation=0.0,

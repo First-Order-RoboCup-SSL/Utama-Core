@@ -14,11 +14,13 @@ non-goalkeeper robot unconditionally, with no tactic-specific exception.
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.game import Game
 from utama_core.run import StrategyRunner
-from utama_core.strategy.examples import SimpleNavigationStrategy
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
+)
+from utama_core.tests.motion_planning._kernel_test_strategies import (
+    single_robot_go_to_point_strategy,
 )
 
 # my_team_is_right=True in the test below means our attacking (enemy) goal is
@@ -82,7 +84,7 @@ def test_robot_targeting_enemy_defense_area_center_is_routed_around_it(headless)
     robot_id = 0
 
     runner = StrategyRunner(
-        strategy=SimpleNavigationStrategy(
+        strategy=single_robot_go_to_point_strategy(
             robot_id=robot_id,
             target_position=_ENEMY_DEFENSE_AREA_CENTER,
             target_orientation=0.0,

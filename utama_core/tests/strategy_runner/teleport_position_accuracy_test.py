@@ -3,11 +3,11 @@
 import os
 from typing import Optional
 
-import py_trees
 import pytest
 
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
+from utama_core.kernel.kernel_strategy import build_default_kernel_strategy
 from utama_core.run import StrategyRunner
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import AbstractSimController
@@ -30,20 +30,9 @@ _TELEPORT_CASES = [
 POSITION_TOLERANCE = 0.15  # metres — accounts for one frame of physics settling
 
 
-class _IdleStrategy(AbstractStrategy):
-    """Minimal strategy that does nothing — used when we only care about game state."""
-
-    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        return py_trees.behaviours.Success(name="Idle")
-
-    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
-        return True
-
-    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
-        return True
-
-    def get_min_bounding_req(self):
-        return None
+def _idle_strategy() -> AbstractStrategy:
+    """Minimal kernel strategy that does nothing — used when we only care about game state."""
+    return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()))
 
 
 class _TeleportAccuracyTestManager(AbstractTestManager):
@@ -86,7 +75,7 @@ def _run_teleport_accuracy_test(robot_id: int, x: float, y: float, theta: float)
     test_manager = _TeleportAccuracyTestManager(robot_id, x, y, theta)
 
     runner = StrategyRunner(
-        strategy=_IdleStrategy(),
+        strategy=_idle_strategy(),
         my_team_is_yellow=True,
         my_team_is_right=False,
         mode="rsim",
@@ -139,7 +128,7 @@ def test_teleport_ball_first_frame():
             return TestingStatus.SUCCESS
 
     runner = StrategyRunner(
-        strategy=_IdleStrategy(),
+        strategy=_idle_strategy(),
         my_team_is_yellow=True,
         my_team_is_right=False,
         mode="rsim",

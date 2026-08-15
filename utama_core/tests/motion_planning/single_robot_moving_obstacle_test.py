@@ -6,14 +6,14 @@ from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.run import StrategyRunner
-from utama_core.strategy.examples import (
-    OscillatingObstacleStrategy,
-    SimpleNavigationStrategy,
-)
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
+)
+from utama_core.tests.motion_planning._kernel_test_strategies import (
+    oscillating_obstacle_strategy,
+    single_robot_go_to_point_strategy,
 )
 
 
@@ -171,14 +171,14 @@ def test_single_robot_moving_obstacles(
     )
 
     # Create friendly robot strategy
-    my_strategy = SimpleNavigationStrategy(
+    my_strategy = single_robot_go_to_point_strategy(
         robot_id=robot_id,
         target_position=scenario.target_position,
         target_orientation=0.0,
     )
 
     # Create opponent strategy with oscillating obstacles
-    opp_strategy = OscillatingObstacleStrategy(
+    opp_strategy = oscillating_obstacle_strategy(
         obstacle_configs=scenario.moving_obstacles,
     )
 

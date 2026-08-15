@@ -1,12 +1,12 @@
 import os
 
-import py_trees
 import pytest
 
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.config.formations import get_formations
 from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.mapping_utils import map_left_right_to_colors
+from utama_core.kernel.kernel_strategy import build_default_kernel_strategy
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.tests.common.abstract_test_manager import (
@@ -19,22 +19,9 @@ os.environ["SDL_VIDEO_WINDOW_POS"] = "100,100"
 POSITION_TOLERANCE = 0.15
 
 
-class _IdleStrategy(AbstractStrategy):
-    """Minimal strategy used only to drive runner lifecycle."""
-
-    exp_ball: bool = True
-
-    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        return py_trees.behaviours.Success(name="Idle")
-
-    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
-        return True
-
-    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
-        return True
-
-    def get_min_bounding_req(self):
-        return None
+def _idle_strategy() -> AbstractStrategy:
+    """Minimal kernel strategy used only to drive runner lifecycle."""
+    return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()), exp_ball=True)
 
 
 class _CaptureFirstFrameManager(AbstractTestManager):
@@ -73,7 +60,7 @@ def test_rsim_formation_allocation_and_spawn_positions(
     n_enemy: int,
 ):
     runner = StrategyRunner(
-        strategy=_IdleStrategy(),
+        strategy=_idle_strategy(),
         my_team_is_yellow=team_is_yellow,
         my_team_is_right=team_on_right,
         mode="rsim",
@@ -122,7 +109,7 @@ def test_rsim_spawn_respects_shifted_bounds_and_ball_center():
     shifted_bounds = FieldBounds(top_left=(1.5, 2.0), bottom_right=(4.5, -2.0))
 
     runner = StrategyRunner(
-        strategy=_IdleStrategy(),
+        strategy=_idle_strategy(),
         my_team_is_yellow=True,
         my_team_is_right=False,
         mode="rsim",
@@ -144,7 +131,7 @@ def test_rsim_spawn_respects_shifted_bounds_and_ball_center():
 def test_rsim_renderer_resizes_with_non_standard_field_dimensions():
     dims = GREAT_EXHIBITION_FIELD_DIMS
     runner = StrategyRunner(
-        strategy=_IdleStrategy(),
+        strategy=_idle_strategy(),
         my_team_is_yellow=True,
         my_team_is_right=False,
         mode="rsim",

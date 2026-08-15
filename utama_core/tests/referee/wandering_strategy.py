@@ -1,17 +1,25 @@
-"""WanderingStrategy — base strategy for referee visualisation.
+"""WanderingTactic — base kernel tactic for referee visualisation.
 
 Each robot cycles through its own list of waypoints on the field indefinitely.
-When a referee command fires, the RefereeOverride tree (built into AbstractStrategy)
-intercepts before this strategy runs, so you can clearly see robots interrupted
+When a referee command fires, `kernel.Strategy.tick()`'s `RefereeOverride`
+intercepts before this tactic runs, so you can clearly see robots interrupted
 and repositioned by the referee.
 """
 
-import py_trees
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
+from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.game import Game
+from utama_core.kernel.context import KernelContext
+from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
+from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
+from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.skills.src.utils.move_utils import move
-from utama_core.strategy.common import AbstractBehaviour, AbstractStrategy
+from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 # Waypoints defined as fractions of the standard field half-dimensions
 # (half_length=4.5, half_width=3.0) so they scale correctly to any field.
@@ -31,84 +39,82 @@ _WAYPOINT_SETS_NORMALISED = [
     [(0.67, 0.0), (0.22, 0.67), (0.22, -0.67)],
 ]
 
+_ARRIVAL_THRESHOLD = 0.15  # metres — how close counts as "reached"
 
-def _scale_waypoints(
-    field_dims: FieldDimensions,
-) -> list[list[Vector2D]]:
+
+def _scale_waypoints(field_dims: FieldDimensions) -> list[list[Vector2D]]:
     """Return waypoint lists scaled to *field_dims*."""
     L = field_dims.full_field_half_length
     W = field_dims.full_field_half_width
     return [[Vector2D(fx * L, fy * W) for fx, fy in pattern] for pattern in _WAYPOINT_SETS_NORMALISED]
 
 
-_ARRIVAL_THRESHOLD = 0.15  # metres — how close counts as "reached"
+@dataclass
+class WanderingMem:
+    wp_index: dict[int, int] = field(default_factory=dict)
 
 
-class WanderingStep(AbstractBehaviour):
-    """Moves each robot through its waypoint list, advancing when it arrives."""
+class WanderingTactic(BaseTactic[WanderingMem]):
+    """Every assigned robot continuously patrols a set of waypoints, keyed by
+    slot position (robot's position in the sorted outfield roster) rather
+    than by robot ID directly, matching the original BT `WanderingStep`'s
+    `sorted(friendly_robots)`-indexed waypoint-set assignment."""
 
-    def __init__(self, waypoints: list[list[Vector2D]], name: str = "WanderingStep"):
-        super().__init__(name=name)
-        self._waypoints = waypoints
+    tag = TacticTag.MIXED
 
-    def initialise(self):
-        # Track waypoint index per robot ID
-        self._wp_index: dict[int, int] = {}
+    def __init__(self, field_dims: FieldDimensions | None = None):
+        self._waypoints = _scale_waypoints(field_dims or STANDARD_FIELD_DIMS)
 
-    def update(self) -> py_trees.common.Status:
-        game = self.blackboard.game
-        motion_controller = self.blackboard.motion_controller
+    def initial_mem(self) -> WanderingMem:
+        return WanderingMem()
 
-        robot_ids = sorted(game.friendly_robots.keys())
-
-        for slot, robot_id in enumerate(robot_ids):
+    def tick(
+        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: WanderingMem
+    ) -> tuple[dict[RobotId, RobotCommand], WanderingMem]:
+        commands: dict[RobotId, RobotCommand] = {}
+        for slot, robot_id in enumerate(sorted(robot_ids)):
             waypoints = self._waypoints[slot % len(self._waypoints)]
 
-            if robot_id not in self._wp_index:
-                self._wp_index[robot_id] = 0
-
-            wp_idx = self._wp_index[robot_id]
+            wp_idx = mem.wp_index.get(robot_id, 0)
             target = waypoints[wp_idx]
 
             robot = game.friendly_robots[robot_id]
             dist = robot.p.distance_to(target)
 
             if dist < _ARRIVAL_THRESHOLD:
-                # Advance to next waypoint
-                self._wp_index[robot_id] = (wp_idx + 1) % len(waypoints)
-                target = waypoints[self._wp_index[robot_id]]
+                wp_idx = (wp_idx + 1) % len(waypoints)
+                mem.wp_index[robot_id] = wp_idx
+                target = waypoints[wp_idx]
 
             oren = robot.p.angle_to(target)
-            self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, target, oren)
+            commands[robot_id] = move(game, ctx.motion_controller, robot_id, target, oren)
 
-        return py_trees.common.Status.RUNNING
+        return commands, mem
 
 
-class WanderingStrategy(AbstractStrategy):
-    """Strategy where every robot continuously patrols a set of waypoints.
+def wandering_strategy(
+    outfield_robot_ids: tuple[int, ...], field_dims: FieldDimensions | None = None
+) -> AbstractStrategy:
+    """Kernel-native replacement for the deleted BT `WanderingStrategy`.
 
-    Waypoints are scaled to *field_dims* so the strategy works correctly on
-    any field size.  Defaults to STANDARD_FIELD_DIMS when omitted, which
-    preserves the original behaviour for existing callers.
-
-    Intended for use with the referee visualisation simulation so that referee
-    commands visibly interrupt robot motion.
+    `goalkeeper_id` stays at its `AbstractStrategy` default (0) even though
+    robot 0 is also in the wandering roster — harmless here, same reasoning as
+    `tests/motion_planning/_kernel_test_strategies.go_to_point_strategy`
+    (every robot in `outfield_robot_ids` always gets a command from the
+    tactic, so the goalkeeper tick is always skipped for it).
     """
 
-    def __init__(self, field_dims: FieldDimensions | None = None) -> None:
-        self._waypoints = _scale_waypoints(field_dims or STANDARD_FIELD_DIMS)
-        super().__init__()
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = KernelContext(motion_controller=motion_controller)
+        tactic = WanderingTactic(field_dims)
+        return KernelSchedulerStrategy(
+            tactics={"wander": tactic},
+            partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "wander"),
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
 
-    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
-        return True
+    return AbstractStrategy(build_kernel_strategy=_build)
 
-    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
-        return True
 
-    def get_min_bounding_req(self):
-        return None
-
-    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        root = py_trees.composites.Sequence(name="WanderingRoot", memory=False)
-        root.add_child(WanderingStep(self._waypoints))
-        return root
+__all__ = ["WanderingTactic", "wandering_strategy"]

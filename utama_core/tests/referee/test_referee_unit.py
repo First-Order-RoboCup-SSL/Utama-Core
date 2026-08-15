@@ -4,9 +4,9 @@ Tests cover:
   - RefereeData new fields (game_events, match_type, status_message) and custom __eq__
   - RefereeRefiner.refine injects data into GameFrame; deduplication logic
   - Game.referee property proxies correctly from CurrentGameFrame
-  - CheckRefereeCommand condition node (SUCCESS / FAILURE / None-referee guard)
-  - Dispatcher routing (ours vs. theirs) for bilateral commands
-  - build_referee_override_tree structure and priority
+  - strategy/referee/actions.py Step classes (Halt/Stop/BallPlacement/Kickoff/
+    Penalty/DirectFree) — the geometry/positioning logic `kernel.RefereeOverride`
+    reuses directly for the kernel-tactic model.
 """
 
 from types import SimpleNamespace
@@ -27,8 +27,6 @@ from utama_core.entities.game.robot import Robot
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.strategy.referee.conditions import CheckRefereeCommand
-from utama_core.strategy.referee.tree import build_referee_override_tree
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -281,62 +279,6 @@ class TestGameRefereeProperty:
         new_frame = _make_game_frame(referee=new_data)
         game.add_game_frame(new_frame)
         assert game.referee is new_data
-
-
-# ---------------------------------------------------------------------------
-# CheckRefereeCommand condition node
-# ---------------------------------------------------------------------------
-
-
-def _setup_check_node(*commands: RefereeCommand, game: Game) -> CheckRefereeCommand:
-    """Build and set up a CheckRefereeCommand node with the given expected commands."""
-    # Reset py_trees blackboard between tests
-    py_trees.blackboard.Blackboard.enable_activity_stream()
-    node = CheckRefereeCommand(*commands)
-    node.blackboard = _make_blackboard(game)
-    return node
-
-
-class TestCheckRefereeCommand:
-    def test_returns_failure_when_referee_is_none(self):
-        game = _make_game(referee=None)
-        node = CheckRefereeCommand(RefereeCommand.HALT)
-        node.blackboard = _make_blackboard(game)
-        assert node.update() == py_trees.common.Status.FAILURE
-
-    def test_returns_success_on_matching_single_command(self):
-        data = _make_referee_data(command=RefereeCommand.HALT)
-        game = _make_game(referee=data)
-        node = CheckRefereeCommand(RefereeCommand.HALT)
-        node.blackboard = _make_blackboard(game)
-        assert node.update() == py_trees.common.Status.SUCCESS
-
-    def test_returns_failure_on_non_matching_command(self):
-        data = _make_referee_data(command=RefereeCommand.STOP)
-        game = _make_game(referee=data)
-        node = CheckRefereeCommand(RefereeCommand.HALT)
-        node.blackboard = _make_blackboard(game)
-        assert node.update() == py_trees.common.Status.FAILURE
-
-    def test_returns_success_on_any_matching_multi_command(self):
-        for cmd in (RefereeCommand.TIMEOUT_YELLOW, RefereeCommand.TIMEOUT_BLUE):
-            data = _make_referee_data(command=cmd)
-            game = _make_game(referee=data)
-            node = CheckRefereeCommand(RefereeCommand.TIMEOUT_YELLOW, RefereeCommand.TIMEOUT_BLUE)
-            node.blackboard = _make_blackboard(game)
-            assert node.update() == py_trees.common.Status.SUCCESS
-
-    def test_returns_failure_when_command_not_in_multi_list(self):
-        data = _make_referee_data(command=RefereeCommand.HALT)
-        game = _make_game(referee=data)
-        node = CheckRefereeCommand(RefereeCommand.TIMEOUT_YELLOW, RefereeCommand.TIMEOUT_BLUE)
-        node.blackboard = _make_blackboard(game)
-        assert node.update() == py_trees.common.Status.FAILURE
-
-    def test_node_name_contains_command_names(self):
-        node = CheckRefereeCommand(RefereeCommand.HALT, RefereeCommand.STOP)
-        assert "HALT" in node.name
-        assert "STOP" in node.name
 
 
 # ---------------------------------------------------------------------------
@@ -904,177 +846,6 @@ class TestVariableFieldScaling:
         assert status == py_trees.common.Status.RUNNING
         assert kicker_target.x == pytest.approx(-3.0)
         assert kicker_target.y == pytest.approx(0.0)
-
-
-# ---------------------------------------------------------------------------
-# build_referee_override_tree — structure checks
-# ---------------------------------------------------------------------------
-
-
-class TestRefereeOverrideTreeStructure:
-    def setup_method(self):
-        self.tree = build_referee_override_tree()
-
-    def test_root_is_selector(self):
-        assert isinstance(self.tree, py_trees.composites.Selector)
-
-    def test_root_name(self):
-        assert self.tree.name == "RefereeOverride"
-
-    def test_has_eleven_children(self):
-        # HALT, STOP, TIMEOUT, BALL_PLACEMENT×2, KICKOFF×2, PENALTY×2, DIRECT_FREE×2
-        assert len(self.tree.children) == 11
-
-    def test_each_child_is_sequence(self):
-        for child in self.tree.children:
-            assert isinstance(child, py_trees.composites.Sequence)
-
-    def test_each_sequence_has_two_children(self):
-        for child in self.tree.children:
-            assert len(child.children) == 2
-
-    def test_each_sequence_first_child_is_check_command(self):
-        for child in self.tree.children:
-            assert isinstance(child.children[0], CheckRefereeCommand)
-
-    def test_halt_is_first(self):
-        first_seq = self.tree.children[0]
-        condition = first_seq.children[0]
-        assert RefereeCommand.HALT in condition.expected_commands
-
-    def test_stop_is_second(self):
-        second_seq = self.tree.children[1]
-        condition = second_seq.children[0]
-        assert RefereeCommand.STOP in condition.expected_commands
-
-    def test_timeout_handles_both_colours(self):
-        timeout_seq = self.tree.children[2]
-        condition = timeout_seq.children[0]
-        assert RefereeCommand.TIMEOUT_YELLOW in condition.expected_commands
-        assert RefereeCommand.TIMEOUT_BLUE in condition.expected_commands
-
-    def test_all_bilateral_commands_covered(self):
-        """Every bilateral referee command must appear in at least one condition node."""
-        covered = set()
-        for child in self.tree.children:
-            condition = child.children[0]
-            covered.update(condition.expected_commands)
-
-        bilateral = {
-            RefereeCommand.BALL_PLACEMENT_YELLOW,
-            RefereeCommand.BALL_PLACEMENT_BLUE,
-            RefereeCommand.PREPARE_KICKOFF_YELLOW,
-            RefereeCommand.PREPARE_KICKOFF_BLUE,
-            RefereeCommand.PREPARE_PENALTY_YELLOW,
-            RefereeCommand.PREPARE_PENALTY_BLUE,
-            RefereeCommand.DIRECT_FREE_YELLOW,
-            RefereeCommand.DIRECT_FREE_BLUE,
-        }
-        assert bilateral.issubset(covered)
-
-
-# ---------------------------------------------------------------------------
-# Dispatcher ours-vs-theirs routing (no actual motion controller required)
-# ---------------------------------------------------------------------------
-
-
-def _make_dispatch_blackboard(game: Game) -> SimpleNamespace:
-    bb = _make_blackboard(game)
-    return bb
-
-
-class TestDispatcherRouting:
-    """Verify that dispatcher nodes call the correct Ours/Theirs child based on team colour."""
-
-    def _tick_dispatcher(self, dispatcher, game: Game) -> py_trees.common.Status:
-        cmd_map = {rid: None for rid in game.friendly_robots}
-        bb = _make_blackboard(game, cmd_map)
-        dispatcher.blackboard = bb
-        # Propagate blackboard to inner ours/theirs nodes
-        dispatcher._ours.blackboard = bb
-        dispatcher._theirs.blackboard = bb
-        return dispatcher.update()
-
-    def test_ball_placement_yellow_calls_ours_when_yellow(self):
-        from utama_core.strategy.referee.actions import (
-            BallPlacementOursStep,
-            BallPlacementTheirsStep,
-        )
-        from utama_core.strategy.referee.tree import _BallPlacementDispatch
-
-        data = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_YELLOW)
-        # my_team_is_yellow=True, is_yellow_command=True → ours
-        game = _make_game(referee=data, my_team_is_yellow=True)
-        dispatcher = _BallPlacementDispatch(is_yellow_command=True, name="test")
-
-        called = []
-        # original_ours = dispatcher._ours.update
-        # original_theirs = dispatcher._theirs.update
-        dispatcher._ours.update = lambda: called.append("ours") or py_trees.common.Status.RUNNING
-        dispatcher._theirs.update = lambda: called.append("theirs") or py_trees.common.Status.RUNNING
-
-        self._tick_dispatcher(dispatcher, game)
-        assert called == ["ours"]
-
-    def test_ball_placement_yellow_calls_theirs_when_blue(self):
-        from utama_core.strategy.referee.tree import _BallPlacementDispatch
-
-        data = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_YELLOW)
-        # my_team_is_yellow=False, is_yellow_command=True → theirs
-        game = _make_game(referee=data, my_team_is_yellow=False)
-        dispatcher = _BallPlacementDispatch(is_yellow_command=True, name="test")
-
-        called = []
-        dispatcher._ours.update = lambda: called.append("ours") or py_trees.common.Status.RUNNING
-        dispatcher._theirs.update = lambda: called.append("theirs") or py_trees.common.Status.RUNNING
-
-        self._tick_dispatcher(dispatcher, game)
-        assert called == ["theirs"]
-
-    def test_kickoff_blue_calls_ours_when_blue(self):
-        from utama_core.strategy.referee.tree import _KickoffDispatch
-
-        data = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_BLUE)
-        # my_team_is_yellow=False, is_yellow_command=False → ours
-        game = _make_game(referee=data, my_team_is_yellow=False)
-        dispatcher = _KickoffDispatch(is_yellow_command=False, name="test")
-
-        called = []
-        dispatcher._ours.update = lambda: called.append("ours") or py_trees.common.Status.RUNNING
-        dispatcher._theirs.update = lambda: called.append("theirs") or py_trees.common.Status.RUNNING
-
-        self._tick_dispatcher(dispatcher, game)
-        assert called == ["ours"]
-
-    def test_penalty_yellow_calls_theirs_when_blue(self):
-        from utama_core.strategy.referee.tree import _PenaltyDispatch
-
-        data = _make_referee_data(command=RefereeCommand.PREPARE_PENALTY_YELLOW)
-        # my_team_is_yellow=False, is_yellow_command=True → theirs
-        game = _make_game(referee=data, my_team_is_yellow=False)
-        dispatcher = _PenaltyDispatch(is_yellow_command=True, name="test")
-
-        called = []
-        dispatcher._ours.update = lambda: called.append("ours") or py_trees.common.Status.RUNNING
-        dispatcher._theirs.update = lambda: called.append("theirs") or py_trees.common.Status.RUNNING
-
-        self._tick_dispatcher(dispatcher, game)
-        assert called == ["theirs"]
-
-    def test_direct_free_blue_calls_ours_when_blue(self):
-        from utama_core.strategy.referee.tree import _DirectFreeDispatch
-
-        data = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
-        # my_team_is_yellow=False, is_yellow_command=False → ours
-        game = _make_game(referee=data, my_team_is_yellow=False)
-        dispatcher = _DirectFreeDispatch(is_yellow_command=False, name="test")
-
-        called = []
-        dispatcher._ours.update = lambda: called.append("ours") or py_trees.common.Status.RUNNING
-        dispatcher._theirs.update = lambda: called.append("theirs") or py_trees.common.Status.RUNNING
-
-        self._tick_dispatcher(dispatcher, game)
-        assert called == ["ours"]
 
 
 # ---------------------------------------------------------------------------

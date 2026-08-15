@@ -9,11 +9,11 @@ Covers three layers:
 import os
 from typing import Optional
 
-import py_trees
 import pytest
 
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
+from utama_core.kernel.kernel_strategy import build_default_kernel_strategy
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import AbstractSimController
@@ -27,44 +27,16 @@ os.environ["SDL_VIDEO_WINDOW_POS"] = "100,100"
 
 
 # ---------------------------------------------------------------------------
-# Minimal idle strategies with controllable exp_ball
+# Minimal idle kernel strategies with controllable exp_ball
 # ---------------------------------------------------------------------------
 
 
-class _IdleWithBallStrategy(AbstractStrategy):
-    """Idle strategy that expects the ball to be present (exp_ball=True)."""
-
-    exp_ball: bool = True
-
-    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        return py_trees.behaviours.Success(name="Idle")
-
-    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
-        return True
-
-    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
-        return True
-
-    def get_min_bounding_req(self):
-        return None
+def _idle_with_ball_strategy() -> AbstractStrategy:
+    return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()), exp_ball=True)
 
 
-class _IdleNoBallStrategy(AbstractStrategy):
-    """Idle strategy that expects NO ball (exp_ball=False)."""
-
-    exp_ball: bool = False
-
-    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        return py_trees.behaviours.Success(name="Idle")
-
-    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
-        return True
-
-    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
-        return True
-
-    def get_min_bounding_req(self):
-        return None
+def _idle_no_ball_strategy() -> AbstractStrategy:
+    return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()), exp_ball=False)
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +173,7 @@ def test_exp_ball_true_ball_present_in_game():
     """When exp_ball=True, game.ball must be non-None in the first game frame."""
     tm = _BallPresentManager()
     runner = StrategyRunner(
-        strategy=_IdleWithBallStrategy(),
+        strategy=_idle_with_ball_strategy(),
         my_team_is_yellow=True,
         my_team_is_right=False,
         mode="rsim",
@@ -218,7 +190,7 @@ def test_exp_ball_true_ball_present_in_game_with_filtering():
     """Same as above but with Kalman filtering enabled."""
     tm = _BallPresentManager()
     runner = StrategyRunner(
-        strategy=_IdleWithBallStrategy(),
+        strategy=_idle_with_ball_strategy(),
         my_team_is_yellow=True,
         my_team_is_right=False,
         mode="rsim",
@@ -236,7 +208,7 @@ def test_exp_ball_false_ball_absent_in_game():
     """When exp_ball=False, game.ball must be None on every game frame throughout the episode."""
     tm = _BallAbsentManager()
     runner = StrategyRunner(
-        strategy=_IdleNoBallStrategy(),
+        strategy=_idle_no_ball_strategy(),
         my_team_is_yellow=True,
         my_team_is_right=False,
         mode="rsim",
@@ -258,7 +230,7 @@ def test_exp_ball_false_ball_absent_in_game_with_filtering():
     """Same as above but with Kalman filtering enabled — the filter must not impute a ball."""
     tm = _BallAbsentManager()
     runner = StrategyRunner(
-        strategy=_IdleNoBallStrategy(),
+        strategy=_idle_no_ball_strategy(),
         my_team_is_yellow=True,
         my_team_is_right=False,
         mode="rsim",

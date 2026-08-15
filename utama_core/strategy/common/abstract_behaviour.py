@@ -1,14 +1,17 @@
-from typing import Any, Optional, final
+from typing import Optional
 
 import py_trees
 
-from utama_core.config.settings import BLACKBOARD_NAMESPACE_MAP
-from utama_core.strategy.common.base_blackboard import BaseBlackboard
-from utama_core.strategy.common.blackboard_contract import register_blackboard_contract
-
 
 class AbstractBehaviour(py_trees.behaviour.Behaviour):
-    """An abstract base class for all behaviours in the strategy."""
+    """An abstract base class for `strategy/referee/actions.py`'s Step classes.
+
+    Only `setup_`/`initialise`/`update` are actually used now: `kernel.RefereeOverride`
+    drives Step instances directly (`step.blackboard = shim; step.update()`),
+    calling `setup_()` once but never the py_trees `setup()`/blackboard-registration
+    machinery this class used to provide for real BT tree ticking — that machinery
+    is gone along with the BT strategies it existed for.
+    """
 
     def __init__(self, name: Optional[str] = None):
         if name is None:
@@ -48,47 +51,3 @@ class AbstractBehaviour(py_trees.behaviour.Behaviour):
         ...
 
     ### END OF FUNCTIONS TO BE IMPLEMENTED BY YOUR STRATEGY ###
-
-    @final
-    def setup(self, **kwargs: Any) -> None:
-        """This method is called once by the tree before the first tick.
-
-        We setup the common blackboard keys to all behaviours.
-        """
-        is_opp_strategy = kwargs.get("is_opp_strat", False)
-        self._is_opp_strat: bool = is_opp_strategy
-        self.blackboard: BaseBlackboard = self.attach_blackboard_client(
-            name="GlobalBlackboard", namespace=BLACKBOARD_NAMESPACE_MAP[is_opp_strategy]
-        )
-        self.blackboard.register_key(
-            key="game",
-            access=py_trees.common.Access.READ,
-        )
-        self.blackboard.register_key(
-            key="rsim_env",
-            access=py_trees.common.Access.READ,
-        )
-        self.blackboard.register_key(
-            key="motion_controller",
-            access=py_trees.common.Access.READ,
-        )
-        self.blackboard.register_key(
-            key="cmd_map",
-            access=py_trees.common.Access.WRITE,
-        )
-        self.blackboard.register_key(
-            key="role_map",
-            access=py_trees.common.Access.READ,
-        )
-        self.blackboard.register_key(
-            key="tactic",
-            access=py_trees.common.Access.READ,
-        )
-        register_blackboard_contract(self)
-        self.setup_()
-
-    # prevent overriding of setup method
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if "setup" in cls.__dict__:
-            raise TypeError(f"{cls.__name__} must not override 'setup'. Override 'setup_' instead.")

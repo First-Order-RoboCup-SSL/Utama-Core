@@ -21,6 +21,7 @@ def mock_runner():
         runner.profiler = None
         runner.replay_writer = None
         runner.rsim_env = None
+        runner.vision_stream = None
         runner._fps_live = None
         runner._stop_event = MagicMock()
         runner._stop_event.is_set.return_value = False

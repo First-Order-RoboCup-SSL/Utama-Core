@@ -195,3 +195,132 @@ def test_goalkeeper_stops_during_halt(split_shape_runner):
 
     dist_moved = math.hypot(gk_pos_after[0] - gk_pos_before[0], gk_pos_after[1] - gk_pos_before[1])
     assert dist_moved < 0.05, f"goalkeeper moved {dist_moved:.3f}m while HALT was active"
+
+
+# ---------------------------------------------------------------------------
+# Penalty and direct-free routing — RefereeOverride._step_for's "ours"/"theirs"
+# dispatch for these four command families had zero test coverage until now:
+# the only place it was ever exercised was the BT path's
+# TestDispatcherRouting (utama_core/tests/referee/test_referee_unit.py),
+# deleted alongside strategy/referee/tree.py since it tested the BT
+# dispatcher classes directly, not the kernel's _step_for. Ball placement and
+# kickoff (both directions) are covered above; these four fill the gap for
+# penalty and direct-free.
+# ---------------------------------------------------------------------------
+
+
+def test_their_penalty_clears_our_robots_from_the_penalty_area(split_shape_runner):
+    """During the opponent's penalty, PreparePenaltyTheirsStep's own two-part
+    formation is actually reached: our goalkeeper moves to our goal line
+    centre, and a non-keeper robot moves onto the behind-the-line formation
+    in our own half — not just "moved somewhere far away" (there is no
+    ball-keep-out-distance rule here at all; it's a fixed formation)."""
+    game = split_shape_runner.my.game
+    split_shape_runner.step_once()
+
+    # Robot 0 (goalkeeper) and robot 1 both start on the wrong side of the
+    # field entirely, so a passing test demonstrates the override actually
+    # repositioned them rather than them already sitting somewhere plausible
+    # — but close enough to their targets to cover the distance within the
+    # 200-tick (~3.3s) budget this file's other tests use.
+    split_shape_runner.sim_controller.teleport_robot(True, 0, 2.0, 0.0, 0.0)
+    split_shape_runner.sim_controller.teleport_robot(True, 1, 0.5, 2.0, 0.0)
+    split_shape_runner.step_once()
+
+    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_PENALTY_BLUE)
+
+    for _ in range(200):
+        split_shape_runner.step_once()
+
+    field = game.field
+    # PreparePenaltyTheirsStep: our_goal_x = +half_length when my_team_is_right
+    # (True here); the opponent's penalty mark (and therefore the behind-line
+    # formation) sits between there and centre.
+    our_goal_x = field.full_field_half_length
+    penalty_mark_x = 0.5 * our_goal_x  # PENALTY_MARK_HALF_FIELD_RATIO
+
+    keeper = game.friendly_robots[0]
+    dist_keeper_to_goal = math.hypot(keeper.p.x - our_goal_x, keeper.p.y)
+    assert dist_keeper_to_goal < 0.3, f"goalkeeper did not reach our goal line: dist={dist_keeper_to_goal:.3f}m"
+
+    non_keeper = game.friendly_robots[1]
+    dist_to_line = abs(non_keeper.p.x - penalty_mark_x)
+    assert dist_to_line < 0.5, f"robot 1 did not reach the behind-the-line formation: dist_x={dist_to_line:.3f}m"
+
+
+def test_our_penalty_moves_kicker_to_the_penalty_mark(split_shape_runner):
+    """During our own penalty, the (non-goalkeeper) kicker drives to the
+    opponent's penalty mark — PreparePenaltyOursStep's actual target, not
+    just "moved somewhere"."""
+    game = split_shape_runner.my.game
+    split_shape_runner.step_once()
+
+    # Robot 1 starts far from the opponent's penalty mark.
+    split_shape_runner.sim_controller.teleport_robot(True, 1, -1.0, 2.0, 0.0)
+    split_shape_runner.step_once()
+
+    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_PENALTY_YELLOW)
+
+    for _ in range(200):
+        split_shape_runner.step_once()
+
+    field = game.field
+    # PreparePenaltyOursStep: opp_goal_x = +half_length if NOT my_team_is_right
+    # else -half_length. split_shape_runner has my_team_is_right=True, so the
+    # opponent's goal (and penalty mark) is on the NEGATIVE-x side.
+    penalty_x = -0.5 * field.full_field_half_length
+    non_goalkeeper_ids = [rid for rid in game.friendly_robots if rid != 0]
+    kicker_id = min(non_goalkeeper_ids)  # PreparePenaltyOursStep: sorted(friendly_robots), first non-keeper
+    kicker = game.friendly_robots[kicker_id]
+    dist_to_mark = math.hypot(kicker.p.x - penalty_x, kicker.p.y)
+    assert dist_to_mark < 0.3, f"kicker (robot {kicker_id}) did not reach the penalty mark: dist={dist_to_mark:.3f}m"
+
+
+def test_their_direct_free_clears_our_robots_from_ball_keep_out_zone(split_shape_runner):
+    """During the opponent's direct free kick, a robot starting on the ball
+    clears the keep-out radius — same observable contract as ball placement's
+    "theirs" test above, different command family."""
+    game = split_shape_runner.my.game
+    split_shape_runner.step_once()
+
+    ball_x, ball_y = game.ball.p.x, game.ball.p.y
+    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x, ball_y, 0.0)
+    split_shape_runner.step_once()
+
+    _set_referee_command(split_shape_runner, RefereeCommand.DIRECT_FREE_BLUE)
+
+    for _ in range(200):
+        split_shape_runner.step_once()
+
+    ball = game.ball.p
+    for robot_id, robot in game.friendly_robots.items():
+        dist_to_ball = math.hypot(robot.p.x - ball.x, robot.p.y - ball.y)
+        assert dist_to_ball >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} too close to ball"
+
+
+def test_our_direct_free_moves_kicker_to_the_ball(split_shape_runner):
+    """During our own direct free kick, the closest robot to the ball drives
+    to an approach position near it (DirectFreeOursStep) — the same contract
+    `_ApproachBallManager` verifies on the BT-replacement ball-placement path,
+    for a different command family."""
+    game = split_shape_runner.my.game
+    split_shape_runner.step_once()
+
+    ball_x, ball_y = game.ball.p.x, game.ball.p.y
+    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + 1.5, ball_y, 0.0)
+    split_shape_runner.step_once()
+
+    _set_referee_command(split_shape_runner, RefereeCommand.DIRECT_FREE_YELLOW)
+
+    for _ in range(200):
+        split_shape_runner.step_once()
+
+    ball = game.ball.p
+    kicker = min(
+        game.friendly_robots.values(),
+        key=lambda robot: math.hypot(robot.p.x - ball.x, robot.p.y - ball.y),
+    )
+    dist_to_ball = math.hypot(kicker.p.x - ball.x, kicker.p.y - ball.y)
+    assert (
+        dist_to_ball < 0.3
+    ), f"no robot approached the ball for our direct free kick: closest dist={dist_to_ball:.3f}m"

@@ -33,23 +33,26 @@ Note on ball placement in out-of-bounds:
 """
 
 import math
+from dataclasses import dataclass
 from typing import Optional
-
-import py_trees
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
+from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.entities.game.field import FieldBounds
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.kernel.context import KernelContext
+from utama_core.kernel.kernel_strategy import build_default_kernel_strategy
+from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
+from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
+from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
+from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
-from utama_core.strategy.examples.utils import SetBlackboardVariable
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
@@ -57,104 +60,69 @@ from utama_core.tests.common.abstract_test_manager import (
 )
 
 # ---------------------------------------------------------------------------
-# Minimal idle strategy — referee override tree handles all motion
+# Minimal idle strategy — RefereeOverride (kernel.Strategy.tick()) handles all
+# motion during override commands; only test_out_of_bounds_restart_spot_...
+# needs a real tactic below, since it isn't exercising the override layer.
 # ---------------------------------------------------------------------------
 
-BALL_PLACEMENT_COMMANDS = {
-    RefereeCommand.BALL_PLACEMENT_YELLOW,
-    RefereeCommand.BALL_PLACEMENT_BLUE,
-}
-DIRECT_FREE_COMMANDS = {
-    RefereeCommand.DIRECT_FREE_YELLOW,
-    RefereeCommand.DIRECT_FREE_BLUE,
-}
 PREPARE_KICKOFF_COMMANDS = {
     RefereeCommand.PREPARE_KICKOFF_YELLOW,
     RefereeCommand.PREPARE_KICKOFF_BLUE,
 }
 
 
-class _IdleStrategy(AbstractStrategy):
-    """Does nothing in the strategy subtree — referee override layer handles all motion."""
-
-    exp_ball: bool = True
-
-    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        return py_trees.behaviours.Running(name="Idle")
-
-    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
-        return True
-
-    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
-        return True
-
-    def get_min_bounding_req(self) -> Optional[FieldBounds]:
-        return None
+def _idle_strategy() -> AbstractStrategy:
+    """Kernel strategy with an empty outfield pool — does nothing; the referee
+    override layer (`kernel.Strategy.tick()`'s `RefereeOverride`) handles all
+    motion during override commands regardless of the tactic roster."""
+    return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()), exp_ball=True)
 
 
-class _StateHasBall(AbstractBehaviour):
-    def __init__(self, robot_id_key: str, name: str = "StateHasBall"):
-        super().__init__(name=name)
-        self.robot_id_key = robot_id_key
-
-    def setup_(self):
-        self.blackboard.register_key(key=self.robot_id_key, access=py_trees.common.Access.READ)
-
-    def update(self) -> py_trees.common.Status:
-        robot_id = self.blackboard.get(self.robot_id_key)
-        robot = self.blackboard.game.friendly_robots[robot_id]
-        return py_trees.common.Status.SUCCESS if robot.has_ball else py_trees.common.Status.FAILURE
+@dataclass
+class _GoToBallUntilPossessionMem:
+    pass
 
 
-class _GoToBallUntilStatePossession(AbstractBehaviour):
-    def __init__(self, robot_id_key: str, name: str = "GoToBallUntilStatePossession"):
-        super().__init__(name=name)
-        self.robot_id_key = robot_id_key
+class _GoToBallUntilPossessionTactic(BaseTactic[_GoToBallUntilPossessionMem]):
+    """Test-only tactic: single robot drives to the ball via `go_to_ball` until
+    it has possession, then holds. Direct kernel-native port of the BT
+    "SetRobotID -> Selector(HasBall, GoToBall)" state machine this replaces —
+    no state machine needed since `go_to_ball` is idempotent to call every
+    tick and `has_ball` doesn't change what command gets issued.
+    """
 
-    def setup_(self):
-        self.blackboard.register_key(key=self.robot_id_key, access=py_trees.common.Access.READ)
+    tag = TacticTag.ATTACK
 
-    def update(self) -> py_trees.common.Status:
-        robot_id = self.blackboard.get(self.robot_id_key)
-        self.blackboard.cmd_map[robot_id] = go_to_ball(
-            self.blackboard.game, self.blackboard.motion_controller, robot_id
+    def initial_mem(self) -> _GoToBallUntilPossessionMem:
+        return _GoToBallUntilPossessionMem()
+
+    def tick(
+        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: _GoToBallUntilPossessionMem
+    ) -> tuple[dict[RobotId, RobotCommand], _GoToBallUntilPossessionMem]:
+        robot_id = robot_ids[0]
+        robot = game.friendly_robots[robot_id]
+        if robot.has_ball:
+            return {robot_id: empty_command(dribbler_on=True)}, mem
+        return {robot_id: go_to_ball(game, ctx.motion_controller, robot_id)}, mem
+
+
+def _go_to_ball_strategy(robot_id: int) -> AbstractStrategy:
+    """`robot_id` is in both the kernel scheduler's outfield pool AND the
+    default `goalkeeper_id=0` pin when `robot_id == 0` — harmless here since
+    `AbstractStrategy.step()` only ticks the goalkeeper when its id is not
+    already present in `cmd_map`, and the tactic always assigns `robot_id` a
+    command, so the (otherwise-unused) goalkeeper tick is simply skipped."""
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = KernelContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={"go_to_ball": _GoToBallUntilPossessionTactic()},
+            partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "go_to_ball"),
+            outfield_robot_ids=(robot_id,),
+            ctx=ctx,
         )
-        return py_trees.common.Status.RUNNING
 
-
-class _StateGoToBallStrategy(AbstractStrategy):
-    exp_ball: bool = True
-
-    def __init__(self, robot_id: int):
-        self.robot_id = robot_id
-        self.robot_id_key = "robot_id"
-        super().__init__()
-
-    def create_behaviour_tree(self) -> py_trees.behaviour.Behaviour:
-        root = py_trees.composites.Sequence(name="StateGoToBallRoot", memory=True)
-        go_to_ball_until_possession = py_trees.composites.Selector(name="StateGoToBall", memory=False)
-        go_to_ball_until_possession.add_children(
-            [
-                _StateHasBall(robot_id_key=self.robot_id_key),
-                _GoToBallUntilStatePossession(robot_id_key=self.robot_id_key),
-            ]
-        )
-        root.add_children(
-            [
-                SetBlackboardVariable(name="SetRobotID", variable_name=self.robot_id_key, value=self.robot_id),
-                go_to_ball_until_possession,
-            ]
-        )
-        return root
-
-    def assert_exp_robots(self, n_runtime_friendly: int, n_runtime_enemy: int) -> bool:
-        return n_runtime_friendly == 1
-
-    def assert_exp_goals(self, includes_my_goal_line: bool, includes_opp_goal_line: bool) -> bool:
-        return True
-
-    def get_min_bounding_req(self) -> Optional[FieldBounds]:
-        return None
+    return AbstractStrategy(build_kernel_strategy=_build)
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +132,7 @@ class _StateGoToBallStrategy(AbstractStrategy):
 
 def _make_runner(referee: CustomReferee, n_friendly: int = 3) -> StrategyRunner:
     return StrategyRunner(
-        strategy=_IdleStrategy(),
+        strategy=_idle_strategy(),
         my_team_is_yellow=True,
         my_team_is_right=False,  # defending left → own half is negative-x
         mode="rsim",
@@ -176,72 +144,20 @@ def _make_runner(referee: CustomReferee, n_friendly: int = 3) -> StrategyRunner:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 1: BALL_PLACEMENT — closest robot drives to designated target
-# ---------------------------------------------------------------------------
-
-
-class _BallPlacementManager(AbstractTestManager):
-    """BALL_PLACEMENT_YELLOW is issued directly via set_command.
-
-    A robot is placed near the designated target so it is the obvious candidate
-    to reach the position quickly.  We verify it gets within APPROACH_TOLERANCE.
-    """
-
-    n_episodes = 1
-    TARGET = (1.0, 1.0)  # designated placement position
-    APPROACH_TOLERANCE = 0.4
-
-    def __init__(self, referee: CustomReferee):
-        super().__init__()
-        self._referee = referee
-        self.placement_command_seen: bool = False
-        self.robot_reached_target: bool = False
-
-    def reset_field(self, sim_controller: AbstractSimController, game: Game):
-        # Robot 0 starts close to the target so it is the clear closest candidate.
-        sim_controller.teleport_robot(game.my_team_is_yellow, 0, 0.5, 0.5)
-        sim_controller.teleport_robot(game.my_team_is_yellow, 1, -2.0, 0.5)
-        sim_controller.teleport_robot(game.my_team_is_yellow, 2, -2.0, -0.5)
-        # Ball far from the placement target
-        sim_controller.teleport_ball(-1.0, -1.0)
-        # Issue BALL_PLACEMENT directly and set the designated target
-        self._referee.set_command(RefereeCommand.BALL_PLACEMENT_YELLOW, game.ts)
-        self._referee._state.ball_placement_target = self.TARGET
-
-    def eval_status(self, game: Game) -> TestingStatus:
-        ref = game.referee
-        if ref is None:
-            return TestingStatus.IN_PROGRESS
-
-        if ref.referee_command in BALL_PLACEMENT_COMMANDS:
-            self.placement_command_seen = True
-
-        if not self.placement_command_seen:
-            return TestingStatus.IN_PROGRESS
-
-        target_x, target_y = self.TARGET
-        for robot in game.friendly_robots.values():
-            dist = math.hypot(robot.p.x - target_x, robot.p.y - target_y)
-            if dist < self.APPROACH_TOLERANCE:
-                self.robot_reached_target = True
-                return TestingStatus.SUCCESS
-
-        return TestingStatus.IN_PROGRESS
-
-
-def test_ball_placement_robot_approaches_designated_position(headless):
-    """During BALL_PLACEMENT, the closest robot drives toward the designated target."""
-    referee = CustomReferee.from_profile_name("simulation")
-    runner = _make_runner(referee)
-    tm = _BallPlacementManager(referee)
-
-    passed = runner.run_test(tm, episode_timeout=20.0, rsim_headless=headless)
-
-    assert tm.placement_command_seen, "CustomReferee never issued a BALL_PLACEMENT command"
-    assert tm.robot_reached_target, "No robot approached the ball placement designated position"
-    assert passed
-
-
+# Scenario 1: BALL_PLACEMENT is covered by test_ball_placement_rsim.py, not
+# here. This file's version of the scenario is structurally unfixable:
+# StrategyRunner._run_step teleports the ball straight to designated_position
+# the instant a BALL_PLACEMENT_* command is first seen ("simulate placement
+# instantly" — robots cannot physically retrieve an out-of-bounds ball in
+# simulation), so ball.p.distance_to(target) is already inside
+# BALL_PLACEMENT_DONE_DISTANCE on the very first tick regardless of robot
+# starting positions. BallPlacementOursStep enters its release/done phase
+# immediately and no robot ever moves — there is no way to position robots to
+# observe real "approach the ball" motion under this runner behavior.
+# test_ball_placement_rsim.py's tests avoid this by placing the ball far from
+# its own designated_position, so the teleport-to-target shortcut never
+# collapses those scenarios the same way; that file is where this coverage
+# (approach/carry/clearance/placer-selection) genuinely lives.
 # ---------------------------------------------------------------------------
 # Scenario 2a: our direct free kick — kicker drives toward ball
 # ---------------------------------------------------------------------------
@@ -398,7 +314,12 @@ class _KickoffPositioningManager(AbstractTestManager):
         sim_controller.teleport_robot(game.my_team_is_yellow, 1, -0.2, 0.5)
         sim_controller.teleport_robot(game.my_team_is_yellow, 2, -0.2, -0.5)
         sim_controller.teleport_ball(0.0, 0.0)
-        self._referee.set_command(RefereeCommand.PREPARE_KICKOFF_YELLOW, game.ts)
+        # force_command (not set_command) — set_command inserts STOP first, which
+        # only auto-advances once every robot clears BALL_CLEAR_DIST from the
+        # ball; robots start deliberately near the centre circle here (so the
+        # clearing movement this test verifies is visible), which would never
+        # satisfy that clearance and the command would never advance past STOP.
+        self._referee.force_command(RefereeCommand.PREPARE_KICKOFF_YELLOW, game.ts)
 
     def eval_status(self, game: Game) -> TestingStatus:
         ref = game.referee
@@ -487,7 +408,7 @@ def test_out_of_bounds_restart_spot_is_capturable_by_go_to_ball(headless):
     restart_spot = OutOfBoundsRule._nearest_infield_point(0.0, geometry.half_width + 0.5, geometry)
 
     runner = StrategyRunner(
-        strategy=_StateGoToBallStrategy(robot_id=0),
+        strategy=_go_to_ball_strategy(robot_id=0),
         my_team_is_yellow=True,
         my_team_is_right=False,
         mode="rsim",

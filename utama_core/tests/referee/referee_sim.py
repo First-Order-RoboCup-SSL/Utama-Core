@@ -4,9 +4,9 @@ Run with:
     pixi run python utama_core/tests/referee/referee_sim.py
 
 What it does:
-  - Starts a 3v3 RSim with StartupStrategy as the base strategy.
-  - The RefereeOverride tree (built automatically by AbstractStrategy) intercepts
-    referee commands and overrides robot behaviour accordingly.
+  - Starts a 3v3 RSim with WanderingTactic as the base strategy.
+  - `kernel.Strategy.tick()`'s `RefereeOverride` intercepts referee commands
+    and overrides robot behaviour accordingly.
   - A scripted referee cycles through all referee commands every few seconds so
     you can watch how robots respond visually in the RSim window.
 
@@ -31,7 +31,7 @@ from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.run import StrategyRunner
-from utama_core.tests.referee.wandering_strategy import WanderingStrategy
+from utama_core.tests.referee.wandering_strategy import wandering_strategy
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -136,7 +136,7 @@ def main():
     scripted_referee = _ScriptedReferee()
 
     runner = StrategyRunner(
-        strategy=WanderingStrategy(),
+        strategy=wandering_strategy(tuple(range(N_ROBOTS))),
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,
         mode="rsim",

@@ -10,13 +10,13 @@ What it does:
   - Passes the referee to StrategyRunner via referee=. StrategyRunner
     calls referee.step() on every tick and handles ball teleports on STOP
     automatically — no patching required.
-  - WanderingStrategy is used as the base strategy so robots visibly move and
-    you can watch the RefereeOverride tree interrupt them when you issue
+  - WanderingTactic is used as the base strategy so robots visibly move and
+    you can watch kernel.RefereeOverride interrupt them when you issue
     commands from the GUI (Halt, Kickoff Yellow, etc.).
 
 Operator workflow:
   1. Open http://localhost:8080 in a browser.
-  2. Robots start moving under WanderingStrategy.
+  2. Robots start moving under WanderingTactic.
   3. Click any command button (Halt, Stop, Kickoff Yellow…) — robots reposition.
   4. Click Normal Start to resume free play.
   5. With the human profile, the referee stays in STOP after a goal until the operator advances play.
@@ -25,7 +25,7 @@ Operator workflow:
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.run import StrategyRunner
-from utama_core.tests.referee.wandering_strategy import WanderingStrategy
+from utama_core.tests.referee.wandering_strategy import wandering_strategy
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -57,7 +57,7 @@ def main() -> None:
     )
 
     runner = StrategyRunner(
-        strategy=WanderingStrategy(),
+        strategy=wandering_strategy(tuple(range(N_ROBOTS))),
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,
         mode="rsim",
