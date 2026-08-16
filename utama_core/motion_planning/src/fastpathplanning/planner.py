@@ -165,7 +165,7 @@ class FastPathPlanner:
             return obstacle_pos
 
         direction = target - robot_pos
-        direction_norm = np.linalg.norm(direction)
+        direction_norm = math.hypot(direction[0], direction[1])
         if direction_norm == 0.0:
             # `robot_pos` and `target` have collapsed to the same point (this
             # recursive call's segment endpoints, not the original plan's) —
@@ -183,7 +183,7 @@ class FastPathPlanner:
             # itself rather than propagate NaN.
             return obstacle_pos
         perp_dir = rotate_vector(direction[0], direction[1], math.pi * (subgoal_direction + 0.5))
-        unitvec = perp_dir / direction_norm
+        unitvec = np.array([perp_dir[0] / direction_norm, perp_dir[1] / direction_norm])
         subgoal = obstacle_pos + self.SUBGOAL_DISTANCE * unitvec * multiple
 
         for o in obstacles:
@@ -338,7 +338,7 @@ class FastPathPlanner:
             return target
 
         direction = trajectory[0][1] - robot_position
-        unit_vec = direction / np.linalg.norm(direction)
+        unit_vec = direction / math.hypot(direction[0], direction[1])
         safe_distance = self._clamp_to_obstacle_clearance(robot_position, unit_vec, self.PROJECTION_DISTANCE, obstacles)
         new_target = robot_position + unit_vec * safe_distance
 
@@ -411,9 +411,9 @@ class FastPathPlanner:
                 if distance_point_to_segment(safe_target, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
                     closest_pt = closest_point_on_segment(safe_target, o[0], o[1])
                     push_dir = safe_target - closest_pt
-                    if np.linalg.norm(push_dir) == 0:
+                    if math.hypot(push_dir[0], push_dir[1]) == 0:
                         push_dir = robot_pos - closest_pt
-                    unit_push = push_dir / np.linalg.norm(push_dir)
+                    unit_push = push_dir / math.hypot(push_dir[0], push_dir[1])
                     safe_target = closest_pt + unit_push * (self.OBSTACLE_CLEARANCE * 1.05)
                     collision_found = True
             if not collision_found:
@@ -477,7 +477,8 @@ class FastPathPlanner:
         ball_adjacent_obstacles = set()
         if game.ball is not None:
             ball_pos = np.array([game.ball.p.x, game.ball.p.y])
-            if np.linalg.norm(raw_target - ball_pos) < self.OBSTACLE_CLEARANCE:
+            diff = raw_target - ball_pos
+            if math.hypot(diff[0], diff[1]) < self.OBSTACLE_CLEARANCE:
                 for o in obstacles:
                     if distance_point_to_segment(ball_pos, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
                         ball_adjacent_obstacles.add((tuple(o[0]), tuple(o[1])))

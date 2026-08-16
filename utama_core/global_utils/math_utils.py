@@ -1,3 +1,4 @@
+import math
 from typing import Tuple
 
 import numpy as np
@@ -201,7 +202,7 @@ def distance_between_line_segments(
     )
 
 
-def distance_point_to_segment(point: np.ndarray, seg_start: np.ndarray, seg_end: np.ndarray) -> float:
+def distance_point_to_segment(point, seg_start, seg_end) -> float:
     """Calculate the minimum distance from a point to a line segment in 2D space.
 
     Args:
@@ -210,29 +211,39 @@ def distance_point_to_segment(point: np.ndarray, seg_start: np.ndarray, seg_end:
         seg_end (tuple): A tuple representing the end of the segment (x2, y2).
     Returns:
         float: The minimum distance from the point to the line segment.
+
+    Plain-float implementation, not numpy: this is called millions of times
+    per match from `FastPathPlanner`'s obstacle-avoidance inner loop, where
+    it was previously the single largest share of per-tick wall-clock cost
+    (per `cProfile` on a 30s headless match) — `np.asarray`/`np.dot`/
+    `np.linalg.norm` all carry dispatch overhead that dwarfs the actual
+    2-float arithmetic at this call volume. Same formula as before, just
+    without allocating numpy arrays for a 2-component vector.
     """
-    point = np.asarray(point)
-    seg_start = np.asarray(seg_start)
-    seg_end = np.asarray(seg_end)
+    px, py = point[0], point[1]
+    sx, sy = seg_start[0], seg_start[1]
+    ex, ey = seg_end[0], seg_end[1]
 
-    seg_vec = seg_end - seg_start
-    pt_vec = point - seg_start
+    seg_dx = ex - sx
+    seg_dy = ey - sy
+    pt_dx = px - sx
+    pt_dy = py - sy
 
-    seg_len_sq = np.dot(seg_vec, seg_vec)
+    seg_len_sq = seg_dx * seg_dx + seg_dy * seg_dy
 
     if seg_len_sq < EPS:
-        return np.linalg.norm(point - seg_start)
+        return math.hypot(px - sx, py - sy)
 
-    t = np.dot(pt_vec, seg_vec) / seg_len_sq
+    t = (pt_dx * seg_dx + pt_dy * seg_dy) / seg_len_sq
 
     if t < 0:
-        closest = seg_start
+        closest_x, closest_y = sx, sy
     elif t > 1:
-        closest = seg_end
+        closest_x, closest_y = ex, ey
     else:
-        closest = seg_start + t * seg_vec
+        closest_x, closest_y = sx + t * seg_dx, sy + t * seg_dy
 
-    return np.linalg.norm(point - closest)
+    return math.hypot(px - closest_x, py - closest_y)
 
 
 def closest_point_on_segment(point, seg_start, seg_end):
@@ -283,10 +294,7 @@ def segments_intersect(
     Returns:
         bool: True if the segments intersect, False otherwise.
     """
-    p1 = np.asarray(seg1_start)
-    q1 = np.asarray(seg1_end)
-    p2 = np.asarray(seg2_start)
-    q2 = np.asarray(seg2_end)
+    p1, q1, p2, q2 = seg1_start, seg1_end, seg2_start, seg2_end
 
     o1 = point_orientation(p1, q1, p2)
     o2 = point_orientation(p1, q1, q2)
@@ -308,22 +316,21 @@ def segments_intersect(
     return False
 
 
-def point_orientation(p_1: np.ndarray, p_2: np.ndarray, p_3: np.ndarray) -> int:
+def point_orientation(p_1, p_2, p_3) -> int:
     """Calculate the orientation of 3 points (e.g. on a line or in a triangle).
 
     Args:
-        p_1 (np.ndarray): First point as (x, y).
-        p_2 (np.ndarray): Second point as (x, y).
-        p_3 (np.ndarray): Third point as (x, y).
+        p_1: First point as (x, y).
+        p_2: Second point as (x, y).
+        p_3: Third point as (x, y).
 
     Returns:
         int: 0 if collinear, 1 if clockwise, 2 if counterclockwise.
-    """
-    p1 = np.asarray(p_1)
-    p2 = np.asarray(p_2)
-    p3 = np.asarray(p_3)
 
-    val = (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0])
+    Plain-float implementation, not numpy — see `distance_point_to_segment`'s
+    docstring; called from the same hot obstacle-avoidance path.
+    """
+    val = (p_2[0] - p_1[0]) * (p_3[1] - p_1[1]) - (p_2[1] - p_1[1]) * (p_3[0] - p_1[0])
 
     if abs(val) < EPS:
         return 0
@@ -331,21 +338,17 @@ def point_orientation(p_1: np.ndarray, p_2: np.ndarray, p_3: np.ndarray) -> int:
     return 1 if val < 0 else 2
 
 
-def on_segment(p: np.ndarray, q: np.ndarray, r: np.ndarray) -> bool:
+def on_segment(p, q, r) -> bool:
     """Check if point q lies on line segment 'pr'.
 
     Args:
-        p (np.ndarray): Start point of segment as (x, y).
-        q (np.ndarray): Point to check as (x, y).
-        r (np.ndarray): End point of segment as (x, y).
+        p: Start point of segment as (x, y).
+        q: Point to check as (x, y).
+        r: End point of segment as (x, y).
 
     Returns:
         bool: True if q lies on segment pr, False otherwise.
     """
-    p = np.asarray(p)
-    q = np.asarray(q)
-    r = np.asarray(r)
-
     return (
         min(p[0], r[0]) - EPS <= q[0] <= max(p[0], r[0]) + EPS
         and min(p[1], r[1]) - EPS <= q[1] <= max(p[1], r[1]) + EPS
