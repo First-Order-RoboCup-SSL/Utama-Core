@@ -29,7 +29,9 @@ need to reinvent — a tournament script is purely a driver on top of
 from __future__ import annotations
 
 import itertools
+import os
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 
 from utama_core.custom_referee import CustomReferee
@@ -106,9 +108,20 @@ def main() -> None:
     # `_kernel_strategy` wrapping) to run instead of the full auto-discovered
     # catalog — useful for a quick check of one or two configs without
     # waiting on every pair, e.g. `python demo_tournament.py default
-    # low_block`. No args keeps today's behaviour: every config, once each.
-    if len(sys.argv) > 1:
-        requested = set(sys.argv[1:])
+    # low_block`. `--sequential` forces the old one-process-at-a-time loop
+    # (useful for debugging a specific match without pool noise); otherwise
+    # matches run in a process pool since each `run_match` call is fully
+    # self-contained (its own StrategyRunner, its own rSim subprocess, no
+    # shared state with any other match) — this is the "many independent
+    # matches" case, not the harder "parallelize robots within one match"
+    # case (shared per-tick obstacle state, GIL-bound Python, would need its
+    # own design). No args keeps today's behaviour: every config, once each.
+    args = sys.argv[1:]
+    sequential = "--sequential" in args
+    args = [a for a in args if a != "--sequential"]
+
+    if args:
+        requested = set(args)
         config_names = [
             name
             for name in _CONFIG_NAMES
@@ -124,19 +137,24 @@ def main() -> None:
     else:
         config_names = _CONFIG_NAMES
 
-    print(f"Round-robin: {len(config_names)} configs, {len(config_names) * (len(config_names) - 1) // 2} matches")
-    print(f"{N_OUTFIELD + 1}v{N_OUTFIELD + 1}, {MATCH_DURATION_SECONDS:.0f}s sim time per match, headless rsim\n")
+    pairs = list(itertools.combinations(sorted(config_names), 2))
+    print(f"Round-robin: {len(config_names)} configs, {len(pairs)} matches")
+    print(f"{N_OUTFIELD + 1}v{N_OUTFIELD + 1}, {MATCH_DURATION_SECONDS:.0f}s sim time per match, headless rsim")
+    if not sequential:
+        n_workers = min(len(pairs), max(1, (os.cpu_count() or 1) - 1))
+        print(f"Running {n_workers} matches concurrently (--sequential to disable)\n")
+    else:
+        print("Running sequentially\n")
 
     results: list[MatchResult] = []
     wins: dict[str, int] = {name: 0 for name in config_names}
     draws: dict[str, int] = {name: 0 for name in config_names}
 
-    for config_a_name, config_b_name in itertools.combinations(sorted(config_names), 2):
-        result = run_match(config_a_name, config_b_name)
+    def _record(result: MatchResult) -> None:
         results.append(result)
         if result.winner == "draw":
-            draws[config_a_name] += 1
-            draws[config_b_name] += 1
+            draws[result.config_a] += 1
+            draws[result.config_b] += 1
         else:
             wins[result.winner] += 1
         print(
@@ -144,6 +162,20 @@ def main() -> None:
             f"{result.config_b:<40} winner={result.winner}",
             flush=True,
         )
+
+    if sequential:
+        for config_a_name, config_b_name in pairs:
+            _record(run_match(config_a_name, config_b_name))
+    else:
+        # Matches complete out of submission order under a process pool —
+        # printed as they finish rather than buffered back into pair order,
+        # since waiting to preserve order would throttle everything to the
+        # slowest in-flight match. Final standings are still sorted, so the
+        # only user-visible reordering is the interleaved progress log.
+        with ProcessPoolExecutor(max_workers=n_workers) as pool:
+            futures = [pool.submit(run_match, a, b) for a, b in pairs]
+            for future in as_completed(futures):
+                _record(future.result())
 
     print("\nStandings (wins, draws):")
     for name in sorted(config_names, key=lambda n: (-wins[n], -draws[n])):
