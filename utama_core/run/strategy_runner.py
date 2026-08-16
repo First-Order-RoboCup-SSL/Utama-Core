@@ -1604,7 +1604,7 @@ class StrategyRunner:
         """
         if not isinstance(self.referee, CustomReferee):
             return
-        self.referee.set_bt_data(self.my.strategy.debug_status())
+        self.referee.set_debug_status(self.my.strategy.debug_status())
 
     def _vision_stream_roster(self) -> list[dict]:
         """Build the player roster list shown below the scoreboard."""

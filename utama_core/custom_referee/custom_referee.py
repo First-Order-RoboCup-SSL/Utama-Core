@@ -163,10 +163,10 @@ class CustomReferee:
             self._gui_server.notify(result, game_frame, self._bt_nodes_per_robot, self._robot_feedback_data)
         return result
 
-    def set_bt_data(self, bt_nodes_per_robot: dict[int, list[str]]) -> None:
-        """Set per-robot running BT node names for GUI display.
+    def set_debug_status(self, bt_nodes_per_robot: dict[int, list[str]]) -> None:
+        """Set per-robot tactic debug status for GUI display.
 
-        Called by StrategyRunner after each behaviour tree tick.
+        Called by StrategyRunner every tick with `AbstractStrategy.debug_status()`.
         """
         self._bt_nodes_per_robot = bt_nodes_per_robot
 
