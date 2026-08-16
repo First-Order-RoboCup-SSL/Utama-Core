@@ -8,16 +8,16 @@ command for every assigned robot", "is_committed() returns a bool") with
 near-identical boilerplate around a real `StrategyRunner`/rsim fixture. A
 single parametrized suite over `_TACTIC_CASES` below gives the same coverage
 without the duplication, and — concretely — would have caught
-`TwoRobotAttackTactic`'s `robot_ids[1]` crash (see `build_low_block_kernel_strategy`
+`PassAndShootTactic`'s `robot_ids[1]` crash (see `build_low_block_kernel_strategy`
 in `kernel_strategy.py`) automatically instead of requiring a bespoke test
 to notice a Tactic has an undeclared minimum robot count.
 
 Behavior specific to one Tactic (e.g. `LeadAndSupportTactic`'s leader
 picked by ball proximity, `ShadowAndMarkTactic`'s fallback-hold-target
 regression) stays in its own test — those don't generalize across the
-table and shouldn't be forced into it. `TwoRobotAttackTactic`'s pure-logic
+table and shouldn't be forced into it. `PassAndShootTactic`'s pure-logic
 `assign_passer_receiver`/`is_committed()` tests also stay separate
-(`test_two_robot_attack_tactic.py`) since they need no rsim fixture at all.
+(`test_pass_and_shoot_tactic.py`) since they need no rsim fixture at all.
 """
 
 from __future__ import annotations
@@ -30,18 +30,18 @@ from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
 from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
+from utama_core.tactics.pass_and_shoot import PassAndShootTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
-from utama_core.tactics.two_robot_attack import TwoRobotAttackTactic
 
 # (tactic_factory, robot_ids, exp_friendly, exp_enemy) — robot_ids and
 # exp_friendly/exp_enemy are chosen per-Tactic to respect each one's real
-# constraints (e.g. TwoRobotAttackTactic hard-requires >=2 robots; no Tactic
+# constraints (e.g. PassAndShootTactic hard-requires >=2 robots; no Tactic
 # declares this anywhere today — see design doc §15's "explicitly deferred"
 # per-Tactic robot-count-bound item — so it's encoded here instead).
 _TACTIC_CASES = [
     pytest.param(DefenseTactic, (1, 2), 3, 0, id="defense"),
-    pytest.param(TwoRobotAttackTactic, (1, 2), 3, 0, id="two_robot_attack"),
+    pytest.param(PassAndShootTactic, (1, 2), 3, 0, id="pass_and_shoot"),
     pytest.param(LeadAndSupportTactic, (1, 2, 3, 4), 5, 2, id="lead_and_support"),
     pytest.param(ShadowAndMarkTactic, (1, 2, 3, 4), 5, 3, id="shadow_and_mark"),
     pytest.param(PressAndContainTactic, (1, 2, 3), 4, 3, id="press_and_contain"),

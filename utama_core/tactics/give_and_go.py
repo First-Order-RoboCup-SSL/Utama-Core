@@ -1,7 +1,7 @@
 """Give-and-go attack tactic — carrier passes and relocates, receiver becomes
 the next carrier, repeat until a shot lane opens.
 
-New tactical logic, not ported from Utama-Strategy. `TwoRobotAttackTactic`
+New tactical logic, not ported from Utama-Strategy. `PassAndShootTactic`
 runs one pass then always shoots; `LeadAndSupportTactic` never passes at
 all — the leader dribbles in alone while supports just hold space. Neither
 captures the actual "wall pass" / one-two pattern: a carrier under pressure
@@ -11,13 +11,13 @@ takes for a lane to open, rather than committing to a single scripted
 setup -> pass -> score sequence. This tactic is that cycle, generalized past
 two robots — any assigned robot can become "next receiver," chosen fresh
 each hop by who currently offers the best `score_pass_setup` (the same
-scoring function `two_robot_attack`'s dynamic setup already uses, reused
+scoring function `pass_and_shoot`'s dynamic setup already uses, reused
 here as a per-hop receiver choice instead of a one-time setup optimization).
 
 Reuses `_pass_and_score`'s `_pass_exec` (aim, intercept-position the
 receiver, kick, confirm catch) as-is for the mechanics of one hop — that
 machinery is generic two-robot ball transfer, not specific to
-`TwoRobotAttackTactic`'s fixed-pair phase sequence, so it was imported
+`PassAndShootTactic`'s fixed-pair phase sequence, so it was imported
 rather than re-derived. What is new here is the *decision* layered on top:
 after each catch, the new carrier either shoots immediately (if
 `segment_blocked` says its lane to goal is clear) or picks the best-scoring
@@ -26,7 +26,7 @@ fresh support point (via `LeadAndSupportTactic`'s support-scoring approach,
 reused at k=1) instead of standing still waiting for a return pass that may
 never come.
 
-`is_committed()` covers the same window `two_robot_attack` protects: once a
+`is_committed()` covers the same window `pass_and_shoot` protects: once a
 carrier has the ball and is aiming (or already selected a target
 receiver for this hop), reassigning this tactic's robots mid-hop would
 strand a pass in flight. Between hops (ball not yet caught, no receiver

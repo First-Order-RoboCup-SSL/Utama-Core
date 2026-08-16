@@ -19,16 +19,16 @@ from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
 from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
+from utama_core.tactics.pass_and_shoot import PassAndShootTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 from utama_core.tactics.switch_of_play import SwitchOfPlayTactic
-from utama_core.tactics.two_robot_attack import TwoRobotAttackTactic
 
 
 def build_default_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """Minimal, single-tactic-pool `Strategy` factory: everyone attacks.
 
-    Only one real multi-robot tactic exists so far (`two_robot_attack`), so
+    Only one real multi-robot tactic exists so far (`pass_and_shoot`), so
     the picker has nothing to choose between yet — per the design doc's
     "splitting policy" deferral, this deliberately does not invent an
     allocation policy ahead of a second concrete tactic that would need one.
@@ -43,8 +43,8 @@ def build_default_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
         ctx = KernelContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
-            tactics={"two_robot_attack": TwoRobotAttackTactic()},
-            partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "two_robot_attack"),
+            tactics={"pass_and_shoot": PassAndShootTactic()},
+            partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "pass_and_shoot"),
             outfield_robot_ids=outfield_robot_ids,
             ctx=ctx,
         )
@@ -227,7 +227,7 @@ def _fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float,
     `min_attack`: a floor on the attack slot's robot count whenever attack is
     getting any robots at all. Exists because not every Tactic is
     robot-count-agnostic the way `GiveAndGoTactic`/`LeadAndSupportTactic`
-    are — `TwoRobotAttackTactic.tick()` unconditionally reads
+    are — `PassAndShootTactic.tick()` unconditionally reads
     `robot_ids[1]`, so a rounded-down fraction that hands it a single robot
     crashes with an `IndexError` rather than degrading gracefully. This
     picker has no way to know that from the Tactic itself (no
@@ -306,8 +306,8 @@ def build_low_block_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """5-robot (or fewer) `Strategy` factory: a conservative, defense-heavy
     counterpart to `build_high_press_kernel_strategy` — most of the pool
     stays back regardless of possession (floored at `min_attack=2`, since
-    `TwoRobotAttackTactic` hard-requires at least 2 robots). Wires
-    `TwoRobotAttackTactic` ("attack") and `DefenseTactic` ("defense"), the
+    `PassAndShootTactic` hard-requires at least 2 robots). Wires
+    `PassAndShootTactic` ("attack") and `DefenseTactic` ("defense"), the
     original two ported Tactics, still useful as the minimal-risk baseline
     they were designed to be (§1/§2's original pairing) rather than the
     newer, more elaborate Tactics used elsewhere in this file.
@@ -320,7 +320,7 @@ def build_low_block_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
         ctx = KernelContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
-            tactics={"attack": TwoRobotAttackTactic(), "defense": DefenseTactic()},
+            tactics={"attack": PassAndShootTactic(), "defense": DefenseTactic()},
             partitioner=_fixed_ratio_picker("attack", "defense", attack_fraction=0.2, min_attack=2),
             outfield_robot_ids=outfield_robot_ids,
             ctx=ctx,
@@ -415,7 +415,7 @@ def build_decoy_and_overload_kernel_strategy(outfield_robot_ids: tuple[int, ...]
     Wires `DecoyOverloadTactic` ("attack") and `ShadowAndMarkTactic`
     ("defense"), split by `_fixed_ratio_picker` with `min_attack=2` —
     `DecoyOverloadTactic` hard-requires at least 2 robots (a decoy and an
-    overloader) the same way `TwoRobotAttackTactic` does, so it needs the
+    overloader) the same way `PassAndShootTactic` does, so it needs the
     same floor `build_low_block_kernel_strategy` gives that tactic. Attack
     fraction left at a plain 0.5 split (possession-agnostic) since nothing
     about the lure/overload pattern is more or less urgent when the
@@ -473,7 +473,7 @@ def build_switch_of_play_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     carrier/pivot/runner relay needs 3 robots to actually exercise the
     "switch" leg (the pivot outlet) rather than silently degrading to its
     2-robot direct-pass fallback every tick, the same floor rationale
-    `build_low_block_kernel_strategy` gives `TwoRobotAttackTactic` and
+    `build_low_block_kernel_strategy` gives `PassAndShootTactic` and
     `build_decoy_and_overload_kernel_strategy` gives `DecoyOverloadTactic`.
     Attack fraction left at a plain 0.5 split (possession-agnostic), same as
     `build_decoy_and_overload_kernel_strategy` — nothing about reading the

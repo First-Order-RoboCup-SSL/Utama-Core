@@ -96,7 +96,7 @@ def _make_runner(referee: CustomReferee) -> StrategyRunner:
     active, so a minimal default kernel strategy reproduces the old
     `BallPlacementStrategy`'s behaviour (which was itself just an idle vehicle
     for the referee override layer) exactly. Both robots go in the outfield
-    pool (not just robot 1) since `TwoRobotAttackTactic` needs >=2 robots and
+    pool (not just robot 1) since `PassAndShootTactic` needs >=2 robots and
     `AbstractStrategy`'s goalkeeper pinning is irrelevant to this test.
     """
     return StrategyRunner(

@@ -1,7 +1,7 @@
-"""Unit-level (no rsim) tests for `TwoRobotAttackTactic`'s assignment/commit logic.
+"""Unit-level (no rsim) tests for `PassAndShootTactic`'s assignment/commit logic.
 
 The full end-to-end behaviour (actual robot motion, pass execution, scoring)
-is exercised in Utama-Strategy's `test_two_robot_attack_functional.py`, which
+is exercised in Utama-Strategy's `test_pass_and_shoot_functional.py`, which
 requires `StrategyRunner` + rsim (`mode="rsim"`) — standing that up inside
 Utama-Core is out of scope for this pass. What's tested here instead is the
 part that doesn't need simulation: `assign_passer_receiver`'s ball-proximity
@@ -15,9 +15,9 @@ from dataclasses import dataclass
 
 from utama_core.entities.data.vector import Vector2D
 from utama_core.tactics._pass_and_score import PassAndScoreMem
-from utama_core.tactics.two_robot_attack import (
-    TwoRobotAttackMem,
-    TwoRobotAttackTactic,
+from utama_core.tactics.pass_and_shoot import (
+    PassAndShootMem,
+    PassAndShootTactic,
     assign_passer_receiver,
 )
 
@@ -83,20 +83,20 @@ def test_assign_passer_receiver_falls_back_when_ball_lookup_empty():
 
 
 def test_committed_is_false_before_any_assignment():
-    tactic = TwoRobotAttackTactic()
+    tactic = PassAndShootTactic()
     mem = tactic.initial_mem()
     assert tactic.is_committed(game=None, mem=mem) is False
 
 
 def test_committed_is_false_during_setup_phase():
-    tactic = TwoRobotAttackTactic()
-    mem = TwoRobotAttackMem(pass_and_score=PassAndScoreMem(phase="setup"), assigned_pair=(1, 2))
+    tactic = PassAndShootTactic()
+    mem = PassAndShootMem(pass_and_score=PassAndScoreMem(phase="setup"), assigned_pair=(1, 2))
     assert tactic.is_committed(game=None, mem=mem) is False
 
 
 def test_committed_is_true_once_past_setup_phase():
-    tactic = TwoRobotAttackTactic()
-    mem = TwoRobotAttackMem(pass_and_score=PassAndScoreMem(phase="pass_then_score"), assigned_pair=(1, 2))
+    tactic = PassAndShootTactic()
+    mem = PassAndShootMem(pass_and_score=PassAndScoreMem(phase="pass_then_score"), assigned_pair=(1, 2))
     assert tactic.is_committed(game=None, mem=mem) is True
 
     mem.pass_and_score.phase = "score"

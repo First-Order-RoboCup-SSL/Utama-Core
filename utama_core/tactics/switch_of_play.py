@@ -3,7 +3,7 @@ side before attacking, rather than combining on whichever side it already is.
 
 New tactical logic, not a variation on an existing Core tactic. Every attack
 tactic so far commits to goal (or to a lure) on whatever side of the field the
-ball already happens to be: `TwoRobotAttackTactic`/`GiveAndGoTactic` pass
+ball already happens to be: `PassAndShootTactic`/`GiveAndGoTactic` pass
 between whoever is nearby, `LeadAndSupportTactic` drives straight at goal,
 `DecoyOverloadTactic` drags a *single* marker sideways with a dribble. None of
 them read the *global* left/right balance of the defense and reposition the
@@ -347,7 +347,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # point (and therefore the pivot's required facing angle) drifts
             # every tick right along with the pivot's own approach, so
             # `oriented_towards` never settles and the pass never completes.
-            # `two_robot_attack`'s `run_setup_phase` avoids exactly this by
+            # `pass_and_shoot`'s `run_setup_phase` avoids exactly this by
             # gating its own pass leg on both robots already being at fixed
             # setup positions before calling the shared pass machinery — same
             # fix here, just for the pivot only (the carrier is already

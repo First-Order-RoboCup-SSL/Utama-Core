@@ -18,7 +18,7 @@ def main():
     runner = StrategyRunner(
         # Robot 0 is the goalkeeper (pinned outside the kernel scheduler), so
         # only robot 1 is an outfield tactic slot — a solo GiveAndGoTactic
-        # pool, since TwoRobotAttackTactic hard-requires 2 outfield robots.
+        # pool, since PassAndShootTactic hard-requires 2 outfield robots.
         strategy=AbstractStrategy(build_kernel_strategy=build_give_and_go_solo_kernel_strategy((1,))),
         my_team_is_yellow=True,
         my_team_is_right=True,

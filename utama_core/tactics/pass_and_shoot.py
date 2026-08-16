@@ -1,6 +1,11 @@
-"""Two-robot dynamic-role attack tactic.
+"""Pass-and-shoot attack tactic: one scripted setup -> pass -> shoot sequence
+for a fixed pair of robots.
 
-Ported from `utama_strategy.functional.strategies.two_robot_attack`.
+Ported from `utama_strategy.functional.strategies.two_robot_attack` (that
+name refers to the source module in Utama-Strategy, unchanged there; this
+port was renamed to `pass_and_shoot` to name the actual behavior once
+`GiveAndGoTactic` — a repeated-hop pass cycle — made "two robot attack" an
+ambiguous name for two different tactics).
 Closest-robot-to-ball becomes passer, the other receiver, then runs a
 setup -> pass -> score sequence.
 
@@ -77,7 +82,7 @@ def assign_passer_receiver(
 
 
 @dataclass
-class TwoRobotAttackMem:
+class PassAndShootMem:
     pass_and_score: PassAndScoreMem
     assigned_pair: Optional[tuple[int, int]] = None
 
@@ -86,7 +91,7 @@ _PHASE_TIMEOUT_TIME = 12.0  # seconds — generous budget for the full aim+posit
 _PHASE_TIMEOUT_TICKS = round(_PHASE_TIMEOUT_TIME * CONTROL_FREQUENCY)
 
 
-class TwoRobotAttackTactic(BaseTactic[TwoRobotAttackMem]):
+class PassAndShootTactic(BaseTactic[PassAndShootMem]):
     """Two attacking robots, dynamic passer/receiver role by ball proximity."""
 
     tag = TacticTag.ATTACK
@@ -101,17 +106,17 @@ class TwoRobotAttackTactic(BaseTactic[TwoRobotAttackMem]):
         self.receiver_pos = receiver_pos
         self.dynamic_setup = dynamic_setup
 
-    def initial_mem(self) -> TwoRobotAttackMem:
-        return TwoRobotAttackMem(pass_and_score=PassAndScoreMem())
+    def initial_mem(self) -> PassAndShootMem:
+        return PassAndShootMem(pass_and_score=PassAndScoreMem())
 
-    def is_committed(self, game: Game, mem: TwoRobotAttackMem) -> bool:
+    def is_committed(self, game: Game, mem: PassAndShootMem) -> bool:
         if mem is None or mem.assigned_pair is None:
             return False
         return mem.pass_and_score.phase != "setup"
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: TwoRobotAttackMem
-    ) -> tuple[dict[RobotId, RobotCommand], TwoRobotAttackMem]:
+        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: PassAndShootMem
+    ) -> tuple[dict[RobotId, RobotCommand], PassAndShootMem]:
         pair = (robot_ids[0], robot_ids[1])
 
         if mem.assigned_pair is None or mem.pass_and_score.phase == "setup":
@@ -128,7 +133,7 @@ class TwoRobotAttackTactic(BaseTactic[TwoRobotAttackMem]):
             # match: the ref resets the ball, so start a fresh attempt rather
             # than sitting idle. Re-picking passer/receiver here (rather than
             # keeping the pinned pair) is deliberate: a completed attempt is
-            # exactly the point where `two_robot_attack`'s own docstring says
+            # exactly the point where `pass_and_shoot`'s own docstring says
             # reassignment is safe.
             mem.pass_and_score = PassAndScoreMem()
             mem.assigned_pair = None

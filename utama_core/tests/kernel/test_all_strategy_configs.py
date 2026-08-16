@@ -129,7 +129,7 @@ def test_fixed_ratio_picker_high_press_split():
 
 
 def test_fixed_ratio_picker_low_block_split_respects_min_attack_floor():
-    """attack_fraction=0.2 on 5 robots rounds to 1, but TwoRobotAttackTactic
+    """attack_fraction=0.2 on 5 robots rounds to 1, but PassAndShootTactic
     hard-requires >=2 (it unconditionally reads robot_ids[1]) — min_attack=2
     floors the split rather than letting `build_low_block_kernel_strategy`
     crash the tactic it wires (the exact regression this test guards)."""

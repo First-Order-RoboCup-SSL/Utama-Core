@@ -4,7 +4,7 @@ New tactical logic, not ported from Utama-Strategy and not a variation on an
 existing Core tactic (see `docs/roadmap.md`'s "More tactics" entry, which
 asks for genuinely new football vocabulary rather than growing the catalog
 by variations on what's already there). Every attacking tactic so far drives
-straight at the danger: `TwoRobotAttackTactic` sets up a fixed pass-then-shoot,
+straight at the danger: `PassAndShootTactic` sets up a fixed pass-then-shoot,
 `LeadAndSupportTactic`'s leader dribbles toward goal and looks for a lane,
 `GiveAndGoTactic` cycles hops but each hop is still "whoever is open now,
 shoot or pass." None of them deliberately manufacture space by first *luring*
@@ -15,7 +15,7 @@ the lane clears behind the marker, or by a teammate who runs into the space
 the marker just left.
 
 Two roles, both re-evaluated only outside a commitment window (mirrors
-`is_committed()` in every other attack tactic here — see `two_robot_attack`'s
+`is_committed()` in every other attack tactic here — see `pass_and_shoot`'s
 docstring for the original rationale): a **decoy** (the ball carrier) and an
 **overloader** (the teammate who exploits the vacated space). Phases:
 
@@ -183,7 +183,7 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
             # ball chase rather than crash; a single-robot allocation to an
             # ATTACK-tagged, two-role tactic is a Partitioner misconfiguration
             # (see `_fixed_ratio_picker`'s `min_attack` handling of the same
-            # class of problem for `TwoRobotAttackTactic`), not something
+            # class of problem for `PassAndShootTactic`), not something
             # this tactic should silently invent a role split for.
             robot_id = robot_ids[0]
             return {robot_id: go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id)}, mem

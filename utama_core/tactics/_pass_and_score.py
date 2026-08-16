@@ -1,13 +1,13 @@
-"""Shared pass-and-score phase machinery used by `two_robot_attack`.
+"""Shared pass-and-score phase machinery used by `pass_and_shoot`.
 
 Ported from `utama_strategy.functional.strategies.pass_and_score` — only the
-pieces `two_robot_attack` actually calls (`PassAndScoreMem`, `_setup_positions`,
+pieces `pass_and_shoot` actually calls (`PassAndScoreMem`, `_setup_positions`,
 `run_setup_phase`, `_pass_exec`, `_score_goal`). The original module's own
 `PassAndScoreStrategy` class (a standalone fixed-assignment tactic) is not
 ported in this pass — out of scope; port it if/when a caller needs a
-fixed-pair pass tactic distinct from `two_robot_attack`'s dynamic assignment.
+fixed-pair pass tactic distinct from `pass_and_shoot`'s dynamic assignment.
 
-Leading underscore: this is `two_robot_attack`'s private implementation
+Leading underscore: this is `pass_and_shoot`'s private implementation
 detail, not a tactic of its own and not meant to be imported elsewhere.
 """
 

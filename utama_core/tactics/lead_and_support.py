@@ -2,7 +2,7 @@
 
 New tactical logic, not ported from Utama-Strategy's `plays/`/`strategies/`
 (the user explicitly asked for genuinely new tactics rather than a renamed
-2v1/go-to-space). `two_robot_attack`'s fixed passer/receiver pattern doesn't
+2v1/go-to-space). `pass_and_shoot`'s fixed passer/receiver pattern doesn't
 generalize past two robots without deciding what the other robots do — this
 tactic makes that decision: closest-to-ball leads (dribble toward goal, shoot
 when a lane opens, or pass to the best-scoring support point), every other
@@ -16,7 +16,7 @@ reinvented.
 Robot-count-agnostic per the design doc's §7 stance (no scheduler-level
 splitting policy yet): works with 1 robot (leader only, no support) up to
 however many are assigned. Leader role is re-evaluated every tick except
-while `is_committed()` — see below — mirroring `two_robot_attack`'s setup-phase
+while `is_committed()` — see below — mirroring `pass_and_shoot`'s setup-phase
 gating, generalized: once the leader has the ball and is not merely passing
 setup, re-picking "closest to ball" every tick is wrong for the same reason
 it was wrong there (the ball is transiently closer to a receiver than the
@@ -133,7 +133,7 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
 
     The leader dribbles toward goal and shoots as soon as a shot lane opens;
     otherwise it holds the ball while supports resettle. There is no
-    passing/receiving handoff sequencing here (unlike `two_robot_attack`) —
+    passing/receiving handoff sequencing here (unlike `pass_and_shoot`) —
     supports exist to occupy space and pull opponents out of position, not
     to be passed to. `is_committed()` covers only "leader has the ball and is
     lined up to shoot," a short-lived window, so this tactic is rarely a

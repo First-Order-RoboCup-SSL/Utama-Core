@@ -3,7 +3,7 @@
 Exercises the actual `StrategyRunner` call sequence (`load_robot_controller` /
 `load_motion_controller` before `load_game`, then repeated `step_once()`)
 against `AbstractStrategy`, not just the kernel `Strategy` in isolation — this
-is the thing `test_strategy.py`/`test_two_robot_attack_tactic.py` don't
+is the thing `test_strategy.py`/`test_pass_and_shoot_tactic.py` don't
 cover: that the kernel `Strategy` actually gets wired up correctly through
 `AbstractStrategy`'s robot_controller/motion_controller plumbing.
 """
@@ -58,7 +58,7 @@ def test_kernel_strategy_goalkeeper_is_pinned_to_robot_0(kernel_runner):
 def test_kernel_strategy_outfield_tactic_gets_ticked(kernel_runner):
     kernel_runner.step_once()
     strategy = kernel_runner.my.strategy
-    assert strategy._kernel_strategy.active_tactic_id == "two_robot_attack"
+    assert strategy._kernel_strategy.active_tactic_id == "pass_and_shoot"
 
 
 def test_kernel_strategy_is_built_by_load_motion_controller_alone():
