@@ -72,6 +72,7 @@ public:
         bool getDribbler();
         void toggleDribbler();
         bool isTouchingBall();
+        bool isNearKickerFace();
         KickStatus getKickerStatus();
         void holdBall();
         void unholdBall();

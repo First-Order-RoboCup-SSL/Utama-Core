@@ -1,0 +1,120 @@
+diff --git a/vendor/rSim/src/robosim/sslrobot.cpp b/vendor/rSim/src/robosim/sslrobot.cpp
+index 9721844..bf716e7 100644
+--- a/vendor/rSim/src/robosim/sslrobot.cpp
++++ b/vendor/rSim/src/robosim/sslrobot.cpp
+@@ -144,6 +144,74 @@ bool SSLRobot::Kicker::isTouchingBall()
+     return ((xx < SSLConfig::Robot().getKickerThickness() * 2.0f + SSLConfig::World().getBallRadius()) && (yy < SSLConfig::Robot().getKickerWidth()*0.5f) && (zz < SSLConfig::Robot().getKickerHeight() * 0.5f));
+ }
+ 
++// A looser proximity gate used only to decide whether kick() should fire.
++//
++// isTouchingBall() requires the ball to sit within a razor-thin box flush
++// against the kicker face (xx < kickerThickness*2 + ballRadius ~= 3.15cm
++// forward, yy < kickerWidth*0.5 = 4cm lateral, with kickerThickness = 5mm)
++// -- appropriate for deciding whether to grab the ball into the dribbler
++// hold (holdBall()), but far stricter than what any Python-side "do I have
++// the ball" sensor actually checks before issuing a kick command (e.g. the
++// visual has_ball() capture_distance used by utama_core's tactics is a
++// 0.15m *radial*, center-to-center distance -- not an axis-aligned box at
++// all). While the ball is held (holdingBall via holdBall()'s free-swinging
++// hinge to the kicker box), it can legitimately drift outside
++// isTouchingBall()'s thin window -- e.g. during a fast turn_on_spot pivot,
++// or while a robot is still settling after receiving a pass -- while
++// remaining visually/physically "with" the robot by any reasonable
++// definition. If kick() gates on isTouchingBall() and that check happens
++// to be false on the exact tick the kick command arrives, kick() silently
++// no-ops (see below): unholdBall() still releases the ball, but no
++// directional velocity is ever applied, so the ball simply keeps whatever
++// residual momentum it already had -- in a direction unrelated to the
++// robot's facing angle. This was confirmed to reproduce large (tens of
++// degrees to wildly wrong) launch-direction mismatches between the
++// commanded orientation and the ball's actual post-kick flight path.
++//
++// isNearKickerFace() instead uses a plain radial distance from the chassis
++// center, matched to that same 0.15m real-world capture distance, plus a
++// sanity check that the ball is roughly in front of the robot (not
++// directly behind it, where a "kick" would be physically nonsensical) so a
++// kick that Python's own sensors would already consider "in possession"
++// reliably fires.
++bool SSLRobot::Kicker::isNearKickerFace()
++{
++    dReal vx,vy,vz;
++    dReal bx,by,bz;
++    dReal rx,ry,rz;
++    dReal kx,ky,kz;
++
++    this->rob->chassis->getBodyDirection(vx,vy,vz);
++    this->rob->getBall()->getBodyPosition(bx,by,bz);
++    // Planar (x/y) distance and forward-facing check are measured from the
++    // chassis center, matching Python's has_ball(visual=True) semantics
++    // exactly (robot.p.distance_to(ball.p) against the robot's own
++    // position) -- not from the kicker box's position, which sits ~8cm
++    // forward of the chassis center and made a ball that's clearly still
++    // within capture range of the robot overall (e.g. approaching fast,
++    // just shy of the kicker's own forward offset) incorrectly fail a
++    // dot-product-from-the-kicker forward check.
++    this->rob->chassis->getBodyPosition(rx,ry,rz);
++    // Height is still checked against the kicker box's own z -- it sits
++    // near ball height close to the ground, well below the chassis's
++    // vertical center, so comparing height against the chassis center
++    // would reject essentially every real ball position.
++    this->box->getBodyPosition(kx,ky,kz);
++
++    dReal ox = bx - rx;
++    dReal oy = by - ry;
++    dReal dist = sqrt(ox*ox + oy*oy);
++    dReal zz = fabs(kz - bz);
++
++    const dReal kKickCaptureDistance = 0.15; // matches has_ball()'s visual capture_distance
++    // Forward-facing component of the offset -- reject a ball that's behind
++    // the robot rather than in front of it.
++    dReal forward = ox*vx + oy*vy;
++
++    return (dist < kKickCaptureDistance) && (forward > 0) &&
++           (zz < SSLConfig::Robot().getKickerHeight() * 0.5f);
++}
++
+ KickStatus SSLRobot::Kicker::getKickerStatus()
+ {
+     return this->kickerState;
+@@ -174,7 +242,7 @@ void SSLRobot::Kicker::kick(dReal kickSpeedX, dReal kickSpeedZ)
+ 
+     unholdBall();
+ 
+-    if (isTouchingBall())
++    if (isNearKickerFace())
+     {
+         dReal dlen = dx*dx + dy*dy + dz*dz;
+         dlen = sqrt(dlen);
+@@ -185,7 +253,18 @@ void SSLRobot::Kicker::kick(dReal kickSpeedX, dReal kickSpeedZ)
+ 
+         const dReal* vball = dBodyGetLinearVel(rob->getBall()->body);
+         dReal vn = -(vball[0]*dx + vball[1]*dy) * SSLConfig::Robot().getKickerDampFactor();
+-        dReal vt = -(vball[0]*dy - vball[1]*dx);
++        // The tangential component was previously left fully undamped (added
++        // back at 100% of the ball's pre-kick sideways speed, vs. the normal
++        // component's kickerDampFactor=0.2 damping). A ball carrying real
++        // lateral velocity at the moment of the kick -- e.g. one that
++        // arrived from a pass and hasn't fully settled, or was still
++        // swinging from a turn_on_spot pivot -- bled that velocity directly
++        // into the kick's resultant direction, confirmed to produce
++        // launch-angle deflections of tens of degrees (matching an observed
++        // real-match ~31 degree mismatch between commanded orientation and
++        // actual ball flight path). Damp it the same way as the normal
++        // component for consistency.
++        dReal vt = -(vball[0]*dy - vball[1]*dx) * SSLConfig::Robot().getKickerDampFactor();
+         vx += vn * dx - vt * dy;
+         vy += vn * dy + vt * dx;
+         dBodySetLinearVel(this->rob->getBall()->body,vx,vy,vz);
+diff --git a/vendor/rSim/src/robosim/sslrobot.h b/vendor/rSim/src/robosim/sslrobot.h
+index a162713..fb85075 100644
+--- a/vendor/rSim/src/robosim/sslrobot.h
++++ b/vendor/rSim/src/robosim/sslrobot.h
+@@ -72,6 +72,7 @@ public:
+         bool getDribbler();
+         void toggleDribbler();
+         bool isTouchingBall();
++        bool isNearKickerFace();
+         KickStatus getKickerStatus();
+         void holdBall();
+         void unholdBall();
