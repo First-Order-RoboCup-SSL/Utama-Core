@@ -21,6 +21,7 @@ from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
+from utama_core.tactics.switch_of_play import SwitchOfPlayTactic
 from utama_core.tactics.two_robot_attack import TwoRobotAttackTactic
 
 
@@ -457,6 +458,38 @@ def build_give_and_go_solo_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
         return KernelSchedulerStrategy(
             tactics={"attack": GiveAndGoTactic()},
             partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "attack"),
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
+def build_switch_of_play_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """5-robot (or fewer) `Strategy` factory exercising `SwitchOfPlayTactic`.
+
+    Wires `SwitchOfPlayTactic` ("attack") and `DefenseTactic` ("defense"),
+    split by `_fixed_ratio_picker` with `min_attack=3` — the tactic's full
+    carrier/pivot/runner relay needs 3 robots to actually exercise the
+    "switch" leg (the pivot outlet) rather than silently degrading to its
+    2-robot direct-pass fallback every tick, the same floor rationale
+    `build_low_block_kernel_strategy` gives `TwoRobotAttackTactic` and
+    `build_decoy_and_overload_kernel_strategy` gives `DecoyOverloadTactic`.
+    Attack fraction left at a plain 0.5 split (possession-agnostic), same as
+    `build_decoy_and_overload_kernel_strategy` — nothing about reading the
+    weak side and relaying the ball across it is more or less urgent when the
+    opponent has the ball.
+
+    Returns a `build_kernel_strategy(motion_controller)`
+    callable suitable for `AbstractStrategy`'s constructor argument of the
+    same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = KernelContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={"attack": SwitchOfPlayTactic(), "defense": DefenseTactic()},
+            partitioner=_fixed_ratio_picker("attack", "defense", attack_fraction=0.5, min_attack=3),
             outfield_robot_ids=outfield_robot_ids,
             ctx=ctx,
         )
