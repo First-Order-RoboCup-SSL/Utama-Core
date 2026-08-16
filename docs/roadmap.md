@@ -90,65 +90,99 @@ the stream — not decided here, just flagged as a genuine, measured (35x)
 performance footgun worth designing around properly rather than patching
 per-caller as this session did.
 
-**TODO — two more real costs found via `cProfile` on a single match, once the
-vision stream stopped dominating.** Neither is a bug — both are inherent to
-the current design — but both are plausible future optimization targets, not
-dismissed as untouchable:
-- `robosim`'s per-tick subprocess pipe I/O (`robosim_wrapper.py`'s
-  `readline()` round-trip: one write + one blocking read per tick over
-  stdin/stdout JSON to the physics simulator subprocess) — 1804 `readline()`
-  calls costing 1.996s in a 900-tick (15s) profiling run, essentially all of
-  it real wait time, not sub-call overhead. Comparable in magnitude to the
-  `distance_point_to_segment` cost below. Worth investigating whether the
-  physics step can be batched (send N ticks, read N responses) instead of a
-  strict per-tick round-trip, or whether the JSON serialization itself is a
-  meaningful fraction of the 1.1ms/call average — not diagnosed further here,
-  just measured.
-- `distance_point_to_segment` inside `FastPathPlanning`'s obstacle-avoidance
-  recursion (`motion_planning/src/fastpathplanning/planner.py`) — 427,032
-  calls in the same 900-tick run, ~475 calls/tick, 2.34s cumulative (1.32s of
-  that its own time, not sub-calls). A plausible target for vectorization or
-  tighter obstacle pre-filtering before falling into the recursive
-  segment-check.
+**Investigated (2026-08-16, subagent findings independently spot-verified
+against the real code before being trusted):** the two costs above, plus the
+tick-rate question, all followed up on properly rather than left as
+speculative TODOs.
 
-Both would matter more once the `enable_vision_stream` fix above is applied
-generally — right now the vision stream dwarfs both, so neither is the
-current bottleneck, but they're the next two things worth profiling again
-once it is.
+- **`robosim` pipe I/O — real, actionable fix found, not just a cost to
+  shrug at.** `RSimSSL.send_commands()` (`rsim.py:152`) calls
+  `self.simulator.step(sim_cmds)` and **discards the return value**.
+  `robosim_subprocess.py:82-83` already sends that step's resulting state
+  back over the pipe as part of the same response
+  (`state = sim.step(...); print(json.dumps({"state": state}))`) — but
+  nothing reads it. `standard_ssl.py:187` then issues a **second, separate**
+  `get_frame()` → `get_state()` round-trip
+  (`rsim.py:155-156`) to re-fetch the same information a moment later. Two
+  round-trips per tick where one would do — confirmed by reading both files
+  directly, not taken on the investigating agent's word. This is exactly
+  what the original 1804-`readline()`-over-900-ticks (≈2/tick) measurement
+  was seeing, just not previously diagnosed as *why* it was 2, not 1.
+  Wiring `send_commands()` to return/cache the `step()` response and having
+  `get_frame()` reuse it instead of a fresh `get_state()` call would roughly
+  halve `robosim` pipe wait per tick — small, surgical, no physics-fidelity
+  tradeoff (unlike the tick-rate idea below). **Not yet implemented** — a
+  real, scoped, low-risk fix ready to pick up.
+  - Measured separately, with a standalone script against the real
+    subprocess: JSON (de)serialization is ~1.0% of the ~2.27ms/call
+    real-world cost (`0.023ms` pure serialize/deserialize vs. `2.2659ms`
+    mean end-to-end). The remaining ~99% is pipe write/flush, OS process
+    scheduling, and robosim's own C++ physics step — not something a
+    format change would meaningfully affect.
+  - **Cross-tick batching (send N ticks, read N responses) is not
+    feasible** and shouldn't be pursued: each tick's commands are the
+    output of a strategy decision (`Partitioner`, `Tactic.tick()`,
+    `FastPathPlanning`) made *after* seeing the previous tick's physics
+    result. There's no window to compute N ticks' commands ahead of N
+    physics results without either running strategy decisions blind
+    (no longer reactive) or moving strategy logic into the physics
+    subprocess (a much larger architectural change, not a pipe
+    optimization).
+- **`distance_point_to_segment`** — not re-investigated this pass; still
+  flagged as a plausible `FastPathPlanning` optimization target (427,032
+  calls, 2.34s cumulative in the same 900-tick profile), lower priority than
+  the pipe fix above since it doesn't have an already-identified concrete fix.
 
-**TODO — investigate a lower tick rate for non-fidelity-sensitive runs.**
-`CONTROL_FREQUENCY = 60` (`config/settings.py`) drives both the `robosim`
-physics step size and every frame-counted constant in the codebase. For
-batch/tournament/RL-throughput runs that don't need 60Hz motion smoothness,
-a coarser tick rate is a bigger lever than either cost above — it cuts the
-*number* of `robosim` round-trips and `FastPathPlanning` calls per second of
-simulated gameplay, not just the cost of each one. Real, not yet scoped.
+**Tick-rate investigation — full audit done, feasibility confirmed
+architecturally straightforward, not yet implemented:**
 
-Two things this needs before it's a safe knob, not just a flip:
-- **Audit every frame-counted constant for hidden 60Hz coupling.** Some are
-  already correctly derived (`KICKER_COOLDOWN_TIMESTEPS =
-  KICKER_COOLDOWN_TIME * CONTROL_FREQUENCY`, `PROJECTEDFRAMES /
-  CONTROL_FREQUENCY` in `fastpathplanning/planner.py`) and would stay correct
-  automatically. Others are hardcoded tick counts with a 60Hz assumption
-  baked into a comment, not the value: `DoubleTouchRule._LURE_MAX_TICKS = 90
-  # ~1.5s at 60Hz` (`tactics/decoy_and_overload.py`) and `KeepOutRule`'s
-  `violation_persistence_frames: 30` (all three YAML profiles, "≈0.5s at 60Hz"
-  per its own docstring) are two found just from this session's own recent
-  edits — there are likely more. Lowering the tick rate without converting
-  these would silently change tactic/referee timing behavior (e.g. at 20Hz,
-  90 ticks becomes 4.5s instead of 1.5s), not just run faster.
-- **Physics fidelity at a coarser step is a different question from wall-clock
-  cost.** A larger `robosim` timestep changes per-step displacement and
-  collision behavior, not just speed — results from a low-tick-rate
-  tournament run may not be comparable to 60Hz-equivalent play. Whether that
-  tradeoff is acceptable depends on what the run is for (rough A/B tactic
-  comparison vs. anything claiming to represent real match behavior).
+- **Frame-counted-constant audit, extended beyond the two found earlier
+  this session.** Confirmed safe (correctly derived from `CONTROL_FREQUENCY`,
+  would stay correct automatically): `KICKER_COOLDOWN_TIMESTEPS`
+  (`settings.py:36`), `PROJECTEDFRAMES / CONTROL_FREQUENCY`
+  (`fastpathplanning/planner.py:120`), the DWA planner's `simulate_frames *
+  TIMESTEP` / `_control_period = TIMESTEP` (`dwa/planner.py`,
+  `dwa/translation_controller.py`), and the PID `dt` config defaults
+  (`pid/configs.py`). Confirmed unsafe (hardcoded tick count, implicit-Hz
+  assumption not encoded anywhere executable) beyond the two already found:
+  **`KICKER_PERSIST_TIMESTEPS = 10  # in timesteps to persist the kick
+  command`** (`settings.py:37`, right next to the correctly-derived
+  `KICKER_COOLDOWN_TIMESTEPS` on the line above — spot-checked directly,
+  genuinely a bare literal with no `* CONTROL_FREQUENCY`), `KICK_PERSISTENCE_FRAMES
+  = 3` in `standard_ssl.py`'s `_apply_dribbler_release_kicks`, and — a
+  distinct case — `_KICK_TTL_FRAMES = 45  # ~1.5s at 30fps` in
+  `run/vision_stream.py:20`, which assumes a *different* implicit rate
+  (the vision stream's own 30fps render loop, not `CONTROL_FREQUENCY=60`) —
+  a second, independent hardcoded-rate hazard, not the same one.
+- **`CONTROL_FREQUENCY` as a per-`StrategyRunner` parameter is
+  architecturally straightforward, not deep.** `SSLStandardEnv` already
+  accepts `time_step` as a constructor parameter (not hardcoded) —
+  `StrategyRunner._init_sim_and_controller()` just doesn't pass one through
+  today, so that's a one-line threading fix. RSIM mode never rate-limits on
+  `TIMESTEP` at all (`strategy_runner.py:1362`'s `time.sleep` only fires for
+  non-RSIM modes) — for batch/tournament runs, `TIMESTEP` today only gates
+  physics step size and motion-planner `dt` integration, not wall-clock
+  pacing, which is one less thing to worry about. The three motion
+  controllers (PID/DWA/FastPathPlanning) all follow the same `(mode,
+  rsim_env)` construction shape and read `dt`/`TIMESTEP` from factory
+  functions keyed only by `Mode` — making frequency per-runner means adding
+  a parameter to that one construction call chain and those factories, not
+  a redesign. `FastPathPlanner`'s direct `CONTROL_FREQUENCY` import
+  (`planner.py:120`) is the one genuinely awkward case with no config
+  object to thread through today. Real hardware (`real_robot_controller.py`)
+  should stay pinned to the true global regardless — not every consumer
+  needs to become parameterized, only the RSIM-path constructors.
+- **Physics fidelity at a coarser step remains a separate, undecided
+  question from the plumbing** — parameterizing `CONTROL_FREQUENCY`
+  doesn't resolve whether a larger `robosim` timestep's different
+  per-step displacement/collision behavior is acceptable for a given
+  run's purpose. Still open, as originally flagged.
 
-Likely shape of a real fix: make `CONTROL_FREQUENCY` a per-`StrategyRunner`
-parameter instead of a single global, so fidelity-sensitive callers (real
-mode, grsim demos) keep 60Hz and throughput-sensitive callers (tournament
-runs, RL training) can opt into something coarser — not decided here, just
-the shape that avoids a single global changing behavior everywhere at once.
+**Not yet implemented, either the pipe de-dup or the tick-rate
+parameterization** — both are now real, scoped, and ready to pick up rather
+than speculative; picking between them (or doing the pipe fix first, since
+it's smaller and has no fidelity tradeoff) is the next decision, not made
+here.
 
 Original framing, for context (superseded by the above):
 
