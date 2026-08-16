@@ -27,6 +27,7 @@ import pytest
 from utama_core.kernel.kernel_strategy import (
     _fixed_ratio_picker,
     _three_way_picker,
+    build_decoy_and_overload_kernel_strategy,
     build_give_and_go_solo_kernel_strategy,
     build_high_press_kernel_strategy,
     build_low_block_kernel_strategy,
@@ -46,6 +47,7 @@ _CONFIGS = [
     pytest.param(build_low_block_kernel_strategy, id="low_block"),
     pytest.param(build_three_slot_kernel_strategy, id="three_slot"),
     pytest.param(build_give_and_go_solo_kernel_strategy, id="give_and_go_solo"),
+    pytest.param(build_decoy_and_overload_kernel_strategy, id="decoy_and_overload"),
 ]
 
 

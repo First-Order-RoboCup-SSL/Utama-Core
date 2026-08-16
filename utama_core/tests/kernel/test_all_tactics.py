@@ -26,6 +26,7 @@ import pytest
 
 from utama_core.kernel.context import KernelContext
 from utama_core.kernel.tactic import TacticTag
+from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
 from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
@@ -45,6 +46,7 @@ _TACTIC_CASES = [
     pytest.param(ShadowAndMarkTactic, (1, 2, 3, 4), 5, 3, id="shadow_and_mark"),
     pytest.param(PressAndContainTactic, (1, 2, 3), 4, 3, id="press_and_contain"),
     pytest.param(GiveAndGoTactic, (1, 2, 3), 5, 2, id="give_and_go"),
+    pytest.param(DecoyOverloadTactic, (1, 2, 3), 5, 2, id="decoy_and_overload"),
 ]
 
 
