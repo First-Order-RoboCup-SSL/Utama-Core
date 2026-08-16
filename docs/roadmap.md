@@ -30,8 +30,9 @@ picks them up — this file isn't itself a design doc.
    green run. See "CI" below for the full account.
 4. Tournament/multi-strategy infra still waits on there being enough of a
    tactic catalog for comparisons to mean anything.
-5. Agentic coding infra (`AGENTS.md` at least) can start any time — cheap,
-   and best written while the tactic-kernel reasoning is still fresh.
+5. Agentic coding infra — `AGENTS.md` done, see "Agentic coding infra" below.
+   The other two items there (CI shaped for agent loops, LLM-legible
+   grsim/rsim feedback) remain exploratory, no design decided.
 
 ## Multi-strategy / tournament evaluation infra
 
@@ -271,11 +272,19 @@ real run times.
 As the tactic catalog and contributor base potentially includes coding agents (not
 just humans), worth deliberately investing in:
 
-- **`AGENTS.md`** (agent-agnostic, not Claude-specific) — durable context a coding
-  agent needs before touching this repo: the kernel/Tactic/Partitioner model, the
-  single-writer-partition invariant, `--headless` requirement, minimalism discipline
-  (add concepts only after a concrete forcing case), where design rationale lives
-  (`docs/tactic_model_design_decisions.md`).
+- ~~**`AGENTS.md`**~~ **Done** (2026-08-16) — agent-agnostic (not Claude-specific)
+  root-level `AGENTS.md` covers: what the repo is (Utama-Core active,
+  Utama-Strategy stale), the kernel/`Tactic`/`Strategy`/`Partitioner` model
+  (verified against the real `kernel/tactic.py`/`kernel/strategy.py` code, not
+  just the design doc's framing), the single-writer-partition invariant,
+  `CustomReferee`/`RefereeOverride` handling, the minimalism discipline (add a
+  concept only after a concrete forcing case), the `--headless` requirement and
+  `--level quick|full` CI split, the rsim-dribble-flakiness caveat with the
+  `xfail(strict=False, ...)` pattern to follow, a "don't trust a self-reported
+  test pass, re-run it" note, and a pointer map to
+  `docs/tactic_model_design_decisions.md`/`docs/custom_referee.md`/
+  `docs/custom_referee_design_decisions.md`/this file for anything needing more
+  depth than a one-paragraph summary.
 - **CI/testing infra shaped for agent iteration loops**, not just human PR gating —
   e.g. fast feedback on whether a newly authored `Tactic` is well-formed
   (`tag` declared, `applicable()`/`is_committed()` behave sanely) before a full
