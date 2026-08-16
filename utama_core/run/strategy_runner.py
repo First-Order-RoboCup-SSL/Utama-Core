@@ -198,7 +198,7 @@ class StrategyRunner:
             Defaults to 0 for each.
         rsim_vanishing (float, optional): When running in rsim, cause robots and ball to vanish with the given probability.
             Defaults to 0.
-        filtering (bool, optional): Turn on Kalman filtering. Defaults to false.
+        filtering (bool, optional): Turn on Kalman smoothing and vanished-robot imputation. Defaults to True.
         referee (RefereeSource, optional): Referee source.  Pass a ``CustomReferee``
             instance to use the in-process referee, ``OfficialReferee()`` to consume
             commands from the SSL game-controller over the network, or ``None``

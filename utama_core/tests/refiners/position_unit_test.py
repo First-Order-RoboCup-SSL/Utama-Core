@@ -1,7 +1,7 @@
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.data_processing.refiners import PositionRefiner
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
-from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionRobotData
 from utama_core.entities.game import Ball, GameFrame
 from utama_core.entities.game.robot import Robot
@@ -66,6 +66,11 @@ def rfac(id, is_friendly, x, y) -> Robot:
 
 def bfac(x, y) -> Ball:
     return Ball(Vector2D(x, y), Vector2D(0, 0), Vector2D(0, 0))
+
+
+def bfac3d(x, y, z=0.0) -> Ball:
+    zv = Vector3D(0, 0, 0)
+    return Ball(Vector3D(x, y, z), zv, zv)
 
 
 def base_refine(is_yellow: bool):
@@ -214,6 +219,57 @@ def test_no_allowlist_passes_all_robots():
 
     assert 0 in result.friendly_robots
     assert 1 in result.friendly_robots
+
+
+def test_smooth_positions_false_passes_raw_vision_through():
+    """With smooth_positions=False, present robots bypass the Kalman filter entirely and their
+    vision position is used as-is."""
+    friendly = {0: rfac(0, True, 0, 0)}
+    raw_yellow = [RawRobotData(0, -1, -1, 0, 1)]
+    raw_balls = [RawBallData(0, 0, 0, 0)]
+    frames = [RawVisionData(0, raw_yellow, [], raw_balls, 0)]
+
+    p = PositionRefiner(full_field_dims, smooth_positions=False, impute_vanished=True)
+    p.start_filtering()
+    g = GameFrame(0, True, True, friendly, {}, bfac(0, 0))
+    result = p.refine(g, frames)
+
+    fr = result.friendly_robots[0]
+    assert fr.p.x == raw_yellow[0].x
+    assert fr.p.y == raw_yellow[0].y
+
+
+def test_impute_vanished_false_leaves_vanished_robot_stale():
+    """With impute_vanished=False, a robot missing from this tick's vision is neither dropped
+    nor Kalman-predicted forward: it's carried over from the previous frame untouched, since
+    _combine_single_team_positions only updates robots vision actually reports this tick."""
+    friendly = {0: rfac(0, True, 5, 5)}
+    raw_balls = [RawBallData(0, 0, 0, 0)]
+    frames = [RawVisionData(0, [], [], raw_balls, 0)]  # no yellow robots seen this tick
+
+    p = PositionRefiner(full_field_dims, smooth_positions=True, impute_vanished=False)
+    p.start_filtering()
+    g = GameFrame(0, True, True, friendly, {}, bfac3d(0, 0))
+    result = p.refine(g, frames)
+
+    assert 0 in result.friendly_robots
+    assert result.friendly_robots[0].p.x == 5
+    assert result.friendly_robots[0].p.y == 5
+
+
+def test_impute_vanished_true_keeps_vanished_robot():
+    """With impute_vanished=True, a robot missing from this tick's vision is imputed via the
+    Kalman predict step and remains present in the result."""
+    friendly = {0: rfac(0, True, 0, 0)}
+    raw_balls = [RawBallData(0, 0, 0, 0)]
+    frames = [RawVisionData(0, [], [], raw_balls, 0)]  # no yellow robots seen this tick
+
+    p = PositionRefiner(full_field_dims, smooth_positions=True, impute_vanished=True)
+    p.start_filtering()
+    g = GameFrame(0, True, True, friendly, {}, bfac3d(0, 0))
+    result = p.refine(g, frames)
+
+    assert 0 in result.friendly_robots
 
 
 if __name__ == "__main__":

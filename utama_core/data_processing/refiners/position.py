@@ -43,12 +43,17 @@ class VisionBounds:
 class PositionRefiner(BaseRefiner):
     """
     Refiner that combines vision data from multiple cameras, applies bounds filtering,
-    and optionally applies Kalman filtering for smoothing and imputing vanished robots.
+    and optionally applies Kalman smoothing and/or imputes vanished robots.
 
     Args:
         full_field_dims: The dimensions of the full field, used to set bounds for vision data inclusion.
-        filtering: Whether to apply Kalman filtering for smoothing and imputing vanished robots.
+        filtering: Default for both `smooth_positions` and `impute_vanished` when they are left unset.
+            Kept as a single convenience switch since most callers want both on or both off together.
         exp_ball: Whether to expect a ball on the field.
+        smooth_positions: Whether to apply Kalman smoothing to robot/ball positions. Defaults to `filtering`.
+        impute_vanished: Whether to impute robots that vanish from vision (via the Kalman predict step,
+            with no measurement update that tick). Defaults to `filtering`. Note this is independent of
+            smoothing: it can be kept on even if `smooth_positions` is off, or vice versa.
 
     Important:
         when exp_ball set to False, the refiner could return either Ball | None type ball value
@@ -62,6 +67,8 @@ class PositionRefiner(BaseRefiner):
         exp_ball: bool = True,
         allowed_yellow_ids: Optional[frozenset[int]] = None,
         allowed_blue_ids: Optional[frozenset[int]] = None,
+        smooth_positions: Optional[bool] = None,
+        impute_vanished: Optional[bool] = None,
     ):
         # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
         self.angle_smoother = AngleSmoother(alpha=1)
@@ -75,8 +82,11 @@ class PositionRefiner(BaseRefiner):
             y_max=top_left[1] + VISION_BOUNDS_BUFFER,
         )
 
-        # For Kalman filtering and imputing vanished values.
-        self.filtering = filtering
+        # Kalman smoothing and vanished-robot imputation are independent concerns that both
+        # happen to be driven off the Kalman filter; each can be toggled on its own.
+        self.smooth_positions = filtering if smooth_positions is None else smooth_positions
+        self.impute_vanished = filtering if impute_vanished is None else impute_vanished
+        self._uses_kalman = self.smooth_positions or self.impute_vanished
         self._filter_running = (
             False  # Only start filtering once we have valid data to filter (i.e. after the first valid game frame)
         )
@@ -85,7 +95,7 @@ class PositionRefiner(BaseRefiner):
         self.allowed_yellow_ids = allowed_yellow_ids
         self.allowed_blue_ids = allowed_blue_ids
 
-        if self.filtering:
+        if self._uses_kalman:
             # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
             self.kalman_filters_yellow: dict[int, KalmanFilter] = {}
             self.kalman_filters_blue: dict[int, KalmanFilter] = {}
@@ -112,10 +122,15 @@ class PositionRefiner(BaseRefiner):
 
         time_elapsed = combined_vision_data.ts - game_frame.ts
 
-        # For filtering and vanishing
-        if self.filtering and self._filter_running:  # Checks if the first valid game frame has been received.
-            # For vanishing: imputes combined_vision_data with null vision frames in place.
-            vision_yellow, vision_blue = self._include_vanished_robots(combined_vision_data, game_frame)
+        # Kalman smoothing and vanished-robot imputation share the same predict/update filter,
+        # so both toggles gate this block; each independently controls what it feeds into it.
+        if self._uses_kalman and self._filter_running:  # Checks if the first valid game frame has been received.
+            if self.impute_vanished:
+                # Imputes combined_vision_data with null vision frames in place for vanished robots.
+                vision_yellow, vision_blue = self._include_vanished_robots(combined_vision_data, game_frame)
+            else:
+                vision_yellow = {r.id: r for r in combined_vision_data.yellow_robots}
+                vision_blue = {r.id: r for r in combined_vision_data.blue_robots}
 
             yellow_rbt_last_frame, blue_rbt_last_frame = map_friendly_enemy_to_colors(
                 game_frame.my_team_is_yellow,
@@ -125,6 +140,10 @@ class PositionRefiner(BaseRefiner):
 
             filtered_yellow_robots = []
             for y_rbt_id, vision_y_rbt in vision_yellow.items():
+                if not self.smooth_positions and vision_y_rbt is not None:
+                    # Smoothing off: pass present robots through untouched, still let vanished ones be imputed.
+                    filtered_yellow_robots.append(vision_y_rbt)
+                    continue
                 if y_rbt_id not in self.kalman_filters_yellow:
                     self.kalman_filters_yellow[y_rbt_id] = KalmanFilter(id=y_rbt_id)
                     if y_rbt_id not in yellow_rbt_last_frame:
@@ -140,6 +159,9 @@ class PositionRefiner(BaseRefiner):
 
             filtered_blue_robots = []
             for b_rbt_id, vision_b_rbt in vision_blue.items():
+                if not self.smooth_positions and vision_b_rbt is not None:
+                    filtered_blue_robots.append(vision_b_rbt)
+                    continue
                 if b_rbt_id not in self.kalman_filters_blue:
                     self.kalman_filters_blue[b_rbt_id] = KalmanFilter(id=b_rbt_id)
                     if b_rbt_id not in blue_rbt_last_frame:
@@ -173,8 +195,11 @@ class PositionRefiner(BaseRefiner):
 
         # Skip filtering when there's no ball and we don't expect one
         if new_ball is not None or self.exp_ball:
-            # For filtering and vanishing
-            if self.filtering and self._filter_running:
+            ball_vanished = new_ball is None
+            run_ball_filter = self._filter_running and (
+                (self.smooth_positions and not ball_vanished) or (self.impute_vanished and ball_vanished)
+            )
+            if run_ball_filter:
                 new_ball = self.kalman_filter_ball.filter_data(
                     new_ball,
                     game_frame.ball,
@@ -209,7 +234,7 @@ class PositionRefiner(BaseRefiner):
         Should be called at the start of each game to ensure no leakage of information between games.
         """
         self._filter_running = False
-        if self.filtering:
+        if self._uses_kalman:
             self.kalman_filters_yellow = {}
             self.kalman_filters_blue = {}
             self.kalman_filter_ball = KalmanFilterBall()
