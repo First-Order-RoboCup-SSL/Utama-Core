@@ -1,5 +1,5 @@
 import math
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np  # type: ignore
 
@@ -165,8 +165,25 @@ class FastPathPlanner:
             return obstacle_pos
 
         direction = target - robot_pos
+        direction_norm = np.linalg.norm(direction)
+        if direction_norm == 0.0:
+            # `robot_pos` and `target` have collapsed to the same point (this
+            # recursive call's segment endpoints, not the original plan's) —
+            # a previous recursion step's subgoal landed exactly on one of
+            # them. There is no well-defined perpendicular to rotate here;
+            # `rotate_vector` would preserve the zero magnitude and the
+            # normalize below would divide 0/0 into NaN, silently poisoning
+            # every subgoal computed from it for the rest of this recursion.
+            # Confirmed via direct reproduction: an idle robot sitting
+            # directly on a tactic's planned path degenerated a detour
+            # segment into exactly this case, and the resulting NaN subgoal
+            # left the robot with no valid route around the obstacle for the
+            # rest of the match. Same fallback as the recursion-depth
+            # failsafe above: give up and return the obstacle position
+            # itself rather than propagate NaN.
+            return obstacle_pos
         perp_dir = rotate_vector(direction[0], direction[1], math.pi * (subgoal_direction + 0.5))
-        unitvec = perp_dir / np.linalg.norm(perp_dir)
+        unitvec = perp_dir / direction_norm
         subgoal = obstacle_pos + self.SUBGOAL_DISTANCE * unitvec * multiple
 
         for o in obstacles:
@@ -336,7 +353,12 @@ class FastPathPlanner:
             return (point + new_target) / 2.0
 
     def sanitize_target(
-        self, target: np.ndarray, obstacles: List, robot_pos: np.ndarray, field_bounds: FieldBounds | None = None
+        self,
+        target: np.ndarray,
+        obstacles: List,
+        robot_pos: np.ndarray,
+        field_bounds: FieldBounds | None = None,
+        exempt_obstacles: Optional[set] = None,
     ) -> np.ndarray:
         """
         Ensures the target isn't inside a velocity-line obstacle.
@@ -345,7 +367,25 @@ class FastPathPlanner:
         legally be near the touchline and the robot must be able to reach it.
         Boundary walls are still used in path collision detection so the planner
         never routes *through* the wall — they just don't repel the target.
+
+        `exempt_obstacles` (identified by `(tuple(o[0]), tuple(o[1]))`, same
+        keying as `boundary_segments` below) gets the same treatment, for the
+        same reason: a `go_to_ball` target sitting at/near the ball is
+        legitimately close to a contesting opponent robot — that robot is a
+        real obstacle for the *path* (still routed around via `check_segment`
+        below), but pushing the *target itself* away from it by a full
+        `OBSTACLE_CLEARANCE` makes any contested ball permanently
+        uncollectable: the target keeps retreating from the very obstacle the
+        robot needs to get close to, so the "carrot" `smooth_path` derives
+        from it never advances and the robot converges just outside contact
+        range and stalls there indefinitely. Confirmed via direct
+        reproduction: a passer approaching a ball parked ~0.31m from an idle
+        enemy robot got its target sanitized from ~0.01m off the ball to
+        ~0.13m off it, converged to ~0.15m from the ball, and never closed
+        the remaining gap for the rest of a 60s match.
         """
+        if exempt_obstacles is None:
+            exempt_obstacles = set()
         if field_bounds is not None:
             # Build the set of field-boundary segments so we can skip them below.
             tl = np.array(field_bounds.top_left)
@@ -365,7 +405,8 @@ class FastPathPlanner:
         for _ in range(5):
             collision_found = False
             for o in obstacles:
-                if (tuple(o[0]), tuple(o[1])) in boundary_segments:
+                o_key = (tuple(o[0]), tuple(o[1]))
+                if o_key in boundary_segments or o_key in exempt_obstacles:
                     continue
                 if distance_point_to_segment(safe_target, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
                     closest_pt = closest_point_on_segment(safe_target, o[0], o[1])
@@ -419,8 +460,30 @@ class FastPathPlanner:
             raw_target, self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
         )
 
-        # 3. Sanitize target — skip boundary walls so robots can reach the ball near touchlines
-        safe_target = self.sanitize_target(raw_target, obstacles, our_pos, field_bounds)
+        # 3. Sanitize target — skip boundary walls so robots can reach the ball
+        # near touchlines, and skip obstacles that are themselves right next
+        # to the ball when the target is a ball-approach target (see
+        # `sanitize_target`'s docstring): a contested ball is a normal,
+        # legal situation, and pushing the target away from an opponent
+        # standing near it makes the ball permanently uncollectable rather
+        # than just harder to reach. Identified structurally (target is
+        # within contact range of the live ball position), not via a new
+        # parameter threaded through every `MotionController` implementation
+        # — `go_to_ball`'s target already sits within a few centimetres of
+        # the ball by construction (see `_target_past_ball`'s small
+        # overshoot), so this only ever fires for genuine ball-approach
+        # targets, not general movement commands that merely happen to end
+        # up near the ball.
+        ball_adjacent_obstacles = set()
+        if game.ball is not None:
+            ball_pos = np.array([game.ball.p.x, game.ball.p.y])
+            if np.linalg.norm(raw_target - ball_pos) < self.OBSTACLE_CLEARANCE:
+                for o in obstacles:
+                    if distance_point_to_segment(ball_pos, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
+                        ball_adjacent_obstacles.add((tuple(o[0]), tuple(o[1])))
+        safe_target = self.sanitize_target(
+            raw_target, obstacles, our_pos, field_bounds, exempt_obstacles=ball_adjacent_obstacles
+        )
 
         # 4. Plan geometric path
         final_trajectory, _ = self.check_segment((our_pos, safe_target), obstacles, 0, safe_target, field_bounds)
