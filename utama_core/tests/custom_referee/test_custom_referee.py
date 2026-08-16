@@ -13,6 +13,7 @@ from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.custom_referee.rules.ball_speed_rule import BallSpeedRule
 from utama_core.custom_referee.rules.defense_area_rule import DefenseAreaRule
+from utama_core.custom_referee.rules.double_touch_rule import DoubleTouchRule
 from utama_core.custom_referee.rules.goal_rule import GoalRule
 from utama_core.custom_referee.rules.keep_out_rule import KeepOutRule
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
@@ -257,6 +258,148 @@ class TestBallSpeedRule:
         rule = BallSpeedRule(max_speed_mps=6.5)
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0))
         assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
+
+
+# ---------------------------------------------------------------------------
+# DoubleTouchRule
+# ---------------------------------------------------------------------------
+
+
+def _arm_double_touch(rule: DoubleTouchRule, restart_command: RefereeCommand) -> None:
+    """Drive a DoubleTouchRule through the same call pattern CustomReferee.step()
+    uses across a restart_command -> NORMAL_START transition: check() is
+    called with the OLD command before the state machine advances, then
+    reset() fires because the command changed, then check() is called again
+    with the NEW command (NORMAL_START) — which is the tick that arms."""
+    rule.check(_frame(ball=_ball(0.0, 0.0)), GEO, restart_command)
+    rule.reset()
+
+
+class TestDoubleTouchRule:
+    def test_same_robot_touching_twice_after_a_restart_fouls(self):
+        rule = DoubleTouchRule()
+        _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_YELLOW)
+
+        kicker = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        rule.check(
+            _frame(ball=_ball(0.0, 0.0), friendly_robots=kicker, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+
+        released = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=False)}
+        rule.check(
+            _frame(ball=_ball(0.0, 0.0), friendly_robots=released, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+
+        touched_again = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        violation = rule.check(
+            _frame(ball=_ball(0.0, 0.0), friendly_robots=touched_again, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+        assert violation is not None
+        assert violation.rule_name == "double_touch"
+        assert violation.next_command == RefereeCommand.DIRECT_FREE_BLUE
+
+    def test_continuous_possession_is_not_a_second_touch(self):
+        """has_ball staying True (normal dribbling/carrying) must not itself
+        look like a fresh touch."""
+        rule = DoubleTouchRule()
+        _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_YELLOW)
+
+        kicker = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        for _ in range(5):
+            violation = rule.check(
+                _frame(ball=_ball(0.0, 0.0), friendly_robots=kicker, my_team_is_yellow=True),
+                GEO,
+                RefereeCommand.NORMAL_START,
+            )
+            assert violation is None
+
+    def test_a_different_robot_touching_is_legal_and_disarms(self):
+        rule = DoubleTouchRule()
+        _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_YELLOW)
+
+        kicker = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        rule.check(
+            _frame(ball=_ball(0.0, 0.0), friendly_robots=kicker, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+
+        teammate_receives = {
+            0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=False),
+            1: _robot(1, 1.0, 0.0, is_friendly=True, has_ball=True),
+        }
+        violation = rule.check(
+            _frame(ball=_ball(1.0, 0.0), friendly_robots=teammate_receives, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+        assert violation is None  # legal pass
+
+        # Original kicker touching it again now is fine — window already closed.
+        kicker_touches_again = {
+            0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True),
+            1: _robot(1, 1.0, 0.0, is_friendly=True, has_ball=False),
+        }
+        violation2 = rule.check(
+            _frame(ball=_ball(0.0, 0.0), friendly_robots=kicker_touches_again, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+        assert violation2 is None
+
+    def test_ordinary_open_play_without_a_preceding_restart_is_never_armed(self):
+        """NORMAL_START reached other than via a restart command (e.g. after a
+        kickoff timeout auto-advances straight through, or mid-match with no
+        stoppage at all) must never arm — otherwise ordinary dribbling would
+        be flagged as a foul."""
+        rule = DoubleTouchRule()
+        robot_state = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        released = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=False)}
+        for _ in range(3):
+            rule.check(
+                _frame(ball=_ball(0.0, 0.0), friendly_robots=robot_state, my_team_is_yellow=True),
+                GEO,
+                RefereeCommand.NORMAL_START,
+            )
+            rule.check(
+                _frame(ball=_ball(0.0, 0.0), friendly_robots=released, my_team_is_yellow=True),
+                GEO,
+                RefereeCommand.NORMAL_START,
+            )
+        assert rule._armed is False
+
+    def test_disarms_when_play_leaves_normal_start(self):
+        rule = DoubleTouchRule()
+        _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_YELLOW)
+        kicker = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        rule.check(
+            _frame(ball=_ball(0.0, 0.0), friendly_robots=kicker, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+        assert rule._armed is True
+
+        rule.check(_frame(ball=_ball(0.0, 0.0)), GEO, RefereeCommand.STOP)
+        assert rule._armed is False
+
+    def test_reset_for_new_episode_clears_prev_command(self):
+        """A plain reset() (command-transition reset) must keep _prev_command
+        so the arming edge can still be detected — but a full episode reset
+        must not let a stale _prev_command from the last episode arm this
+        one incorrectly."""
+        rule = DoubleTouchRule()
+        rule.check(_frame(ball=_ball(0.0, 0.0)), GEO, RefereeCommand.DIRECT_FREE_YELLOW)
+        rule.reset()
+        assert rule._prev_command == RefereeCommand.DIRECT_FREE_YELLOW
+
+        rule.reset_for_new_episode()
+        assert rule._prev_command is None
 
 
 # ---------------------------------------------------------------------------
@@ -660,6 +803,57 @@ class TestCustomReferee:
         data = referee.step(_frame(ball=_ball(0.0, 0.0), ts=10.0), current_time=10.0)
         assert data.referee_command == RefereeCommand.STOP
         assert data.next_command == RefereeCommand.PREPARE_PENALTY_YELLOW
+
+    def test_simulation_double_touch_after_direct_free_kick_is_flagged(self):
+        """End-to-end through the real CustomReferee.step() call pattern —
+        the single most important double-touch test, since it validates the
+        rule's arming logic against the actual command-transition timing
+        rather than a hand-rolled simulation of it."""
+        referee = CustomReferee.from_profile_name("simulation")
+        referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+        referee.set_command(RefereeCommand.DIRECT_FREE_BLUE, timestamp=1.0)
+
+        # STOP -> DIRECT_FREE_BLUE requires robots to clear the ball first.
+        clear_frame = _frame(ball=_ball(0.0, 0.0), ts=2.0)
+        referee.step(clear_frame, current_time=2.0)
+        data = referee.step(clear_frame, current_time=2.0)
+        assert data.referee_command == RefereeCommand.DIRECT_FREE_BLUE
+
+        # Blue kicker ready, defenders clear -> auto-advances to NORMAL_START.
+        ready_frame = _frame(
+            ball=_ball(0.0, 0.0),
+            enemy_robots={0: _robot(0, 0.0, 0.0, is_friendly=False)},
+            ts=5.0,
+        )
+        referee.step(ready_frame, current_time=5.0)
+        data = referee.step(ready_frame, current_time=8.0)
+        assert data.referee_command == RefereeCommand.NORMAL_START
+
+        # Blue kicker touches the ball (the restart kick itself).
+        kicker_touch = _frame(
+            ball=_ball(0.0, 0.0),
+            enemy_robots={0: _robot(0, 0.0, 0.0, is_friendly=False, has_ball=True)},
+            ts=8.1,
+        )
+        referee.step(kicker_touch, current_time=8.1)
+
+        # Kicker releases, then touches again — no one else touched it. Foul.
+        released = _frame(
+            ball=_ball(0.0, 0.0),
+            enemy_robots={0: _robot(0, 0.0, 0.0, is_friendly=False, has_ball=False)},
+            ts=8.2,
+        )
+        referee.step(released, current_time=8.2)
+
+        touched_again = _frame(
+            ball=_ball(0.0, 0.0),
+            enemy_robots={0: _robot(0, 0.0, 0.0, is_friendly=False, has_ball=True)},
+            ts=8.3,
+        )
+        data = referee.step(touched_again, current_time=8.3)
+        assert data.referee_command == RefereeCommand.STOP
+        assert data.next_command == RefereeCommand.DIRECT_FREE_YELLOW
+        assert data.status_message == "Double touch"
 
     def test_reset_restores_score_and_command_for_episode_reuse(self):
         """A fresh episode should look exactly like a newly-constructed referee,

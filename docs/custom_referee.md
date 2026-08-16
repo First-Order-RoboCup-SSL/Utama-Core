@@ -30,6 +30,7 @@ CustomReferee
 │   ├── GoalRule
 │   ├── OutOfBoundsRule
 │   ├── BallSpeedRule
+│   ├── DoubleTouchRule
 │   ├── DefenseAreaRule
 │   └── KeepOutRule
 └── GameStateMachine         # mutable command / score / stage state
@@ -128,8 +129,9 @@ Each rule is a `BaseRule` subclass. Rules are evaluated in priority order; the *
 | 1 | `GoalRule` | `NORMAL_START`, `FORCE_START` |
 | 2 | `OutOfBoundsRule` | `NORMAL_START`, `FORCE_START` |
 | 3 | `BallSpeedRule` | `NORMAL_START`, `FORCE_START` |
-| 4 | `DefenseAreaRule` | `NORMAL_START`, `FORCE_START` |
-| 5 | `KeepOutRule` | `DIRECT_FREE_*`, `PREPARE_KICKOFF_*`, `PREPARE_PENALTY_*` |
+| 4 | `DoubleTouchRule` | `NORMAL_START` (only within a restart-kick window — see below) |
+| 5 | `DefenseAreaRule` | `NORMAL_START`, `FORCE_START` |
+| 6 | `KeepOutRule` | `DIRECT_FREE_*`, `PREPARE_KICKOFF_*`, `PREPARE_PENALTY_*` |
 
 ### GoalRule
 
@@ -162,6 +164,14 @@ The non-touching team receives the `DIRECT_FREE_*`. The `designated_position` is
 Fires when the ball's ground speed (`hypot(ball.v.x, ball.v.y)` — z-velocity from a bounce is excluded) exceeds a configurable `max_speed_mps` (default 6.5 m/s, SSL Division B's limit). Edge-detected: fires once when speed crosses above the limit, not every frame it stays fast.
 
 Tracks last-touch the same way as `OutOfBoundsRule` (IR `has_ball` first, closest-robot-within-0.15m fallback) and awards `DIRECT_FREE_*` to the non-kicking team.
+
+### DoubleTouchRule
+
+Scoped narrowly to the actual SSL rule: only the kicker of a restart (free kick, kickoff, penalty) is barred from touching the ball a second time before another robot does. **Not** a general open-play rule — a robot releasing and reacquiring its own ball during normal possession (exactly what `DribbleTactic` does) is legal and must not be flagged.
+
+Arms the moment play resumes (`NORMAL_START`) immediately after `DIRECT_FREE_*`, `PREPARE_KICKOFF_*`, or `PREPARE_PENALTY_*`. The kicker is whichever robot registers the first touch after arming (not assumed in advance). Disarms — no more double-touch risk for that kick — the moment any *other* robot touches the ball (a legal pass/interception), or the game leaves `NORMAL_START`. A "touch" is a rising edge of `has_ball` (False → True); continuous possession while dribbling is not a repeated touch.
+
+Detects its arming edge by comparing `current_command` across consecutive `check()` calls internally (`BaseRule.check()` doesn't receive the previous command directly) — `reset()` deliberately does not clear this internal `_prev_command` tracking, since `CustomReferee.step()` calls `reset()` on every command transition, including the very transition this rule needs to observe.
 
 ### DefenseAreaRule
 
@@ -217,6 +227,7 @@ referee = CustomReferee.from_profile_name("/path/to/my_profile.yaml")
 | Defence area | ✅ max 1 defender | ❌ |
 | Keep-out radius | ✅ 0.5 m | ❌ |
 | Ball speed limit | ✅ 6.5 m/s | ❌ |
+| Double touch | ✅ | ❌ |
 | Restart progression | Auto when readiness criteria are met | Manual operator control |
 | Half duration | 300 s | 300 s |
 
@@ -248,6 +259,8 @@ rules:
   ball_speed:
     enabled: true
     max_speed_mps: 6.5
+  double_touch:
+    enabled: true
 game:
   half_duration_seconds: 300.0
   kickoff_team: "yellow"
@@ -346,6 +359,7 @@ utama_core/custom_referee/
 │   ├── goal_rule.py             # GoalRule
 │   ├── out_of_bounds_rule.py    # OutOfBoundsRule
 │   ├── ball_speed_rule.py       # BallSpeedRule
+│   ├── double_touch_rule.py     # DoubleTouchRule
 │   ├── defense_area_rule.py     # DefenseAreaRule
 │   └── keep_out_rule.py        # KeepOutRule
 └── profiles/
@@ -370,10 +384,15 @@ Re-derived from the current code (2026-08-16) after the original design-review
 notes — kept only in ad hoc session transcripts — were deleted as repo clutter.
 This list reflects actual code state, not the old discussion.
 
-- **No double-touch rule.** A robot that kicks then touches the ball again
-  before another robot touches it should foul. No rule checks this — the
-  string "double-touch" only appears as a `Force Start` button tooltip in
-  `gui.py`, not an implemented check.
+- ~~**No double-touch rule.**~~ **Fixed.** `DoubleTouchRule` (see "Rule
+  Checkers" above) is scoped narrowly to the real SSL rule — only the
+  designated kicker of a restart (free kick/kickoff/penalty) is barred from
+  touching the ball again before another robot does. Deliberately does
+  **not** apply to general open-play dribbling (release-and-reacquire during
+  normal possession, exactly what `DribbleTactic` does, is legal and must
+  stay legal). The first draft of this rule didn't scope it this way and
+  would have falsely fouled every dribble sequence — caught before landing,
+  not after. Enabled in `simulation`, disabled in `human`.
 - ~~**No ball-speed rule.**~~ **Fixed.** `BallSpeedRule` (see "Rule Checkers"
   above) fires once, edge-detected, when the ball's ground speed crosses
   above `max_speed_mps` (default 6.5 m/s), and awards `DIRECT_FREE_*` to the

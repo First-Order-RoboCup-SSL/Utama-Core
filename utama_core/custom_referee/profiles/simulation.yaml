@@ -17,6 +17,8 @@ rules:
   ball_speed:
     enabled: true
     max_speed_mps: 6.5
+  double_touch:
+    enabled: true
 game:
   half_duration_seconds: 300.0
   kickoff_team: "yellow"

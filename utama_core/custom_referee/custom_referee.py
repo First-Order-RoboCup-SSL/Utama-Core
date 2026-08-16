@@ -13,6 +13,7 @@ from utama_core.custom_referee.profiles.profile_loader import (
 from utama_core.custom_referee.rules.ball_speed_rule import BallSpeedRule
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.custom_referee.rules.defense_area_rule import DefenseAreaRule
+from utama_core.custom_referee.rules.double_touch_rule import DoubleTouchRule
 from utama_core.custom_referee.rules.goal_rule import GoalRule
 from utama_core.custom_referee.rules.keep_out_rule import KeepOutRule
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
@@ -26,7 +27,8 @@ def _build_active_rules(rules_cfg) -> List[BaseRule]:
     """Construct the ordered list of active rules from a RulesConfig."""
     active: List[BaseRule] = []
 
-    # Priority order: GoalRule → OutOfBoundsRule → BallSpeedRule → DefenseAreaRule → KeepOutRule
+    # Priority order: GoalRule → OutOfBoundsRule → BallSpeedRule → DoubleTouchRule
+    #                 → DefenseAreaRule → KeepOutRule
     if rules_cfg.goal_detection.enabled:
         active.append(GoalRule(cooldown_seconds=rules_cfg.goal_detection.cooldown_seconds))
 
@@ -35,6 +37,9 @@ def _build_active_rules(rules_cfg) -> List[BaseRule]:
 
     if rules_cfg.ball_speed.enabled:
         active.append(BallSpeedRule(max_speed_mps=rules_cfg.ball_speed.max_speed_mps))
+
+    if rules_cfg.double_touch.enabled:
+        active.append(DoubleTouchRule())
 
     if rules_cfg.defense_area.enabled:
         active.append(

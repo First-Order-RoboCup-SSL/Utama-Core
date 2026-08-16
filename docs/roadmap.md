@@ -151,14 +151,29 @@ dropping py_trees) — not urgent, revisit once there's a concrete forcing case:
   every `Tactic.tick()` call; worth checking whether that indirection earns its
   keep once `AbstractStrategy` itself is simpler.
 
-## CustomReferee — remaining gaps
+## CustomReferee gaps (2026-08-16 re-derivation) — all 3 resolved
 
 From the 2026-08-16 re-derivation in `docs/custom_referee.md`'s "Known gaps"
 section (see "Repo root cleanup" below for how this list was recovered
-after the source transcripts were deleted):
+after the source transcripts were deleted). All 3 genuinely-open items are
+now done:
 
-- No double-touch rule (a robot touching the ball twice in a row, before
-  another robot touches it, should foul).
+- ~~No double-touch rule~~ **Done.** New `DoubleTouchRule`
+  (`rules/double_touch_rule.py`), scoped narrowly to the real SSL rule: only
+  the designated kicker of a restart (`DIRECT_FREE_*`, `PREPARE_KICKOFF_*`,
+  `PREPARE_PENALTY_*` → `NORMAL_START`) is barred from touching the ball
+  again before another robot does. Deliberately does **not** apply to
+  general open-play dribbling — the first draft didn't scope it this way
+  and would have falsely fouled every `DribbleTactic` sequence; caught via
+  AskUserQuestion before landing, not after. Arms on the restart→NORMAL_START
+  edge (detected via the rule's own `_prev_command` tracking across
+  `check()` calls, since `BaseRule.check()` doesn't receive the previous
+  command directly), disarms on any other robot's touch or on leaving
+  `NORMAL_START`. New `DoubleTouchConfig`, wired into both YAML profiles
+  (enabled in `simulation`, disabled in `human`). 7 new tests, including one
+  end-to-end through the real `CustomReferee.step()` call pattern
+  specifically to validate the arming-edge timing against actual code, not
+  a hand-rolled simulation of it.
 - ~~No ball-speed rule~~ **Done.** New `BallSpeedRule`
   (`rules/ball_speed_rule.py`) fires once, edge-detected, when the ball's
   ground speed (`hypot(v.x, v.y)` — z-velocity from a bounce excluded)
