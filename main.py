@@ -1,17 +1,11 @@
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.custom_referee import CustomReferee
 from utama_core.entities.game.field import FieldBounds
+from utama_core.kernel.kernel_strategy import build_give_and_go_solo_kernel_strategy
 from utama_core.replay import ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import StrategyRunner
-from utama_core.strategy.examples import (
-    DefenceStrategy,
-    GoToBallExampleStrategy,
-    RandomMovementStrategy,
-    RobotPlacementStrategy,
-    StartupStrategy,
-    TwoRobotPlacementStrategy,
-)
+from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 
 def main():
@@ -22,7 +16,10 @@ def main():
     # custom_bounds = FieldBounds(top_left=(-1.5, 1.125), bottom_right=(1.5, 1.125))
 
     runner = StrategyRunner(
-        strategy=StartupStrategy(),
+        # Robot 0 is the goalkeeper (pinned outside the kernel scheduler), so
+        # only robot 1 is an outfield tactic slot — a solo GiveAndGoTactic
+        # pool, since TwoRobotAttackTactic hard-requires 2 outfield robots.
+        strategy=AbstractStrategy(build_kernel_strategy=build_give_and_go_solo_kernel_strategy((1,))),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="grsim",
@@ -35,7 +32,6 @@ def main():
         profiler_name=None,
         referee=referee,
     )
-    runner.my.strategy.render()
     runner.run()
 
 
