@@ -411,6 +411,60 @@ pytest markers of any kind exist in this repo yet. Not done in this pass —
 flagged for whenever CI's actual bottleneck (if any) becomes clear from
 real run times.
 
+### TODO — add grsim as a CI/tournament environment, alongside rsim
+
+Raised by the user (2026-08-16). Three separable problems bundled under one
+goal — tracked as three items rather than one, since they have different
+owners/timelines (a simulator bug fix vs. new CI infrastructure vs. an
+environment-parity investigation):
+
+1. **rsim ball-stickiness bug.** User's own description: when a robot
+   dribbles and then releases (dribbler signal off), the ball tends to stay
+   stuck to the robot instead of actually releasing. **Not yet verified
+   against [[project_rsim_dribble_issues]]** — that existing memory already
+   documents rsim dribble-physics issues (motion-controller divergence,
+   stalls) surfaced during an earlier `Utama-Strategy` port, and that
+   memory's own text says "the team's planned fix is to move dribble-related
+   testing onto grsim" — which lines up with what's being asked for here.
+   Plausibly the same underlying issue described more specifically now, but
+   the user was explicit they can't confirm this and it needs to actually be
+   verified against rsim's real behavior before treating them as one bug
+   rather than two. Whoever picks this up should reproduce the release-time
+   stickiness directly (a short rsim scenario: dribble to a point, release,
+   check ball separates within N ticks) before assuming it's already covered
+   by the existing `xfail(strict=False, ...)` markers
+   (`test_ball_placement_rsim.py`, `multiple_robots_test.py`) — those cover
+   different specific scenarios, not a general "dribble is untrustworthy"
+   blanket.
+2. **grsim headless/dependency/speed investigation.** User's own framing:
+   grsim is "slightly harder because of the dependency and also it not being
+   able to run faster when it is running in headless mode." Two distinct
+   claims to verify, not assume: (a) what grsim's actual runtime/build
+   dependencies are and whether they're installable in a GitHub Actions
+   runner at all (grsim is an external process per `docs/custom_referee.md`'s
+   own description — every grsim demo script in this repo already says "must
+   already be running," i.e. today nothing in this codebase starts/manages a
+   grsim process itself); (b) whether grsim genuinely cannot exceed
+   real-time even headless, or whether that's grsim's own architecture
+   (unlike rsim/robosim, which — per this session's own investigation above —
+   was found to run faster than real-time once an unrelated bottleneck was
+   fixed; grsim may or may not have an equivalent hidden bottleneck, not
+   established either way yet).
+3. **CI integration, blocked on both of the above.** `.github/workflows/
+   ci.yml` currently hardcodes `--ignore-glob "**/*grsim*"` specifically
+   because there's no grsim process available in the CI runner today. Adding
+   grsim to CI means either (a) getting grsim itself to run headless inside
+   the runner (blocked on item 2's dependency question), or (b) some other
+   arrangement (a grsim Docker image, a self-hosted runner with grsim
+   pre-installed) — not decided, genuinely an open integration design
+   question once items 1–2 are further along. The tournament-style use case
+   (running `demo_tournament.py`-shaped comparisons on grsim instead of/in
+   addition to rsim) has the same blocker plus grsim's own speed ceiling —
+   if grsim truly can't exceed real-time, a 28-match round-robin at 60s/match
+   would take at minimum 28 minutes regardless of any code changes, unlike
+   the rsim version, which this session got down to ~10 minutes by removing
+   an unrelated bottleneck.
+
 ## Agentic coding infra
 
 As the tactic catalog and contributor base potentially includes coding agents (not
