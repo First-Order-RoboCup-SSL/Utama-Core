@@ -94,6 +94,7 @@ class PassAndScoreMem:
     locked_assignment: Optional[tuple[int, int]] = None
     rng: random.Random = field(default_factory=random.Random)
     goal_scored: bool = False
+    phase_ticks: int = 0  # ticks spent in the current non-setup phase; drives the timeout reset
 
 
 def _setup_positions(
@@ -111,7 +112,18 @@ def _setup_positions(
 
     base_passer, base_receiver = _scaled_setup_positions(base_passer_pos, base_receiver_pos, game)
     if dynamic_setup:
-        passer_pos, receiver_pos = choose_setup_positions(game, base_passer, base_receiver, mem.rng)
+        # Seed deterministically from the assignment rather than trusting
+        # mem.rng's default (unseeded) state. Observed in practice: the
+        # kernel slot holding this tactic's mem can hand back a *fresh*
+        # PassAndScoreMem mid-setup (its own bookkeeping, outside this
+        # tactic's control) — with an unseeded rng that meant every reset
+        # sampled a brand-new random setup position, so a robot chasing a
+        # position that gets discarded and re-rolled before it arrives
+        # never converges on anything. Seeding on (passer_id, receiver_id)
+        # makes repeated re-initialization re-derive the *same* candidate
+        # position instead of a new random one each time.
+        rng = random.Random(hash(assignment))
+        passer_pos, receiver_pos = choose_setup_positions(game, base_passer, base_receiver, rng)
     else:
         passer_pos, receiver_pos = base_passer, base_receiver
 
@@ -136,7 +148,7 @@ def _move_to(game: Game, ctx: KernelContext, robot_id: int, target: Vector2D) ->
 
 
 def _hold_or_acquire_ball(game: Game, ctx: KernelContext, robot_id: int) -> RobotCommand:
-    if has_ball(game, robot_id):
+    if has_ball(game, robot_id, visual=True):
         return empty_command(dribbler_on=True)
     return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id)
 
@@ -152,7 +164,13 @@ def run_setup_phase(
 
     Returns (commands, phase_complete).
     """
-    if has_ball(game, passer_id):
+    # The strict IR/contact `has_ball` sensor can stay False even while the
+    # robot is visually touching the ball (observed: robot parked on the
+    # ball for the rest of a match, has_ball_visual=True, has_ball=False,
+    # go_to_ball looping forever with nowhere left to go). Use the visual
+    # fallback here, same as _pass_exec's receiver-catch check below, so a
+    # flaky sensor reading can't permanently strand the passer at the ball.
+    if has_ball(game, passer_id, visual=True):
         passer_cmd, passer_arrived = _move_to(game, ctx, passer_id, mem.passer_position)
     else:
         passer_cmd = _hold_or_acquire_ball(game, ctx, passer_id)
@@ -174,7 +192,10 @@ def _pass_exec(
 
     passer_target_oren = game.friendly_robots[passer_id].p.angle_to(intercept_pos)
     passer_aimed = oriented_towards(game, passer_id, passer_target_oren)
-    passer_has_ball = has_ball(game, passer_id)
+    # visual=True: see run_setup_phase's comment — the strict sensor can
+    # stay False while the robot is visually on the ball, which would
+    # otherwise strand the passer in go_to_ball indefinitely.
+    passer_has_ball = has_ball(game, passer_id, visual=True)
 
     commands: dict[int, RobotCommand] = {}
 
@@ -227,7 +248,10 @@ def _score_goal(game: Game, ctx: KernelContext, robot_id: int) -> tuple[RobotCom
         return empty_command(dribbler_on=True), False
 
     target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y))
-    if not has_ball(game, robot_id):
+    # visual=True: see run_setup_phase's comment on the strict sensor's
+    # unreliability — without this the shooter can stall on the ball
+    # forever if the IR/contact flag never fires.
+    if not has_ball(game, robot_id, visual=True):
         return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id), False
     if not oriented_towards(game, robot_id, target_oren):
         return (

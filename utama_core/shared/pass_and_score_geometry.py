@@ -28,7 +28,16 @@ from utama_core.skills.src.score_goal import (  # noqa: F401  (re-exported)
 ORIENTATION_TOLERANCE_RAD = 0.05
 
 
-def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: float = 0.12) -> bool:
+def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: float = 0.15) -> bool:
+    """`capture_distance` default: `ROBOT_RADIUS + BALL_RADIUS` (contact distance)
+    is ~0.1115m. The previous 0.12m default left only ~0.008m of margin above
+    contact — well inside typical per-tick simulator jitter (observed: a
+    stationary dribbling robot's distance-to-ball oscillates by ~0.01-0.02m
+    tick to tick), so `has_ball(..., visual=True)` chattered True/False every
+    tick right at pickup, which made every caller's "if has_ball: X else: Y"
+    branch flip every tick too and never make sustained progress in either
+    branch. 0.15m gives real margin above contact distance.
+    """
     robot = game.friendly_robots[robot_id]
     if visual:
         return robot.p.distance_to(game.ball.p.to_2d()) < capture_distance
