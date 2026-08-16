@@ -115,6 +115,7 @@ class TwoDPID(AbstractPID[Vector2D]):
     ):
         super().__init__(config)
         self.max_velocity = config.max_velocity
+        self.max_acceleration = config.max_acceleration
 
     def _calculate(self, target: Vector2D, current: Vector2D, robot_id: int) -> Vector2D:
         dx = target[0] - current[0]
@@ -169,7 +170,15 @@ class TwoDPID(AbstractPID[Vector2D]):
             return Vector2D(0.0, 0.0)
         x_vel = output * (dx / error)
         y_vel = output * (dy / error)
-        return self._apply_speed_limits(x_vel, y_vel, self.max_velocity)
+
+        # Braking-distance cap: Kp*error alone doesn't account for the robot's
+        # own deceleration limit, so on a fast approach the commanded speed
+        # can exceed what's stoppable within the remaining distance, and the
+        # rate-limited ramp-down (accel_limiter, applied after this returns)
+        # isn't fast enough to prevent overshoot. v = sqrt(2*a*d) is the max
+        # speed that can still be braked to zero by the time distance d closes.
+        max_brake_vel = math.sqrt(2 * self.max_acceleration * error) if self.max_acceleration > 0 else self.max_velocity
+        return self._apply_speed_limits(x_vel, y_vel, min(self.max_velocity, max_brake_vel))
 
     def _apply_speed_limits(self, x_vel: float, y_vel: float, max_vel: float) -> Vector2D:
         current_vel = math.hypot(x_vel, y_vel)
