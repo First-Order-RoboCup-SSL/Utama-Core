@@ -262,7 +262,32 @@ class FastPathPlanner:
         closest_obstacle = None
         min_dist_to_robot = float("inf")
 
+        # Broad-phase bounding-box prune: the true minimum distance between
+        # two segments can never be smaller than the gap between their
+        # axis-aligned bounding boxes, so if that gap alone already exceeds
+        # OBSTACLE_CLEARANCE, distance_between_line_segments (4x
+        # distance_point_to_segment calls plus an intersection test) is
+        # guaranteed to return >= OBSTACLE_CLEARANCE too — safe to skip
+        # without ever producing a false negative. cProfile showed
+        # distance_point_to_segment as the single largest per-tick cost even
+        # after removing its numpy overhead; most obstacles on a full-size
+        # field are nowhere near a given path segment, so this prunes the
+        # large majority of calls rather than making each one cheaper.
+        seg_min_x = min(segment[0][0], segment[1][0]) - self.OBSTACLE_CLEARANCE
+        seg_max_x = max(segment[0][0], segment[1][0]) + self.OBSTACLE_CLEARANCE
+        seg_min_y = min(segment[0][1], segment[1][1]) - self.OBSTACLE_CLEARANCE
+        seg_max_y = max(segment[0][1], segment[1][1]) + self.OBSTACLE_CLEARANCE
+
         for o in obstacles:
+            o_min_x = min(o[0][0], o[1][0])
+            o_max_x = max(o[0][0], o[1][0])
+            if o_max_x < seg_min_x or o_min_x > seg_max_x:
+                continue
+            o_min_y = min(o[0][1], o[1][1])
+            o_max_y = max(o[0][1], o[1][1])
+            if o_max_y < seg_min_y or o_min_y > seg_max_y:
+                continue
+
             # OPTIMIZATION: Removed double distance call
             dist_between_segs = distance_between_line_segments(o[0], o[1], segment[0], segment[1])
 
