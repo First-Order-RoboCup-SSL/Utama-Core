@@ -236,7 +236,7 @@ resolves to `ResetTier.NONE` (résumé from a pause, not a new phase) rather tha
 `ResetTier.BARRIER`.
 
 **Only one outfield tactic exists so far:** `build_default_kernel_strategy()` wires a
-single-tactic pool (`two_robot_attack`) with a picker that has nothing to actually choose
+single-tactic pool (`pass_and_shoot`) with a picker that has nothing to actually choose
 between. This is not a stand-in allocation policy — it is the direct consequence of §7's
 deferral: no second concrete outfield tactic exists yet to force a real splitting/allocation
 decision, so none was invented. Callers needing more than one outfield tactic should construct
@@ -247,7 +247,7 @@ their own `kernel.Strategy` with a real `Picker` rather than use this helper.
 ## Ported tactics inventory
 
 Beyond the three tactics ported alongside the kernel itself (`GoalkeeperTactic`,
-`TwoRobotAttackTactic`, `DribbleTactic`), a survey of both repos' `plays/`, `strategies/`,
+`PassAndShootTactic`, `DribbleTactic`), a survey of both repos' `plays/`, `strategies/`,
 `examples/`, and `behaviours/` directories (across `Utama-Strategy`'s `spike/functional-strategy`
 branch and several feature branches: `feat/dribbling`, `feat/pass`, `feat/pose`, `test/goalkeep`,
 plus Utama-Core's own branch history) turned up:
@@ -268,7 +268,7 @@ plus Utama-Core's own branch history) turned up:
   left for a follow-up pass — the former needs verification against the current `Game` API since
   it lives on a stale branch, the latter needs its cooldown timer reworked to live in `mem`.
 - **Not ported, rejected as redundant:** `plays/pose.py`/`plays/receive.py` (subsumed by
-  `two_robot_attack`'s existing setup-phase movement), the older random-target dribble picker in
+  `pass_and_shoot`'s existing setup-phase movement), the older random-target dribble picker in
   `utils/dribble_utils.py` (superseded by the already-ported `DribbleTactic`'s fixed
   rectangle-corner pattern), and all of Utama-Core's own non-`spike/tactic-kernel` branches
   (vision/UI/referee infra only, no tactical logic).
@@ -572,7 +572,7 @@ path was wrong.
 ## 15. ✅ Settled — Tactic selection at scale: `applicable()` + a closed tag set, not scoring
 
 **Context.** Sections 1–14 assumed a handful of hand-written Tactics (currently four:
-`GoalkeeperTactic`, `TwoRobotAttackTactic`, `LeadAndSupportTactic`, `ShadowAndMarkTactic`),
+`GoalkeeperTactic`, `PassAndShootTactic`, `LeadAndSupportTactic`, `ShadowAndMarkTactic`),
 each wired into a `Strategy` via a hand-written `Partitioner` covering exactly that Tactic
 set. The team's longer-term direction is agentic/automated Tactic authoring and strategy
 research at a scale where the Tactic count (`T`) is unknown in advance and could reach the
@@ -673,7 +673,7 @@ slots, and interact in only one place:
   Tactic whose behaviour genuinely depends on a minimum robot count beyond what
   `LeadAndSupportTactic`'s existing 1-to-N agnosticism already tolerates. **This is no longer
   purely hypothetical**: building `build_low_block_kernel_strategy` (§17) hit exactly this gap
-  — `TwoRobotAttackTactic.tick()` unconditionally reads `robot_ids[1]` and crashes with
+  — `PassAndShootTactic.tick()` unconditionally reads `robot_ids[1]` and crashes with
   `IndexError` if handed only 1 robot, which a naive fixed-ratio `Partitioner` did. Worked
   around at the call site (`_fixed_ratio_picker`'s `min_attack` parameter, known only by the
   caller, not the Tactic) rather than fixed properly, since the proper fix is this deferred
@@ -760,7 +760,7 @@ scheduler), the roster of `build_*_kernel_strategy` factories grew to six, each 
 different combination of Tactics and/or `Partitioner` mechanics rather than being interchangeable
 variations on one idea:
 
-- **`build_default_kernel_strategy`** — single Tactic (`TwoRobotAttackTactic`), via
+- **`build_default_kernel_strategy`** — single Tactic (`PassAndShootTactic`), via
   `Strategy.single_tactic_picker`. The original, minimal config; no real allocation decision.
 - **`build_split_shape_kernel_strategy`** — two concurrent slots (`LeadAndSupportTactic`/
   `ShadowAndMarkTactic`), split by `_possession_split_picker` (possession-edge reactive).
@@ -773,7 +773,7 @@ variations on one idea:
   built specifically to demonstrate that the same Tactic roster can be driven by a mechanically
   different `Partitioner`; the scheduling *policy* varies between example strategies
   independently of the Tactic roster.
-- **`build_low_block_kernel_strategy`** — the original `TwoRobotAttackTactic`/`DefenseTactic`
+- **`build_low_block_kernel_strategy`** — the original `PassAndShootTactic`/`DefenseTactic`
   pairing (§1/§2), split by `_fixed_ratio_picker` (attack_fraction=0.2, floored at
   `min_attack=2`) — a conservative counterpart to `high_press`. Surfaced the undeclared
   per-Tactic robot-count-bound gap tracked above.

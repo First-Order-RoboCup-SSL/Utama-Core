@@ -36,7 +36,7 @@ picks them up — this file isn't itself a design doc.
 6. **Tournament scoreless-draw debugging (2026-08-16 session)** — done for
    this pass. Original 86% (24/28) scoreless-draw rate driven down to 72%
    (26/36) across: an rSim kick-direction physics bug (native patch), two
-   `FastPathPlanner` bugs unfreezing `two_robot_attack` in real 6v6 matches
+   `FastPathPlanner` bugs unfreezing `pass_and_shoot` in real 6v6 matches
    (NaN divide-by-zero, ball-adjacent-obstacle target exemption), a batch of
    hardcoded-tick-count removals, a new `SwitchOfPlayTactic`, and a
    `DefenseTactic`/`defend_parameter` foul-loop fix (two independent bugs:
@@ -46,10 +46,32 @@ picks them up — this file isn't itself a design doc.
    `SwitchOfPlayTactic`'s `_pivot_target()` could put an attacker inside its
    own defense area during relay play (uncapped pullback distance). Full
    writeup in "Multi-strategy / tournament evaluation infra" below.
-   Verification match now runs 43s -> 61s+ clean before only a few
-   centimetres of residual PID overshoot remain (same open class of issue
-   as `defend_parameter`'s margin, not re-chased further). Committed as a
-   series of focused commits, one per fix.
+   Verification match now runs 43s -> 61s+ clean, then — after root-causing
+   and fixing the residual overshoot itself (`TwoDPID` had no braking-
+   distance term; see below) — the full 90s verification match now runs
+   with **zero** defender fouls. `two_robot_attack` also renamed to
+   `pass_and_shoot` (its actual behavior: one scripted setup -> pass -> shoot
+   for a fixed pair, as distinct from `GiveAndGoTactic`'s repeated-hop
+   cycle — the old name was ambiguous once both tactics existed).
+   Committed as a series of focused commits, one per fix.
+
+   **Root cause of the residual PID overshoot**: `TwoDPID._calculate`
+   (`motion_planning/src/pid/pid.py`) computed its commanded velocity as
+   `Kp * position_error`, capped only by `max_velocity` — it never checked
+   whether that speed was actually stoppable within the remaining distance
+   given the robot's own `max_acceleration`. The separate `AccelerationLimiter`
+   applied after `_calculate` returns only rate-limits how fast the
+   *commanded* velocity can change once decided; it doesn't help the
+   controller anticipate a stop. On a fast approach the proportional term
+   alone doesn't ask for deceleration until the robot is already close,
+   so the robot overshoots by however far it travels while the commanded
+   velocity ramps down. At `max_velocity=2 m/s`, `max_acceleration=4 m/s²`,
+   physical stopping distance is `v²/(2a) = 0.5m` — bigger than any bare
+   proportional margin. Fixed by adding a braking-distance speed cap,
+   `v <= sqrt(2 * max_acceleration * error)`, alongside the existing
+   `max_velocity` cap. Verified: `verify_defense_foul_fix.py`'s full 90s
+   match went from 1 residual foul to 0; full suite unchanged at 638
+   passed / 2 skipped / 2 xfailed both before and after.
 
 ## Multi-strategy / tournament evaluation infra
 
@@ -158,13 +180,13 @@ that bug only affects `DribbleTactic`'s passive-release path, not wired into
 any of the 8 tournament configs.
 
 Instrumented a live match (`build_default_kernel_strategy` vs itself,
-per-tick phase/state tracing) and found the real cause: **`two_robot_attack.py`
+per-tick phase/state tracing) and found the real cause: **`pass_and_shoot.py`
 and `_pass_and_score.py`'s pass-and-shoot phase machine was a one-way,
 no-retry state machine with no failure recovery.** Five independent, stacked
 bugs, each verified against real per-tick trace data before being trusted (not
 assumed from reading code alone):
 
-1. `TwoRobotAttackTactic.tick()`: `goal_scored=True` returned `{}` forever —
+1. `PassAndShootTactic.tick()`: `goal_scored=True` returned `{}` forever —
    even a *successful* attempt permanently froze the tactic for the rest of
    the match. Fixed: reset to a fresh attempt instead of freezing.
 2. No timeout on a stuck `pass_then_score`/`score` phase — `is_committed()`
@@ -273,7 +295,7 @@ improves — a correctly-aimed kick reaching the simulator is necessary but
 its physical accuracy was the last untested link in the chain.
 
 **That tournament re-run confirmed the fixes above weren't enough on their
-own: `two_robot_attack`-based configs still scored zero goals in full 6v6
+own: `pass_and_shoot`-based configs still scored zero goals in full 6v6
 matches (23/28 scoreless, 82%, barely down from the 86% baseline), despite
 completing cleanly in a nearly-empty solo trace.** Root-caused (2026-08-16,
 user-authorized to work in `utama_core/motion_planning/` specifically for
@@ -332,7 +354,7 @@ scoreless-draw rate dropped to 26/36 (72%), down from the original 86%
 (24/28) baseline and the intermediate 82% (23/28) measurement taken before
 the `motion_planning` fixes. 10 of 36 matches now have a real scored goal,
 spread across 6 different configs (`high_press`, `split_shape`,
-`press_and_pass`, `three_slot`, and others taking a loss). `two_robot_attack`
+`press_and_pass`, `three_slot`, and others taking a loss). `pass_and_shoot`
 -based configs (`default`, `low_block`, `three_slot`) are no longer
 structurally frozen — `default` lost several matches by conceding rather
 than by never moving the ball, `three_slot` won once — confirming the
@@ -601,7 +623,7 @@ different (non-BT) substrate. Any future tournament/multi-strategy infra should 
 on the kernel, not resurrect the BT-based Runner design. A few ideas from that plan
 are still worth keeping in mind when this gets built:
 - Reassignment should reset a tactic's `mem` exactly when its robot set changes, not
-  otherwise (already the pattern inside `two_robot_attack.py` and generalized into the
+  otherwise (already the pattern inside `pass_and_shoot.py` and generalized into the
   kernel's `Strategy` tick loop).
 - Conflict detection: never allow the same robot to be double-assigned in one tick
   silently — assert loudly instead of last-write-wins.
@@ -611,7 +633,7 @@ are still worth keeping in mind when this gets built:
 
 ## More tactics — football-inspired plays/formations
 
-Only a handful of tactics exist today (goalkeeper, defense, two_robot_attack,
+Only a handful of tactics exist today (goalkeeper, defense, pass_and_shoot,
 lead_and_support), each tagged via the closed `TacticTag` vocabulary
 (see `tactic_model_design_decisions.md` §15). There's a lot of real football/SSL
 tactical vocabulary worth mining for genuinely new tactics — formations, set plays,
@@ -887,7 +909,7 @@ environment-parity investigation):
    `build_*_kernel_strategy` tournament configs** (verified directly against
    `kernel/kernel_strategy.py` — no `DribbleTactic` reference anywhere in the
    file). Every ball-release path actually used by those 8 configs
-   (`_pass_and_score.py`'s pass/shoot logic, used by `TwoRobotAttackTactic`,
+   (`_pass_and_score.py`'s pass/shoot logic, used by `PassAndShootTactic`,
    `GiveAndGoTactic`, `DecoyOverloadTactic`, `LeadAndSupportTactic`) holds
    with `empty_command(dribbler_on=True)` — dribbler *stays on* — right up
    until an actual `kick()` call, which the control run confirmed separates
@@ -1130,7 +1152,7 @@ Deliberately *not* bundled into the BT-removal pass — same reasoning as
     kernel-tactic equivalent and none needed.
   - `main.py` — ported. Was `StartupStrategy` over `exp_friendly=2`; since
     robot 0 is the goalkeeper (pinned outside the kernel scheduler) only
-    robot 1 is an outfield slot, too few for `TwoRobotAttackTactic` (hard-
+    robot 1 is an outfield slot, too few for `PassAndShootTactic` (hard-
     requires 2). Switched to `build_give_and_go_solo_kernel_strategy((1,))`
     instead. Also dropped a dead `runner.my.strategy.render()` call —
     `AbstractStrategy` never had a `render()` method; likely a stale
