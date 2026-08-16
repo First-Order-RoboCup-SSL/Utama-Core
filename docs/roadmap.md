@@ -69,6 +69,40 @@ existing tests exercise the tactic's shape, not this specific code path) —
 flagged here, not fixed, since closing it means understanding what game state
 actually triggers marking, not a quick addition.
 
+**TODO — investigate `StrategyRunner`'s `enable_vision_stream` default:** a
+full 60s tournament match was taking 12+ minutes of wall time (worse than
+real-time) until `demo_tournament.py` explicitly passed
+`enable_vision_stream=False` (commit `3086337`) — with it off, the same match
+runs in ~21s (2.9x *faster* than real-time), the speed rsim headless is
+supposed to have. `enable_vision_stream: bool = True` is `StrategyRunner`'s
+hardcoded constructor default (`strategy_runner.py:242`), with no
+mode-awareness (set the same regardless of `rsim`/`grsim`/`real`) and no
+signal that leaving it on is expensive unless a caller happens to profile a
+slow run and find the HTTP server startup/frame-render cost themselves, the
+way this session did. The vision stream has real value for grsim/real-mode
+operator workflows (`demo_referee_gui_rsim.py` genuinely wants it) — this
+isn't "the default is wrong," it's "the default silently punishes headless/
+automated callers who have no way to know to turn it off, instead of the env
+setup itself recognizing when nobody's watching." Worth a real look at making
+this the caller's responsibility to *opt into* rather than *opt out of* for
+non-interactive contexts, or auto-detecting when nothing's actually consuming
+the stream — not decided here, just flagged as a genuine, measured (35x)
+performance footgun worth designing around properly rather than patching
+per-caller as this session did.
+
+**Other real costs found via `cProfile` on a single match, once the vision
+stream stopped dominating (flagged, not touched — both are structural, not
+bugs):**
+- `robosim`'s per-tick subprocess pipe I/O (`robosim_wrapper.py`'s
+  `readline()` round-trip) — ~2ms/tick, inherent to running the physics
+  simulator as a separate process communicating over stdin/stdout JSON.
+- `distance_point_to_segment` inside `FastPathPlanning`'s obstacle-avoidance
+  recursion (`motion_planning/src/fastpathplanning/planner.py`) — 427,032
+  calls in a 900-tick (15s) profiling run, ~475 calls/tick. A plausible
+  motion-planning optimization target (vectorization, tighter obstacle
+  pre-filtering) if path-planning throughput ever becomes the actual
+  bottleneck once the vision-stream issue above is resolved properly.
+
 Original framing, for context (superseded by the above):
 
 Note: an earlier plan (`snug-hugging-sutton.md`, now deleted) explored a
