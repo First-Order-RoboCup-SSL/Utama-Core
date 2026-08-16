@@ -90,18 +90,31 @@ the stream — not decided here, just flagged as a genuine, measured (35x)
 performance footgun worth designing around properly rather than patching
 per-caller as this session did.
 
-**Other real costs found via `cProfile` on a single match, once the vision
-stream stopped dominating (flagged, not touched — both are structural, not
-bugs):**
+**TODO — two more real costs found via `cProfile` on a single match, once the
+vision stream stopped dominating.** Neither is a bug — both are inherent to
+the current design — but both are plausible future optimization targets, not
+dismissed as untouchable:
 - `robosim`'s per-tick subprocess pipe I/O (`robosim_wrapper.py`'s
-  `readline()` round-trip) — ~2ms/tick, inherent to running the physics
-  simulator as a separate process communicating over stdin/stdout JSON.
+  `readline()` round-trip: one write + one blocking read per tick over
+  stdin/stdout JSON to the physics simulator subprocess) — 1804 `readline()`
+  calls costing 1.996s in a 900-tick (15s) profiling run, essentially all of
+  it real wait time, not sub-call overhead. Comparable in magnitude to the
+  `distance_point_to_segment` cost below. Worth investigating whether the
+  physics step can be batched (send N ticks, read N responses) instead of a
+  strict per-tick round-trip, or whether the JSON serialization itself is a
+  meaningful fraction of the 1.1ms/call average — not diagnosed further here,
+  just measured.
 - `distance_point_to_segment` inside `FastPathPlanning`'s obstacle-avoidance
   recursion (`motion_planning/src/fastpathplanning/planner.py`) — 427,032
-  calls in a 900-tick (15s) profiling run, ~475 calls/tick. A plausible
-  motion-planning optimization target (vectorization, tighter obstacle
-  pre-filtering) if path-planning throughput ever becomes the actual
-  bottleneck once the vision-stream issue above is resolved properly.
+  calls in the same 900-tick run, ~475 calls/tick, 2.34s cumulative (1.32s of
+  that its own time, not sub-calls). A plausible target for vectorization or
+  tighter obstacle pre-filtering before falling into the recursive
+  segment-check.
+
+Both would matter more once the `enable_vision_stream` fix above is applied
+generally — right now the vision stream dwarfs both, so neither is the
+current bottleneck, but they're the next two things worth profiling again
+once it is.
 
 Original framing, for context (superseded by the above):
 
