@@ -123,9 +123,10 @@ def test_their_kickoff_clears_our_robots_outside_center_circle(split_shape_runne
     for _ in range(200):
         split_shape_runner.step_once()
 
+    ball = game.ball.p
     for robot_id, robot in game.friendly_robots.items():
-        dist_to_center = math.hypot(robot.p.x, robot.p.y)
-        assert dist_to_center >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} inside centre keep-out zone"
+        dist_to_ball = math.hypot(robot.p.x - ball.x, robot.p.y - ball.y)
+        assert dist_to_ball >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} inside centre keep-out zone"
 
 
 def test_override_ends_and_tactics_resume_on_normal_start(split_shape_runner):
