@@ -2,7 +2,6 @@ import math
 
 import pytest
 
-from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.skills.src.go_to_ball import (
     _APPROACH_OVERSHOOT_M,
@@ -30,6 +29,8 @@ def test_target_past_ball_overshoots_diagonal_approach():
 
 
 def test_dribbler_off_overshoot_is_smaller_than_dribbler_on():
-    assert _APPROACH_OVERSHOOT_M == pytest.approx(ROBOT_RADIUS * 0.5)
+    # _APPROACH_OVERSHOOT_M is currently tuned to 0 (no overshoot needed to
+    # capture the ball without the dribbler on) — the real invariant this
+    # test guards is the ordering, not one specific historical value.
     assert _DRIBBLE_OVERSHOOT_M > 0.0
     assert _APPROACH_OVERSHOOT_M < _DRIBBLE_OVERSHOOT_M

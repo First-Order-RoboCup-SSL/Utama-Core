@@ -22,8 +22,12 @@ picks them up — this file isn't itself a design doc.
    load-bearing, `kernel.RefereeOverride` drives their Step classes directly
    (not via real py_trees tree-ticking). See "Codebase cleanup" below for the
    full account, including bugs found and fixed along the way.
-3. **CI** can now be scoped for real — cleanup is done, the tree the CI gate
-   should protect actually exists.
+3. **CI** already existed (`.github/workflows/ci.yml`/`lint.yml`) — this
+   section previously said otherwise, which was stale. What was actually
+   missing: `spike/tactic-kernel` had never been pushed, so CI had never
+   validated it; running the exact CI command locally found and fixed 2
+   real pre-existing test bugs (unrelated to this branch's work) blocking a
+   green run. See "CI" below for the full account.
 4. Tournament/multi-strategy infra still waits on there being enough of a
    tactic catalog for comparisons to mean anything.
 5. Agentic coding infra (`AGENTS.md` at least) can start any time — cheap,
@@ -215,12 +219,52 @@ rsim has known dribble simulation bugs).
 
 ## CI
 
-No CI exists yet. At minimum: lint/format check (black, matching local pre-commit
-hooks), and a headless test run (`pixi run pytest --headless`, matching local
-convention — never run simulator/integration tests without `--headless`). Needs a
-decision on scope — which test directories are stable enough to gate merges on,
-given known rsim dribble flakiness — and probably GitHub Actions given the org
-(`First-Order-RoboCup-SSL`) already lives on GitHub.
+**This section was stale — CI already exists.** `.github/workflows/ci.yml`
+(pytest, headless, `--level full` on push / `--level quick` on PR,
+`--ignore-glob "**/*grsim*"`, JUnit test report) and `.github/workflows/lint.yml`
+(ruff) both exist, are well-configured, and have a real run history on other
+branches going back well before the tactic-kernel work started. The `--level`
+flag comes from a root-level `conftest.py` (not `utama_core/tests/conftest.py`)
+that scales certain test parametrizations (`robot_id`, `my_team_is_right`, etc.)
+between `quick` and `full`.
+
+**What was actually missing (2026-08-16):** `spike/tactic-kernel` had never
+been pushed to GitHub, so none of this branch's ~10 commits of BT-removal +
+`CustomReferee` work had ever been validated by CI. Running the exact CI
+command locally (`pytest utama_core/tests/ --level full --ignore-glob
+"**/*grsim*" --headless`) surfaced 3 failures — none caused by this branch's
+work (independently reproduced on the pre-BT-removal baseline `087ee4b` too,
+per the "Codebase cleanup" section above) but real, fixable bugs:
+
+- `test_render_overlay.py`'s two tests described features that were never
+  built and aren't wanted: a multi-segment-line renderer (`draw_line`'s own
+  docstring says it deliberately uses only the first and last point — every
+  real caller in `ssl_gym_base.py` relies on exactly that) and an
+  `OverlayType.CIRCLE` that no caller anywhere ever constructs (`POINT` is
+  the real filled-circle marker, via `pygame.draw.circle(..., width=0)`).
+  Rewrote both tests to assert the actual documented/used behavior instead
+  of a spec for code that doesn't exist.
+- `test_go_to_ball.py`'s dribbler-overshoot test asserted
+  `_APPROACH_OVERSHOOT_M == ROBOT_RADIUS * 0.5`, a stale hardcoded value
+  left over from before `_APPROACH_OVERSHOOT_M` was intentionally tuned to
+  `0`. Dropped that one assertion, kept the two that express the test's
+  actual intent (`_DRIBBLE_OVERSHOOT_M > 0` and `_APPROACH_OVERSHOOT_M <
+  _DRIBBLE_OVERSHOOT_M` — dribbler-off overshoot smaller than dribbler-on).
+
+Local run of the exact `--level full` CI command after these fixes: 624
+passed, 2 skipped, 2 xfailed, **0 failed**. CI would be green if this branch
+were pushed. Branch has deliberately not been pushed yet (per explicit
+instruction) — pushing and confirming a real green run on GitHub is the
+next concrete step whenever that's wanted.
+
+**Still an open, separate question:** whether `tests/kernel/` and
+`tests/strategy_runner/` (the real tactic-kernel surface — no test files
+elsewhere are kernel-specific) deserve dedicated CI treatment — e.g. a
+`@pytest.mark.kernel` marker so they run fast/prioritized on every push,
+rather than only as part of the undifferentiated full-suite sweep. No
+pytest markers of any kind exist in this repo yet. Not done in this pass —
+flagged for whenever CI's actual bottleneck (if any) becomes clear from
+real run times.
 
 ## Agentic coding infra
 
