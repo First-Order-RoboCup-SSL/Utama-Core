@@ -361,13 +361,19 @@ This list reflects actual code state, not the old discussion.
   `gui.py`, not an implemented check.
 - **No ball-speed rule.** SSL limits kick speed (6.5 m/s); nothing in
   `rules/` measures it.
-- **No full-episode reset.** Each `BaseRule` has `reset()` (called by
-  `CustomReferee.step()` on every command transition, clearing internal
-  counters like `KeepOutRule._violation_count`), but there is no
-  `CustomReferee.reset()` / `GameStateMachine.reset()` that restores score,
-  stage, and command to their initial values. RL training that wants to
-  reuse one referee across episodes currently has to construct a fresh
-  `CustomReferee` each episode instead.
+- ~~**No full-episode reset.**~~ **Fixed.** `CustomReferee.reset()` /
+  `GameStateMachine.reset()` restore score, stage, command, and every
+  auto-advance timer to their initial values, so RL training can reuse one
+  referee across episodes instead of constructing a new one each time.
+  `BaseRule.reset()` (called on every command transition — used e.g. by
+  `KeepOutRule` to clear `_violation_count`) is distinct from the new
+  `BaseRule.reset_for_new_episode()` (called only by `CustomReferee.reset()`):
+  `GoalRule` deliberately keeps its cooldown timestamp across ordinary
+  `reset()` calls (that's what makes the mid-game cooldown work) but must
+  clear it on `reset_for_new_episode()`, since a new episode's clock starts
+  from ~0 and a stale timestamp from the previous episode could otherwise
+  suppress an early goal. Call `seed_clock()` again after `reset()`, same as
+  after construction, once the new episode's first game frame is available.
 - **Last-touch tracking is a proximity heuristic at the boundary.**
   `OutOfBoundsRule._update_last_touch` prefers the reliable `has_ball` IR
   flag, but falls back to "closest robot within 0.15 m" when no friendly

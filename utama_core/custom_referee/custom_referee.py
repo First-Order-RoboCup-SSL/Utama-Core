@@ -221,6 +221,21 @@ class CustomReferee:
         """God-mode override — bypasses the STOP-first guard."""
         self._state.force_command(command, timestamp, ball_placement_target)
 
+    def reset(self) -> None:
+        """Restore this referee to its just-constructed state (score, command,
+        stage, timers, and every rule's internal counters), for reuse across
+        RL episodes without constructing a new `CustomReferee`.
+
+        Does not reset geometry (see `override_geometry`) or the profile
+        config the referee was built with — only per-episode state.
+        `seed_clock()` still needs to be called again afterward, same as
+        after construction, once the new episode's first game frame is
+        available.
+        """
+        self._state.reset()
+        for rule in self._rules:
+            rule.reset_for_new_episode()
+
     # ------------------------------------------------------------------
     # Properties (read-only access for callers that need to inspect state)
     # ------------------------------------------------------------------

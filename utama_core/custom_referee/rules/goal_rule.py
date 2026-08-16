@@ -92,5 +92,11 @@ class GoalRule(BaseRule):
         return None
 
     def reset(self) -> None:
-        # Keep last_goal_time across resets so cooldown still applies.
+        # Keep last_goal_time across command-transition resets so the
+        # cooldown still applies within a game.
         pass
+
+    def reset_for_new_episode(self) -> None:
+        # A fresh episode's clock starts over — a stale last_goal_time from
+        # the previous episode must not suppress an early goal in this one.
+        self._last_goal_time = -math.inf

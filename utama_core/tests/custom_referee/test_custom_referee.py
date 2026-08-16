@@ -421,6 +421,58 @@ class TestGameStateMachine:
         assert data.referee_command == RefereeCommand.NORMAL_START
         assert data.next_command is None
 
+    def test_reset_restores_score_command_and_stage(self):
+        from utama_core.custom_referee.rules.base_rule import RuleViolation
+
+        sm = _state_machine()
+        violation = RuleViolation(
+            rule_name="goal",
+            suggested_command=RefereeCommand.STOP,
+            next_command=RefereeCommand.PREPARE_KICKOFF_BLUE,
+            status_message="Goal by Yellow",
+        )
+        sm.step(current_time=10.0, violation=violation)
+        assert sm.yellow_team.score == 1
+        assert sm.command == RefereeCommand.STOP
+
+        sm.reset()
+        assert sm.yellow_team.score == 0
+        assert sm.blue_team.score == 0
+        assert sm.command == RefereeCommand.HALT
+        assert sm.stage == Stage.NORMAL_FIRST_HALF_PRE
+        assert sm.next_command is None
+        assert sm.ball_placement_target is None
+
+    def test_reset_clears_auto_advance_timers(self):
+        sm = _state_machine()
+        sm.set_command(RefereeCommand.PREPARE_PENALTY_YELLOW, timestamp=1.0)
+        clear_frame = _frame(ball=_ball(0.0, 0.0), ts=1.5)
+        sm.step(current_time=1.5, violation=None, game_frame=clear_frame)  # STOP → PREPARE_PENALTY_YELLOW
+
+        ready_attackers = {0: _robot(0, 2.25, 0.0, is_friendly=True)}
+        ready_frame = _frame(ball=_ball(0.0, 0.0), friendly_robots=ready_attackers, ts=14.0)
+        sm.step(current_time=14.0, violation=None, game_frame=ready_frame)
+        assert sm._advance2_ready_since != math.inf
+
+        sm.reset()
+        assert sm._advance2_ready_since == math.inf
+        assert sm._advance3_ready_since == math.inf
+        assert sm._advance4_ready_since == math.inf
+        assert sm._last_transition_time == -math.inf
+
+    def test_reset_preserves_construction_config(self):
+        sm = GameStateMachine(
+            half_duration_seconds=123.0,
+            kickoff_team="blue",
+            n_robots_yellow=5,
+            n_robots_blue=2,
+        )
+        sm.reset()
+        assert sm.stage_duration == 123.0
+        assert sm.yellow_team.max_allowed_bots == 5
+        assert sm.blue_team.max_allowed_bots == 2
+        assert sm._kickoff_team_is_yellow is False
+
 
 # ---------------------------------------------------------------------------
 # CustomReferee integration
@@ -539,6 +591,59 @@ class TestCustomReferee:
         data = referee.step(_frame(ball=_ball(0.0, 0.0), ts=10.0), current_time=10.0)
         assert data.referee_command == RefereeCommand.STOP
         assert data.next_command == RefereeCommand.PREPARE_PENALTY_YELLOW
+
+    def test_reset_restores_score_and_command_for_episode_reuse(self):
+        """A fresh episode should look exactly like a newly-constructed referee,
+        without paying for a new CustomReferee instance each time (the RL
+        training use case reset() exists for)."""
+        referee = CustomReferee.from_profile_name("simulation")
+        referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+
+        goal_frame = _frame(ball=_ball(5.0, 0.0), my_team_is_yellow=True, my_team_is_right=True, ts=10.0)
+        data = referee.step(goal_frame, current_time=10.0)
+        assert data.blue_team.score == 1
+
+        referee.reset()
+        fresh_frame = _frame(ball=_ball(0.0, 0.0), ts=0.0)
+        data = referee.step(fresh_frame, current_time=0.0)
+        assert data.referee_command == RefereeCommand.HALT
+        assert data.blue_team.score == 0
+        assert data.yellow_team.score == 0
+
+    def test_reset_clears_goal_cooldown_so_an_early_goal_in_the_new_episode_still_fires(self):
+        """GoalRule.reset() deliberately keeps _last_goal_time across ordinary
+        command-transition resets (mid-game cooldown). A full episode reset
+        must NOT carry that timestamp into the new episode's clock, or a
+        goal scored early in the new episode (small current_time) would look
+        like it's still within the old episode's cooldown window and get
+        suppressed."""
+        referee = CustomReferee.from_profile_name("simulation")
+        referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+        goal_frame = _frame(ball=_ball(5.0, 0.0), my_team_is_yellow=True, my_team_is_right=True, ts=100.0)
+        referee.step(goal_frame, current_time=100.0)
+
+        referee.reset()
+        referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+        early_goal_frame = _frame(ball=_ball(5.0, 0.0), my_team_is_yellow=True, my_team_is_right=True, ts=0.5)
+        data = referee.step(early_goal_frame, current_time=0.5)
+        assert data.blue_team.score == 1
+
+    def test_reset_clears_keep_out_and_out_of_bounds_rule_state(self):
+        referee = CustomReferee.from_profile_name("simulation")
+        referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+
+        touch_frame = _frame(
+            ball=_ball(4.4, 2.9),
+            friendly_robots={0: _robot(0, 4.4, 2.9, is_friendly=True, has_ball=True)},
+            my_team_is_yellow=True,
+            ts=9.9,
+        )
+        referee.step(touch_frame, current_time=9.9)
+        out_of_bounds_rule = next(r for r in referee._rules if isinstance(r, OutOfBoundsRule))
+        assert out_of_bounds_rule._last_touch_was_friendly is True
+
+        referee.reset()
+        assert out_of_bounds_rule._last_touch_was_friendly is None
 
 
 # ---------------------------------------------------------------------------

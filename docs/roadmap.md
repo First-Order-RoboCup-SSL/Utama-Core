@@ -160,11 +160,19 @@ after the source transcripts were deleted):
 - No double-touch rule (a robot touching the ball twice in a row, before
   another robot touches it, should foul).
 - No ball-speed rule (SSL's 6.5 m/s kick-speed cap is unenforced).
-- No full-episode `reset()` on `CustomReferee`/`GameStateMachine` — RL
-  training that wants to reuse one referee instance across episodes has to
-  construct a fresh one each episode instead. Per-rule `reset()` already
-  exists and runs on every command transition, just not a full
-  score/stage/command reset.
+- ~~No full-episode `reset()`~~ **Done.** `GameStateMachine.reset()` and
+  `CustomReferee.reset()` restore score/command/stage/timers to their
+  starting values without constructing a new instance, for RL episode
+  reuse. Required splitting `BaseRule.reset()` (called on every command
+  transition — some rules, like `GoalRule`'s cooldown timestamp,
+  deliberately keep state across these) from a new
+  `BaseRule.reset_for_new_episode()` (called by `CustomReferee.reset()`;
+  defaults to calling `reset()`, but `GoalRule` overrides it to also clear
+  the cooldown timestamp, since a new episode's clock starts fresh and a
+  stale timestamp could suppress an early goal). 7 new tests in
+  `test_custom_referee.py` cover state restoration, timer clearing,
+  construction-config preservation, and the goal-cooldown episode-boundary
+  edge case specifically.
 - `CustomReferee.set_bt_data`/`_bt_nodes_per_robot` are stale BT-era names
   — the only call site (`strategy_runner.py:1607`) already passes
   `debug_status()`, the kernel-native replacement. Cosmetic, but worth a

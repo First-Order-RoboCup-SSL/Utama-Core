@@ -43,14 +43,39 @@ class GameStateMachine:
         geometry: Optional[RefereeGeometry] = None,
         auto_advance: Optional[AutoAdvanceConfig] = None,
     ) -> None:
+        # Config, fixed for the lifetime of this instance — re-applied by
+        # reset() but never itself reset.
+        self._half_duration_seconds = half_duration_seconds
+        self._kickoff_team = kickoff_team
+        self._n_robots_yellow = n_robots_yellow
+        self._n_robots_blue = n_robots_blue
+        self._initial_stage = initial_stage
+        self._force_start_after_goal = force_start_after_goal
+        self._stop_duration_seconds = stop_duration_seconds
+        self._prepare_duration_seconds = prepare_duration_seconds
+        self._kickoff_timeout_seconds = kickoff_timeout_seconds
+        self._geometry: Optional[RefereeGeometry] = geometry
+        self._auto_advance = auto_advance if auto_advance is not None else AutoAdvanceConfig()
+
+        self._reset_state()
+
+    def _reset_state(self) -> None:
+        """(Re-)initialise all per-episode mutable state to its starting values.
+
+        Called once from `__init__` and again from `reset()` — kept as a
+        single method so the two can never drift apart. Config passed to
+        `__init__` (durations, robot counts, kickoff team, geometry,
+        auto-advance flags) is untouched here; only state that changes over
+        the course of a game is reset.
+        """
         self.command = RefereeCommand.HALT
         self.command_counter = 0
         self.command_timestamp = 0.0
 
-        self.stage = initial_stage
+        self.stage = self._initial_stage
         # Seeded by seed_clock() after the first valid game frame is available.
         self.stage_start_time: Optional[float] = None
-        self.stage_duration = half_duration_seconds
+        self.stage_duration = self._half_duration_seconds
 
         self.yellow_team = TeamInfo(
             name="Yellow",
@@ -64,7 +89,7 @@ class GameStateMachine:
             foul_counter=0,
             ball_placement_failures=0,
             can_place_ball=True,
-            max_allowed_bots=n_robots_yellow,
+            max_allowed_bots=self._n_robots_yellow,
             bot_substitution_intent=False,
             bot_substitution_allowed=True,
             bot_substitutions_left=5,
@@ -81,7 +106,7 @@ class GameStateMachine:
             foul_counter=0,
             ball_placement_failures=0,
             can_place_ball=True,
-            max_allowed_bots=n_robots_blue,
+            max_allowed_bots=self._n_robots_blue,
             bot_substitution_intent=False,
             bot_substitution_allowed=True,
             bot_substitutions_left=5,
@@ -93,17 +118,13 @@ class GameStateMachine:
         self.status_message: Optional[str] = None
 
         # Kickoff team initialised from profile.
-        self._kickoff_team_is_yellow = kickoff_team.lower() == "yellow"
+        self._kickoff_team_is_yellow = self._kickoff_team.lower() == "yellow"
 
         # Arcade auto-advance: after stop_duration_seconds in STOP following a
         # goal, automatically issue FORCE_START instead of waiting for operator.
-        self._force_start_after_goal = force_start_after_goal
-        self._stop_duration_seconds = stop_duration_seconds
         self._stop_entered_time: float = -math.inf  # wall time when STOP was last entered
 
         # Auto-advance timings.
-        self._prepare_duration_seconds = prepare_duration_seconds
-        self._kickoff_timeout_seconds = kickoff_timeout_seconds
         self._prepare_entered_time: float = -math.inf  # wall time when PREPARE_KICKOFF was entered
         self._normal_start_time: float = -math.inf  # wall time when NORMAL_START was entered
 
@@ -116,14 +137,20 @@ class GameStateMachine:
         self._advance3_ready_since: float = math.inf  # DIRECT_FREE_* → NORMAL_START
         self._advance4_ready_since: float = math.inf  # BALL_PLACEMENT_* → next_command
 
-        # Field geometry (used for readiness checks).
-        self._geometry: Optional[RefereeGeometry] = geometry
-
         # Cooldown: don't process a new violation within this window.
         self._last_transition_time: float = -math.inf
 
-        # Per-transition enable flags (default: all on).
-        self._auto_advance = auto_advance if auto_advance is not None else AutoAdvanceConfig()
+    def reset(self) -> None:
+        """Restore all per-episode state (score, command, stage, timers) to
+        its starting values, for reuse across RL episodes without
+        constructing a new `GameStateMachine`.
+
+        Does not reset `_geometry` (set separately via `override_geometry`)
+        or any of the config passed to `__init__` (durations, robot counts,
+        kickoff team, auto-advance flags) — those describe the deployment,
+        not the episode.
+        """
+        self._reset_state()
 
     # ------------------------------------------------------------------
     # Public API
