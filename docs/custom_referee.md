@@ -1,6 +1,6 @@
 # Custom Referee
 
-The `CustomReferee` is an in-process, mode-agnostic referee that operates on `GameFrame` objects and produces `RefereeData` — the same type consumed by the behaviour tree's `CheckRefereeCommand` nodes. It requires no network connection, no AutoReferee process, and no simulator-specific code. It works identically across RSim, grSim, and Real modes.
+The `CustomReferee` is an in-process, mode-agnostic referee that operates on `GameFrame` objects and produces `RefereeData` — read each tick via `game.referee` by `kernel.RefereeOverride` (see `kernel/referee_override.py`) to interrupt tactics during restarts. It requires no network connection, no AutoReferee process, and no simulator-specific code. It works identically across RSim, grSim, and Real modes.
 
 ---
 
@@ -312,8 +312,8 @@ CustomReferee.step(game_frame, t)
     → RefereeRefiner.refine(game_frame, referee_data)
     → game_frame.referee = RefereeData
     → game.referee (via Game.referee property)
-    → CheckRefereeCommand reads game.referee.referee_command
-    → Behaviour tree reacts
+    → kernel.RefereeOverride reads game.referee.referee_command,
+      intercepts AbstractStrategy.step() during restarts
 ```
 
 ---
@@ -349,6 +349,53 @@ demo_referee_gui_rsim.py         # browser GUI + StrategyRunner + RSim (replaces
 
 ---
 
+## Known gaps
+
+Re-derived from the current code (2026-08-16) after the original design-review
+notes — kept only in ad hoc session transcripts — were deleted as repo clutter.
+This list reflects actual code state, not the old discussion.
+
+- **No double-touch rule.** A robot that kicks then touches the ball again
+  before another robot touches it should foul. No rule checks this — the
+  string "double-touch" only appears as a `Force Start` button tooltip in
+  `gui.py`, not an implemented check.
+- **No ball-speed rule.** SSL limits kick speed (6.5 m/s); nothing in
+  `rules/` measures it.
+- **No full-episode reset.** Each `BaseRule` has `reset()` (called by
+  `CustomReferee.step()` on every command transition, clearing internal
+  counters like `KeepOutRule._violation_count`), but there is no
+  `CustomReferee.reset()` / `GameStateMachine.reset()` that restores score,
+  stage, and command to their initial values. RL training that wants to
+  reuse one referee across episodes currently has to construct a fresh
+  `CustomReferee` each episode instead.
+- **Last-touch tracking is a proximity heuristic at the boundary.**
+  `OutOfBoundsRule._update_last_touch` prefers the reliable `has_ball` IR
+  flag, but falls back to "closest robot within 0.15 m" when no friendly
+  robot reports possession — acknowledged in the code as a fallback, not
+  guaranteed accurate when the true touch happened right at the boundary.
+  Documented here as a known limitation, not scheduled to be fixed.
+- **`CustomReferee.set_bt_data` / `StrategyRunner`'s call site are stale
+  names**, left over from the deleted behaviour-tree scaffolding —
+  `set_bt_data`'s docstring still says "Called by StrategyRunner after each
+  behaviour tree tick," but the actual call
+  (`strategy_runner.py:1607`) is `self.referee.set_bt_data(self.my.strategy.debug_status())`
+  — `debug_status()` is the kernel-native per-robot tactic/committed status,
+  nothing BT-related. Functionally correct, just misnamed; a rename
+  (`set_bt_data` → `set_debug_status`, `_bt_nodes_per_robot` →
+  `_debug_status_per_robot`) would need to touch `custom_referee.py`,
+  `gui.py`, and the one `strategy_runner.py` call site.
+
+Previously flagged and now confirmed resolved by reading the code directly:
+auto-advance after goals and after kickoff/free-kick timeouts (all 5
+auto-advance paths in `state_machine.py`), the keep-out-during-bare-`STOP`
+team-assignment bug (`KeepOutRule` explicitly excludes `STOP`, with the
+reasoning documented in a code comment), blue-perspective goal-scoring test
+coverage (`test_custom_referee.py`), the one-frame lag (documented above in
+this file), and `StrategyRunner` integration coverage
+(`tests/strategy_runner/test_referee_rsim.py`,
+`tests/strategy_runner/test_ball_placement_rsim.py`). `force_start_after_goal`
+is implemented (`state_machine.py`'s "Legacy force-start path").
+
 ## Running tests
 
 ```bash
@@ -376,7 +423,7 @@ pixi run python demo_referee_gui_rsim.py
 
 - Creates a `CustomReferee` with `enable_gui=True`, which starts an HTTP server on a background daemon thread.
 - Passes the referee to `StrategyRunner` via `referee=`. `StrategyRunner` calls `referee.step()` on every tick and handles ball teleports on `STOP` automatically.
-- Uses `WanderingStrategy` so robots visibly move; the `RefereeOverride` behaviour tree interrupts them when you issue commands from the GUI.
+- Uses `WanderingStrategy` (`tests/referee/wandering_strategy.py`, a kernel-native `AbstractStrategy`) so robots visibly move; `kernel.RefereeOverride` interrupts them when you issue commands from the GUI.
 
 ### Operator workflow
 

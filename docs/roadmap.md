@@ -151,6 +151,26 @@ dropping py_trees) — not urgent, revisit once there's a concrete forcing case:
   every `Tactic.tick()` call; worth checking whether that indirection earns its
   keep once `AbstractStrategy` itself is simpler.
 
+## CustomReferee — remaining gaps
+
+From the 2026-08-16 re-derivation in `docs/custom_referee.md`'s "Known gaps"
+section (see "Repo root cleanup" below for how this list was recovered
+after the source transcripts were deleted):
+
+- No double-touch rule (a robot touching the ball twice in a row, before
+  another robot touches it, should foul).
+- No ball-speed rule (SSL's 6.5 m/s kick-speed cap is unenforced).
+- No full-episode `reset()` on `CustomReferee`/`GameStateMachine` — RL
+  training that wants to reuse one referee instance across episodes has to
+  construct a fresh one each episode instead. Per-rule `reset()` already
+  exists and runs on every command transition, just not a full
+  score/stage/command reset.
+- `CustomReferee.set_bt_data`/`_bt_nodes_per_robot` are stale BT-era names
+  — the only call site (`strategy_runner.py:1607`) already passes
+  `debug_status()`, the kernel-native replacement. Cosmetic, but worth a
+  rename (`set_bt_data` → `set_debug_status`) across `custom_referee.py`,
+  `gui.py`, and that one call site next time this area is touched.
+
 ## Developer documentation
 
 Beyond `tactic_model_design_decisions.md` (internal decision log, not onboarding
@@ -202,16 +222,25 @@ Deliberately *not* bundled into the BT-removal pass — same reasoning as
   from earlier work building `CustomReferee` and its RSim GUI, committed by
   accident — were deleted in `960662c` at the user's explicit request.
   **Not distilled first**: the transcripts contained a 10-item gap list from
-  the original `CustomReferee` design review (auto-advance-after-goal
-  missing, double-touch rule missing, keep-out team-assignment bug on bare
-  `STOP`, ball-speed rule missing, no `reset()` for RL-episode reuse, etc.)
-  and the auto-advance timing rules (kickoff/free-kick sequencing) added
-  afterward. None of that was captured anywhere else before the transcripts
-  were removed — check `utama_core/custom_referee/` and `docs/custom_referee.md`
-  for whether these items are still open (some may already be fixed; the
-  transcripts are gone so this needs a fresh look at the code, not a re-read
-  of the old discussion) and, if still relevant, record them in
-  `docs/custom_referee.md` or a `custom_referee`-specific decision log.
+  the original `CustomReferee` design review, lost when they were deleted.
+
+  **Follow-up done**: re-derived all 10 items directly from
+  `utama_core/custom_referee/` and its tests (not from memory of the old
+  discussion) and recorded the result in `docs/custom_referee.md`'s new
+  "Known gaps" section. 6 of the 10 turned out to already be resolved
+  (auto-advance after goals/timeouts, the keep-out-on-bare-`STOP`
+  team-assignment bug, blue-perspective goal tests, the one-frame-lag doc
+  note, `StrategyRunner` integration tests, `force_start_after_goal`). 3 are
+  still genuinely open (no double-touch rule, no ball-speed rule, no
+  full-episode `reset()` for RL reuse) and 1 is a documented-but-accepted
+  limitation (last-touch tracking falls back to a 0.15 m proximity heuristic
+  at the boundary). Also caught and fixed two stale BT-era doc references
+  (`docs/custom_referee.md`'s pipeline diagram said "Behaviour tree reacts";
+  `CustomReferee.set_bt_data`'s docstring still says "after each behaviour
+  tree tick" even though the only call site
+  (`strategy_runner.py:1607`) now passes `debug_status()`, the kernel-native
+  replacement — flagged as a worthwhile rename, not done here to keep this
+  pass doc-only).
 
 **Done (broken-demo triage, follow-up pass):**
 - The 7 files still importing deleted `strategy.examples` were resolved
