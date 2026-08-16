@@ -318,7 +318,8 @@ class SSLStandardEnv(SSLBaseEnv):
         increasing ``kick_v_x`` for robots whose dribbler transitioned from
         on to off while they were moving with the ball.
         """
-        KICK_PERSISTENCE_FRAMES = 3
+        KICK_PERSISTENCE_TIME = 0.05  # seconds
+        KICK_PERSISTENCE_FRAMES = round(KICK_PERSISTENCE_TIME / TIMESTEP)
 
         n_blue = self.n_robots_blue
         for i in range(n_blue):

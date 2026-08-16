@@ -54,6 +54,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from utama_core.config.settings import CONTROL_FREQUENCY
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
@@ -72,7 +73,8 @@ from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.tactics._pass_and_score import _pass_exec, _score_goal
 
 _LURE_DRAG_THRESHOLD = 0.8  # metres — marker must be pulled at least this far off the central shot lane's y
-_LURE_MAX_TICKS = 90  # ~1.5s at 60Hz — cap so a marker that doesn't bite can't stall the tactic forever
+_LURE_MAX_TIME = 1.5  # seconds — cap so a marker that doesn't bite can't stall the tactic forever
+_LURE_MAX_TICKS = round(_LURE_MAX_TIME * CONTROL_FREQUENCY)
 _LURE_TOUCHLINE_MARGIN = 0.5  # metres in from the touchline — how close the decoy's lure run goes
 _OVERLOAD_STANDOFF = 0.4  # metres — how far past the marker's original shadow the overloader sits
 

@@ -17,7 +17,9 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 _KICK_SPEED_THRESHOLD = 0.5  # m/s — ball speed above this triggers annotation
-_KICK_TTL_FRAMES = 45  # frames the kick line stays visible (~1.5s at 30fps)
+_KICK_ANNOTATION_RENDER_FPS = 30.0  # assumed render rate; must match RSimVisionStreamServer's default max_fps
+_KICK_TTL_SECS = 1.5  # how long the kick line stays visible
+_KICK_TTL_FRAMES = round(_KICK_TTL_SECS * _KICK_ANNOTATION_RENDER_FPS)
 _KICK_PREDICT_SECS = 0.6  # seconds ahead to project kick endpoint
 
 
