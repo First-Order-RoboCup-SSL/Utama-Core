@@ -113,10 +113,12 @@ class TestKalmanFilterStepXY:
 
     def test_initialises_state_on_first_call(self):
         kf = KalmanFilter()
-        assert kf.state_xy is None
+        assert kf.state_x is None
+        assert kf.state_y is None
         robot = make_robot(x=3.0, y=4.0)
         kf._step_xy((3.0, 4.0), robot, time_elapsed=0.1)
-        assert kf.state_xy is not None
+        assert kf.state_x is not None
+        assert kf.state_y is not None
 
     def test_exact_repeated_measurement_converges(self):
         """After many steps with zero velocity and the same measurement the filter should
@@ -445,9 +447,10 @@ class TestKalmanFilterBallFilterData:
         # First call initializes state
         kf._step_xy((1.0, 2.0), robot, time_elapsed=0.1)
 
-        initial_cov = kf.covariance_mat_xy.copy()
+        initial_cov_x, initial_cov_y = kf.covariance_x, kf.covariance_y
 
         for _ in range(50):
             kf._step_xy((1.0, 2.0), robot, time_elapsed=0.1)
 
-        assert np.all(np.diag(kf.covariance_mat_xy) < np.diag(initial_cov))
+        assert kf.covariance_x < initial_cov_x
+        assert kf.covariance_y < initial_cov_y

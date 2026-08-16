@@ -22,6 +22,20 @@ def zero_vector(twod: bool) -> Union[Vector2D, Vector3D]:
 
 
 class VelocityRefiner(BaseRefiner):
+    # Acceleration uses windowed-average finite differencing: split the last
+    # N_WINDOWS*WINDOW_SIZE velocity samples into N_WINDOWS windows, average each window, then
+    # diff consecutive window-averages. This trades responsiveness for noise rejection, which is
+    # fine for acceleration (a slower-changing, already-smoothed-once-removed quantity feeding
+    # mostly planning rather than a tight feedback loop).
+    #
+    # Velocity intentionally does NOT use this scheme, even at a small window size: any window
+    # or regression smoothing of velocity introduces lag under acceleration (a step change in
+    # true velocity, e.g. a robot starting/stopping), because the estimate is necessarily
+    # centered on a timestamp behind the current tick. This was tried and measured to break
+    # time-critical control loops (a robot failed to clear a keep-out zone in time and failed to
+    # intercept a moving ball, both by a wide margin, even with a minimal 4-point window). Position
+    # is already Kalman-smoothed upstream (see PositionRefiner); velocity stays a plain 1-step
+    # finite difference so it stays maximally responsive for control.
     ACCELERATION_WINDOW_SIZE = 5
     ACCELERATION_N_WINDOWS = 3
 
@@ -87,12 +101,12 @@ class VelocityRefiner(BaseRefiner):
             new_v = self._calculate_object_velocity(game_history, robot_instance.p, robot_obj_key, current_ts, twod)
 
             new_a = zero_vector(twod)  # Default to zero
-            # try:
-            new_a = self._calculate_object_acceleration(game_history, robot_obj_key, twod)
-            # except Exception as e:
-            #     logger.warning(
-            #         f"Could not calculate acceleration for {team_type.name} robot {robot_id} (key: {robot_obj_key}), setting to zero: {e}"
-            #     )
+            try:
+                new_a = self._calculate_object_acceleration(game_history, robot_obj_key, twod)
+            except Exception as e:
+                logger.warning(
+                    f"Could not calculate acceleration for {team_type.name} robot {robot_id} (key: {robot_obj_key}), setting to zero: {e}"
+                )
 
             updated_robot = replace(robot_instance, v=new_v, a=new_a)
             updated_robots_dict[robot_id] = updated_robot
@@ -134,57 +148,30 @@ class VelocityRefiner(BaseRefiner):
         current_ts: float,
         twod: bool,
     ) -> Union[Vector2D, Vector3D]:
-        # try:
+        """Estimates velocity as a plain 1-step finite difference against the most recent
+        historical position. Deliberately unsmoothed — see the class docstring comment on
+        ACCELERATION_WINDOW_SIZE for why: any windowing here adds control-loop-breaking lag.
+        """
         timestamps_np, positions_np = game_history.get_historical_attribute_series(
             object_key, AttributeType.POSITION, 1
         )
-        # logger.debug(f"VELOCITY_CALC: obj_key={object_key}, current_ts={current_ts}, current_pos={current_pos}")
-        # logger.debug(f"VELOCITY_CALC: historical timestamps_np={timestamps_np}, positions_np={positions_np.tolist() if positions_np.size > 0 else 'EMPTY'}")
 
         if not timestamps_np.size or not positions_np.size:
-            logger.debug(
-                f"VELOCITY_CALC: No historical position for {object_key}. GameHistory returned empty arrays. Setting zero velocity."
-            )
             return zero_vector(twod)
 
-        # Assign these *after* confirming timestamps_np and positions_np are not empty
         previous_time_received = timestamps_np[0]
-        previous_pos_np = positions_np[0]  # This is a 1D NumPy array [x, y] or [x, y, z]
+        previous_pos_np = positions_np[0]
 
-        # Now calculate dt_secs using the defined previous_time_received
         dt_secs = current_ts - previous_time_received
-        # logger.debug(f"VELOCITY_CALC: obj_key={object_key}, dt_secs={dt_secs}, prev_ts={previous_time_received}, prev_pos_np={previous_pos_np}")
-
         if dt_secs <= 1e-9:
-            logger.warning(
-                f"VELOCITY_CALC: Object {object_key} velocity dt_secs is too small or zero ({dt_secs}). Using zero velocity."
-            )
             return zero_vector(twod)
 
-        # Convert previous_pos_np back to VectorObject for subtraction
         if twod:
             previous_pos = Vector2D(previous_pos_np[0], previous_pos_np[1])
         else:
             previous_pos = Vector3D(previous_pos_np[0], previous_pos_np[1], previous_pos_np[2])
 
-        velocity = (current_pos - previous_pos) / dt_secs
-        # logger.debug(
-        #     f"VELOCITY_CALC: obj_key={object_key}, calculated_v={velocity}"
-        # )
-        return velocity
-
-    # except IndexError:
-    #     logger.error(
-    #         f"VELOCITY_CALC: IndexError for {object_key}. This indicates an issue with historical data structure despite size checks. Setting zero velocity.",
-    #         exc_info=True,
-    #     )
-    #     return zero_vector(twod)
-    # except Exception as e:
-    #     logger.error(
-    #         f"VELOCITY_CALC: Unexpected error calculating velocity for {object_key}, setting to zero: {e}",
-    #         exc_info=True,
-    #     )
-    #     return zero_vector(twod)
+        return (current_pos - previous_pos) / dt_secs
 
     def _calculate_object_acceleration(
         self, game_history: GameHistory, object_key: ObjectKey, twod: bool
@@ -203,8 +190,14 @@ class VelocityRefiner(BaseRefiner):
         except Exception as e:
             raise ValueError(f"Velocity data not available for acceleration for {object_key}: {e}") from e
 
-        # Pass NumPy arrays directly
-        return self._calculate_acceleration_from_pairs(timestamps_np, velocities_np, twod)
+        return self._windowed_average_derivative(
+            timestamps_np,
+            velocities_np,
+            self.ACCELERATION_N_WINDOWS,
+            self.ACCELERATION_WINDOW_SIZE,
+            twod,
+            log_prefix="ACCEL",
+        )
 
     def _extract_time_velocity_np_arrays(
         self, game_history: GameHistory, object_key: ObjectKey, num_points: int
@@ -214,113 +207,81 @@ class VelocityRefiner(BaseRefiner):
         )
         return timestamps_np, velocities_np
 
-    def _calculate_acceleration_from_pairs(
+    def _windowed_average_derivative(
         self,
         timestamps_np: np.ndarray,
-        velocities_np: np.ndarray,  # This is now a 2D NumPy array
+        values_np: np.ndarray,
+        n_windows: int,
+        window_size: int,
         twod: bool,
+        log_prefix: str,
     ) -> Union[Vector2D, Vector3D]:
-        """Estimates an object's acceleration using NumPy arrays as input."""
-        # logger.debug(f"ACCEL_PAIRS_INPUT: timestamps_np shape={timestamps_np.shape}, velocities_np shape={velocities_np.shape}, twod={twod}")
+        """Estimates d(values)/dt by averaging consecutive windows and differencing the averages.
 
-        if self.ACCELERATION_N_WINDOWS == 0 or self.ACCELERATION_WINDOW_SIZE == 0:
-            # logger.info("ACCEL_PAIRS: N_WINDOWS or WINDOW_SIZE is 0, returning zero vector.")
-            return zero_vector(twod)
-
-        # Minimum points needed for the entire calculation based on N_WINDOWS
-        # If N_WINDOWS < 2, we can't form any dv/dt segments with the current logic.
-        if self.ACCELERATION_N_WINDOWS < 2:
+        Splits the last n_windows*window_size samples into n_windows equal windows, averages
+        each window's value and timestamp, then diffs consecutive window-averages and divides
+        to get a per-segment derivative, averaged across all valid (non-degenerate dt) segments.
+        """
+        if n_windows < 2 or window_size < 1:
             logger.warning(
-                f"ACCEL_PAIRS: ACCELERATION_N_WINDOWS is {self.ACCELERATION_N_WINDOWS}. "
-                "Need at least 2 windows to calculate acceleration with current logic. Returning zero."
+                f"{log_prefix}: n_windows={n_windows}, window_size={window_size} is degenerate. Returning zero."
             )
             return zero_vector(twod)
 
-        min_total_points_needed = self.ACCELERATION_N_WINDOWS * self.ACCELERATION_WINDOW_SIZE
-
-        if timestamps_np.shape[0] < min_total_points_needed:
-            logger.warning(
-                f"ACCEL_PAIRS: Not enough data points. Have {timestamps_np.shape[0]}, "
-                f"need {min_total_points_needed} for {self.ACCELERATION_N_WINDOWS} windows "
-                f"of size {self.ACCELERATION_WINDOW_SIZE}. Returning zero."
-            )
-            return zero_vector(twod)
-
-        # Ensure velocities_np also has enough points (should match timestamps_np)
-        if velocities_np.shape[0] < min_total_points_needed:
-            logger.warning(
-                f"ACCEL_PAIRS: Velocities_np has insufficient data points. Have {velocities_np.shape[0]}, "
-                f"need {min_total_points_needed}. Returning zero."
-            )
-            return zero_vector(twod)
-
+        min_total_points_needed = n_windows * window_size
         num_dimensions = 2 if twod else 3
-        if velocities_np.shape[1] != num_dimensions:
-            logger.error(
-                f"ACCEL_PAIRS: velocities_np has incorrect number of dimensions. "
-                f"Expected {num_dimensions} (twod={twod}), got {velocities_np.shape[1]}. Returning zero."
+
+        if (
+            timestamps_np.shape[0] < min_total_points_needed
+            or values_np.shape[0] < min_total_points_needed
+            or values_np.shape[1] != num_dimensions
+        ):
+            logger.warning(
+                f"{log_prefix}: Insufficient/malformed data. timestamps={timestamps_np.shape}, "
+                f"values={values_np.shape}, need {min_total_points_needed} points x {num_dimensions} dims. Returning zero."
             )
             return zero_vector(twod)
 
-        # Trim excess data if more points were provided than needed for the configured windows.
-        # This should ideally be handled by the caller (_calculate_object_acceleration) ensuring
-        # that `timestamps_np` and `velocities_np` are already correctly sized.
-        # For robustness, we slice here if they are larger than needed.
+        # Use the most recent min_total_points_needed points.
+        # Plain-float implementation, not numpy: this is called ~46k times per match with a
+        # small fixed shape (n_windows=3, window_size=5, 2-3 dims), where np.reshape/np.mean/
+        # np.diff's dispatch overhead dwarfs the actual arithmetic at this size — same pattern
+        # as distance_point_to_segment's hot-path float rewrite (see that function's docstring).
+        start = timestamps_np.shape[0] - min_total_points_needed
+        active_timestamps = timestamps_np[start:].tolist()
+        active_values = values_np[start:].tolist()
 
-        active_timestamps_np = timestamps_np[:min_total_points_needed]
-        active_velocities_np = velocities_np[:min_total_points_needed]
+        avg_ts_per_window = [0.0] * n_windows
+        avg_values_per_window = [[0.0] * num_dimensions for _ in range(n_windows)]
+        for w in range(n_windows):
+            ts_sum = 0.0
+            val_sums = [0.0] * num_dimensions
+            base = w * window_size
+            for i in range(window_size):
+                ts_sum += active_timestamps[base + i]
+                row = active_values[base + i]
+                for d in range(num_dimensions):
+                    val_sums[d] += row[d]
+            avg_ts_per_window[w] = ts_sum / window_size
+            avg_values_per_window[w] = [s / window_size for s in val_sums]
 
-        try:
-            windowed_velocities = active_velocities_np.reshape(
-                self.ACCELERATION_N_WINDOWS,
-                self.ACCELERATION_WINDOW_SIZE,
-                num_dimensions,
-            )
-            windowed_timestamps = active_timestamps_np.reshape(
-                self.ACCELERATION_N_WINDOWS, self.ACCELERATION_WINDOW_SIZE
-            )
-        except ValueError as e:
-            logger.error(
-                f"ACCEL_PAIRS: Cannot reshape arrays. "
-                f"active_timestamps_np shape: {active_timestamps_np.shape}, "
-                f"active_velocities_np shape: {active_velocities_np.shape}, "
-                f"N_WINDOWS: {self.ACCELERATION_N_WINDOWS}, WINDOW_SIZE: {self.ACCELERATION_WINDOW_SIZE}. Error: {e}",
-                exc_info=True,
-            )
+        sum_derivative = [0.0] * num_dimensions
+        valid_segments = 0
+        for w in range(1, n_windows):
+            d_ts = avg_ts_per_window[w] - avg_ts_per_window[w - 1]
+            if d_ts <= 1e-9:
+                continue
+            valid_segments += 1
+            for d in range(num_dimensions):
+                sum_derivative[d] += (avg_values_per_window[w][d] - avg_values_per_window[w - 1][d]) / d_ts
+
+        if valid_segments == 0:
+            logger.warning(f"{log_prefix}: All dt segments too small or zero. Returning zero.")
             return zero_vector(twod)
 
-        avg_velocities_per_window = np.mean(windowed_velocities, axis=1)  # Shape: (N_WINDOWS, num_dimensions)
-        middle_ts_per_window = np.mean(windowed_timestamps, axis=1)  # Shape: (N_WINDOWS)
+        final_derivative = [s / valid_segments for s in sum_derivative]
 
-        # Calculate differences between consecutive window averages
-        dv_segments = np.diff(avg_velocities_per_window, axis=0)  # Shape: (N_WINDOWS-1, num_dimensions)
-        dt_segments = np.diff(middle_ts_per_window, axis=0)  # Shape: (N_WINDOWS-1)
-
-        # Avoid division by zero or very small dt
-        valid_dt_mask = dt_segments > 1e-9
-
-        if not np.any(valid_dt_mask):
-            logger.warning("ACCEL_PAIRS: All dt for acceleration segments are too small or zero. Returning zero.")
-            return zero_vector(twod)
-
-        # Initialize accelerations_segments with zeros
-        acceleration_segments_np = np.zeros_like(dv_segments)
-
-        # Perform division only where dt is valid
-        # dt_segments needs to be broadcastable: (N_WINDOWS-1,) -> (N_WINDOWS-1, 1) for division
-        acceleration_segments_np[valid_dt_mask] = dv_segments[valid_dt_mask] / dt_segments[valid_dt_mask, np.newaxis]
-
-        # Average the valid acceleration segments
-        if np.sum(valid_dt_mask) == 0:  # Should be caught by np.any above, but as a safeguard
-            logger.warning("ACCEL_PAIRS: No valid dt segments after filtering. Returning zero.")
-            return zero_vector(twod)
-
-        final_accel_np = np.sum(acceleration_segments_np[valid_dt_mask], axis=0) / np.sum(valid_dt_mask)
-
-        # logger.debug(f"ACCEL_PAIRS_RESULT: final_accel_np={final_accel_np}")
-
-        # Convert final NumPy array back to VectorObject
         if twod:
-            return Vector2D(final_accel_np[0], final_accel_np[1])
+            return Vector2D(final_derivative[0], final_derivative[1])
         else:
-            return Vector3D(final_accel_np[0], final_accel_np[1], final_accel_np[2])
+            return Vector3D(final_derivative[0], final_derivative[1], final_derivative[2])

@@ -240,7 +240,30 @@ class FastPathPlanner:
         unitvec = np.array([perp_dir[0] / direction_norm, perp_dir[1] / direction_norm])
         subgoal = obstacle_pos + self.SUBGOAL_DISTANCE * unitvec * multiple
 
+        # Broad-phase bounding-box prune (same idea as collides()): a point can
+        # only be within OBSTACLE_CLEARANCE of a segment if it's within that
+        # distance of the segment's bounding box, so obstacles whose box misses
+        # this margin around subgoal can never trigger the clearance check below
+        # and are skipped without calling distance_point_to_segment at all. This
+        # loop is the largest single caller of distance_point_to_segment in a
+        # full match (cProfile), since it's retried on every recursive subgoal
+        # attempt against every obstacle.
+        sub_x, sub_y = subgoal[0], subgoal[1]
+        box_min_x = sub_x - self.OBSTACLE_CLEARANCE
+        box_max_x = sub_x + self.OBSTACLE_CLEARANCE
+        box_min_y = sub_y - self.OBSTACLE_CLEARANCE
+        box_max_y = sub_y + self.OBSTACLE_CLEARANCE
+
         for o in obstacles:
+            o_min_x = min(o[0][0], o[1][0])
+            o_max_x = max(o[0][0], o[1][0])
+            if o_max_x < box_min_x or o_min_x > box_max_x:
+                continue
+            o_min_y = min(o[0][1], o[1][1])
+            o_max_y = max(o[0][1], o[1][1])
+            if o_max_y < box_min_y or o_min_y > box_max_y:
+                continue
+
             # OPTIMIZATION: Removed np.isclose, ensuring strictly less-than for clearance
             if distance_point_to_segment(subgoal, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
                 return self._find_subgoal(

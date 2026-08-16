@@ -56,24 +56,23 @@ class KalmanFilter:
 
         # For position
         # s; to be initialised by strategy runner with 1st GameFrame
-        self.state_xy = None
+        self.state_x = None
+        self.state_y = None
 
-        # sigma squared x, sigma squared y
+        # sigma squared x, sigma squared y. x and y errors are assumed uncorrelated (the
+        # measurement/process covariance matrices below are always diagonal), which means the
+        # 2D xy filter is mathematically equivalent to two independent scalar filters — same
+        # closed-form update as _step_th below, just applied twice. Plain scalar arithmetic,
+        # not numpy: _step_xy is called ~43k times per match, where np.matmul/np.linalg.solve's
+        # dispatch overhead on a 2x2 matrix dwarfs the actual arithmetic at this call volume.
         noise_xy_var = pow(noise_xy_sd, 2)
-        var_x, var_y = noise_xy_var, noise_xy_var
-
-        # sigma xy; assume their errors are uncorrelated
-        covariance_xy = 0
-
-        dimensions_xy = 2
-        self.identity_xy = np.identity(dimensions_xy)
-
-        # R_n
-        self.measurement_cov_xy = np.array([[var_x, covariance_xy], [covariance_xy, var_y]])
+        self.measurement_var_x = noise_xy_var
+        self.measurement_var_y = noise_xy_var
         # P_n,n; initialised with uncertainty in 1st frame
-        self.covariance_mat_xy = self.measurement_cov_xy
+        self.covariance_x = noise_xy_var
+        self.covariance_y = noise_xy_var
         # Q
-        self.process_noise_xy = (2 * noise_xy_var) * self.identity_xy
+        self.process_noise_xy = 2 * noise_xy_var
 
         # Observation matrix H and state transition matrix F are just the identity matrix.
         # Multiplications with them are omitted.
@@ -116,51 +115,49 @@ class KalmanFilter:
         # class Robot: id: int; is_friendly: bool; has_ball: bool
         # p: Vector2D; v: Vector2D; a: Vector2D; orientation: float
 
-        # Phase 0: Initialised with the 1st valid GameFrame (only on initialisation)
-        if self.state_xy is None:
-            self.state_xy = np.array((last_robot.p.x, last_robot.p.y))
+        # x and y are filtered as two independent scalar Kalman filters (see __init__ for why
+        # that's mathematically equivalent to the 2D matrix form here), using the same
+        # closed-form update as _step_th below.
+        if self.state_x is None:
+            self.state_x = last_robot.p.x
+            self.state_y = last_robot.p.y
 
+        new_x, new_y = (None, None) if new_data is None else new_data
+
+        self.state_x, self.covariance_x = self._step_scalar(
+            new_x, self.state_x, last_robot.v.x, time_elapsed, self.covariance_x, self.measurement_var_x
+        )
+        self.state_y, self.covariance_y = self._step_scalar(
+            new_y, self.state_y, last_robot.v.y, time_elapsed, self.covariance_y, self.measurement_var_y
+        )
+
+        return (self.state_x, self.state_y)
+
+    def _step_scalar(
+        self,
+        new_data: Optional[float],
+        state: float,
+        velocity: float,
+        time_elapsed: float,
+        covariance: float,
+        measurement_var: float,
+    ) -> tuple[float, float]:
+        """One prediction-update cycle of a scalar (1D) Kalman filter with constant-velocity
+        prediction. Shared by both axes of _step_xy."""
         # Phase 1: Predicting the current state given the last state.
-        # u
-        control_velocities_xy = np.array((last_robot.v.x, last_robot.v.y))
-        # G
-        control_mat_xy = time_elapsed * self.identity_xy
-
-        # s_n,n-1
-        pred_state_xy = self.state_xy + np.matmul(control_mat_xy, control_velocities_xy)
-        # P_n,n-1
-        pred_cov_xy = self.covariance_mat_xy + self.process_noise_xy
+        pred_state = state + velocity * time_elapsed
+        pred_cov = covariance + self.process_noise_xy
 
         # Phase 2: Adjust this prediction based on new data
         if new_data is not None:  # Received frame.
-            # z
-            measurement_xy = np.array(new_data)
-
-            # K_n
-            kalman_gain_xy = np.linalg.solve((pred_cov_xy + self.measurement_cov_xy).T, pred_cov_xy.T).T
-
-            # s_n,n
-            self.state_xy = pred_state_xy + np.matmul(kalman_gain_xy, (measurement_xy - pred_state_xy))
-
-            ident_less_kalman_xy = self.identity_xy - kalman_gain_xy
-            measurement_uncertainty_xy = np.matmul(
-                kalman_gain_xy,
-                np.matmul(self.measurement_cov_xy, kalman_gain_xy.T),
-            )
-
-            # P_n,n
-            self.covariance_mat_xy = (
-                np.matmul(ident_less_kalman_xy, np.matmul(pred_cov_xy, ident_less_kalman_xy.T))
-                + measurement_uncertainty_xy
-            )
+            kalman_gain = pred_cov / (pred_cov + measurement_var)
+            new_state = pred_state + kalman_gain * (new_data - pred_state)
+            new_cov = (1 - kalman_gain) * pred_cov
+            return new_state, new_cov
 
         # We can rely on the invariant that vanished frames have null x values
         # as they are imputed with a null VisionRobotData in the Position Refiner.
-        else:  # Vanished frame: use predicted values.
-            self.state_xy = pred_state_xy
-            self.covariance_mat_xy = pred_cov_xy
-
-        return tuple(self.state_xy)
+        return pred_state, pred_cov  # Vanished frame: use predicted values.
 
     def _step_th(self, new_data: Optional[float], last_th: float) -> float:
         """
