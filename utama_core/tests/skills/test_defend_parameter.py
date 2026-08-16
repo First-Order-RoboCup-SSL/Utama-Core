@@ -5,15 +5,17 @@ import pytest
 
 import utama_core.skills.src.defend_parameter as dp
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
+from utama_core.config.referee_constants import OWN_DEFENSE_AREA_STANDOFF_DISTANCE
 from utama_core.entities.data.vector import Vector2D, Vector3D
 
 EDGE_OFFSET = BALL_RADIUS + ROBOT_RADIUS
+_DEFENDER_STANDOFF = ROBOT_RADIUS + OWN_DEFENSE_AREA_STANDOFF_DISTANCE
 
 # ---------------------------------------------------------------------------
 # Standard-field stubs (9x6 field)
 # goal_x = +/-4.5, goal_half_width = 0.5
 # defense front at +/-3.5, defense_half_width = 1.0
-# defender_x (left) = -3.5 + ROBOT_RADIUS, defender_x (right) = 3.5 - ROBOT_RADIUS
+# defender_x (left) = -3.5 + _DEFENDER_STANDOFF, defender_x (right) = 3.5 - _DEFENDER_STANDOFF
 # keeper_x (left) = -4.5 + ROBOT_RADIUS, keeper_x (right) = 4.5 - ROBOT_RADIUS
 # post_limit = 0.5 - ROBOT_RADIUS
 # ---------------------------------------------------------------------------
@@ -38,9 +40,9 @@ _STD_RIGHT_DEFENSE_AREA = np.array(
     ]
 )
 
-# Defender stands one ROBOT_RADIUS in front of the defense area
-_LEFT_DEFENDER_X = -3.5 + ROBOT_RADIUS
-_RIGHT_DEFENDER_X = 3.5 - ROBOT_RADIUS
+# Defender stands _DEFENDER_STANDOFF in front of the defense area
+_LEFT_DEFENDER_X = -3.5 + _DEFENDER_STANDOFF
+_RIGHT_DEFENDER_X = 3.5 - _DEFENDER_STANDOFF
 
 # Keeper-line references
 _LEFT_KEEPER_X = -4.5 + ROBOT_RADIUS
@@ -264,7 +266,7 @@ def test_custom_geometry_uses_field_values(monkeypatch):
     field = _custom_field(-6.0, 0.8, -4.5, 1.5)
     keeper_x = -6.0 + ROBOT_RADIUS
     post_limit = 0.8 - ROBOT_RADIUS
-    defender_x = -4.5 + ROBOT_RADIUS  # left team
+    defender_x = -4.5 + _DEFENDER_STANDOFF  # left team
     game = _make_game(
         team_is_right=False,
         field=field,

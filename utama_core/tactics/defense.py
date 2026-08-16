@@ -11,8 +11,7 @@ needed no porting itself. This tactic is that same dispatch, expressed as a
 `tick()` instead of `execute_default_action`.
 
 No cross-tick state: `defend_parameter` recomputes its target from scratch
-every tick, including the 2-defender side-selection (it reads
-`len(game.friendly_robots)` and `robot_id` directly), so `mem` is empty.
+every tick, including the 2-defender side-selection, so `mem` is empty.
 """
 
 from __future__ import annotations
@@ -34,15 +33,16 @@ class DefenseMem:
 class DefenseTactic(BaseTactic[DefenseMem]):
     """One or two robots, shadowing the ball-to-goal shot line.
 
-    Carried over as-is from the source: `defend_parameter`'s dynamic
-    2-defender side-selection triggers on `len(game.friendly_robots) == 2`
-    (whole-team robot count), not on how many robots this tactic was handed.
-    That was correct for the original dedicated 2-robot defense strategy it
-    came from; if this tactic is ever run with 2 defenders on a team with
-    more than 2 robots total (e.g. 2 defenders + 1 attacker elsewhere), each
-    defender falls back to the fixed near-post-by-parity assignment instead
-    of the dynamic side choice. Not fixed here since it wasn't a forcing
-    case yet — flagging so it isn't mistaken for new behaviour.
+    Passes its own `robot_ids` to `defend_parameter` as `defender_group`, so
+    the dynamic 2-defender side-selection triggers on how many robots *this
+    tactic* was handed, not on the whole team's robot count — and the
+    near/far-post parity fallback is keyed off position within that group,
+    not the global `robot_id == 1` convention. Fixes a real bug where a team
+    with more than 2 outfield robots (e.g. 2 defenders + 3 attackers
+    elsewhere) could assign both defenders to the same post: neither one's
+    `robot_id` needed to be 1, so both hit the `else` branch and picked the
+    same side, ending up on top of each other and tripping the "too many
+    defenders in own area" foul.
     """
 
     tag = TacticTag.DEFENSE
@@ -53,5 +53,8 @@ class DefenseTactic(BaseTactic[DefenseMem]):
     def tick(
         self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: DefenseMem
     ) -> tuple[dict[RobotId, RobotCommand], DefenseMem]:
-        commands = {robot_id: defend_parameter(game, ctx.motion_controller, robot_id) for robot_id in robot_ids}
+        commands = {
+            robot_id: defend_parameter(game, ctx.motion_controller, robot_id, defender_group=robot_ids)
+            for robot_id in robot_ids
+        }
         return commands, mem

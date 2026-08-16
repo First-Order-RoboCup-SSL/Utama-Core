@@ -1,6 +1,7 @@
-from typing import Optional
+from typing import Iterable, Optional
 
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
+from utama_core.config.referee_constants import OWN_DEFENSE_AREA_STANDOFF_DISTANCE
 from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -54,7 +55,7 @@ def _choose_defender_side(
     edge_offset,
     defender_x,
     defense_half_width,
-    robot_id,
+    is_first: bool = True,
 ):
     """For a single defender (2-robot team), dynamically pick the better post side."""
     # Keeper reference: predicted intercept > current keeper y > centre
@@ -69,7 +70,7 @@ def _choose_defender_side(
         pass
 
     candidates = [post_limit, -post_limit]
-    best_side = post_limit if robot_id == 1 else -post_limit
+    best_side = post_limit if is_first else -post_limit
     best_score = None
 
     for side in candidates:
@@ -98,7 +99,7 @@ def _choose_defender_side(
             edge_offset,
         )
         # Lower is better: closest keeper stop_y, then largest shadow, then id convention
-        id_tiebreak = 0 if (robot_id == 1) == (side > 0) else 1
+        id_tiebreak = 0 if is_first == (side > 0) else 1
         score = (dist, -shadow_w, id_tiebreak)
 
         if best_score is None or score < best_score:
@@ -113,14 +114,29 @@ def defend_parameter(
     motion_controller: MotionController,
     robot_id: int,
     goal_frame_y: Optional[float] = None,
+    defender_group: Optional[Iterable[int]] = None,
 ):
+    """Position a single outfield defender.
+
+    `defender_group`: the full set of robot ids this defender is being
+    positioned alongside (e.g. a tactic's own `robot_ids`). When omitted,
+    falls back to `game.friendly_robots` (whole team) for both the
+    2-defender dynamic-side trigger and the static-fallback parity check —
+    correct for a standalone 2-robot defense strategy, but wrong whenever a
+    caller (like `DefenseTactic`) hands this function a *subset* of the
+    team: `len(game.friendly_robots) == 2` may never trigger even though
+    exactly 2 defenders were assigned, and `robot_id == 1` may be false for
+    every robot in the subset, collapsing every defender onto the same
+    post. Passing `defender_group` fixes both.
+    """
     ball_pos = game.ball.p.to_2d()
 
     goal_x = game.field.my_goal_line[0][0]
     goal_half_width = game.field.half_goal_width
     defense_area = game.field.my_defense_area
     defense_front_x = float(defense_area[1][0])
-    defender_x = defense_front_x + (ROBOT_RADIUS if not game.my_team_is_right else -ROBOT_RADIUS)
+    defender_standoff = ROBOT_RADIUS + OWN_DEFENSE_AREA_STANDOFF_DISTANCE
+    defender_x = defense_front_x + (defender_standoff if not game.my_team_is_right else -defender_standoff)
     defense_half_width = abs(float(defense_area[0][1]))
 
     keeper_x = goal_x + (ROBOT_RADIUS if not game.my_team_is_right else -ROBOT_RADIUS)
@@ -128,7 +144,16 @@ def defend_parameter(
     edge_offset = BALL_RADIUS + ROBOT_RADIUS
 
     if goal_frame_y is None:
-        if len(game.friendly_robots) == 2:
+        if defender_group is not None:
+            group = sorted(defender_group)
+            is_two_defender = len(group) == 2
+            is_first = bool(group) and robot_id == group[0]
+        else:
+            group = None
+            is_two_defender = len(game.friendly_robots) == 2
+            is_first = robot_id == 1
+
+        if is_two_defender:
             goal_frame_y = _choose_defender_side(
                 game,
                 ball_pos,
@@ -137,10 +162,10 @@ def defend_parameter(
                 edge_offset,
                 defender_x,
                 defense_half_width,
-                robot_id,
+                is_first=is_first,
             )
         else:
-            goal_frame_y = post_limit if robot_id == 1 else -post_limit
+            goal_frame_y = post_limit if is_first else -post_limit
 
     target_y = _defender_target_y(
         ball_pos,
