@@ -85,6 +85,7 @@ def run_match(config_a_name: str, config_b_name: str) -> MatchResult:
         exp_enemy=N_OUTFIELD + 1,
         exp_ball=True,
         referee=referee,
+        enable_vision_stream=False,
     )
 
     try:
