@@ -35,6 +35,34 @@ class FastPathPlanner:
         # Initialize collision cache dictionary
         self._collision_cache = {}
 
+        # Per-tick obstacle cache: `_get_obstacles` was rebuilding the same
+        # per-robot position/velocity segments and the same 8 static
+        # (field-bound + enemy-defense-area) segments from scratch on every
+        # `_path_to()` call — once per robot needing a path, ~5-6x per tick
+        # for a full roster, all identical bar the `robot_id` self-exclusion
+        # and each robot's own `LOOK_AHEAD_RANGE` filter. `game.ts` changes
+        # exactly once per tick (`Game.add_game_frame`), so it's a cheap,
+        # correct cache key for the parts that don't vary per-robot within
+        # a tick — confirmed via cProfile that _get_obstacles' own array
+        # allocations were a real, repeated cost, not just the collision
+        # checks that consume its output.
+        self._obstacle_cache_ts: float | None = None
+        self._obstacle_cache_moving: List[Tuple[bool, int, np.ndarray, np.ndarray]] = []
+        self._obstacle_cache_static: List[Tuple[np.ndarray, np.ndarray]] = []
+
+    @property
+    def _should_draw(self) -> bool:
+        """`self._env` is set whenever an `SSLStandardEnv` exists at all —
+        including in headless runs, where nothing ever reads `env.overlay`
+        (only the `"human"` render path drains and clears it; see
+        `SSLStandardEnv.render`). Without this check, every `draw_line` call
+        below still builds an `OverlayObject` and appends it to a list that
+        grows unboundedly for the rest of the match, for zero benefit — a
+        real, measured cost in headless tournament/eval runs (cProfile
+        showed ~170k calls / ~1.7s in a 30s headless match).
+        """
+        return self._env is not None and self._env.render_mode == "human"
+
     def is_point_in_field(self, point, field_bounds: FieldBounds) -> bool:
         x, y = float(point[0]), float(point[1])
         min_x = min(field_bounds.top_left[0], field_bounds.bottom_right[0])
@@ -102,36 +130,37 @@ class FastPathPlanner:
             return np.array([x, min_y])
         return np.array([x, max_y])
 
-    def _get_obstacles(
-        self, game: Game, robot_id: int, our_pos: np.ndarray, field_bounds: FieldBounds
-    ) -> List[Tuple[np.ndarray, np.ndarray]]:
+    def _refresh_obstacle_cache(self, game: Game, field_bounds: FieldBounds) -> None:
+        """Rebuild the tick-invariant obstacle data (every robot's projected
+        "ghost wall" segment, plus the 8 static field-bound/enemy-defense-area
+        segments) once per tick, keyed on `game.ts`. `_get_obstacles` then
+        just filters/excludes per robot instead of reallocating from scratch.
         """
-        Compiles obstacles and draws projected velocity lines in Red.
-        """
-        friendly_obstacles = [robot for robot in game.friendly_robots.values() if robot.id != robot_id]
-        robots = friendly_obstacles + list(game.enemy_robots.values())
-        obstacle_list = []
+        if self._obstacle_cache_ts == game.ts:
+            return
 
-        for r in robots:
-            robot_pos = np.array([r.p.x, r.p.y])
-            if distance(our_pos, robot_pos) < self.LOOK_AHEAD_RANGE:
+        # Tag each entry with whether it's a friendly robot, not just its raw
+        # `id` — friendly and enemy robots occupy independent id spaces, so a
+        # bare `r.id == robot_id` filter (applied to both lists combined)
+        # would wrongly exclude an enemy robot that happens to share the
+        # querying friendly robot's numeric id. Only friendly robots are ever
+        # excluded by id (the original semantics: `robot.id != robot_id` was
+        # only ever applied to `game.friendly_robots`).
+        moving: List[Tuple[bool, int, np.ndarray, np.ndarray]] = []
+        for is_friendly, robots in ((True, game.friendly_robots), (False, game.enemy_robots)):
+            for r in robots.values():
+                robot_pos = np.array([r.p.x, r.p.y])
                 velocity = np.array([r.v.x, r.v.y])
                 # Project the "Ghost Wall" based on current velocity
                 point = robot_pos + velocity * (self.PROJECTEDFRAMES / CONTROL_FREQUENCY)
-                obstacle_segment = (robot_pos, point)
-
-                obstacle_list.append(obstacle_segment)
-
-                # DRAWING: Show the projected velocity line in Red when an RSim renderer is available.
-                if self._env is not None:
-                    self._env.draw_line(obstacle_segment, color="Red")
+                moving.append((is_friendly, r.id, robot_pos, point))
 
         # Field bounds as obstacles (static, usually not drawn to keep screen clean)
         tl, br = np.array(field_bounds.top_left), np.array(field_bounds.bottom_right)
         tr = np.array([field_bounds.bottom_right[0], field_bounds.top_left[1]])
         bl = np.array([field_bounds.top_left[0], field_bounds.bottom_right[1]])
 
-        obstacle_list.extend([(tl, tr), (tr, br), (br, bl), (bl, tl)])
+        static = [(tl, tr), (tr, br), (br, bl), (bl, tl)]
 
         # Opponent's defense area is off-limits to every non-goalkeeper robot
         # at all times during live play (SSL rules) — no per-tactic exception
@@ -146,8 +175,33 @@ class FastPathPlanner:
         c1 = np.array([max_x, max_y])
         c2 = np.array([max_x, min_y])
         c3 = np.array([min_x, min_y])
-        obstacle_list.extend([(c0, c1), (c1, c2), (c2, c3), (c3, c0)])
+        static.extend([(c0, c1), (c1, c2), (c2, c3), (c3, c0)])
 
+        self._obstacle_cache_moving = moving
+        self._obstacle_cache_static = static
+        self._obstacle_cache_ts = game.ts
+
+    def _get_obstacles(
+        self, game: Game, robot_id: int, our_pos: np.ndarray, field_bounds: FieldBounds
+    ) -> List[Tuple[np.ndarray, np.ndarray]]:
+        """
+        Compiles obstacles and draws projected velocity lines in Red.
+        """
+        self._refresh_obstacle_cache(game, field_bounds)
+
+        obstacle_list = []
+        for is_friendly, r_id, robot_pos, point in self._obstacle_cache_moving:
+            if is_friendly and r_id == robot_id:
+                continue
+            if distance(our_pos, robot_pos) < self.LOOK_AHEAD_RANGE:
+                obstacle_segment = (robot_pos, point)
+                obstacle_list.append(obstacle_segment)
+
+                # DRAWING: Show the projected velocity line in Red when an RSim renderer is available.
+                if self._should_draw:
+                    self._env.draw_line(obstacle_segment, color="Red")
+
+        obstacle_list.extend(self._obstacle_cache_static)
         return obstacle_list
 
     def _find_subgoal(
@@ -490,7 +544,7 @@ class FastPathPlanner:
         final_trajectory, _ = self.check_segment((our_pos, safe_target), obstacles, 0, safe_target, field_bounds)
 
         # 5. Draw the resulting safe path segments when an RSim renderer is available.
-        if self._env is not None:
+        if self._should_draw:
             for i in final_trajectory:
                 self._env.draw_line(i)
 
@@ -517,7 +571,7 @@ class FastPathPlanner:
             new_target, self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
         )
 
-        if self._env is not None:
+        if self._should_draw:
             self._env.draw_line((our_pos, new_target), color="Blue")
 
         return new_target
