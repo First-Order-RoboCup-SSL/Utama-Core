@@ -612,6 +612,107 @@ than speculative; picking between them (or doing the pipe fix first, since
 it's smaller and has no fidelity tradeoff) is the next decision, not made
 here.
 
+**Strategy-computation-side perf work (2026-08-16, later session) — closes
+out the `distance_point_to_segment` item flagged above as
+"not re-investigated," plus two similarly-shaped fixes found by profiling a
+real match end-to-end.** The finding above (line ~551-562: pipe overhead is
+small, per-tick cost is dominated by strategy computation) turned out to be
+exactly right — `cProfile` on a full 30s 6v6 match (`build_default` vs
+`build_high_press`) showed the rSim `readline()` wait at ~94% of tick time,
+but of that, only ~15% (~0.94s/1800 ticks) was IPC/pipe overhead; the
+remaining ~85% is genuine native physics compute happening to be *measured*
+through that blocking call, not fixable from the Python side. The real
+Python-side cost, once separated from rSim's own wait, was concentrated in
+three specific hot paths, all following the same shape: small, fixed-size
+numpy operations whose per-call dispatch overhead dwarfs the actual
+arithmetic at the call volumes involved (tens of thousands of calls per
+match) — the same diagnosis as the earlier `distance_point_to_segment`
+float rewrite, just not yet applied to these three.
+
+1. **`FastPathPlanner._find_subgoal` was missing the bounding-box
+   broad-phase prune `collides()` already had.** It checks every obstacle
+   against a candidate subgoal point on every recursive retry, with no cheap
+   way to skip far-away obstacles — `collides()` right below it in the same
+   file already solved exactly this shape of problem (segment-vs-many-
+   obstacles) earlier this session; `_find_subgoal` (point-vs-many-obstacles)
+   just never got the same treatment. Added the same axis-aligned
+   bounding-box pre-check. Cut `distance_point_to_segment` calls
+   originating from this function 15x (941,209 → 62,575 per 30s match,
+   confirmed via `pstats.print_callers`), and total `distance_point_to_segment`
+   calls across the whole match by ~59% (1.48M → 603K). Measured **~26-30%
+   faster** on the function itself via an isolated, interleaved A/B
+   microbenchmark (obstacle-field synthetic input, not a full match — avoids
+   rSim noise in the timing).
+2. **`VelocityRefiner._windowed_average_derivative`** (introduced this same
+   session for acceleration's windowed finite-differencing — see the
+   `data_processing/refiners` design-cleanup entry) reshaped/averaged/diffed
+   tiny numpy arrays (3 windows × 5 points × 2-3 dims) on every one of its
+   ~46,410 calls per match. Rewritten as plain-float loops at that fixed
+   shape. **~5x faster** (44-52µs → 6-10µs/call across 3 runs), numerically
+   identical output (existing `test_acceleration_calculation_implements_
+   expected_formula`'s exact `pytest.approx` assertions still pass).
+   *(Velocity itself was tried with the same windowed scheme and reverted —
+   see the design-cleanup entry for why: any windowing adds real lag under
+   acceleration that broke two time-critical control-loop tests. Velocity
+   stays a plain 1-step diff; only acceleration's already-existing windowing
+   got the float rewrite.)*
+3. **`KalmanFilter._step_xy`** used a full 2×2 numpy matrix Kalman update
+   (`np.linalg.solve`, `np.matmul`) despite the measurement/process
+   covariance matrices always being diagonal (`covariance_xy` is hardcoded
+   `0` in `__init__`, uncorrelated x/y noise) — which means the 2D filter is
+   mathematically identical to two independent scalar Kalman filters, the
+   same closed-form update `_step_th` (the orientation filter, right below
+   it in the same file) already uses. Rewritten as two calls to a shared
+   `_step_scalar` helper. **~17-22x faster** (28-41µs → 1.5-1.8µs/call).
+   Correctness verified two ways before trusting it: the full existing
+   `kalman_test.py` suite (40 tests — convergence, vanish-handling,
+   covariance-shrink — 2 tests updated only for renamed internal attributes,
+   `state_xy`→`state_x`/`state_y` etc., not behavior), and a standalone
+   500-trial cross-check against the original matrix implementation with
+   randomized noise/dt/trajectory-length and mixed measurement/vanished
+   frames — max deviation ~1e-15 (float64 epsilon), and zero off-diagonal
+   covariance terms ever appeared in the matrix version's output, confirming
+   the decoupling assumption held in practice, not just in theory.
+
+All three verified against the full test suite (641 passed, 2 skipped, 2
+xfailed — same counts as before any of this session's changes) in addition
+to their individual scoped tests.
+
+**End-to-end measurement — the number this whole investigation has been
+building toward.** Single process, no multiprocessing, one 6v6 30s match,
+`enable_vision_stream=False`, 3 interleaved A/B runs (baseline/current
+alternated, not run back-to-back) to cancel out system-load drift, which
+was substantial enough on this machine to swing a single-shot measurement
+by 2x on its own:
+
+| | avg wall time / 30s match | realtime multiplier |
+|---|---|---|
+| Baseline (`342dcb8`, immediately before `demo_tournament.py` existed — no perf work of any kind) | ~47.5s | 0.63x (slower than real-time) |
+| Current (all rounds of perf work through this entry) | ~16.0s | 1.88x |
+
+**~3.0x faster end-to-end**, compounding across every round logged in this
+file: disabling the vision stream by default in tournament runs (`3086337`,
+the single biggest jump per the 35x-footgun note above), the rSim
+`step()`-state cache (`0cf1e17`), `distance_point_to_segment`'s float
+rewrite (`679e8cd`), per-tick obstacle-list caching (`b79b863`),
+`collides()`'s bounding-box prune (`b98cd29`), and this entry's three fixes
+(`4493002`). No single commit explains the 3x — it's multiplicative
+accumulation across rounds, each closing a gap the previous round's
+profiling surfaced.
+
+Isolated per-function speedups (5x, 17-22x, etc.) do **not** translate
+1:1 to end-to-end speedup, and this is worth stating plainly since it's an
+easy number to misread: rSim's `readline()` wait is still the largest
+single share of tick time by far (per the profiling above), and none of
+this round's fixes touch it. A function going from 44µs to 2µs matters a
+lot in a profiler's self-time ranking; if it was only ~1s out of a ~26s
+match to begin with, cutting it to ~0.05s doesn't move the total by much.
+The honest ceiling on *this* direction (Python-side refiner/planner code)
+is close to exhausted — further large jumps would need to come from the
+rSim/robosim boundary itself (the pipe de-dup / tick-rate items above),
+which is real work with real tradeoffs (physics fidelity, cross-environment
+protocol risk), not more of this session's style of micro-optimization.
+
 Original framing, for context (superseded by the above):
 
 Note: an earlier plan (`snug-hugging-sutton.md`, now deleted) explored a
