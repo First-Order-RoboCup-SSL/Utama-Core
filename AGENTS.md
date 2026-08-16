@@ -54,6 +54,48 @@ directly — this happens *before* any `Tactic` ticks, not as a `Tactic` itself.
 rationale and the full rule-by-rule audit against the SSL rulebook: `docs/custom_referee.md`
 and `docs/custom_referee_design_decisions.md`.
 
+## Writing a Tactic
+
+Lessons from building `SwitchOfPlayTactic` (`utama_core/tactics/switch_of_play.py`), a
+multi-phase relay tactic that took two full debugging rounds to get right. The bugs below
+weren't one-offs — the same *shape* of bug recurred twice in the same file, so they're
+worth checking for deliberately rather than trusting "it worked once."
+
+- **`go_to_point()` always faces the ball — it has no orientation parameter.** If a robot
+  needs to hold a specific orientation while stationary (e.g. facing a pass target, not
+  the ball), use `move()` directly with an explicit `target_oren`. This bit the same
+  tactic twice: once in an early phase (carrier holding the ball before passing) and again,
+  independently, one phase later (a different robot's own hold-and-wait branch) — a fix in
+  one call site does not imply the pattern is fixed everywhere it appears. Grep every
+  `go_to_point(` call in a new tactic and check whether the robot's orientation while
+  stationary actually matters there.
+- **`intercept_point()` (`shared/pass_and_score_geometry.py`) projects the receive point
+  along the *passer's current orientation*,** not toward anything about the receiver's
+  actual position. A passer facing the wrong way (see above) silently sends the receiver
+  toward a nonsense point — this fails quietly (the receiver just never arrives) rather
+  than erroring, so it reads as a vague "stall" until traced.
+- **`is_committed()` returning `True` is a promise, not a suggestion.** It blocks the
+  kernel scheduler from ever reassigning that tactic slot's robots — by design, not a bug
+  (see "Single-writer partition invariant" above). Every code path that sets it `True` for
+  a phase transition needs a matching path back to `False`, covering both the success case
+  *and* every failure/timeout case. A timeout-driven phase reset is easy to write in a way
+  that gets silently undone within the same tick, if the reset-target phase's own logic
+  immediately re-advances past it — check that a timeout reset actually sticks for at least
+  one full tick before the tactic can re-advance.
+- **Verify by tracing a real match, not by reading the phase-transition logic.** Bugs in
+  this tactic were invisible from the code alone — `intercept_point()` computing a
+  plausible-looking point that happened to be wrong, or a phase timeout resetting state
+  that then got immediately overwritten — and only showed up as `src_oren`/`intercept_pos`
+  oscillating tick-to-tick in an actual traced match. Add a phase-transition + key-variable
+  trace (see prior debugging sessions' harnesses for the pattern) before concluding a phase
+  is stuck for some subtler reason than it looks.
+- **A tactic can trip referee rules that have nothing to do with its own logic.** Positions
+  computed correctly by one tactic can still walk a robot through another tactic's
+  keep-out zone (e.g. `SwitchOfPlayTactic`'s relay play putting an attacker inside its own
+  defense area, tripping the same `DefenseAreaRule` foul that a broken `DefenseTactic` also
+  trips). When a match stalls on a referee foul, check *which* robot and *which* rule
+  before assuming the fix belongs in the tactic that seems most related.
+
 ## Minimalism discipline
 
 Add a new concept (a new base class, a new scheduling mechanism, a new config knob) only
