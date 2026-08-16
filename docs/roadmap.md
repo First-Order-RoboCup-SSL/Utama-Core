@@ -36,11 +36,40 @@ picks them up — this file isn't itself a design doc.
 
 ## Multi-strategy / tournament evaluation infra
 
-Today's evaluation is strategy-vs-strategy via `StrategyRunner` (one strategy per
-side). We'll eventually want something tournament-shaped: many strategies (or many
-tactic-kernel configs) round-robined or bracketed against each other, with aggregate
-results, not just a single head-to-head match. Much later priority — revisit once
-there's enough of a tactic catalog to make comparisons meaningful.
+~~Much later priority~~ **First pass done** (2026-08-16). The catalog reached 8
+`build_*_kernel_strategy` configs (7 original + `decoy_and_overload`), enough
+to make round-robin comparisons meaningful — `demo_tournament.py` round-robins
+every pair via headless rsim `StrategyRunner` matches (6v6, `opp_strategy`),
+reads the final score off `CustomReferee`'s scoreboard, and prints a results
+table. Deliberately just a for-loop over the existing `StrategyRunner` primitive
+plus a plain tally — no new `Runner`/`Tournament` class, no persistence layer,
+no bracketing/seeding, per the minimalism discipline. `C(8,2)=28` matches, all
+of which fit comfortably in one run at this catalog size.
+
+**Found and fixed along the way:** the smoke test for this script crashed
+immediately on any pairing involving `build_high_press_kernel_strategy` or
+`build_press_and_pass_kernel_strategy` — both use `PressAndContainTactic`,
+whose only marking call (`skills/man_mark.py`) turned out to be completely
+broken (3 separate stale-API mismatches: `Ball`/`Robot` don't have bare
+`.x`/`.y`, `move()` expects `robot_id: int` + `Vector2D`, not a `Robot` object
++ tuple). `press_and_contain.py`'s own docstring already flagged `man_mark` as
+"previously unused by any tactic," and there was no test file for it — this
+had apparently never been exercised end-to-end before. Fixed the API
+mismatches (kept the original ball-to-target perpendicular-offset marking
+geometry, a reasonable design distinct from `ShadowAndMarkTactic`'s
+goal-side marking, just buggy in its API usage), added
+`tests/skills/test_man_mark.py` (none existed).
+
+**Still not done:** `test_all_strategy_configs.py`'s existing
+`build_high_press_kernel_strategy`/`build_press_and_pass_kernel_strategy` test
+cases were passing *before* the `man_mark` fix too — meaning those tests never
+actually drove a scenario that exercises the marking branch of
+`PressAndContainTactic`. That's a real, separate test-coverage gap (the
+existing tests exercise the tactic's shape, not this specific code path) —
+flagged here, not fixed, since closing it means understanding what game state
+actually triggers marking, not a quick addition.
+
+Original framing, for context (superseded by the above):
 
 Note: an earlier plan (`snug-hugging-sutton.md`, now deleted) explored a
 multi-strategy `Runner` built directly on `AbstractStrategy`/py_trees, to let several
