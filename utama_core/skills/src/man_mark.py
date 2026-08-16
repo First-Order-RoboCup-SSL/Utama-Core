@@ -1,5 +1,6 @@
 import numpy as np
 
+from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.skills.src.utils.move_utils import face_ball, move
@@ -8,10 +9,10 @@ from utama_core.skills.src.utils.move_utils import face_ball, move
 def man_mark(game: Game, motion_controller: MotionController, robot_id: int, target_id: int):
     robot = game.friendly_robots[robot_id]
     target = game.enemy_robots[target_id]
-    ball_pos = (game.ball.x, game.ball.y)
+    ball_pos = game.ball.p.to_2d()
     # Position with a perpendicular offset to the line between target and ball
-    dx = target.p.x - ball_pos[0]
-    dy = target.p.y - ball_pos[1]
+    dx = target.p.x - ball_pos.x
+    dy = target.p.y - ball_pos.y
     norm = np.sqrt(dx**2 + dy**2)
     dx /= norm
     dy /= norm
@@ -26,8 +27,8 @@ def man_mark(game: Game, motion_controller: MotionController, robot_id: int, tar
     cmd = move(
         game,
         motion_controller,
-        robot,
-        (target_x, target_y),
-        face_ball((robot.x, robot.y), ball_pos),
+        robot_id,
+        Vector2D(target_x, target_y),
+        face_ball(robot.p, ball_pos),
     )
     return cmd
