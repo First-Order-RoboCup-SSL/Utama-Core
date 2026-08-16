@@ -10,6 +10,7 @@ from utama_core.custom_referee.profiles.profile_loader import (
     RefereeProfile,
     load_profile,
 )
+from utama_core.custom_referee.rules.ball_speed_rule import BallSpeedRule
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.custom_referee.rules.defense_area_rule import DefenseAreaRule
 from utama_core.custom_referee.rules.goal_rule import GoalRule
@@ -25,12 +26,15 @@ def _build_active_rules(rules_cfg) -> List[BaseRule]:
     """Construct the ordered list of active rules from a RulesConfig."""
     active: List[BaseRule] = []
 
-    # Priority order: GoalRule → OutOfBoundsRule → DefenseAreaRule → KeepOutRule
+    # Priority order: GoalRule → OutOfBoundsRule → BallSpeedRule → DefenseAreaRule → KeepOutRule
     if rules_cfg.goal_detection.enabled:
         active.append(GoalRule(cooldown_seconds=rules_cfg.goal_detection.cooldown_seconds))
 
     if rules_cfg.out_of_bounds.enabled:
         active.append(OutOfBoundsRule())
+
+    if rules_cfg.ball_speed.enabled:
+        active.append(BallSpeedRule(max_speed_mps=rules_cfg.ball_speed.max_speed_mps))
 
     if rules_cfg.defense_area.enabled:
         active.append(

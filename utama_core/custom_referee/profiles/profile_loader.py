@@ -43,11 +43,18 @@ class KeepOutConfig:
 
 
 @dataclass
+class BallSpeedConfig:
+    enabled: bool = True
+    max_speed_mps: float = 6.5  # SSL Division B kick-speed limit
+
+
+@dataclass
 class RulesConfig:
     goal_detection: GoalDetectionConfig = field(default_factory=GoalDetectionConfig)
     out_of_bounds: OutOfBoundsConfig = field(default_factory=OutOfBoundsConfig)
     defense_area: DefenseAreaConfig = field(default_factory=DefenseAreaConfig)
     keep_out: KeepOutConfig = field(default_factory=KeepOutConfig)
+    ball_speed: BallSpeedConfig = field(default_factory=BallSpeedConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -177,11 +184,18 @@ def _parse_profile(data: dict) -> RefereeProfile:
         violation_persistence_frames=ko.get("violation_persistence_frames", 30),
     )
 
+    bs = rules_d.get("ball_speed", {})
+    bs_cfg = BallSpeedConfig(
+        enabled=bs.get("enabled", True),
+        max_speed_mps=bs.get("max_speed_mps", 6.5),
+    )
+
     rules = RulesConfig(
         goal_detection=goal_cfg,
         out_of_bounds=oob_cfg,
         defense_area=da_cfg,
         keep_out=ko_cfg,
+        ball_speed=bs_cfg,
     )
 
     game_d = data.get("game", {})

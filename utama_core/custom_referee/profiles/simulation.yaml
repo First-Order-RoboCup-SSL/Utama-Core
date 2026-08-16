@@ -14,6 +14,9 @@ rules:
     enabled: true
     radius_meters: 0.5
     violation_persistence_frames: 30
+  ball_speed:
+    enabled: true
+    max_speed_mps: 6.5
 game:
   half_duration_seconds: 300.0
   kickoff_team: "yellow"

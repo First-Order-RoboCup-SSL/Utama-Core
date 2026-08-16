@@ -29,6 +29,7 @@ CustomReferee
 ├── list[BaseRule]           # ordered rule checkers (first match wins)
 │   ├── GoalRule
 │   ├── OutOfBoundsRule
+│   ├── BallSpeedRule
 │   ├── DefenseAreaRule
 │   └── KeepOutRule
 └── GameStateMachine         # mutable command / score / stage state
@@ -86,9 +87,11 @@ stateDiagram-v2
 
     NORMAL_START --> STOP : GoalRule fires\n[score++, next_cmd set]
     NORMAL_START --> STOP : OutOfBoundsRule fires\n[designated_position set]
+    NORMAL_START --> STOP : BallSpeedRule fires
     NORMAL_START --> STOP : DefenseAreaRule fires
     FORCE_START --> STOP : GoalRule fires
     FORCE_START --> STOP : OutOfBoundsRule fires
+    FORCE_START --> STOP : BallSpeedRule fires
     FORCE_START --> STOP : DefenseAreaRule fires
 
     STOP --> STOP : KeepOutRule fires\n[next_cmd = DIRECT_FREE_*]
@@ -124,8 +127,9 @@ Each rule is a `BaseRule` subclass. Rules are evaluated in priority order; the *
 |----------|------|---------------|
 | 1 | `GoalRule` | `NORMAL_START`, `FORCE_START` |
 | 2 | `OutOfBoundsRule` | `NORMAL_START`, `FORCE_START` |
-| 3 | `DefenseAreaRule` | `NORMAL_START`, `FORCE_START` |
-| 4 | `KeepOutRule` | `DIRECT_FREE_*`, `PREPARE_KICKOFF_*`, `PREPARE_PENALTY_*` |
+| 3 | `BallSpeedRule` | `NORMAL_START`, `FORCE_START` |
+| 4 | `DefenseAreaRule` | `NORMAL_START`, `FORCE_START` |
+| 5 | `KeepOutRule` | `DIRECT_FREE_*`, `PREPARE_KICKOFF_*`, `PREPARE_PENALTY_*` |
 
 ### GoalRule
 
@@ -152,6 +156,12 @@ Fires when `abs(ball.p.x) > half_length` (not in a goal) or `abs(ball.p.y) > hal
 2. Falling back to the closest robot within 0.15 m.
 
 The non-touching team receives the `DIRECT_FREE_*`. The `designated_position` is placed 0.25 m infield from the nearest boundary point so the restart is playable by the robot/dribbler geometry.
+
+### BallSpeedRule
+
+Fires when the ball's ground speed (`hypot(ball.v.x, ball.v.y)` — z-velocity from a bounce is excluded) exceeds a configurable `max_speed_mps` (default 6.5 m/s, SSL Division B's limit). Edge-detected: fires once when speed crosses above the limit, not every frame it stays fast.
+
+Tracks last-touch the same way as `OutOfBoundsRule` (IR `has_ball` first, closest-robot-within-0.15m fallback) and awards `DIRECT_FREE_*` to the non-kicking team.
 
 ### DefenseAreaRule
 
@@ -206,6 +216,7 @@ referee = CustomReferee.from_profile_name("/path/to/my_profile.yaml")
 | Out of bounds | ✅ | ❌ |
 | Defence area | ✅ max 1 defender | ❌ |
 | Keep-out radius | ✅ 0.5 m | ❌ |
+| Ball speed limit | ✅ 6.5 m/s | ❌ |
 | Restart progression | Auto when readiness criteria are met | Manual operator control |
 | Half duration | 300 s | 300 s |
 
@@ -234,6 +245,9 @@ rules:
     enabled: true
     radius_meters: 0.5
     violation_persistence_frames: 30
+  ball_speed:
+    enabled: true
+    max_speed_mps: 6.5
 game:
   half_duration_seconds: 300.0
   kickoff_team: "yellow"
@@ -331,6 +345,7 @@ utama_core/custom_referee/
 │   ├── base_rule.py             # BaseRule ABC, RuleViolation dataclass
 │   ├── goal_rule.py             # GoalRule
 │   ├── out_of_bounds_rule.py    # OutOfBoundsRule
+│   ├── ball_speed_rule.py       # BallSpeedRule
 │   ├── defense_area_rule.py     # DefenseAreaRule
 │   └── keep_out_rule.py        # KeepOutRule
 └── profiles/
@@ -359,8 +374,12 @@ This list reflects actual code state, not the old discussion.
   before another robot touches it should foul. No rule checks this — the
   string "double-touch" only appears as a `Force Start` button tooltip in
   `gui.py`, not an implemented check.
-- **No ball-speed rule.** SSL limits kick speed (6.5 m/s); nothing in
-  `rules/` measures it.
+- ~~**No ball-speed rule.**~~ **Fixed.** `BallSpeedRule` (see "Rule Checkers"
+  above) fires once, edge-detected, when the ball's ground speed crosses
+  above `max_speed_mps` (default 6.5 m/s), and awards `DIRECT_FREE_*` to the
+  non-kicking team. Enabled in `simulation`, disabled in `human` (same
+  reasoning as the other strict-rule toggles — humans trigger this
+  constantly in exhibition play).
 - ~~**No full-episode reset.**~~ **Fixed.** `CustomReferee.reset()` /
   `GameStateMachine.reset()` restore score, stage, command, and every
   auto-advance timer to their initial values, so RL training can reuse one

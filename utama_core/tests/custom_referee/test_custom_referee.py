@@ -11,6 +11,7 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.custom_referee.custom_referee import CustomReferee
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.profiles.profile_loader import load_profile
+from utama_core.custom_referee.rules.ball_speed_rule import BallSpeedRule
 from utama_core.custom_referee.rules.defense_area_rule import DefenseAreaRule
 from utama_core.custom_referee.rules.goal_rule import GoalRule
 from utama_core.custom_referee.rules.keep_out_rule import KeepOutRule
@@ -31,8 +32,8 @@ from utama_core.entities.referee.stage import Stage
 GEO = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
 
 
-def _ball(x: float, y: float, z: float = 0.0) -> Ball:
-    return Ball(p=Vector3D(x, y, z), v=Vector3D(0, 0, 0), a=Vector3D(0, 0, 0))
+def _ball(x: float, y: float, z: float = 0.0, vx: float = 0.0, vy: float = 0.0, vz: float = 0.0) -> Ball:
+    return Ball(p=Vector3D(x, y, z), v=Vector3D(vx, vy, vz), a=Vector3D(0, 0, 0))
 
 
 def _robot(robot_id: int, x: float, y: float, is_friendly: bool, has_ball: bool = False) -> Robot:
@@ -188,6 +189,74 @@ class TestOutOfBoundsRule:
         assert violation is not None
         px, py = violation.designated_position
         assert abs(py) < GEO.half_width  # placed infield
+
+
+# ---------------------------------------------------------------------------
+# BallSpeedRule
+# ---------------------------------------------------------------------------
+
+
+class TestBallSpeedRule:
+    def test_fires_when_ball_exceeds_speed_limit(self):
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
+        violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.rule_name == "ball_speed"
+
+    def test_no_violation_below_speed_limit(self):
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        frame = _frame(ball=_ball(0.0, 0.0, vx=3.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
+        assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
+
+    def test_z_velocity_from_a_bounce_does_not_count(self):
+        """A vertical bounce should not trigger the ground-speed limit."""
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        frame = _frame(ball=_ball(0.0, 0.0, vx=1.0, vy=0.0, vz=8.0), friendly_robots=friendly, my_team_is_yellow=True)
+        assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
+
+    def test_only_fires_once_per_kick_not_every_frame(self):
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
+        first = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        second = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert first is not None
+        assert second is None  # still fast, but not a new kick
+
+    def test_fires_again_after_dropping_below_and_back_above_limit(self):
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        fast = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
+        slow = _frame(ball=_ball(0.0, 0.0, vx=1.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
+
+        assert rule.check(fast, GEO, RefereeCommand.NORMAL_START) is not None
+        assert rule.check(slow, GEO, RefereeCommand.NORMAL_START) is None
+        assert rule.check(fast, GEO, RefereeCommand.NORMAL_START) is not None
+
+    def test_free_kick_assigned_to_non_kicking_team(self):
+        """Friendly (yellow) kicked → enemy (blue) gets the free kick."""
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
+        violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.next_command == RefereeCommand.DIRECT_FREE_BLUE
+
+    def test_inactive_outside_active_play(self):
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
+        assert rule.check(frame, GEO, RefereeCommand.STOP) is None
+
+    def test_no_violation_without_a_known_last_touch(self):
+        """No robot has ever registered a touch — nothing to attribute the kick to."""
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0))
+        assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
 
 
 # ---------------------------------------------------------------------------

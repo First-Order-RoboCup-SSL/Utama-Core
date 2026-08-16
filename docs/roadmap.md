@@ -159,7 +159,18 @@ after the source transcripts were deleted):
 
 - No double-touch rule (a robot touching the ball twice in a row, before
   another robot touches it, should foul).
-- No ball-speed rule (SSL's 6.5 m/s kick-speed cap is unenforced).
+- ~~No ball-speed rule~~ **Done.** New `BallSpeedRule`
+  (`rules/ball_speed_rule.py`) fires once, edge-detected, when the ball's
+  ground speed (`hypot(v.x, v.y)` — z-velocity from a bounce excluded)
+  crosses above `max_speed_mps` (default 6.5 m/s), and awards `DIRECT_FREE_*`
+  to the non-kicking team. Uses the same last-touch tracking approach as
+  `OutOfBoundsRule` (IR `has_ball` first, closest-robot-within-0.15m
+  fallback). New `BallSpeedConfig` in `profile_loader.py`, wired into both
+  YAML profiles — enabled in `simulation`, disabled in `human` (same
+  reasoning as the other strict-rule toggles). 8 new tests cover the
+  threshold, the z-velocity exclusion, once-per-kick edge detection,
+  re-firing after dropping below and back above the limit, team assignment,
+  command gating, and the no-known-touch case.
 - ~~No full-episode `reset()`~~ **Done.** `GameStateMachine.reset()` and
   `CustomReferee.reset()` restore score/command/stage/timers to their
   starting values without constructing a new instance, for RL episode
