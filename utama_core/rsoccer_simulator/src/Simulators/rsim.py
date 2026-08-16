@@ -26,6 +26,18 @@ class RSim:
             time_step_ms=time_step_ms,
         )
         self.field = self.get_field_params()
+        # `simulator.step()` already returns the post-step state over the same
+        # pipe round-trip — `send_commands()` caches it here so `get_frame()`
+        # can reuse it instead of issuing a second, separate `get_state()`
+        # round-trip for the same information. Also required for correctness,
+        # not just speed: `SSLWorld::getState()` computes robot/ball velocity
+        # by finite-differencing against whatever the *previous* call
+        # returned (see `vendor/rSim/FORK_NOTES.md`'s "get_state() is
+        # stateful, not idempotent" note) — a fresh `get_state()` call issued
+        # right after `step()` (with no simulation advancing in between)
+        # silently zeroes the velocity fields instead of returning the real
+        # post-step velocity.
+        self._last_state = None
 
     def reset(self, frame: Frame):
         placement_pos = self._placement_dict_from_frame(frame)
@@ -34,6 +46,12 @@ class RSim:
             placement_pos["blue_robots_pos"],
             placement_pos["yellow_robots_pos"],
         )
+        # `_last_state` is a cache of the *last `step()` call's* response — a
+        # reset doesn't go through `step()`, so any previously cached state
+        # is now stale (positions/velocities from before the reset) and must
+        # not be reused. `get_frame()` falls back to a fresh `get_state()`
+        # call whenever this is `None`.
+        self._last_state = None
 
     def stop(self):
         self.simulator.close()
@@ -97,10 +115,16 @@ class RSimVSS(RSim):
                 rbt_id = cmd.id
             sim_commands[rbt_id][0] = cmd.v_wheel0
             sim_commands[rbt_id][1] = cmd.v_wheel1
-        self.simulator.step(sim_commands)
+        self._last_state = self.simulator.step(sim_commands)
 
     def get_frame(self) -> FrameVSS:
-        state = self.simulator.get_state()
+        # Reuse the state `step()` already returned this tick instead of a
+        # second, separate `get_state()` round-trip — see the `_last_state`
+        # comment in `RSim.__init__`/`reset()` for why this is also a
+        # correctness fix, not just avoiding redundant I/O. Fall back to a
+        # real fetch when there's no cached step yet (first call after
+        # construction, or right after a `reset()`).
+        state = self._last_state if self._last_state is not None else self.simulator.get_state()
         # Update frame with new state
         frame = FrameVSS()
         frame.parse(state, self.n_robots_blue, self.n_robots_yellow)
@@ -150,10 +174,16 @@ class RSimSSL(RSim):
                 sim_cmds[rbt_id][6] = cmd.kick_v_z
                 sim_cmds[rbt_id][7] = cmd.dribbler
 
-        self.simulator.step(sim_cmds)
+        self._last_state = self.simulator.step(sim_cmds)
 
     def get_frame(self) -> FrameSSL:
-        state = self.simulator.get_state()
+        # Reuse the state `step()` already returned this tick instead of a
+        # second, separate `get_state()` round-trip — see the `_last_state`
+        # comment in `RSim.__init__`/`reset()` for why this is also a
+        # correctness fix, not just avoiding redundant I/O. Fall back to a
+        # real fetch when there's no cached step yet (first call after
+        # construction, or right after a `reset()`).
+        state = self._last_state if self._last_state is not None else self.simulator.get_state()
         # Update frame with new state
         frame = FrameSSL()
         frame.parse(state, self.n_robots_blue, self.n_robots_yellow)
