@@ -116,6 +116,40 @@ generally — right now the vision stream dwarfs both, so neither is the
 current bottleneck, but they're the next two things worth profiling again
 once it is.
 
+**TODO — investigate a lower tick rate for non-fidelity-sensitive runs.**
+`CONTROL_FREQUENCY = 60` (`config/settings.py`) drives both the `robosim`
+physics step size and every frame-counted constant in the codebase. For
+batch/tournament/RL-throughput runs that don't need 60Hz motion smoothness,
+a coarser tick rate is a bigger lever than either cost above — it cuts the
+*number* of `robosim` round-trips and `FastPathPlanning` calls per second of
+simulated gameplay, not just the cost of each one. Real, not yet scoped.
+
+Two things this needs before it's a safe knob, not just a flip:
+- **Audit every frame-counted constant for hidden 60Hz coupling.** Some are
+  already correctly derived (`KICKER_COOLDOWN_TIMESTEPS =
+  KICKER_COOLDOWN_TIME * CONTROL_FREQUENCY`, `PROJECTEDFRAMES /
+  CONTROL_FREQUENCY` in `fastpathplanning/planner.py`) and would stay correct
+  automatically. Others are hardcoded tick counts with a 60Hz assumption
+  baked into a comment, not the value: `DoubleTouchRule._LURE_MAX_TICKS = 90
+  # ~1.5s at 60Hz` (`tactics/decoy_and_overload.py`) and `KeepOutRule`'s
+  `violation_persistence_frames: 30` (all three YAML profiles, "≈0.5s at 60Hz"
+  per its own docstring) are two found just from this session's own recent
+  edits — there are likely more. Lowering the tick rate without converting
+  these would silently change tactic/referee timing behavior (e.g. at 20Hz,
+  90 ticks becomes 4.5s instead of 1.5s), not just run faster.
+- **Physics fidelity at a coarser step is a different question from wall-clock
+  cost.** A larger `robosim` timestep changes per-step displacement and
+  collision behavior, not just speed — results from a low-tick-rate
+  tournament run may not be comparable to 60Hz-equivalent play. Whether that
+  tradeoff is acceptable depends on what the run is for (rough A/B tactic
+  comparison vs. anything claiming to represent real match behavior).
+
+Likely shape of a real fix: make `CONTROL_FREQUENCY` a per-`StrategyRunner`
+parameter instead of a single global, so fidelity-sensitive callers (real
+mode, grsim demos) keep 60Hz and throughput-sensitive callers (tournament
+runs, RL training) can opt into something coarser — not decided here, just
+the shape that avoids a single global changing behavior everywhere at once.
+
 Original framing, for context (superseded by the above):
 
 Note: an earlier plan (`snug-hugging-sutton.md`, now deleted) explored a
