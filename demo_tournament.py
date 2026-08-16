@@ -116,9 +116,18 @@ def main() -> None:
     # matches" case, not the harder "parallelize robots within one match"
     # case (shared per-tick obstacle state, GIL-bound Python, would need its
     # own design). No args keeps today's behaviour: every config, once each.
+    # `--max-workers N` caps the pool size, e.g. to leave headroom on a shared
+    # machine — os.cpu_count() ignores CPU affinity/cgroup limits, so a
+    # `taskset`-restricted run would otherwise still size the pool for all
+    # cores and oversubscribe.
     args = sys.argv[1:]
     sequential = "--sequential" in args
     args = [a for a in args if a != "--sequential"]
+    max_workers_override: int | None = None
+    if "--max-workers" in args:
+        idx = args.index("--max-workers")
+        max_workers_override = int(args[idx + 1])
+        args = args[:idx] + args[idx + 2 :]
 
     if args:
         requested = set(args)
@@ -141,7 +150,8 @@ def main() -> None:
     print(f"Round-robin: {len(config_names)} configs, {len(pairs)} matches")
     print(f"{N_OUTFIELD + 1}v{N_OUTFIELD + 1}, {MATCH_DURATION_SECONDS:.0f}s sim time per match, headless rsim")
     if not sequential:
-        n_workers = min(len(pairs), max(1, (os.cpu_count() or 1) - 1))
+        default_workers = max(1, (os.cpu_count() or 1) - 1)
+        n_workers = min(len(pairs), max_workers_override or default_workers)
         print(f"Running {n_workers} matches concurrently (--sequential to disable)\n")
     else:
         print("Running sequentially\n")
