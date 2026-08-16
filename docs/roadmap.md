@@ -133,6 +133,20 @@ speculative TODOs.
   calls, 2.34s cumulative in the same 900-tick profile), lower priority than
   the pipe fix above since it doesn't have an already-identified concrete fix.
 
+**Scoreless-draw pattern (24/28 matches, 86%) — cause still open.** Hypothesis
+that this was caused by rsim's ball-stickiness-on-release bug was investigated
+and **ruled out**: that bug is real (see item 1 of the grsim TODO section
+below, confirmed via direct reproduction) but only affects `DribbleTactic`'s
+passive-release path, which isn't wired into any of the 8 tournament configs —
+every scoring/passing path those configs actually use goes through `kick()`,
+confirmed to separate the ball reliably. So the tournament's scorelessness and
+the rsim stickiness bug are both real but separate problems. Not yet
+investigated: shot-selection/shot-lane logic (`find_best_shot`/
+`segment_blocked` in `shared/pass_and_score_geometry.py`), goalkeeper
+effectiveness, or whether 60s is simply too short for multi-phase tactics
+(lure/drag windows, up to `_MAX_HOPS_PER_POSSESSION=6` pass hops) to reach a
+shot at all — plausible directions, none confirmed.
+
 **Tick-rate investigation — full audit done, feasibility confirmed
 architecturally straightforward, not yet implemented:**
 
@@ -418,24 +432,159 @@ goal — tracked as three items rather than one, since they have different
 owners/timelines (a simulator bug fix vs. new CI infrastructure vs. an
 environment-parity investigation):
 
-1. **rsim ball-stickiness bug.** User's own description: when a robot
-   dribbles and then releases (dribbler signal off), the ball tends to stay
-   stuck to the robot instead of actually releasing. **Not yet verified
-   against [[project_rsim_dribble_issues]]** — that existing memory already
-   documents rsim dribble-physics issues (motion-controller divergence,
-   stalls) surfaced during an earlier `Utama-Strategy` port, and that
-   memory's own text says "the team's planned fix is to move dribble-related
-   testing onto grsim" — which lines up with what's being asked for here.
-   Plausibly the same underlying issue described more specifically now, but
-   the user was explicit they can't confirm this and it needs to actually be
-   verified against rsim's real behavior before treating them as one bug
-   rather than two. Whoever picks this up should reproduce the release-time
-   stickiness directly (a short rsim scenario: dribble to a point, release,
-   check ball separates within N ticks) before assuming it's already covered
-   by the existing `xfail(strict=False, ...)` markers
-   (`test_ball_placement_rsim.py`, `multiple_robots_test.py`) — those cover
-   different specific scenarios, not a general "dribble is untrustworthy"
-   blanket.
+1. **rsim ball-stickiness bug — confirmed real and reproduced (2026-08-16).**
+   A subagent investigation reproduced this directly (standalone scratch
+   script, not committed: single-robot rsim scenario, dribble to the ball,
+   release via `empty_command()`, log robot-ball distance every tick for 5s
+   post-release). Result: **the ball never separates** — distance froze at
+   0.1123m for all 300 ticks, `has_ball` stayed `True` the entire window. A
+   control run substituting `kick()` at the release point separated the ball
+   by tick 2, confirming the measurement methodology and narrowing the bug to
+   the passive/no-kick release path specifically.
+
+   Root cause, read directly from `rsoccer_simulator/src/ssl/envs/
+   standard_ssl.py`'s `_apply_dribbler_release_kicks`/`_dribbler_release_kick`
+   (lines 314-387): the native robosim simulator doesn't reliably let go of
+   the ball on dribbler-off by itself, so there's a Python-side compensating
+   hack that fires a synthetic release kick — but only if the robot's
+   *previous-tick* commanded forward velocity exceeds `MIN_RELEASE_SPEED =
+   0.1 m/s` (`config/settings.py:26`). A robot that stops and cuts the
+   dribbler in the same tick (`prev_forward = 0`) never clears that gate, so
+   `release = 0.0` — no kick, ball stays glued.
+
+   `DribbleTactic`'s release branch (`tactics/dribble.py:137-141`) does
+   exactly that: sends `empty_command()` (zero velocity, dribbler off) every
+   tick and loops on `not ball_separated(...)`. Confirmed via the repro:
+   **this is a genuine deadlock** — that branch would never exit in rsim.
+
+   Was this the same issue as [[project_rsim_dribble_issues]]? Still not
+   definitively resolved either way, but it's at minimum consistent with
+   that memory's framing (rsim dribble physics being untrustworthy, planned
+   move to grsim for dribble testing) — this investigation adds a specific,
+   reproduced mechanism to what was previously a more general caution.
+
+   Scope check: `DribbleTactic` is **not wired into any of the 8
+   `build_*_kernel_strategy` tournament configs** (verified directly against
+   `kernel/kernel_strategy.py` — no `DribbleTactic` reference anywhere in the
+   file). Every ball-release path actually used by those 8 configs
+   (`_pass_and_score.py`'s pass/shoot logic, used by `TwoRobotAttackTactic`,
+   `GiveAndGoTactic`, `DecoyOverloadTactic`, `LeadAndSupportTactic`) holds
+   with `empty_command(dribbler_on=True)` — dribbler *stays on* — right up
+   until an actual `kick()` call, which the control run confirmed separates
+   reliably. So this bug is real and should be fixed before `DribbleTactic`
+   is ever wired into a kernel config, but it did **not** cause the
+   tournament's scoreless-draw pattern (see
+   "Multi-strategy / tournament evaluation infra" above) — that has a
+   different, still-open cause.
+
+   **User pushed back on treating this as a tactic-layer problem** (correctly
+   — a passive dribbler-off release and an active kick are physically
+   different mechanisms; making `DribbleTactic` fake a kick would just bake a
+   simulator bug into tactic code, and every future tactic doing a passive
+   release would need to remember the same workaround). Root-caused properly
+   instead, in the actual native simulator source.
+
+   **Root cause found (2026-08-16), in `rc-robosim` itself, not this repo.**
+   `rc-robosim` is a PyPI package built from `github.com/robocin/rSim` (C++,
+   ODE physics, pybind11 bindings) — this repo depends on it via
+   `pixi.toml`'s `[feature.robosim.pypi-dependencies]` (`rc-robosim>=1.2,<2`,
+   pinned to v1.2 on PyPI) and shells out to it as a subprocess
+   (`rsoccer_simulator/src/Simulators/robosim/robosim_wrapper.py`). Cloned
+   the real source and read it directly — two genuine bugs, not one:
+
+   1. **The dribbler is a one-way latch.** `SSLWorld::setActions()`
+      (`src/robosim/sslworld.cpp`) contains
+      `if (rbtAction[7] > 0) this->robots[i]->kicker->setDribbler(true);`
+      — no `else` branch ever calls `setDribbler(false)`. Once a robot's
+      dribbler turns on, nothing in the native simulator's per-tick action
+      processing can turn it back off; the Python-side dribbler-off command
+      is silently dropped. This is the actual root cause — the earlier
+      Python-side `_dribbler_release_kick` gate (`MIN_RELEASE_SPEED`) never
+      even gets a chance to matter, because `dribblerOn` never flips.
+   2. **Even with #1 fixed, `unholdBall()` doesn't move the ball.** It only
+      destroys the ODE hinge joint (`dJointDestroy`); the ball is left at
+      rest, still geometrically touching the kicker box. Ball-vs-kicker
+      collision is checked every physics substep regardless of the hinge
+      (`PWorld::handleCollisions` via `dSpaceCollide2(ball, spaceKicker,
+      ...)`), so ODE immediately generates a fresh contact joint and
+      constrains the ball right back — a naive "push it forward" nudge gets
+      silently cancelled if it points into the kicker rather than away from
+      it (confirmed by testing exactly that naive version first: identical
+      frozen output, bit-for-bit, as the unpatched build).
+
+   **Fix**, patched directly in the cloned `rSim` source
+   (`docs/patches/rSim-dribbler-release.diff` in this repo — not applied to
+   this repo's own code, since the bug lives in the upstream C++ package):
+   `setActions()` now unconditionally calls `setDribbler(rbtAction[7] > 0)`;
+   `unholdBall()` now computes the actual outward vector from the kicker box
+   to the ball, repositions the ball just clear of the collision envelope
+   along that vector, and gives it a small (0.3 m/s) outward velocity —
+   enough to separate, well below a real kick's ~5 m/s. Also needed one
+   unrelated compiler-compatibility fix to build at all on this machine's
+   GCC 13 (`CMakeLists.txt`: pybind11 2.6.2's vendored headers assume
+   `<cstdint>`/`<cstddef>` are transitively included, which modern libstdc++
+   no longer guarantees — forced via `-include`).
+
+   **Verified fixed**: rebuilt `rc-robosim` from the patched source (built
+   from inside `.pixi/envs/robosim` using its own pinned toolchain, matching
+   what CI/production would use), installed it over stock 1.2 in that pixi
+   environment, and re-ran the same reproduction script — the ball now
+   separates by release_tick=2 (matching real `kick()` timing), `has_ball`
+   correctly flips to `False`, and the ball settles at a physically
+   reasonable ~0.59m away instead of freezing at 0.1123m forever. The normal
+   `kick()` path was re-verified unaffected (8+m roll, immediate
+   separation, same as before the patch).
+
+   **Not yet safe to ship**: running the headless test suite
+   (`pytest --headless --level quick`, excluding grsim) against the patched
+   build surfaced one regression —
+   `test_referee_override.py::test_their_kickoff_clears_our_robots_outside_center_circle`
+   passes on stock 1.2 but fails on the patch (a robot's path planner stalls
+   partway out of the keep-out zone instead of fully clearing it). Confirmed
+   this isn't dribbler-related (`has_ball` is `False` throughout that test)
+   — it's a real physics divergence, most likely because the ball's new
+   resting position/velocity after a release lands slightly differently near
+   the field center, perturbing `FastPathPlanning`'s geometry into a
+   degenerate case (an `invalid value encountered in divide` warning from
+   `planner.py:169`'s `perp_dir / np.linalg.norm(perp_dir)` shows up in the
+   same run). Not root-caused yet.
+
+   **Current state: reverted, but the fix is preserved and buildable.**
+   `.pixi/envs/robosim` is back on stock `rc-robosim==1.2`; the *installed*
+   environment currently matches pre-investigation exactly. The fix itself
+   is preserved two ways, both committed to this repo:
+   - `docs/patches/rSim-dribbler-release.diff` — the reviewable diff.
+   - `vendor/rSim/` — the actual patched rSim source, already applied (not a
+     diff to apply — a working, buildable checkout), forked at upstream
+     `v1.2` (commit `b413932`). See `vendor/rSim/FORK_NOTES.md` for exactly
+     what's changed, why, and the full rebuild command. Keeping the real
+     source here (not just the diff) means whoever picks up the regression
+     below doesn't have to re-clone upstream and re-apply anything by hand
+     first.
+
+   **TODO — fix the keep-out-zone regression before shipping this.** Not
+   root-caused yet:
+   `utama_core/tests/kernel/test_referee_override.py::test_their_kickoff_clears_our_robots_outside_center_circle`
+   passes against stock `rc-robosim==1.2` but fails against the patched
+   build in `vendor/rSim` — a robot's path planner stalls at
+   `dist_to_center≈0.24m` and never moves again, well short of the required
+   `BALL_KEEP_OUT_DISTANCE - 0.05 = 0.75m`. Confirmed this isn't
+   dribbler-related (`has_ball` reads `False` for the entire test — the
+   robot never touches the ball). Leading hypothesis, not yet confirmed: the
+   ball's slightly different resting position/velocity after a release (a
+   direct consequence of the `unholdBall()` fix) lands close enough to the
+   field center to push `FastPathPlanning`'s geometry into a degenerate case
+   — an `invalid value encountered in divide` RuntimeWarning from
+   `motion_planning/src/fastpathplanning/planner.py:169`'s `perp_dir /
+   np.linalg.norm(perp_dir)` shows up in the same test run. Whoever picks
+   this up should: (1) reproduce standalone (a script like the one used to
+   verify the dribbler fix, but instrumenting `FastPathPlanning`'s obstacle
+   geometry near the stall point), (2) confirm or rule out the degenerate
+   perpendicular-vector hypothesis, (3) only then re-attempt installing
+   `vendor/rSim`'s build over the pinned `rc-robosim` version. Do **not**
+   install it over stock in `.pixi/envs/robosim` until this is resolved —
+   doing so silently regresses that test (and possibly other
+   center-field-proximate behavior nothing else currently exercises).
 2. **grsim headless/dependency/speed investigation.** User's own framing:
    grsim is "slightly harder because of the dependency and also it not being
    able to run faster when it is running in headless mode." Two distinct

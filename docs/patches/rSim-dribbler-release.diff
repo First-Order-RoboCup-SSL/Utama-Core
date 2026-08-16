@@ -1,0 +1,81 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 787a2a9..ff00f97 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -31,6 +31,12 @@ pybind11_add_module(${python_module_name} MODULE
+         ${P_HEADER_FILES}
+   )
+ 
++# pybind11 2.6.2's headers rely on <cstdint>/<cstddef> types (uint16_t etc.)
++# without including them directly, relying on transitive includes that
++# modern libstdc++ (GCC 13+) no longer guarantees. Force the includes rather
++# than patch vendored pybind11 source.
++target_compile_options(${python_module_name} PRIVATE "SHELL:-include cstdint" "SHELL:-include cstddef")
++
+ find_package(ODE REQUIRED)
+ include_directories(${ODE_INCLUDE_DIRS})
+ 
+diff --git a/src/robosim/sslrobot.cpp b/src/robosim/sslrobot.cpp
+index 348507c..9721844 100644
+--- a/src/robosim/sslrobot.cpp
++++ b/src/robosim/sslrobot.cpp
+@@ -225,6 +225,46 @@ void SSLRobot::Kicker::unholdBall(){
+     if(this->holdingBall) {
+         dJointDestroy(this->robot_to_ball);
+         this->holdingBall = false;
++
++        // The hinge zeroes the ball's velocity while held (see holdBall()).
++        // Destroying the joint alone leaves the ball at rest, still
++        // geometrically touching the kicker box (spaceKicker vs. ball is
++        // collided every physics substep regardless of the hinge — see
++        // SSLWorld::step()/PWorld::handleCollisions), so ODE keeps
++        // generating a real contact joint between them. That contact
++        // constrains the ball's velocity along the contact normal, which
++        // silently cancels a naive forward-velocity nudge if it points into
++        // the kicker rather than away from it — release must both push the
++        // ball away from the kicker box and clear it out of the contact
++        // envelope, or the ball stays glued indefinitely to a robot that
++        // stops before releasing.
++        dReal bx, by, bz;
++        dReal kx, ky, kz;
++        this->rob->getBall()->getBodyPosition(bx, by, bz);
++        this->box->getBodyPosition(kx, ky, kz);
++
++        dReal ox = bx - kx;
++        dReal oy = by - ky;
++        dReal olen = sqrt(ox * ox + oy * oy);
++        if (olen < 1e-6) {
++            // Degenerate (exactly centered on the kicker) — fall back to
++            // the robot's facing direction so we still separate.
++            dReal dz;
++            this->rob->chassis->getBodyDirection(ox, oy, dz);
++            olen = sqrt(ox * ox + oy * oy);
++        }
++        ox /= olen;
++        oy /= olen;
++
++        // Reposition the ball just clear of the kicker's collision envelope
++        // before the next substep's dSpaceCollide2 runs, then give it an
++        // outward velocity so it keeps moving away instead of drifting back
++        // into contact under the ball's own linear damping.
++        const dReal clearance = SSLConfig::Robot().getKickerThickness() + SSLConfig::World().getBallRadius();
++        dBodySetPosition(this->rob->getBall()->body, kx + ox * clearance, ky + oy * clearance, bz);
++
++        const dReal releaseSpeed = 0.3; // m/s, well below a real kick
++        dBodySetLinearVel(this->rob->getBall()->body, ox * releaseSpeed, oy * releaseSpeed, 0);
+     }
+ }
+ 
+diff --git a/src/robosim/sslworld.cpp b/src/robosim/sslworld.cpp
+index 2271174..45d91c9 100644
+--- a/src/robosim/sslworld.cpp
++++ b/src/robosim/sslworld.cpp
+@@ -317,7 +317,7 @@ void SSLWorld::setActions(std::vector<std::vector<double>> actions)
+         if (rbtAction[5] > 0 || rbtAction[6] > 0) {
+             this->robots[i]->kicker->kick(rbtAction[5], rbtAction[6]);
+         }
+-        if (rbtAction[7] > 0) this->robots[i]->kicker->setDribbler(true);
++        this->robots[i]->kicker->setDribbler(rbtAction[7] > 0);
+     }
+ }
+ 
