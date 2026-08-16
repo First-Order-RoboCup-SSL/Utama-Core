@@ -29,6 +29,7 @@ need to reinvent — a tournament script is purely a driver on top of
 from __future__ import annotations
 
 import itertools
+import sys
 from dataclasses import dataclass
 
 from utama_core.custom_referee import CustomReferee
@@ -101,14 +102,36 @@ def run_match(config_a_name: str, config_b_name: str) -> MatchResult:
 
 
 def main() -> None:
-    print(f"Round-robin: {len(_CONFIG_NAMES)} configs, {len(_CONFIG_NAMES) * (len(_CONFIG_NAMES) - 1) // 2} matches")
+    # Optional CLI args: config names (with or without the `build_`/
+    # `_kernel_strategy` wrapping) to run instead of the full auto-discovered
+    # catalog — useful for a quick check of one or two configs without
+    # waiting on every pair, e.g. `python demo_tournament.py default
+    # low_block`. No args keeps today's behaviour: every config, once each.
+    if len(sys.argv) > 1:
+        requested = set(sys.argv[1:])
+        config_names = [
+            name
+            for name in _CONFIG_NAMES
+            if name in requested or name.removeprefix("build_").removesuffix("_kernel_strategy") in requested
+        ]
+        unmatched = requested - {
+            n for name in config_names for n in (name, name.removeprefix("build_").removesuffix("_kernel_strategy"))
+        }
+        if unmatched:
+            raise SystemExit(f"Unknown config name(s): {sorted(unmatched)}. Available: {sorted(_CONFIG_NAMES)}")
+        if len(config_names) < 2:
+            raise SystemExit("Need at least 2 configs to play a round-robin.")
+    else:
+        config_names = _CONFIG_NAMES
+
+    print(f"Round-robin: {len(config_names)} configs, {len(config_names) * (len(config_names) - 1) // 2} matches")
     print(f"{N_OUTFIELD + 1}v{N_OUTFIELD + 1}, {MATCH_DURATION_SECONDS:.0f}s sim time per match, headless rsim\n")
 
     results: list[MatchResult] = []
-    wins: dict[str, int] = {name: 0 for name in _CONFIG_NAMES}
-    draws: dict[str, int] = {name: 0 for name in _CONFIG_NAMES}
+    wins: dict[str, int] = {name: 0 for name in config_names}
+    draws: dict[str, int] = {name: 0 for name in config_names}
 
-    for config_a_name, config_b_name in itertools.combinations(sorted(_CONFIG_NAMES), 2):
+    for config_a_name, config_b_name in itertools.combinations(sorted(config_names), 2):
         result = run_match(config_a_name, config_b_name)
         results.append(result)
         if result.winner == "draw":
@@ -123,7 +146,7 @@ def main() -> None:
         )
 
     print("\nStandings (wins, draws):")
-    for name in sorted(_CONFIG_NAMES, key=lambda n: (-wins[n], -draws[n])):
+    for name in sorted(config_names, key=lambda n: (-wins[n], -draws[n])):
         print(f"  {name:<40} {wins[name]}W {draws[name]}D")
 
 
