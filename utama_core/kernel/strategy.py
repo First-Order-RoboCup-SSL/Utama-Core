@@ -40,9 +40,10 @@ from typing import Callable, Optional
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
+from utama_core.kernel.match_log import MatchLog
 from utama_core.kernel.referee_override import RefereeOverride, is_override_command
 from utama_core.kernel.referee_reset import ResetTier, classify_transition, is_paused
-from utama_core.kernel.tactic import RobotId, Tactic, TacticId
+from utama_core.kernel.tactic import RobotId, Tactic, TacticId, TacticTag
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,14 @@ class Strategy:
         self._prev_partition: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._prev_referee_command = None
         self._referee_override = RefereeOverride()
+
+        # Optional structured intention trace — assigned post-construction by
+        # `StrategyRunner` (see its `match_log_path` param), not threaded
+        # through every `build_*_kernel_strategy` factory's constructor
+        # signature, since none of them currently take anything beyond
+        # `motion_controller`. `None` disables it entirely.
+        self.match_log: Optional[MatchLog] = None
+        self._tick_count = 0
 
     @staticmethod
     def single_tactic_picker(picker: Picker) -> Partitioner:
@@ -186,13 +195,14 @@ class Strategy:
         return None
 
     def tick(self, game: Game) -> dict[RobotId, RobotCommand]:
+        self._tick_count += 1
         referee = getattr(game, "referee", None)
         current_command = getattr(referee, "referee_command", None) if referee is not None else None
 
         if current_command is not None:
             tier = classify_transition(self._prev_referee_command, current_command)
             if tier is ResetTier.BARRIER:
-                self._barrier_reset()
+                self._barrier_reset(game)
             self._prev_referee_command = current_command
 
             if is_paused(current_command):
@@ -233,6 +243,14 @@ class Strategy:
                 slot.mem = slot.tactic.initial_mem() if robot_ids else None
                 slot.assigned_robots = robot_ids
                 slot.committed_ticks = 0
+                if self.match_log is not None and robot_ids:
+                    self.match_log.intention(
+                        tick=self._tick_count,
+                        sim_time=getattr(game, "ts", 0.0),
+                        tactic_id=tactic_id,
+                        robot_ids=robot_ids,
+                        tag=slot.tactic.tag,
+                    )
 
             if not robot_ids:
                 # A slot with no robots this tick has nothing to tick —
@@ -333,9 +351,18 @@ class Strategy:
                 f"(missing={sorted(missing)}, unexpected={sorted(extra)})"
             )
 
-    def _barrier_reset(self) -> None:
+    def _barrier_reset(self, game: Game) -> None:
+        had_any_assignment = any(slot.assigned_robots for slot in self._slots.values())
         for slot in self._slots.values():
             slot.mem = None
             slot.assigned_robots = frozenset()
             slot.committed_ticks = 0
         self._prev_partition = None
+        if self.match_log is not None and had_any_assignment:
+            self.match_log.intention(
+                tick=self._tick_count,
+                sim_time=getattr(game, "ts", 0.0),
+                tactic_id="__barrier_reset__",
+                robot_ids=(),
+                tag=TacticTag.MIXED,
+            )

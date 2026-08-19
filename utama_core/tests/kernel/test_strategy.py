@@ -18,6 +18,7 @@ import pytest
 
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.kernel.context import KernelContext
+from utama_core.kernel.match_log import MatchLog
 from utama_core.kernel.strategy import Strategy
 from utama_core.kernel.tactic import BaseTactic, TacticTag
 
@@ -528,3 +529,111 @@ def test_pause_freezes_without_resetting_any_tactic():
 
     strategy.tick(_FakeGame(RefereeCommand.FORCE_START))
     assert tactic_a.mem_creations == 1
+
+
+# --- match_log intention tracing ---
+
+
+def test_no_match_log_by_default():
+    """match_log is None unless a caller explicitly opts in — tick() must not
+    require one."""
+    tactic = RecordingTactic()
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    assert strategy.match_log is None
+    strategy.tick(_FakeGame())  # must not raise
+
+
+def test_match_log_records_intention_on_fresh_assignment():
+    tactic = RecordingTactic()
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy.match_log = MatchLog()
+
+    strategy.tick(_FakeGame())
+
+    events = strategy.match_log.events()
+    assert len(events) == 1
+    assert events[0].tactic_id == "a"
+    assert events[0].robot_ids == (1, 2)
+    assert events[0].tag == TacticTag.MIXED
+    assert events[0].tick == 1
+
+
+def test_match_log_does_not_repeat_for_unchanged_assignment():
+    tactic = RecordingTactic()
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy.match_log = MatchLog()
+
+    strategy.tick(_FakeGame())
+    strategy.tick(_FakeGame())  # same robot set — no new event
+
+    assert len(strategy.match_log.events()) == 1
+
+
+def test_match_log_records_reassignment_when_active_tactic_switches():
+    tactic_a, tactic_b = RecordingTactic(), RecordingTactic()
+    picks = iter(["a", "b"])
+    strategy = Strategy(
+        tactics={"a": tactic_a, "b": tactic_b},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: next(picks)),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy.match_log = MatchLog()
+
+    strategy.tick(_FakeGame())
+    strategy.tick(_FakeGame())
+
+    events = strategy.match_log.events()
+    assert [e.tactic_id for e in events] == ["a", "b"]
+
+
+def test_match_log_records_barrier_reset():
+    tactic = RecordingTactic()
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy.match_log = MatchLog()
+
+    strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
+    strategy.tick(_FakeGame(RefereeCommand.GOAL_YELLOW))  # barrier-tier transition
+
+    tactic_ids = [e.tactic_id for e in strategy.match_log.events()]
+    assert "__barrier_reset__" in tactic_ids
+
+
+def test_match_log_skips_barrier_reset_event_when_nothing_was_assigned():
+    """A barrier reset before any tactic ever held robots has nothing to
+    report — must not emit a spurious event."""
+    tactic = RecordingTactic()
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy.match_log = MatchLog()
+
+    # First tick ever is GOAL_YELLOW: classify_transition(None, GOAL_YELLOW)
+    # is a barrier tier, but no slot has held robots yet.
+    strategy.tick(_FakeGame(RefereeCommand.GOAL_YELLOW))
+
+    tactic_ids = [e.tactic_id for e in strategy.match_log.events()]
+    assert "__barrier_reset__" not in tactic_ids

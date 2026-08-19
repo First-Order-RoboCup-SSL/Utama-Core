@@ -41,6 +41,7 @@ from utama_core.global_utils.mapping_utils import (
     map_left_right_to_colors,
 )
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
+from utama_core.kernel.match_log import MatchLog
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
@@ -193,6 +194,11 @@ class StrategyRunner:
             and optional status text. Defaults to False.
         print_real_fps (bool, optional): Deprecated alias for `show_live_status`.
         profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
+        match_log_path (Optional[str], optional): If set, writes a structured JSONL trace of
+            `my`'s kernel-tactic assignment decisions (see `utama_core.kernel.match_log.MatchLog`)
+            to this path on `close()`. Only applies when `strategy` is a kernel-tactic
+            `AbstractStrategy` (i.e. exposes `_kernel_strategy`); ignored for BT-path strategies.
+            Defaults to None, which disables the trace.
         rsim_noise (RsimGaussianNoise, optional): When running in rsim, add Gaussian noise to balls and robots with the
             given standard deviation. The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
             Defaults to 0 for each.
@@ -234,6 +240,7 @@ class StrategyRunner:
         show_live_status: bool = False,  # Turn this on for simulator debugging
         print_real_fps: Optional[bool] = None,
         profiler_name: Optional[str] = None,
+        match_log_path: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
         rsim_vanishing: float = 0,
         filtering: bool = True,
@@ -338,6 +345,11 @@ class StrategyRunner:
 
         self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
         self._assert_exp_robots_and_ball(exp_friendly, exp_enemy, exp_ball)
+
+        # Set before `_load_robot_controllers()`, which wires `self.match_log`
+        # into the kernel `Strategy` right after `load_motion_controller`.
+        self.match_log_path = match_log_path
+        self.match_log = MatchLog() if match_log_path else None
 
         self._load_robot_controllers()
 
@@ -966,6 +978,16 @@ class StrategyRunner:
 
         self.my.strategy.load_robot_controller(my_robot_controller)
         self.my.strategy.load_motion_controller(self.my.motion_controller(self.mode, self.rsim_env))
+        if self.match_log is not None:
+            # Reach into the kernel `Strategy` post-construction rather than
+            # threading `match_log` through every `build_*_kernel_strategy`
+            # factory's signature — those only accept `motion_controller`
+            # today, and none of them need to know this trace exists. A
+            # BT-path `AbstractStrategy` simply has no `_kernel_strategy`
+            # attribute, so this is a no-op for it.
+            kernel_strategy = getattr(self.my.strategy, "_kernel_strategy", None)
+            if kernel_strategy is not None:
+                kernel_strategy.match_log = self.match_log
         if self.opp:
             self.opp.strategy.load_robot_controller(opp_robot_controller)
             self.opp.strategy.load_motion_controller(self.opp.motion_controller(self.mode, self.rsim_env))
@@ -1112,6 +1134,8 @@ class StrategyRunner:
             self.profiler.disable()
             if self.profiler.getstats():
                 self.profiler.dump_stats(f"{self.profiler_name}.prof")
+        if self.match_log is not None and self.match_log_path:
+            self.match_log.to_jsonl(self.match_log_path)
         if self.replay_writer:
             self.replay_writer.close()
         if self.vision_stream:
