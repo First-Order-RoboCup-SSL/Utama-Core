@@ -145,15 +145,21 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
         # never satisfied, etc.) previously left the tactic permanently
         # committed with no way back to "setup" — is_committed() only
         # releases once phase == "setup", but nothing ever set it back.
-        # Time out of a stuck non-setup phase instead of deadlocking for the
-        # rest of the match.
-        if inner.phase == "setup":
-            inner.phase_ticks = 0
-        else:
-            inner.phase_ticks += 1
-            if inner.phase_ticks > _PHASE_TIMEOUT_TICKS:
-                inner = PassAndScoreMem()
-                mem.assigned_pair = None
+        # Time out of a stuck phase instead of deadlocking for the rest of
+        # the match. This budget now also covers "setup" itself: that phase
+        # is exempt from is_committed() (see class docstring), so the kernel
+        # never reassigns the slot's robots away from it either — a stall
+        # here (e.g. the passer can't stabilize dribbling the ball to
+        # passer_position) previously had *no* timeout at all, unlike every
+        # later phase, and could hold the tactic for the rest of the match
+        # with zero progress (observed: 30s straight, has_ball flickering,
+        # distance to target never converging). Re-sample setup
+        # positions/pairing on timeout rather than retrying the exact same
+        # targets that just failed to converge.
+        inner.phase_ticks += 1
+        if inner.phase_ticks > _PHASE_TIMEOUT_TICKS:
+            inner = PassAndScoreMem()
+            mem.assigned_pair = None
 
         inner = _setup_positions(
             game, inner, passer_id, receiver_id, self.passer_pos, self.receiver_pos, self.dynamic_setup

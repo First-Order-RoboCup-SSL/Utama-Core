@@ -95,6 +95,7 @@ class PassAndScoreMem:
     rng: random.Random = field(default_factory=random.Random)
     goal_scored: bool = False
     phase_ticks: int = 0  # ticks spent in the current non-setup phase; drives the timeout reset
+    setup_ticks_without_ball: int = 0  # consecutive setup ticks the passer has read has_ball=False
 
 
 def _setup_positions(
@@ -153,6 +154,9 @@ def _hold_or_acquire_ball(game: Game, ctx: KernelContext, robot_id: int) -> Robo
     return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id)
 
 
+_SETUP_BALL_LOSS_GRACE_TICKS = 10  # ~0.17s at 60Hz — see comment below
+
+
 def run_setup_phase(
     game: Game,
     ctx: KernelContext,
@@ -170,10 +174,25 @@ def run_setup_phase(
     # go_to_ball looping forever with nowhere left to go). Use the visual
     # fallback here, same as _pass_exec's receiver-catch check below, so a
     # flaky sensor reading can't permanently strand the passer at the ball.
+    #
+    # Grace period on top of that: driving toward passer_position while
+    # dribbling can cause has_ball(visual=True) to flicker False for a tick
+    # or two even when the ball is still under control (observed: distance
+    # to target oscillating 0.3m-2.5m for 30s straight, has_ball toggling
+    # every few ticks, never converging) — every flicker was previously
+    # switching straight to go_to_ball, which re-approaches the ball from
+    # scratch and discards all progress toward passer_position, so the
+    # passer never made net progress. Only fall back to re-acquisition once
+    # the ball has actually been away for several consecutive ticks.
     if has_ball(game, passer_id, visual=True):
+        mem.setup_ticks_without_ball = 0
         passer_cmd, passer_arrived = _move_to(game, ctx, passer_id, mem.passer_position)
     else:
-        passer_cmd = _hold_or_acquire_ball(game, ctx, passer_id)
+        mem.setup_ticks_without_ball += 1
+        if mem.setup_ticks_without_ball <= _SETUP_BALL_LOSS_GRACE_TICKS:
+            passer_cmd, _ = _move_to(game, ctx, passer_id, mem.passer_position)
+        else:
+            passer_cmd = _hold_or_acquire_ball(game, ctx, passer_id)
         passer_arrived = False
 
     receiver_cmd, receiver_arrived = _move_to(game, ctx, receiver_id, mem.receiver_position)
