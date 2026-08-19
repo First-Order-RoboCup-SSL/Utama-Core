@@ -136,6 +136,21 @@ def play_replay(file_name: str, play_by_play: bool = False):
             frame_index += 1
 
 
+def load_frames_in_range(replay_path, t_start: float, t_end: float) -> list[GameFrame]:
+    """Load frames from a replay `.pkl` file whose `ts` falls within `[t_start, t_end]`.
+
+    A 60s/3600-tick match's replay is small enough (tens of thousands of
+    small dataclasses) that full-load-then-filter is simpler than adding a
+    seek-aware reader, and this is only ever called for one short window at
+    a time, not the whole file repeatedly.
+    """
+    frames = []
+    for obj in _load_replay(replay_path):
+        if isinstance(obj, GameFrame) and t_start <= obj.ts <= t_end:
+            frames.append(obj)
+    return frames
+
+
 def get_latest_replay_name() -> str:
     files = list(REPLAY_BASE_PATH.glob("*.pkl"))
     if not files:

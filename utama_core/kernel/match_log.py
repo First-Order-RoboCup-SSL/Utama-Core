@@ -64,3 +64,25 @@ class MatchLog:
                 row = asdict(event)
                 row["tag"] = event.tag.value
                 f.write(json.dumps(row) + "\n")
+
+
+def load_jsonl(path: Union[str, Path]) -> list[IntentionEvent]:
+    """Read back a `MatchLog.to_jsonl()` file as `IntentionEvent`s."""
+    events: list[IntentionEvent] = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            events.append(
+                IntentionEvent(
+                    tick=row["tick"],
+                    sim_time=row["sim_time"],
+                    tactic_id=row["tactic_id"],
+                    robot_ids=tuple(row["robot_ids"]),
+                    tag=TacticTag(row["tag"]),
+                    note=row["note"],
+                )
+            )
+    return events

@@ -25,6 +25,7 @@ snakeviz = ">=2.2.2,<3"
 scipy = ">=1.16.3,<2"
 pandas = "==3.0.1"
 rich = ">=14.2.0,<15"
+matplotlib = ">=3.11.1,<4"
 
 [package]
 name = "Utama-Core"
