@@ -599,7 +599,35 @@ def test_match_log_records_reassignment_when_active_tactic_switches():
     strategy.tick(_FakeGame())
 
     events = strategy.match_log.events()
-    assert [e.tactic_id for e in events] == ["a", "b"]
+    # tick 1: "a" gets the pool. tick 2: the picker switches to "b", so "a"
+    # is released (robot_ids=()) before "b" picks up the freed pool.
+    assert [(e.tactic_id, e.robot_ids) for e in events] == [
+        ("a", (1, 2)),
+        ("a", ()),
+        ("b", (1, 2)),
+    ]
+
+
+def test_match_log_records_tactic_release_without_commitment():
+    """A slot dropped before ever committing is distinguishable from one that was."""
+    tactic_a, tactic_b = RecordingTactic(), RecordingTactic()
+    picks = iter(["a", "b"])
+    strategy = Strategy(
+        tactics={"a": tactic_a, "b": tactic_b},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: next(picks)),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy.match_log = MatchLog()
+
+    strategy.tick(_FakeGame())
+    strategy.tick(_FakeGame())
+
+    release_event = strategy.match_log.events()[1]
+    assert release_event.tactic_id == "a"
+    assert release_event.robot_ids == ()
+    assert "committed=False" in release_event.note
+    assert "held 0 committed ticks" in release_event.note
 
 
 def test_match_log_records_barrier_reset():

@@ -231,6 +231,15 @@ class Strategy:
         # robots" signal, not something the main loop below would otherwise see.
         for tactic_id, slot in self._slots.items():
             if tactic_id not in partition and slot.assigned_robots:
+                if self.match_log is not None:
+                    self.match_log.intention(
+                        tick=self._tick_count,
+                        sim_time=getattr(game, "ts", 0.0),
+                        tactic_id=tactic_id,
+                        robot_ids=(),
+                        tag=slot.tactic.tag,
+                        note=f"released (was committed={slot.committed_ticks > 0}, held {slot.committed_ticks} committed ticks)",
+                    )
                 slot.mem = None
                 slot.assigned_robots = frozenset()
                 slot.committed_ticks = 0
