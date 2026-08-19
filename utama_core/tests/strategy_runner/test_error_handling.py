@@ -21,6 +21,8 @@ def mock_runner():
         runner.profiler = None
         runner.match_log = None
         runner.match_log_path = None
+        runner.match_stats = None
+        runner.stats_path = None
         runner.replay_writer = None
         runner.rsim_env = None
         runner.vision_stream = None

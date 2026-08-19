@@ -42,6 +42,7 @@ from utama_core.global_utils.mapping_utils import (
 )
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
 from utama_core.kernel.match_log import MatchLog
+from utama_core.kernel.match_stats import MatchStatsAccumulator
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
@@ -199,6 +200,10 @@ class StrategyRunner:
             to this path on `close()`. Only applies when `strategy` is a kernel-tactic
             `AbstractStrategy` (i.e. exposes `_kernel_strategy`); ignored for BT-path strategies.
             Defaults to None, which disables the trace.
+        stats_path (Optional[str], optional): If set, writes a single JSON summary of `my`'s
+            match (rule-event counts, possession %, per-robot zone-time %; see
+            `utama_core.kernel.match_stats.MatchStats`) to this path on `close()`. Works for
+            any strategy type, not just kernel-tactic ones. Defaults to None, which disables it.
         rsim_noise (RsimGaussianNoise, optional): When running in rsim, add Gaussian noise to balls and robots with the
             given standard deviation. The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
             Defaults to 0 for each.
@@ -241,6 +246,7 @@ class StrategyRunner:
         print_real_fps: Optional[bool] = None,
         profiler_name: Optional[str] = None,
         match_log_path: Optional[str] = None,
+        stats_path: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
         rsim_vanishing: float = 0,
         filtering: bool = True,
@@ -350,6 +356,8 @@ class StrategyRunner:
         # into the kernel `Strategy` right after `load_motion_controller`.
         self.match_log_path = match_log_path
         self.match_log = MatchLog() if match_log_path else None
+        self.stats_path = stats_path
+        self.match_stats = MatchStatsAccumulator() if stats_path else None
 
         self._load_robot_controllers()
 
@@ -1136,6 +1144,8 @@ class StrategyRunner:
                 self.profiler.dump_stats(f"{self.profiler_name}.prof")
         if self.match_log is not None and self.match_log_path:
             self.match_log.to_jsonl(self.match_log_path)
+        if self.match_stats is not None and self.stats_path:
+            self.match_stats.finalize().to_json(self.stats_path)
         if self.replay_writer:
             self.replay_writer.close()
         if self.vision_stream:
@@ -1290,6 +1300,8 @@ class StrategyRunner:
 
         if isinstance(self.referee, CustomReferee):
             ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
+            if self.match_stats is not None:
+                self.match_stats.record_rule_violation(self.referee.last_violation)
             self.ref_buffer.append(ref_data)
             _BALL_PLACEMENT_COMMANDS = (
                 RefereeCommand.BALL_PLACEMENT_YELLOW,
@@ -1738,4 +1750,6 @@ class StrategyRunner:
             self.replay_writer.write_frame(new_game_frame)
 
         side.game.add_game_frame(new_game_frame)
+        if not running_opp and self.match_stats is not None:
+            self.match_stats.record_tick(new_game_frame)
         side.strategy.step()

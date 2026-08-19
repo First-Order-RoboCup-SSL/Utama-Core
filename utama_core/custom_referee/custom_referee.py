@@ -105,6 +105,13 @@ class CustomReferee:
         self._gui_server = None
         self._bt_nodes_per_robot: dict[int, list[str]] = {}
         self._robot_feedback_data: list[dict] = []
+        # The `RuleViolation` (if any) detected on the most recent `step()`
+        # call — independent of whether the state machine actually applied
+        # it (it may be suppressed by a transition cooldown). Exposed so
+        # callers like `StrategyRunner`'s stats accumulator can tally
+        # detected events (goals, etc.) without `RuleViolation` needing to
+        # round-trip through `RefereeData`, which doesn't carry it.
+        self.last_violation: Optional[RuleViolation] = None
         if enable_gui:
             # Lazy import to keep this module free of HTTP/GUI dependencies
             # when the GUI is not needed.
@@ -150,6 +157,7 @@ class CustomReferee:
             if result is not None:
                 violation = result
                 break
+        self.last_violation = violation
 
         previous_command = self._state.command
         result = self._state.step(current_time, violation, game_frame)
