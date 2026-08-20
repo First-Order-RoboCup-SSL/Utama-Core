@@ -16,7 +16,11 @@ Yellow's own-frame targets are mirrored into the pitch frame (yellow is the
 right team), blue's are not (blue is the left team), so all coordinates in
 the dump are comparable in the same frame.
 
-Usage:  pixi run python probe_default_vs_lowblock.py [duration_seconds]
+Usage:  pixi run python probe_default_vs_lowblock.py [duration_seconds] [initial_command]
+
+`initial_command` is any RefereeCommand name (e.g. PREPARE_KICKOFF_YELLOW to
+start with a proper kickoff ceremony); defaults to FORCE_START (the
+StrategyRunner sim default that the tournament uses).
 
 Output: /tmp/opencode/probe_default_vs_lowblock.jsonl (one row per tick).
 Replays (my + opp perspective) and match log / stats are also written via the
@@ -31,6 +35,7 @@ import time
 from dataclasses import asdict
 
 from utama_core.custom_referee import CustomReferee
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.kernel import kernel_strategy
 from utama_core.replay.replay_writer import ReplayWriterConfig
 from utama_core.run import StrategyRunner
@@ -39,6 +44,7 @@ from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 N_OUTFIELD = 5
 OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
 DURATION_SECONDS = float(sys.argv[1]) if len(sys.argv) > 1 else 60.0
+INITIAL_COMMAND = RefereeCommand[sys.argv[2]] if len(sys.argv) > 2 else RefereeCommand.FORCE_START
 TICKS_PER_SECOND = 60
 
 OUT_PATH = "/tmp/opencode/probe_default_vs_lowblock.jsonl"
@@ -131,11 +137,23 @@ def _row(runner, tick):
         return out
 
     ball = frame.ball
+    violation = None
+    custom = getattr(runner, "referee", None)
+    if custom is not None and getattr(custom, "last_violation", None) is not None:
+        v = custom.last_violation
+        violation = {
+            "rule": v.rule_name,
+            "suggested": str(v.suggested_command),
+            "message": v.status_message,
+        }
     return {
         "tick": tick,
         "t": round(tick / TICKS_PER_SECOND, 2),
         "cmd": command,
         "score": score,
+        "violation": violation,
+        "y_has": {str(rid): bool(rb.has_ball) for rid, rb in sorted((frame.friendly_robots or {}).items())},
+        "b_has": {str(rid): bool(rb.has_ball) for rid, rb in sorted((frame.enemy_robots or {}).items())},
         "ball": (
             [round(ball.p.x, 3), round(ball.p.y, 3), round(ball.v.x, 3), round(ball.v.y, 3)]
             if ball is not None
@@ -169,6 +187,7 @@ def main() -> None:
         exp_enemy=N_OUTFIELD + 1,
         exp_ball=True,
         referee=referee,
+        referee_initial_command=INITIAL_COMMAND,
         enable_vision_stream=False,
         replay_writer_config=ReplayWriterConfig(replay_name="probe_default_vs_lowblock", overwrite_existing=True),
         match_log_path="/tmp/opencode/probe_matchlog.jsonl",

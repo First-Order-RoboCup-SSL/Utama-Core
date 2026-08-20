@@ -23,6 +23,18 @@ def _make_robot(robot_id: int, x: float, y: float, has_ball: bool = False) -> Ro
     )
 
 
+def _make_enemy_robot(robot_id: int, x: float, y: float, has_ball: bool = False) -> Robot:
+    return Robot(
+        id=robot_id,
+        is_friendly=False,
+        has_ball=has_ball,
+        p=Vector2D(x, y),
+        v=None,
+        a=None,
+        orientation=0,
+    )
+
+
 def _make_frame(robots: dict, ball_pos=None) -> GameFrame:
     ball = Ball(Vector3D(*ball_pos, 0), Vector3D(0, 0, 0), None) if ball_pos else None
     return GameFrame(
@@ -78,6 +90,54 @@ def test_unknown_robot_id_warns(recwarn):
     frame = _make_frame({0: _make_robot(0, 0.0, 0.0)})
     refiner.refine(frame, [RobotResponse(id=99, has_ball=True)])
     assert any("99" in str(w.message) for w in recwarn.list)
+
+
+# ---------------------------------------------------------------------------
+# Enemy has_ball: provided via the team-tagged enemy_robot_responses list
+# ---------------------------------------------------------------------------
+
+
+def _make_pvp_frame(enemy_robots: dict) -> GameFrame:
+    return GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={0: _make_robot(0, 0.0, 0.0, has_ball=False)},
+        enemy_robots=enemy_robots,
+        ball=None,
+    )
+
+
+def test_enemy_has_ball_merged_from_enemy_responses():
+    """The referee's frame must see the opponent's touches (DoubleTouchRule
+    relies on an intervening enemy touch closing its restart window)."""
+    refiner = RobotInfoRefiner()
+    frame = _make_pvp_frame(enemy_robots={5: _make_enemy_robot(5, 0.0, 0.0, has_ball=False)})
+    result = refiner.refine(frame, [], [RobotResponse(id=5, has_ball=True)])
+    assert result.enemy_robots[5].has_ball is True
+    assert result.friendly_robots[0].has_ball is False
+
+
+def test_identical_ids_across_teams_updated_via_matching_list():
+    """Response ids collide across teams (both sides run 0..N). Each list must
+    only affect its own team — friendly responses must not leak onto the
+    enemy robot with the same id, and vice versa."""
+    refiner = RobotInfoRefiner()
+    frame = _make_pvp_frame(enemy_robots={0: _make_enemy_robot(0, 0.0, 0.0, has_ball=False)})
+    result = refiner.refine(
+        frame,
+        [RobotResponse(id=0, has_ball=True)],  # friendly: IR says yes
+        [RobotResponse(id=0, has_ball=False)],  # enemy: no contact
+    )
+    assert result.friendly_robots[0].has_ball is True
+    assert result.enemy_robots[0].has_ball is False
+
+
+def test_enemy_untouched_without_enemy_responses():
+    refiner = RobotInfoRefiner()
+    frame = _make_pvp_frame(enemy_robots={0: _make_enemy_robot(0, 0.0, 0.0, has_ball=True)})
+    assert refiner.refine(frame, []).enemy_robots[0].has_ball is True
+    assert refiner.refine(frame, None, None) is frame
 
 
 # ---------------------------------------------------------------------------

@@ -7,8 +7,6 @@ from utama_core.data_processing.refiners.base_refiner import BaseRefiner
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.game.game_frame import GameFrame
 
-# TODO: current doesn't handle has_ball for enemy robots. In future, implement using vision data
-
 # Distance threshold for vision-based has_ball inference: robot centre + small buffer.
 _BALL_CAPTURE_DIST = ROBOT_RADIUS + 0.04  # ~0.13 m
 
@@ -23,13 +21,29 @@ class RobotInfoRefiner(BaseRefiner):
             (~0.13 m threshold) instead.  Pass ``None`` (default) to trust every
             robot's IR sensor — this is the normal stable-hardware behaviour and can
             be restored by simply removing the argument.
+
+    Enemy robots' ``has_ball`` is applied from ``enemy_robot_responses`` when the
+    caller provides them — in rsim PVP ``StrategyRunner`` feeds both teams'
+    contact data into each frame (the sim physics reports contact for both
+    sides), left untouched otherwise. Previously enemy ``has_ball`` was never
+    filled here (always False in the referee's view), which made touch-dependent
+    referee rules — e.g. ``DoubleTouchRule``, whose restart window only closes
+    when *any* robot touches the ball — blind to the opponent's touches and able
+    to flag phantom "second touches" long after a legal intervening touch.
+    (Real-mode PVP does not yet feed opponent responses here.)
     """
 
     def __init__(self, trusted_ir_robots: Optional[FrozenSet[int]] = None):
         self._trusted_ir_robots = trusted_ir_robots
 
-    def refine(self, game_frame: GameFrame, robot_responses: List[RobotResponse]):
+    def refine(
+        self,
+        game_frame: GameFrame,
+        robot_responses: List[RobotResponse],
+        enemy_robot_responses: List[RobotResponse] = None,
+    ):
         friendly_robots = game_frame.friendly_robots.copy()
+        enemy_robots = game_frame.enemy_robots.copy()
 
         # When an allowlist is active, first infer has_ball for every untrusted
         # robot from vision proximity.  This covers frames where the robot drops
@@ -54,9 +68,19 @@ class RobotInfoRefiner(BaseRefiner):
                     friendly_robots[rid] = replace(robot, has_ball=robot_response.has_ball)
                 # Untrusted robots were already handled by the vision-proximity pass above
 
-        if friendly_robots == game_frame.friendly_robots:
+        # Enemy has_ball: provided team-tagged by the caller (StrategyRunner
+        # pulls both teams' responses once per tick in PVP). No IR allowlist
+        # concept applies — the raw response (sim contact physics, or the
+        # shared-transmitter payload in real PVP) is the only source.
+        if enemy_robot_responses:
+            for robot_response in enemy_robot_responses:
+                rid = robot_response.id
+                if rid in enemy_robots:
+                    enemy_robots[rid] = replace(enemy_robots[rid], has_ball=robot_response.has_ball)
+
+        if friendly_robots == game_frame.friendly_robots and enemy_robots == game_frame.enemy_robots:
             return game_frame
-        return replace(game_frame, friendly_robots=friendly_robots)
+        return replace(game_frame, friendly_robots=friendly_robots, enemy_robots=enemy_robots)
 
     @staticmethod
     def _infer_has_ball(game_frame: GameFrame, robot) -> bool:

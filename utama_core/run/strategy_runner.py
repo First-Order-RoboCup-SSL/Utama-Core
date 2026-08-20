@@ -214,6 +214,13 @@ class StrategyRunner:
             instance to use the in-process referee, ``OfficialReferee()`` to consume
             commands from the SSL game-controller over the network, or ``None``
             (default) to run without any referee input.
+        referee_initial_command (RefereeCommand, optional): Command to seed a
+            ``CustomReferee`` with at match start. Defaults to ``None``, which
+            keeps the existing behavior: ``HALT`` in real mode (operator sets up
+            first), ``FORCE_START`` in sim modes (play begins immediately, no
+            kickoff ceremony). Pass e.g. ``PREPARE_KICKOFF_YELLOW`` to make sim
+            matches start with a proper kickoff sequence (auto-advances to
+            ``NORMAL_START`` once the kicker is in the circle).
         enable_vision_stream (bool, optional): Start a browser stream that renders
             the current game frame using RSim-style graphics without opening RSim.
             Defaults to True.
@@ -251,6 +258,7 @@ class StrategyRunner:
         rsim_vanishing: float = 0,
         filtering: bool = True,
         referee: RefereeSource = None,
+        referee_initial_command: Optional[RefereeCommand] = None,
         formation_type: Optional[FormationType] = None,
         enable_vision_stream: bool = True,
         vision_stream_http_port: int = 8765,
@@ -358,6 +366,7 @@ class StrategyRunner:
         self.match_log = MatchLog() if match_log_path else None
         self.stats_path = stats_path
         self.match_stats = MatchStatsAccumulator() if stats_path else None
+        self.referee_initial_command = referee_initial_command
 
         self._load_robot_controllers()
 
@@ -377,10 +386,18 @@ class StrategyRunner:
         # Seed the custom referee's internal clocks from the first real vision
         # timestamp so all timers are on the same timebase regardless of mode
         # (rsim sim-time or grsim/real wall-time).
-        # Sim modes start in FORCE_START so play begins immediately; real mode
-        # starts in HALT so the operator can set up before play begins.
+        # Sim modes default to FORCE_START so play begins immediately; real mode
+        # defaults to HALT so the operator can set up before play begins. An
+        # explicit `referee_initial_command` overrides both — sim matches can
+        # start with a proper kickoff ceremony (e.g. PREPARE_KICKOFF_YELLOW,
+        # which auto-advances to NORMAL_START once the kicker is in the circle)
+        # instead of releasing both teams at the ball at the same instant.
         if isinstance(self.referee, CustomReferee):
-            initial_command = RefereeCommand.HALT if self.mode == Mode.REAL else RefereeCommand.FORCE_START
+            initial_command = (
+                self.referee_initial_command
+                if self.referee_initial_command is not None
+                else (RefereeCommand.HALT if self.mode == Mode.REAL else RefereeCommand.FORCE_START)
+            )
             self.referee.seed_clock(self.my.current_game_frame.ts, initial_command)
 
         self.toggle_opp_first = False  # used to alternate the order of opp and friendly in run
@@ -1293,10 +1310,22 @@ class StrategyRunner:
         self._draw_rsim_field_bounds_overlay()
 
         raw_robot_responses: List[RobotResponse] = []
+        sim_response_pairs: Optional[Tuple[List[RobotResponse], List[RobotResponse]]] = None
         if self.mode == Mode.REAL:
             raw_robot_responses = self.my.strategy.robot_controller.get_robots_responses() or []
             self._update_robot_feedback_snapshot(raw_robot_responses, frame_start)
             self._push_robot_feedback_to_referee()
+        elif self.opp is not None:
+            # rsim PVP: each controller's queue holds one entry per tick for
+            # its own team. Pull both once, tagged by origin, so both games
+            # frames get friendly AND enemy has_ball (the referee's frame in
+            # particular needs the opponent's touches for touch-based rules).
+            # Response ids collide across teams (both are 0..5), so the lists
+            # must stay separate — the refiner's id check alone cannot tell
+            # yellow 1 from blue 1.
+            my_own_res = self.my.strategy.robot_controller.get_robots_responses() or []
+            opp_own_res = self.opp.strategy.robot_controller.get_robots_responses() or []
+            sim_response_pairs = (my_own_res, opp_own_res)
 
         if isinstance(self.referee, CustomReferee):
             ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
@@ -1362,6 +1391,7 @@ class StrategyRunner:
 
         # alternate between opp and friendly playing
         real = self.mode == Mode.REAL
+        sim_opp_pairs = (sim_response_pairs[1], sim_response_pairs[0]) if sim_response_pairs is not None else None
         if self.toggle_opp_first:
             if self.opp:
                 self._step_game(
@@ -1369,12 +1399,14 @@ class StrategyRunner:
                     referee_data,
                     True,
                     real_responses=opp_res if real else None,
+                    sim_response_pairs=sim_opp_pairs,
                 )
             self._step_game(
                 vision_frames,
                 referee_data,
                 False,
                 real_responses=friendly_res if real else None,
+                sim_response_pairs=sim_response_pairs,
             )
         else:
             self._step_game(
@@ -1382,6 +1414,7 @@ class StrategyRunner:
                 referee_data,
                 False,
                 real_responses=friendly_res if real else None,
+                sim_response_pairs=sim_response_pairs,
             )
             if self.opp:
                 self._step_game(
@@ -1389,6 +1422,7 @@ class StrategyRunner:
                     referee_data,
                     True,
                     real_responses=opp_res if real else None,
+                    sim_response_pairs=sim_opp_pairs,
                 )
         self.toggle_opp_first = not self.toggle_opp_first
         self._publish_vision_stream_frame()
@@ -1718,6 +1752,7 @@ class StrategyRunner:
         referee_data,
         running_opp: bool,
         real_responses: Optional[List[RobotResponse]] = None,
+        sim_response_pairs: Optional[Tuple[List[RobotResponse], List[RobotResponse]]] = None,
     ):
         """Step the game for the robot controller and strategy.
 
@@ -1727,19 +1762,30 @@ class StrategyRunner:
             running_opp (bool): Whether to run the opponent strategy.
             real_responses (Optional[List[RobotResponse]]): The robot responses pulled for real.
                                                             We use a shared transmitter, so it cannot be pulled per side.
+            sim_response_pairs (Optional[(own, enemy)]): Both teams' responses for rsim PVP,
+                                                         pulled once per tick by the caller so
+                                                         each frame (and the referee's view) gets
+                                                         friendly AND enemy has_ball (e.g.
+                                                         DoubleTouchRule needs the opponent's
+                                                         touches). `None` keeps the old per-side
+                                                         controller pull (single-team sim).
         """
         side = self.opp if running_opp else self.my
 
         # Pull responses from robot controller
-        if self.mode != Mode.REAL:
-            responses = side.strategy.robot_controller.get_robots_responses()
-        else:
+        if self.mode == Mode.REAL:
             responses = real_responses if real_responses is not None else []
+            enemy_responses = None
+        elif sim_response_pairs is not None:
+            responses, enemy_responses = sim_response_pairs
+        else:
+            responses = side.strategy.robot_controller.get_robots_responses()
+            enemy_responses = None
 
         # Update game frame with refined information
         new_game_frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
         new_game_frame = side.velocity_refiner.refine(side.game_history, new_game_frame)  # , robot_frame.imu_data)
-        new_game_frame = side.robot_info_refiner.refine(new_game_frame, responses)
+        new_game_frame = side.robot_info_refiner.refine(new_game_frame, responses, enemy_responses)
         new_game_frame = self.referee_refiner.refine(new_game_frame, referee_data)
 
         # Store updated game frame
