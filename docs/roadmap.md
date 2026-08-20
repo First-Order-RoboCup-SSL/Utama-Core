@@ -77,7 +77,10 @@ picks them up — this file isn't itself a design doc.
 
 ~~Much later priority~~ **First pass done** (2026-08-16). The catalog reached 8
 `build_*_kernel_strategy` configs (7 original + `decoy_and_overload`), enough
-to make round-robin comparisons meaningful — `demo_tournament.py` round-robins
+to make round-robin comparisons meaningful — `tournament.py` (renamed from
+`demo_tournament.py` on 2026-08-20, once it grew persistent per-match stats/
+replay recording and became the standing way to evaluate strategy changes
+rather than a one-off demo) round-robins
 every pair via headless rsim `StrategyRunner` matches (6v6, `opp_strategy`),
 reads the final score off `CustomReferee`'s scoreboard, and prints a results
 table. Deliberately just a for-loop over the existing `StrategyRunner` primitive
@@ -1150,7 +1153,7 @@ environment-parity investigation):
    arrangement (a grsim Docker image, a self-hosted runner with grsim
    pre-installed) — not decided, genuinely an open integration design
    question once items 1–2 are further along. The tournament-style use case
-   (running `demo_tournament.py`-shaped comparisons on grsim instead of/in
+   (running `tournament.py`-shaped comparisons on grsim instead of/in
    addition to rsim) has the same blocker plus grsim's own speed ceiling —
    if grsim truly can't exceed real-time, a 28-match round-robin at 60s/match
    would take at minimum 28 minutes regardless of any code changes, unlike

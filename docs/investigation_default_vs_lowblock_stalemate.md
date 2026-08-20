@@ -26,7 +26,7 @@ simultaneously have no escape mechanism.
 
 ```
 pixi run python arena_tournament.py                # 60 s, dumps per-tick JSONL to /tmp/opencode/
-pixi run python demo_tournament.py default low_block
+pixi run python tournament.py default low_block
 ```
 
 `arena_tournament.py` (renamed from the `probe_default_vs_lowblock.py` committed

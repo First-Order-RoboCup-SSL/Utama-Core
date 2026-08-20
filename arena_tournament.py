@@ -4,7 +4,7 @@ Born as `probe_default_vs_lowblock.py`, the instrumented reproduction of the
 tournament's default_vs_lowblock 0-0 passer-tangle investigation; generalized
 into a runner for *any* two `build_*_kernel_strategy` factories, with a
 round-robin mode for the arena strategies. Same match configuration as
-`demo_tournament.run_match` (6v6, headless rsim), but every tick dumps a JSON
+`tournament.run_match` (6v6, headless rsim), but every tick dumps a JSON
 row with:
 
   - sim time, referee command
