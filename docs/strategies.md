@@ -26,7 +26,11 @@ Every non-`default` config played every other once (78 matches, 60s sim time,
 6v6 headless rsim, 8 concurrent workers) specifically to answer "which of
 these should be used for comparison going forward, and which are early
 artifacts" — not to rank baselines as if they were trying to win.
-Run: `replays/tournament_20260820_104203/summary.json`.
+Run: `replays/tournament_20260820_104203/summary.json`. **Predates the
+`block_attacker` fix below** (2026-08-20, same day but later) — every
+press-using strategy's possession numbers here (`counter_press`, `high_press`,
+and indirectly anything facing them) are understated relative to current
+behavior; re-run before trusting these for a press-heavy comparison.
 
 | Strategy | W-D-L | GF-GA |
 |---|---|---|
@@ -77,7 +81,8 @@ signal; do not treat a loss here as something to fix.
 |---|---|---|---|
 | `tiki_taka` | 2026-08-20 | competitive, **strongest — the reference baseline for future strategies** | Possession team: 3 give-and-go attackers + 2 shadow-and-mark cover when we have the ball; 3 pressers + 2 shadow when we don't. Undefeated in the full 12-match backfill (3W-9D-0L, GF5-GA1) — beat both `overload_press` and `high_line_zone` and never lost to anything, including the non-reactive `high_press` baseline (0-0 draw). Any new strategy should be judged against this one. |
 | `zone_fluid` | 2026-08-20 | competitive, real but weaker | Zone-adaptive team: man-shape defense throughout; give-and-go trio builds through the middle thirds, hands off to the decoy/overload duet in the final third. 1-6-5 in the backfill, GF3-GA9 — genuinely reactive (unlike the baselines) but loses more than it draws or wins, including 1-2 to `tiki_taka`. A real second data point, not an artifact, but needs work before it's a useful comparison target. |
-| `counter_press` | 2026-08-20 | **broken — do not use for comparison yet** | Transition team: full press when the ball is lost and pressable, low block (`BlockShapeTactic`) when it isn't, 4-up switch-of-play attack the moment the ball is won. **Backfill result: 0W-12D-0L, 0 goals scored or conceded in every single match**, including 95% possession vs `tiki_taka` and 98% vs `zone_fluid` with zero shots recorded. This isn't a design-limitation artifact (it visibly dominates or gets dominated on possession depending on opponent) — it never finishes, in either direction, against anyone. Needs debugging (likely `SwitchOfPlayTactic`'s attack path never reaching a shoot phase — the shared `_pass_exec`/pass-and-score machinery already had real bugs found and fixed this session) before its win/loss record means anything. |
+| `counter_press` | 2026-08-20 | **broken — do not use for comparison yet** | Transition team: full press when the ball is lost and pressable, low block (`BlockShapeTactic`) when it isn't, 4-up switch-of-play attack the moment the ball is won. **Backfill result: 0W-12D-0L, 0 goals scored or conceded in every single match**, including 95% possession vs `tiki_taka` and 98% vs `zone_fluid` with zero shots recorded. This isn't a design-limitation artifact (it visibly dominates or gets dominated on possession depending on opponent) — it never finishes, in either direction, against anyone. The 2026-08-20 `block_attacker` fix (see `counter_flow` below) confirmed the possession numbers were real but didn't fix the finishing gap: re-run vs `tiki_taka` post-fix is still 0-0, still 0 shots, and ball travel is only 5.0 m despite 95% possession — much lower than `counter_flow`'s 21.2 m under the same fix, so whatever is actually broken here (most likely `SwitchOfPlayTactic`'s attack path never reaching a shoot phase) is separate from the press bug and still unfixed. |
+| `counter_flow` | 2026-08-20 | competitive, closest attempt yet, still no win | Third anti-tiki_taka strategy, after `overload_press`/`high_line_zone` were parked. Instead of trying to out-number tiki_taka's 2-robot shadow defense (the bet both prior attempts made and lost before ever getting to test it), fights tiki_taka on its own ground: `GiveAndGoTactic` for attack (tiki_taka's own proven-undefeated engine), `PressAndContainTactic` for our own press on turnover (contesting the transition window instead of ceding it), `BlockShapeTactic` for the defensive screen. 3/2 split in both postures, with possession-edge hysteresis (same fix `high_line_zone` needed). Building and testing this is what surfaced the shared `block_attacker` bug below — first run was 6% possession (thrashing symptom initially suspected, then diagnosed as the press never actually reaching the ball); after the fix, **93% possession, 21.2 m ball travel, still 0-0 and 0 shots**. Holds and moves the ball now; doesn't yet convert that into a shot against a 2-defender + keeper deep block — likely a `GiveAndGoTactic` lane-finding/shoot-decision gap, not a `counter_flow`-specific issue. Closest any strategy has gotten to contesting `tiki_taka`. |
 
 ## Parked — tried against tiki_taka, didn't win, not being iterated further
 
@@ -88,9 +93,28 @@ signal; do not treat a loss here as something to fix.
 
 ## Known open bugs
 
-- **`counter_press` never scores** — see the Competitive section above. Highest-priority
-  open item from the backfill: it's the only strategy with a possible correctness
-  bug rather than a genuine strength gap.
+- **`block_attacker` didn't contest the ball (fixed 2026-08-20)** — `PressAndContainTactic`'s
+  presser only ever held a fixed 10%-of-the-way shot-line standoff point,
+  never converging on the ball itself, so every press-using strategy could
+  be held off indefinitely once tiki_taka had the ball. Root cause behind
+  the ~5-7% possession ceiling every anti-tiki_taka strategy hit
+  independently (`overload_press`, `high_line_zone`, `counter_press`,
+  `high_press` in the backfill, and `counter_flow` before this fix). Fixed
+  in `utama_core/skills/src/block.py`: within 0.5 m the presser now drives
+  at the ball directly. See `counter_flow`'s and `counter_press`'s rows
+  above for before/after numbers.
+- **`counter_press` never scores, even after the `block_attacker` fix** — see the
+  Competitive section above. Now confirmed as its own separate bug (low ball
+  travel despite high possession), not explained by the press issue.
+  Highest-priority open item: it's the only strategy with a likely
+  correctness bug (probably `SwitchOfPlayTactic`'s finishing path) rather
+  than a genuine strength gap.
+- **`GiveAndGoTactic` doesn't convert sustained possession into shots against a
+  deep block** — surfaced by `counter_flow`: 93% possession and 21 m of ball
+  travel vs `tiki_taka` produced 0 shots in ~52 s. Not yet root-caused;
+  worth checking `segment_blocked`'s shot-lane logic against a 2-defender +
+  keeper screen specifically before trying a fourth anti-tiki_taka
+  strategy from scratch.
 - **`default` vs `low_block` draws 0-0** — root-caused, not fixed. See
   [`docs/investigation_default_vs_lowblock_stalemate.md`](investigation_default_vs_lowblock_stalemate.md).
   Since both are `baseline`-status, this is *not* worth fixing for its own sake —
