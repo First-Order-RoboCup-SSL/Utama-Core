@@ -261,7 +261,7 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
 
         # phase == "finish": decoy shoots if its own lane is now open,
         # otherwise passes to the overloader sitting in the vacated lane.
-        if has_ball(game, mem.decoy_id) and _decoy_shot_open(game, mem.decoy_id):
+        if has_ball(game, mem.decoy_id, visual=True) and _decoy_shot_open(game, mem.decoy_id):
             shot_cmd, scored = _score_goal(game, ctx, mem.decoy_id)
             commands[mem.decoy_id] = shot_cmd
             commands.setdefault(

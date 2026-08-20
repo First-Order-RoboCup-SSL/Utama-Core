@@ -8,6 +8,15 @@ ball an enemy is also converging on ends up shielding it from that enemy's
 side instead of wedging to a stop short of the ball entirely — the exact
 mechanism behind the `default_vs_lowblock` stalemate investigation
 (`docs/investigation_default_vs_lowblock_stalemate.md`) before this fix.
+
+Shielding stops once we're within `_COMMIT_RANGE` of the ball ourselves —
+see that constant's comment. Without this, shielding against a genuinely
+mobile enemy (one actively covering a shot lane, not just racing for a
+loose ball) never converges: the shield target tracks the enemy's live
+position every tick with no memory, so as the enemy moves to keep covering
+the lane, the target keeps sliding and the approach oscillates instead of
+closing. Root-caused as the `high_line_zone` regression — see
+`docs/strategies.md`'s "Known open bugs".
 """
 
 import math
@@ -35,6 +44,27 @@ _DRIBBLE_OVERSHOOT_M = ROBOT_RADIUS * (1 / 10)
 # never reaching the ball itself). See `docs/investigation_default_vs_lowblock_stalemate.md`,
 # fix candidate #1.
 _CONTEST_RANGE = 0.5
+
+# Once we're this close to the ball ourselves, commit to a direct approach
+# instead of continuing to shield against the contesting enemy's *live*
+# position. `approach_oren = contesting_enemy.angle_to(ball)` is recomputed
+# fresh every tick with no memory of its own — against a genuinely mobile
+# enemy (one actively covering a shot lane, not just racing for a loose
+# ball, e.g. `DecoyOverloadTactic`'s "finish" phase against a real
+# defender), the shield target keeps sliding and our path planner never
+# converges: confirmed via instrumented match trace, `high_line_zone` vs
+# `low_block` — the robot closed to 0.34m, then the shield target moved and
+# it drifted back out to 0.62m, a 7.5s oscillation that ate the entire
+# scoring window (see `docs/strategies.md`'s "Known open bugs"). This is not
+# a persistent freeze (no per-robot memory exists at this stateless-skill
+# level, and adding one would be new general-purpose state for a single
+# call site) — it is a proximity gate recomputed fresh each tick from
+# information already on hand, which has the same practical effect: near
+# the ball, the enemy's exact position stops mattering because there is no
+# more room left to route around it, so tracking it any further only
+# introduces churn. Must stay smaller than `_CONTEST_RANGE` or shield mode
+# would never have room to operate at all.
+_COMMIT_RANGE = 0.2
 
 
 def _target_past_ball(ball: Vector2D, approach_oren: float, overshoot_distance: float) -> Vector2D:
@@ -83,7 +113,8 @@ def go_to_ball(
     robot = game.friendly_robots[robot_id].p
 
     contesting_enemy = _nearest_contesting_enemy(game, ball)
-    if contesting_enemy is not None:
+    shielding = contesting_enemy is not None and robot.distance_to(ball) > _COMMIT_RANGE
+    if shielding:
         # Approach from the far side of the ball relative to the contesting
         # enemy — our body ends up between the enemy and the ball (a shield),
         # instead of a straight line from our own position that, against an
@@ -92,6 +123,8 @@ def go_to_ball(
         # default_vs_lowblock pin).
         approach_oren = contesting_enemy.angle_to(ball)
     else:
+        # Either no contesting enemy, or we're already close enough to
+        # commit — see `_COMMIT_RANGE`.
         approach_oren = robot.angle_to(ball)
 
     if ctx is not None and ctx.match_log is not None:
@@ -102,7 +135,7 @@ def go_to_ball(
             tick=0,
             sim_time=getattr(game, "ts", 0.0),
             key=f"go_to_ball[{robot_id}].approach",
-            value="shield" if contesting_enemy is not None else "direct",
+            value="shield" if shielding else "direct",
         )
 
     # Kicker/dribbler is on the back of the robot; approach with back facing ball.

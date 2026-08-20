@@ -100,7 +100,7 @@ signal; do not treat a loss here as something to fix.
 | Strategy | Added | Status | Description |
 |---|---|---|---|
 | `overload_press` | 2026-08-20 | parked, improved post-fix but still not competitive-tier | Built to outnumber tiki_taka's 2-robot shadow line (4-robot overload/switch attack + 1 block insurance) and hit direct on turnovers before tiki_taka's press organizes. Original result: lost 3%/97% possession to tiki_taka before either shared fix, and was genuinely weak overall (1-10-1). Post-fix re-run backfill: 2-11-0, GF3-GA1, zero losses — a real improvement, worth another look before `high_line_zone` if the anti-tiki_taka thread is picked back up again, though not yet re-tested head-to-head against `tiki_taka` itself. |
-| `high_line_zone` | 2026-08-20 | parked, **now flagged as a possible regression** | Built to deny tiki_taka's give-and-go trio 1v1s via a zone screen (`BlockShapeTactic`) instead of man-marking, switching the ball past its thin 2-robot cover. Original backfill: real mid-pack strategy (2-8-2, GF4-GA3) — beat `low_block` 1-0 and `zone_fluid` 3-1. **Post-fix re-run backfill: 0-13-0, GF0-GA0 — zero goals scored or conceded in any of its 13 matches**, despite still showing real possession swings and occasional shots. Not yet root-caused; see Known open bugs. Do not treat the pre-fix 2-8-2 record as current. |
+| `high_line_zone` | 2026-08-20 | parked, **regression root-caused and fixed 2026-08-21** | Built to deny tiki_taka's give-and-go trio 1v1s via a zone screen (`BlockShapeTactic`) instead of man-marking, switching the ball past its thin 2-robot cover. Original backfill: real mid-pack strategy (2-8-2, GF4-GA3) — beat `low_block` 1-0 and `zone_fluid` 3-1. Post-`block_attacker`/`go_to_ball` re-run backfill regressed to 0-13-0, GF0-GA0 (see Known open bugs for the root cause and fix) — verified fixed: re-run vs `low_block` scores 1-0 again. Full 91-match backfill not yet re-run post-fix; treat the pre-regression 2-8-2 record as the best current estimate until it is. |
 
 ## Known open bugs
 
@@ -138,16 +138,29 @@ signal; do not treat a loss here as something to fix.
   (probably `SwitchOfPlayTactic`'s finishing path) rather than a genuine
   strength gap.
 - **`high_line_zone` went from a real mid-pack record to 0 goals in any match,
-  post-fix** — see the Parked section above (2026-08-20 re-run backfill:
-  0-13-0, GF0-GA0, down from 2-8-2/GF4-GA3 pre-fix). Not the same shape as
-  `counter_press`/`decoy_and_overload`: it still shows real possession
-  swings and does reach its finishing tactic (`overload`) for genuine
-  multi-second stretches in a spot-checked match, so this isn't "never
-  reaches a shoot phase." More likely `DecoyOverloadTactic`'s finishing
-  conversion specifically got worse now that `go_to_ball`'s approach angles
-  changed — plausible, not confirmed. Highest-priority open item: this is
-  the one place a fix may have made something worse rather than just failing
-  to fix something else.
+  post-fix (root-caused and fixed 2026-08-21)** — was 0-13-0, GF0-GA0 in the
+  2026-08-20 re-run backfill, down from 2-8-2/GF4-GA3 pre-fix. Root cause,
+  confirmed via instrumented match trace (`DecoyOverloadTactic`'s "finish"
+  phase, `utama_core/tactics/decoy_and_overload.py`): `go_to_ball`'s
+  shield-approach logic (`utama_core/skills/src/go_to_ball.py`) recomputes
+  its shield target every tick from the contesting enemy's *live* position,
+  with no hysteresis. Against a defender racing for a genuinely loose ball
+  this converges fine (the case it was built for — see
+  `docs/investigation_default_vs_lowblock_stalemate.md`), but against a
+  defender actively covering the shot lane — exactly what a real opponent
+  does in `DecoyOverloadTactic`'s finish phase — the shield target keeps
+  sliding as the defender moves to keep covering, and the decoy's approach
+  oscillates instead of converging: traced closing to 0.34m then drifting
+  back out to 0.62m, a 7.5s stall that ate the entire scoring window every
+  time. Fixed by adding `_COMMIT_RANGE = 0.2` to `go_to_ball.py`: once the
+  approaching robot is within that range of the ball itself, it stops
+  tracking the enemy's position and commits to a direct approach — no new
+  state needed, since proximity to the ball is already known each tick.
+  Secondary, minor fix in the same pass: `decoy_and_overload.py`'s "finish"
+  phase used the strict (non-`visual`) `has_ball` check where every other
+  call site in `_pass_and_score.py` uses `visual=True`; brought in line.
+  Verified fixed: `high_line_zone` vs `low_block` now scores 1-0 (was 0-0,
+  0 shots). Full 91-match backfill not yet re-run post-fix.
 - **`default` vs `low_block` still draws 0-0 after the `go_to_ball` fix** — partial
   improvement only (possession moved from a near-total pin to 55%/44%, ball
   travel from ~6.8m to 8.78m) — see
