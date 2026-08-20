@@ -821,3 +821,225 @@ def build_zone_fluid_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
         )
 
     return _build
+
+
+# ---------------------------------------------------------------------------
+# Anti-tiki_taka strategies (2026-08-20 addition)
+#
+# tiki_taka (`_tiki_taka_picker`) splits 3/2 in both postures: 3 attack + 2
+# defense when it has the ball, 3 press + 2 defense when it doesn't. Two
+# exploitable properties fall directly out of that split:
+#
+# 1. Its "defense" slot is `ShadowAndMarkTactic`, whose man-marking only
+#    starts at the *3rd* assigned robot (robots 1-2 always shadow the shot
+#    line; see the tactic's own docstring/tick — marking is
+#    `robot_ids[2:]`). tiki_taka only ever gives that slot 2 robots, in
+#    either posture — so its defense is *always* pure shot-line shadowing,
+#    never man-marking, no matter how many attackers we send. A numbers
+#    overload (more attacking bodies than tiki_taka has cover for) faces
+#    zero marking, only a two-robot shadow to beat with width or a switch.
+# 2. Its 3-press only forms *after* it reads possession loss — there is no
+#    press while it still has the ball, and nothing pre-positioned for a
+#    turnover. A fast direct counter (no scripted setup phase, re-picks its
+#    leader every uncommitted tick) that strikes in the transition window
+#    before the 3-press organizes skips the fight tiki_taka is built to win.
+# ---------------------------------------------------------------------------
+
+
+def _overload_press_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    applicable_tactic_ids: frozenset[str],
+) -> dict[str, frozenset[RobotId]]:
+    """Overload-and-strike posture: outnumber tiki_taka's 2-robot shadow line
+    when we have the ball, hit immediately on a turnover before its press
+    organizes.
+
+    - We have the ball (or unknown): 4 robots overload (`DecoyOverloadTactic`
+      lure + fill, backed by `SwitchOfPlayTactic`'s weak-side read once the
+      overload draws cover across) — more attackers than tiki_taka's defense
+      slot ever man-marks, since that slot never grows past 2 and only
+      shadows. 1 robot holds `BlockShapeTactic` as counter insurance.
+    - The opponent has the ball: everyone (or as many as `applicable_tactic_ids`
+      allows) goes straight to `LeadAndSupportTactic` — a direct,
+      no-setup-phase counter — rather than a organized press, to strike in
+      the transition window before tiki_taka's own 3-press forms. Falls back
+      to the block screen if the counter is unavailable (e.g. `switch`
+      pinned mid-relay elsewhere — not expected with this tactic set, but
+      every picker in this file keeps this fallback chain for the same
+      reason: every free robot must land somewhere).
+    """
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    friendly_edge = _friendly_closer_to_ball(game)
+    losing = friendly_edge is not True
+
+    overload_ok = "overload" in applicable_tactic_ids
+    switch_ok = "switch" in applicable_tactic_ids
+    block_ok = "block" in applicable_tactic_ids
+    counter_ok = "counter" in applicable_tactic_ids
+
+    if losing:
+        if counter_ok:
+            return _allocate_ordered(ordered, "counter", len(ordered))
+        if block_ok:
+            return _allocate_ordered(ordered, "block", len(ordered))
+        if switch_ok:
+            return _allocate_ordered(ordered, "switch", len(ordered))
+        return {}
+
+    if overload_ok:
+        return _allocate_ordered(ordered, "overload", 4, "block" if block_ok else None)
+    if switch_ok:
+        return _allocate_ordered(ordered, "switch", 4, "block" if block_ok else None)
+    if block_ok:
+        return _allocate_ordered(ordered, "block", len(ordered))
+    return {}
+
+
+def build_overload_press_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """Numbers-overload team built to beat tiki_taka's shot-line-only shadow
+    defense, with a direct pre-press counter for the transition window.
+
+    Four concurrent slots — `DecoyOverloadTactic` ("overload"),
+    `SwitchOfPlayTactic` ("switch"), `LeadAndSupportTactic` ("counter"), and
+    `BlockShapeTactic` ("block") — allocated by `_overload_press_picker`:
+    4 robots overload/switch the attack (more bodies than tiki_taka's 2-robot
+    defense slot ever marks) with 1 held on the block screen while we have
+    the ball; on loss, the whole team goes direct via the counter rather than
+    building a press, to hit before tiki_taka's own 3-press organizes.
+
+    Returns a `build_kernel_strategy(motion_controller)`
+    callable suitable for `AbstractStrategy`'s constructor argument of the
+    same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = KernelContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={
+                "overload": DecoyOverloadTactic(),
+                "switch": SwitchOfPlayTactic(),
+                "counter": LeadAndSupportTactic(),
+                "block": BlockShapeTactic(),
+            },
+            partitioner=_overload_press_picker,
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
+def _high_line_zone_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    applicable_tactic_ids: frozenset[str],
+) -> dict[str, frozenset[RobotId]]:
+    """High-line zone posture: deny tiki_taka's give-and-go trio the 1v1s it
+    wants with a zone screen instead of man-marking, switch the ball to the
+    weak side its 2-robot defense can't cover, finish with the overload duet
+    once we're through.
+
+    - The opponent has the ball: the whole team holds `BlockShapeTactic`'s
+      shifting zone line — tiki_taka's give-and-go build-up is a 3-robot
+      short-passing relay that thrives against man-marking cover it can
+      dribble/pass past one defender at a time; a zone screen that shifts
+      with the ball and never breaks shape denies it the individual
+      matchups it's built around, unlike `ShadowAndMarkTactic`'s greedy
+      per-robot marking (which is what tiki_taka's own defense runs, and
+      exactly the shape `overload_press` targets instead).
+    - We have the ball, not yet in the final third: `SwitchOfPlayTactic`
+      leads — tiki_taka's defense is only ever 2 robots, so a genuine
+      weak-side imbalance is easy to manufacture; 2 hold the block screen as
+      insurance against the counter.
+    - We have the ball in the final third: switch to the overload duet
+      (`DecoyOverloadTactic`) to finish, same final-third handoff
+      `_zone_flow_picker` uses — the switch has already done its job of
+      breaking the defense's shape open by this point.
+    """
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    block_ok = "block" in applicable_tactic_ids
+    switch_ok = "switch" in applicable_tactic_ids
+    overload_ok = "overload" in applicable_tactic_ids
+
+    # Sticky possession edge: a plain `_friendly_closer_to_ball` re-read every
+    # tick flips constantly in a genuinely contested 50/50 (measured: switch
+    # assigned and released again within single-digit ticks, over and over,
+    # for the first ~10s of a live match against tiki_taka) — `switch`'s
+    # carrier/pivot/runner relay needs several seconds to settle and never
+    # got the chance, discarded before `is_committed()` ever saw it commit.
+    # `prev_partition` is this picker's only persistent state (a `Partitioner`
+    # is a plain function, no `mem` of its own — unlike a `Tactic`, which
+    # gets one), so use "did we hold switch/overload last tick" as the
+    # attacking side's memory and require a full possession loss (proximity
+    # edge, not just "not clearly ahead") before dropping it. Mirrors
+    # `SwitchOfPlayTactic`'s own internal weak-side hysteresis, one level up.
+    prev_partition = prev_partition or {}
+    currently_attacking = bool(prev_partition.get("switch")) or bool(prev_partition.get("overload"))
+    friendly_edge = _friendly_closer_to_ball(game)
+    if currently_attacking:
+        losing = friendly_edge is False  # only give up the ball on a clear loss, not just "unknown"
+    else:
+        losing = friendly_edge is not True  # regaining needs a clear win, same conservative default as elsewhere
+
+    if losing:
+        if block_ok:
+            return _allocate_ordered(ordered, "block", len(ordered))
+        if switch_ok:
+            return _allocate_ordered(ordered, "switch", len(ordered))
+        if overload_ok:
+            return _allocate_ordered(ordered, "overload", len(ordered))
+        return {}
+
+    zone = _ball_zone(game)
+    if zone == "final" and overload_ok:
+        return _allocate_ordered(ordered, "overload", 2, "block" if block_ok else None)
+    if switch_ok:
+        return _allocate_ordered(ordered, "switch", 3, "block" if block_ok else None)
+    if overload_ok:
+        return _allocate_ordered(ordered, "overload", len(ordered))
+    if block_ok:
+        return _allocate_ordered(ordered, "block", len(ordered))
+    return {}
+
+
+def build_high_line_zone_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """Zone-defense team built to deny tiki_taka's give-and-go trio the 1v1s
+    it's designed around, switching the ball past its thin 2-robot cover.
+
+    Three concurrent slots — `SwitchOfPlayTactic` ("switch"),
+    `DecoyOverloadTactic` ("overload"), and `BlockShapeTactic` ("block") —
+    allocated by `_high_line_zone_picker`: the whole team holds the zone
+    screen when the ball is lost (denying man-marking 1v1s instead of
+    running them, unlike tiki_taka's own `ShadowAndMarkTactic` defense);
+    3 robots read the weak side and switch there once we have it (tiki_taka's
+    defense is always just 2 robots — an imbalance is easy to create); the
+    final third hands off to the overload duet to finish.
+
+    Returns a `build_kernel_strategy(motion_controller)`
+    callable suitable for `AbstractStrategy`'s constructor argument of the
+    same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = KernelContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={
+                "switch": SwitchOfPlayTactic(),
+                "overload": DecoyOverloadTactic(),
+                "block": BlockShapeTactic(),
+            },
+            partitioner=_high_line_zone_picker,
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
