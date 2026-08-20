@@ -25,10 +25,10 @@ from utama_core.config.referee_constants import (
     PENALTY_LINE_Y_STEP_RATIO,
     PENALTY_MARK_HALF_FIELD_RATIO,
 )
+from utama_core.custom_referee.abstract_behaviour import AbstractBehaviour
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
-from utama_core.strategy.common.abstract_behaviour import AbstractBehaviour
 
 
 def _all_stop(blackboard) -> py_trees.common.Status:

@@ -14,12 +14,12 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.kernel.abstract_strategy import AbstractStrategy
 from utama_core.kernel.context import KernelContext
 from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.skills.src.utils.move_utils import move
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 # Waypoints defined as fractions of the standard field half-dimensions
 # (half_length=4.5, half_width=3.0) so they scale correctly to any field.

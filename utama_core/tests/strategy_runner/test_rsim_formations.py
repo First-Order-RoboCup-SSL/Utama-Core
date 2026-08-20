@@ -6,9 +6,9 @@ from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.config.formations import get_formations
 from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.mapping_utils import map_left_right_to_colors
-from utama_core.kernel.kernel_strategy import build_default_kernel_strategy
+from utama_core.kernel.abstract_strategy import AbstractStrategy
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,

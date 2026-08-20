@@ -1,6 +1,6 @@
 # Strategy catalog
 
-Every `build_*_kernel_strategy` factory in `utama_core/kernel/kernel_strategy.py`,
+Every `build_*_kernel_strategy` factory in `utama_core/strategy/kernel_strategy.py`,
 what it does, and whether it's worth spending further effort on. Run any pair with
 `pixi run python tournament.py <name1> <name2>` (name = the factory name with the
 `build_`/`_kernel_strategy` trimmed, e.g. `tiki_taka`).

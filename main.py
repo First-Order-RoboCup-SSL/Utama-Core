@@ -1,11 +1,11 @@
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.custom_referee import CustomReferee
 from utama_core.entities.game.field import FieldBounds
-from utama_core.kernel.kernel_strategy import build_give_and_go_solo_kernel_strategy
+from utama_core.kernel.abstract_strategy import AbstractStrategy
 from utama_core.replay import ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.run import StrategyRunner
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.strategy.kernel_strategy import build_give_and_go_solo_kernel_strategy
 
 
 def main():

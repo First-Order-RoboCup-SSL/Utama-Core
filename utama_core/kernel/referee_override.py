@@ -7,11 +7,12 @@ do* during a restart, so left alone, a Tactic's normal logic keeps running
 during e.g. an opponent's ball placement — driving straight at the ball,
 which is an SSL rule violation, not just a scheduling wrinkle.
 
-The BT path (`utama_core/strategy/referee/{actions,tree}.py`) already solves
-this: a priority Selector matches the current `RefereeCommand` and, when
-matched, takes over every friendly robot's command for that tick, bypassing
-the strategy tree entirely. This module reuses that same logic (the
-`*Step` `AbstractBehaviour` subclasses in `actions.py`) rather than
+The old BT path (`actions.py`, plus a `tree.py` that no longer exists — see
+`docs/referee_integration.md`, now stale) already solved this: a priority
+Selector matches the current `RefereeCommand` and, when matched, takes over
+every friendly robot's command for that tick, bypassing the strategy tree
+entirely. This module reuses that same logic (the `*Step` `AbstractBehaviour`
+subclasses in `utama_core/custom_referee/actions.py`) rather than
 reimplementing keep-out-distance geometry — those classes only ever touch
 `blackboard.game`, `blackboard.motion_controller`, and `blackboard.cmd_map`
 (verified: no other blackboard key is read), so a tiny duck-typed shim
@@ -28,12 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from utama_core.entities.data.command import RobotCommand
-from utama_core.entities.game import Game
-from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.kernel.tactic import RobotId
-from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.strategy.referee.actions import (
+from utama_core.custom_referee.actions import (
     BallPlacementOursStep,
     BallPlacementTheirsStep,
     DirectFreeOursStep,
@@ -43,6 +39,11 @@ from utama_core.strategy.referee.actions import (
     PreparePenaltyOursStep,
     PreparePenaltyTheirsStep,
 )
+from utama_core.entities.data.command import RobotCommand
+from utama_core.entities.game import Game
+from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.kernel.tactic import RobotId
+from utama_core.motion_planning.src.common.motion_controller import MotionController
 
 # Commands the BT path treats as restarts requiring legal-position override
 # (i.e. everything in `_REFEREE_STOPPAGE_COMMANDS` except HALT/STOP/TIMEOUT_*,

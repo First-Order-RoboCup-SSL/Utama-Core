@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from utama_core.kernel.kernel_strategy import build_default_kernel_strategy
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.kernel.abstract_strategy import AbstractStrategy
+from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
 
 
 @pytest.fixture

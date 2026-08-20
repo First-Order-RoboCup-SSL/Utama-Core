@@ -18,11 +18,8 @@ import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.game.field import Field, FieldBounds
-from utama_core.kernel.kernel_strategy import build_default_kernel_strategy
-from utama_core.strategy.common.abstract_strategy import (
-    AbstractStrategy,
-    SpaceRequirements,
-)
+from utama_core.kernel.abstract_strategy import AbstractStrategy, SpaceRequirements
+from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
 
 
 def make_dummy_game(field_bounds):

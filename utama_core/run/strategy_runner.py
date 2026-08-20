@@ -41,6 +41,7 @@ from utama_core.global_utils.mapping_utils import (
     map_left_right_to_colors,
 )
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
+from utama_core.kernel.abstract_strategy import AbstractStrategy
 from utama_core.kernel.match_log import MatchLog
 from utama_core.kernel.match_stats import MatchStatsAccumulator
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
@@ -51,7 +52,6 @@ from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNo
 from utama_core.run import GameGater
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
 from utama_core.run.vision_stream import GameFrameRenderer, RSimVisionStreamServer
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import (
     AbstractSimController,
     GRSimController,

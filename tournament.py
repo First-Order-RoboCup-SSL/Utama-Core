@@ -6,7 +6,7 @@ Run:
 What this does
 --------------
 Headless rsim, no external process required. For each distinct pair of the
-`build_*_kernel_strategy` factories in `utama_core.kernel.kernel_strategy`,
+`build_*_kernel_strategy` factories in `utama_core.strategy.kernel_strategy`,
 runs one `StrategyRunner` match (6v6: 1 goalkeeper + 5 outfield robots per
 side — enough for every factory's minimum, including the `min_attack=2`
 configs and `build_three_slot_kernel_strategy`'s three concurrent slots),
@@ -48,10 +48,10 @@ from typing import Optional
 
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.custom_referee import CustomReferee
-from utama_core.kernel import kernel_strategy
+from utama_core.kernel.abstract_strategy import AbstractStrategy
 from utama_core.replay.replay_writer import ReplayWriterConfig
 from utama_core.run import StrategyRunner
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.strategy import kernel_strategy
 
 N_OUTFIELD = 5  # + 1 goalkeeper per side
 OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))

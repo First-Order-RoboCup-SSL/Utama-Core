@@ -1,7 +1,7 @@
 """Kernel `Strategy` factories — `build_kernel_strategy(motion_controller) -> kernel.Strategy`
 callables suitable for `AbstractStrategy`'s constructor argument of the same name.
 
-See `utama_core.strategy.common.abstract_strategy.AbstractStrategy` for the class that
+See `utama_core.kernel.abstract_strategy.AbstractStrategy` for the class that
 consumes these and drives them under `StrategyRunner`.
 """
 

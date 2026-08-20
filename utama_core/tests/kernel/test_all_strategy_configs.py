@@ -25,7 +25,9 @@ from __future__ import annotations
 import pytest
 
 from utama_core.entities.data.object import TeamType
-from utama_core.kernel.kernel_strategy import (
+from utama_core.kernel.abstract_strategy import AbstractStrategy
+from utama_core.kernel.strategy import Strategy
+from utama_core.strategy.kernel_strategy import (
     _counter_press_picker,
     _fixed_ratio_picker,
     _three_way_picker,
@@ -42,8 +44,6 @@ from utama_core.kernel.kernel_strategy import (
     build_tiki_taka_kernel_strategy,
     build_zone_fluid_kernel_strategy,
 )
-from utama_core.kernel.strategy import Strategy
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
 
 _OUTFIELD_IDS = (1, 2, 3, 4, 5)
 

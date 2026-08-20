@@ -31,8 +31,8 @@ from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.kernel.kernel_strategy import build_split_shape_kernel_strategy
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.kernel.abstract_strategy import AbstractStrategy
+from utama_core.strategy.kernel_strategy import build_split_shape_kernel_strategy
 
 
 @pytest.fixture

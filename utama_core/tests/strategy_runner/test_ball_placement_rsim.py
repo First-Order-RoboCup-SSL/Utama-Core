@@ -56,9 +56,9 @@ from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.custom_referee import CustomReferee
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.kernel.kernel_strategy import build_default_kernel_strategy
+from utama_core.kernel.abstract_strategy import AbstractStrategy
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,

@@ -60,10 +60,10 @@ from typing import Optional
 
 from utama_core.custom_referee import CustomReferee
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.kernel import kernel_strategy
+from utama_core.kernel.abstract_strategy import AbstractStrategy
 from utama_core.replay.replay_writer import ReplayWriterConfig
 from utama_core.run import StrategyRunner
-from utama_core.strategy.common.abstract_strategy import AbstractStrategy
+from utama_core.strategy import kernel_strategy
 
 N_OUTFIELD = 5
 OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
@@ -243,7 +243,7 @@ def _row(runner, tick):
 def _picker_edge(game):
     """The pickers' possession-edge verdict + the raw proximity distances."""
     from utama_core.entities.data.object import TeamType
-    from utama_core.kernel.kernel_strategy import _friendly_closer_to_ball
+    from utama_core.strategy.kernel_strategy import _friendly_closer_to_ball
 
     _, friendly_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.FRIENDLY)
     _, enemy_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
