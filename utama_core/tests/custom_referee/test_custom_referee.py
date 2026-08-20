@@ -191,6 +191,63 @@ class TestOutOfBoundsRule:
         px, py = violation.designated_position
         assert abs(py) < GEO.half_width  # placed infield
 
+    def test_free_kick_after_enemy_touch_goes_to_friendly(self):
+        """Enemy (blue) last touched → friendly (yellow) gets the free kick."""
+        rule = OutOfBoundsRule()
+        enemy = {0: _robot(0, 4.4, 2.9, is_friendly=False, has_ball=True)}
+        frame_before = _frame(ball=_ball(4.4, 2.9), enemy_robots=enemy, my_team_is_yellow=True, ts=9.9)
+        rule.check(frame_before, GEO, RefereeCommand.NORMAL_START)
+
+        frame_out = _frame(ball=_ball(0.0, 3.5), my_team_is_yellow=True, ts=10.0)
+        violation = rule.check(frame_out, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.next_command == RefereeCommand.DIRECT_FREE_YELLOW
+
+    def test_scrum_tie_broken_by_distance_not_colour(self):
+        """Both teams touching the same tick: the closer robot decides — the
+        old tracker short-circuited on the friendly contact flag first."""
+        rule = OutOfBoundsRule()
+        friendly = {0: _robot(0, 4.4, 2.8, is_friendly=True, has_ball=True)}  # 0.10 m from ball
+        enemy = {0: _robot(0, 4.47, 2.94, is_friendly=False, has_ball=True)}  # ~0.08 m from ball
+        frame_before = _frame(ball=_ball(4.4, 2.9), friendly_robots=friendly, enemy_robots=enemy, ts=9.9)
+        rule.check(frame_before, GEO, RefereeCommand.NORMAL_START)
+
+        frame_out = _frame(ball=_ball(0.0, 3.5), my_team_is_yellow=True, ts=10.0)
+        violation = rule.check(frame_out, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        # Enemy was closer → friendly gets the free kick.
+        assert violation.next_command == RefereeCommand.DIRECT_FREE_YELLOW
+
+    def test_hard_kick_attribution_persists_across_exit(self):
+        """A kicker's touch recorded at contact must survive to the exit
+        tick even when the kicker is far from the boundary and no contact
+        flag is set there."""
+        rule = OutOfBoundsRule()
+        kicker = {0: _robot(0, 0.5, 0.0, is_friendly=True, has_ball=True)}
+        frame_kick = _frame(ball=_ball(0.5, 0.0), friendly_robots=kicker, my_team_is_yellow=True, ts=9.9)
+        rule.check(frame_kick, GEO, RefereeCommand.NORMAL_START)
+
+        # Exit tick: kicker is 2 m away, nobody near the ball, no flags.
+        frame_out = _frame(
+            ball=_ball(0.0, 3.5),
+            friendly_robots={0: _robot(0, -1.5, 0.0, is_friendly=True)},
+            enemy_robots={0: _robot(0, -2.0, 0.5, is_friendly=False)},
+            my_team_is_yellow=True,
+            ts=10.0,
+        )
+        violation = rule.check(frame_out, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.next_command == RefereeCommand.DIRECT_FREE_BLUE  # non-kicking team
+
+    def test_unknown_last_touch_has_no_colour_bias(self):
+        """No robots in the frame → no restart can be attributed; the rule
+        must not default to a hardcoded colour."""
+        rule = OutOfBoundsRule()
+        frame = _frame(ball=_ball(0.0, 3.5), my_team_is_yellow=True)
+        violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.next_command is None
+
 
 # ---------------------------------------------------------------------------
 # BallSpeedRule
@@ -258,6 +315,26 @@ class TestBallSpeedRule:
         rule = BallSpeedRule(max_speed_mps=6.5)
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0))
         assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
+
+    def test_enemy_kick_attributed_symmetrically(self):
+        """Enemy (blue) kicked too fast → friendly (yellow) gets the free kick."""
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        enemy = {0: _robot(0, 0.0, 0.0, is_friendly=False, has_ball=True)}
+        frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), enemy_robots=enemy, my_team_is_yellow=True)
+        violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.next_command == RefereeCommand.DIRECT_FREE_YELLOW
+
+    def test_scrum_kick_tie_broken_by_distance_not_colour(self):
+        """Both teams in contact at the kick: the closer robot's team is the
+        kicker — the old tracker always awarded this to the friendly side."""
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        friendly = {0: _robot(0, 0.08, 0.0, is_friendly=True, has_ball=True)}
+        enemy = {0: _robot(0, 0.03, 0.0, is_friendly=False, has_ball=True)}  # 0.03 m — closer
+        frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, enemy_robots=enemy)
+        violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.next_command == RefereeCommand.DIRECT_FREE_YELLOW  # enemy kicked, friendly gets FK
 
 
 # ---------------------------------------------------------------------------
@@ -725,7 +802,9 @@ class TestCustomReferee:
         referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
         frame = _frame(ball=_ball(0.0, 4.0), ts=10.0)
         data = referee.step(frame, current_time=10.0)
-        assert data.status_message == "Ball out of bounds"
+        # Empty frame → no last touch can be attributed; the message must
+        # say so rather than silently defaulting to a colour.
+        assert data.status_message.startswith("Ball out of bounds")
 
     def test_human_stays_in_stop_after_goal_until_operator_advances(self):
         """Human mode keeps the game in STOP after a goal for operator control."""

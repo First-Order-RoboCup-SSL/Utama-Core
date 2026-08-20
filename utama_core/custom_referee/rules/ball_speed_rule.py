@@ -7,6 +7,7 @@ from typing import Optional
 
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
+from utama_core.custom_referee.rules.last_touch import infer_last_touch_team
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
 
@@ -14,9 +15,6 @@ _ACTIVE_PLAY_COMMANDS = {
     RefereeCommand.NORMAL_START,
     RefereeCommand.FORCE_START,
 }
-
-# Touches closer than this are trusted enough to attribute a kick to a robot.
-_TOUCH_DIST = 0.15  # metres, matches OutOfBoundsRule's fallback threshold
 
 
 class BallSpeedRule(BaseRule):
@@ -35,6 +33,7 @@ class BallSpeedRule(BaseRule):
         self._max_speed = max_speed_mps
         self._was_over_limit = False
         # True = friendly last touched, False = enemy, None = unknown.
+        # Maintained colour-blind by `infer_last_touch_team` (see last_touch.py).
         self._last_touch_was_friendly: Optional[bool] = None
 
     def check(
@@ -51,7 +50,7 @@ class BallSpeedRule(BaseRule):
         if ball is None:
             return None
 
-        self._update_last_touch(game_frame, ball.p.x, ball.p.y)
+        self._last_touch_was_friendly = infer_last_touch_team(game_frame, self._last_touch_was_friendly)
 
         speed = math.hypot(ball.v.x, ball.v.y)
         is_over_limit = speed > self._max_speed
@@ -78,31 +77,3 @@ class BallSpeedRule(BaseRule):
     def reset(self) -> None:
         self._was_over_limit = False
         self._last_touch_was_friendly = None
-
-    def _update_last_touch(self, game_frame: GameFrame, bx: float, by: float) -> None:
-        """Same approach as `OutOfBoundsRule`: prefer the IR-backed `has_ball`
-        flag on friendly robots, fall back to closest-robot-within-touch-dist
-        for enemies (whose `has_ball` is itself a positional heuristic, not a
-        real sensor reading — see `entities/game/robot.py`)."""
-        for robot in game_frame.friendly_robots.values():
-            if robot.has_ball:
-                self._last_touch_was_friendly = True
-                return
-
-        min_dist = math.inf
-        closest_is_friendly: Optional[bool] = None
-
-        for robot in game_frame.friendly_robots.values():
-            d = math.hypot(robot.p.x - bx, robot.p.y - by)
-            if d < min_dist:
-                min_dist = d
-                closest_is_friendly = True
-
-        for robot in game_frame.enemy_robots.values():
-            d = math.hypot(robot.p.x - bx, robot.p.y - by)
-            if d < min_dist:
-                min_dist = d
-                closest_is_friendly = False
-
-        if closest_is_friendly is not None and min_dist <= _TOUCH_DIST:
-            self._last_touch_was_friendly = closest_is_friendly

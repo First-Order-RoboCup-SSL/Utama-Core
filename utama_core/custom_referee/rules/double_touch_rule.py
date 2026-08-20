@@ -50,10 +50,11 @@ class DoubleTouchRule(BaseRule):
     the first touch after arming — not assumed in advance, since who
     actually takes the kick can vary by scenario.
 
-    `has_ball` is IR-backed for friendly robots and a positional heuristic
-    for enemy robots (see `entities/game/robot.py`) — enemy-side detection
-    inherits that heuristic's imprecision, same caveat as
-    `OutOfBoundsRule`'s last-touch fallback.
+    `has_ball` is now filled for both teams by `RobotInfoRefiner`
+    (IR/contact for friendly, sim contact physics for enemy — see
+    `data_processing/refiners/robot_info.py`), so the rule sees both
+    sides' touches symmetrically; an opponent's legal intervening touch
+    closes the restart window.
     """
 
     def __init__(self) -> None:

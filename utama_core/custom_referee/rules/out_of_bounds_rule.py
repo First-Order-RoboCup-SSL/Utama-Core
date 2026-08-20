@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import math
 from typing import Optional
 
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
+from utama_core.custom_referee.rules.last_touch import infer_last_touch_team
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
 
@@ -22,8 +22,8 @@ class OutOfBoundsRule(BaseRule):
     """Fires a free kick for the non-touching team when the ball leaves the field."""
 
     def __init__(self) -> None:
-        # Track last robot to have the ball (friendly vs enemy) across frames.
-        # True = friendly last touched, False = enemy last touched, None = unknown.
+        # Last team to have the ball: True = friendly, False = enemy, None = unknown.
+        # Maintained colour-blind by `infer_last_touch_team` (see last_touch.py).
         self._last_touch_was_friendly: Optional[bool] = None
 
     def check(
@@ -42,7 +42,7 @@ class OutOfBoundsRule(BaseRule):
         bx, by = ball.p.x, ball.p.y
 
         # Update last-touch tracking regardless of out-of-bounds state.
-        self._update_last_touch(game_frame, bx, by)
+        self._last_touch_was_friendly = infer_last_touch_team(game_frame, self._last_touch_was_friendly)
 
         # Only fire when ball is outside field AND not in a goal.
         if geometry.is_in_field(bx, by) or geometry.is_in_left_goal(bx, by) or geometry.is_in_right_goal(bx, by):
@@ -56,7 +56,9 @@ class OutOfBoundsRule(BaseRule):
             rule_name="out_of_bounds",
             suggested_command=RefereeCommand.STOP,
             next_command=free_kick_cmd,
-            status_message="Ball out of bounds",
+            status_message=(
+                "Ball out of bounds" if free_kick_cmd is not None else "Ball out of bounds (last touch unknown)"
+            ),
             designated_position=placement,
         )
 
@@ -67,42 +69,19 @@ class OutOfBoundsRule(BaseRule):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _update_last_touch(self, game_frame: GameFrame, bx: float, by: float) -> None:
-        """Update last-touch tracking based on robot proximity / has_ball flag."""
-        # Check friendly robots first (has_ball from IR sensor is reliable).
-        for robot in game_frame.friendly_robots.values():
-            if robot.has_ball:
-                self._last_touch_was_friendly = True
-                return
+    def _assign_free_kick(self, game_frame: GameFrame) -> Optional[RefereeCommand]:
+        """Return the free-kick command for the non-touching team.
 
-        # Fall back to closest robot proximity.
-        min_dist = math.inf
-        closest_is_friendly: Optional[bool] = None
-
-        for robot in game_frame.friendly_robots.values():
-            d = math.hypot(robot.p.x - bx, robot.p.y - by)
-            if d < min_dist:
-                min_dist = d
-                closest_is_friendly = True
-
-        for robot in game_frame.enemy_robots.values():
-            d = math.hypot(robot.p.x - bx, robot.p.y - by)
-            if d < min_dist:
-                min_dist = d
-                closest_is_friendly = False
-
-        # Only update if a robot was actually close enough to plausibly touch (≤ 0.15 m).
-        if closest_is_friendly is not None and min_dist <= 0.15:
-            self._last_touch_was_friendly = closest_is_friendly
-
-    def _assign_free_kick(self, game_frame: GameFrame) -> RefereeCommand:
-        """Return the free-kick command for the non-touching team."""
+        Returns None when the last touch cannot be attributed at all
+        (only possible with an empty frame — a real match always has
+        robots, so `infer_last_touch_team` resolves the touch).
+        """
         my_team_is_yellow = game_frame.my_team_is_yellow
 
-        # Non-touching team gets the free kick.
         if self._last_touch_was_friendly is None:
-            # Unknown last touch: give to yellow by default.
-            return RefereeCommand.DIRECT_FREE_YELLOW
+            # No colour-bias default: leave the restart unresolved instead
+            # of awarding the ball to a hardcoded team.
+            return None
 
         if self._last_touch_was_friendly:
             # Friendly last touched → enemy gets free kick.

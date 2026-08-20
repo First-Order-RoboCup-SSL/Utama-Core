@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class Robot:
     id: int
     is_friendly: bool
-    has_ball: bool  # Friendly and enemy now have this, friendly is from IR sensor, enemy from position
+    has_ball: bool  # Friendly from IR sensor; enemy filled from sim contact by RobotInfoRefiner
     p: Vector2D
     v: Vector2D
     a: Vector2D
