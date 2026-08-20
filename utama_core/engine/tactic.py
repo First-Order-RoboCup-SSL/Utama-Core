@@ -15,9 +15,9 @@ from __future__ import annotations
 import enum
 from typing import Generic, Optional, Protocol, TypeVar
 
+from utama_core.engine.context import KernelContext
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.kernel.context import KernelContext
 
 MemT = TypeVar("MemT")
 

@@ -39,10 +39,10 @@ from utama_core.custom_referee.actions import (
     PreparePenaltyOursStep,
     PreparePenaltyTheirsStep,
 )
+from utama_core.engine.tactic import RobotId
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.kernel.tactic import RobotId
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 
 # Commands the BT path treats as restarts requiring legal-position override

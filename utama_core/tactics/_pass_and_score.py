@@ -18,10 +18,10 @@ import random
 from dataclasses import dataclass, field
 from typing import Optional
 
+from utama_core.engine.context import KernelContext
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.kernel.context import KernelContext
 from utama_core.shared.field_scaling import scale_point_from_standard_field
 from utama_core.shared.pass_and_score_geometry import (
     at_target,

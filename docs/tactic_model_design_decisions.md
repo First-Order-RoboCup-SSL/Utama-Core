@@ -1,7 +1,7 @@
 # Tactic Model — Design Decisions
 
 This document captures the design rationale for the multi-tactic scheduling architecture
-(the "Tactic model") being implemented in `utama_core/kernel/` and `utama_core/tactics/`
+(the "Tactic model") being implemented in `utama_core/engine/` and `utama_core/tactics/`
 on `spike/tactic-kernel`. It replaces a single fixed behaviour tree per team colour with a
 scheduler that can run different tactics on different robots and change that assignment
 as the game situation changes.
@@ -413,7 +413,7 @@ entirely. Rebuilding equivalent keep-out-distance geometry inside the kernel mod
 to avoid a py_trees dependency would be duplicated logic with its own, separate bug
 surface — worse than the coupling it avoids.
 
-**Mechanism (`utama_core/kernel/referee_override.py`):** the `*Step` classes are
+**Mechanism (`utama_core/engine/referee_override.py`):** the `*Step` classes are
 `AbstractBehaviour` (py_trees) subclasses, but every one of them touches exactly three
 `blackboard` attributes — `game`, `motion_controller`, `cmd_map` — nothing else (verified
 by grep, not assumed). `RefereeOverride` is a plain class holding one long-lived instance

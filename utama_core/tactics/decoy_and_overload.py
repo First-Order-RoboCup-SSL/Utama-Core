@@ -55,12 +55,12 @@ from dataclasses import dataclass
 from typing import Optional
 
 from utama_core.config.settings import CONTROL_FREQUENCY
+from utama_core.engine.context import KernelContext
+from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.kernel.context import KernelContext
-from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.shared.pass_and_score_geometry import (
     clamp_outside_enemy_defense_area,
     enemy_goal_line,

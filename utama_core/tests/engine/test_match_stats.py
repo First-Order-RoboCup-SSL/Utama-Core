@@ -1,16 +1,16 @@
-"""Tests for `utama_core.kernel.match_stats` — the aggregate per-match boxscore."""
+"""Tests for `utama_core.engine.match_stats` — the aggregate per-match boxscore."""
 
 from __future__ import annotations
 
 import json
 
 from utama_core.custom_referee.rules.base_rule import RuleViolation
+from utama_core.engine.match_stats import MatchStatsAccumulator
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.kernel.match_stats import MatchStatsAccumulator
 
 
 def _robot(rid: int, x: float, y: float, is_friendly: bool) -> Robot:

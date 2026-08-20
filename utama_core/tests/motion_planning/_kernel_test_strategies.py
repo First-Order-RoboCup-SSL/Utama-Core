@@ -14,13 +14,13 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from utama_core.engine.abstract_strategy import AbstractStrategy
+from utama_core.engine.context import KernelContext
+from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
+from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.kernel.abstract_strategy import AbstractStrategy
-from utama_core.kernel.context import KernelContext
-from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
-from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.skills.src.utils.move_utils import move
 

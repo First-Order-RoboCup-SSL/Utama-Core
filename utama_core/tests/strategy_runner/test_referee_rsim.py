@@ -41,13 +41,13 @@ from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
+from utama_core.engine.abstract_strategy import AbstractStrategy
+from utama_core.engine.context import KernelContext
+from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
+from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.kernel.abstract_strategy import AbstractStrategy
-from utama_core.kernel.context import KernelContext
-from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
-from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.skills.src.go_to_ball import go_to_ball

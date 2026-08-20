@@ -2,10 +2,10 @@ import math
 from typing import Optional
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.engine.context import KernelContext
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.kernel.context import KernelContext
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.skills.src.utils.move_utils import move
 

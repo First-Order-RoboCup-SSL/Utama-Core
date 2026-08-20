@@ -27,11 +27,11 @@ import math
 import pytest
 
 from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
+from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.kernel.abstract_strategy import AbstractStrategy
 from utama_core.strategy.kernel_strategy import build_split_shape_kernel_strategy
 
 

@@ -3,7 +3,7 @@
 `StrategyRunner` drives a strategy through a fixed contract: `load_rsim_env`,
 `load_robot_controller`, `load_motion_controller`, `load_game`, `assert_exp_robots`,
 `assert_exp_goals`, and once per tick, `step()`. A concrete `AbstractStrategy` wraps a
-`kernel.Strategy` (see `utama_core.kernel.strategy`): `step()` ticks that `Strategy` (plus
+`kernel.Strategy` (see `utama_core.engine.strategy`): `step()` ticks that `Strategy` (plus
 the goalkeeper, pinned outside the kernel scheduler) directly every frame.
 
 Robot 0 is always the goalkeeper, ticked directly and never handed to the kernel
@@ -17,6 +17,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 from utama_core.config.enums import Role
+from utama_core.engine.referee_override import is_override_command
+from utama_core.engine.referee_reset import is_paused
+from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
@@ -24,9 +27,6 @@ from utama_core.global_utils.math_utils import (
     assert_contains,
     assert_valid_bounding_box,
 )
-from utama_core.kernel.referee_override import is_override_command
-from utama_core.kernel.referee_reset import is_paused
-from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command

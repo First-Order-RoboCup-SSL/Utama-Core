@@ -9,7 +9,7 @@ against the actual field bounds. This logic is unchanged from the pre-kernel
 The other half of this file's original coverage — `_ResetStrategyOnRefereeStoppage`
 / `_REFEREE_STOPPAGE_COMMANDS` reset-guard tests — tested BT-only machinery
 that no longer exists. Its functional equivalent (barrier-reset behavior) is
-already covered by `utama_core/tests/kernel/test_strategy.py`'s
+already covered by `utama_core/tests/engine/test_strategy.py`'s
 `test_barrier_reset_clears_mem_and_overrides_commitment` and
 `test_barrier_reset_clears_all_tactics_and_unpins_commitments`.
 """
@@ -17,8 +17,8 @@ already covered by `utama_core/tests/kernel/test_strategy.py`'s
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.engine.abstract_strategy import AbstractStrategy, SpaceRequirements
 from utama_core.entities.game.field import Field, FieldBounds
-from utama_core.kernel.abstract_strategy import AbstractStrategy, SpaceRequirements
 from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
 
 

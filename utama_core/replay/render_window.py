@@ -1,7 +1,7 @@
 """`render_window` — a single PNG showing robot/ball movement over a time window.
 
-The other two observability pieces (`utama_core.kernel.match_log.MatchLog`,
-`utama_core.kernel.match_stats.MatchStats`) answer "why" and "what happened
+The other two observability pieces (`utama_core.engine.match_log.MatchLog`,
+`utama_core.engine.match_stats.MatchStats`) answer "why" and "what happened
 overall" as text an agent can read directly. Spatial motion over a short
 window is the one thing text is bad at — an agent reading a coordinate
 series has to do the trajectory integration itself, inconsistently, across
@@ -28,8 +28,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Rectangle
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
+from utama_core.engine.match_log import load_jsonl
 from utama_core.entities.game import GameFrame
-from utama_core.kernel.match_log import load_jsonl
 from utama_core.replay.replay_player import load_frames_in_range
 from utama_core.rsoccer_simulator.src.Render.utils import COLORS
 

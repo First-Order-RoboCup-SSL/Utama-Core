@@ -32,10 +32,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.engine.context import KernelContext
+from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.kernel.context import KernelContext
-from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.skills.src.go_to_point import go_to_point
 
 # Depth of our own defense area (standard SSL penalty box front edge).

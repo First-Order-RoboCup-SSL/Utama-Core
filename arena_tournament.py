@@ -59,8 +59,8 @@ from dataclasses import asdict
 from typing import Optional
 
 from utama_core.custom_referee import CustomReferee
+from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.kernel.abstract_strategy import AbstractStrategy
 from utama_core.replay.replay_writer import ReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy

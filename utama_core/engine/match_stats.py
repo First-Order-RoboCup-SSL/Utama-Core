@@ -1,6 +1,6 @@
 """`MatchStats` — aggregate per-match summary, for post-match analysis.
 
-Complements `utama_core.kernel.match_log.MatchLog` (the "why" trace of
+Complements `utama_core.engine.match_log.MatchLog` (the "why" trace of
 tactic decisions) with the "what happened" boxscore: rule-event counts
 (goals, out-of-bounds, ...), ball-possession share, and pitch zone-time —
 one small JSON object per match instead of a per-tick series, so it's cheap

@@ -27,7 +27,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Optional, Union
 
-from utama_core.kernel.tactic import RobotId, TacticId, TacticTag
+from utama_core.engine.tactic import RobotId, TacticId, TacticTag
 
 
 @dataclass(frozen=True)

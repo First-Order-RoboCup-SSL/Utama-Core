@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from enum import Enum
 
+from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.game import Game
-from utama_core.kernel.abstract_strategy import AbstractStrategy
 from utama_core.team_controller.src.controllers import AbstractSimController
 
 

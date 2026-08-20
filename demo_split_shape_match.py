@@ -17,7 +17,7 @@ Open http://localhost:8080 while this is running.
 import time
 
 from utama_core.custom_referee import CustomReferee
-from utama_core.kernel.abstract_strategy import AbstractStrategy
+from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.run import StrategyRunner
 from utama_core.strategy.kernel_strategy import build_split_shape_kernel_strategy
 

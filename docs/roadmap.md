@@ -774,7 +774,7 @@ because the diffs got entangled (see kernel-cleanup commit history around
   kernel-based strategies first, so no coverage was silently dropped: ball
   placement (`test_ball_placement_rsim.py`), referee-override/stoppage
   handling (`test_referee_rsim.py`, plus 4 new tests added to
-  `tests/kernel/test_referee_override.py` for penalty/direct-free dispatch,
+  `tests/engine/test_referee_override.py` for penalty/direct-free dispatch,
   which had zero coverage anywhere — old or new — until this pass),
   `exp_ball` validation (`test_exp_ball.py`), formation loading
   (`test_rsim_formations.py`), motion-planning obstacle avoidance
@@ -962,10 +962,10 @@ were pushed. Branch has deliberately not been pushed yet (per explicit
 instruction) — pushing and confirming a real green run on GitHub is the
 next concrete step whenever that's wanted.
 
-**Still an open, separate question:** whether `tests/kernel/` and
+**Still an open, separate question:** whether `tests/engine/` and
 `tests/strategy_runner/` (the real tactic-kernel surface — no test files
 elsewhere are kernel-specific) deserve dedicated CI treatment — e.g. a
-`@pytest.mark.kernel` marker so they run fast/prioritized on every push,
+`@pytest.mark.engine` marker so they run fast/prioritized on every push,
 rather than only as part of the undifferentiated full-suite sweep. No
 pytest markers of any kind exist in this repo yet. Not done in this pass —
 flagged for whenever CI's actual bottleneck (if any) becomes clear from
@@ -1110,7 +1110,7 @@ environment-parity investigation):
 
    **TODO — fix the keep-out-zone regression before shipping this.** Not
    root-caused yet:
-   `utama_core/tests/kernel/test_referee_override.py::test_their_kickoff_clears_our_robots_outside_center_circle`
+   `utama_core/tests/engine/test_referee_override.py::test_their_kickoff_clears_our_robots_outside_center_circle`
    passes against stock `rc-robosim==1.2` but fails against the patched
    build in `vendor/rSim` — a robot's path planner stalls at
    `dist_to_center≈0.24m` and never moves again, well short of the required

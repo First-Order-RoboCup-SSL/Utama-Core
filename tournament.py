@@ -26,7 +26,7 @@ reinvent — a tournament script is purely a driver on top of
 `StrategyRunner`'s existing `opp_strategy` support, not a new mechanism.
 
 Every run records the full observability stack (structured intention log,
-aggregate stats, replay trail — see `utama_core.kernel.match_log`/
+aggregate stats, replay trail — see `utama_core.engine.match_log`/
 `match_stats`, `utama_core.replay`) per match under
 `replays/tournament_<UTC-timestamp>/`, plus one `summary.json` for the whole
 run. `--verbose`/`-v` also prints a possession/shots/ball-travel line per
@@ -48,7 +48,7 @@ from typing import Optional
 
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.custom_referee import CustomReferee
-from utama_core.kernel.abstract_strategy import AbstractStrategy
+from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.replay.replay_writer import ReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
@@ -104,7 +104,7 @@ def _short_name(config_name: str) -> str:
 def run_match(config_a_name: str, config_b_name: str, run_dir: Optional[Path] = None) -> MatchResult:
     """Play one match. If `run_dir` is set, also records the full observability
     stack (structured intention log, aggregate stats, replay trail) under it —
-    see `utama_core.kernel.match_log`/`match_stats` and `utama_core.replay`.
+    see `utama_core.engine.match_log`/`match_stats` and `utama_core.replay`.
     """
     build_a = getattr(kernel_strategy, config_a_name)
     build_b = getattr(kernel_strategy, config_b_name)
@@ -180,7 +180,7 @@ def main() -> None:
     # cores and oversubscribe.
     # `--verbose`/`-v` prints each match's possession/shots/ball-travel line
     # alongside the score. The full observability stack (intention log, full
-    # stats JSON, replay trail — see `utama_core.kernel.match_log`/
+    # stats JSON, replay trail — see `utama_core.engine.match_log`/
     # `match_stats`, `utama_core.replay`) is always recorded regardless of
     # this flag, under `replays/tournament_<timestamp>/`: it's cheap (a few
     # KB of JSON/JSONL plus one replay per match) and is the point of running

@@ -1,4 +1,4 @@
-"""Tests for `utama_core.kernel.strategy.Strategy` — pure scheduling logic.
+"""Tests for `utama_core.engine.strategy.Strategy` — pure scheduling logic.
 
 No rsim, no real `Game`/`RobotCommand` machinery: the kernel only reads
 `game.referee.referee_command` off whatever object it's given, so a bare
@@ -16,11 +16,11 @@ from typing import Optional
 
 import pytest
 
+from utama_core.engine.context import KernelContext
+from utama_core.engine.match_log import MatchLog
+from utama_core.engine.strategy import Strategy
+from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.kernel.context import KernelContext
-from utama_core.kernel.match_log import MatchLog
-from utama_core.kernel.strategy import Strategy
-from utama_core.kernel.tactic import BaseTactic, TacticTag
 
 
 @dataclass

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Optional
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 
 if TYPE_CHECKING:
-    from utama_core.kernel.match_log import MatchLog
+    from utama_core.engine.match_log import MatchLog
 
 
 @dataclass

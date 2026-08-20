@@ -24,8 +24,8 @@ from __future__ import annotations
 
 import pytest
 
-from utama_core.kernel.context import KernelContext
-from utama_core.kernel.tactic import TacticTag
+from utama_core.engine.context import KernelContext
+from utama_core.engine.tactic import TacticTag
 from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
 from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic

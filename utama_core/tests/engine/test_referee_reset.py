@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from utama_core.engine.referee_reset import ResetTier, classify_transition, is_paused
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.kernel.referee_reset import ResetTier, classify_transition, is_paused
 
 
 def test_no_transition_when_command_unchanged():

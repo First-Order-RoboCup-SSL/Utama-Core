@@ -11,9 +11,9 @@ from typing import Optional
 
 import pytest
 
+from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
-from utama_core.kernel.abstract_strategy import AbstractStrategy
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
 from utama_core.team_controller.src.controllers import AbstractSimController

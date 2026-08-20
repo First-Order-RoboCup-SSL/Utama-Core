@@ -1,7 +1,7 @@
 """Kernel `Strategy` factories — `build_kernel_strategy(motion_controller) -> kernel.Strategy`
 callables suitable for `AbstractStrategy`'s constructor argument of the same name.
 
-See `utama_core.kernel.abstract_strategy.AbstractStrategy` for the class that
+See `utama_core.engine.abstract_strategy.AbstractStrategy` for the class that
 consumes these and drives them under `StrategyRunner`.
 """
 
@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from typing import Optional
 
+from utama_core.engine.context import KernelContext
+from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
+from utama_core.engine.tactic import RobotId
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
-from utama_core.kernel.context import KernelContext
-from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
-from utama_core.kernel.tactic import RobotId
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.tactics.block_shape import BlockShapeTactic
 from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic

@@ -59,11 +59,11 @@ from typing import Optional
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.config.referee_constants import OWN_DEFENSE_AREA_STANDOFF_DISTANCE
+from utama_core.engine.context import KernelContext
+from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.kernel.context import KernelContext
-from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.shared.pass_and_score_geometry import (
     at_target,
     enemy_goal_line,

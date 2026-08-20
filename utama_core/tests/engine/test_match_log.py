@@ -1,11 +1,11 @@
-"""Tests for `utama_core.kernel.match_log.MatchLog` — the structured intention/trace log."""
+"""Tests for `utama_core.engine.match_log.MatchLog` — the structured intention/trace log."""
 
 from __future__ import annotations
 
 import json
 
-from utama_core.kernel.match_log import IntentionEvent, MatchLog, TraceEvent, load_jsonl
-from utama_core.kernel.tactic import TacticTag
+from utama_core.engine.match_log import IntentionEvent, MatchLog, TraceEvent, load_jsonl
+from utama_core.engine.tactic import TacticTag
 
 
 def test_to_jsonl_round_trips(tmp_path):

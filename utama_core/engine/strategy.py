@@ -37,13 +37,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from utama_core.engine.context import KernelContext
+from utama_core.engine.match_log import MatchLog
+from utama_core.engine.referee_override import RefereeOverride, is_override_command
+from utama_core.engine.referee_reset import ResetTier, classify_transition, is_paused
+from utama_core.engine.tactic import RobotId, Tactic, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.kernel.context import KernelContext
-from utama_core.kernel.match_log import MatchLog
-from utama_core.kernel.referee_override import RefereeOverride, is_override_command
-from utama_core.kernel.referee_reset import ResetTier, classify_transition, is_paused
-from utama_core.kernel.tactic import RobotId, Tactic, TacticId, TacticTag
 
 logger = logging.getLogger(__name__)
 

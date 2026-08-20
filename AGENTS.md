@@ -11,9 +11,12 @@ and is stale — all active strategy work happens here, on top of the tactic-ker
 
 ## Repo map
 
-- `utama_core/kernel/` — the scheduler/protocol infra: `Strategy`, `Tactic`, `KernelContext`,
+- `utama_core/engine/` — the scheduler/protocol infra: `Strategy`, `Tactic`, `KernelContext`,
   `MatchLog`, `AbstractStrategy`, referee-override plumbing. Strategy-dev work touches this
-  rarely, mostly to add a new primitive, not a new strategy.
+  rarely, mostly to add a new primitive, not a new strategy. Named `engine/`, not `kernel/`,
+  specifically to avoid colliding with "kernel strategy" — the model's own established
+  vocabulary (every factory is `build_*_kernel_strategy`, e.g. `build_tiki_taka_kernel_strategy`)
+  — so "where do I find the kernel strategies" unambiguously means `strategy/` below, not here.
 - `utama_core/strategy/` — the actual strategies people write, run, and compare
   (`kernel_strategy.py`'s `build_*_kernel_strategy` factories — `tiki_taka`, `counter_flow`,
   etc.). This is where day-to-day strategy-dev edits land.
@@ -26,9 +29,9 @@ and is stale — all active strategy work happens here, on top of the tactic-ker
   `data_processing/`, `entities/`, `global_utils/`) is infrastructure the strategy layer
   sits on top of and mostly doesn't need to change to write a new strategy.
 
-**Before touching `utama_core/kernel/`, `utama_core/tactics/`, `utama_core/strategy/`,
+**Before touching `utama_core/engine/`, `utama_core/tactics/`, `utama_core/strategy/`,
 `utama_core/skills/`, or `tournament.py`/`docs/strategies.md`, read
-`utama_core/kernel/AGENTS.md`** — the tactic-kernel model, referee-restart handling,
+`utama_core/engine/AGENTS.md`** — the tactic-kernel model, referee-restart handling,
 lessons from past tactic bugs, and the observability tooling (`MatchLog.trace()`,
 `render_window()`, the strategy catalog) all live there, scoped to that half of the repo
 rather than duplicated here for every task.
@@ -66,7 +69,7 @@ declarations) — check there before reintroducing one of them.
 
 ## Where things live
 
-- `utama_core/kernel/AGENTS.md` — tactic-kernel model, referee handling, writing a
+- `utama_core/engine/AGENTS.md` — tactic-kernel model, referee handling, writing a
   `Tactic`, observability tooling. Read before any strategy-layer change.
 - `docs/tactic_model_design_decisions.md` — kernel/Tactic/Partitioner design rationale.
 - `docs/custom_referee.md` — `CustomReferee` architecture/usage; its "Known gaps" section
@@ -77,6 +80,6 @@ declarations) — check there before reintroducing one of them.
   assuming a doc's claim about "not yet built" is still accurate — these drift.
 - `docs/strategies.md` — strategy catalog: status, description, and real round-robin
   results per `build_*_kernel_strategy` factory.
-- `utama_core/tests/kernel/` and `utama_core/tests/strategy_runner/` — the real
+- `utama_core/tests/engine/` and `utama_core/tests/strategy_runner/` — the real
   tactic-kernel test surface; everywhere else is largely infrastructure (motion planning,
   vision, controllers) that predates and sits below the kernel model.

@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import pytest
 
+from utama_core.engine.abstract_strategy import AbstractStrategy
+from utama_core.engine.strategy import Strategy
 from utama_core.entities.data.object import TeamType
-from utama_core.kernel.abstract_strategy import AbstractStrategy
-from utama_core.kernel.strategy import Strategy
 from utama_core.strategy.kernel_strategy import (
     _counter_press_picker,
     _fixed_ratio_picker,

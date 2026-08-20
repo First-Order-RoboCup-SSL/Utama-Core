@@ -30,6 +30,9 @@ from utama_core.data_processing.refiners import (
     RobotInfoRefiner,
     VelocityRefiner,
 )
+from utama_core.engine.abstract_strategy import AbstractStrategy
+from utama_core.engine.match_log import MatchLog
+from utama_core.engine.match_stats import MatchStatsAccumulator
 from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameFrame, GameHistory
@@ -41,9 +44,6 @@ from utama_core.global_utils.mapping_utils import (
     map_left_right_to_colors,
 )
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
-from utama_core.kernel.abstract_strategy import AbstractStrategy
-from utama_core.kernel.match_log import MatchLog
-from utama_core.kernel.match_stats import MatchStatsAccumulator
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
@@ -196,13 +196,13 @@ class StrategyRunner:
         print_real_fps (bool, optional): Deprecated alias for `show_live_status`.
         profiler_name (Optional[str], optional): Enables and sets profiler name. Defaults to None which disables profiler.
         match_log_path (Optional[str], optional): If set, writes a structured JSONL trace of
-            `my`'s kernel-tactic assignment decisions (see `utama_core.kernel.match_log.MatchLog`)
+            `my`'s kernel-tactic assignment decisions (see `utama_core.engine.match_log.MatchLog`)
             to this path on `close()`. Only applies when `strategy` is a kernel-tactic
             `AbstractStrategy` (i.e. exposes `_kernel_strategy`); ignored for BT-path strategies.
             Defaults to None, which disables the trace.
         stats_path (Optional[str], optional): If set, writes a single JSON summary of `my`'s
             match (rule-event counts, possession %, per-robot zone-time %; see
-            `utama_core.kernel.match_stats.MatchStats`) to this path on `close()`. Works for
+            `utama_core.engine.match_stats.MatchStats`) to this path on `close()`. Works for
             any strategy type, not just kernel-tactic ones. Defaults to None, which disables it.
         rsim_noise (RsimGaussianNoise, optional): When running in rsim, add Gaussian noise to balls and robots with the
             given standard deviation. The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
