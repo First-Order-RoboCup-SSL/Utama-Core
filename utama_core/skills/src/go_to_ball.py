@@ -1,3 +1,15 @@
+"""`go_to_ball` — drive a robot to the ball and (optionally) pick it up with the dribbler.
+
+The lowest-level "get the ball" primitive; every attacking tactic that needs
+a robot to reach a loose or contested ball calls this rather than computing
+an approach itself. Not just "drive to `ball.p`": the approach angle is
+opponent-aware (see `_nearest_contesting_enemy`) so a robot converging on a
+ball an enemy is also converging on ends up shielding it from that enemy's
+side instead of wedging to a stop short of the ball entirely — the exact
+mechanism behind the `default_vs_lowblock` stalemate investigation
+(`docs/investigation_default_vs_lowblock_stalemate.md`) before this fix.
+"""
+
 import math
 from typing import Optional
 
@@ -54,6 +66,19 @@ def go_to_ball(
     dribble_threshold: float = 0.5,
     ctx: Optional[KernelContext] = None,
 ) -> RobotCommand:
+    """Drive `robot_id` to the ball, approaching from the far side of any contesting enemy.
+
+    Args:
+        dribble_when_near: if True (default), runs the dribbler for the whole
+            approach (so it's already spinning at contact) and overshoots the
+            ball by `_DRIBBLE_OVERSHOOT_M`; if False, overshoot is `_APPROACH_OVERSHOOT_M`
+            (currently 0 — stop exactly at the ball, no dribbler).
+        dribble_threshold: unused by this function currently; kept for
+            call-site compatibility with callers that pass it positionally.
+        ctx: optional `KernelContext` — when its `match_log` is set, records
+            which approach branch ("shield" vs "direct") was taken this call.
+            Omit for callers outside a `Tactic.tick()` that don't have a `ctx`.
+    """
     ball = game.ball.p.to_2d()
     robot = game.friendly_robots[robot_id].p
 

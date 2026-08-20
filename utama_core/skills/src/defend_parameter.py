@@ -1,3 +1,16 @@
+"""`defend_parameter` — position one outfield defender on the defense-area front edge.
+
+Standoff point on `defense_front_x` (just outside the box, per
+`OWN_DEFENSE_AREA_STANDOFF_DISTANCE`), with the target y-coordinate either
+fixed to a post (`goal_frame_y` given), statically split left/right post by
+robot id, or — for exactly 2 defenders — dynamically chosen per tick via
+`_choose_defender_side` (whichever post assignment leaves the keeper's
+predicted stop point closer to centre, tie-broken by shadow width). Used by
+`DefenseTactic`; see the `defender_group` parameter's docstring below for a
+subtlety that bites when a caller hands this a *subset* of the team rather
+than the whole roster.
+"""
+
 from typing import Iterable, Optional
 
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS

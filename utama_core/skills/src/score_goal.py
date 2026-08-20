@@ -1,3 +1,16 @@
+"""Shot-lane geometry: find the best open gap on the goal line and score a shot's quality.
+
+Every enemy robot casts a "shadow" onto the goal line — the interval a shot
+along its two tangent lines from the shooting point would be blocked
+(`_shadow`/`_ray_casting`, flat `ROBOT_RADIUS` per robot regardless of which
+robot it is, including the keeper). `_find_best_shot` merges overlapping
+shadows and returns the midpoint of the largest open gap; `find_shot_quality`
+normalizes that into a 0-1 score (open angle / total angle, penalized by
+distance to goal) usable for ranking candidate shooting positions rather than
+just picking a shot. `is_goal_blocked` is a separate, simpler point-to-segment
+check for "is *this specific* shot currently blocked," not a search.
+"""
+
 import logging
 import math
 from typing import List, Tuple

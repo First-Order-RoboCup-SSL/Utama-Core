@@ -1,3 +1,14 @@
+"""`goalkeep` — position the goalkeeper on the goal line to cover the predicted shot.
+
+Called directly on robot 0 (pinned outside the kernel scheduler — see
+`docs/STRATEGY_DEVELOPMENT.md`'s "Single-writer partition invariant"), not
+wrapped in a `Tactic`. The keeper's target y-position on the goal line is
+`predict_ball_pos_at_x`'s intercept when available, adjusted to account for
+one or two outfield defenders standing between the ball and goal (so the
+keeper doesn't try to cover an angle a teammate is already shadowing) — see
+the 1/2/3+ friendly-robot branches below.
+"""
+
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
@@ -18,6 +29,13 @@ def goalkeep(
     motion_controller: MotionController,
     robot_id: int,
 ):
+    """Move `robot_id` (the goalkeeper) to cover the predicted shot on the goal line.
+
+    Returns `None` if `game.ball` is unset (nothing to react to); otherwise a
+    `RobotCommand` moving the keeper to the goal line, with the target
+    y-coordinate adjusted for however many outfield defenders (0, 1, or 2+)
+    are currently positioned between the ball and the goal.
+    """
     if game.ball is None:
         return None
 

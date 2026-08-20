@@ -1,3 +1,15 @@
+"""`block_attacker` — the presser's per-tick command in `PressAndContainTactic`.
+
+Sole caller is `PressAndContainTactic.tick()` (`robot_ids[0]`, the presser —
+see `man_mark.py`'s module docstring for the marker robots' side of the same
+tactic). Three-way branch keyed on possession + proximity: shot-line standoff
+when the attacker has the ball but is out of steal range, direct ball contest
+when within `_STEAL_RANGE`, loose-ball positioning otherwise — see the
+function docstring for why the steal-range branch exists at all (it was
+missing until 2026-08-20; without it, a presser could shadow a carrier's shot
+line indefinitely without ever actually contesting possession).
+"""
+
 import math
 
 from utama_core.entities.data.command import RobotCommand
