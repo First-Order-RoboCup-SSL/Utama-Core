@@ -119,7 +119,8 @@ class ShadowAndMarkTactic(BaseTactic[ShadowAndMarkMem]):
         marker_ids = robot_ids[2:]
 
         commands: dict[RobotId, RobotCommand] = {
-            robot_id: defend_parameter(game, ctx.motion_controller, robot_id) for robot_id in shadow_ids
+            robot_id: defend_parameter(game, ctx.motion_controller, robot_id, defender_group=shadow_ids)
+            for robot_id in shadow_ids
         }
 
         marks = _assign_marks(game, marker_ids)
