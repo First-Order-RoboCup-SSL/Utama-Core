@@ -86,9 +86,10 @@ worth checking for deliberately rather than trusting "it worked once."
   this tactic were invisible from the code alone — `intercept_point()` computing a
   plausible-looking point that happened to be wrong, or a phase timeout resetting state
   that then got immediately overwritten — and only showed up as `src_oren`/`intercept_pos`
-  oscillating tick-to-tick in an actual traced match. Add a phase-transition + key-variable
-  trace (see prior debugging sessions' harnesses for the pattern) before concluding a phase
-  is stuck for some subtler reason than it looks.
+  oscillating tick-to-tick in an actual traced match. Use `ctx.match_log.trace(...)` (see
+  Observability below) to record the key variable per tick and read it back — not a
+  hand-added `print()` you have to remember to revert — before concluding a phase is stuck
+  for some subtler reason than it looks.
 - **A tactic can trip referee rules that have nothing to do with its own logic.** Positions
   computed correctly by one tactic can still walk a robot through another tactic's
   keep-out zone (e.g. `SwitchOfPlayTactic`'s relay play putting an attacker inside its own
@@ -127,6 +128,45 @@ declarations) — check there before reintroducing one of them.
   been touched by both humans and agents, and a claimed "all tests pass" is only as
   trustworthy as the last time someone actually ran it.
 
+## Observability — don't hand-roll a debug print, these already exist
+
+Answering "why did this match go the way it did" has dedicated tooling; reach for it
+before adding an `os.environ`-gated `print()` you'll have to remember to add and revert.
+
+- **`MatchLog`** (`utama_core/kernel/match_log.py`) — one JSONL trace per match, two event
+  kinds sharing the same file/reader:
+  - `intention(...)` — auto-recorded by `Strategy` itself, one row per tactic-slot
+    assignment *change* (not per tick), so a robot holding the same tactic for seconds is
+    one line, not thousands. You don't call this directly.
+  - `trace(tick, sim_time, key, value)` — call this yourself, from inside any `Tactic.tick()`
+    or any skill that receives `ctx`, via `ctx.match_log.trace(...)`. Record any
+    JSON-serializable scalar/string per tick (a branch taken, `has_ball`, a computed angle).
+    Guard with `if ctx.match_log is not None:` — it's `None` (a no-op) on every
+    tournament/CI run, so leaving trace calls in permanently costs nothing. See
+    `go_to_ball()` (`utama_core/skills/src/go_to_ball.py`) and `GiveAndGoTactic.tick()`
+    (`utama_core/tactics/give_and_go.py`) for the pattern already in place.
+  - Enable per-match by passing `match_log_path=...` to `StrategyRunner`/`AbstractStrategy`,
+    or via `tournament.py run_match(..., run_dir=...)` which wires it automatically.
+  - Read back with `utama_core.kernel.match_log.load_jsonl(path)` — returns a list of
+    `IntentionEvent`/`TraceEvent` in tick order; filter by `isinstance`.
+- **`render_window()`** (`utama_core/replay/render_window.py`) — renders a PNG of robot/ball
+  trails over a time window from a replay `.pkl`, for the one thing text traces are bad at
+  (spatial motion). `render_around_event()` anchors the window on a `MatchLog` event index
+  directly, instead of guessing a raw timestamp.
+- **`docs/strategies.md`** — the strategy catalog: every `build_*_kernel_strategy` factory,
+  its status (`baseline`/`competitive`/`parked`/`experimental`), and real round-robin
+  results. Check here before treating an old strategy's win/loss record as current, and
+  before assuming a strategy is worth using as a comparison target — `baseline`-status
+  strategies (e.g. `default`, `low_block`) are not meant to be competitive; don't spend
+  effort making them "win." Its own "Updating this file" section explains when to add/edit
+  a row.
+- **`tournament.py`** — round-robin match runner, `--max-workers N` for concurrency;
+  `run_match(config_a_name, config_b_name, run_dir=None)` is directly importable for a
+  one-off match with full observability recorded, not just the CLI's exclusion-filtered
+  round-robin (e.g. `default` is excluded from the CLI sweep but reachable via `run_match`
+  directly). Config names passed to `run_match` are the full factory name
+  (`build_tiki_taka_kernel_strategy`), not the short catalog name (`tiki_taka`).
+
 ## Where things live
 
 - `docs/tactic_model_design_decisions.md` — kernel/Tactic/Partitioner design rationale.
@@ -136,6 +176,8 @@ declarations) — check there before reintroducing one of them.
 - `docs/custom_referee_design_decisions.md` — referee rule-by-rule design decisions.
 - `docs/roadmap.md` — running list of larger, not-yet-scheduled workstreams; check before
   assuming a doc's claim about "not yet built" is still accurate — these drift.
+- `docs/strategies.md` — strategy catalog: status, description, and real round-robin
+  results per `build_*_kernel_strategy` factory. See Observability above.
 - `utama_core/tests/kernel/` and `utama_core/tests/strategy_runner/` — the real
   tactic-kernel test surface; everywhere else is largely infrastructure (motion planning,
   vision, controllers) that predates and sits below the kernel model.
