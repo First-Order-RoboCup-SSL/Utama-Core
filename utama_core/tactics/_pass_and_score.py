@@ -25,6 +25,7 @@ from utama_core.kernel.context import KernelContext
 from utama_core.shared.field_scaling import scale_point_from_standard_field
 from utama_core.shared.pass_and_score_geometry import (
     at_target,
+    clamp_outside_own_defense_area,
     clamp_to_field,
     enemy_goal_line,
     find_best_shot,
@@ -207,7 +208,12 @@ def _pass_exec(
     receiver_id: int,
 ) -> tuple[dict[int, RobotCommand], bool]:
     """Synchronized aiming, intercept positioning, and kick. Returns (commands, pass_complete)."""
-    intercept_pos, intercept_oren = intercept_point(game, passer_id, receiver_id)
+    intercept_pos_raw, intercept_oren = intercept_point(game, passer_id, receiver_id)
+    # A receiver (or the passer's aim) may never enter our own defense area —
+    # the keeper owns the box ("too many defenders in own area" fouls trip on
+    # any second robot inside). Clamp the whole pass target to the edge so a
+    # defensive scramble around our box cannot walk either robot in.
+    intercept_pos = clamp_outside_own_defense_area(game, intercept_pos_raw)
 
     passer_target_oren = game.friendly_robots[passer_id].p.angle_to(intercept_pos)
     passer_aimed = oriented_towards(game, passer_id, passer_target_oren)

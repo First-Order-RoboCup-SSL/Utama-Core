@@ -45,11 +45,15 @@ from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
 from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.shared.pass_and_score_geometry import (
+    ball_in_own_defense_area,
+    clamp_outside_own_defense_area,
     enemy_goal_line,
     enemy_positions,
     find_best_shot,
     has_ball,
+    in_own_defense_area,
     oriented_towards,
+    own_defense_area_exit_point,
     score_pass_setup,
     segment_blocked,
 )
@@ -147,7 +151,35 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         commands: dict[RobotId, RobotCommand] = {}
 
         if not has_ball(game, carrier_id):
-            commands[carrier_id] = go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id)
+            if ball_in_own_defense_area(game):
+                # The ball is inside our own box — an outfield robot may not
+                # enter it (DefenseAreaRule: the keeper owns the area). Hold
+                # the edge nearest the ball instead of chasing it in.
+                commands[carrier_id] = go_to_point(
+                    game=game,
+                    motion_controller=ctx.motion_controller,
+                    robot_id=carrier_id,
+                    target_coords=own_defense_area_exit_point(game, game.ball.p.to_2d().y),
+                )
+            else:
+                commands[carrier_id] = go_to_ball(
+                    game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id
+                )
+            self._relocate_others(game, ctx, robot_ids, carrier_id, commands)
+            return commands, mem
+
+        carrier_pos = game.friendly_robots[carrier_id].p
+        if in_own_defense_area(game, carrier_pos):
+            # Carried the ball into our own box (e.g. a rebound scramble):
+            # holding it inside makes 2 robots in the area (keeper + carrier)
+            # and draws the same foul — dribble straight out to the edge.
+            commands[carrier_id] = go_to_point(
+                game=game,
+                motion_controller=ctx.motion_controller,
+                robot_id=carrier_id,
+                target_coords=own_defense_area_exit_point(game, carrier_pos.y),
+                dribbling=True,
+            )
             self._relocate_others(game, ctx, robot_ids, carrier_id, commands)
             return commands, mem
 
@@ -204,5 +236,8 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             target = _relocate_target(game, robot_id, occupied)
             occupied.append(target)
             commands[robot_id] = go_to_point(
-                game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, target_coords=target
+                game=game,
+                motion_controller=ctx.motion_controller,
+                robot_id=robot_id,
+                target_coords=clamp_outside_own_defense_area(game, target),
             )

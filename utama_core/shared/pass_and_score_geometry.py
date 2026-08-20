@@ -119,6 +119,64 @@ def enemy_goal_line(game: Game) -> tuple[float, float, float]:
     return goal_x, goal_y1, goal_y2
 
 
+def in_own_defense_area(game: Game, point: Vector2D) -> bool:
+    """True if `point` is inside our own defense area.
+
+    Uses `field.my_defense_area` — the same geometry the CustomReferee's
+    `DefenseAreaRule` derives from (`half_defense_area_depth`/`width`), so a
+    tactic deciding legality by this check agrees with the referee.
+    """
+    defense_area = game.field.my_defense_area
+    front_x = float(defense_area[1][0])
+    goal_x = game.field.my_goal_line[0][0]
+    half_width = abs(float(defense_area[0][1]))
+    x_inside = (point.x - front_x) * (goal_x - front_x) >= 0.0
+    return x_inside and abs(point.y) <= half_width
+
+
+def ball_in_own_defense_area(game: Game) -> bool:
+    """True if the ball center is inside our own defense area (see `in_own_defense_area`)."""
+    return in_own_defense_area(game, game.ball.p.to_2d())
+
+
+def clamp_outside_own_defense_area(game: Game, point: Vector2D, margin: float = 2.0 * ROBOT_RADIUS + 0.05) -> Vector2D:
+    """Clamp a target point to just outside our own defense area's front edge.
+
+    The `DefenseAreaRule` fouls any outfield robot entering the area (the
+    keeper owns the box), so tactics that route robots near their own goal —
+    shot-line defenders, carriers chasing a loose ball — must never target
+    inside it. Keep-out is enforced on x with one robot-diameter margin;
+    the y-coordinate is preserved unchanged (the area only spans
+    `half_defense_area_width`, so a clamped x alone is already outside).
+    """
+    defense_area = game.field.my_defense_area
+    front_x = float(defense_area[1][0])
+    sign = 1.0 if game.my_team_is_right else -1.0
+    exit_x = front_x - sign * margin
+    if sign > 0 and point.x > exit_x:
+        return Vector2D(exit_x, point.y)
+    if sign < 0 and point.x < exit_x:
+        return Vector2D(exit_x, point.y)
+    return point
+
+
+def own_defense_area_exit_point(game: Game, at_y: float, margin: float = 2.0 * ROBOT_RADIUS + 0.05) -> Vector2D:
+    """A hold point just outside our own defense area's front edge at `at_y`.
+
+    For a defender/carrier that needs to stand near a ball that is inside
+    our own area (which outfield robots may not enter): hold the edge
+    closest to the ball, with y clamped inside the area's width so the
+    point is the nearest legal standing spot.
+    """
+    defense_area = game.field.my_defense_area
+    front_x = float(defense_area[1][0])
+    half_width = abs(float(defense_area[0][1]))
+    sign = 1.0 if game.my_team_is_right else -1.0
+    exit_x = front_x - sign * margin
+    y = max(-(half_width - margin), min(half_width - margin, at_y))
+    return Vector2D(exit_x, y)
+
+
 def find_best_shot(
     point: Vector2D, enemy_robots: list, goal_x: float, goal_y1: float, goal_y2: float
 ) -> tuple[Optional[float], Optional[tuple[float, float]]]:

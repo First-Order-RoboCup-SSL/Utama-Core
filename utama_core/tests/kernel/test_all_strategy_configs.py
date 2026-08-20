@@ -24,9 +24,14 @@ from __future__ import annotations
 
 import pytest
 
+from utama_core.entities.data.object import TeamType
 from utama_core.kernel.kernel_strategy import (
+    _counter_press_picker,
     _fixed_ratio_picker,
     _three_way_picker,
+    _tiki_taka_picker,
+    _zone_flow_picker,
+    build_counter_press_kernel_strategy,
     build_decoy_and_overload_kernel_strategy,
     build_give_and_go_solo_kernel_strategy,
     build_high_press_kernel_strategy,
@@ -34,6 +39,8 @@ from utama_core.kernel.kernel_strategy import (
     build_press_and_pass_kernel_strategy,
     build_split_shape_kernel_strategy,
     build_three_slot_kernel_strategy,
+    build_tiki_taka_kernel_strategy,
+    build_zone_fluid_kernel_strategy,
 )
 from utama_core.kernel.strategy import Strategy
 from utama_core.strategy.common.abstract_strategy import AbstractStrategy
@@ -48,6 +55,9 @@ _CONFIGS = [
     pytest.param(build_three_slot_kernel_strategy, id="three_slot"),
     pytest.param(build_give_and_go_solo_kernel_strategy, id="give_and_go_solo"),
     pytest.param(build_decoy_and_overload_kernel_strategy, id="decoy_and_overload"),
+    pytest.param(build_tiki_taka_kernel_strategy, id="tiki_taka"),
+    pytest.param(build_counter_press_kernel_strategy, id="counter_press"),
+    pytest.param(build_zone_fluid_kernel_strategy, id="zone_fluid"),
 ]
 
 
@@ -172,3 +182,179 @@ def test_give_and_go_solo_always_assigns_everyone_to_attack(make_runner):
     runner.step_once()
     partition = runner.my.strategy._kernel_strategy.active_partition
     assert partition == {"attack": frozenset(_OUTFIELD_IDS)}
+
+
+# --- arena-picker unit tests (stub game: the pickers read live state) ---
+
+
+class _StubProximityLookup:
+    """Stand-in for `Game.proximity_lookup`: fixed per-team closest distances."""
+
+    def __init__(self, friendly_dist, enemy_dist):
+        self._dists = {TeamType.FRIENDLY: friendly_dist, TeamType.ENEMY: enemy_dist}
+
+    def closest_to_ball(self, team_type_filter=None):
+        return (None, self._dists.get(team_type_filter))
+
+
+def _stub_game(friendly_dist, enemy_dist, ball_x: float, my_team_is_right: bool = True):
+    """Minimal fake `Game` exposing what `_tiki_taka_picker` and friends read:
+    proximity lookup, side sign, field half-length (standard 4.5 m), ball x.
+
+    With my_team_is_right (attacking -x), ball_x < -1.5 is the final third,
+    -1.5..1.5 the middle, > 1.5 our own third (thirds = 2*4.5/3 = 3 m each).
+    """
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        proximity_lookup=_StubProximityLookup(friendly_dist, enemy_dist),
+        my_team_is_right=my_team_is_right,
+        field=SimpleNamespace(half_length=4.5),
+        ball=SimpleNamespace(p=SimpleNamespace(to_2d=lambda: SimpleNamespace(x=ball_x))),
+    )
+
+
+_FIVE = frozenset({1, 2, 3, 4, 5})
+_ALL = frozenset({"attack", "defense", "press", "givego", "overload", "block"})
+
+
+def test_tiki_taka_attacks_with_three_when_ball_is_ours():
+    partition = _tiki_taka_picker(
+        _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=0.0),
+        _FIVE,
+        None,
+        _ALL,
+    )
+    assert len(partition["attack"]) == 3
+    assert len(partition["defense"]) == 2
+    assert frozenset().union(*partition.values()) == _FIVE
+
+
+def test_tiki_taka_presses_with_three_when_ball_is_lost():
+    partition = _tiki_taka_picker(
+        _stub_game(friendly_dist=1.5, enemy_dist=0.2, ball_x=0.0),
+        _FIVE,
+        None,
+        _ALL,
+    )
+    assert len(partition["press"]) == 3
+    assert len(partition["defense"]) == 2
+
+
+def test_tiki_taka_unknown_edge_falls_back_to_conservative_press():
+    # Unknown possession edge (both None) must not send everyone forward.
+    partition = _tiki_taka_picker(
+        _stub_game(friendly_dist=None, enemy_dist=None, ball_x=0.0),
+        _FIVE,
+        None,
+        _ALL,
+    )
+    assert len(partition["press"]) == 3
+    assert len(partition["defense"]) == 2
+
+
+def test_tiki_taka_press_inapplicable_covers_with_defense():
+    partition = _tiki_taka_picker(
+        _stub_game(friendly_dist=1.5, enemy_dist=0.2, ball_x=0.0),
+        _FIVE,
+        None,
+        frozenset({"attack", "defense"}),  # press out of pressing range
+    )
+    assert partition == {"defense": _FIVE}
+
+
+def test_tiki_taka_attack_pinned_folds_share_into_defense():
+    # Give-and-go committed mid-hop: its robots are pinned (not in the free
+    # pool) and "attack" never appears in applicable_tactic_ids — everyone
+    # free must still land in a legal slot.
+    partition = _tiki_taka_picker(
+        _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=-3.0),
+        _FIVE,
+        None,
+        frozenset({"defense", "press"}),
+    )
+    assert partition == {"defense": _FIVE}
+
+
+def test_counter_press_everyone_presses_when_lost():
+    partition = _counter_press_picker(
+        _stub_game(friendly_dist=2.0, enemy_dist=0.3, ball_x=0.0),
+        _FIVE,
+        None,
+        _ALL,
+    )
+    assert partition == {"press": _FIVE}
+
+
+def test_counter_press_drops_into_low_block_when_nothing_to_press():
+    partition = _counter_press_picker(
+        _stub_game(friendly_dist=2.0, enemy_dist=0.3, ball_x=0.0),
+        _FIVE,
+        None,
+        frozenset({"attack", "block"}),  # opponent shielded from the press
+    )
+    assert partition == {"block": _FIVE}
+
+
+def test_counter_press_attacks_with_four_and_one_screen_when_won():
+    partition = _counter_press_picker(
+        _stub_game(friendly_dist=0.3, enemy_dist=2.0, ball_x=-3.0),
+        _FIVE,
+        None,
+        _ALL,
+    )
+    assert len(partition["attack"]) == 4
+    assert len(partition["block"]) == 1
+
+
+def test_counter_press_won_ball_without_block_sends_all_five_forward():
+    partition = _counter_press_picker(
+        _stub_game(friendly_dist=0.3, enemy_dist=2.0, ball_x=-3.0),
+        _FIVE,
+        None,
+        frozenset({"attack", "press"}),
+    )
+    assert partition == {"attack": _FIVE}
+
+
+def test_zone_flow_everyone_takes_shape_when_ball_lost():
+    partition = _zone_flow_picker(
+        _stub_game(friendly_dist=2.0, enemy_dist=0.3, ball_x=0.0),
+        _FIVE,
+        None,
+        _ALL,
+    )
+    assert partition == {"defense": _FIVE}
+
+
+def test_zone_flow_givego_trio_builds_up_in_middle_third():
+    partition = _zone_flow_picker(
+        _stub_game(friendly_dist=0.3, enemy_dist=2.0, ball_x=0.0),  # mid third
+        _FIVE,
+        None,
+        _ALL,
+    )
+    assert len(partition["givego"]) == 3
+    assert len(partition["defense"]) == 2
+
+
+def test_zone_flow_overload_pair_swaps_in_for_final_third():
+    partition = _zone_flow_picker(
+        _stub_game(friendly_dist=0.3, enemy_dist=2.0, ball_x=-3.0),  # final third
+        _FIVE,
+        None,
+        _ALL,
+    )
+    assert partition["overload"] == frozenset({1, 2})
+    assert len(partition["defense"]) == 3
+
+
+def test_zone_flow_overload_pinned_builds_with_givego_instead():
+    partition = _zone_flow_picker(
+        _stub_game(friendly_dist=0.3, enemy_dist=2.0, ball_x=-3.0),  # final third
+        _FIVE,
+        None,
+        frozenset({"givego", "defense"}),  # decoy/overload duet elsewhere
+    )
+    assert len(partition["givego"]) == 3
+    assert len(partition["defense"]) == 2

@@ -77,9 +77,9 @@ def test_zone_time_stationary_robot_is_all_one_zone():
         acc.record_tick(_frame(friendly, enemy, ball_xy=(0.0, 0.0)))
 
     stats = acc.finalize()
-    assert stats.zone_time_pct[1]["attacking"] == 1.0
-    assert stats.zone_time_pct[1]["defensive"] == 0.0
-    assert stats.zone_time_pct[1]["mid"] == 0.0
+    assert stats.zone_time_pct["friendly_1"]["attacking"] == 1.0
+    assert stats.zone_time_pct["friendly_1"]["defensive"] == 0.0
+    assert stats.zone_time_pct["friendly_1"]["mid"] == 0.0
 
 
 def test_zone_time_midfield_robot_buckets_mid():
@@ -89,7 +89,21 @@ def test_zone_time_midfield_robot_buckets_mid():
     acc.record_tick(_frame(friendly, enemy, ball_xy=(0.0, 0.0)))
 
     stats = acc.finalize()
-    assert stats.zone_time_pct[1]["mid"] == 1.0
+    assert stats.zone_time_pct["friendly_1"]["mid"] == 1.0
+
+
+def test_robot_ids_kepied_per_side_across_teams():
+    """Same robot id on both teams must not collide in zone/motion keys."""
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy = {1: _robot(1, 4.0, 0.0, False)}
+    acc.record_tick(_frame(friendly, enemy, ball_xy=(0.0, 0.0)))
+    acc.record_tick(_frame(friendly, enemy, ball_xy=(0.0, 0.0)))
+
+    stats = acc.finalize()
+    assert stats.zone_time_pct["friendly_1"]["mid"] == 1.0
+    # Enemy robot at x=+4.0 attacks toward +x (own goal at +4.5): attacking zone.
+    assert stats.zone_time_pct["enemy_1"]["attacking"] == 1.0
 
 
 def test_no_ticks_recorded_yields_empty_stats_without_crashing():
@@ -113,4 +127,90 @@ def test_to_json_round_trips(tmp_path):
     data = json.loads(out.read_text())
     assert data["rule_event_counts"] == {"goal": 1}
     assert data["possession_pct"]["friendly"] == 1.0
-    assert data["zone_time_pct"]["1"]["mid"] == 1.0
+    assert data["zone_time_pct"]["friendly_1"]["mid"] == 1.0
+    assert data["shots"] == {"friendly": 0, "enemy": 0}
+
+
+# ---------------------------------------------------------------------------
+# Shots / ball travel / robot motion — the "meaningful boxscore" additions
+# ---------------------------------------------------------------------------
+
+
+def _fast_frame(ball_xy, ball_v, my_team_is_right: bool = True) -> GameFrame:
+    ball = Ball(Vector3D(ball_xy[0], ball_xy[1], 0), Vector3D(ball_v[0], ball_v[1], 0), None)
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy = {2: _robot(2, 4.0, 0.0, False)}
+    return GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=my_team_is_right,
+        friendly_robots=friendly,
+        enemy_robots=enemy,
+        ball=ball,
+    )
+
+
+def test_shot_counted_once_per_kick_for_friendly():
+    # my_team_is_right=True -> own goal at +4.5, friendly attacks toward -x.
+    acc = MatchStatsAccumulator()
+    fast = _fast_frame((-3.0, 0.0), (-6.0, 0.0))  # hard ball toward enemy goal in attacking half
+    slow = _fast_frame((-3.1, 0.0), (-0.1, 0.0))  # same play, now rolling
+
+    acc.record_tick(fast)
+    acc.record_tick(fast)  # still fast + locked -> must not double-count
+    acc.record_tick(slow)  # lock released
+    acc.record_tick(fast)  # second kick -> second shot
+
+    stats = acc.finalize()
+    assert stats.shots == {"friendly": 2, "enemy": 0}
+
+
+def test_no_shot_for_slow_or_backwards_ball():
+    acc = MatchStatsAccumulator()
+    acc.record_tick(_fast_frame((-3.0, 0.0), (-2.0, 0.0)))  # too slow
+    acc.record_tick(_fast_frame((-3.0, 0.0), (6.0, 0.0)))  # moving away from goal
+    acc.record_tick(_fast_frame((2.0, 0.0), (-6.0, 0.0)))  # in own half
+
+    stats = acc.finalize()
+    assert stats.shots == {"friendly": 0, "enemy": 0}
+
+
+def test_shot_for_enemy_mirrored():
+    acc = MatchStatsAccumulator()
+    acc.record_tick(_fast_frame((3.0, 0.0), (6.0, 0.0)))  # enemy attacks +x
+
+    stats = acc.finalize()
+    assert stats.shots == {"friendly": 0, "enemy": 1}
+
+
+def test_ball_travel_skips_teleport_jumps():
+    acc = MatchStatsAccumulator()
+    acc.record_tick(_fast_frame((0.0, 0.0), (0.0, 0.0)))
+    acc.record_tick(_fast_frame((0.5, 0.0), (0.0, 0.0)))  # 0.5 m of real travel
+    acc.record_tick(_fast_frame((3.0, 0.0), (0.0, 0.0)))  # 2.5 m jump = placement, ignored
+    acc.record_tick(_fast_frame((3.1, 0.0), (0.0, 0.0)))  # 0.1 m of real travel
+
+    stats = acc.finalize()
+    assert stats.ball_travel_m == 0.6
+
+
+def test_robot_motion_share_requires_velocity_readings():
+    acc = MatchStatsAccumulator()
+    moving = Robot(id=1, is_friendly=True, has_ball=False, p=Vector2D(0, 0), v=Vector2D(0.5, 0), a=None, orientation=0)
+    still = Robot(id=2, is_friendly=True, has_ball=False, p=Vector2D(0, 0), v=Vector2D(0.0, 0), a=None, orientation=0)
+    enemy = {5: _robot(5, 4.0, 0.0, False)}
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={1: moving, 2: still},
+        enemy_robots=enemy,
+        ball=Ball(Vector3D(0, 0, 0), Vector3D(0, 0, 0), None),
+    )
+    acc.record_tick(frame)
+    acc.record_tick(frame)
+
+    stats = acc.finalize()
+    assert stats.robot_motion_pct["friendly_1"] == 1.0
+    assert stats.robot_motion_pct["friendly_2"] == 0.0
+    assert "enemy_5" not in stats.robot_motion_pct  # no velocity readings (v=None) -> excluded

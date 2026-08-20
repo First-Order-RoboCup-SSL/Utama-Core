@@ -15,6 +15,7 @@ from utama_core.kernel.context import KernelContext
 from utama_core.kernel.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.kernel.tactic import RobotId
 from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.tactics.block_shape import BlockShapeTactic
 from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
 from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
@@ -490,6 +491,331 @@ def build_switch_of_play_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
         return KernelSchedulerStrategy(
             tactics={"attack": SwitchOfPlayTactic(), "defense": DefenseTactic()},
             partitioner=_fixed_ratio_picker("attack", "defense", attack_fraction=0.5, min_attack=3),
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
+# ---------------------------------------------------------------------------
+# Arena strategies — plan-driven multi-tactic teams (2026-08-20 addition)
+#
+# The barebone factories (default/split_shape/low_block/...) exist to exercise
+# the kernel machinery; these three are meant as *playable* teams: every
+# posture reads live game state (ball ownership, ball zone), every posture
+# has both an attack and a defense answer, and the allocation reacts to the
+# game instead of being a fixed constant.
+# ---------------------------------------------------------------------------
+
+
+def _friendly_closer_to_ball(game: Game) -> Optional[bool]:
+    """True if a friendly robot is closer to the ball than every enemy.
+
+    None when the proximity lookup cannot read the ball's side (ball missing
+    or no robots on one side) — callers should fall back to the conservative
+    posture in that case.
+    """
+    _friendly_closest, friendly_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.FRIENDLY)
+    _enemy_closest, enemy_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
+    if friendly_dist is None or enemy_dist is None:
+        return None
+    # Explicit `bool()`: the proximity lookup returns numpy floats, and a raw
+    # comparison yields np.bool_ — whose `is True` is False, which a caller
+    # checking `edge is True` would read as "unknown/losing" forever.
+    return bool(friendly_dist < enemy_dist)
+
+
+def _ball_zone(game: Game) -> str:
+    """Where the ball sits along our attacking axis: 'own', 'mid', or 'final'.
+
+    "Final" means the third of the pitch nearest the enemy goal we attack;
+    "own" the third our own goal defends. Uses the same
+    `own_goal_sign = 1.0 if my_team_is_right else -1.0` convention as
+    `strategy/referee/actions.py`.
+    """
+    half_length = game.field.half_length
+    # progress measured from our own goal line toward the enemy goal.
+    own_goal_x = (1.0 if game.my_team_is_right else -1.0) * half_length
+    attack_dir = -1.0 if game.my_team_is_right else 1.0
+    progress = (game.ball.p.to_2d().x - own_goal_x) * attack_dir
+    third = 2.0 * half_length / 3.0
+    if progress < third:
+        return "own"
+    if progress < 2.0 * third:
+        return "mid"
+    return "final"
+
+
+def _allocate_ordered(
+    ordered: list[RobotId],
+    primary: str,
+    primary_n: int,
+    secondary: Optional[str] = None,
+) -> dict[str, frozenset[RobotId]]:
+    """Split `ordered` into (primary: primary_n, secondary: rest) with coverage guaranteed.
+
+    Only slots already confirmed available by the caller are named here; the
+    caller is responsible for passing a `secondary` that is either None (when
+    the primary alone may take everyone) or a real available slot id.
+    """
+    out: dict[str, frozenset[RobotId]] = {}
+    if not ordered:
+        return out
+    if primary_n >= len(ordered):
+        out[primary] = frozenset(ordered)
+        return out
+    if secondary is None:
+        # Primary may take everyone (caller chose no backup slot).
+        out[primary] = frozenset(ordered)
+        return out
+    out[primary] = frozenset(ordered[:primary_n])
+    out[secondary] = frozenset(ordered[primary_n:])
+    return out
+
+
+def _tiki_taka_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    applicable_tactic_ids: frozenset[str],
+) -> dict[str, frozenset[RobotId]]:
+    """Tiki-taka posture: possession attack with give-and-go, press on loss,
+    shadow-and-mark cover in both postures.
+
+    - We have the ball (friendly closer to it, or unknown): 3 attackers
+      (give-and-go trio), 2 defenders (one shadowing pair on the shot line).
+    - The opponent has the ball: 3 pressers (1 ball-presser + 2 man-markers)
+      and 2 shadowers — the press denies the immediate play while the shadow
+      pair keeps the shot line honest behind it.
+    - A slot that is unavailable (inapplicable — PressAndContain only, or
+      commitment-pinned so it never appears in `applicable_tactic_ids`) has
+      its share folded into the other non-pinned attacker/defender slot, so
+      every free robot always lands somewhere.
+    """
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    friendly_edge = _friendly_closer_to_ball(game)
+    losing = friendly_edge is not True  # enemy closer, or unknown -> conservative
+
+    press_ok = "press" in applicable_tactic_ids
+    attack_ok = "attack" in applicable_tactic_ids
+    defense_ok = "defense" in applicable_tactic_ids
+
+    if losing and press_ok:
+        # Press with the ball-side group, shadow with the rest; if there is
+        # nothing to shadow behind (no defense slot), press with everyone.
+        if defense_ok:
+            return _allocate_ordered(ordered, "press", 3, "defense")
+        return _allocate_ordered(ordered, "press", len(ordered))
+    if losing:
+        # No press available: everyone shadows/marks.
+        if defense_ok:
+            return _allocate_ordered(ordered, "defense", len(ordered))
+        if attack_ok:
+            return _allocate_ordered(ordered, "attack", len(ordered))
+        return {}
+
+    # We have the ball: attack with the forward group, keep a covering pair.
+    if attack_ok:
+        return _allocate_ordered(ordered, "attack", 3, "defense" if defense_ok else None)
+    if defense_ok:
+        return _allocate_ordered(ordered, "defense", len(ordered))
+    return {}
+
+
+def _counter_press_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    applicable_tactic_ids: frozenset[str],
+) -> dict[str, frozenset[RobotId]]:
+    """Counter-press posture: all-out pressure when we lose it, low block when
+    there is nothing to press, four-up on the switch when we regain it.
+
+    - Opponent has the ball and pressing is possible: everyone presses
+      (1 ball-presser + everyone else man-marking) — the ball is smothered
+      where it was lost.
+    - Opponent has the ball but nothing is pressable: everyone holds the
+      `block_shape` zone screen — the compact low block.
+    - We have the ball: the switch-of-play needs its three roles
+      (carrier/pivot/runner), so 4 robots attack through the weak side while
+      1 keeps the screen shape as insurance on the counter.
+    """
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    friendly_edge = _friendly_closer_to_ball(game)
+    losing = friendly_edge is not True
+
+    press_ok = "press" in applicable_tactic_ids
+    attack_ok = "attack" in applicable_tactic_ids
+    block_ok = "block" in applicable_tactic_ids
+
+    if losing:
+        if press_ok:
+            return _allocate_ordered(ordered, "press", len(ordered))
+        if block_ok:
+            return _allocate_ordered(ordered, "block", len(ordered))
+        if attack_ok:
+            return _allocate_ordered(ordered, "attack", len(ordered))
+        return {}
+    if attack_ok:
+        return _allocate_ordered(ordered, "attack", 4, "block" if block_ok else None)
+    if block_ok:
+        return _allocate_ordered(ordered, "block", len(ordered))
+    return {}
+
+
+def _zone_flow_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    applicable_tactic_ids: frozenset[str],
+) -> dict[str, frozenset[RobotId]]:
+    """Zone-flow posture: the attacking *pattern* changes with ball zone, the
+    defense stays man-shaped throughout.
+
+    - Opponent has the ball: everyone shadows/marks (the whole team in
+      shape).
+    - We have the ball in our own or middle third: a give-and-go trio works
+      the ball forward while 2 shadow/mark.
+    - We have the ball in the final third: the decoy-and-overload pair
+      lures the last line out of position (2 robots — that tactic is a
+      two-role duet by design) while the other 3 hold the defensive shape.
+    """
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    friendly_edge = _friendly_closer_to_ball(game)
+    losing = friendly_edge is not True
+
+    defense_ok = "defense" in applicable_tactic_ids
+    givego_ok = "givego" in applicable_tactic_ids
+    overload_ok = "overload" in applicable_tactic_ids
+
+    if losing:
+        if defense_ok:
+            return _allocate_ordered(ordered, "defense", len(ordered))
+        if givego_ok:
+            return _allocate_ordered(ordered, "givego", len(ordered))
+        if overload_ok:
+            return _allocate_ordered(ordered, "overload", len(ordered))
+        return {}
+
+    zone = _ball_zone(game)
+    if zone == "final" and overload_ok:
+        return _allocate_ordered(ordered, "overload", 2, "defense" if defense_ok else None)
+    if givego_ok:
+        return _allocate_ordered(ordered, "givego", 3, "defense" if defense_ok else None)
+    if overload_ok:
+        return _allocate_ordered(ordered, "overload", len(ordered))
+    if defense_ok:
+        return _allocate_ordered(ordered, "defense", len(ordered))
+    return {}
+
+
+def build_tiki_taka_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """Real possession-play team: give-and-go build-up, press on loss,
+    shadow-and-mark cover behind every attack.
+
+    Three concurrent slots — `GiveAndGoTactic` ("attack"),
+    `PressAndContainTactic` ("press", only when an enemy is within pressing
+    range of the ball — its `applicable()`), and
+    `ShadowAndMarkTactic` ("defense") — allocated by `_tiki_taka_picker` on
+    the possession edge: 3+2 attack/cover when the ball is ours, 3+2
+    press/cover when it is lost. The give-and-go loop is the build-up engine:
+    short hops under pressure instead of `PassAndShootTactic`'s scripted
+    setup-then-shoot, which the match-stuck investigation showed cannot
+    complete under contest.
+
+    Returns a `build_kernel_strategy(motion_controller)`
+    callable suitable for `AbstractStrategy`'s constructor argument of the
+    same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = KernelContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={
+                "attack": GiveAndGoTactic(),
+                "press": PressAndContainTactic(),
+                "defense": ShadowAndMarkTactic(),
+            },
+            partitioner=_tiki_taka_picker,
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
+def build_counter_press_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """High-intensity transition team: smother the ball where it was lost,
+    then switch the play to the weak side at full commitment.
+
+    Three concurrent slots — `SwitchOfPlayTactic` ("attack"),
+    `PressAndContainTactic` ("press"), and the new `BlockShapeTactic`
+    ("block") — allocated by `_counter_press_picker`: everyone presses while
+    the opponent has it (and something is pressable), everyone drops into
+    the zone screen when they are shielded from the press, and 4 robots
+    attack through the pivot/runner switch the moment the ball is won. The
+    three-role switch (carrier/pivot/runner) needs at least 3 robots, hence
+    the 4+1 split.
+
+    Returns a `build_kernel_strategy(motion_controller)`
+    callable suitable for `AbstractStrategy`'s constructor argument of the
+    same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = KernelContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={
+                "attack": SwitchOfPlayTactic(),
+                "press": PressAndContainTactic(),
+                "block": BlockShapeTactic(),
+            },
+            partitioner=_counter_press_picker,
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
+def build_zone_fluid_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """Zone-adaptive team: the attacking pattern itself changes with ball
+    position, the first strategy in the catalog with two concurrent ATTACK-
+    tagged slots that the picker chooses between — exactly the use the closed
+    `TacticTag` vocabulary exists for.
+
+    Three concurrent slots — `GiveAndGoTactic` ("givego"),
+    `DecoyOverloadTactic` ("overload"), and `ShadowAndMarkTactic`
+    ("defense") — allocated by `_zone_flow_picker`: the whole team takes
+    man-shape when the ball is lost; the give-and-go trio builds up through
+    the middle thirds; and in the final third the two-robot decoy/overload
+    duet replaces the trio, luring the last line out of position instead of
+    passing into it.
+
+    Returns a `build_kernel_strategy(motion_controller)`
+    callable suitable for `AbstractStrategy`'s constructor argument of the
+    same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = KernelContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={
+                "givego": GiveAndGoTactic(),
+                "overload": DecoyOverloadTactic(),
+                "defense": ShadowAndMarkTactic(),
+            },
+            partitioner=_zone_flow_picker,
             outfield_robot_ids=outfield_robot_ids,
             ctx=ctx,
         )
