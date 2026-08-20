@@ -6,6 +6,8 @@ from utama_core.entities.game.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.skills.src.utils.move_utils import move
 
+_STEAL_RANGE = 0.5  # metres — inside this, contest the ball directly instead of only shadowing the shot line
+
 
 def block_attacker(
     game: Game,
@@ -18,15 +20,27 @@ def block_attacker(
 ) -> RobotCommand:
     """
     Intelligent defense strategy:
-    1) If the attacker has the ball, block on the attacker-goal line.
-    2) Otherwise, stay closer to the ball while still considering the attacker's possible shot.
+    1) If the attacker has the ball and is out of steal range, hold the
+       attacker-goal shot line at `block_ratio`.
+    2) If the attacker has the ball and is within `_STEAL_RANGE`, drive at the
+       ball itself instead — `block_ratio` alone never converges on the ball
+       (it is a fixed 10%-of-the-way standoff from the attacker toward goal),
+       so a presser could shadow a carrier indefinitely without ever
+       contesting possession. `has_ball` is physics-derived from dribbler
+       proximity, not a scripted lock, so a defender that actually reaches
+       the ball first can win it the same way any two-robot race would.
+    3) Otherwise (no possession yet), stay closer to the ball while still
+       considering the attacker's possible shot.
     :return: The command dict for the defender robot
     """
     defender = game.friendly_robots[friendly_robot_id]
     attacker = game.enemy_robots[enemy_robot_id]
     ball = game.ball
 
-    if attacker_has_ball:
+    if attacker_has_ball and defender.p.distance_to(ball.p.to_2d()) <= _STEAL_RANGE:
+        target_x, target_y = ball.p.x, ball.p.y
+        face_theta = math.atan2((ball.p.y - defender.p.y), (ball.p.x - defender.p.x))
+    elif attacker_has_ball:
         # ========== Prioritize blocking the shot line ==========
         ax, ay = attacker.p.x, attacker.p.y
 
