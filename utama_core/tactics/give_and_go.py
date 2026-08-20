@@ -64,6 +64,9 @@ from utama_core.tactics._pass_and_score import _pass_exec
 
 _MAX_HOPS_PER_POSSESSION = 6  # safety valve — force a shot attempt rather than passing forever
 _RELOCATE_MIN_SEPARATION = 0.9  # metres — a relocating support point must clear the carrier and other supports
+# Retreat standoff from our own area front edge while the ball is in our own
+# half: support robots hold this far off the box line instead of packing it.
+_RELOCATE_BOX_RETREAT = 1.0
 
 
 def _best_receiver(game: Game, carrier_id: int, candidate_ids: tuple[int, ...]) -> Optional[int]:
@@ -96,8 +99,22 @@ def _relocate_target(game: Game, robot_id: int, avoid: list[Vector2D]) -> Vector
     ball_x = game.ball.p.to_2d().x
     current = game.friendly_robots[robot_id].p
 
+    # When the ball is in our own half, support points ahead of the ball
+    # (`ball_x + dx`) sit on the clamped defense-area edge, packing the
+    # whole trio onto the box line — a scrum that gets shoved across it in
+    # loose-ball scrambles (defense-area fouls). Hold a retreat line instead:
+    # well off the area front edge.
+    own_goal_sign = 1.0 if game.my_team_is_right else -1.0
+    own_half_edge = own_goal_sign * 0.0  # midfield in own-goal-sign coords
+    area_front_x = float(game.field.my_defense_area[1][0])
+    if (ball_x - own_half_edge) * own_goal_sign > 0.0:
+        # Ball is in our own half: cap candidates short of the box.
+        forward_cap = area_front_x - own_goal_sign * _RELOCATE_BOX_RETREAT
+    else:
+        forward_cap = half_length - 0.5
+
     candidates = [
-        Vector2D(min(ball_x + dx, half_length - 0.5), max(-half_width + 0.6, min(half_width - 0.6, current.y + dy)))
+        Vector2D(min(ball_x + dx, forward_cap), max(-half_width + 0.6, min(half_width - 0.6, current.y + dy)))
         for dx in (1.0, 1.8, 0.5)
         for dy in (-1.2, 1.2, -2.2, 2.2)
     ]

@@ -25,16 +25,17 @@ simultaneously have no escape mechanism.
 ## Reproduction
 
 ```
-pixi run python probe_default_vs_lowblock.py        # 60 s, dumps per-tick JSONL to /tmp/opencode/
+pixi run python arena_tournament.py                # 60 s, dumps per-tick JSONL to /tmp/opencode/
 pixi run python demo_tournament.py default low_block
 ```
 
-`probe_default_vs_lowblock.py` (committed with this doc) reruns the exact tournament
-match while dumping, every tick: referee command, ball pos/vel, all robot positions,
-and both teams' kernel slot state (phase, pair, setup targets, phase ticks). Replays
-are written via the standard replay writer; `utama_core/replay/render_window.py`
-reproduces the t=30-38 / t=50-58 renders from
-`replays/probe_default_vs_lowblock.pkl`.
+`arena_tournament.py` (renamed from the `probe_default_vs_lowblock.py` committed
+with this doc) reruns the exact tournament match while dumping, every tick:
+referee command, ball pos/vel, all robot positions, both teams' kernel slot
+state (phase, pair, setup targets, phase ticks), and each robot's commanded
+motion target. Replays are written via the standard replay writer;
+`utama_core/replay/render_window.py` reproduces the t=30-38 / t=50-58 renders
+from `replays/probe_default_vs_lowblock.pkl`.
 
 ## Evidence
 

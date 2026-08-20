@@ -30,7 +30,12 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
 from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
+from utama_core.shared.pass_and_score_geometry import (
+    ball_in_own_defense_area,
+    own_defense_area_exit_point,
+)
 from utama_core.skills.src.block import block_attacker
+from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.man_mark import man_mark
 
 _PRESS_RANGE = 1.5  # metres — ball must be within this of an enemy for pressing to be applicable
@@ -98,13 +103,25 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
         presser_id = robot_ids[0]
         marker_ids = robot_ids[1:]
 
-        commands[presser_id] = block_attacker(
-            game=game,
-            motion_controller=ctx.motion_controller,
-            friendly_robot_id=presser_id,
-            enemy_robot_id=pressed_enemy_id,
-            attacker_has_ball=game.enemy_robots[pressed_enemy_id].has_ball,
-        )
+        if ball_in_own_defense_area(game):
+            # The ball is inside our own box — pressing there means an
+            # outfield robot in the keeper's area (DefenseAreaRule foul).
+            # Hold the edge nearest the ball, like `GiveAndGoTactic`'s
+            # carrier; the keeper owns the box.
+            commands[presser_id] = go_to_point(
+                game=game,
+                motion_controller=ctx.motion_controller,
+                robot_id=presser_id,
+                target_coords=own_defense_area_exit_point(game, game.ball.p.to_2d().y),
+            )
+        else:
+            commands[presser_id] = block_attacker(
+                game=game,
+                motion_controller=ctx.motion_controller,
+                friendly_robot_id=presser_id,
+                enemy_robot_id=pressed_enemy_id,
+                attacker_has_ball=game.enemy_robots[pressed_enemy_id].has_ball,
+            )
 
         marks = _assign_markers(game, marker_ids, exclude_enemy_id=pressed_enemy_id)
         for marker_id in marker_ids:

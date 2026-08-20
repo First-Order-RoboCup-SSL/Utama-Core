@@ -1,9 +1,11 @@
-"""probe_default_vs_lowblock.py — instrumented reproduction of the tournament's
-default_vs_lowblock match, for investigating the 0-0 / passer-tangle pattern.
+"""arena_tournament.py — headless kernel-strategy tournament / matchup runner.
 
-Same match configuration as `demo_tournament.run_match` (6v6, headless rsim,
-yellow = default config attacking the left goal, blue = low_block), but every
-tick dumps a JSON row with:
+Born as `probe_default_vs_lowblock.py`, the instrumented reproduction of the
+tournament's default_vs_lowblock 0-0 passer-tangle investigation; generalized
+into a runner for *any* two `build_*_kernel_strategy` factories, with a
+round-robin mode for the arena strategies. Same match configuration as
+`demo_tournament.run_match` (6v6, headless rsim), but every tick dumps a JSON
+row with:
 
   - sim time, referee command
   - ball position/velocity
@@ -11,26 +13,41 @@ tick dumps a JSON row with:
   - per-side kernel slot state: tactic id, assigned robots, `is_committed()`,
     and each tactic's `mem` fields (phase, assigned pair, setup targets,
     phase ticks, setup_ticks_without_ball, goal_scored)
+  - each robot's commanded motion target this tick (via a recorder wrapped
+    around both kernels' motion controllers — what tactics wanted, as opposed
+    to where physics put them; keys `y<id>` / `b<id>` because both teams'
+    robot ids collide)
+  - the arena pickers' possession-edge verdict + raw proximity distances
 
 Yellow's own-frame targets are mirrored into the pitch frame (yellow is the
 right team), blue's are not (blue is the left team), so all coordinates in
 the dump are comparable in the same frame.
 
-Usage:  pixi run python probe_default_vs_lowblock.py [my_strategy] [opp_strategy] [duration_seconds] [initial_command]
+Usage:
+  pixi run python arena_tournament.py [my_strategy] [opp_strategy] [duration_seconds] [initial_command]
+  pixi run python arena_tournament.py round_robin [duration_seconds] [initial_command]
 
 `my_strategy` / `opp_strategy` are any `build_*_kernel_strategy` factory names
-(short form, e.g. `tiki_taka`, `low_block`, `default`); defaults:
-`default` vs `low_block` — the original investigation matchup. Both sides are
-always constructed from kernel factories, so any two configs can be compared
-in the same fixture.
+(short form, e.g. `tiki_taka`, `low_block`, `default`); defaults: `default`
+vs `low_block` — the original investigation matchup. Both sides are always
+constructed from kernel factories, so any two configs can be compared in the
+same fixture.
+
+`round_robin` plays every pairing of the three arena strategies (tiki_taka,
+counter_press, zone_fluid) in both orientations — six matches — and prints a
+results table. A stale boxscore is noted for matches the sim wedged (kickoff
+passer tangle) or the referee froze.
 
 `initial_command` is any RefereeCommand name (e.g. PREPARE_KICKOFF_YELLOW to
-start with a proper kickoff ceremony); defaults to FORCE_START (the
+start with a proper kickoff ceremony, which breaks the center-circle passer
+tangle for matchups that otherwise wedge); defaults to FORCE_START (the
 StrategyRunner sim default that the tournament uses).
 
-Output: /tmp/opencode/probe_default_vs_lowblock.jsonl (one row per tick).
-Replays (my + opp perspective) and match log / stats are also written via the
-standard StrategyRunner machinery; a compact boxscore is printed at the end.
+Output: /tmp/opencode/arena_tournament.jsonl (one row per tick); the last
+match's rows also land in /tmp/opencode/probe_default_vs_lowblock.jsonl when
+the first token is a back-compat positional form. Replays (my + opp
+perspective) and match log / stats are also written via the standard
+StrategyRunner machinery; a compact boxscore is printed at the end.
 """
 
 from __future__ import annotations
@@ -52,7 +69,10 @@ N_OUTFIELD = 5
 OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
 TICKS_PER_SECOND = 60
 
-OUT_PATH = "/tmp/opencode/probe_default_vs_lowblock.jsonl"
+# Arena strategies for the round-robin tournament.
+_ARENA_STRATEGIES = ("tiki_taka", "counter_press", "zone_fluid")
+
+OUT_PATH = "/tmp/opencode/arena_tournament.jsonl"
 STATS_PATH = "/tmp/opencode/probe_stats.json"
 MATCHLOG_PATH = "/tmp/opencode/probe_matchlog.jsonl"
 
@@ -248,17 +268,27 @@ def _picker_edge(game):
 # them per tick so the dump shows what each robot was *commanded to do*, not
 # just where physics put it (positions alone cannot distinguish a bad target
 # from a transient body collision).
-_TARGETS: dict[int, tuple[float, float]] = {}
+_TARGETS: dict[str, tuple[float, float]] = {}
 
 
 class _TargetRecorder:
-    """Delegating MotionController wrapper that records calculate() targets."""
+    """Delegating MotionController wrapper that records calculate() targets.
 
-    def __init__(self, inner):
+    Both teams' robot ids collide (both are 0..5), so keys are
+    team-qualified: ``y<id>`` for the my-side kernel, ``b<id>`` for opp.
+    """
+
+    def __init__(self, inner, side: str):
         self._inner = inner
+        self._prefix = side
 
     def calculate(self, game, robot_id, target_pos, target_oren, **kwargs):
-        _TARGETS[robot_id] = (round(float(target_pos.x), 3), round(float(target_pos.y), 3))
+        # go_to_point accepts Vector2D or plain (x, y) tuples — record either.
+        if hasattr(target_pos, "x"):
+            x, y = target_pos.x, target_pos.y
+        else:
+            x, y = target_pos[0], target_pos[1]
+        _TARGETS[f"{self._prefix}{robot_id}"] = (round(float(x), 3), round(float(y), 3))
         return self._inner.calculate(
             game=game, robot_id=robot_id, target_pos=target_pos, target_oren=target_oren, **kwargs
         )
@@ -269,14 +299,62 @@ class _TargetRecorder:
 
 def _install_target_recorders(runner) -> None:
     """Wrap both kernels' motion controllers so every tick's targets land in `_TARGETS`."""
-    for side in (runner.my, runner.opp):
+    for side, prefix in ((runner.my, "y"), (runner.opp, "b")):
         kernel = getattr(side.strategy, "_kernel_strategy", None)
         if kernel is not None:
-            kernel._ctx.motion_controller = _TargetRecorder(kernel._ctx.motion_controller)
+            kernel._ctx.motion_controller = _TargetRecorder(kernel._ctx.motion_controller, prefix)
 
 
 def main() -> None:
-    my_name, opp_name, duration_seconds, initial_command = _parse_args(sys.argv[1:])
+    argv = sys.argv[1:]
+    if argv and argv[0] == "round_robin":
+        _run_round_robin(argv[1:])
+        return
+    my_name, opp_name, duration_seconds, initial_command = _parse_args(argv)
+    _run_match(my_name, opp_name, duration_seconds, initial_command)
+
+
+def _run_round_robin(rest: list[str]) -> None:
+    """Play every arena pairing in both orientations and print a results table."""
+    duration = 60.0
+    command_name = None
+    for token in rest:
+        try:
+            duration = float(token)
+            continue
+        except ValueError:
+            pass
+        if token in RefereeCommand.__members__:
+            command_name = token
+    initial_command = RefereeCommand[command_name] if command_name else RefereeCommand.FORCE_START
+
+    results: list[dict] = []
+    done: set[tuple[str, str]] = set()
+    for a in _ARENA_STRATEGIES:
+        for b in _ARENA_STRATEGIES:
+            if a == b or (a, b) in done:
+                continue
+            done.add((b, a))
+            print(f"\n==================== {a} (yellow) vs {b} (blue) ====================")
+            result = _run_match(a, b, duration, initial_command)
+            if result is not None:
+                results.append(result)
+
+    print("\n==================== TOURNAMENT TABLE ====================")
+    print(f"format: {initial_command.name}, {duration:.0f}s sim per match")
+    print(f"{'yellow':<14}{'blue':<14}{'score':<9}{'shots':<10}{'poss%':<12}{'travel':<9}{'events':<24}note")
+    for r in results:
+        score = f"{r['score_y']}-{r['score_b']}"
+        shots = f"{r['shots_y']}-{r['shots_b']}"
+        poss = f"{r['pos_y'] * 100:.0f}-{r['pos_b'] * 100:.0f}"
+        print(
+            f"{r['my']:<14}{r['opp']:<14}{score:<9}{shots:<10}{poss:<12}"
+            f"{r['travel']:<9.1f}{str(r['events']):<24}{r['note']}"
+        )
+
+
+def _run_match(my_name: str, opp_name: str, duration_seconds: float, initial_command: RefereeCommand) -> Optional[dict]:
+    """Run one matchup under the same deterministic fixture; return its boxscore fields."""
     build_my = _resolve_builder(my_name)
     build_opp = _resolve_builder(opp_name)
 
@@ -299,7 +377,7 @@ def main() -> None:
         referee=referee,
         referee_initial_command=initial_command,
         enable_vision_stream=False,
-        replay_writer_config=ReplayWriterConfig(replay_name="probe_default_vs_lowblock", overwrite_existing=True),
+        replay_writer_config=ReplayWriterConfig(replay_name="arena_tournament", overwrite_existing=True),
         match_log_path=MATCHLOG_PATH,
         stats_path=STATS_PATH,
     )
@@ -335,7 +413,7 @@ def main() -> None:
         runner.close()
 
     wall = time.monotonic() - start_wall
-    _print_boxscore(my_name, opp_name, duration_seconds, wall, initial_command.name)
+    return _print_boxscore(my_name, opp_name, duration_seconds, wall, initial_command.name)
 
 
 def _current_command(runner) -> Optional[RefereeCommand]:
@@ -346,8 +424,11 @@ def _current_command(runner) -> Optional[RefereeCommand]:
     return None
 
 
-def _print_boxscore(my_name: str, opp_name: str, duration_seconds: float, wall: float, initial_cmd: str) -> None:
-    """Compact post-match summary from the stats JSON + the per-tick dump."""
+def _print_boxscore(my_name: str, opp_name: str, duration_seconds: float, wall: float, initial_cmd: str) -> dict:
+    """Compact post-match summary from the stats JSON + the per-tick dump.
+
+    Returns the boxscore fields so the round-robin table can reuse them.
+    """
     rows = [json.loads(line) for line in open(OUT_PATH)]
     score = rows[-1]["score"]
     stats = {}
@@ -356,13 +437,23 @@ def _print_boxscore(my_name: str, opp_name: str, duration_seconds: float, wall: 
     except (OSError, ValueError):
         pass
 
+    events = stats.get("rule_event_counts", {})
+    travel = stats.get("ball_travel_m", 0)
+    # Flag matches the deterministic sim wedged (kickoff passer tangle) or
+    # froze into referee foul-replay loops — their scorelines are physics
+    # artifacts, not strategy outcomes.
+    note = ""
+    if travel < 8.0:
+        note = "sim wedge (low ball travel)"
+    elif any(n >= 10 for n in events.values()):
+        note = "foul-frozen replay"
+
     print()
     print(
         f"Match: yellow({my_name}) vs blue({opp_name})  |  {initial_cmd} start, {duration_seconds:.0f}s sim "
         f"({wall:.1f}s wall)"
     )
     print(f"Score:            {score['yellow']} - {score['blue']}")
-    events = stats.get("rule_event_counts", {})
     if events:
         print(f"Rule events:      {events}")
     print(
@@ -373,7 +464,7 @@ def _print_boxscore(my_name: str, opp_name: str, duration_seconds: float, wall: 
         f"Possession:       friendly {stats.get('possession_pct', {}).get('friendly', 0):.0%} | "
         f"enemy {stats.get('possession_pct', {}).get('enemy', 0):.0%}"
     )
-    print(f"Ball travel:      {stats.get('ball_travel_m', 0):.1f} m")
+    print(f"Ball travel:      {travel:.1f} m")
 
     motion = stats.get("robot_motion_pct", {})
     my_motion = [f"r{i}:{motion.get(f'friendly_{i}', 0):.0%}" for i in range(1, 6)]
@@ -405,6 +496,20 @@ def _print_boxscore(my_name: str, opp_name: str, duration_seconds: float, wall: 
         print(f"{side_name} slots:      {summary}")
 
     print(f"Probe rows: {OUT_PATH}")
+
+    return {
+        "my": my_name,
+        "opp": opp_name,
+        "score_y": score["yellow"],
+        "score_b": score["blue"],
+        "shots_y": stats.get("shots", {}).get("friendly", 0),
+        "shots_b": stats.get("shots", {}).get("enemy", 0),
+        "pos_y": stats.get("possession_pct", {}).get("friendly", 0),
+        "pos_b": stats.get("possession_pct", {}).get("enemy", 0),
+        "travel": travel,
+        "events": events,
+        "note": note,
+    }
 
 
 if __name__ == "__main__":
