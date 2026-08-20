@@ -2,8 +2,20 @@
 
 Branch: `investigate/default-vs-lowblock-stalemate`
 Date: 2026-08-19
-Status: **Root-caused, not fixed.** Fix candidates at the bottom are recommendations
-for follow-up work, not implemented changes.
+Status: **Root-caused. Fix candidate #1 implemented 2026-08-20, partial
+improvement — match still ends 0-0.** `go_to_ball` (`utama_core/skills/src/go_to_ball.py`)
+now approaches from the far side of the ball relative to a contesting enemy
+instead of always driving from the robot's own current position, closing
+fix candidate #1 below. Re-run post-fix: possession moved from a near-total
+pin to 55%/44%, ball travel from ~6.8 m to 8.78 m — a real but partial
+improvement, not a resolution. The match stays 0-0 because
+`build_default_kernel_strategy`'s separate zombie-robot bug (fix candidate #3)
+is untouched: 3 of 5 outfield robots still never move (`robot_motion_pct`
+confirms 0% for friendly_3/4/5), so `default` is still effectively playing
+2v6. Fix candidates #2 and #4 also remain unimplemented. This same
+`go_to_ball` fix, applied for an unrelated reason (a new strategy,
+`counter_flow`, unable to hold the ball against `tiki_taka`), is what
+motivated re-checking this investigation — see `docs/strategies.md`.
 
 ## Summary
 
