@@ -20,40 +20,77 @@ what it does, and whether it's worth spending further effort on. Run any pair wi
 - `experimental` — isolated/benchmark config, not meant to represent a realistic
   match posture at all (e.g. no defense slot).
 
-Known results are recorded where we have them; most pairings have never been run
-and are marked "untested" rather than guessed at.
+## Backfill round-robin (2026-08-20)
+
+Every non-`default` config played every other once (78 matches, 60s sim time,
+6v6 headless rsim, 8 concurrent workers) specifically to answer "which of
+these should be used for comparison going forward, and which are early
+artifacts" — not to rank baselines as if they were trying to win.
+Run: `replays/tournament_20260820_104203/summary.json`.
+
+| Strategy | W-D-L | GF-GA |
+|---|---|---|
+| `high_press` | 4-8-0 | 7-3 |
+| `tiki_taka` | 3-9-0 | 5-1 |
+| `split_shape` | 2-10-0 | 2-0 |
+| `press_and_pass` | 2-9-1 | 3-2 |
+| `three_slot` | 2-9-1 | 2-1 |
+| `high_line_zone` | 2-8-2 | 4-3 |
+| `give_and_go_solo` | 1-10-1 | 3-2 |
+| `overload_press` | 1-10-1 | 2-2 |
+| `zone_fluid` | 1-6-5 | 3-9 |
+| `counter_press` | 0-12-0 | 0-0 |
+| `decoy_and_overload` | 0-11-1 | 0-1 |
+| `switch_of_play` | 0-11-1 | 0-1 |
+| `low_block` | 0-7-5 | 0-6 |
+
+`tiki_taka` is undefeated across all 12 matches (drew `high_press` 0-0,
+otherwise won or drew everyone else) and has the tightest goal difference of
+any strategy that actually won matches — confirmed as the strongest,
+most-robust strategy in the catalog and the right one to compare future work
+against. `high_press` has a better raw record, but it's a `baseline` (fixed,
+non-reactive 80/20 split) padding its total against weak baselines, not a
+signal that it's a better team to build on.
 
 ## Baselines — don't fix, don't judge by these
 
-| Strategy | Added | Status | Description |
-|---|---|---|---|
-| `default` | pre-2026-08-19 | baseline | Single-tactic pool: everyone runs `PassAndShootTactic`, only ever commands the first 2 outfield robots (robots 3-5 are zombies — known bug, see [investigation below](#known-open-bugs)). Exists to exercise minimal kernel scheduling, not to be a real team. |
-| `split_shape` | pre-2026-08-19 | baseline | `LeadAndSupportTactic` (attack) + `ShadowAndMarkTactic` (defense), split by possession edge. First concrete forcing case for the kernel's splitting policy. |
-| `press_and_pass` | pre-2026-08-19 | baseline | `GiveAndGoTactic` (attack) + `PressAndContainTactic` (defense), possession-edge split. Same shape as `split_shape`, newer tactic pair. |
-| `high_press` | pre-2026-08-19 | baseline | Same tactic pair as `press_and_pass` but a fixed 80/20 attack-heavy split, ignoring possession — demonstrates a non-reactive `Partitioner` on the same tactics. |
-| `low_block` | pre-2026-08-19 | baseline | `PassAndShootTactic` (attack, floored at 2 robots) + `DefenseTactic` (defense), fixed 20/80 defense-heavy split. The original minimal-risk pairing. **Known bug: draws 0-0 against `default`** — see [investigation](#known-open-bugs). |
-| `three_slot` | pre-2026-08-19 | baseline | First 3-concurrent-slot config: `PressAndContainTactic` + `ShadowAndMarkTactic` + `GiveAndGoTactic`. Exercises N>2 scheduling, not tuned for strength. |
-| `decoy_and_overload` | pre-2026-08-19 | baseline | `DecoyOverloadTactic` (attack, floored at 2) + `ShadowAndMarkTactic` (defense), fixed 50/50 split. Exercises the lure/overload tactic in isolation. |
-| `give_and_go_solo` | pre-2026-08-19 | experimental | Entire pool always runs `GiveAndGoTactic`, no defense slot at all. Isolated benchmark for tuning give-and-go internals without a defensive confound — not a fielding-ready config. |
-| `switch_of_play` | pre-2026-08-19 | baseline | `SwitchOfPlayTactic` (attack, floored at 3 for the carrier/pivot/runner relay) + `DefenseTactic`, fixed 50/50 split. Exercises the switch tactic in isolation. |
-
-## Competitive — real playable teams
+Several of these don't have both a real attack and a real defense answer, or
+use a fixed split that ignores game state — they exist to exercise kernel
+machinery, not to compete. Their round-robin record above is not a quality
+signal; do not treat a loss here as something to fix.
 
 | Strategy | Added | Status | Description |
 |---|---|---|---|
-| `tiki_taka` | 2026-08-20 | competitive, **strong** | Possession team: 3 give-and-go attackers + 2 shadow-and-mark cover when we have the ball; 3 pressers + 2 shadow when we don't. Beat both `overload_press` (97% possession) and `high_line_zone` (94% possession) in this session's matches — currently the strongest strategy in the catalog. |
-| `counter_press` | 2026-08-20 | competitive, untested | Transition team: full press when the ball is lost and pressable, low block (`BlockShapeTactic`) when it isn't, 4-up switch-of-play attack the moment the ball is won. Not yet run against `tiki_taka` or the other arena strategies. |
-| `zone_fluid` | 2026-08-20 | competitive, untested | Zone-adaptive team: man-shape defense throughout; give-and-go trio builds through the middle thirds, hands off to the decoy/overload duet in the final third. Not yet run against `tiki_taka` or the other arena strategies. |
+| `default` | pre-2026-08-19 | baseline | Single-tactic pool: everyone runs `PassAndShootTactic`, only ever commands the first 2 outfield robots (robots 3-5 are zombies — known bug, see [investigation below](#known-open-bugs)). Exists to exercise minimal kernel scheduling, not to be a real team. Excluded from the round-robin/catalog discovery entirely (see `tournament.py`). |
+| `split_shape` | pre-2026-08-19 | baseline | `LeadAndSupportTactic` (attack) + `ShadowAndMarkTactic` (defense), split by possession edge. First concrete forcing case for the kernel's splitting policy. 2-10-0 in the backfill — undefeated but mostly draws, consistent with a reactive-but-not-tuned baseline. |
+| `press_and_pass` | pre-2026-08-19 | baseline | `GiveAndGoTactic` (attack) + `PressAndContainTactic` (defense), possession-edge split. Same shape as `split_shape`, newer tactic pair. 2-9-1. |
+| `high_press` | pre-2026-08-19 | baseline | Same tactic pair as `press_and_pass` but a fixed 80/20 attack-heavy split, ignoring possession — demonstrates a non-reactive `Partitioner` on the same tactics. Best raw W-D-L in the backfill (4-8-0) purely from being relentlessly attack-heavy against weaker baselines; drew `tiki_taka` 0-0. Not a signal to build more strategies this way — see the backfill note above. |
+| `low_block` | pre-2026-08-19 | baseline | `PassAndShootTactic` (attack, floored at 2 robots) + `DefenseTactic` (defense), fixed 20/80 defense-heavy split. The original minimal-risk pairing. Worst record in the backfill (0-7-5, GF0-GA6) — consistent with its defense-heavy split giving it almost no attacking output. **Known bug: draws 0-0 against `default`** — see [investigation](#known-open-bugs). |
+| `three_slot` | pre-2026-08-19 | baseline | First 3-concurrent-slot config: `PressAndContainTactic` + `ShadowAndMarkTactic` + `GiveAndGoTactic`. Exercises N>2 scheduling, not tuned for strength. 2-9-1. |
+| `decoy_and_overload` | pre-2026-08-19 | baseline | `DecoyOverloadTactic` (attack, floored at 2) + `ShadowAndMarkTactic` (defense), fixed 50/50 split. Exercises the lure/overload tactic in isolation. 0-11-1, GF0 — never scored across 12 matches; the isolated lure/overload pairing doesn't generate offense on its own. |
+| `give_and_go_solo` | pre-2026-08-19 | experimental | Entire pool always runs `GiveAndGoTactic`, no defense slot at all. Isolated benchmark for tuning give-and-go internals without a defensive confound — not a fielding-ready config. 1-10-1. |
+| `switch_of_play` | pre-2026-08-19 | baseline | `SwitchOfPlayTactic` (attack, floored at 3 for the carrier/pivot/runner relay) + `DefenseTactic`, fixed 50/50 split. Exercises the switch tactic in isolation. 0-11-1, GF0 — same never-scores pattern as `decoy_and_overload`; isolated attack tactics don't produce goals without a complementary posture. |
+
+## Competitive — real playable teams, use these for comparison going forward
+
+| Strategy | Added | Status | Description |
+|---|---|---|---|
+| `tiki_taka` | 2026-08-20 | competitive, **strongest — the reference baseline for future strategies** | Possession team: 3 give-and-go attackers + 2 shadow-and-mark cover when we have the ball; 3 pressers + 2 shadow when we don't. Undefeated in the full 12-match backfill (3W-9D-0L, GF5-GA1) — beat both `overload_press` and `high_line_zone` and never lost to anything, including the non-reactive `high_press` baseline (0-0 draw). Any new strategy should be judged against this one. |
+| `zone_fluid` | 2026-08-20 | competitive, real but weaker | Zone-adaptive team: man-shape defense throughout; give-and-go trio builds through the middle thirds, hands off to the decoy/overload duet in the final third. 1-6-5 in the backfill, GF3-GA9 — genuinely reactive (unlike the baselines) but loses more than it draws or wins, including 1-2 to `tiki_taka`. A real second data point, not an artifact, but needs work before it's a useful comparison target. |
+| `counter_press` | 2026-08-20 | **broken — do not use for comparison yet** | Transition team: full press when the ball is lost and pressable, low block (`BlockShapeTactic`) when it isn't, 4-up switch-of-play attack the moment the ball is won. **Backfill result: 0W-12D-0L, 0 goals scored or conceded in every single match**, including 95% possession vs `tiki_taka` and 98% vs `zone_fluid` with zero shots recorded. This isn't a design-limitation artifact (it visibly dominates or gets dominated on possession depending on opponent) — it never finishes, in either direction, against anyone. Needs debugging (likely `SwitchOfPlayTactic`'s attack path never reaching a shoot phase — the shared `_pass_exec`/pass-and-score machinery already had real bugs found and fixed this session) before its win/loss record means anything. |
 
 ## Parked — tried against tiki_taka, didn't win, not being iterated further
 
 | Strategy | Added | Status | Description |
 |---|---|---|---|
-| `overload_press` | 2026-08-20 | parked | Built to outnumber tiki_taka's 2-robot shadow line (4-robot overload/switch attack + 1 block insurance) and hit direct on turnovers before tiki_taka's press organizes. **Result: lost 3%/97% possession to tiki_taka** — got possession-dominated by the press before the overload theory ever got tested. Root cause: never sustained clean possession long enough to exploit the numbers edge. Not scheduled for further iteration ("latter option" — user chose to park rather than investigate the press-dominance further). |
-| `high_line_zone` | 2026-08-20 | parked | Built to deny tiki_taka's give-and-go trio 1v1s via a zone screen (`BlockShapeTactic`) instead of man-marking, switching the ball past its thin 2-robot cover. **Result: 0-0 draw, 94%/6% possession to tiki_taka**, 0 shots, 3.3 m total ball travel — technically avoided losing possession outright but too passive to threaten. Same "park it" call as `overload_press`. |
+| `overload_press` | 2026-08-20 | parked | Built to outnumber tiki_taka's 2-robot shadow line (4-robot overload/switch attack + 1 block insurance) and hit direct on turnovers before tiki_taka's press organizes. **Result: lost 3%/97% possession to tiki_taka** — got possession-dominated by the press before the overload theory ever got tested. Backfill confirms it's genuinely weak overall (1-10-1), not just vs `tiki_taka`. Root cause: never sustained clean possession long enough to exploit the numbers edge. Not scheduled for further iteration ("latter option" — user chose to park rather than investigate the press-dominance further). |
+| `high_line_zone` | 2026-08-20 | parked, but stronger than the parking implied | Built to deny tiki_taka's give-and-go trio 1v1s via a zone screen (`BlockShapeTactic`) instead of man-marking, switching the ball past its thin 2-robot cover. Original result: 0-0 draw, 94%/6% possession to tiki_taka, 0 shots, too passive to threaten. Backfill shows it's a real mid-pack strategy (2-8-2, GF4-GA3) — beat `low_block` 1-0 and `zone_fluid` 3-1, only drew (not lost) `tiki_taka` again at 94/6%. Passivity against `tiki_taka` specifically is still the open problem, but the strategy itself isn't as weak as `overload_press`; worth revisiting before `overload_press` if anyone picks the anti-tiki_taka thread back up. |
 
 ## Known open bugs
 
+- **`counter_press` never scores** — see the Competitive section above. Highest-priority
+  open item from the backfill: it's the only strategy with a possible correctness
+  bug rather than a genuine strength gap.
 - **`default` vs `low_block` draws 0-0** — root-caused, not fixed. See
   [`docs/investigation_default_vs_lowblock_stalemate.md`](investigation_default_vs_lowblock_stalemate.md).
   Since both are `baseline`-status, this is *not* worth fixing for its own sake —
