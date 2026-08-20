@@ -769,12 +769,25 @@ class TestVariableFieldScaling:
         node.blackboard = _make_blackboard(game, cmd_map)
 
         status = node.update()
-        first_support_target = next(target for robot_id, target in captured if robot_id == 1)
+        # Kicker must be the lowest-ID *outfield* robot — robot 0 is the pinned
+        # goalkeeper and must not leave its line to take kickoffs (it is a
+        # support robot here, not the kicker).
+        kicker_target = next(target for robot_id, target in captured if robot_id == 1)
+        keeper_target = next(target for robot_id, target in captured if robot_id == 0)
+        second_support_target = next(target for robot_id, target in captured if robot_id == 2)
 
         assert status == py_trees.common.Status.RUNNING
-        assert first_support_target.x == pytest.approx(6.0 * (0.8 / 4.5))
-        assert first_support_target.y == pytest.approx(4.0 * (0.5 / 3.0))
-        assert first_support_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
+        assert kicker_target.distance_to(Vector2D(0.12, 0.0)) < 1e-9
+        # The keeper starts ON the ball (0, 0): it is encroaching, so it is
+        # cleared straight out of the keep-out zone along the own-half
+        # fallback direction instead of heading to its formation slot (which
+        # would cut across the exclusion zone).
+        assert keeper_target.distance_to(Vector2D(0.8, 0.0)) < 1e-9
+        assert keeper_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
+        # Non-encroaching support robots head to the field-scaled formation slots.
+        assert second_support_target.x == pytest.approx(6.0 * (0.8 / 4.5))
+        assert second_support_target.y == pytest.approx(-4.0 * (0.5 / 3.0))
+        assert second_support_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
 
     def test_prepare_kickoff_ours_uses_own_half_when_defending_left(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions
@@ -805,11 +818,17 @@ class TestVariableFieldScaling:
         node.blackboard = _make_blackboard(game, cmd_map)
 
         status = node.update()
-        first_support_target = next(target for robot_id, target in captured if robot_id == 1)
+        # Robot 1 is the lowest-ID outfield robot → the kicker; the keeper
+        # (robot 0) is a support robot.
+        kicker_target = next(target for robot_id, target in captured if robot_id == 1)
+        # Keeper starts ON the ball (0, 0): cleared straight out of the
+        # keep-out zone toward own half (negative x when defending left).
+        keeper_target = next(target for robot_id, target in captured if robot_id == 0)
 
         assert status == py_trees.common.Status.RUNNING
-        assert first_support_target.x == pytest.approx(-6.0 * (0.8 / 4.5))
-        assert first_support_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
+        assert kicker_target.distance_to(Vector2D(-0.12, 0.0)) < 1e-9
+        assert keeper_target.distance_to(Vector2D(-0.8, 0.0)) < 1e-9
+        assert keeper_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
 
     def test_prepare_penalty_ours_scales_penalty_mark_with_field_bounds(self, monkeypatch):
         from utama_core.strategy.referee import actions as referee_actions

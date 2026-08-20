@@ -420,7 +420,13 @@ class PrepareKickoffOursStep(AbstractBehaviour):
         motion_controller = self.blackboard.motion_controller
 
         robot_ids = sorted(game.friendly_robots.keys())
-        kicker_id = robot_ids[0]
+        # The goalkeeper (id 0) is pinned outside the kernel scheduler and is
+        # exempt from restart positioning — it must not be chosen as the
+        # kicker, or the "kickoff" becomes the keeper standing on the ball
+        # and then returning to its line without ever touching it (observed:
+        # kernel matches with the kicker = robot 0). Lowest-ID *outfield*
+        # robot takes the kick instead.
+        kicker_id = next((rid for rid in robot_ids if rid != 0), robot_ids[0])
 
         # Kicker: approach from own-half side so the robot doesn't push the ball.
         own_half_sign = 1.0 if game.my_team_is_right else -1.0

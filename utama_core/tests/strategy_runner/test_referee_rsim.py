@@ -333,10 +333,11 @@ class _KickoffPositioningManager(AbstractTestManager):
             return TestingStatus.IN_PROGRESS
 
         # my_team_is_right=False → own half is negative-x.
-        # Kicker (robot 0) targets (0,0) on the boundary — allow x <= 0.2.
-        # Support robots (1, 2) must be strictly on own half and outside centre circle.
-        support_robots = [r for rid, r in game.friendly_robots.items() if rid != 0]
-        kicker = game.friendly_robots.get(0)
+        # Kicker (robot 1 — lowest-ID outfield robot; the goalkeeper is pinned
+        # and exempt) targets (0,0) on the boundary — allow x <= 0.2.
+        # Support robots (0, 2) must be strictly on own half and outside centre circle.
+        support_robots = [r for rid, r in game.friendly_robots.items() if rid != 1]
+        kicker = game.friendly_robots.get(1)
 
         kicker_ok = kicker is not None and kicker.p.x <= 0.2
         supports_on_half = all(r.p.x <= self.POSITION_TOLERANCE for r in support_robots)
