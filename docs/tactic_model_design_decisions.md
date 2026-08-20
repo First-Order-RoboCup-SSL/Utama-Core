@@ -14,6 +14,12 @@ Items marked **Settled** are decisions the team has committed to. Items marked *
 are recognised open questions being deliberately left unbuilt until a concrete case forces
 them.
 
+See [`scheduling_math_model.md`](scheduling_math_model.md) for the general mathematical
+framework §15/§16's allocation stage (`Partitioner`) is one point in, where Sumatra's
+`Athena`/`Metis` sits in the same space, and a deferred design (filter + vector-valued
+`fitness()`) for opening it up later without reopening §15's boolean-not-scored decision for
+eligibility filtering.
+
 ---
 
 ## 1. ✅ Settled — Naming: `Strategy` (scheduler) and `Tactic` (per-tactic unit)
