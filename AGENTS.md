@@ -31,10 +31,10 @@ and is stale — all active strategy work happens here, on top of the tactic-ker
 
 **Before touching `utama_core/engine/`, `utama_core/tactics/`, `utama_core/strategy/`,
 `utama_core/skills/`, or `tournament.py`/`docs/strategies.md`, read
-`utama_core/engine/AGENTS.md`** — the tactic-kernel model, referee-restart handling,
-lessons from past tactic bugs, and the observability tooling (`MatchLog.trace()`,
-`render_window()`, the strategy catalog) all live there, scoped to that half of the repo
-rather than duplicated here for every task.
+[`docs/STRATEGY_DEVELOPMENT.md`](docs/STRATEGY_DEVELOPMENT.md)** — the tactic-kernel model,
+referee-restart handling, lessons from past tactic bugs, and the observability tooling
+(`MatchLog.trace()`, `render_window()`, the strategy catalog) all live there, scoped to
+that half of the repo rather than duplicated here for every task.
 
 ## Minimalism discipline
 
@@ -69,7 +69,7 @@ declarations) — check there before reintroducing one of them.
 
 ## Where things live
 
-- `utama_core/engine/AGENTS.md` — tactic-kernel model, referee handling, writing a
+- `docs/STRATEGY_DEVELOPMENT.md` — tactic-kernel model, referee handling, writing a
   `Tactic`, observability tooling. Read before any strategy-layer change.
 - `docs/tactic_model_design_decisions.md` — kernel/Tactic/Partitioner design rationale.
 - `docs/custom_referee.md` — `CustomReferee` architecture/usage; its "Known gaps" section

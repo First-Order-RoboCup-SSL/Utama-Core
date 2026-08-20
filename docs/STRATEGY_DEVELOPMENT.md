@@ -1,10 +1,10 @@
-# AGENTS.md — tactic-kernel / strategy dev
+# Strategy development
 
-Scoped to `utama_core/engine/`, `utama_core/tactics/`, `utama_core/skills/`,
-`utama_core/strategy/`, and `tournament.py`/`docs/strategies.md` — the strategy-layer half
-of the repo. See the root `AGENTS.md` for repo-wide facts (what the repo is, testing
-commands, minimalism discipline). That file links here; this file assumes you've read it
-first.
+Durable context for building/debugging anything under `utama_core/engine/`,
+`utama_core/tactics/`, `utama_core/skills/`, `utama_core/strategy/`, or
+`tournament.py`/`docs/strategies.md` — the strategy-layer half of the repo. See the root
+`AGENTS.md` for repo-wide facts (what the repo is, testing commands, minimalism
+discipline). That file links here; this file assumes you've read it first.
 
 `engine/` (infra: `Strategy`, `Tactic`, `KernelContext`, `MatchLog`, `AbstractStrategy`,
 referee-override plumbing) and `strategy/` (the actual `build_*_kernel_strategy` factories
