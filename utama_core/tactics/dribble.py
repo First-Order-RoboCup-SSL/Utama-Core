@@ -142,7 +142,9 @@ class DribbleTactic(BaseTactic[DribbleMem]):
 
         if not has_ball(game, robot_id):
             mem.reacquiring = True
-            return {robot_id: go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id)}, mem
+            return {
+                robot_id: go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx)
+            }, mem
 
         if mem.reacquiring:
             mem.dribble_limit, mem.segment_target = set_dribble_segment(game, robot_id, mem.final_target)

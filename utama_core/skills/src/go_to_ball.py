@@ -5,6 +5,7 @@ from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.kernel.context import KernelContext
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.skills.src.utils.move_utils import move
 
@@ -51,6 +52,7 @@ def go_to_ball(
     robot_id: int,
     dribble_when_near: bool = True,
     dribble_threshold: float = 0.5,
+    ctx: Optional[KernelContext] = None,
 ) -> RobotCommand:
     ball = game.ball.p.to_2d()
     robot = game.friendly_robots[robot_id].p
@@ -66,6 +68,17 @@ def go_to_ball(
         approach_oren = contesting_enemy.angle_to(ball)
     else:
         approach_oren = robot.angle_to(ball)
+
+    if ctx is not None and ctx.match_log is not None:
+        # No per-tick counter available at skill level (only `Strategy` tracks
+        # that) — `sim_time` alone is enough to order/locate a trace event,
+        # same key `render_around_event` already anchors on.
+        ctx.match_log.trace(
+            tick=0,
+            sim_time=getattr(game, "ts", 0.0),
+            key=f"go_to_ball[{robot_id}].approach",
+            value="shield" if contesting_enemy is not None else "direct",
+        )
 
     # Kicker/dribbler is on the back of the robot; approach with back facing ball.
     target_oren = (approach_oren + math.pi) % (2 * math.pi) - math.pi

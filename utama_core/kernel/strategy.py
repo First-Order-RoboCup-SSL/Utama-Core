@@ -111,13 +111,25 @@ class Strategy:
         self._prev_referee_command = None
         self._referee_override = RefereeOverride()
 
-        # Optional structured intention trace — assigned post-construction by
-        # `StrategyRunner` (see its `match_log_path` param), not threaded
+        # Optional structured intention/trace log — assigned post-construction
+        # by `StrategyRunner` (see its `match_log_path` param), not threaded
         # through every `build_*_kernel_strategy` factory's constructor
         # signature, since none of them currently take anything beyond
-        # `motion_controller`. `None` disables it entirely.
-        self.match_log: Optional[MatchLog] = None
+        # `motion_controller`. `None` disables it entirely. The setter below
+        # also pushes it into `self._ctx.match_log`, the one instance shared
+        # by every tactic/skill invoked this tick, so assigning it here is
+        # the only place a caller ever needs to touch.
+        self._match_log: Optional[MatchLog] = None
         self._tick_count = 0
+
+    @property
+    def match_log(self) -> Optional[MatchLog]:
+        return self._match_log
+
+    @match_log.setter
+    def match_log(self, value: Optional[MatchLog]) -> None:
+        self._match_log = value
+        self._ctx.match_log = value
 
     @staticmethod
     def single_tactic_picker(picker: Picker) -> Partitioner:

@@ -299,7 +299,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # time out, since "assess" never advances past itself here.
             if not has_ball(game, carrier_id, visual=True):
                 commands[carrier_id] = go_to_ball(
-                    game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id
+                    game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id, ctx=ctx
                 )
             else:
                 carrier_pos = game.friendly_robots[carrier_id].p
@@ -318,7 +318,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
 
             if not has_ball(game, carrier_id, visual=True):
                 commands[carrier_id] = go_to_ball(
-                    game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id
+                    game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id, ctx=ctx
                 )
             else:
                 # Face the intended pass target (pivot, or runner in
@@ -443,7 +443,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
                     )
                 else:
                     commands[source_id] = go_to_ball(
-                        game=game, motion_controller=ctx.motion_controller, robot_id=source_id
+                        game=game, motion_controller=ctx.motion_controller, robot_id=source_id, ctx=ctx
                     )
                 return commands, mem
 
@@ -463,7 +463,9 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
                 mem.goal_scored = True
                 mem.phase = "assess"
         elif not has_ball(game, runner_id, visual=True):
-            commands[runner_id] = go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=runner_id)
+            commands[runner_id] = go_to_ball(
+                game=game, motion_controller=ctx.motion_controller, robot_id=runner_id, ctx=ctx
+            )
         else:
             commands[runner_id] = go_to_point(
                 game=game,

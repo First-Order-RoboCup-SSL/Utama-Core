@@ -204,7 +204,9 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
             # class of problem for `PassAndShootTactic`), not something
             # this tactic should silently invent a role split for.
             robot_id = robot_ids[0]
-            return {robot_id: go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id)}, mem
+            return {
+                robot_id: go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx)
+            }, mem
 
         if mem.decoy_id is None or mem.decoy_id not in robot_ids or mem.overloader_id not in robot_ids:
             ordered = sorted(robot_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(game.ball.p.to_2d()))
@@ -227,7 +229,7 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
         if mem.phase == "lure":
             if not has_ball(game, mem.decoy_id):
                 commands[mem.decoy_id] = go_to_ball(
-                    game=game, motion_controller=ctx.motion_controller, robot_id=mem.decoy_id
+                    game=game, motion_controller=ctx.motion_controller, robot_id=mem.decoy_id, ctx=ctx
                 )
             else:
                 target = _lure_target(game, mem.decoy_id, mem.marker_id)

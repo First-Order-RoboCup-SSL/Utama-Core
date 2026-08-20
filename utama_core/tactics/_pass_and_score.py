@@ -153,7 +153,7 @@ def _move_to(game: Game, ctx: KernelContext, robot_id: int, target: Vector2D) ->
 def _hold_or_acquire_ball(game: Game, ctx: KernelContext, robot_id: int) -> RobotCommand:
     if has_ball(game, robot_id, visual=True):
         return empty_command(dribbler_on=True)
-    return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id)
+    return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx)
 
 
 _SETUP_BALL_LOSS_GRACE_TICKS = 10  # ~0.17s at 60Hz — see comment below
@@ -237,7 +237,9 @@ def _pass_exec(
     commands: dict[int, RobotCommand] = {}
 
     if not passer_has_ball:
-        commands[passer_id] = go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=passer_id)
+        commands[passer_id] = go_to_ball(
+            game=game, motion_controller=ctx.motion_controller, robot_id=passer_id, ctx=ctx
+        )
     elif not passer_aimed:
         commands[passer_id] = turn_on_spot(
             game=game,
@@ -289,7 +291,7 @@ def _score_goal(game: Game, ctx: KernelContext, robot_id: int) -> tuple[RobotCom
     # unreliability — without this the shooter can stall on the ball
     # forever if the IR/contact flag never fires.
     if not has_ball(game, robot_id, visual=True):
-        return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id), False
+        return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx), False
     if not oriented_towards(game, robot_id, target_oren):
         return (
             turn_on_spot(

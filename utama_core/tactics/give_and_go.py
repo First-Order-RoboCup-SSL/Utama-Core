@@ -166,8 +166,14 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
 
         carrier_id = mem.carrier_id
         commands: dict[RobotId, RobotCommand] = {}
+        carrier_has_ball = has_ball(game, carrier_id)
 
-        if not has_ball(game, carrier_id):
+        if ctx.match_log is not None:
+            ctx.match_log.trace(
+                tick=0, sim_time=getattr(game, "ts", 0.0), key="give_and_go.carrier_has_ball", value=carrier_has_ball
+            )
+
+        if not carrier_has_ball:
             if ball_in_own_defense_area(game):
                 # The ball is inside our own box — an outfield robot may not
                 # enter it (DefenseAreaRule: the keeper owns the area). Hold
@@ -180,7 +186,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 )
             else:
                 commands[carrier_id] = go_to_ball(
-                    game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id
+                    game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id, ctx=ctx
                 )
             self._relocate_others(game, ctx, robot_ids, carrier_id, commands)
             return commands, mem

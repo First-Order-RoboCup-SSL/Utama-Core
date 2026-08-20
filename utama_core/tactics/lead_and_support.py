@@ -179,7 +179,9 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
         leader_pos = game.friendly_robots[leader_id].p
 
         if not has_ball(game, leader_id):
-            commands[leader_id] = go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=leader_id)
+            commands[leader_id] = go_to_ball(
+                game=game, motion_controller=ctx.motion_controller, robot_id=leader_id, ctx=ctx
+            )
         else:
             goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
             best_shot_y, gap = find_best_shot(leader_pos, list(game.enemy_robots.values()), goal_x, goal_y1, goal_y2)

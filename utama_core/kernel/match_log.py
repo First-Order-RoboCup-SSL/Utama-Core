@@ -7,6 +7,17 @@ back to answer "why did this match go the way it did" without inferring
 intent from raw robot coordinates. One event per tactic-assignment change,
 not per tick, so a robot holding the same tactic for seconds produces one
 line, not thousands.
+
+`TraceEvent`/`trace()` extend this to arbitrary scalar facts a tactic or
+skill wants to record mid-`tick()` — e.g. "which branch did `go_to_ball` take
+this tick", "was a shot lane open" — the exact things that used to get
+answered with a hand-added `os.environ`-gated `print()`, run, read stdout,
+then revert before committing. `KernelContext.match_log` (set by `Strategy`
+from the same instance passed to `to_jsonl()`) is how a tactic/skill reaches
+this without every call site threading a separate logger through. Same file,
+same reader (`load_jsonl` returns both event kinds in tick order) — a second
+parallel logging path was considered and rejected as unnecessary duplication
+of what this module already does for `IntentionEvent`.
 """
 
 from __future__ import annotations
@@ -14,7 +25,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 from utama_core.kernel.tactic import RobotId, TacticId, TacticTag
 
@@ -29,11 +40,19 @@ class IntentionEvent:
     note: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class TraceEvent:
+    tick: int
+    sim_time: float
+    key: str
+    value: Any
+
+
 class MatchLog:
-    """Accumulates `IntentionEvent`s during a match; flush once via `to_jsonl()`."""
+    """Accumulates `IntentionEvent`s/`TraceEvent`s during a match; flush once via `to_jsonl()`."""
 
     def __init__(self) -> None:
-        self._events: list[IntentionEvent] = []
+        self._events: list[Union[IntentionEvent, TraceEvent]] = []
 
     def intention(
         self,
@@ -55,34 +74,45 @@ class MatchLog:
             )
         )
 
-    def events(self) -> list[IntentionEvent]:
+    def trace(self, tick: int, sim_time: float, key: str, value: Any) -> None:
+        """Record one arbitrary scalar fact for this tick (JSON-serializable `value`)."""
+        self._events.append(TraceEvent(tick=tick, sim_time=sim_time, key=key, value=value))
+
+    def events(self) -> list[Union[IntentionEvent, TraceEvent]]:
         return list(self._events)
 
     def to_jsonl(self, path: Union[str, Path]) -> None:
         with open(path, "w") as f:
             for event in self._events:
                 row = asdict(event)
-                row["tag"] = event.tag.value
+                row["event"] = "trace" if isinstance(event, TraceEvent) else "intention"
+                if isinstance(event, IntentionEvent):
+                    row["tag"] = event.tag.value
                 f.write(json.dumps(row) + "\n")
 
 
-def load_jsonl(path: Union[str, Path]) -> list[IntentionEvent]:
-    """Read back a `MatchLog.to_jsonl()` file as `IntentionEvent`s."""
-    events: list[IntentionEvent] = []
+def load_jsonl(path: Union[str, Path]) -> list[Union[IntentionEvent, TraceEvent]]:
+    """Read back a `MatchLog.to_jsonl()` file as `IntentionEvent`/`TraceEvent`s, in order."""
+    events: list[Union[IntentionEvent, TraceEvent]] = []
     with open(path) as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             row = json.loads(line)
-            events.append(
-                IntentionEvent(
-                    tick=row["tick"],
-                    sim_time=row["sim_time"],
-                    tactic_id=row["tactic_id"],
-                    robot_ids=tuple(row["robot_ids"]),
-                    tag=TacticTag(row["tag"]),
-                    note=row["note"],
+            if row.get("event") == "trace":
+                events.append(
+                    TraceEvent(tick=row["tick"], sim_time=row["sim_time"], key=row["key"], value=row["value"])
                 )
-            )
+            else:
+                events.append(
+                    IntentionEvent(
+                        tick=row["tick"],
+                        sim_time=row["sim_time"],
+                        tactic_id=row["tactic_id"],
+                        robot_ids=tuple(row["robot_ids"]),
+                        tag=TacticTag(row["tag"]),
+                        note=row["note"],
+                    )
+                )
     return events
