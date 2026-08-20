@@ -35,6 +35,7 @@ from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
 from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.shared.pass_and_score_geometry import (
+    clamp_outside_enemy_defense_area,
     enemy_goal_line,
     enemy_positions,
     find_best_shot,
@@ -61,6 +62,21 @@ def _candidate_support_points(game: Game, count: int) -> list[Vector2D]:
     x_hi = min(max(ball_x, goal_x), half_length - 0.5)
     if x_hi <= x_lo:
         x_lo, x_hi = -half_length + 0.5, half_length - 0.5
+
+    # The unclamped range runs the grid's forward edge up to the field
+    # boundary itself, right through the enemy defense area — an outfield
+    # robot standing there is an attacker-infringement foul
+    # (`DefenseAreaRule`). Found via 20 `defense_area` fouls in one live
+    # match (`overload_press`'s "counter" slot uses this tactic on every
+    # tick it doesn't have the ball). Clamp the deep edge with the same
+    # box-avoidance helper `decoy_and_overload.py`'s `_overload_target` uses.
+    clamped_edge = clamp_outside_enemy_defense_area(game, Vector2D(x_hi, 0.0)).x
+    if goal_x >= 0:
+        x_hi = min(x_hi, clamped_edge)
+    else:
+        x_hi = max(x_hi, clamped_edge)
+    if x_hi <= x_lo:
+        x_hi = x_lo + 0.1
 
     cols = max(2, int(count**0.5) + 2)
     rows = max(2, count)

@@ -289,6 +289,30 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
         runner_id = mem.runner_id
         two_robot_mode = pivot_id is None or runner_id == pivot_id
 
+        if runner_id is None:
+            # Solo allocation (a picker gave this slot exactly 1 robot): there
+            # is no one to relay or pass to, so "switch"/"relay"/"finish" can
+            # never be entered — every use of runner_id past "assess" assumes
+            # it is set (that's what two_robot_mode's "collapse pivot into
+            # runner" is for), and with a single robot there is no pivot to
+            # collapse. The carrier just chases and holds the ball; nothing to
+            # time out, since "assess" never advances past itself here.
+            if not has_ball(game, carrier_id, visual=True):
+                commands[carrier_id] = go_to_ball(
+                    game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id
+                )
+            else:
+                carrier_pos = game.friendly_robots[carrier_id].p
+                commands[carrier_id] = move(
+                    game=game,
+                    motion_controller=ctx.motion_controller,
+                    robot_id=carrier_id,
+                    target_coords=carrier_pos,
+                    target_oren=carrier_pos.angle_to(game.ball.p.to_2d()),
+                    dribbling=True,
+                )
+            return commands, mem
+
         if mem.phase == "assess":
             mem.weak_side = _weak_side(game, mem.weak_side)
 

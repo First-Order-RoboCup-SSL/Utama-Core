@@ -25,6 +25,7 @@ from utama_core.kernel.context import KernelContext
 from utama_core.shared.field_scaling import scale_point_from_standard_field
 from utama_core.shared.pass_and_score_geometry import (
     at_target,
+    clamp_outside_enemy_defense_area,
     clamp_outside_own_defense_area,
     clamp_to_field,
     enemy_goal_line,
@@ -214,6 +215,17 @@ def _pass_exec(
     # any second robot inside). Clamp the whole pass target to the edge so a
     # defensive scramble around our box cannot walk either robot in.
     intercept_pos = clamp_outside_own_defense_area(game, intercept_pos_raw)
+    # The same is true of the *enemy's* box (attacker-infringement fouls),
+    # which this function never clamped: an attacking pass's receive point is
+    # naturally near the enemy goal by design (that's the whole point of a
+    # finishing pass), and `intercept_point` has no notion of the box at all.
+    # Found via direct replay/kernel-state inspection: `DecoyOverloadTactic`'s
+    # "finish" phase calls this shared helper (decoy -> overloader) and its
+    # decoy sat inside the enemy box for 200+ consecutive ticks, driven
+    # entirely from here — the tactic-level target clamps added to
+    # `decoy_and_overload.py`'s "lure" phase never touched this later phase
+    # at all, since it hands off to this shared primitive instead.
+    intercept_pos = clamp_outside_enemy_defense_area(game, intercept_pos)
 
     passer_target_oren = game.friendly_robots[passer_id].p.angle_to(intercept_pos)
     passer_aimed = oriented_towards(game, passer_id, passer_target_oren)

@@ -177,6 +177,31 @@ def own_defense_area_exit_point(game: Game, at_y: float, margin: float = 2.0 * R
     return Vector2D(exit_x, y)
 
 
+def clamp_outside_enemy_defense_area(
+    game: Game, point: Vector2D, margin: float = 2.0 * ROBOT_RADIUS + 0.05
+) -> Vector2D:
+    """Clamp a target point to just outside the enemy's defense area front edge.
+
+    `DefenseAreaRule` fouls attacker encroachment into the enemy box too (not
+    just our own — `attacker_infringement=True` is the referee default), so
+    any attacking tactic that scripts a target close to the enemy goal
+    (overload/relay finishing runs, decoy lures, switch-of-play runners) must
+    clamp it the same way `clamp_outside_own_defense_area` clamps defensive
+    targets. Mirror image of that function: the enemy goal is on the
+    opposite side from ours, so the clamp direction is `-sign` instead of
+    `sign`.
+    """
+    defense_area = game.field.enemy_defense_area
+    front_x = float(defense_area[1][0])
+    sign = -1.0 if game.my_team_is_right else 1.0
+    exit_x = front_x - sign * margin
+    if sign > 0 and point.x > exit_x:
+        return Vector2D(exit_x, point.y)
+    if sign < 0 and point.x < exit_x:
+        return Vector2D(exit_x, point.y)
+    return point
+
+
 def find_best_shot(
     point: Vector2D, enemy_robots: list, goal_x: float, goal_y1: float, goal_y2: float
 ) -> tuple[Optional[float], Optional[tuple[float, float]]]:

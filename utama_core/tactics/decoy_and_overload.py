@@ -62,6 +62,7 @@ from utama_core.entities.game import Game
 from utama_core.kernel.context import KernelContext
 from utama_core.kernel.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.shared.pass_and_score_geometry import (
+    clamp_outside_enemy_defense_area,
     enemy_goal_line,
     enemy_positions,
     find_best_shot,
@@ -110,7 +111,15 @@ def _lure_target(game: Game, decoy_id: int, marker_id: Optional[int]) -> Vector2
     # abandoning it.
     goal_x = game.field.enemy_goal_line[0][0]
     target_x = decoy_pos.x + 0.4 * (goal_x - decoy_pos.x)
-    return Vector2D(target_x, target_y)
+    # Recomputed from the decoy's *current* position every tick, this target
+    # converges toward goal_x itself as the decoy chases it tick over tick —
+    # nothing here ever stops short of the goal line, let alone the defense
+    # area 1 m in front of it. This was the actual source of repeated
+    # attacker-infringement `defense_area` fouls (confirmed via replay
+    # inspection: the decoy sat inside the enemy box for 200+ consecutive
+    # ticks in one match) — `_overload_target`'s clamp alone did not cover
+    # this second forward-converging target in the same tactic.
+    return clamp_outside_enemy_defense_area(game, Vector2D(target_x, target_y))
 
 
 def _overload_target(game: Game, marker_start_y: float) -> Vector2D:
@@ -123,7 +132,16 @@ def _overload_target(game: Game, marker_start_y: float) -> Vector2D:
     # to cover.
     target_x = goal_x - (goal_x / abs(goal_x)) * 1.5 if goal_x != 0 else 0.0
     offset = _OVERLOAD_STANDOFF if marker_start_y >= 0 else -_OVERLOAD_STANDOFF
-    return Vector2D(target_x, marker_start_y - offset)
+    target = Vector2D(target_x, marker_start_y - offset)
+    # The nominal 1.5 m standoff only clears the enemy defense area's own
+    # 1 m depth by 0.5 m — thin enough that controller overshoot chasing a
+    # moving marker regularly lands the overloader inside the box, an
+    # attacker-infringement foul (`DefenseAreaRule`'s `attacker_infringement`
+    # default). Found via repeated `defense_area` fouls (20 in one match)
+    # once this tactic ran against a live opponent that could actually drag
+    # its marker deep. Clamp with the same margin every other tactic's
+    # box-adjacent target uses.
+    return clamp_outside_enemy_defense_area(game, target)
 
 
 def _decoy_shot_open(game: Game, decoy_id: int) -> bool:
