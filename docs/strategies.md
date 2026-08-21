@@ -84,7 +84,7 @@ signal; do not treat a loss here as something to fix.
 | `split_shape` | pre-2026-08-19 | baseline | `LeadAndSupportTactic` (attack) + `ShadowAndMarkTactic` (defense), split by possession edge. First concrete forcing case for the kernel's splitting policy. 2026-08-21 backfill: 5-8-0, GF6-GA0 — undefeated with a real conceded-nothing record, benefiting from this session's `LeadAndSupportTactic` reset fix (see Known open bugs). |
 | `press_and_pass` | pre-2026-08-19 | baseline | `GiveAndGoTactic` (attack) + `PressAndContainTactic` (defense), possession-edge split. Same shape as `split_shape`, newer tactic pair. 2026-08-21 backfill: 6-5-2, GF7-GA2 — best raw win count in the whole catalog, benefiting from the `GiveAndGoTactic` reset fix (see Known open bugs). |
 | `high_press` | pre-2026-08-19 | baseline | Same tactic pair as `press_and_pass` but a fixed 80/20 attack-heavy split, ignoring possession — demonstrates a non-reactive `Partitioner` on the same tactics. 2026-08-21 backfill: 5-6-2, GF10-GA3, highest goals-for in the catalog — still purely from being relentlessly attack-heavy against weaker opponents, not a signal to build more strategies this way. |
-| `low_block` | pre-2026-08-19 | baseline | `PassAndShootTactic` (attack, floored at 2 robots) + `DefenseTactic` (defense), fixed 20/80 defense-heavy split. The original minimal-risk pairing. 2026-08-21 backfill: 0-10-3, GF0-GA6 — still the weakest record in the catalog. Separately noted: `PassAndShootTactic`'s "setup" phase was observed getting stuck for entire 60s matches against several opponents this session (never reaching `pass_then_score`) — not yet root-caused, may be a pre-existing issue distinct from the reset-discontinuity bug class (whose fix in `pass_and_shoot.py` could not be match-trace-verified for this reason — see Known open bugs). **Known bug: draws 0-0 against `default`** — see [investigation](#known-open-bugs). |
+| `low_block` | pre-2026-08-19 | baseline | `PassAndShootTactic` (attack, floored at 2 robots) + `DefenseTactic` (defense), fixed 20/80 defense-heavy split. The original minimal-risk pairing. 2026-08-21 backfill: 0-10-3, GF0-GA6 — still the weakest record in the catalog. Root-caused this session: with only 2 of 5 outfield robots on attack, the passer can never secure sustained possession against a heavier opponent, so `run_setup_phase` never completes — a possession/robot-allocation design gap, not a bug (see Known open bugs). **Known bug: draws 0-0 against `default`** — see [investigation](#known-open-bugs). |
 | `three_slot` | pre-2026-08-19 | baseline | First 3-concurrent-slot config: `PressAndContainTactic` + `ShadowAndMarkTactic` + `GiveAndGoTactic`. Exercises N>2 scheduling, not tuned for strength. 2026-08-21 backfill: 2-8-3, GF3-GA4. |
 | `decoy_and_overload` | pre-2026-08-19 | baseline | `DecoyOverloadTactic` (attack, floored at 2) + `ShadowAndMarkTactic` (defense), fixed 50/50 split. Exercises the lure/overload tactic in isolation. 2026-08-21 backfill: 2-7-4, GF2-GA5 — up from never scoring at all (0-11-1, GF0) once `DecoyOverloadTactic`'s own reset-discontinuity bug was fixed (see Known open bugs). |
 | `give_and_go_solo` | pre-2026-08-19 | experimental | Entire pool always runs `GiveAndGoTactic`, no defense slot at all. Isolated benchmark for tuning give-and-go internals without a defensive confound — not a fielding-ready config. 2026-08-21 backfill: 3-8-2, GF5-GA3, benefiting from the `GiveAndGoTactic` reset fix like every other user of that tactic. |
@@ -346,19 +346,35 @@ signal; do not treat a loss here as something to fix.
 - **`default` hands 5 robots to a 2-robot tactic** (robots 3-5 are zombies all
   match) — real defect, same investigation doc, fix candidate #3.
 - **`low_block`'s `PassAndShootTactic` observed stuck in "setup" for entire
-  60s matches (found 2026-08-21, not yet root-caused)** — while trace-
-  verifying the `pass_and_shoot.py` reset fix above, every match tried
-  against `low_block` (vs `switch_of_play`, `three_slot`, `overload_press`,
-  `press_and_pass`, `high_press`) showed `PassAndShootMem.phase` staying
-  `"setup"` for the tactic's full 2-robot attack-slot lifetime, with the same
-  2 robots assigned the whole time (no reassignment thrashing) —
-  `run_setup_phase` (`utama_core/tactics/_pass_and_score.py`) never reports
-  both passer and receiver arrived. Not investigated further this session
-  (out of scope for the reset-discontinuity fix pass), but worth tracing
-  next: either the setup targets themselves are unreachable in `low_block`'s
-  specific geometry, or `_settled_at`/`at_target`-style convergence has the
-  same kind of tolerance issue already found and fixed once in
-  `switch_of_play.py`'s `_ARRIVAL_SPEED_THRESHOLD`.
+  60s matches — root-caused 2026-08-21, a design tension not a quick patch**
+  — while trace-verifying the `pass_and_shoot.py` reset fix above, every
+  match tried against `low_block` (vs `switch_of_play`, `three_slot`,
+  `overload_press`, `press_and_pass`, `high_press`) showed
+  `PassAndShootMem.phase` staying `"setup"` for the tactic's full 2-robot
+  attack-slot lifetime. Direct trace (standalone script instrumenting
+  `run_setup_phase`, `low_block` vs `three_slot`, 20s of sim time) found the
+  actual mechanism: the **receiver has no problem at all** — it ignores
+  ball state and walks straight to its fixed `receiver_position`, settling
+  there (`at_target=True`) within ~6s and staying. The **passer never gets
+  there** — `run_setup_phase` only calls `_move_to(passer_position)` once
+  the passer already has the ball (`has_ball(..., visual=True)`, plus a
+  10-tick flicker-grace window), and with only 2 of 5 outfield robots on
+  attack, the passer can spend the whole match contesting the ball with a
+  heavier opponent, briefly touching it and losing it again inside the
+  grace window, over and over, without ever accumulating the sustained
+  possession needed to leave the contested area and start walking toward
+  `passer_position`. Confirmed directly: `has_ball_v` stayed `False` for the
+  passer through the entire first 10s of the traced match while it
+  wandered near midfield rather than progressing toward its target 5m
+  away. This is a possession/robot-allocation design gap in
+  `run_setup_phase` itself (it has grace periods for possession *flicker*,
+  but no fallback for genuinely being unable to win the ball at all) — the
+  same shape of open question as `counter_press`'s turn-budget mismatch
+  below, not a bug fixable as a small patch. Not attempted this session;
+  worth a real design pass (e.g. letting setup complete without possession
+  and deferring ball acquisition to the pass phase, or giving the passer
+  help winning the ball back) before revisiting `low_block`'s backfill
+  record.
 
 ## Updating this file
 
