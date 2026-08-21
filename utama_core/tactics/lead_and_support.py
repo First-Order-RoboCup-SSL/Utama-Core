@@ -142,6 +142,7 @@ def choose_leader(game: Game, robot_ids: tuple[int, ...]) -> int:
 @dataclass
 class LeadAndSupportMem:
     leader_id: Optional[int] = None
+    was_carrying: bool = False  # tracks has_ball(leader_id)'s own edge; see its reset comment in tick()
 
 
 class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
@@ -170,7 +171,15 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
         self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: LeadAndSupportMem
     ) -> tuple[dict[RobotId, RobotCommand], LeadAndSupportMem]:
         if mem.leader_id is None or mem.leader_id not in robot_ids or not self.is_committed(game, mem):
-            mem.leader_id = choose_leader(game, robot_ids)
+            new_leader_id = choose_leader(game, robot_ids)
+            if new_leader_id != mem.leader_id:
+                # A fresh leader (possibly already holding the ball this
+                # tick, e.g. an immediate re-pick after a goal) must not
+                # inherit was_carrying=True from whichever robot held the
+                # leader role before — that would suppress the catch-edge
+                # reset below for a robot that never actually had one.
+                mem.was_carrying = False
+            mem.leader_id = new_leader_id
 
         leader_id = mem.leader_id
         support_ids = tuple(rid for rid in robot_ids if rid != leader_id)
@@ -178,11 +187,25 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
         commands: dict[RobotId, RobotCommand] = {}
         leader_pos = game.friendly_robots[leader_id].p
 
-        if not has_ball(game, leader_id):
+        leader_has_ball = has_ball(game, leader_id)
+        if not leader_has_ball:
+            mem.was_carrying = False
             commands[leader_id] = go_to_ball(
                 game=game, motion_controller=ctx.motion_controller, robot_id=leader_id, ctx=ctx
             )
         else:
+            # The leader's orientation source jumps discontinuously right
+            # here: go_to_ball drives it to face the ball while approaching,
+            # then the instant it catches up this branch re-aims it toward
+            # the goal instead — same orientation-discontinuity/stale-PID-
+            # derivative-state bug fixed in switch_of_play.py/give_and_go.py/
+            # pass_and_shoot.py (see docs/strategies.md's counter_press
+            # writeup for the full mechanism). Reset only on the catch edge
+            # (was_carrying False -> True), not every tick, so the PID keeps
+            # its normal smoothing once the leader is actually aiming.
+            if not mem.was_carrying:
+                ctx.motion_controller.reset(leader_id)
+            mem.was_carrying = True
             goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
             best_shot_y, gap = find_best_shot(leader_pos, list(game.enemy_robots.values()), goal_x, goal_y1, goal_y2)
             if best_shot_y is None:

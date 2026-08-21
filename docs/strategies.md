@@ -20,52 +20,56 @@ what it does, and whether it's worth spending further effort on. Run any pair wi
 - `experimental` — isolated/benchmark config, not meant to represent a realistic
   match posture at all (e.g. no defense slot).
 
-## Backfill round-robin (2026-08-20, re-run after the block_attacker/go_to_ball fixes)
+## Backfill round-robin (2026-08-21, re-run after the full motion-controller-reset fix pass)
 
-Every non-`default` config played every other once (91 matches — 14 configs,
-up from 13 with `counter_flow` added — 60s sim time, 6v6 headless rsim, 8
-concurrent workers), re-run specifically to see how the catalog looks after
-the two shared-skill fixes below. Supersedes the original 2026-08-20 backfill
-(`replays/tournament_20260820_104203/`), which predated both fixes and is no
-longer representative. Current run: `replays/tournament_20260820_113853/summary.json`.
+Every non-`default` config played every other once (91 matches — 14 configs —
+60s sim time, 6v6 headless rsim), re-run after fixing every then-known
+instance of the "no `motion_controller.reset()` across an orientation
+discontinuity" bug class (see Known open bugs): `SwitchOfPlayTactic` (5 bugs,
+`counter_press`), `GiveAndGoTactic` (3 edges, `tiki_taka`/`zone_fluid`), and
+`PassAndShootTactic`/`LeadAndSupportTactic`/`DecoyOverloadTactic` (this pass).
+Supersedes the 2026-08-20 re-run (`replays/tournament_20260820_113853/`) and
+the two intermediate 2026-08-21 runs taken between individual fixes, none of
+which reflect the fully-fixed codebase. Current run:
+`replays/tournament_20260821_171924/summary.json`.
 
 | Strategy | W-D-L | GF-GA |
 |---|---|---|
-| `tiki_taka` | 4-8-1 | 8-4 |
-| `counter_flow` | 3-10-0 | 6-2 |
-| `high_press` | 3-9-1 | 4-2 |
-| `press_and_pass` | 3-9-1 | 5-1 |
-| `overload_press` | 2-11-0 | 3-1 |
-| `give_and_go_solo` | 2-9-2 | 3-3 |
-| `split_shape` | 2-9-2 | 2-2 |
-| `three_slot` | 1-9-3 | 1-3 |
-| `zone_fluid` | 1-7-5 | 3-9 |
-| `high_line_zone` | 0-13-0 | 0-0 |
-| `low_block` | 0-12-1 | 0-2 |
-| `switch_of_play` | 0-12-1 | 0-1 |
-| `counter_press` | 0-11-2 | 0-3 |
-| `decoy_and_overload` | 0-11-2 | 0-2 |
+| `press_and_pass` | 6-5-2 | 7-2 |
+| `counter_flow` | 5-8-0 | 8-3 |
+| `split_shape` | 5-8-0 | 6-0 |
+| `high_press` | 5-6-2 | 10-3 |
+| `overload_press` | 4-9-0 | 7-1 |
+| `give_and_go_solo` | 3-8-2 | 5-3 |
+| `three_slot` | 2-8-3 | 3-4 |
+| `decoy_and_overload` | 2-7-4 | 2-5 |
+| `high_line_zone` | 2-7-4 | 2-5 |
+| `zone_fluid` | 2-6-5 | 3-8 |
+| `switch_of_play` | 1-10-2 | 1-2 |
+| `tiki_taka` | 1-8-4 | 5-9 |
+| `low_block` | 0-10-3 | 0-6 |
+| `counter_press` | 0-6-7 | 0-8 |
 
-`tiki_taka` still has the best record (4W), but it is **no longer
-undefeated** — its one loss is to `counter_flow` (2-1, see the Competitive
-section). `counter_flow` itself is the only strategy with zero losses across
-all 91 matches (3W-10D-0L) — on a losses-first read it is arguably the more
-robust strategy now, even though `tiki_taka` still has more wins. Both are
-reasonable reference points; judge new work against whichever one it's
-actually trying to beat.
+The picture reshuffled substantially from the 2026-08-20 backfill, and not
+just for the strategies actually touched — every strategy sharing a fixed
+tactic with one of this session's bug fixes moved. `press_and_pass` (uses
+`GiveAndGoTactic`) now leads on wins; `counter_flow`/`split_shape` remain
+undefeated on losses (0L). `decoy_and_overload` and `high_line_zone` (both use
+`DecoyOverloadTactic`) went from 0 wins to 2 each — direct evidence the
+`decoy_and_overload.py` reset fix (below) was live and load-bearing, not
+just theoretically correct.
 
-`high_line_zone` is a new concern: it went from a real mid-pack record
-(2-8-2, GF4-GA3, beat `low_block` 1-0 and `zone_fluid` 3-1) in the original
-backfill to **0-13-0, GF0-GA0** — zero goals scored or conceded in any of
-its 13 matches post-fix, despite still showing real possession swings and
-occasional shots (e.g. 2 shots vs `zone_fluid`, 1 vs `high_press`/`switch_of_play`).
-Spot-checked one match (`vs low_block`, previously a 1-0 win, now 0-0): the
-picker cycles through `block`/`switch`/`overload` normally and does reach
-the finishing tactic for real stretches, so this isn't the same "never
-reaches a shoot phase" bug as `counter_press`/`decoy_and_overload` — more
-likely `DecoyOverloadTactic`'s actual finishing conversion got worse now
-that `go_to_ball`'s approach angles changed, which is plausible but not
-confirmed. Flagged, not yet root-caused; see Known open bugs.
+`tiki_taka` (1W-8D-4L, GF5-GA9) is still well below its original 4W-8D-1L —
+but all 4 losses are to strategies that themselves got materially stronger
+this session via the very same shared-tactic fixes (`high_press`,
+`press_and_pass`, `split_shape`, `give_and_go_solo` — all four either use
+`GiveAndGoTactic` directly or a sibling tactic whose call sites were fixed in
+this pass), so a weaker relative record is the expected shape of "everyone
+who shared the bug got fixed at once," not a sign `tiki_taka` itself
+regressed further. `counter_press` (0W-6D-7L, GF0) still scores in no match
+at all — expected and already explained: its remaining blocker is the
+turn-budget-vs-window-duration mismatch documented below, a design tension,
+not a bug this pass touches.
 
 ## Baselines — don't fix, don't judge by these
 
@@ -77,30 +81,30 @@ signal; do not treat a loss here as something to fix.
 | Strategy | Added | Status | Description |
 |---|---|---|---|
 | `default` | pre-2026-08-19 | baseline | Single-tactic pool: everyone runs `PassAndShootTactic`, only ever commands the first 2 outfield robots (robots 3-5 are zombies — known bug, see [investigation below](#known-open-bugs)). Exists to exercise minimal kernel scheduling, not to be a real team. Excluded from the round-robin/catalog discovery entirely (see `tournament.py`). |
-| `split_shape` | pre-2026-08-19 | baseline | `LeadAndSupportTactic` (attack) + `ShadowAndMarkTactic` (defense), split by possession edge. First concrete forcing case for the kernel's splitting policy. 2-10-0 in the backfill — undefeated but mostly draws, consistent with a reactive-but-not-tuned baseline. |
-| `press_and_pass` | pre-2026-08-19 | baseline | `GiveAndGoTactic` (attack) + `PressAndContainTactic` (defense), possession-edge split. Same shape as `split_shape`, newer tactic pair. 2-9-1. |
-| `high_press` | pre-2026-08-19 | baseline | Same tactic pair as `press_and_pass` but a fixed 80/20 attack-heavy split, ignoring possession — demonstrates a non-reactive `Partitioner` on the same tactics. Best raw W-D-L in the backfill (4-8-0) purely from being relentlessly attack-heavy against weaker baselines; drew `tiki_taka` 0-0. Not a signal to build more strategies this way — see the backfill note above. |
-| `low_block` | pre-2026-08-19 | baseline | `PassAndShootTactic` (attack, floored at 2 robots) + `DefenseTactic` (defense), fixed 20/80 defense-heavy split. The original minimal-risk pairing. Worst record in the backfill (0-7-5, GF0-GA6) — consistent with its defense-heavy split giving it almost no attacking output. **Known bug: draws 0-0 against `default`** — see [investigation](#known-open-bugs). |
-| `three_slot` | pre-2026-08-19 | baseline | First 3-concurrent-slot config: `PressAndContainTactic` + `ShadowAndMarkTactic` + `GiveAndGoTactic`. Exercises N>2 scheduling, not tuned for strength. 2-9-1. |
-| `decoy_and_overload` | pre-2026-08-19 | baseline | `DecoyOverloadTactic` (attack, floored at 2) + `ShadowAndMarkTactic` (defense), fixed 50/50 split. Exercises the lure/overload tactic in isolation. 0-11-1, GF0 — never scored across 12 matches; the isolated lure/overload pairing doesn't generate offense on its own. |
-| `give_and_go_solo` | pre-2026-08-19 | experimental | Entire pool always runs `GiveAndGoTactic`, no defense slot at all. Isolated benchmark for tuning give-and-go internals without a defensive confound — not a fielding-ready config. 1-10-1. |
-| `switch_of_play` | pre-2026-08-19 | baseline | `SwitchOfPlayTactic` (attack, floored at 3 for the carrier/pivot/runner relay) + `DefenseTactic`, fixed 50/50 split. Exercises the switch tactic in isolation. 0-11-1, GF0 — same never-scores pattern as `decoy_and_overload`; isolated attack tactics don't produce goals without a complementary posture. |
+| `split_shape` | pre-2026-08-19 | baseline | `LeadAndSupportTactic` (attack) + `ShadowAndMarkTactic` (defense), split by possession edge. First concrete forcing case for the kernel's splitting policy. 2026-08-21 backfill: 5-8-0, GF6-GA0 — undefeated with a real conceded-nothing record, benefiting from this session's `LeadAndSupportTactic` reset fix (see Known open bugs). |
+| `press_and_pass` | pre-2026-08-19 | baseline | `GiveAndGoTactic` (attack) + `PressAndContainTactic` (defense), possession-edge split. Same shape as `split_shape`, newer tactic pair. 2026-08-21 backfill: 6-5-2, GF7-GA2 — best raw win count in the whole catalog, benefiting from the `GiveAndGoTactic` reset fix (see Known open bugs). |
+| `high_press` | pre-2026-08-19 | baseline | Same tactic pair as `press_and_pass` but a fixed 80/20 attack-heavy split, ignoring possession — demonstrates a non-reactive `Partitioner` on the same tactics. 2026-08-21 backfill: 5-6-2, GF10-GA3, highest goals-for in the catalog — still purely from being relentlessly attack-heavy against weaker opponents, not a signal to build more strategies this way. |
+| `low_block` | pre-2026-08-19 | baseline | `PassAndShootTactic` (attack, floored at 2 robots) + `DefenseTactic` (defense), fixed 20/80 defense-heavy split. The original minimal-risk pairing. 2026-08-21 backfill: 0-10-3, GF0-GA6 — still the weakest record in the catalog. Separately noted: `PassAndShootTactic`'s "setup" phase was observed getting stuck for entire 60s matches against several opponents this session (never reaching `pass_then_score`) — not yet root-caused, may be a pre-existing issue distinct from the reset-discontinuity bug class (whose fix in `pass_and_shoot.py` could not be match-trace-verified for this reason — see Known open bugs). **Known bug: draws 0-0 against `default`** — see [investigation](#known-open-bugs). |
+| `three_slot` | pre-2026-08-19 | baseline | First 3-concurrent-slot config: `PressAndContainTactic` + `ShadowAndMarkTactic` + `GiveAndGoTactic`. Exercises N>2 scheduling, not tuned for strength. 2026-08-21 backfill: 2-8-3, GF3-GA4. |
+| `decoy_and_overload` | pre-2026-08-19 | baseline | `DecoyOverloadTactic` (attack, floored at 2) + `ShadowAndMarkTactic` (defense), fixed 50/50 split. Exercises the lure/overload tactic in isolation. 2026-08-21 backfill: 2-7-4, GF2-GA5 — up from never scoring at all (0-11-1, GF0) once `DecoyOverloadTactic`'s own reset-discontinuity bug was fixed (see Known open bugs). |
+| `give_and_go_solo` | pre-2026-08-19 | experimental | Entire pool always runs `GiveAndGoTactic`, no defense slot at all. Isolated benchmark for tuning give-and-go internals without a defensive confound — not a fielding-ready config. 2026-08-21 backfill: 3-8-2, GF5-GA3, benefiting from the `GiveAndGoTactic` reset fix like every other user of that tactic. |
+| `switch_of_play` | pre-2026-08-19 | baseline | `SwitchOfPlayTactic` (attack, floored at 3 for the carrier/pivot/runner relay) + `DefenseTactic`, fixed 50/50 split. Exercises the switch tactic in isolation. 2026-08-21 backfill: 1-10-2, GF1-GA2 — still barely scores in isolation despite `SwitchOfPlayTactic`'s own 5 bugs being fixed (see `counter_press`'s row), consistent with the documented turn-budget-vs-window-duration mismatch affecting this tactic regardless of which strategy wraps it. |
 
 ## Competitive — real playable teams, use these for comparison going forward
 
 | Strategy | Added | Status | Description |
 |---|---|---|---|
-| `counter_flow` | 2026-08-20 | competitive, **strongest by losses (0 across 91 matches)** | Third anti-tiki_taka strategy, after `overload_press`/`high_line_zone` were parked. Instead of trying to out-number tiki_taka's 2-robot shadow defense (the bet both prior attempts made and lost before ever getting to test it), fights tiki_taka on its own ground: `GiveAndGoTactic` for attack (tiki_taka's own proven-undefeated engine), `PressAndContainTactic` for our own press on turnover, `BlockShapeTactic` for the defensive screen. 3/2 split in both postures, with possession-edge hysteresis (same fix `high_line_zone` needed). Building this surfaced two shared bugs, both now fixed (see Known open bugs): `block_attacker` never contesting the ball, and `go_to_ball` having no opponent-awareness. Beat `tiki_taka` 2-1 (reproducible) at just 22% possession — the first and still only loss `tiki_taka` has anywhere in the catalog. In the full 91-match re-run backfill, `counter_flow` is 3W-10D-**0L**, the only strategy with zero losses. |
-| `tiki_taka` | 2026-08-20 | competitive, most wins, one loss (**pre-2026-08-21-fix numbers — stale, see Known open bugs**) | Possession team: 3 give-and-go attackers + 2 shadow-and-mark cover when we have the ball; 3 pressers + 2 shadow when we don't. Best raw record in the 91-match re-run backfill (4W-8D-1L, GF8-GA4) — but no longer undefeated; its one loss is to `counter_flow` (2-1). A `GiveAndGoTactic` orientation-discontinuity bug (fixed 2026-08-21, see Known open bugs) was suppressing this strategy's own scoring the whole time these numbers were recorded — e.g. `tiki_taka vs zone_fluid` is now a reproducible 1-0 rather than the 2-1 shown here, and `vs counter_flow` is now 2-2 rather than a 1-2 loss. Full backfill not yet re-run post-fix; treat this row's numbers as an undercount of `tiki_taka`'s real record until it is. |
-| `zone_fluid` | 2026-08-20 | competitive, real but weaker (**pre-2026-08-21-fix numbers — stale, see Known open bugs**) | Zone-adaptive team: man-shape defense throughout; give-and-go trio builds through the middle thirds, hands off to the decoy/overload duet in the final third. 1-7-5 in the re-run backfill, GF3-GA9 — genuinely reactive (unlike the baselines) but loses more than it draws or wins, including 1-2 to `tiki_taka` (recorded as unchanged across both 2026-08-20 backfills, but see below — that pairing wasn't actually stable once the `GiveAndGoTactic` bug is fixed). Also runs `GiveAndGoTactic`, so this row shares the same staleness as `tiki_taka`'s; full backfill not yet re-run post-fix. |
-| `counter_press` | 2026-08-20 | **5 layered bugs root-caused and fixed 2026-08-21; scoring still rare — see Known open bugs** | Transition team: full press when the ball is lost and pressable, low block (`BlockShapeTactic`) when it isn't, 4-up switch-of-play attack the moment the ball is won. Zero goals scored in every match across both backfills (0-11-2 in the re-run, GF0). Neither the `block_attacker` fix nor the `go_to_ball` fix resolved this — the actual cause was 5 separate bugs in `SwitchOfPlayTactic`'s relay/finish path, all now fixed and individually trace-verified (see Known open bugs). Post-fix: went from *never* scoring (0 goals across 91+ matches) to scoring at least once (1-0 vs `low_block` in one traced match), but still mostly draws — the remaining blocker is a turn-budget-vs-window-duration mismatch, not a bug in these 5 fixes. Full backfill not yet re-run post-fix. |
+| `counter_flow` | 2026-08-20 | competitive, undefeated (0L across 91 matches) | Third anti-tiki_taka strategy, after `overload_press`/`high_line_zone` were parked. Instead of trying to out-number tiki_taka's 2-robot shadow defense (the bet both prior attempts made and lost before ever getting to test it), fights tiki_taka on its own ground: `GiveAndGoTactic` for attack (tiki_taka's own proven engine), `PressAndContainTactic` for our own press on turnover, `BlockShapeTactic` for the defensive screen. 3/2 split in both postures, with possession-edge hysteresis (same fix `high_line_zone` needed). Building this surfaced two shared bugs, both now fixed (see Known open bugs): `block_attacker` never contesting the ball, and `go_to_ball` having no opponent-awareness. Beat `tiki_taka` 2-1 (reproducible) at just 22% possession, the first loss `tiki_taka` had anywhere in the catalog — now a 2-2 draw post-`GiveAndGoTactic`-fix (below). In the 2026-08-21 backfill (post full reset-fix pass), `counter_flow` is 5W-8D-**0L**, still undefeated. |
+| `tiki_taka` | 2026-08-20 | competitive, but now mid-pack on wins | Possession team: 3 give-and-go attackers + 2 shadow-and-mark cover when we have the ball; 3 pressers + 2 shadow when we don't. In the 2026-08-21 backfill (post full reset-fix pass): 1W-8D-4L, GF5-GA9 — down from the pre-fix-era 4W-8D-1L. Not a regression: a `GiveAndGoTactic` orientation-discontinuity bug (fixed 2026-08-21, see Known open bugs) had been suppressing this strategy's own scoring the whole time the earlier numbers were recorded (`vs zone_fluid` is now a reproducible 1-0 rather than 2-1; `vs counter_flow` is 2-2 rather than a 1-2 loss), but all 4 of its current losses are to strategies that themselves got materially stronger from the *same* shared-tactic fixes this session (`high_press`, `press_and_pass`, `split_shape`, `give_and_go_solo`) — the whole `GiveAndGoTactic`-using cohort moved together, so `tiki_taka`'s *relative* standing dropped even though its own play improved. Worth another look if the anti-tiki_taka thread continues, but not an open bug. |
+| `zone_fluid` | 2026-08-20 | competitive, real but weaker | Zone-adaptive team: man-shape defense throughout; give-and-go trio builds through the middle thirds, hands off to the decoy/overload duet in the final third. 2-6-5 in the 2026-08-21 backfill, GF3-GA8 — genuinely reactive (unlike the baselines) but loses more than it draws or wins. Also runs `GiveAndGoTactic`, so benefited from the same fix as `tiki_taka`; `vs tiki_taka` is now a reproducible 1-0 rather than the earlier 2-1 loss. |
+| `counter_press` | 2026-08-20 | **5 layered bugs root-caused and fixed 2026-08-21; still scores in no match — turn-budget mismatch, see Known open bugs** | Transition team: full press when the ball is lost and pressable, low block (`BlockShapeTactic`) when it isn't, 4-up switch-of-play attack the moment the ball is won. In the 2026-08-21 backfill (post full reset-fix pass): 0W-6D-7L, GF0 — zero goals scored in any match, same as every prior backfill. Neither the `block_attacker` fix nor the `go_to_ball` fix resolved this — the actual cause was 5 separate bugs in `SwitchOfPlayTactic`'s relay/finish path, all fixed and individually trace-verified (see Known open bugs), and confirmed capable of scoring in isolated traces (1-0 vs `low_block`). The remaining, still-open blocker is a turn-budget-vs-window-duration mismatch (a design tension, not a bug in these 5 fixes) — see Known open bugs for why it isn't cleanly fixable as a small patch. |
 
 ## Parked — tried against tiki_taka, didn't win, not being iterated further
 
 | Strategy | Added | Status | Description |
 |---|---|---|---|
-| `overload_press` | 2026-08-20 | parked, improved post-fix but still not competitive-tier | Built to outnumber tiki_taka's 2-robot shadow line (4-robot overload/switch attack + 1 block insurance) and hit direct on turnovers before tiki_taka's press organizes. Original result: lost 3%/97% possession to tiki_taka before either shared fix, and was genuinely weak overall (1-10-1). Post-fix re-run backfill: 2-11-0, GF3-GA1, zero losses — a real improvement, worth another look before `high_line_zone` if the anti-tiki_taka thread is picked back up again, though not yet re-tested head-to-head against `tiki_taka` itself. |
-| `high_line_zone` | 2026-08-20 | parked, **regression root-caused and fixed 2026-08-21** | Built to deny tiki_taka's give-and-go trio 1v1s via a zone screen (`BlockShapeTactic`) instead of man-marking, switching the ball past its thin 2-robot cover. Original backfill: real mid-pack strategy (2-8-2, GF4-GA3) — beat `low_block` 1-0 and `zone_fluid` 3-1. Post-`block_attacker`/`go_to_ball` re-run backfill regressed to 0-13-0, GF0-GA0 (see Known open bugs for the root cause and fix) — verified fixed: re-run vs `low_block` scores 1-0 again. Full 91-match backfill not yet re-run post-fix; treat the pre-regression 2-8-2 record as the best current estimate until it is. |
+| `overload_press` | 2026-08-20 | parked, improved post-fix but still not competitive-tier | Built to outnumber tiki_taka's 2-robot shadow line (4-robot overload/switch attack + 1 block insurance) and hit direct on turnovers before tiki_taka's press organizes. Original result: lost 3%/97% possession to tiki_taka before either shared fix, and was genuinely weak overall (1-10-1). 2026-08-21 backfill (post full reset-fix pass): 4-9-0, GF7-GA1, still zero losses — a real, growing improvement each fix pass, worth another look before `high_line_zone` if the anti-tiki_taka thread is picked back up again, though not yet re-tested head-to-head against `tiki_taka` itself. |
+| `high_line_zone` | 2026-08-20 | parked, **regression root-caused and fixed 2026-08-21** | Built to deny tiki_taka's give-and-go trio 1v1s via a zone screen (`BlockShapeTactic`) instead of man-marking, switching the ball past its thin 2-robot cover. Original backfill: real mid-pack strategy (2-8-2, GF4-GA3) — beat `low_block` 1-0 and `zone_fluid` 3-1. Post-`block_attacker`/`go_to_ball` re-run backfill regressed to 0-13-0, GF0-GA0 (see Known open bugs for the root cause and fix) — verified fixed via direct re-run (vs `low_block` scores 1-0 again), and the 2026-08-21 backfill (after also fixing `DecoyOverloadTactic`'s own reset gap, see Known open bugs) confirms it at scale: 2-7-4, GF2-GA5 — real wins again, though not yet back to the original 2-8-2 mid-pack form. |
 
 ## Known open bugs
 
@@ -254,10 +258,58 @@ signal; do not treat a loss here as something to fix.
   `tiki_taka vs zone_fluid` went from a reproducible 0-0 (post-regression) to
   a reproducible 1-0 win (4/4 repeated runs, deterministic sim). `tiki_taka
   vs counter_flow` improved from a 1-2 loss to a 2-2 draw. Full test suite
-  green (714 passed) after the fix. Full 91-match backfill re-run in
-  progress as of this writing — the win/draw/loss numbers on `tiki_taka`'s
-  and `zone_fluid`'s rows above predate this fix and should be treated as an
-  undercount until that backfill lands.
+  green (714 passed) after the fix.
+- **Three more tactics had the same "no `motion_controller.reset()` across an
+  orientation discontinuity" bug, found by a dedicated architecture audit
+  rather than by another backfill surprise (fixed 2026-08-21)** — after the
+  `GiveAndGoTactic` fix above revealed the bug class could hide in any tactic
+  with a discrete phase/role state machine, a research pass specifically
+  checked every remaining tactic's phase transitions for the same shape.
+  Confirmed exposed and fixed:
+  1. **`PassAndShootTactic`** (`utama_core/tactics/pass_and_shoot.py`) — the
+     `pass_then_score`->`score` transition: the receiver spent the pass leg
+     facing the passer (`_pass_exec`'s `intercept_oren`) and was immediately
+     re-aimed at goal. Fixed with `ctx.motion_controller.reset(receiver_id)`
+     right on the transition, mirroring `give_and_go.py`'s hop-hand-off fix
+     exactly.
+  2. **`LeadAndSupportTactic`** (`utama_core/tactics/lead_and_support.py`) —
+     the `has_ball(leader_id)` catch edge: the leader's orientation source
+     jumps from `go_to_ball`'s ball-facing approach to `turn_on_spot`'s
+     goal-facing shot aim the instant it catches the ball. This directly
+     contradicted an earlier in-session claim that this tactic didn't need
+     the fix — that check had only considered the leader-reassignment edge,
+     not this has_ball-flip edge, which has the identical shape to
+     `give_and_go.py`'s already-fixed catch edge. Fixed via a new
+     `LeadAndSupportMem.was_carrying` bool, reset only on the False->True
+     edge (mirroring `SwitchOfPlayMem.was_shooting`'s pattern), with a guard
+     so a freshly-chosen leader can't inherit a stale `True` from whoever
+     held the role before.
+  3. **`DecoyOverloadTactic`** (`utama_core/tactics/decoy_and_overload.py`) —
+     two separate discontinuities in the same tactic: (a) `"lure"`->`"finish"`,
+     where the decoy's orientation source jumps from the lateral
+     touchline-lure target to `_score_goal`'s goal-facing aim; (b) within
+     "finish" itself, the overloader's `_pass_exec`->`_score_goal` hand-off
+     (same shape as every other pass-then-shoot transition fixed this
+     session). Both fixed with `ctx.motion_controller.reset()` at their
+     respective transition ticks.
+
+  Trace-verified via full-match runs for `DecoyOverloadTactic` (both edges:
+  orientation converges monotonically toward a slowly-drifting shot target
+  over hundreds of ticks, diff shrinking from >6 rad, i.e. a wrapped near-zero
+  gap, down to 0.03 rad by kick time — no non-convergent spin) and
+  `LeadAndSupportTactic` (13-tick window, diff shrinking monotonically from
+  0.12 to 0.05 rad). `PassAndShootTactic`'s fix could not be exercised via a
+  full match this session — `low_block` (the only strategy using this
+  tactic) was observed getting stuck in "setup" for entire 60s matches
+  against every opponent tried, a separate, likely pre-existing issue
+  unrelated to this fix (see `low_block`'s row) — but the fix itself is a
+  byte-identical call to the same `MotionController.reset()` API already
+  confirmed correct at 6 other call sites, placed at the exact tick analogous
+  to `give_and_go.py`'s already-verified hop-hand-off fix, so it is applied
+  with high confidence pending a future trace once `low_block`'s setup-phase
+  issue is separately resolved. Full test suite green (714 passed) after all
+  three fixes. Full 91-match backfill re-run — see the top of this doc for
+  the fresh numbers, which supersede every earlier backfill in this file.
 - **`high_line_zone` went from a real mid-pack record to 0 goals in any match,
   post-fix (root-caused and fixed 2026-08-21)** — was 0-13-0, GF0-GA0 in the
   2026-08-20 re-run backfill, down from 2-8-2/GF4-GA3 pre-fix. Root cause,
@@ -293,6 +345,20 @@ signal; do not treat a loss here as something to fix.
   fix is not worth doing for its own sake.
 - **`default` hands 5 robots to a 2-robot tactic** (robots 3-5 are zombies all
   match) — real defect, same investigation doc, fix candidate #3.
+- **`low_block`'s `PassAndShootTactic` observed stuck in "setup" for entire
+  60s matches (found 2026-08-21, not yet root-caused)** — while trace-
+  verifying the `pass_and_shoot.py` reset fix above, every match tried
+  against `low_block` (vs `switch_of_play`, `three_slot`, `overload_press`,
+  `press_and_pass`, `high_press`) showed `PassAndShootMem.phase` staying
+  `"setup"` for the tactic's full 2-robot attack-slot lifetime, with the same
+  2 robots assigned the whole time (no reassignment thrashing) —
+  `run_setup_phase` (`utama_core/tactics/_pass_and_score.py`) never reports
+  both passer and receiver arrived. Not investigated further this session
+  (out of scope for the reset-discontinuity fix pass), but worth tracing
+  next: either the setup targets themselves are unreachable in `low_block`'s
+  specific geometry, or `_settled_at`/`at_target`-style convergence has the
+  same kind of tolerance issue already found and fixed once in
+  `switch_of_play.py`'s `_ARRIVAL_SPEED_THRESHOLD`.
 
 ## Updating this file
 

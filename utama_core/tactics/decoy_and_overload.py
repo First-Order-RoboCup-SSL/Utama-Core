@@ -257,6 +257,15 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
                 dragged = abs(marker_now_y - mem.marker_start_y) >= _LURE_DRAG_THRESHOLD
             if dragged or mem.lure_ticks >= _LURE_MAX_TICKS:
                 mem.phase = "finish"
+                # The decoy just spent "lure" facing the touchline target
+                # (_lure_target, deliberately lateral/away from goal) and is
+                # about to be re-aimed toward goal instead in "finish" below
+                # — same orientation-discontinuity/stale-PID-derivative-state
+                # bug fixed in switch_of_play.py/give_and_go.py/
+                # pass_and_shoot.py (see docs/strategies.md's counter_press
+                # writeup for the full mechanism). Reset right on this
+                # transition tick.
+                ctx.motion_controller.reset(mem.decoy_id)
 
             return commands, mem
 
@@ -280,6 +289,10 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
         pass_cmds, pass_complete = _pass_exec(game, ctx, mem.decoy_id, mem.overloader_id)
         commands.update(pass_cmds)
         if pass_complete:
+            # Same discontinuity, second instance: the overloader just spent
+            # the pass leg facing the decoy (_pass_exec's intercept_oren) and
+            # is about to be re-aimed toward goal by _score_goal instead.
+            ctx.motion_controller.reset(mem.overloader_id)
             shot_cmd, scored, mem.prev_best_shot_y = _score_goal(game, ctx, mem.overloader_id, mem.prev_best_shot_y)
             commands[mem.overloader_id] = shot_cmd
             mem.goal_scored = scored
