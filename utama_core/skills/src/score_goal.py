@@ -18,16 +18,11 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
-from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game, Robot
 from utama_core.global_utils.math_utils import (
     angle_between_points as _angle_between_points,
 )
-from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.utils.move_utils import kick, turn_on_spot
 
 logger = logging.getLogger(__name__)
 

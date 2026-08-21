@@ -73,6 +73,91 @@ picks them up — this file isn't itself a design doc.
    match went from 1 residual foul to 0; full suite unchanged at 638
    passed / 2 skipped / 2 xfailed both before and after.
 
+## Motion-controller discontinuity handling (flagged 2026-08-21, not decided)
+
+Context: across a bug-fixing session, the same underlying bug — a tactic
+hands a robot a new orientation target that's discontinuous from what it was
+just facing (e.g. "face the passer to catch a ball" -> "face the goal to
+shoot"), and nothing tells the shared angular PID's per-robot state
+(`pre_errors`/`integrals` in `motion_planning/src/pid/pid.py`) to forget its
+history — was independently found and fixed *six separate times*, at six
+different tactic call sites (`switch_of_play.py` x3, `give_and_go.py` x3,
+`pass_and_shoot.py`, `lead_and_support.py`, `decoy_and_overload.py` x2), each
+requiring its own from-scratch match trace to discover. A dedicated
+architecture-audit agent confirmed the motion-controller/PID code itself is
+not a mess (small, well-factored, zero drift between the two actively-used
+`MotionController` implementations) — the actual gap is a missing protocol at
+the tactics/motion-planning boundary: `ctx.motion_controller.reset(robot_id)`
+exists and correctly clears the stale state, but calling it is a manual,
+opt-in discipline enforced by nothing. Two ideas came out of that audit,
+flagged here for future consideration rather than committed to:
+
+1. **Discontinuity-detecting wrapper at the `MotionController` boundary.**
+   The idea: some mechanism at (or wrapping) `skills/src/utils/move_utils.py`'s
+   `move()` — already confirmed the single funnel point every skill/tactic
+   routes through before hitting `motion_controller.calculate()` — that
+   auto-invalidates a robot's PID state when its commanded target changes in
+   a way that means "this is a new task," not "this is a continuation of the
+   same task," without every tactic author needing to notice and hand-place
+   a `reset()` call.
+   - **Open design question, not yet resolved:** a plain distance/angle
+     *magnitude* threshold ("reset if the new target is more than X away
+     from the old one") is the obvious first idea, but it has a real
+     failure mode — it can't distinguish a genuine phase-transition jump
+     from legitimate fast-tracking of a moving target (e.g. `go_to_ball`'s
+     shield-approach continuously re-aiming at a moving contesting enemy,
+     which *should* keep its PID memory, since it's converging, not
+     switching tasks). Picking a threshold that's safe for both cases may
+     not exist as a single number.
+   - **An alternative worth weighing instead of magnitude-based detection:**
+     make it *identity*-based, not distance-based. Have `move()`/
+     `turn_on_spot()` accept an explicit intent tag from the caller (e.g.
+     `"switch_of_play.finish"` vs `"switch_of_play.relay"`), and
+     auto-reset whenever that tag changes for a given robot. This pushes
+     the actual judgment call back to the tactic (which already knows
+     semantically when its own intent changed) while still removing the
+     manual `reset()` call-site burden — the tactic states *what* it's
+     doing, the shared layer decides *whether that's new* mechanically,
+     with no threshold-tuning guesswork.
+   - Also proposed, smaller and independent of either design above: add a
+     `reset(robot_id)` call at the kernel's own existing tactic-reassignment
+     point (`engine/strategy.py:264`, where `slot.mem` is already reset to
+     `None` on reassignment) and barrier-reset point (`engine/strategy.py:
+     375-389`) — the kernel already knows exactly when a robot's tactic
+     assignment changes, which is a strict subset of "target went
+     discontinuous," and today does nothing to the motion controller at
+     that moment either.
+   - Risk if built: medium — a wrong design here could reintroduce the
+     oscillation the existing hysteresis constants (`_COMMIT_RANGE`,
+     `_ARRIVAL_SPEED_THRESHOLD`, `switch_margin`, etc.) were built to
+     prevent, so whichever approach is picked needs real tuning/verification
+     against the match traces already referenced in those constants'
+     docstrings before being trusted over today's manual resets.
+   - Not started. Needs a short design spike (comparing the two approaches
+     above concretely) before implementation, not a straight build.
+
+2. **A shared `Sticky`/hysteresis helper.** The same audit found 5-6
+   independently-invented instances of "keep the previous choice unless a
+   new candidate beats it by a margin," spanning three architectural layers:
+   skill (`go_to_ball.py`'s `_COMMIT_RANGE`), tactic (`switch_of_play.py`'s
+   `_WEAK_SIDE_MARGIN`/`_ARRIVAL_SPEED_THRESHOLD`, `pass_and_shoot.py`'s
+   `_REASSIGN_MARGIN_M`, `_pass_and_score.py`'s `switch_margin`), and even
+   the scheduler/partitioner level (`kernel_strategy.py`'s possession-edge
+   pickers). Each instance is well-reasoned and well-commented in isolation
+   (several docstrings cite the exact live-match trace that motivated them),
+   but there's no shared primitive, so the same "don't let noisy per-tick
+   recomputation thrash a downstream consumer" insight gets re-derived from
+   scratch each time.
+   - Per the project's stated minimalism preference (avoid speculative
+     abstraction — add a shared mechanism only after a concrete forcing
+     case, not in anticipation), **explicitly not recommended to build yet**.
+     The instances aren't quite the same shape (scalar-distance comparison
+     vs. "which gap contains the old choice" vs. a boolean edge trigger), so
+     a forced common interface could make each individually less readable
+     than its current purpose-built form. Revisit if/when a clearly-6th
+     instance of the exact same shape shows up, rather than building this
+     speculatively now.
+
 ## Multi-strategy / tournament evaluation infra
 
 ~~Much later priority~~ **First pass done** (2026-08-16). The catalog reached 8
