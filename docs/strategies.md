@@ -93,7 +93,7 @@ signal; do not treat a loss here as something to fix.
 | `counter_flow` | 2026-08-20 | competitive, **strongest by losses (0 across 91 matches)** | Third anti-tiki_taka strategy, after `overload_press`/`high_line_zone` were parked. Instead of trying to out-number tiki_taka's 2-robot shadow defense (the bet both prior attempts made and lost before ever getting to test it), fights tiki_taka on its own ground: `GiveAndGoTactic` for attack (tiki_taka's own proven-undefeated engine), `PressAndContainTactic` for our own press on turnover, `BlockShapeTactic` for the defensive screen. 3/2 split in both postures, with possession-edge hysteresis (same fix `high_line_zone` needed). Building this surfaced two shared bugs, both now fixed (see Known open bugs): `block_attacker` never contesting the ball, and `go_to_ball` having no opponent-awareness. Beat `tiki_taka` 2-1 (reproducible) at just 22% possession — the first and still only loss `tiki_taka` has anywhere in the catalog. In the full 91-match re-run backfill, `counter_flow` is 3W-10D-**0L**, the only strategy with zero losses. |
 | `tiki_taka` | 2026-08-20 | competitive, most wins, one loss | Possession team: 3 give-and-go attackers + 2 shadow-and-mark cover when we have the ball; 3 pressers + 2 shadow when we don't. Best raw record in the 91-match re-run backfill (4W-8D-1L, GF8-GA4) — but no longer undefeated; its one loss is to `counter_flow` (2-1). Still the strategy with the most wins and a reasonable default reference; `counter_flow` is the more defensible pick specifically for "hardest to beat." |
 | `zone_fluid` | 2026-08-20 | competitive, real but weaker | Zone-adaptive team: man-shape defense throughout; give-and-go trio builds through the middle thirds, hands off to the decoy/overload duet in the final third. 1-7-5 in the re-run backfill, GF3-GA9 — genuinely reactive (unlike the baselines) but loses more than it draws or wins, including 1-2 to `tiki_taka` (unchanged across both backfills). A real second data point, not an artifact, but needs work before it's a useful comparison target. |
-| `counter_press` | 2026-08-20 | **broken — do not use for comparison yet** | Transition team: full press when the ball is lost and pressable, low block (`BlockShapeTactic`) when it isn't, 4-up switch-of-play attack the moment the ball is won. Zero goals scored in every match across both backfills (0-11-2 in the re-run, GF0). Neither the `block_attacker` fix nor the `go_to_ball` fix resolved this. Whatever is actually broken here (most likely `SwitchOfPlayTactic`'s attack path never reaching a shoot phase) is separate from both shared-skill bugs and still unfixed. |
+| `counter_press` | 2026-08-20 | **5 layered bugs root-caused and fixed 2026-08-21; scoring still rare — see Known open bugs** | Transition team: full press when the ball is lost and pressable, low block (`BlockShapeTactic`) when it isn't, 4-up switch-of-play attack the moment the ball is won. Zero goals scored in every match across both backfills (0-11-2 in the re-run, GF0). Neither the `block_attacker` fix nor the `go_to_ball` fix resolved this — the actual cause was 5 separate bugs in `SwitchOfPlayTactic`'s relay/finish path, all now fixed and individually trace-verified (see Known open bugs). Post-fix: went from *never* scoring (0 goals across 91+ matches) to scoring at least once (1-0 vs `low_block` in one traced match), but still mostly draws — the remaining blocker is a turn-budget-vs-window-duration mismatch, not a bug in these 5 fixes. Full backfill not yet re-run post-fix. |
 
 ## Parked — tried against tiki_taka, didn't win, not being iterated further
 
@@ -130,13 +130,81 @@ signal; do not treat a loss here as something to fix.
   possession — ball control, not territory, was the real bottleneck.
   `tiki_taka`'s own matches against `zone_fluid`/etc. are unchanged, so this
   didn't regress the strategy that was already working.
-- **`counter_press` never scores, even after both fixes above** — see the
-  Competitive section above. Confirmed as its own separate bug (low ball
-  travel, no shots, even with high possession and real ball control
-  elsewhere in the catalog now), not explained by either shared-skill issue.
-  It's the only `competitive`-tagged strategy with a likely correctness bug
-  (probably `SwitchOfPlayTactic`'s finishing path) rather than a genuine
-  strength gap.
+- **`counter_press` never scored, even after both fixes above (5 layered bugs
+  root-caused and fixed 2026-08-21, scoring still rare — see below)** — not
+  explained by either shared-skill issue above. All 5 live in
+  `SwitchOfPlayTactic`'s relay/finish path
+  (`utama_core/tactics/switch_of_play.py`) and were found sequentially, each
+  fix revealing the next bug that had been masked behind it:
+  1. **Ball-ejection noise in "relay" treated as a real loss.** rsim has a
+     known dribble-physics quirk where holding a ball for an extended period
+     can eject it for a tick with no tactic-level cause (see the rsim
+     dribble-issues project note). A single ejection tick sent the relay
+     source robot straight into `go_to_ball`, discarding hold/aim progress.
+     Mitigated (not root-cause-fixed — the real fix belongs in rsim's
+     dribbler physics) via a `_BALL_RECOVERY_RADIUS` grace window: treat the
+     ball as still held if within 0.3m even on a `has_ball=False` tick.
+  2. **`_ARRIVAL_SPEED_THRESHOLD` too tight.** 0.05 m/s flickered on ordinary
+     station-keeping jitter (observed: speed oscillating 0.03-0.07 m/s around
+     a robot that had, for practical purposes, arrived), flapping
+     `runner_ready` and never letting the relay pass leg start. Widened to
+     0.1 m/s.
+  3. **`_find_best_shot`'s largest-gap selection had no hysteresis.** Same
+     class of bug as `high_line_zone`'s regression below and `_weak_side`'s
+     pre-existing margin gate: recomputing the best shot gap fresh every tick
+     let ordinary defender jitter flip which gap "won" between near-equal
+     candidates, swinging `target_oren` tick to tick even when the true
+     defensive picture was near-static. This fed a PID derivative-term kick
+     (see #4) every time it flipped. Fixed via `prev_best_shot_y`/
+     `switch_margin` hysteresis threaded through `_find_best_shot`/
+     `find_best_shot`/`_score_goal` and all 4 real call sites (`switch_of_play`,
+     `pass_and_shoot`, `decoy_and_overload` x2).
+  4. **No PID/motion-controller reset across a target-orientation
+     discontinuity.** Confirmed via direct code reading:
+     `motion_controller.reset(robot_id)` — which clears the angular PID's
+     per-robot `pre_errors`/`integrals` (`utama_core/motion_planning/src/pid/pid.py`)
+     and the acceleration limiter's per-robot `_last_values`
+     (`utama_core/motion_planning/src/common/acceleration_limiter.py`) — was
+     never called anywhere in the codebase before this fix. The runner's
+     commanded orientation jumps discontinuously on the "relay"->"finish"
+     transition (relay's ball-holding aim -> finish's shot-aim); with no
+     reset, the derivative term computed against a stale, unrelated
+     `pre_errors[robot_id]` produced a large wrong-signed angular command
+     that the acceleration limiter could then only unwind gradually — a
+     multi-second non-convergent spin. Root-caused via direct match trace:
+     63 consecutive "finish" ticks, every one `"turning"`, zero reaching
+     `"kick"`. Fixed by calling `ctx.motion_controller.reset(runner_id)`
+     exactly once, on the "relay"->"finish" transition tick.
+  5. **Same discontinuity, one level down, inside "finish" itself.** Fixing
+     #4 revealed that `has_ball`/shot-lane-open can flicker tick to tick
+     *within* "finish" (a marker stepping in/out of the shot lane, or a
+     momentary `has_ball` miss), bouncing the runner between the
+     shoot-attempt branch and the chase-ball/hold branches — each driving a
+     different commanded orientation, so every re-entry into shooting poisoned
+     the PID with stale state the same way the phase transition did. Fixed
+     by tracking re-entry (`SwitchOfPlayMem.was_shooting`) and resetting the
+     motion controller only on that edge, mirroring fix #4's pattern.
+
+  All 5 fixes individually trace-confirmed: target orientation stays stable
+  across a shooting window (drift <0.1 rad/s), the runner turns in the
+  correct (shortest-path) direction at up to max angular velocity, and at
+  least one match reached `kick()` with `scored=True` (1-0 vs `low_block`).
+  However, **scoring is still rare post-fix** (4 further matches in this
+  session's regression batch were 0-0 draws) — root cause, also trace-confirmed,
+  is a genuine turn-budget-vs-window-duration mismatch, not a 6th instance of
+  the discontinuity bug class above: turning ~3.8 rad (near half a full
+  rotation) to aim at goal takes over a second at max angular velocity
+  (4 rad/s, `MAX_ANGULAR_ACCELERATION`=50 rad/s²), but the shooting window
+  (`has_ball and _shot_open` staying continuously true against a live
+  defender) was observed lasting only 0.1-2.6s per attempt across 8 windows
+  in one traced match — consistently too short to complete a large re-aim
+  before the next interruption resets progress. Not fixed this session — a
+  plausible direction is starting the aim-toward-goal turn earlier (during
+  "relay", once it's clear the runner will receive the ball) rather than
+  only after "finish" begins, so most of the turn is already done before the
+  shooting window opens; this is a real behavioral change to `SwitchOfPlayTactic`'s
+  relay-phase aim logic, not a small patch, and needs its own trace-first
+  verification pass.
 - **`high_line_zone` went from a real mid-pack record to 0 goals in any match,
   post-fix (root-caused and fixed 2026-08-21)** — was 0-13-0, GF0-GA0 in the
   2026-08-20 re-run backfill, down from 2-8-2/GF4-GA3 pre-fix. Root cause,

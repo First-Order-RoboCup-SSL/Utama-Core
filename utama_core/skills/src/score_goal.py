@@ -13,7 +13,7 @@ check for "is *this specific* shot currently blocked," not a search.
 
 import logging
 import math
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -113,6 +113,8 @@ def _find_best_shot(
     goal_x: float,
     goal_y1: float,
     goal_y2: float,
+    prev_best_shot_y: Optional[float] = None,
+    switch_margin: float = 0.0,
 ) -> Tuple[float, Vector2D]:
     """Determines the best y-coordinate along the goal line (at x = goal_x) to shoot, such that the shot is farthest
     from any enemy robots' shadows.
@@ -123,6 +125,31 @@ def _find_best_shot(
         goal_x: The x-coordinate of the goal line.
         goal_y1: The smallest y-coordinate of the goal.
         goal_y2: The largest y-coordinate of the goal.
+        prev_best_shot_y: the shot y chosen on a previous call (e.g. last
+            tick), if any. When given, a different candidate must beat the
+            gap containing `prev_best_shot_y` by more than `switch_margin`
+            clearance before it is allowed to win — otherwise the previous
+            gap's own candidate is returned again. Optional and defaults to
+            `None` (no hysteresis, today's exact behaviour) because this
+            function has no memory of its own; a caller must supply its own
+            previous choice (e.g. from its `mem`) to opt in.
+        switch_margin: clearance margin required to switch away from the gap
+            containing `prev_best_shot_y`. Ignored when `prev_best_shot_y` is
+            `None`. See module docstring's cross-reference for why this
+            exists: recomputing the largest-gap candidate fresh every tick
+            with no margin lets ordinary defender jitter flip which gap wins
+            between near-equal candidates, which can swing `target_oren` by
+            a large angle tick to tick even though nothing meaningfully
+            changed — confirmed as the root cause of a PID derivative-term
+            kick in `_score_goal` (`utama_core/tactics/_pass_and_score.py`),
+            traced via `counter_press`: the robot's actual orientation spun
+            continuously past a `target_oren` that itself barely moved,
+            because `_find_best_shot`'s selection flipped between two
+            similar-clearance gaps tick to tick while the true underlying
+            defensive picture was near-static. Same class of fix as
+            `_weak_side`'s margin gate in `switch_of_play.py` and
+            `go_to_ball`'s `_COMMIT_RANGE` — require a real margin before
+            switching, not a raw greater-than comparison.
 
     Returns:
         A tuple containing:
@@ -205,6 +232,35 @@ def _find_best_shot(
             best_clearance = clearance
             best_candidate = candidate
             best_gap = interval
+
+    if prev_best_shot_y is not None:
+        # Find whichever open interval still contains the previous choice,
+        # if any (it may have closed entirely — a real defensive change, not
+        # jitter — in which case there is nothing to be sticky about and the
+        # naive best stands).
+        prev_gap = next((interval for interval in open_spaces if interval[0] <= prev_best_shot_y <= interval[1]), None)
+        if prev_gap is not None and prev_gap != best_gap:
+            prev_gap_length = prev_gap[1] - prev_gap[0]
+            prev_clearance = (
+                prev_gap_length
+                if np.isclose(prev_gap[0], goal_y1, rtol=0.0, atol=1e-6)
+                or np.isclose(prev_gap[1], goal_y2, rtol=0.0, atol=1e-6)
+                else prev_gap_length / 2
+            )
+            if best_clearance <= prev_clearance + switch_margin:
+                # Not a clear enough win to justify switching — stay on the
+                # previous gap's own candidate instead of flickering to a
+                # near-equal alternative.
+                prev_s, prev_e = prev_gap
+                is_lower_bound = np.isclose(prev_s, goal_y1, rtol=0.0, atol=1e-6)
+                is_upper_bound = np.isclose(prev_e, goal_y2, rtol=0.0, atol=1e-6)
+                if is_lower_bound:
+                    best_candidate = prev_s + 0.2 * prev_gap_length
+                elif is_upper_bound:
+                    best_candidate = prev_e - 0.2 * prev_gap_length
+                else:
+                    best_candidate = (prev_s + prev_e) / 2
+                best_gap = prev_gap
 
     return best_candidate, best_gap
 

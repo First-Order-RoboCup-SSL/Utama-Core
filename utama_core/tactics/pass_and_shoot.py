@@ -174,7 +174,7 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
             if pass_complete:
                 inner.phase = "score"
         elif inner.phase == "score":
-            command, scored = _score_goal(game, ctx, receiver_id)
+            command, scored, inner.prev_best_shot_y = _score_goal(game, ctx, receiver_id, inner.prev_best_shot_y)
             commands = {receiver_id: command}
             if scored:
                 inner.goal_scored = True

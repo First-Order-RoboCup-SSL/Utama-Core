@@ -108,8 +108,24 @@ _RUNNER_DEPTH_FRACTION = 0.55  # how far up the weak flank the runner advances (
 # passer-orientation-based projection at an unrelated point on the field).
 # Both fixes are real and load-bearing together; confirmed via a full
 # two-team match trace reaching "finish" only once both were in place.
-_ARRIVAL_SPEED_THRESHOLD = 0.05  # m/s — must be below this, not just within radius, to count as "arrived"
+_ARRIVAL_SPEED_THRESHOLD = 0.1  # m/s — widened from 0.05: that tight a threshold flickered
+# on ordinary station-keeping jitter (observed via trace: speed oscillating
+# 0.03-0.07 m/s around a robot that had, for practical purposes, already
+# arrived), which flapped `runner_ready` tick to tick in the "relay" phase
+# below and never let the pass leg start. Root-caused as part of the
+# `counter_press` "never scores" investigation.
 _ARRIVAL_POSITION_TOLERANCE = 0.15  # metres — tighter than the original 0.25 for the same reason
+
+# Grace radius for treating the ball as still "held" by the relay source
+# robot even on a tick where has_ball(visual=True) reads False. rsim has a
+# known dribble-physics quirk where holding a ball for an extended period can
+# eject it briefly with no tactic-level cause — see
+# docs/strategies.md / project memory on rsim dribble issues. Without this,
+# a single ejection tick during "relay" sent the source robot straight into
+# go_to_ball, discarding its aim/hold state and restarting the leg. This is a
+# mitigation for simulator noise, not a root-cause fix — the real fix belongs
+# in rsim's dribbler physics, out of scope here.
+_BALL_RECOVERY_RADIUS = 0.3  # metres
 
 
 def _weak_side(game: Game, prev_side: Optional[int]) -> int:
@@ -211,6 +227,8 @@ class SwitchOfPlayMem:
     weak_side: Optional[int] = None
     goal_scored: bool = False
     phase_ticks: int = 0  # ticks spent in the current phase; drives the timeout reset (guidance point 1)
+    prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _pass_and_score.py
+    was_shooting: bool = False  # tracks "finish"'s own has_ball/shot_open branch; see its reset comment below
 
 
 class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
@@ -430,8 +448,11 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
                 # ball's own tiny position jitter while held is enough to
                 # spin that orientation around) with `intercept_pos` swinging
                 # wildly in lockstep, `dst_at_intercept` never settling.
-                if has_ball(game, source_id, visual=True):
-                    source_pos = game.friendly_robots[source_id].p
+                source_pos = game.friendly_robots[source_id].p
+                if (
+                    has_ball(game, source_id, visual=True)
+                    or source_pos.distance_to(game.ball.p.to_2d()) <= _BALL_RECOVERY_RADIUS
+                ):
                     runner_pos = game.friendly_robots[runner_id].p
                     commands[source_id] = move(
                         game=game,
@@ -451,22 +472,65 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             commands.update(leg_commands)
             if leg_complete:
                 mem.phase = "finish"
+                # The runner's commanded orientation jumps discontinuously
+                # here: "relay" aims it via _pass_exec's intercept-facing
+                # logic, "finish" immediately re-aims it at a shot target
+                # that's typically unrelated. The angular PID's derivative
+                # term (utama_core/motion_planning/src/pid/pid.py) keeps
+                # per-robot pre_errors/integrals state across this jump with
+                # no reset (nothing anywhere calls motion_controller.reset()
+                # on a target-context change) — on this tick, that stale
+                # error produces a large wrong-signed angular command, which
+                # AccelerationLimiter can then only unwind gradually,
+                # producing a multi-second non-convergent spin instead of a
+                # clean turn onto the shot line. Root-caused via direct
+                # match trace on `counter_press`: 63 consecutive "finish"
+                # ticks, every one "turning", zero reaching "kick", actual
+                # orientation sweeping through 100+ degrees off a target
+                # that itself barely moved. Reset on this one transition
+                # tick (narrowest fix — not a generic reset-on-every-tick,
+                # which would defeat the PID's own smoothing) clears the
+                # stale state right where the jump happens.
+                ctx.motion_controller.reset(runner_id)
             return commands, mem
 
         # phase == "finish": runner shoots if it has an open lane, otherwise
         # holds/re-approaches the ball until one opens or the phase times out
         # back to "assess" (handled by the timeout block above).
         if has_ball(game, runner_id, visual=True) and _shot_open(game, runner_id):
-            shot_cmd, scored = _score_goal(game, ctx, runner_id)
+            # Same discontinuity as the relay->finish transition above, one
+            # level down: has_ball/_shot_open flicker tick to tick (a
+            # marker stepping in/out of the shot lane, or a momentary
+            # has_ball=False read) bounces the runner in and out of this
+            # branch and into go_to_ball/hold below, each of which drives a
+            # completely different commanded orientation (facing the ball,
+            # or holding whatever it last faced). Root-caused via direct
+            # match trace on `counter_press`: after the phase-transition
+            # reset alone, orientation still failed to converge — traced
+            # gaps in "shooting" ticks each followed by a 2-2.7 rad jump in
+            # actual orientation, coinciding exactly with a round trip
+            # through this branch's else-clauses. The PID's stale
+            # pre_errors/integrals from that detour poison the next
+            # shooting attempt the same way the phase transition did.
+            # Detect re-entry (was_shooting was False last tick) and reset
+            # only on that edge — same narrow, transition-only reset
+            # pattern as above, not a reset-every-tick that would defeat
+            # the PID's own smoothing.
+            if not mem.was_shooting:
+                ctx.motion_controller.reset(runner_id)
+            mem.was_shooting = True
+            shot_cmd, scored, mem.prev_best_shot_y = _score_goal(game, ctx, runner_id, mem.prev_best_shot_y)
             commands[runner_id] = shot_cmd
             if scored:
                 mem.goal_scored = True
                 mem.phase = "assess"
         elif not has_ball(game, runner_id, visual=True):
+            mem.was_shooting = False
             commands[runner_id] = go_to_ball(
                 game=game, motion_controller=ctx.motion_controller, robot_id=runner_id, ctx=ctx
             )
         else:
+            mem.was_shooting = False
             commands[runner_id] = go_to_point(
                 game=game,
                 motion_controller=ctx.motion_controller,

@@ -203,10 +203,22 @@ def clamp_outside_enemy_defense_area(
 
 
 def find_best_shot(
-    point: Vector2D, enemy_robots: list, goal_x: float, goal_y1: float, goal_y2: float
+    point: Vector2D,
+    enemy_robots: list,
+    goal_x: float,
+    goal_y1: float,
+    goal_y2: float,
+    prev_best_shot_y: Optional[float] = None,
+    switch_margin: float = 0.0,
 ) -> tuple[Optional[float], Optional[tuple[float, float]]]:
-    """Thin passthrough to Core's own shadow/ray-casting shot finder."""
-    return _find_best_shot(point, enemy_robots, goal_x, goal_y1, goal_y2)
+    """Thin passthrough to Core's own shadow/ray-casting shot finder.
+
+    `prev_best_shot_y`/`switch_margin`: optional hysteresis, forwarded
+    unchanged — see `_find_best_shot`'s docstring in `skills/src/score_goal.py`.
+    Both default to no-hysteresis (today's exact behaviour); a caller opts in
+    by passing its own previously-chosen shot y (typically from its `mem`).
+    """
+    return _find_best_shot(point, enemy_robots, goal_x, goal_y1, goal_y2, prev_best_shot_y, switch_margin)
 
 
 @dataclass(frozen=True)

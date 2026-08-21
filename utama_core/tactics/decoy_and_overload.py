@@ -162,6 +162,7 @@ class DecoyOverloadMem:
     marker_start_y: Optional[float] = None
     lure_ticks: int = 0
     goal_scored: bool = False
+    prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _pass_and_score.py
 
 
 def _support_hold_point(game: Game, robot_id: int, index: int) -> Vector2D:
@@ -262,7 +263,7 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
         # phase == "finish": decoy shoots if its own lane is now open,
         # otherwise passes to the overloader sitting in the vacated lane.
         if has_ball(game, mem.decoy_id, visual=True) and _decoy_shot_open(game, mem.decoy_id):
-            shot_cmd, scored = _score_goal(game, ctx, mem.decoy_id)
+            shot_cmd, scored, mem.prev_best_shot_y = _score_goal(game, ctx, mem.decoy_id, mem.prev_best_shot_y)
             commands[mem.decoy_id] = shot_cmd
             commands.setdefault(
                 mem.overloader_id,
@@ -279,7 +280,7 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
         pass_cmds, pass_complete = _pass_exec(game, ctx, mem.decoy_id, mem.overloader_id)
         commands.update(pass_cmds)
         if pass_complete:
-            shot_cmd, scored = _score_goal(game, ctx, mem.overloader_id)
+            shot_cmd, scored, mem.prev_best_shot_y = _score_goal(game, ctx, mem.overloader_id, mem.prev_best_shot_y)
             commands[mem.overloader_id] = shot_cmd
             mem.goal_scored = scored
 

@@ -98,6 +98,7 @@ class PassAndScoreMem:
     goal_scored: bool = False
     phase_ticks: int = 0  # ticks spent in the current non-setup phase; drives the timeout reset
     setup_ticks_without_ball: int = 0  # consecutive setup ticks the passer has read has_ball=False
+    prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _score_goal below
 
 
 def _setup_positions(
@@ -279,19 +280,38 @@ def _pass_exec(
     return commands, pass_complete
 
 
-def _score_goal(game: Game, ctx: KernelContext, robot_id: int) -> tuple[RobotCommand, bool]:
+_SHOT_SWITCH_MARGIN = (
+    0.15  # metres of extra clearance a new gap must beat the previous one by; see find_best_shot's own docstring
+)
+
+
+def _score_goal(
+    game: Game, ctx: KernelContext, robot_id: int, prev_best_shot_y: Optional[float] = None
+) -> tuple[RobotCommand, bool, Optional[float]]:
     goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
     robot = game.friendly_robots[robot_id]
-    best_shot_y, _gap = find_best_shot(robot.p, list(game.enemy_robots.values()), goal_x, goal_y1, goal_y2)
+    best_shot_y, _gap = find_best_shot(
+        robot.p,
+        list(game.enemy_robots.values()),
+        goal_x,
+        goal_y1,
+        goal_y2,
+        prev_best_shot_y=prev_best_shot_y,
+        switch_margin=_SHOT_SWITCH_MARGIN,
+    )
     if best_shot_y is None:
-        return empty_command(dribbler_on=True), False
+        return empty_command(dribbler_on=True), False, prev_best_shot_y
 
     target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y))
     # visual=True: see run_setup_phase's comment on the strict sensor's
     # unreliability — without this the shooter can stall on the ball
     # forever if the IR/contact flag never fires.
     if not has_ball(game, robot_id, visual=True):
-        return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx), False
+        return (
+            go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx),
+            False,
+            best_shot_y,
+        )
     if not oriented_towards(game, robot_id, target_oren):
         return (
             turn_on_spot(
@@ -302,5 +322,6 @@ def _score_goal(game: Game, ctx: KernelContext, robot_id: int) -> tuple[RobotCom
                 dribbling=True,
             ),
             False,
+            best_shot_y,
         )
-    return kick(), True
+    return kick(), True, best_shot_y
