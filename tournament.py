@@ -32,6 +32,18 @@ aggregate stats, replay trail — see `utama_core.engine.match_log`/
 run. `--verbose`/`-v` also prints a possession/shots/ball-travel line per
 match as it completes; the recording itself is unconditional since it's
 cheap and is what a tournament run is actually for.
+
+`--both-sides` plays each pair twice — once with each config as
+`config_a` (yellow, defending/attacking the right side per `run_match`'s
+hardcoded `my_team_is_yellow=True, my_team_is_right=True`) — instead of
+once. This isn't a repeat: the sim's initial formation and every
+`my_team_is_right`-relative geometry call (`enemy_goal_line`, defense-area
+clamps, etc.) genuinely differ by side, so re-running the exact same pair
+gives a byte-identical result (fixed initial formation, no RNG source that
+varies run to run) while swapping which config plays which side gives a
+real second data point per pair — the smallest available source of
+variance reduction without inventing a noise model. Off by default since it
+doubles match count.
 """
 
 from __future__ import annotations
@@ -178,6 +190,9 @@ def main() -> None:
     # machine — os.cpu_count() ignores CPU affinity/cgroup limits, so a
     # `taskset`-restricted run would otherwise still size the pool for all
     # cores and oversubscribe.
+    # `--both-sides` plays every pair twice, once with each config on each
+    # side — see the module docstring for why this is real variance
+    # reduction rather than a duplicate match.
     # `--verbose`/`-v` prints each match's possession/shots/ball-travel line
     # alongside the score. The full observability stack (intention log, full
     # stats JSON, replay trail — see `utama_core.engine.match_log`/
@@ -192,6 +207,8 @@ def main() -> None:
     args = [a for a in args if a != "--sequential"]
     verbose = "--verbose" in args or "-v" in args
     args = [a for a in args if a not in ("--verbose", "-v")]
+    both_sides = "--both-sides" in args
+    args = [a for a in args if a != "--both-sides"]
     max_workers_override: int | None = None
     if "--max-workers" in args:
         idx = args.index("--max-workers")
@@ -215,13 +232,19 @@ def main() -> None:
     else:
         config_names = _CONFIG_NAMES
 
-    pairs = list(itertools.combinations(sorted(config_names), 2))
+    base_pairs = list(itertools.combinations(sorted(config_names), 2))
+    # --both-sides plays (a, b) and (b, a) as distinct fixtures — see the
+    # module docstring for why this is a real second data point (side-
+    # dependent geometry) rather than a duplicate, unlike naively re-running
+    # the same pair (which is byte-identical: fixed initial formation, no
+    # varying RNG source).
+    pairs = [(a, b) for a, b in base_pairs] + ([(b, a) for a, b in base_pairs] if both_sides else [])
 
     run_id = datetime.now(timezone.utc).strftime("tournament_%Y%m%d_%H%M%S")
     run_dir = REPLAY_BASE_PATH / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Round-robin: {len(config_names)} configs, {len(pairs)} matches")
+    print(f"Round-robin: {len(config_names)} configs, {len(pairs)} matches" + (" (both sides)" if both_sides else ""))
     print(f"{N_OUTFIELD + 1}v{N_OUTFIELD + 1}, {MATCH_DURATION_SECONDS:.0f}s sim time per match, headless rsim")
     print(f"Recording to replays/{run_id}/ (per-match replay, intention log, stats)")
     if not sequential:
