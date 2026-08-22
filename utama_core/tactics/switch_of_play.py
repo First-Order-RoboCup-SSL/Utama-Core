@@ -60,7 +60,7 @@ from typing import Optional
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.config.referee_constants import OWN_DEFENSE_AREA_STANDOFF_DISTANCE
 from utama_core.engine.context import KernelContext
-from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
+from utama_core.engine.tactic import BaseTactic, RobotId, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -228,7 +228,6 @@ class SwitchOfPlayMem:
     goal_scored: bool = False
     phase_ticks: int = 0  # ticks spent in the current phase; drives the timeout reset (guidance point 1)
     prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _pass_and_score.py
-    was_shooting: bool = False  # tracks "finish"'s own has_ball/shot_open branch; see its reset comment below
 
 
 class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
@@ -252,6 +251,21 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
         if mem.carrier_id is None:
             return False
         return mem.phase != "assess"
+
+    def suggest_next(self, game: Game, mem: SwitchOfPlayMem) -> Optional[TacticId]:
+        """Purely advisory (see `Tactic.suggest_next`'s contract) — after a
+        goal, `tick()` already loops `phase` back to "assess" and re-picks
+        roles on its own (see the module docstring), so this isn't needed
+        for correctness. It exists only for a `TacticGraph`-driven
+        repertoire that wants a chance to try a different attacking pattern
+        for the next possession rather than always re-running the same
+        relay. No existing strategy calls this (nothing consulted
+        `suggest_next` anywhere until `strategy/tactic_graph.py`), so this
+        has no effect on any already-tuned `build_*_kernel_strategy` config.
+        """
+        if mem.goal_scored:
+            return "givego"
+        return None
 
     def tick(
         self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: SwitchOfPlayMem
@@ -472,65 +486,22 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             commands.update(leg_commands)
             if leg_complete:
                 mem.phase = "finish"
-                # The runner's commanded orientation jumps discontinuously
-                # here: "relay" aims it via _pass_exec's intercept-facing
-                # logic, "finish" immediately re-aims it at a shot target
-                # that's typically unrelated. The angular PID's derivative
-                # term (utama_core/motion_planning/src/pid/pid.py) keeps
-                # per-robot pre_errors/integrals state across this jump with
-                # no reset (nothing anywhere calls motion_controller.reset()
-                # on a target-context change) — on this tick, that stale
-                # error produces a large wrong-signed angular command, which
-                # AccelerationLimiter can then only unwind gradually,
-                # producing a multi-second non-convergent spin instead of a
-                # clean turn onto the shot line. Root-caused via direct
-                # match trace on `counter_press`: 63 consecutive "finish"
-                # ticks, every one "turning", zero reaching "kick", actual
-                # orientation sweeping through 100+ degrees off a target
-                # that itself barely moved. Reset on this one transition
-                # tick (narrowest fix — not a generic reset-on-every-tick,
-                # which would defeat the PID's own smoothing) clears the
-                # stale state right where the jump happens.
-                ctx.motion_controller.reset(runner_id)
             return commands, mem
 
         # phase == "finish": runner shoots if it has an open lane, otherwise
         # holds/re-approaches the ball until one opens or the phase times out
         # back to "assess" (handled by the timeout block above).
         if has_ball(game, runner_id, visual=True) and _shot_open(game, runner_id):
-            # Same discontinuity as the relay->finish transition above, one
-            # level down: has_ball/_shot_open flicker tick to tick (a
-            # marker stepping in/out of the shot lane, or a momentary
-            # has_ball=False read) bounces the runner in and out of this
-            # branch and into go_to_ball/hold below, each of which drives a
-            # completely different commanded orientation (facing the ball,
-            # or holding whatever it last faced). Root-caused via direct
-            # match trace on `counter_press`: after the phase-transition
-            # reset alone, orientation still failed to converge — traced
-            # gaps in "shooting" ticks each followed by a 2-2.7 rad jump in
-            # actual orientation, coinciding exactly with a round trip
-            # through this branch's else-clauses. The PID's stale
-            # pre_errors/integrals from that detour poison the next
-            # shooting attempt the same way the phase transition did.
-            # Detect re-entry (was_shooting was False last tick) and reset
-            # only on that edge — same narrow, transition-only reset
-            # pattern as above, not a reset-every-tick that would defeat
-            # the PID's own smoothing.
-            if not mem.was_shooting:
-                ctx.motion_controller.reset(runner_id)
-            mem.was_shooting = True
             shot_cmd, scored, mem.prev_best_shot_y = _score_goal(game, ctx, runner_id, mem.prev_best_shot_y)
             commands[runner_id] = shot_cmd
             if scored:
                 mem.goal_scored = True
                 mem.phase = "assess"
         elif not has_ball(game, runner_id, visual=True):
-            mem.was_shooting = False
             commands[runner_id] = go_to_ball(
                 game=game, motion_controller=ctx.motion_controller, robot_id=runner_id, ctx=ctx
             )
         else:
-            mem.was_shooting = False
             commands[runner_id] = go_to_point(
                 game=game,
                 motion_controller=ctx.motion_controller,

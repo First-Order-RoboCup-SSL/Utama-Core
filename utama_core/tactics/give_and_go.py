@@ -39,8 +39,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+from utama_core.config.settings import CONTROL_FREQUENCY
 from utama_core.engine.context import KernelContext
-from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
+from utama_core.engine.tactic import BaseTactic, RobotId, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -63,6 +64,8 @@ from utama_core.skills.src.utils.move_utils import empty_command, kick, turn_on_
 from utama_core.tactics._pass_and_score import _pass_exec
 
 _MAX_HOPS_PER_POSSESSION = 6  # safety valve — force a shot attempt rather than passing forever
+_SUGGEST_HANDOFF_TIME = 2.0  # seconds — see suggest_next below
+_SUGGEST_HANDOFF_TICKS = round(_SUGGEST_HANDOFF_TIME * CONTROL_FREQUENCY)
 _RELOCATE_MIN_SEPARATION = 0.9  # metres — a relocating support point must clear the carrier and other supports
 # Retreat standoff from our own area front edge while the ball is in our own
 # half: support robots hold this far off the box line instead of packing it.
@@ -133,7 +136,7 @@ class GiveAndGoMem:
     carrier_id: Optional[int] = None
     receiver_id: Optional[int] = None  # locked target for the in-flight hop, None while deciding
     hop_count: int = 0
-    was_carrying: bool = False  # tracks carrier_has_ball's own edge; see its reset comment in tick()
+    ticks_held: int = 0  # ticks since the current carrier was assigned; feeds suggest_next's timeout below
 
 
 class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
@@ -159,25 +162,34 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         # landed with them yet. Reassignment here would strand a pass in flight.
         return mem.receiver_id is not None
 
+    def suggest_next(self, game: Game, mem: GiveAndGoMem) -> Optional[TacticId]:
+        """Purely advisory (see `Tactic.suggest_next`'s contract) — this
+        tactic's own `tick()` already force-shoots once `hop_count` hits
+        `_MAX_HOPS_PER_POSSESSION` rather than cycling forever, so this isn't
+        needed for correctness. It exists only for a `TacticGraph`-driven
+        repertoire that wants a chance to try a different attacking pattern
+        rather than staying on this one indefinitely. Triggers on wall-clock
+        ticks held (`_SUGGEST_HANDOFF_TICKS`), not `hop_count` — observed in
+        a real match against a low-possession opponent that this tactic can
+        hold the carrier role for the entire match without ever completing a
+        single hop (falls back to solo dribble-and-shoot when it can't find
+        a good pass, per the class docstring), so a hop-count-based trigger
+        would simply never fire. No existing strategy calls this (nothing
+        consulted `suggest_next` anywhere until `strategy/tactic_graph.py`),
+        so this has no effect on any already-tuned `build_*_kernel_strategy`
+        config.
+        """
+        if mem.ticks_held >= _SUGGEST_HANDOFF_TICKS:
+            return "switch"
+        return None
+
     def tick(
         self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: GiveAndGoMem
     ) -> tuple[dict[RobotId, RobotCommand], GiveAndGoMem]:
         if mem.carrier_id is None or mem.carrier_id not in robot_ids:
-            # This slot's assigned carrier just changed (fresh allocation, or
-            # a kernel reassignment after this tactic wasn't running for a
-            # stretch — e.g. right after a goal). Confirmed via trace to be
-            # the DOMINANT case in practice, more so than the in-tactic
-            # hop hand-off below: the new carrier may have spent the
-            # intervening time running a completely different tactic with an
-            # unrelated commanded orientation, so its angular PID's
-            # pre_errors/integrals are stale relative to whatever this tactic
-            # is about to command. Same discontinuity bug as the hop
-            # hand-off (see comment below) and SwitchOfPlayTactic's
-            # relay->finish transition — reset right on this assignment
-            # edge for the same reason.
-            ctx.motion_controller.reset(robot_ids[0])
-            mem.carrier_id, mem.receiver_id, mem.hop_count = robot_ids[0], None, 0
+            mem.carrier_id, mem.receiver_id, mem.hop_count, mem.ticks_held = robot_ids[0], None, 0, 0
 
+        mem.ticks_held += 1
         carrier_id = mem.carrier_id
         commands: dict[RobotId, RobotCommand] = {}
         carrier_has_ball = has_ball(game, carrier_id)
@@ -188,7 +200,6 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             )
 
         if not carrier_has_ball:
-            mem.was_carrying = False
             if ball_in_own_defense_area(game):
                 # The ball is inside our own box — an outfield robot may not
                 # enter it (DefenseAreaRule: the keeper owns the area). Hold
@@ -205,22 +216,6 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 )
             self._relocate_others(game, ctx, robot_ids, carrier_id, commands)
             return commands, mem
-
-        if not mem.was_carrying:
-            # Edge case found via trace, distinct from both the hop hand-off
-            # and the fresh-assignment case above: a carrier that was still
-            # chasing the ball (go_to_ball, which continuously faces the
-            # ball itself as it approaches) the tick before it catches it.
-            # The instant has_ball flips True, this tactic re-aims the
-            # carrier toward the shot target below — a fresh orientation
-            # discontinuity with no reset, same bug class as the other two
-            # transitions here and SwitchOfPlayTactic's relay->finish edge.
-            # Confirmed dominant in one traced tiki_taka match: the
-            # fresh-assignment reset above fired ~0.45s before this catch,
-            # far too early to help — the actual discontinuity is this
-            # catch edge, not the assignment edge that preceded it.
-            ctx.motion_controller.reset(carrier_id)
-            mem.was_carrying = True
 
         carrier_pos = game.friendly_robots[carrier_id].p
         if in_own_defense_area(game, carrier_pos):
@@ -248,19 +243,6 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             commands.update(hop_commands)
             self._relocate_others(game, ctx, robot_ids, carrier_id, commands, also_exclude=mem.receiver_id)
             if pass_complete:
-                # The new carrier just spent this whole hop facing the old
-                # carrier (_pass_exec's intercept_oren, required to catch the
-                # pass) and is about to be re-aimed toward goal instead —
-                # same orientation-discontinuity/stale-PID-derivative-state
-                # bug as SwitchOfPlayTactic's relay->finish transition (see
-                # utama_core/tactics/switch_of_play.py and docs/strategies.md's
-                # counter_press writeup for the full mechanism). Confirmed via
-                # trace on tiki_taka/zone_fluid (both run this tactic): the
-                # carrier's target_oren pinned at goal while actual
-                # orientation spun the wrong way and never converged. Reset
-                # right on this hand-off tick, same narrow pattern as the
-                # SwitchOfPlayTactic fix.
-                ctx.motion_controller.reset(mem.receiver_id)
                 mem.carrier_id, mem.receiver_id = mem.receiver_id, None
                 mem.hop_count += 1
             return commands, mem

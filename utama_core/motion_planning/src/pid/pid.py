@@ -11,6 +11,13 @@ from utama_core.motion_planning.src.pid.configs import (
 )
 from utama_core.motion_planning.src.pid.pid_abstract import AbstractPID
 
+# A phase hand-off / reassignment re-aiming a robot swings the target by a
+# large angle in one tick (observed 100+ degrees in `switch_of_play`'s
+# relay->finish transition); ordinary tracking of a moving target (e.g.
+# facing the ball while it drifts) never jumps this far in a single 1/60s
+# tick. See `AbstractPID._target_jumped`'s docstring for why this matters.
+_ORIENTATION_JUMP_THRESHOLD = 0.5  # radians (~28.6 degrees)
+
 
 class PID(AbstractPID[float]):
     """A PID controller that control the Orientation of the robot.
@@ -37,6 +44,9 @@ class PID(AbstractPID[float]):
         super().__init__(config)
         self.max_output = config.max_output
         self.min_output = config.min_output
+
+    def _target_jumped(self, target: float, last_target: float) -> bool:
+        return abs(normalise_heading(target - last_target)) > _ORIENTATION_JUMP_THRESHOLD
 
     def _calculate(
         self,
@@ -116,6 +126,26 @@ class TwoDPID(AbstractPID[Vector2D]):
         super().__init__(config)
         self.max_velocity = config.max_velocity
         self.max_acceleration = config.max_acceleration
+
+    def _target_jumped(self, target: Vector2D, last_target: Vector2D) -> bool:
+        # Unlike orientation, translation targets legitimately move by
+        # metre-scale distances tick-to-tick under ordinary operation — a
+        # moving formation reference point, a live-recomputed setup
+        # position, a path-planner waypoint (`FastPathPlanningController`
+        # feeds these straight from `FastPathPlanner._path_to`) all shift
+        # substantially without representing a discontinuity. Auto-reset
+        # on a position jump was tried and measured to do more harm than
+        # good: it fired ~14 times over 200 ticks tracking a single
+        # formation target whose reference point itself moves as the robot
+        # approaches (`test_referee_override.py`'s penalty-formation test),
+        # each reset discarding real acceleration-limiter/derivative
+        # progress and costing enough convergence time to fail the test's
+        # tolerance. Every actual bug this session traced was the
+        # *orientation* PID's stale derivative from a target re-aim
+        # (`PID._target_jumped` below) — translation was never the
+        # culprit, so it isn't given this behavior.
+        del target, last_target
+        return False
 
     def _calculate(self, target: Vector2D, current: Vector2D, robot_id: int) -> Vector2D:
         dx = target[0] - current[0]

@@ -173,14 +173,6 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
             commands, pass_complete = _pass_exec(game, ctx, passer_id, receiver_id)
             if pass_complete:
                 inner.phase = "score"
-                # The receiver just spent this whole pass leg facing the
-                # passer (_pass_exec's intercept_oren, required to catch the
-                # ball) and is about to be re-aimed toward goal instead —
-                # same orientation-discontinuity/stale-PID-derivative-state
-                # bug fixed in switch_of_play.py and give_and_go.py (see
-                # docs/strategies.md's counter_press writeup for the full
-                # mechanism). Reset right on this hand-off tick.
-                ctx.motion_controller.reset(receiver_id)
         elif inner.phase == "score":
             command, scored, inner.prev_best_shot_y = _score_goal(game, ctx, receiver_id, inner.prev_best_shot_y)
             commands = {receiver_id: command}

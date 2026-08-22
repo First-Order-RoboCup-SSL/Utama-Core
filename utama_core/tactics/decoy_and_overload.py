@@ -56,7 +56,7 @@ from typing import Optional
 
 from utama_core.config.settings import CONTROL_FREQUENCY
 from utama_core.engine.context import KernelContext
-from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
+from utama_core.engine.tactic import BaseTactic, RobotId, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
@@ -194,6 +194,22 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
         # gives its in-progress action.
         return mem.decoy_id is not None and not mem.goal_scored
 
+    def suggest_next(self, game: Game, mem: DecoyOverloadMem) -> Optional[TacticId]:
+        """Purely advisory (see `Tactic.suggest_next`'s contract) —
+        `is_committed()` already releases this tactic once `goal_scored` is
+        True, so a `TacticGraph` would reassign it regardless via normal
+        eviction-and-fallback-to-start. This exists only so a graph can hand
+        off to a specific next pattern (give-and-go, to build the next
+        possession up rather than immediately re-luring) instead of whatever
+        the graph's fallback happens to pick. No existing strategy calls
+        this (nothing consulted `suggest_next` anywhere until
+        `strategy/tactic_graph.py`), so this has no effect on any
+        already-tuned `build_*_kernel_strategy` config.
+        """
+        if mem.goal_scored:
+            return "givego"
+        return None
+
     def tick(
         self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: DecoyOverloadMem
     ) -> tuple[dict[RobotId, RobotCommand], DecoyOverloadMem]:
@@ -257,15 +273,6 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
                 dragged = abs(marker_now_y - mem.marker_start_y) >= _LURE_DRAG_THRESHOLD
             if dragged or mem.lure_ticks >= _LURE_MAX_TICKS:
                 mem.phase = "finish"
-                # The decoy just spent "lure" facing the touchline target
-                # (_lure_target, deliberately lateral/away from goal) and is
-                # about to be re-aimed toward goal instead in "finish" below
-                # — same orientation-discontinuity/stale-PID-derivative-state
-                # bug fixed in switch_of_play.py/give_and_go.py/
-                # pass_and_shoot.py (see docs/strategies.md's counter_press
-                # writeup for the full mechanism). Reset right on this
-                # transition tick.
-                ctx.motion_controller.reset(mem.decoy_id)
 
             return commands, mem
 
@@ -289,10 +296,6 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
         pass_cmds, pass_complete = _pass_exec(game, ctx, mem.decoy_id, mem.overloader_id)
         commands.update(pass_cmds)
         if pass_complete:
-            # Same discontinuity, second instance: the overloader just spent
-            # the pass leg facing the decoy (_pass_exec's intercept_oren) and
-            # is about to be re-aimed toward goal by _score_goal instead.
-            ctx.motion_controller.reset(mem.overloader_id)
             shot_cmd, scored, mem.prev_best_shot_y = _score_goal(game, ctx, mem.overloader_id, mem.prev_best_shot_y)
             commands[mem.overloader_id] = shot_cmd
             mem.goal_scored = scored
