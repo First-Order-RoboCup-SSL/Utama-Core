@@ -18,10 +18,39 @@ reimplementing keep-out-distance geometry — those classes only ever touch
 (verified: no other blackboard key is read), so a tiny duck-typed shim
 exposing just those three attributes is enough to drive them outside py_trees.
 
-`HALT`/`STOP`/`TIMEOUT_*` are deliberately NOT handled here: `Strategy.tick()`
-already returns `{}` for those via `is_paused` before any tactic (or this
-override) would run, which satisfies the same "stop issuing motion" rule more
-directly than routing through `StopStep`.
+`HALT` is correctly NOT handled here: `Strategy.tick()` returns `{}` for it
+via `is_paused`, satisfying "stop issuing motion", which is all HALT ever
+requires ("robots must stop immediately", see `HaltStep`).
+
+`STOP` and `TIMEOUT_YELLOW`/`TIMEOUT_BLUE` **are** handled here, both via
+`StopStep` — this docstring used to lump all three (HALT/STOP/TIMEOUT_*)
+together under "just freeze", which was wrong for the other two:
+
+- STOP's actual rule is stricter than a freeze: "stop in place, AND stay
+  >= 0.5m from the ball" (`docs/custom_referee_gui.md`). A robot already
+  inside that keep-out radius at the exact instant STOP is entered (e.g. a
+  carrier mid-dribble, or `goalkeep.py`'s own retrieval branch driving the
+  keeper up to a loose ball) has no way to comply by freezing — it is
+  already in violation, and freezing leaves it there. Found live: the
+  `CustomReferee`'s own `_all_robots_clear`/auto-advance-1 gate (see
+  `state_machine.py`) requires every robot to clear 0.5m before the queued
+  restart (e.g. `DIRECT_FREE_YELLOW` after a "too many defenders" foul) can
+  ever fire — with motion frozen and nobody backing away, that gate can
+  never be satisfied, deadlocking the match in STOP for the rest of the
+  game.
+- TIMEOUT_YELLOW/BLUE was never routed anywhere in the kernel path at all
+  (despite several comments elsewhere in this codebase claiming `is_paused`
+  covered it — it didn't; `RefereeCommand.TIMEOUT_YELLOW` was never actually
+  in `_PAUSE_COMMANDS`), so tactics kept ticking and issuing ordinary motion
+  commands straight through a timeout. The old BT path's own tree dispatched
+  `TIMEOUT_YELLOW | TIMEOUT_BLUE` to `StopStep` directly
+  (`docs/referee_integration.md`'s tree diagram) — the same "push any
+  encroaching robot outside the ball keep-out radius, freeze everyone else"
+  behaviour as STOP, not a passive freeze — so it belongs in this module
+  alongside STOP, not in `referee_reset.py`'s `_PAUSE_COMMANDS`.
+
+Both fixes reuse `StopStep`/`_clear_to_legal_positions` (already fully
+implemented in `actions.py`, just never wired into the kernel path).
 """
 
 from __future__ import annotations
@@ -38,6 +67,7 @@ from utama_core.custom_referee.actions import (
     PrepareKickoffTheirsStep,
     PreparePenaltyOursStep,
     PreparePenaltyTheirsStep,
+    StopStep,
 )
 from utama_core.engine.tactic import RobotId
 from utama_core.entities.data.command import RobotCommand
@@ -46,11 +76,15 @@ from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 
 # Commands the BT path treats as restarts requiring legal-position override
-# (i.e. everything in `_REFEREE_STOPPAGE_COMMANDS` except HALT/STOP/TIMEOUT_*,
-# which `Strategy.tick()`'s `is_paused` check already handles by issuing no
-# commands at all).
+# (i.e. everything in `_REFEREE_STOPPAGE_COMMANDS` except HALT, which
+# `Strategy.tick()`'s `is_paused` check already handles by issuing no commands
+# at all — see module docstring for why STOP and TIMEOUT_* are included here
+# despite STOP also being one of `is_paused`'s commands).
 _OVERRIDE_COMMANDS = frozenset(
     {
+        RefereeCommand.STOP,
+        RefereeCommand.TIMEOUT_YELLOW,
+        RefereeCommand.TIMEOUT_BLUE,
         RefereeCommand.PREPARE_KICKOFF_YELLOW,
         RefereeCommand.PREPARE_KICKOFF_BLUE,
         RefereeCommand.PREPARE_PENALTY_YELLOW,
@@ -89,6 +123,7 @@ class RefereeOverride:
     """
 
     def __init__(self):
+        self._stop = StopStep(name="Stop")
         self._ball_placement_ours = BallPlacementOursStep(name="BallPlacementOurs")
         self._ball_placement_ours.setup_()
         self._ball_placement_theirs = BallPlacementTheirsStep(name="BallPlacementTheirs")
@@ -112,6 +147,9 @@ class RefereeOverride:
         return dict(shim.cmd_map)
 
     def _step_for(self, command: RefereeCommand, my_team_is_yellow: bool):
+        if command in (RefereeCommand.STOP, RefereeCommand.TIMEOUT_YELLOW, RefereeCommand.TIMEOUT_BLUE):
+            return self._stop
+
         if command is RefereeCommand.BALL_PLACEMENT_YELLOW:
             return self._ball_placement_ours if my_team_is_yellow else self._ball_placement_theirs
         if command is RefereeCommand.BALL_PLACEMENT_BLUE:

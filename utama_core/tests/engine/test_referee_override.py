@@ -178,6 +178,57 @@ def test_back_to_back_restarts_dispatch_a_fresh_step_each_time(split_shape_runne
     assert kickoff_commands != placement_commands, "override did not re-dispatch for the second restart command"
 
 
+def test_stop_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_runner):
+    """STOP is an override command now, not a pure freeze (see
+    `referee_override.py`'s module docstring): a robot already inside the
+    ball keep-out radius at the moment STOP is entered must actively move
+    out, not sit frozen there. A plain `{}` freeze here was a real deadlock —
+    `CustomReferee`'s own STOP-to-queued-restart auto-advance requires every
+    robot to clear `BALL_KEEP_OUT_DISTANCE` first, which a frozen encroaching
+    robot can never satisfy."""
+    game = split_shape_runner.my.game
+    split_shape_runner.step_once()
+
+    ball_x, ball_y = game.ball.p.x, game.ball.p.y
+    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + 0.1, ball_y, 0.0)
+    split_shape_runner.step_once()
+
+    _set_referee_command(split_shape_runner, RefereeCommand.STOP)
+
+    for _ in range(200):
+        split_shape_runner.step_once()
+
+    ball = game.ball.p
+    for robot_id, robot in game.friendly_robots.items():
+        dist_to_ball = math.hypot(robot.p.x - ball.x, robot.p.y - ball.y)
+        assert dist_to_ball >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} too close to ball during STOP"
+
+
+def test_timeout_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_runner):
+    """TIMEOUT_YELLOW/BLUE is also an override command, routed to `StopStep`
+    exactly like STOP (see `referee_override.py`'s module docstring) — the
+    old BT path dispatched it the same way (`docs/referee_integration.md`'s
+    tree diagram), but the kernel port had never wired it into either
+    `is_paused` or `is_override_command` at all, so a timeout left tactics
+    ticking and issuing ordinary motion commands straight through it."""
+    game = split_shape_runner.my.game
+    split_shape_runner.step_once()
+
+    ball_x, ball_y = game.ball.p.x, game.ball.p.y
+    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + 0.1, ball_y, 0.0)
+    split_shape_runner.step_once()
+
+    _set_referee_command(split_shape_runner, RefereeCommand.TIMEOUT_YELLOW)
+
+    for _ in range(200):
+        split_shape_runner.step_once()
+
+    ball = game.ball.p
+    for robot_id, robot in game.friendly_robots.items():
+        dist_to_ball = math.hypot(robot.p.x - ball.x, robot.p.y - ball.y)
+        assert dist_to_ball >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} too close to ball during TIMEOUT"
+
+
 def test_goalkeeper_stops_during_halt(split_shape_runner):
     """The goalkeeper must stop issuing motion commands during HALT, same as
     the outfield pool (`Strategy.tick()`'s `is_paused` check) — it must not

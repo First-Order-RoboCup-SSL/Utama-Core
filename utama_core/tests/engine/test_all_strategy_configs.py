@@ -28,11 +28,13 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.strategy import Strategy
 from utama_core.entities.data.object import TeamType
 from utama_core.strategy.kernel_strategy import (
+    _clear_danger_picker,
     _counter_press_picker,
     _fixed_ratio_picker,
     _three_way_picker,
     _tiki_taka_picker,
     _zone_flow_picker,
+    build_clear_danger_kernel_strategy,
     build_counter_press_kernel_strategy,
     build_decoy_and_overload_kernel_strategy,
     build_give_and_go_solo_kernel_strategy,
@@ -58,6 +60,7 @@ _CONFIGS = [
     pytest.param(build_tiki_taka_kernel_strategy, id="tiki_taka"),
     pytest.param(build_counter_press_kernel_strategy, id="counter_press"),
     pytest.param(build_zone_fluid_kernel_strategy, id="zone_fluid"),
+    pytest.param(build_clear_danger_kernel_strategy, id="clear_danger"),
 ]
 
 
@@ -358,3 +361,81 @@ def test_zone_flow_overload_pinned_builds_with_givego_instead():
     )
     assert len(partition["givego"]) == 3
     assert len(partition["defense"]) == 2
+
+
+# --- clear-danger picker unit tests (danger valve + counter_flow postures) ---
+
+_CLEAR_ALL = frozenset({"attack", "press", "block", "clear"})
+
+
+def test_clear_danger_valve_takes_one_robot_when_applicable():
+    """Danger read fires (kernel reports 'clear' applicable): 1 clearer + block
+    screen with the rest, regardless of the possession edge."""
+    partition = _clear_danger_picker(
+        _stub_game(friendly_dist=2.0, enemy_dist=0.3, ball_x=3.0),  # losing, deep
+        _FIVE,
+        None,
+        _CLEAR_ALL,
+    )
+    assert len(partition["clear"]) == 1
+    assert len(partition["block"]) == 4
+    assert frozenset().union(*partition.values()) == _FIVE
+
+
+def test_clear_danger_valve_folds_everyone_in_when_block_unavailable():
+    partition = _clear_danger_picker(
+        _stub_game(friendly_dist=2.0, enemy_dist=0.3, ball_x=3.0),
+        _FIVE,
+        None,
+        frozenset({"clear"}),  # block pinned/inapplicable
+    )
+    assert partition == {"clear": _FIVE}
+
+
+def test_clear_danger_uses_counter_flow_press_posture_when_lost_no_danger():
+    partition = _clear_danger_picker(
+        _stub_game(friendly_dist=1.5, enemy_dist=0.2, ball_x=0.0),
+        _FIVE,
+        None,
+        _CLEAR_ALL - {"clear"},  # no danger: valve out of the candidate pool
+    )
+    assert len(partition["press"]) == 3
+    assert len(partition["block"]) == 2
+
+
+def test_clear_danger_attacks_with_three_when_won_no_danger():
+    partition = _clear_danger_picker(
+        _stub_game(friendly_dist=0.3, enemy_dist=1.5, ball_x=0.0),
+        _FIVE,
+        None,
+        _CLEAR_ALL - {"clear"},
+    )
+    assert len(partition["attack"]) == 3
+    assert len(partition["block"]) == 2
+
+
+def test_clear_danger_attack_stays_on_unknown_possession_edge():
+    """Sticky possession edge (same fix counter_flow/high_line_zone needed):
+    while we held attack last tick, an unreadable edge must not reset the
+    give-and-go trio — only a clear loss (enemy strictly closer) does."""
+    prev = {"attack": frozenset({1, 2, 3}), "block": frozenset({4, 5})}
+    partition = _clear_danger_picker(
+        _stub_game(friendly_dist=None, enemy_dist=None, ball_x=0.0),
+        _FIVE,
+        prev,
+        _CLEAR_ALL - {"clear"},
+    )
+    assert len(partition["attack"]) == 3
+
+
+def test_clear_danger_valve_overrides_standing_attack():
+    """Danger fires while we were attacking last tick: the valve still takes its
+    robot — danger is depth+pressure, not just possession."""
+    prev = {"attack": frozenset({1, 2, 3}), "block": frozenset({4, 5})}
+    partition = _clear_danger_picker(
+        _stub_game(friendly_dist=0.5, enemy_dist=1.5, ball_x=3.0),  # we're closer BUT deep+contested
+        _FIVE,
+        prev,
+        _CLEAR_ALL,
+    )
+    assert len(partition["clear"]) == 1

@@ -199,6 +199,16 @@ def test_barrier_reset_clears_mem_and_overrides_commitment():
 
 
 def test_pause_command_freezes_without_resetting_mem():
+    """Uses HALT, not STOP, to exercise the pure-freeze pause path: STOP is
+    now an override command routed through `RefereeOverride`/`StopStep` (see
+    `referee_override.py`'s module docstring — a plain `{}` freeze during
+    STOP could leave an already-encroaching robot stuck inside the ball
+    keep-out radius forever, deadlocking `CustomReferee`'s own
+    STOP→queued-restart auto-advance), which needs real geometry
+    (`friendly_robots`/`ball`/`field`) this file's bare `_FakeGame` doesn't
+    provide by design (see module docstring). HALT still freezes exactly the
+    way STOP used to, so it's the right stand-in for "a plain pause freezes
+    without resetting mem"."""
     tactic = RecordingTactic(committed=True)
     strategy = Strategy(
         tactics={"a": tactic},
@@ -209,11 +219,11 @@ def test_pause_command_freezes_without_resetting_mem():
 
     strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
     assert tactic.mem_creations == 1
-    commands = strategy.tick(_FakeGame(RefereeCommand.STOP))
+    commands = strategy.tick(_FakeGame(RefereeCommand.HALT))
     assert commands == {}  # no commands issued while paused
     assert tactic.mem_creations == 1  # mem NOT reset by a plain pause
 
-    # Resume with FORCE_START coming from STOP (not from a barrier command):
+    # Resume with FORCE_START coming from HALT (not from a barrier command):
     # should NOT be treated as a barrier reset.
     strategy.tick(_FakeGame(RefereeCommand.FORCE_START))
     assert tactic.mem_creations == 1
@@ -509,6 +519,8 @@ def test_tactic_becomes_reassignable_once_commitment_and_applicability_both_allo
 
 
 def test_pause_freezes_without_resetting_any_tactic():
+    """HALT, not STOP — see `test_pause_command_freezes_without_resetting_mem`'s
+    docstring for why."""
     tactic_a = RecordingTactic()
 
     def picker(game, free_robots, prev, applicable_tactic_ids):
@@ -523,7 +535,7 @@ def test_pause_freezes_without_resetting_any_tactic():
     strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
     assert tactic_a.mem_creations == 1
 
-    commands = strategy.tick(_FakeGame(RefereeCommand.STOP))
+    commands = strategy.tick(_FakeGame(RefereeCommand.HALT))
     assert commands == {}
     assert tactic_a.mem_creations == 1
 

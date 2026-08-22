@@ -73,7 +73,7 @@ picks them up — this file isn't itself a design doc.
    match went from 1 residual foul to 0; full suite unchanged at 638
    passed / 2 skipped / 2 xfailed both before and after.
 
-## Motion-controller discontinuity handling (flagged 2026-08-21, not decided)
+## Motion-controller discontinuity handling (flagged 2026-08-21, resolved 2026-08-22)
 
 Context: across a bug-fixing session, the same underlying bug — a tactic
 hands a robot a new orientation target that's discontinuous from what it was
@@ -89,30 +89,59 @@ not a mess (small, well-factored, zero drift between the two actively-used
 `MotionController` implementations) — the actual gap is a missing protocol at
 the tactics/motion-planning boundary: `ctx.motion_controller.reset(robot_id)`
 exists and correctly clears the stale state, but calling it is a manual,
-opt-in discipline enforced by nothing. Two ideas came out of that audit,
-flagged here for future consideration rather than committed to:
+opt-in discipline enforced by nothing. Two ideas came out of that audit; the
+first is now built (commit `91100ff`):
 
-1. **Discontinuity-detecting wrapper at the `MotionController` boundary.**
-   The idea: some mechanism at (or wrapping) `skills/src/utils/move_utils.py`'s
-   `move()` — already confirmed the single funnel point every skill/tactic
-   routes through before hitting `motion_controller.calculate()` — that
-   auto-invalidates a robot's PID state when its commanded target changes in
-   a way that means "this is a new task," not "this is a continuation of the
-   same task," without every tactic author needing to notice and hand-place
-   a `reset()` call.
-   - **Open design question, not yet resolved:** a plain distance/angle
-     *magnitude* threshold ("reset if the new target is more than X away
-     from the old one") is the obvious first idea, but it has a real
-     failure mode — it can't distinguish a genuine phase-transition jump
-     from legitimate fast-tracking of a moving target (e.g. `go_to_ball`'s
-     shield-approach continuously re-aiming at a moving contesting enemy,
-     which *should* keep its PID memory, since it's converging, not
-     switching tasks). Picking a threshold that's safe for both cases may
-     not exist as a single number.
-   - **An alternative worth weighing instead of magnitude-based detection:**
-     make it *identity*-based, not distance-based. Have `move()`/
-     `turn_on_spot()` accept an explicit intent tag from the caller (e.g.
-     `"switch_of_play.finish"` vs `"switch_of_play.relay"`), and
+1. **Built: discontinuity-detecting wrapper, magnitude-threshold approach,
+   orientation only.** `AbstractPID.calculate()` (`motion_planning/src/pid/
+   pid_abstract.py`) now tracks each robot's last commanded target and
+   auto-resets (`pre_errors`/`integrals`/`first_pass`/the acceleration
+   limiter) whenever the new target jumps past a threshold, before
+   computing — no tactic-side `reset()` call needed at all. This is exactly
+   the "magnitude threshold" idea flagged below as having an unresolved
+   failure mode, and that failure mode was real, measured, and resolved by
+   **scoping the mechanism to orientation only**:
+   - `PID._target_jumped` (the orientation controller): threshold
+     `0.5 rad (~28.6°)`. Verified in a live 60s match: 138 genuine
+     discontinuity resets fired, all with 2-4.5 rad deltas — the same class
+     of jump the six manually-fixed bugs above all were.
+   - `TwoDPID._target_jumped` (the translation controller): **deliberately a
+     no-op, always returns `False`.** Tried the same magnitude-threshold
+     approach here first and it caused a real regression:
+     `test_referee_override.py`'s penalty-formation test failed because a
+     live-recomputed formation target legitimately shifts by 0.6-1.2m
+     repeatedly as the robot approaches (measured directly, 14 spurious
+     resets over 200 ticks on one robot), each reset discarding real
+     acceleration-limiter/derivative progress. This confirms the exact
+     concern raised below — translation targets can't be told apart from a
+     discontinuity by magnitude alone — but it turned out not to matter:
+     every one of the six bugs that motivated this whole effort was the
+     *orientation* PID's stale derivative; translation was never the
+     culprit, so it simply doesn't need this behavior.
+   - Removed as dead weight once the PID layer handled this automatically:
+     all 9 manual `ctx.motion_controller.reset()` calls across
+     `give_and_go.py`/`switch_of_play.py`/`decoy_and_overload.py`/
+     `pass_and_shoot.py`/`lead_and_support.py`, plus the
+     `was_carrying`/`was_shooting` mem fields that existed purely to gate
+     them.
+   - Full test suite green (721 passed / 2 skipped / 2 xfailed) after the
+     fix, same baseline as before.
+2. **Not built, and now more clearly unnecessary given (1)'s result:** the
+   identity/intent-tag alternative below was the fallback in case magnitude
+   thresholds proved unworkable in general. Since the actual bug population
+   was 100% orientation and magnitude-thresholding works cleanly there, this
+   more invasive alternative (threading an intent tag through every
+   `move()`/`turn_on_spot()` call site) isn't needed. Left below for
+   reference, not because it's still an open decision.
+   - The idea: some mechanism at (or wrapping) `skills/src/utils/move_utils.py`'s
+     `move()` — already confirmed the single funnel point every skill/tactic
+     routes through before hitting `motion_controller.calculate()` — that
+     auto-invalidates a robot's PID state when its commanded target changes in
+     a way that means "this is a new task," not "this is a continuation of the
+     same task," without every tactic author needing to notice and hand-place
+     a `reset()` call.
+   - Have `move()`/`turn_on_spot()` accept an explicit intent tag from the
+     caller (e.g. `"switch_of_play.finish"` vs `"switch_of_play.relay"`), and
      auto-reset whenever that tag changes for a given robot. This pushes
      the actual judgment call back to the tactic (which already knows
      semantically when its own intent changed) while still removing the
@@ -126,15 +155,9 @@ flagged here for future consideration rather than committed to:
      375-389`) — the kernel already knows exactly when a robot's tactic
      assignment changes, which is a strict subset of "target went
      discontinuous," and today does nothing to the motion controller at
-     that moment either.
-   - Risk if built: medium — a wrong design here could reintroduce the
-     oscillation the existing hysteresis constants (`_COMMIT_RANGE`,
-     `_ARRIVAL_SPEED_THRESHOLD`, `switch_margin`, etc.) were built to
-     prevent, so whichever approach is picked needs real tuning/verification
-     against the match traces already referenced in those constants'
-     docstrings before being trusted over today's manual resets.
-   - Not started. Needs a short design spike (comparing the two approaches
-     above concretely) before implementation, not a straight build.
+     that moment either. Superseded by (1): the PID-level auto-detection
+     already covers reassignment discontinuities without needing the kernel
+     to know about motion-controller internals at all.
 
 2. **A shared `Sticky`/hysteresis helper.** The same audit found 5-6
    independently-invented instances of "keep the previous choice unless a

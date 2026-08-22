@@ -17,7 +17,15 @@ continuous shape, not an action):
   onto the ball-to-goal axis, a fixed standoff ahead of the ball, so the carrier is
   slowed at a predictable distance from the line. Clamped to stay outside our own
   defense area even when the ball is deep in it — the screen never turns into
-  another defender stacking inside the box.
+  another defender stacking inside the box. Exception: if the ball is loose (see
+  `ball_is_loose`) and outside our own box, the first defender drives straight to
+  it instead of the fixed lead-offset point — the lead-offset point only makes
+  sense as a "slow the carrier down" standoff, which is meaningless once there is
+  no carrier at all; without this a loose ball near (but wide of) our own box just
+  sits there with the first defender parked on an axis nobody is threatening.
+  Found live: a `clear_danger` vs `low_block`-shaped match pinned 28 seconds this
+  way (see `tactics/defense.py`'s matching fix for the sibling case in
+  `DefenseTactic`).
 - **screen** (everyone else): holds the line at `_SCREEN_OFFSET` in front of our
   defense area, each robot on its own lane, the whole line shifting sideways with
   the ball (`_SHIFT_FACTOR`), lanes clamped inside the field width. Never enters
@@ -36,6 +44,11 @@ from utama_core.engine.context import KernelContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
+from utama_core.shared.pass_and_score_geometry import (
+    ball_in_own_defense_area,
+    ball_is_loose,
+)
+from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
 
 # Depth of our own defense area (standard SSL penalty box front edge).
@@ -88,19 +101,27 @@ class BlockShapeTactic(BaseTactic[BlockShapeMem]):
 
         # --- step 1: nearest robot steps out to press the ball on the axis ---
         presser_id = min(robot_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball_p))
-        goal_x = own_goal_sign * half_length  # our own goal — press toward it keeps us between ball and goal
-        axis = (goal_x - ball_p.x, 0.0 - ball_p.y)
-        axis_len = (axis[0] ** 2 + axis[1] ** 2) ** 0.5
-        if axis_len > 1e-6:
-            lead_x = ball_p.x + axis[0] / axis_len * _FIRST_DEFENDER_LEAD
-            lead_y = ball_p.y + axis[1] / axis_len * _FIRST_DEFENDER_LEAD
+
+        if ball_is_loose(game) and not ball_in_own_defense_area(game):
+            # No carrier to stand off from — go get it instead of guarding an
+            # axis nobody is threatening (see class docstring).
+            commands[presser_id] = go_to_ball(
+                game=game, motion_controller=ctx.motion_controller, robot_id=presser_id, ctx=ctx
+            )
         else:
-            lead_x, lead_y = ball_p.x, ball_p.y
-        # Clamp the presser to stay clear of our own defense area.
-        if _progress_from_own_goal(lead_x) < min_progress_from_goal:
-            lead_x = own_goal_x - own_goal_sign * min_progress_from_goal
-        lead_y = max(-half_width + 0.5, min(half_width - 0.5, lead_y))
-        commands[presser_id] = go_to_point(game, ctx.motion_controller, presser_id, (lead_x, lead_y))
+            goal_x = own_goal_sign * half_length  # our own goal — press toward it keeps us between ball and goal
+            axis = (goal_x - ball_p.x, 0.0 - ball_p.y)
+            axis_len = (axis[0] ** 2 + axis[1] ** 2) ** 0.5
+            if axis_len > 1e-6:
+                lead_x = ball_p.x + axis[0] / axis_len * _FIRST_DEFENDER_LEAD
+                lead_y = ball_p.y + axis[1] / axis_len * _FIRST_DEFENDER_LEAD
+            else:
+                lead_x, lead_y = ball_p.x, ball_p.y
+            # Clamp the presser to stay clear of our own defense area.
+            if _progress_from_own_goal(lead_x) < min_progress_from_goal:
+                lead_x = own_goal_x - own_goal_sign * min_progress_from_goal
+            lead_y = max(-half_width + 0.5, min(half_width - 0.5, lead_y))
+            commands[presser_id] = go_to_point(game, ctx.motion_controller, presser_id, (lead_x, lead_y))
 
         # --- the rest hold the shifting screen line ---
         screen_ids = [rid for rid in robot_ids if rid != presser_id]

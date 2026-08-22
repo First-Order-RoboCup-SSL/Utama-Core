@@ -53,6 +53,7 @@ from utama_core.shared.pass_and_score_geometry import (
     find_best_shot,
     has_ball,
     in_own_defense_area,
+    no_shot_reposition_target,
     oriented_towards,
     own_defense_area_exit_point,
     score_pass_setup,
@@ -60,7 +61,7 @@ from utama_core.shared.pass_and_score_geometry import (
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import empty_command, kick, turn_on_spot
+from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
 from utama_core.tactics._pass_and_score import _pass_exec
 
 _MAX_HOPS_PER_POSSESSION = 6  # safety valve — force a shot attempt rather than passing forever
@@ -253,7 +254,22 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         carrier_pos = game.friendly_robots[carrier_id].p
         best_shot_y, _gap = find_best_shot(carrier_pos, list(game.enemy_robots.values()), goal_x, goal_y1, goal_y2)
         if best_shot_y is None:
-            commands[carrier_id] = empty_command(dribbler_on=True)
+            # No open lane at all — freezing here (the old behaviour) never
+            # resolves against a stationary blocker (e.g. a keeper at the
+            # goal mouth): nothing about the position changes, so the shot
+            # search comes back empty forever. Strafe instead; see
+            # `no_shot_reposition_target`'s docstring.
+            reposition = no_shot_reposition_target(
+                carrier_pos, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
+            )
+            commands[carrier_id] = move(
+                game=game,
+                motion_controller=ctx.motion_controller,
+                robot_id=carrier_id,
+                target_coords=reposition,
+                target_oren=carrier_pos.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
+                dribbling=True,
+            )
         else:
             target_oren = carrier_pos.angle_to(Vector2D(goal_x, best_shot_y))
             if oriented_towards(game, carrier_id, target_oren):

@@ -108,6 +108,17 @@ signal; do not treat a loss here as something to fix.
 
 ## Known open bugs
 
+**Note (2026-08-22): the manual `ctx.motion_controller.reset()` fixes described
+throughout this section no longer exist in the tactic files.** They've been
+superseded by automatic discontinuity detection at the PID level
+(`AbstractPID.calculate()`, commit `91100ff`) — the underlying bug class and
+root-cause analysis below is still accurate and worth reading, but if you go
+looking for the `reset()` calls themselves in `give_and_go.py`/
+`switch_of_play.py`/etc. to use as a template for a new tactic, they're gone;
+new tactics don't need to call `motion_controller.reset()` for this at all.
+See `docs/roadmap.md`'s "Motion-controller discontinuity handling" entry for
+the full account of what replaced them and why.
+
 - **`block_attacker` didn't contest the ball (fixed 2026-08-20)** — `PressAndContainTactic`'s
   presser only ever held a fixed 10%-of-the-way shot-line standoff point,
   never converging on the ball itself, so every press-using strategy could

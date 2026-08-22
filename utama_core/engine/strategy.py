@@ -217,20 +217,23 @@ class Strategy:
                 self._barrier_reset(game)
             self._prev_referee_command = current_command
 
-            if is_paused(current_command):
-                # Pause: mem and commitments survive untouched, but no tactic
-                # issues motion commands while play is stopped.
-                return {}
-
             if is_override_command(current_command):
-                # Restart in progress (kickoff/placement/free-kick/penalty):
-                # legal positioning takes over every outfield robot for this
-                # tick, same as the BT path's RefereeOverride Selector. Slots
+                # Restart in progress (kickoff/placement/free-kick/penalty),
+                # or STOP/TIMEOUT_* (see `referee_override.py`'s module
+                # docstring for why both are in this set too, ahead of the
+                # `is_paused` check below rather than behind it): legal
+                # positioning takes over every outfield robot for this tick,
+                # same as the BT path's RefereeOverride Selector. Slots
                 # already had their mem/commitments cleared by the barrier
                 # reset on the transition in; tactics simply don't tick while
                 # this is active, so there is nothing further to reconcile
                 # once the restart ends and normal picking resumes.
                 return self._referee_override.tick(game, self._ctx.motion_controller, current_command)
+
+            if is_paused(current_command):
+                # HALT: mem and commitments survive untouched, but no tactic
+                # issues motion commands while play is stopped.
+                return {}
 
         partition = self._choose_partition(game)
         self._validate_partition(partition)

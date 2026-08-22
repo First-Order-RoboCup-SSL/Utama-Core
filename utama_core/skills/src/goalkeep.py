@@ -7,6 +7,18 @@ wrapped in a `Tactic`. The keeper's target y-position on the goal line is
 one or two outfield defenders standing between the ball and goal (so the
 keeper doesn't try to cover an angle a teammate is already shadowing) — see
 the 1/2/3+ friendly-robot branches below.
+
+Exception: a ball at rest inside our own defense area never gets a goal-line
+target at all — see `_ball_needs_retrieval`'s docstring. Every outfield
+tactic that reaches a ball there holds the box's front edge instead of
+entering (`DefenseAreaRule` fouls any non-keeper inside), and this was the
+one function that could legally go in and do something about it, but never
+did: it always drove to a goal-line intercept regardless of where the ball
+actually was, so a ball that rolled dead in the box (not heading at goal,
+`predict_ball_pos_at_x` returns `None` for a near-stationary ball) just sat
+there for the rest of the match. Found live: a `clear_danger` vs `low_block`
+match pinned for the last 28 s of a 60 s game this way (see
+`docs/strategies.md`'s "Known open bugs").
 """
 
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
@@ -14,14 +26,69 @@ from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.shared.pass_and_score_geometry import (
+    ball_in_own_defense_area,
+    has_ball,
+    oriented_towards,
+    own_defense_area_exit_point,
+)
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.utils.defense_utils import (
     clamp_y,
     intersection_with_x_line,
     single_defender_stop_y,
 )
+from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
 
 # TODO: instead of checking number of friendly, should check roles
+
+_RETRIEVE_BALL_SPEED = 0.3  # m/s — below this, a ball in our box is "at rest," not a live shot to block
+_CLEAR_ARRIVED_MARGIN = ROBOT_RADIUS + 0.1  # how close to the box exit point counts as "arrived, ready to kick"
+
+
+def _ball_needs_retrieval(game: Game, robot_id: int) -> bool:
+    """A ball at rest inside our own box is not a shot to block — it is a
+    ball only the keeper may legally go and clear (`DefenseAreaRule` caps
+    outfield entry at 0). `goalkeep`'s ordinary goal-line targeting has no
+    concept of this: a stationary ball gives `predict_ball_pos_at_x` nothing
+    to predict (returns `None`), so the keeper falls back to a `stop_y`
+    computed from the ball's *current* y, which is still a goal-line point,
+    not the ball's actual position — so it never converges on a ball that
+    isn't already on the line. Once the keeper has picked the ball up,
+    `_ball_needs_clearing` takes over (see that docstring) instead of this
+    going back to False and falling through to the ordinary goal-line
+    branch, which would dribble the retrieved ball right back toward goal.
+    """
+    if game.ball is None or not ball_in_own_defense_area(game):
+        return False
+    if has_ball(game, robot_id, visual=True):
+        return False
+    ball_speed = (game.ball.v.x**2 + game.ball.v.y**2) ** 0.5
+    return ball_speed < _RETRIEVE_BALL_SPEED
+
+
+def _ball_needs_clearing(game: Game, robot_id: int) -> bool:
+    """True whenever the keeper currently has the ball — the follow-up to
+    `_ball_needs_retrieval`, covering the whole dribble-to-exit-then-kick
+    sequence. Deliberately does NOT also require `ball_in_own_defense_area`:
+    the ball tracks the dribbling keeper, so by the time it reaches the box's
+    exit point (the dribble target in `goalkeep` below) it has already
+    crossed to just outside the box — gating on box position would go False
+    right at arrival and drop back to the ordinary goal-line branch
+    mid-clearance, dribbling the retrieved ball right back in. `has_ball`
+    alone is the right latch: as soon as the keeper actually kicks (the last
+    step of this branch), it no longer has the ball and this goes False on
+    its own, with nothing left to clear.
+
+    Note this means an ordinary save where the keeper ends up holding the
+    ball right on the goal line also routes here rather than the goal-line
+    branch — harmless: the exit point sits further from goal than the line,
+    so the keeper simply dribbles it there and clears, which is a reasonable
+    thing to do with a held ball regardless of how it got there.
+    """
+    if game.ball is None:
+        return False
+    return has_ball(game, robot_id, visual=True)
 
 
 def goalkeep(
@@ -34,10 +101,53 @@ def goalkeep(
     Returns `None` if `game.ball` is unset (nothing to react to); otherwise a
     `RobotCommand` moving the keeper to the goal line, with the target
     y-coordinate adjusted for however many outfield defenders (0, 1, or 2+)
-    are currently positioned between the ball and the goal.
+    are currently positioned between the ball and the goal. Exception: a ball
+    at rest in our own box is driven straight to (see `_ball_needs_retrieval`)
+    rather than treated as a shot to cover.
     """
     if game.ball is None:
         return None
+
+    if _ball_needs_retrieval(game, robot_id):
+        return go_to_point(
+            game,
+            motion_controller,
+            robot_id,
+            game.ball.p.to_2d(),
+            dribbling=True,
+        )
+
+    if _ball_needs_clearing(game, robot_id):
+        # Dribble to the box's front edge, then kick square upfield (away
+        # from our own goal, along the field's long axis) — a minimal
+        # clearance. Not `ClearBallTactic`'s lane-scored clearance: that
+        # tactic is an outfield-robot slot with room to evaluate candidate
+        # landing lanes; the keeper's only job here is "don't leave the ball
+        # sitting dead in the box," so the simplest kick that gets it out
+        # and moving is enough.
+        keeper = game.friendly_robots[robot_id]
+        exit_point = own_defense_area_exit_point(game, keeper.p.y)
+        upfield_sign = -1.0 if game.my_team_is_right else 1.0
+        clear_target = Vector2D(exit_point.x + upfield_sign * 2.0, exit_point.y)
+        target_oren = keeper.p.angle_to(clear_target)
+        if keeper.p.distance_to(exit_point) >= _CLEAR_ARRIVED_MARGIN:
+            return move(
+                game=game,
+                motion_controller=motion_controller,
+                robot_id=robot_id,
+                target_coords=exit_point,
+                target_oren=target_oren,
+                dribbling=True,
+            )
+        if oriented_towards(game, robot_id, target_oren):
+            return kick()
+        return turn_on_spot(
+            game=game,
+            motion_controller=motion_controller,
+            robot_id=robot_id,
+            target_oren=target_oren,
+            dribbling=True,
+        )
 
     edge_offset = BALL_RADIUS + ROBOT_RADIUS
     goal_x = game.field.my_goal_line[0][0]

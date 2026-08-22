@@ -21,6 +21,14 @@ mechanism, found via a live grsim run of the split-shape strategy).
 Reuses `defend_parameter`, `go_to_point`, and `proximity_lookup`/plain
 distance comparisons — all existing motion/geometry primitives, not
 tactics.
+
+Shares `DefenseTactic`'s loose-ball gap for its own shadow pair (both wrap
+the same `defend_parameter`, which only ever reacts to the ball's current
+position and never approaches it) — see that tactic's docstring for the
+live-match pin this was found from. Fixed the same way: the shadow-pair
+member nearest an abandoned ball (see `ball_is_loose`) breaks off to fetch
+it instead of shadowing a shot no one is taking; the other shadow robot and
+all markers are unaffected.
 """
 
 from __future__ import annotations
@@ -32,8 +40,16 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.shared.pass_and_score_geometry import (
+    ball_in_own_defense_area,
+    ball_is_loose,
+    own_defense_area_exit_point,
+)
 from utama_core.skills.src.defend_parameter import defend_parameter
+from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
+
+_LOOSE_BALL_CLAIM_RANGE = 1.5  # metres — matches ball_is_loose's own contest range
 
 _MARK_STANDOFF = 0.6  # metres — mark from this distance on the goal side of the opponent, not on top of them
 
@@ -118,10 +134,29 @@ class ShadowAndMarkTactic(BaseTactic[ShadowAndMarkMem]):
         shadow_ids = robot_ids[:2]
         marker_ids = robot_ids[2:]
 
-        commands: dict[RobotId, RobotCommand] = {
-            robot_id: defend_parameter(game, ctx.motion_controller, robot_id, defender_group=shadow_ids)
-            for robot_id in shadow_ids
-        }
+        retriever_id = None
+        if shadow_ids and ball_is_loose(game):
+            ball_pos = game.ball.p.to_2d()
+            nearest_id = min(shadow_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball_pos))
+            if game.friendly_robots[nearest_id].p.distance_to(ball_pos) <= _LOOSE_BALL_CLAIM_RANGE:
+                retriever_id = nearest_id
+
+        commands: dict[RobotId, RobotCommand] = {}
+        for robot_id in shadow_ids:
+            if robot_id == retriever_id:
+                if ball_in_own_defense_area(game):
+                    commands[robot_id] = go_to_point(
+                        game=game,
+                        motion_controller=ctx.motion_controller,
+                        robot_id=robot_id,
+                        target_coords=own_defense_area_exit_point(game, game.ball.p.to_2d().y),
+                    )
+                else:
+                    commands[robot_id] = go_to_ball(
+                        game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx
+                    )
+            else:
+                commands[robot_id] = defend_parameter(game, ctx.motion_controller, robot_id, defender_group=shadow_ids)
 
         marks = _assign_marks(game, marker_ids)
         fallback_index = 0

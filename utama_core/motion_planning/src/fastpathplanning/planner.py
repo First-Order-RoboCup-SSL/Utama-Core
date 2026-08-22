@@ -31,9 +31,29 @@ class FastPathPlanner:
         self.MAXRECURSIONLENGTH = self.config.MAXRECURSION_LENGTH
         self.PROJECTEDFRAMES = self.config.PROJECTEDFRAMES
         self.PROJECTION_DISTANCE = self.config.PROJECTION_DISTANCE
+        self.DETOUR_SWITCH_MARGIN = self.config.DETOUR_SWITCH_MARGIN_RATIO * self.config.SUBGOAL_DISTANCE
 
         # Initialize collision cache dictionary
         self._collision_cache = {}
+
+        # Per-robot memory of the last chosen detour side (`subgoal_direction`,
+        # 0=right/1=left) in `check_segment` — see that method's docstring for
+        # why this exists and why the key also includes recursion depth and
+        # the (rounded) obstacle point being detoured around, not just
+        # `robot_id`. Never cleared per-tick (unlike `_collision_cache`) — the
+        # whole point is to survive across ticks; entries for an obstacle
+        # point the robot stops encountering simply go stale and are never
+        # read again, which is harmless (a future detour recreates a fresh
+        # key with no prior bias).
+        self._last_detour_side: dict[tuple[int, int, tuple[float, float]], int] = {}
+        self._DETOUR_MEMORY_PRECISION = 2  # decimal places — collapses float jitter, keeps distinct corners distinct
+
+        # Per-(robot_id, recursion_length) memory of the actual obstacle
+        # segment `collides()` picked last tick — see that method's
+        # docstring's `sticky_obstacle` parameter for why this exists
+        # (stabilizes *which* obstacle is being avoided, upstream of
+        # `_last_detour_side`'s "which side of it").
+        self._last_obstacle: dict[tuple[int, int], Tuple[np.ndarray, np.ndarray]] = {}
 
         # Per-tick obstacle cache: `_get_obstacles` was rebuilding the same
         # per-robot position/velocity segments and the same 8 static
@@ -276,14 +296,41 @@ class FastPathPlanner:
                 )
         return subgoal
 
-    def collides(self, segment: Tuple, obstacles: List):
-        # OPTIMIZATION: Cache collision results (convert numpy arrays to tuples for hashability)
-        seg_key = (tuple(segment[0]), tuple(segment[1]))
+    def collides(self, segment: Tuple, obstacles: List, sticky_obstacle: Optional[Tuple] = None):
+        """Find the obstacle segment nearest the path segment's start (the robot).
+
+        `sticky_obstacle`: the obstacle segment this same robot/recursion-depth
+        picked last tick (from `check_segment`'s `_last_obstacle` memory), if
+        any. When two real, static obstacles both sit close to the robot on
+        roughly opposite sides of its direct line — squeezing through a gap
+        between two defenders, not just one — "closest to the robot" can
+        legitimately swap between them from one tick to the next on a tiny
+        robot-position change, even though neither obstacle moved at all.
+        Since `check_segment` detours around whichever single obstacle this
+        method returns, that swap alone (independent of the left/right
+        hysteresis already applied downstream) was enough to send the robot
+        on a completely different detour every time the pick flipped — found
+        live via a free-kick kicker squeezed between two stationary defenders
+        standing on opposite sides of its approach line, orbiting the ball
+        forever despite both obstacles being motionless the whole time.
+        Fixed by requiring a real margin (`DETOUR_SWITCH_MARGIN`) before a
+        different obstacle can displace the one already being avoided —
+        same "don't flip without a real reason" pattern as the left/right
+        choice.
+        """
+        # OPTIMIZATION: Cache collision results (convert numpy arrays to tuples for hashability).
+        # `sticky_obstacle` is part of the key, not just the segment: it can
+        # change the result for an otherwise-identical segment (see
+        # docstring), so conflating the two would let a cache hit from a
+        # differently-stickied call silently return the wrong obstacle.
+        sticky_key = (tuple(sticky_obstacle[0]), tuple(sticky_obstacle[1])) if sticky_obstacle is not None else None
+        seg_key = (tuple(segment[0]), tuple(segment[1]), sticky_key)
         if seg_key in self._collision_cache:
             return self._collision_cache[seg_key]
 
         closest_obstacle = None
         min_dist_to_robot = float("inf")
+        sticky_dist_to_robot: Optional[float] = None
 
         # Broad-phase bounding-box prune: the true minimum distance between
         # two segments can never be smaller than the gap between their
@@ -317,9 +364,34 @@ class FastPathPlanner:
             if dist_between_segs < self.OBSTACLE_CLEARANCE:
                 # We want the obstacle closest to the START of the segment (the robot)
                 dist_to_robot = distance_point_to_segment(segment[0], o[0], o[1])
+                if (
+                    sticky_obstacle is not None
+                    and np.array_equal(o[0], sticky_obstacle[0])
+                    and np.array_equal(o[1], sticky_obstacle[1])
+                ):
+                    sticky_dist_to_robot = dist_to_robot
                 if dist_to_robot < min_dist_to_robot:
                     min_dist_to_robot = dist_to_robot
                     closest_obstacle = o
+
+        # Require a real margin before a different obstacle displaces the one
+        # this robot was already avoiding at this recursion depth last tick —
+        # see this method's docstring. `sticky_dist_to_robot` is None when the
+        # sticky obstacle isn't even in range this tick (it fell outside
+        # OBSTACLE_CLEARANCE entirely, e.g. the robot moved past it), in
+        # which case there is nothing to stick to and the true closest wins
+        # unconditionally, same as before this fix.
+        if (
+            sticky_obstacle is not None
+            and sticky_dist_to_robot is not None
+            and closest_obstacle is not None
+            and not (
+                np.array_equal(closest_obstacle[0], sticky_obstacle[0])
+                and np.array_equal(closest_obstacle[1], sticky_obstacle[1])
+            )
+            and sticky_dist_to_robot <= min_dist_to_robot + self.DETOUR_SWITCH_MARGIN
+        ):
+            closest_obstacle = sticky_obstacle
 
         obstacle_pos = None
         if closest_obstacle is not None:
@@ -337,9 +409,14 @@ class FastPathPlanner:
                 points = [closest_obstacle[0], closest_obstacle[1], point_c, point_d]
                 obstacle_pos = points[dists.index(min(dists))]
 
-        # Save to cache
-        self._collision_cache[seg_key] = obstacle_pos
-        return obstacle_pos
+        # Save to cache. Cached (and returned) as `(obstacle_pos,
+        # closest_obstacle)`, not just the position: `check_segment` needs
+        # the actual obstacle *segment* to remember for next tick's
+        # `sticky_obstacle` (see this method's docstring) — the position
+        # alone can't be compared against a candidate segment's identity.
+        result = (obstacle_pos, closest_obstacle)
+        self._collision_cache[seg_key] = result
+        return result
 
     def _trajectory_length(self, trajectory):
         return sum(distance(seg[0], seg[1]) for seg in trajectory)
@@ -351,17 +428,47 @@ class FastPathPlanner:
         recursion_length: int,
         target: np.ndarray,
         field_bounds: FieldBounds,
+        robot_id: Optional[int] = None,
     ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float]:
         """
         Recursively checks a segment for collisions and generates subgoals with
         a hysteresis bias to prevent path-switching jitter (indecisiveness).
+
+        `robot_id`: keys `self._last_detour_side`'s per-tick memory of which
+        side (`subgoal_direction`) this robot detoured around a given
+        obstacle point last time. Optional (defaults to no hysteresis,
+        matching the previous behaviour) since a few internal/test call
+        sites plan a one-off segment with no stable robot identity to key
+        memory against.
+
+        The memory key includes the (rounded) obstacle intersection point,
+        not just recursion depth: keying on depth alone was tried first and
+        found to actively cause the exact wall-clipping bug it was meant to
+        prevent — sliding around a rectangular obstacle's corner (e.g. the
+        enemy defense area) means avoiding a genuinely different edge/point
+        of that same rectangle before and after the corner, at the *same*
+        recursion depth, and forcing the pre-corner side to stick past that
+        transition cut straight across the corner into the rectangle.
+        Rounding the obstacle point to `_DETOUR_MEMORY_PRECISION` collapses
+        ordinary per-tick float jitter (same obstacle) into one key while
+        still treating a materially different point (a different edge, or
+        the far side of a corner) as a fresh decision with no prior bias.
         """
-        closest_obstacle = self.collides(segment, obstacles)
+        obstacle_memory_key = (robot_id, recursion_length) if robot_id is not None else None
+        sticky_obstacle_segment = (
+            self._last_obstacle.get(obstacle_memory_key) if obstacle_memory_key is not None else None
+        )
+        closest_obstacle, obstacle_segment = self.collides(segment, obstacles, sticky_obstacle=sticky_obstacle_segment)
         segment_length = distance(segment[0], segment[1])
 
         # Base case: Path is clear or maximum detour complexity reached
         if closest_obstacle is None or recursion_length >= self.MAXRECURSIONLENGTH:
+            if obstacle_memory_key is not None:
+                self._last_obstacle.pop(obstacle_memory_key, None)
             return [segment], segment_length
+
+        if obstacle_memory_key is not None:
+            self._last_obstacle[obstacle_memory_key] = obstacle_segment
 
         # Generate left and right detours
         subgoal_left = self._find_subgoal(segment[0], segment[1], closest_obstacle, obstacles, 1, 1)
@@ -371,19 +478,43 @@ class FastPathPlanner:
         right_valid = self.is_point_in_field(subgoal_right, field_bounds)
 
         best_subgoal = None
+        chosen_side: Optional[int] = None
 
-        # Heuristic: Pick the valid subgoal closest to the ultimate destination
+        # Heuristic: pick the valid subgoal closest to the ultimate
+        # destination, but biased toward whichever side this robot detoured
+        # around this same obstacle point last tick (see docstring) — the
+        # alternative side must beat it by more than DETOUR_SWITCH_MARGIN,
+        # not just any nonzero amount, or the previous side wins the tie.
+        # This is the same "don't flip on a rounding error" pattern as
+        # `_find_best_shot`'s switch_margin/`ClearBallTactic`'s
+        # _SWITCH_MARGIN elsewhere in this codebase.
+        obstacle_key = (
+            round(float(closest_obstacle[0]), self._DETOUR_MEMORY_PRECISION),
+            round(float(closest_obstacle[1]), self._DETOUR_MEMORY_PRECISION),
+        )
+        memory_key = (robot_id, recursion_length, obstacle_key) if robot_id is not None else None
+        prev_side = self._last_detour_side.get(memory_key) if memory_key is not None else None
+
         if left_valid and right_valid:
-            if distance(subgoal_left, target) < distance(subgoal_right, target):
-                best_subgoal = subgoal_left
+            dist_left = distance(subgoal_left, target)
+            dist_right = distance(subgoal_right, target)
+            if prev_side == 1 and dist_left <= dist_right + self.DETOUR_SWITCH_MARGIN:
+                best_subgoal, chosen_side = subgoal_left, 1
+            elif prev_side == 0 and dist_right <= dist_left + self.DETOUR_SWITCH_MARGIN:
+                best_subgoal, chosen_side = subgoal_right, 0
+            elif dist_left < dist_right:
+                best_subgoal, chosen_side = subgoal_left, 1
             else:
-                best_subgoal = subgoal_right
+                best_subgoal, chosen_side = subgoal_right, 0
         elif left_valid:
-            best_subgoal = subgoal_left
+            best_subgoal, chosen_side = subgoal_left, 1
         elif right_valid:
-            best_subgoal = subgoal_right
+            best_subgoal, chosen_side = subgoal_right, 0
         else:
             return [segment], segment_length
+
+        if memory_key is not None:
+            self._last_detour_side[memory_key] = chosen_side
 
         # Recursively check the two halves of the selected detour
         seg1, len1 = self.check_segment(
@@ -392,6 +523,7 @@ class FastPathPlanner:
             recursion_length + 1,
             target,
             field_bounds,
+            robot_id,
         )
         seg2, len2 = self.check_segment(
             (best_subgoal, segment[1]),
@@ -399,6 +531,7 @@ class FastPathPlanner:
             recursion_length + 1,
             target,
             field_bounds,
+            robot_id,
         )
 
         return seg1 + seg2, len1 + len2
@@ -589,7 +722,9 @@ class FastPathPlanner:
         )
 
         # 4. Plan geometric path
-        final_trajectory, _ = self.check_segment((our_pos, safe_target), obstacles, 0, safe_target, field_bounds)
+        final_trajectory, _ = self.check_segment(
+            (our_pos, safe_target), obstacles, 0, safe_target, field_bounds, robot_id
+        )
 
         # 5. Draw the resulting safe path segments when an RSim renderer is available.
         if self._should_draw:

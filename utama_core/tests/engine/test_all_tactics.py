@@ -22,10 +22,13 @@ table and shouldn't be forced into it. `PassAndShootTactic`'s pure-logic
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from utama_core.engine.context import KernelContext
 from utama_core.engine.tactic import TacticTag
+from utama_core.tactics.clear_ball import ClearBallTactic
 from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
 from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
@@ -46,6 +49,7 @@ _TACTIC_CASES = [
     pytest.param(ShadowAndMarkTactic, (1, 2, 3, 4), 5, 3, id="shadow_and_mark"),
     pytest.param(PressAndContainTactic, (1, 2, 3), 4, 3, id="press_and_contain"),
     pytest.param(GiveAndGoTactic, (1, 2, 3), 5, 2, id="give_and_go"),
+    pytest.param(ClearBallTactic, (1, 2, 3), 5, 2, id="clear_ball"),
     pytest.param(DecoyOverloadTactic, (1, 2, 3), 5, 2, id="decoy_and_overload"),
 ]
 
@@ -217,3 +221,101 @@ def test_give_and_go_reassigned_carrier_resets_role_state(runner_factory):
     assert mem.receiver_id is None
     assert mem.hop_count == 0
     assert set(commands.keys()) == {1, 2, 3}
+
+
+class _FakeVec:
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+
+    def __sub__(self, other):
+        return _FakeVec(self.x - other.x, self.y - other.y)
+
+    def __add__(self, other):
+        return _FakeVec(self.x + other.x, self.y + other.y)
+
+    def __mul__(self, scalar):
+        return _FakeVec(self.x * scalar, self.y * scalar)
+
+    def dot(self, other):
+        return self.x * other.x + self.y * other.y
+
+    def distance_to(self, other):
+        return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2) ** 0.5
+
+    def to_2d(self):
+        return self
+
+
+def test_clear_ball_inapplicable_outside_danger_zone():
+    """The valve only fires when the ball is deep in our own third AND an enemy
+    contests it — pure-logic test, no rsim needed. Deep-but-uncontested (a calm
+    back-pass situation) and contested-but-high must both read False."""
+    from utama_core.tactics.clear_ball import _DANGER_DEPTH, _PRESSURE_RANGE
+
+    class _FakeEnemy:
+        def __init__(self, x, y):
+            self.p = _FakeVec(x, y)
+
+    class _FakeField:
+        half_length = 4.5
+
+    class _FakeGame:
+        def __init__(self, ball_x):
+            self.my_team_is_right = True  # own goal at +4.5; own third is x > ~1.5
+            self.field = _FakeField()
+            self.ball = type("B", (), {"p": _FakeVec(ball_x, 0.0)})()
+            self.enemy_robots = {}
+
+    deep_contested = _FakeGame(ball_x=3.0)
+    deep_contested.enemy_robots = {1: _FakeEnemy(3.0 - _PRESSURE_RANGE / 2, 0.0)}
+    deep_free = _FakeGame(ball_x=3.0)
+    deep_free.enemy_robots = {1: _FakeEnemy(3.0 - (_PRESSURE_RANGE + 1.0), 0.0)}
+    high_contested = _FakeGame(ball_x=-(_DANGER_DEPTH + 1.0))  # deep in the ENEMY third
+    high_contested.enemy_robots = {1: _FakeEnemy(3.0, 0.0)}
+
+    tactic = ClearBallTactic()
+    assert tactic.applicable(deep_contested) is True
+    assert tactic.applicable(deep_free) is False
+    assert tactic.applicable(high_contested) is False
+
+
+def test_clear_ball_best_target_prefers_open_lane():
+    """An enemy squatting on the central lane must push the chosen clearance
+    target to one of the wide lanes."""
+    from utama_core.tactics.clear_ball import _best_clear_target
+
+    class _FakeEnemy:
+        def __init__(self, x, y):
+            self.p = _FakeVec(x, y)
+
+    class _FakeField:
+        half_length = 4.5
+        half_width = 3.0
+
+    game = SimpleNamespace(
+        my_team_is_right=True,
+        field=_FakeField(),
+        enemy_robots={1: _FakeEnemy(2.0, 0.0), 2: _FakeEnemy(2.5, 0.9)},
+    )
+    # Ball deep in our own corner-ish spot; central lane runs straight through
+    # both enemies.
+    target = _best_clear_target(game, _FakeVec(2.8, 0.2), prev_target=None)
+    assert abs(target.y) > 1.0, f"expected a wide lane, got y={target.y}"
+
+
+def test_clear_ball_best_target_hysteresis_keeps_prev_choice():
+    """A previous choice must stand when nothing clearly beats it — recomputing
+    fresh every tick is exactly the flapping bug class documented on
+    `find_best_shot`/`go_to_ball`. With an empty field all lanes score equally,
+    so the standing choice can never be displaced."""
+    from utama_core.tactics.clear_ball import _best_clear_target
+
+    class _FakeField:
+        half_length = 4.5
+        half_width = 3.0
+
+    game = SimpleNamespace(my_team_is_right=True, field=_FakeField(), enemy_robots={})
+    ball = _FakeVec(2.5, 0.0)
+    first_choice = _best_clear_target(game, ball, prev_target=None)
+    held = _best_clear_target(game, ball, prev_target=first_choice)
+    assert held == first_choice

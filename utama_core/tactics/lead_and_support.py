@@ -40,12 +40,13 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_positions,
     find_best_shot,
     has_ball,
+    no_shot_reposition_target,
     oriented_towards,
     segment_blocked,
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import empty_command, kick, turn_on_spot
+from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
 
 _MIN_SUPPORT_SEPARATION = 0.9  # metres — supports must not crowd each other or the leader
 _SUPPORT_FORWARD_BIAS = 0.35  # weight favouring support points closer to the enemy goal
@@ -187,7 +188,19 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
             goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
             best_shot_y, gap = find_best_shot(leader_pos, list(game.enemy_robots.values()), goal_x, goal_y1, goal_y2)
             if best_shot_y is None:
-                commands[leader_id] = empty_command(dribbler_on=True)
+                # See `no_shot_reposition_target`'s docstring: freezing here
+                # never resolves against a stationary blocker.
+                reposition = no_shot_reposition_target(
+                    leader_pos, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
+                )
+                commands[leader_id] = move(
+                    game=game,
+                    motion_controller=ctx.motion_controller,
+                    robot_id=leader_id,
+                    target_coords=reposition,
+                    target_oren=leader_pos.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
+                    dribbling=True,
+                )
             else:
                 target_oren = leader_pos.angle_to(Vector2D(goal_x, best_shot_y))
                 if oriented_towards(game, leader_id, target_oren):

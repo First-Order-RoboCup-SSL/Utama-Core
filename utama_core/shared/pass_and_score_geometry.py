@@ -88,6 +88,44 @@ def enemy_positions(game: Game) -> list[Vector2D]:
     return [enemy.p for enemy in game.enemy_robots.values() if enemy is not None]
 
 
+_LOOSE_BALL_SPEED = 0.3  # m/s — matches goalkeep.py's own-box retrieval threshold
+_LOOSE_BALL_CONTEST_RANGE = 1.5  # metres — matches PressAndContainTactic's own _PRESS_RANGE
+
+
+def ball_is_loose(game: Game, contest_range: float = _LOOSE_BALL_CONTEST_RANGE) -> bool:
+    """True when the ball is sitting dead with no enemy nearby to contest it.
+
+    Every "defensive shape" tactic (`DefenseTactic`, `BlockShapeTactic`,
+    `ShadowAndMarkTactic`) positions purely off the ball-to-goal shot angle or
+    off enemy robots, and never actually approaches the ball itself —
+    correct when an enemy has or is about to have it (that's what shadowing
+    prepares for), but wrong once the ball is abandoned altogether: nothing
+    in any of those tactics' geometry ever changes for a ball with no owner,
+    so it just sits wherever it stopped, for the rest of the match, even deep
+    in a defender's own corner with a friendly robot standing a metre away.
+    `PressAndContainTactic` already opts out of exactly this case via its own
+    `applicable()` (`_PRESS_RANGE`) rather than stepping on it — this uses
+    the same range so "no one is contesting it" means the same thing across
+    every defensive tactic that checks it.
+
+    Deliberately does not check which team's corner the ball is in, or
+    distance from any particular robot — that's for the caller (typically:
+    "is my own nearest assigned robot closer to the ball than
+    `_LOOSE_BALL_CONTEST_RANGE`, and if so send it to fetch the ball instead
+    of holding its normal shape this tick").
+    """
+    if game.ball is None:
+        return False
+    ball_speed = (game.ball.v.x**2 + game.ball.v.y**2) ** 0.5
+    if ball_speed >= _LOOSE_BALL_SPEED:
+        return False
+    ball_pos = game.ball.p.to_2d()
+    for enemy in game.enemy_robots.values():
+        if enemy is not None and enemy.p.distance_to(ball_pos) <= contest_range:
+            return False
+    return True
+
+
 def _distance_to_segment(point: Vector2D, start: Vector2D, end: Vector2D) -> float:
     segment = end - start
     segment_len_sq = segment.dot(segment)
@@ -219,6 +257,51 @@ def find_best_shot(
     by passing its own previously-chosen shot y (typically from its `mem`).
     """
     return _find_best_shot(point, enemy_robots, goal_x, goal_y1, goal_y2, prev_best_shot_y, switch_margin)
+
+
+_NO_SHOT_STRAFE_STEP = 0.6  # metres of lateral reposition per tick while hunting for a lane
+
+
+def no_shot_reposition_target(
+    carrier_pos: Vector2D, enemy_robots: list, goal_x: float, goal_y1: float, goal_y2: float, field_half_width: float
+) -> Vector2D:
+    """Where to dribble to when `find_best_shot` returns no lane at all.
+
+    Every `find_best_shot(...) -> (None, None)` call site used to respond by
+    freezing in place (`empty_command(dribbler_on=True)`) — correct only if
+    the blocker is about to move on its own. Against a stationary keeper
+    covering the whole goal from close range (the common case once a carrier
+    reaches the goal mouth) nothing about that position ever changes, so the
+    freeze is permanent: this was the actual mechanism behind a `clear_danger`
+    vs `low_block` match pinning 0-0 for 48 straight seconds (see
+    `docs/strategies.md`'s "Known open bugs" and
+    `docs/investigation_default_vs_lowblock_stalemate.md` for the sibling
+    pin this shares its shape with, at the ball-approach stage rather than
+    here at the finishing stage).
+
+    Fix: step laterally, away from the nearest blocker's side of the goal,
+    which changes every enemy's shadow angle (`_ray_casting`) enough that a
+    gap reliably opens within a few strafes — cheaper than reasoning about
+    the blockers' shadows directly, and correct for the same reason standing
+    still is wrong: motion is the only thing that changes this calculation's
+    inputs. Falls back to sliding toward goal-center if there are no
+    enemies at all (shouldn't happen when `find_best_shot` just returned
+    `None`, but keeps this total).
+    """
+    if enemy_robots:
+        nearest = min(enemy_robots, key=lambda e: carrier_pos.distance_to(e))
+        # Step away from whichever side of us the nearest blocker sits on; a
+        # blocker dead level (rare — tie only matters for direction, not
+        # whether to move) breaks toward +y arbitrarily.
+        away_sign = 1.0 if nearest.y <= carrier_pos.y else -1.0
+    else:
+        goal_mid_y = (goal_y1 + goal_y2) / 2.0
+        away_sign = 1.0 if carrier_pos.y >= goal_mid_y else -1.0
+    margin = 0.3
+    target_y = max(
+        -field_half_width + margin, min(field_half_width - margin, carrier_pos.y + away_sign * _NO_SHOT_STRAFE_STEP)
+    )
+    return Vector2D(carrier_pos.x, target_y)
 
 
 @dataclass(frozen=True)

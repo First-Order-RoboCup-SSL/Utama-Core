@@ -201,14 +201,18 @@ class AbstractStrategy:
         cmd_map: dict[int, RobotCommand] = {}
         cmd_map.update(outfield_commands)
 
-        # During a referee-restart override, `outfield_commands` already covers
-        # every friendly robot including the goalkeeper (the override's Step
-        # classes compute for all of `game.friendly_robots`, not just the
-        # outfield pool) — ticking GoalkeeperTactic on top would overwrite that
-        # with normal ball-tracking logic mid-restart.
+        # During a referee-restart override (including STOP and TIMEOUT_* —
+        # see `referee_override.py`'s module docstring for why both are
+        # override commands, not just a pause), `outfield_commands` already
+        # covers every friendly robot including the goalkeeper (the
+        # override's Step classes compute for all of `game.friendly_robots`,
+        # not just the outfield pool, and `StopStep` in particular will drive
+        # the keeper off the ball if it's inside the keep-out radius) —
+        # ticking GoalkeeperTactic on top would overwrite that with normal
+        # ball-tracking logic mid-restart.
         #
-        # During HALT/STOP, the goalkeeper must stop issuing motion commands
-        # for the same reason `Strategy.tick()` freezes the outfield pool via
+        # During HALT, the goalkeeper must stop issuing motion commands for
+        # the same reason `Strategy.tick()` freezes the outfield pool via
         # `is_paused` — skipping the tick here falls through to
         # `execute_default_action` below, which returns `empty_command(False)`,
         # the correct "stop" command.

@@ -29,9 +29,11 @@ from utama_core.shared.pass_and_score_geometry import (
     clamp_outside_own_defense_area,
     clamp_to_field,
     enemy_goal_line,
+    enemy_positions,
     find_best_shot,
     has_ball,
     intercept_point,
+    no_shot_reposition_target,
     oriented_towards,
     score_pass_setup,
 )
@@ -300,7 +302,22 @@ def _score_goal(
         switch_margin=_SHOT_SWITCH_MARGIN,
     )
     if best_shot_y is None:
-        return empty_command(dribbler_on=True), False, prev_best_shot_y
+        # See `no_shot_reposition_target`'s docstring: freezing here never
+        # resolves against a stationary blocker (e.g. a keeper at the goal
+        # mouth) — nothing about a stationary position changes the shot
+        # search's inputs, so it never comes back non-None on its own.
+        reposition = no_shot_reposition_target(
+            robot.p, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
+        )
+        cmd = move(
+            game=game,
+            motion_controller=ctx.motion_controller,
+            robot_id=robot_id,
+            target_coords=reposition,
+            target_oren=robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
+            dribbling=True,
+        )
+        return cmd, False, prev_best_shot_y
 
     target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y))
     # visual=True: see run_setup_phase's comment on the strict sensor's

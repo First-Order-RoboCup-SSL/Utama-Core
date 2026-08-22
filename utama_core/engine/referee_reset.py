@@ -79,6 +79,19 @@ _RESUME_COMMANDS = frozenset({RefereeCommand.NORMAL_START, RefereeCommand.FORCE_
 
 # Commands that pause play without starting a new phase. `mem`/`is_committed()`
 # must survive these untouched; only live command issuance should stop.
+#
+# TIMEOUT_YELLOW/BLUE is NOT in this set, even though it pauses play the same
+# way STOP does: the old BT path dispatched it straight to `StopStep`
+# (`docs/referee_integration.md`'s tree diagram — `Timeout [Sequence] ->
+# CheckRefereeCommand(TIMEOUT_YELLOW | TIMEOUT_BLUE) -> StopStep`), the same
+# active "push any encroaching robot outside the ball keep-out radius" logic
+# STOP itself uses, not a passive freeze. So TIMEOUT_* is wired into
+# `referee_override.py`'s `_OVERRIDE_COMMANDS` alongside STOP instead of here
+# — see that module for the routing and the fuller history (this was
+# previously unhandled by either mechanism at all: three separate comments in
+# this codebase claimed `is_paused` already covered `TIMEOUT_*`, but it
+# didn't — a real regression from the BT port where a timeout left tactics
+# ticking and issuing ordinary motion commands instead of idling).
 _PAUSE_COMMANDS = frozenset({RefereeCommand.HALT, RefereeCommand.STOP})
 
 

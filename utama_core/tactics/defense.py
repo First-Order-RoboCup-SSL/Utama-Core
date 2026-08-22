@@ -10,8 +10,19 @@ picking sides dynamically for a 2-defender team) already lives in Core and
 needed no porting itself. This tactic is that same dispatch, expressed as a
 `tick()` instead of `execute_default_action`.
 
-No cross-tick state: `defend_parameter` recomputes its target from scratch
-every tick, including the 2-defender side-selection, so `mem` is empty.
+Exception: a loose ball with no enemy contesting it (see `ball_is_loose`)
+never gets shadowed at all — shadowing only ever reacts to the ball's
+current position, so an abandoned ball just sits there forever with a
+defender parked a shot-shadow's distance away. Found live: a `clear_danger`
+vs `low_block` match pinned 28 straight seconds this way, ball dead in a
+corner near `low_block`'s own goal line, three defenders standing
+1.1-1.5m away all still shadowing a shot no one was taking. The nearest
+assigned defender breaks off to fetch it instead (see `tick()` below); the
+rest keep shadowing normally via `defend_parameter`.
+
+No other cross-tick state: `defend_parameter` recomputes its target from
+scratch every tick, including the 2-defender side-selection, so `mem` is
+empty.
 """
 
 from __future__ import annotations
@@ -22,7 +33,16 @@ from utama_core.engine.context import KernelContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
+from utama_core.shared.pass_and_score_geometry import (
+    ball_in_own_defense_area,
+    ball_is_loose,
+    own_defense_area_exit_point,
+)
 from utama_core.skills.src.defend_parameter import defend_parameter
+from utama_core.skills.src.go_to_ball import go_to_ball
+from utama_core.skills.src.go_to_point import go_to_point
+
+_LOOSE_BALL_CLAIM_RANGE = 1.5  # metres — matches ball_is_loose's own contest range
 
 
 @dataclass
@@ -53,8 +73,31 @@ class DefenseTactic(BaseTactic[DefenseMem]):
     def tick(
         self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: DefenseMem
     ) -> tuple[dict[RobotId, RobotCommand], DefenseMem]:
-        commands = {
-            robot_id: defend_parameter(game, ctx.motion_controller, robot_id, defender_group=robot_ids)
-            for robot_id in robot_ids
-        }
+        retriever_id = None
+        if ball_is_loose(game):
+            ball_pos = game.ball.p.to_2d()
+            nearest_id = min(robot_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball_pos))
+            if game.friendly_robots[nearest_id].p.distance_to(ball_pos) <= _LOOSE_BALL_CLAIM_RANGE:
+                retriever_id = nearest_id
+
+        commands: dict[RobotId, RobotCommand] = {}
+        for robot_id in robot_ids:
+            if robot_id == retriever_id:
+                if ball_in_own_defense_area(game):
+                    # Only the keeper may enter our own box (DefenseAreaRule)
+                    # — hold the nearest legal edge instead; goalkeep.py's own
+                    # retrieval branch (see that module) is what actually
+                    # fetches a loose ball once it's this deep.
+                    commands[robot_id] = go_to_point(
+                        game=game,
+                        motion_controller=ctx.motion_controller,
+                        robot_id=robot_id,
+                        target_coords=own_defense_area_exit_point(game, game.ball.p.to_2d().y),
+                    )
+                else:
+                    commands[robot_id] = go_to_ball(
+                        game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx
+                    )
+            else:
+                commands[robot_id] = defend_parameter(game, ctx.motion_controller, robot_id, defender_group=robot_ids)
         return commands, mem
