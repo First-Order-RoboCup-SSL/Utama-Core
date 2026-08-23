@@ -7,6 +7,7 @@ from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTA
 from utama_core.config.settings import CONTROL_FREQUENCY
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.math_utils import (
     closest_point_on_segment,
     distance,
@@ -19,6 +20,21 @@ from utama_core.motion_planning.src.fastpathplanning.config import (
     fastpathplanningconfig as config,
 )
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+
+# Same set `DefenseAreaRule` (custom_referee/rules/defense_area_rule.py) uses to
+# decide when defense-area encroachment is actually a foul — entry is legal
+# outside these commands (e.g. during a DIRECT_FREE_*/BALL_PLACEMENT_* restart
+# where the ball itself has come to rest in the opponent's box and a robot must
+# be able to retrieve it). Duplicated rather than imported: every one of
+# CustomReferee's own rule modules (defense_area_rule.py, out_of_bounds_rule.py,
+# ball_speed_rule.py, goal_rule.py) already independently defines this same
+# constant rather than sharing one, and importing a referee-rule module from
+# the motion planner would be an odd new direction of coupling for one small
+# set.
+_ACTIVE_PLAY_COMMANDS = {
+    RefereeCommand.NORMAL_START,
+    RefereeCommand.FORCE_START,
+}
 
 
 class FastPathPlanner:
@@ -126,6 +142,40 @@ class FastPathPlanner:
         min_y = min(c[1] for c in corners) - margin
         max_y = max(c[1] for c in corners) + margin
         return min_x, max_x, min_y, max_y
+
+    def _enemy_defense_area_retrieval_exempt(self, game: Game) -> bool:
+        """True when a robot must be allowed to actually enter the opponent's
+        defense area to retrieve the ball, rather than have every target/
+        waypoint there clamped to the boundary.
+
+        Mirrors `DefenseAreaRule`'s own notion of when entry is a foul at all
+        (`_ACTIVE_PLAY_COMMANDS` — NORMAL_START/FORCE_START; every other
+        command, e.g. DIRECT_FREE_*/BALL_PLACEMENT_*, is a stoppage where
+        attacker encroachment into the opponent's box is not penalized). Also
+        requires the ball to actually be resting inside the enemy defense area
+        right now — this is deliberately narrower than "any stoppage", so a
+        formation/support target that happens to be computed near the box
+        during a restart is still clamped as before; only a genuine
+        ball-in-the-box retrieval is exempted.
+
+        Without this, `DIRECT_FREE_OURS`/`BALL_PLACEMENT_OURS`
+        (`custom_referee/actions.py`) can correctly choose to approach the
+        ball, but the planner refuses to route anywhere inside the rectangle
+        at all — the kicker/placer converges to just outside
+        `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE` from the box and can never close
+        the last stretch to the ball, stalling the restart indefinitely (the
+        referee never sees the ball move, so no auto-advance condition is
+        ever satisfied either).
+        """
+        referee = game.referee
+        command = getattr(referee, "referee_command", None) if referee is not None else None
+        if command in _ACTIVE_PLAY_COMMANDS:
+            return False
+        ball = game.ball
+        if ball is None:
+            return False
+        min_x, max_x, min_y, max_y = self._enemy_defense_rect(game, margin=0.0)
+        return min_x <= ball.p.x <= max_x and min_y <= ball.p.y <= max_y
 
     def _project_outside_rect(self, point: np.ndarray, rect: Tuple[float, float, float, float]) -> np.ndarray:
         """Push `point` to the nearest edge of `rect` if it lies inside; otherwise return it unchanged."""
@@ -674,6 +724,33 @@ class FastPathPlanner:
         # 1. Get obstacles and draw Red velocity lines
         obstacles = self._get_obstacles(game, robot_id, our_pos, field_bounds)
 
+        # 1a. Same idea as 1b below, one obstacle-class earlier: when the ball
+        # itself is legitimately resting in the opponent's defense area during
+        # a stoppage (DIRECT_FREE_*/BALL_PLACEMENT_* — never during actual
+        # NORMAL_START/FORCE_START play, when entry really is a foul), the
+        # retrieving robot must be able to route into and target inside that
+        # rectangle, not just detour around it. Exclude the enemy-defense-area
+        # segments (added by `_refresh_obstacle_cache`) from routing the same
+        # way `boundary_segments` gets excluded below, and remember the
+        # exemption so steps 2/7 skip clamping the target/waypoint back out of
+        # the rectangle. See `_enemy_defense_area_retrieval_exempt`'s docstring
+        # for the stall this prevents.
+        defense_area_retrieval_exempt = self._enemy_defense_area_retrieval_exempt(game)
+        if defense_area_retrieval_exempt:
+            defense_rect = self._enemy_defense_rect(game, margin=OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+            rmin_x, rmax_x, rmin_y, rmax_y = defense_rect
+            rc0 = (rmin_x, rmax_y)
+            rc1 = (rmax_x, rmax_y)
+            rc2 = (rmax_x, rmin_y)
+            rc3 = (rmin_x, rmin_y)
+            defense_rect_segments = {
+                (rc0, rc1),
+                (rc1, rc2),
+                (rc2, rc3),
+                (rc3, rc0),
+            }
+            obstacles = [o for o in obstacles if (tuple(o[0]), tuple(o[1])) not in defense_rect_segments]
+
         # 1b. A target that's genuinely outside the field (e.g. a free-kick
         # kicker's approach point for a ball that went out of bounds — the
         # ball's real resting spot, which the restart requires actually
@@ -723,9 +800,16 @@ class FastPathPlanner:
         # centimetres into the real defense area (see git history / design
         # doc) — preventing the actual SSL violation took priority over this
         # synthetic test's exact-boundary formation targets.
-        raw_target = self._project_outside_rect(
-            raw_target, self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
-        )
+        #
+        # Skipped when `defense_area_retrieval_exempt` (see step 1a): a target
+        # at/near the ball's real position inside the box must not be clamped
+        # back out of it, or the retrieving robot converges just outside
+        # `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE` from the ball and can never
+        # close the gap — the exact stall this whole exemption exists to fix.
+        if not defense_area_retrieval_exempt:
+            raw_target = self._project_outside_rect(
+                raw_target, self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+            )
 
         # 3. Sanitize target — skip boundary walls so robots can reach the ball
         # near touchlines, and skip obstacles that are themselves right next
@@ -782,9 +866,14 @@ class FastPathPlanner:
         # the robot is actively driving toward, not a stationary destination,
         # so a smaller margin was measured to still let the robot cross the
         # real boundary under momentum.
-        new_target = self._project_outside_rect(
-            new_target, self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
-        )
+        #
+        # Same exemption as step 2 — skipped so a smoothed waypoint that's
+        # legitimately inside the box (chasing a ball resting there) isn't
+        # projected back out right before being returned as the final target.
+        if not defense_area_retrieval_exempt:
+            new_target = self._project_outside_rect(
+                new_target, self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+            )
 
         if self._should_draw:
             self._env.draw_line((our_pos, new_target), color="Blue")
