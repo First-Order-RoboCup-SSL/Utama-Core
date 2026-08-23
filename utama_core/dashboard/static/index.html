@@ -57,7 +57,10 @@
       <span class="muted" id="replay-no-tactics" style="font-size:.68rem; display:none;">no tactic data for this replay</span>
       <span class="muted" id="replay-no-referee" style="font-size:.68rem; display:none;">no referee data for this replay</span>
     </div>
-    <div class="field-wrap" style="flex:1;"><canvas id="replay-field-canvas"></canvas></div>
+    <div class="field-wrap" style="flex:1;">
+      <canvas id="replay-field-canvas"></canvas>
+      <div id="replay-loading" class="loading-overlay" style="display:none;">Loading replay…</div>
+    </div>
     <div class="stack" style="padding:6px 10px 10px; gap:4px;">
       <input type="range" id="replay-slider" min="0" max="0" value="0" style="width:100%;">
       <div class="row" style="align-items:center; justify-content:space-between;">

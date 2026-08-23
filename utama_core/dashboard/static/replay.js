@@ -225,6 +225,23 @@
       });
   }
 
+  const TRANSPORT_CONTROL_IDS = [
+    "replay-play",
+    "replay-step-back",
+    "replay-step-fwd",
+    "replay-slider",
+    "replay-speed",
+  ];
+
+  function setLoading(isLoading) {
+    const overlay = document.getElementById("replay-loading");
+    if (overlay) overlay.style.display = isLoading ? "" : "none";
+    for (const id of TRANSPORT_CONTROL_IDS) {
+      const el = document.getElementById(id);
+      if (el) el.disabled = isLoading;
+    }
+  }
+
   function loadReplay(path) {
     stopPlayback();
     frames = [];
@@ -233,6 +250,7 @@
     lastIndex = 0;
     resetEventCursors();
     setIndex(0);
+    setLoading(true);
     fetch("/replay/frames?path=" + encodeURIComponent(path))
       .then((r) => r.json())
       .then((data) => {
@@ -258,7 +276,9 @@
         if (refBanner) refBanner.style.display = data.has_referee_data ? "none" : "";
         renderIntentionLog();
         setIndex(0);
-      });
+      })
+      .catch((err) => console.error("replay fetch error:", err))
+      .finally(() => setLoading(false));
   }
 
   function loadReplayByPath(path) {
