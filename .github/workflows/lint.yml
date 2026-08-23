@@ -9,3 +9,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v3
+        with:
+          # Pinned to match pixi.toml's locked ruff version -- unpinned, this
+          # action installs "latest", which silently drifts from whatever
+          # `ruff.toml` was actually written/tested against as new default
+          # rules land in newer Ruff releases (found: 0.15.12 local vs 0.16.4
+          # CI disagreed on 753 files' worth of newly-default-on pyupgrade
+          # rules, none of which `ruff.toml` ever opted into).
+          version: "0.15.12"
