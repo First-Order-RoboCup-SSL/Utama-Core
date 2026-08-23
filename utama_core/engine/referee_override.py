@@ -11,12 +11,13 @@ The old BT path (`actions.py`, plus a `tree.py` that no longer exists — see
 `docs/referee_integration.md`, now stale) already solved this: a priority
 Selector matches the current `RefereeCommand` and, when matched, takes over
 every friendly robot's command for that tick, bypassing the strategy tree
-entirely. This module reuses that same logic (the `*Step` `AbstractBehaviour`
-subclasses in `utama_core/custom_referee/actions.py`) rather than
-reimplementing keep-out-distance geometry — those classes only ever touch
-`blackboard.game`, `blackboard.motion_controller`, and `blackboard.cmd_map`
-(verified: no other blackboard key is read), so a tiny duck-typed shim
-exposing just those three attributes is enough to drive them outside py_trees.
+entirely. This module reuses that same logic (the `*Step` classes in
+`utama_core/custom_referee/actions.py`, now plain classes with no py_trees
+dependency) rather than reimplementing keep-out-distance geometry — those
+classes only ever touch `blackboard.game`, `blackboard.motion_controller`,
+and `blackboard.cmd_map` (verified: no other blackboard key is read), so a
+tiny duck-typed shim exposing just those three attributes is enough to drive
+them.
 
 `HALT` is correctly NOT handled here: `Strategy.tick()` returns `{}` for it
 via `is_paused`, satisfying "stop issuing motion", which is all HALT ever
@@ -123,16 +124,15 @@ class RefereeOverride:
     """
 
     def __init__(self):
-        self._stop = StopStep(name="Stop")
-        self._ball_placement_ours = BallPlacementOursStep(name="BallPlacementOurs")
-        self._ball_placement_ours.setup_()
-        self._ball_placement_theirs = BallPlacementTheirsStep(name="BallPlacementTheirs")
-        self._kickoff_ours = PrepareKickoffOursStep(name="KickoffOurs")
-        self._kickoff_theirs = PrepareKickoffTheirsStep(name="KickoffTheirs")
-        self._penalty_ours = PreparePenaltyOursStep(name="PenaltyOurs")
-        self._penalty_theirs = PreparePenaltyTheirsStep(name="PenaltyTheirs")
-        self._direct_free_ours = DirectFreeOursStep(name="DirectFreeOurs")
-        self._direct_free_theirs = DirectFreeTheirsStep(name="DirectFreeTheirs")
+        self._stop = StopStep()
+        self._ball_placement_ours = BallPlacementOursStep()
+        self._ball_placement_theirs = BallPlacementTheirsStep()
+        self._kickoff_ours = PrepareKickoffOursStep()
+        self._kickoff_theirs = PrepareKickoffTheirsStep()
+        self._penalty_ours = PreparePenaltyOursStep()
+        self._penalty_theirs = PreparePenaltyTheirsStep()
+        self._direct_free_ours = DirectFreeOursStep()
+        self._direct_free_theirs = DirectFreeTheirsStep()
 
     def tick(
         self, game: Game, motion_controller: MotionController, command: RefereeCommand

@@ -11,7 +11,6 @@ Tests cover:
 
 from types import SimpleNamespace
 
-import py_trees
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
@@ -116,7 +115,7 @@ def _make_game(
 
 
 def _make_blackboard(game: Game, cmd_map=None):
-    """Construct a minimal SimpleNamespace blackboard as used by AbstractBehaviour."""
+    """Construct a minimal SimpleNamespace blackboard as used by the referee Step classes."""
     bb = SimpleNamespace()
     bb.game = game
     bb.cmd_map = cmd_map if cmd_map is not None else {}
@@ -291,46 +290,30 @@ def _make_cmd_map(game: Game) -> dict:
 
 
 class TestHaltAndStopStep:
-    def _run_step(self, step_class, game: Game) -> tuple:
-        from types import SimpleNamespace
-
+    def _run_step(self, step_class, game: Game) -> dict:
         cmd_map = _make_cmd_map(game)
         bb = _make_blackboard(game, cmd_map)
-        node = step_class(name="TestStep")
+        node = step_class()
         node.blackboard = bb
-        status = node.update()
-        return status, cmd_map
-
-    def test_halt_returns_running(self):
-        from utama_core.custom_referee.actions import HaltStep
-
-        game = _make_game(referee=_make_referee_data(command=RefereeCommand.HALT))
-        status, _ = self._run_step(HaltStep, game)
-        assert status == py_trees.common.Status.RUNNING
+        node.update()
+        return cmd_map
 
     def test_halt_writes_to_all_robots(self):
         from utama_core.custom_referee.actions import HaltStep
 
         robots = {0: _robot(0), 1: _robot(1)}
         game = _make_game(friendly_robots=robots, referee=_make_referee_data())
-        status, cmd_map = self._run_step(HaltStep, game)
+        cmd_map = self._run_step(HaltStep, game)
         assert set(cmd_map.keys()) == {0, 1}
         for rid in robots:
             assert cmd_map[rid] is not None
-
-    def test_stop_returns_running(self):
-        from utama_core.custom_referee.actions import StopStep
-
-        game = _make_game(referee=_make_referee_data(command=RefereeCommand.STOP))
-        status, _ = self._run_step(StopStep, game)
-        assert status == py_trees.common.Status.RUNNING
 
     def test_stop_writes_to_all_robots(self):
         from utama_core.custom_referee.actions import StopStep
 
         robots = {0: _robot(0), 1: _robot(1), 2: _robot(2)}
         game = _make_game(friendly_robots=robots, referee=_make_referee_data())
-        status, cmd_map = self._run_step(StopStep, game)
+        cmd_map = self._run_step(StopStep, game)
         assert set(cmd_map.keys()) == {0, 1, 2}
 
 
@@ -379,12 +362,11 @@ class TestBallPlacementOursStep:
         )
 
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.BallPlacementOursStep(name="BallPlacementOurs")
+        node = referee_actions.BallPlacementOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
 
-        assert status == py_trees.common.Status.RUNNING
         assert captured[0][0] == 0
         assert captured[0][1].x == game.ball.p.x
         assert captured[0][1].y == game.ball.p.y
@@ -448,12 +430,11 @@ class TestBallPlacementOursStep:
         )
 
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.BallPlacementOursStep(name="BallPlacementOurs")
+        node = referee_actions.BallPlacementOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
 
-        assert status == py_trees.common.Status.RUNNING
         # Robot already faces target → should call move (not turn_on_spot).
         assert len(move_captured) >= 1
         assert move_captured[0][0] == 0
@@ -480,12 +461,11 @@ class TestBallPlacementOursStep:
         game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
 
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.BallPlacementOursStep(name="BallPlacementOurs")
+        node = referee_actions.BallPlacementOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
 
-        assert status == py_trees.common.Status.RUNNING
         assert len(captured) == 2
         placer_move = next(item for item in captured if item[0] == 0)
         support_move = next(item for item in captured if item[0] == 1)
@@ -517,12 +497,11 @@ class TestRefereeKeepOutRetreat:
         }
         game = _make_game(friendly_robots=robots, referee=_make_referee_data(command=RefereeCommand.STOP))
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.StopStep(name="Stop")
+        node = referee_actions.StopStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
 
-        assert status == py_trees.common.Status.RUNNING
         assert len(captured) == 1
         assert captured[0][0] == 0
         assert captured[0][1] == Vector2D(0.8, 0.0)
@@ -563,12 +542,11 @@ class TestRefereeKeepOutRetreat:
             ),
         )
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.StopStep(name="Stop")
+        node = referee_actions.StopStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
 
-        assert status == py_trees.common.Status.RUNNING
         assert len(captured) == 1
         assert captured[0][0] == 0
         assert captured[0][1] == Vector2D(-3.25, 0.0)
@@ -591,12 +569,11 @@ class TestRefereeKeepOutRetreat:
         referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_BLUE)
         game = _make_game(friendly_robots=robots, referee=referee)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.BallPlacementTheirsStep(name="BallPlacementTheirs")
+        node = referee_actions.BallPlacementTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
 
-        assert status == py_trees.common.Status.RUNNING
         assert len(captured) == 1
         assert captured[0][0] == 0
         assert captured[0][1] == Vector2D(0.8, 0.0)
@@ -637,12 +614,11 @@ class TestRefereeKeepOutRetreat:
             ),
         )
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.BallPlacementTheirsStep(name="BallPlacementTheirs")
+        node = referee_actions.BallPlacementTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
 
-        assert status == py_trees.common.Status.RUNNING
         assert len(captured) == 1
         assert captured[0][0] == 0
         assert captured[0][1] == Vector2D(1.8, 1.0)
@@ -665,12 +641,11 @@ class TestRefereeKeepOutRetreat:
         referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
         game = _make_game(friendly_robots=robots, referee=referee)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeTheirsStep(name="DirectFreeTheirs")
+        node = referee_actions.DirectFreeTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
 
-        assert status == py_trees.common.Status.RUNNING
         assert len(captured) == 1
         assert captured[0][0] == 0
         assert captured[0][1] == Vector2D(0.8, 0.0)
@@ -696,13 +671,12 @@ class TestPenaltyPositioning:
         referee.yellow_team.goalkeeper = 1
         game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.PreparePenaltyOursStep(name="PreparePenaltyOurs")
+        node = referee_actions.PreparePenaltyOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
         kicker_target = next(target for robot_id, target in captured if robot_id == 0)
 
-        assert status == py_trees.common.Status.RUNNING
         assert kicker_target.x == pytest.approx(-2.25)
         assert kicker_target.x < 0.0
 
@@ -726,14 +700,13 @@ class TestPenaltyPositioning:
         referee.yellow_team.goalkeeper = 1
         game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.PreparePenaltyTheirsStep(name="PreparePenaltyTheirs")
+        node = referee_actions.PreparePenaltyTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
         keeper_target = next(target for robot_id, target in captured if robot_id == 1)
         support_targets = [target for robot_id, target in captured if robot_id != 1]
 
-        assert status == py_trees.common.Status.RUNNING
         assert keeper_target.x == pytest.approx(4.5)
         assert all(target.x > 0.0 for target in support_targets)
 
@@ -765,10 +738,10 @@ class TestVariableFieldScaling:
             field_bounds=custom_bounds,
         )
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.PrepareKickoffOursStep(name="PrepareKickoffOurs")
+        node = referee_actions.PrepareKickoffOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
         # Kicker must be the lowest-ID *outfield* robot — robot 0 is the pinned
         # goalkeeper and must not leave its line to take kickoffs (it is a
         # support robot here, not the kicker).
@@ -776,7 +749,6 @@ class TestVariableFieldScaling:
         keeper_target = next(target for robot_id, target in captured if robot_id == 0)
         second_support_target = next(target for robot_id, target in captured if robot_id == 2)
 
-        assert status == py_trees.common.Status.RUNNING
         assert kicker_target.distance_to(Vector2D(0.12, 0.0)) < 1e-9
         # The keeper starts ON the ball (0, 0): it is encroaching, so it is
         # cleared straight out of the keep-out zone along the own-half
@@ -814,10 +786,10 @@ class TestVariableFieldScaling:
             field_bounds=custom_bounds,
         )
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.PrepareKickoffOursStep(name="PrepareKickoffOurs")
+        node = referee_actions.PrepareKickoffOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
         # Robot 1 is the lowest-ID outfield robot → the kicker; the keeper
         # (robot 0) is a support robot.
         kicker_target = next(target for robot_id, target in captured if robot_id == 1)
@@ -825,7 +797,6 @@ class TestVariableFieldScaling:
         # keep-out zone toward own half (negative x when defending left).
         keeper_target = next(target for robot_id, target in captured if robot_id == 0)
 
-        assert status == py_trees.common.Status.RUNNING
         assert kicker_target.distance_to(Vector2D(-0.12, 0.0)) < 1e-9
         assert keeper_target.distance_to(Vector2D(-0.8, 0.0)) < 1e-9
         assert keeper_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
@@ -856,13 +827,12 @@ class TestVariableFieldScaling:
             field_bounds=custom_bounds,
         )
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.PreparePenaltyOursStep(name="PreparePenaltyOurs")
+        node = referee_actions.PreparePenaltyOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        status = node.update()
+        node.update()
         kicker_target = next(target for robot_id, target in captured if robot_id == 0)
 
-        assert status == py_trees.common.Status.RUNNING
         assert kicker_target.x == pytest.approx(-3.0)
         assert kicker_target.y == pytest.approx(0.0)
 
@@ -882,10 +852,10 @@ class TestPrepareKickoffTheirsStep:
         referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_BLUE)
         game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.PrepareKickoffTheirsStep(name="PrepareKickoffTheirs")
+        node = referee_actions.PrepareKickoffTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        assert node.update() == py_trees.common.Status.RUNNING
+        node.update()
 
     def test_all_robots_placed_on_own_half_right(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
@@ -903,7 +873,7 @@ class TestPrepareKickoffTheirsStep:
         # my_team_is_right=True → own half is positive-x side
         game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.PrepareKickoffTheirsStep(name="PrepareKickoffTheirs")
+        node = referee_actions.PrepareKickoffTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -928,7 +898,7 @@ class TestPrepareKickoffTheirsStep:
         # my_team_is_right=False → own half is negative-x side
         game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=False)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.PrepareKickoffTheirsStep(name="PrepareKickoffTheirs")
+        node = referee_actions.PrepareKickoffTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -952,7 +922,7 @@ class TestPrepareKickoffTheirsStep:
         referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_BLUE)
         game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.PrepareKickoffTheirsStep(name="PrepareKickoffTheirs")
+        node = referee_actions.PrepareKickoffTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -983,7 +953,7 @@ class TestPrepareKickoffTheirsStep:
             field_bounds=custom_bounds,
         )
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.PrepareKickoffTheirsStep(name="PrepareKickoffTheirs")
+        node = referee_actions.PrepareKickoffTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -1009,10 +979,10 @@ class TestDirectFreeOursStep:
         referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW)
         game = _make_game(friendly_robots=robots, referee=referee)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
+        node = referee_actions.DirectFreeOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        assert node.update() == py_trees.common.Status.RUNNING
+        node.update()
 
     def test_kicker_is_closest_robot_to_ball(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
@@ -1049,7 +1019,7 @@ class TestDirectFreeOursStep:
             ),
         )
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
+        node = referee_actions.DirectFreeOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -1094,7 +1064,7 @@ class TestDirectFreeOursStep:
             ),
         )
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
+        node = referee_actions.DirectFreeOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -1124,7 +1094,7 @@ class TestDirectFreeOursStep:
             referee=_make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW),
         )
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
+        node = referee_actions.DirectFreeOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -1147,7 +1117,7 @@ class TestDirectFreeOursStep:
             referee=_make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW),
         )
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeOursStep(name="DirectFreeOurs")
+        node = referee_actions.DirectFreeOursStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -1172,10 +1142,10 @@ class TestDirectFreeTheirsStep:
         referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
         game = _make_game(friendly_robots=robots, referee=referee)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeTheirsStep(name="DirectFreeTheirs")
+        node = referee_actions.DirectFreeTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
-        assert node.update() == py_trees.common.Status.RUNNING
+        node.update()
 
     def test_robot_outside_keep_out_stays_put(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
@@ -1186,7 +1156,7 @@ class TestDirectFreeTheirsStep:
         referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
         game = _make_game(friendly_robots=robots, referee=referee)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeTheirsStep(name="DirectFreeTheirs")
+        node = referee_actions.DirectFreeTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -1215,7 +1185,7 @@ class TestDirectFreeTheirsStep:
         referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
         game = _make_game(friendly_robots=robots, referee=referee)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeTheirsStep(name="DirectFreeTheirs")
+        node = referee_actions.DirectFreeTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -1241,7 +1211,7 @@ class TestDirectFreeTheirsStep:
         referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
         game = _make_game(friendly_robots=robots, referee=referee)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeTheirsStep(name="DirectFreeTheirs")
+        node = referee_actions.DirectFreeTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -1258,7 +1228,7 @@ class TestDirectFreeTheirsStep:
         referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
         game = _make_game(friendly_robots=robots, referee=referee)
         cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeTheirsStep(name="DirectFreeTheirs")
+        node = referee_actions.DirectFreeTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()

@@ -3,7 +3,6 @@
 Each node:
   - Reads game state from blackboard.game
   - Writes robot commands to blackboard.cmd_map for every friendly robot
-  - Returns RUNNING (the parent Selector holds here until the command changes)
 
 All positions are in the ssl-vision coordinate system (metres).
 Team side is resolved at tick-time via game.my_team_is_yellow and
@@ -11,8 +10,6 @@ game.my_team_is_right so no construction-time team colour is needed.
 """
 
 import math
-
-import py_trees
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.config.referee_constants import (
@@ -25,17 +22,15 @@ from utama_core.config.referee_constants import (
     PENALTY_LINE_Y_STEP_RATIO,
     PENALTY_MARK_HALF_FIELD_RATIO,
 )
-from utama_core.custom_referee.abstract_behaviour import AbstractBehaviour
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
 
 
-def _all_stop(blackboard) -> py_trees.common.Status:
-    """Send empty_command to every friendly robot and return RUNNING."""
+def _all_stop(blackboard) -> None:
+    """Send empty_command to every friendly robot."""
     for robot_id in blackboard.game.friendly_robots:
         blackboard.cmd_map[robot_id] = empty_command(False)
-    return py_trees.common.Status.RUNNING
 
 
 def _field_half_length(game) -> float:
@@ -198,7 +193,7 @@ def _clear_to_legal_positions(
     max_own_defenders: int = 1,
     exempt_robot_ids: set[int] | None = None,
     intended_targets: dict[int, Vector2D] | None = None,
-) -> py_trees.common.Status:
+) -> None:
     """Move encroaching robots to the nearest legal location and stop the rest.
 
     If intended_targets is provided, each robot's clearance starts from its
@@ -277,22 +272,20 @@ def _clear_to_legal_positions(
         oren = robot.p.angle_to(target)
         blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, target, oren)
 
-    return py_trees.common.Status.RUNNING
-
 
 # ---------------------------------------------------------------------------
 # HALT — zero velocity, highest priority
 # ---------------------------------------------------------------------------
 
 
-class HaltStep(AbstractBehaviour):
+class HaltStep:
     """Sends zero-velocity commands to all friendly robots.
 
     Required: robots must stop immediately on HALT (2-second grace period allowed).
     """
 
-    def update(self) -> py_trees.common.Status:
-        return _all_stop(self.blackboard)
+    def update(self) -> None:
+        _all_stop(self.blackboard)
 
 
 # ---------------------------------------------------------------------------
@@ -301,11 +294,11 @@ class HaltStep(AbstractBehaviour):
 # ---------------------------------------------------------------------------
 
 
-class StopStep(AbstractBehaviour):
+class StopStep:
     """Moves encroaching robots out of the keep-out radius and stops the rest."""
 
-    def update(self) -> py_trees.common.Status:
-        return _clear_to_legal_positions(
+    def update(self) -> None:
+        _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
             clear_opp_defense_area=True,
@@ -319,7 +312,7 @@ class StopStep(AbstractBehaviour):
 # ---------------------------------------------------------------------------
 
 
-class BallPlacementOursStep(AbstractBehaviour):
+class BallPlacementOursStep:
     """Moves the closest friendly robot to place the ball at designated_position.
 
     If the chosen placer does not yet have the ball, it first drives to the ball
@@ -329,7 +322,7 @@ class BallPlacementOursStep(AbstractBehaviour):
 
     _RELEASE_DELAY_SECONDS = 0.25
 
-    def setup_(self):
+    def __init__(self):
         self._release_started_at: float | None = None
         self._placer_id: int | None = None
 
@@ -337,7 +330,7 @@ class BallPlacementOursStep(AbstractBehaviour):
         self._release_started_at = None
         self._placer_id = None
 
-    def update(self) -> py_trees.common.Status:
+    def update(self) -> None:
         game = self.blackboard.game
         ref = game.referee
         motion_controller = self.blackboard.motion_controller
@@ -346,18 +339,21 @@ class BallPlacementOursStep(AbstractBehaviour):
         our_team = ref.yellow_team if game.my_team_is_yellow else ref.blue_team
         if getattr(our_team, "can_place_ball", None) is False:
             self._reset_release()
-            return _all_stop(self.blackboard)
+            _all_stop(self.blackboard)
+            return
 
         target = ref.designated_position
         if target is None:
             self._reset_release()
-            return _all_stop(self.blackboard)
+            _all_stop(self.blackboard)
+            return
 
         target_pos = Vector2D(target[0], target[1])
         ball = game.ball
         if ball is None:
             self._reset_release()
-            return _all_stop(self.blackboard)
+            _all_stop(self.blackboard)
+            return
 
         if ball.p.distance_to(target_pos) <= BALL_PLACEMENT_DONE_DISTANCE:
             if self._release_started_at is None:
@@ -373,7 +369,7 @@ class BallPlacementOursStep(AbstractBehaviour):
             hold_dribbler = game.ts - self._release_started_at < self._RELEASE_DELAY_SECONDS
             for robot_id in game.friendly_robots:
                 self.blackboard.cmd_map[robot_id] = empty_command(hold_dribbler and robot_id == placer_id)
-            return py_trees.common.Status.RUNNING
+            return
 
         self._release_started_at = None
 
@@ -419,10 +415,10 @@ class BallPlacementOursStep(AbstractBehaviour):
 # ---------------------------------------------------------------------------
 
 
-class BallPlacementTheirsStep(AbstractBehaviour):
+class BallPlacementTheirsStep:
     """Actively clear our robots away from the ball and target during their placement."""
 
-    def update(self) -> py_trees.common.Status:
+    def update(self) -> None:
         return _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
@@ -435,14 +431,14 @@ class BallPlacementTheirsStep(AbstractBehaviour):
 # ---------------------------------------------------------------------------
 
 
-class PrepareKickoffOursStep(AbstractBehaviour):
+class PrepareKickoffOursStep:
     """Positions robots for our kickoff.
 
     Robot with the lowest ID approaches the ball at (0, 0).
     All other robots move to own-half support positions outside the centre circle.
     """
 
-    def update(self) -> py_trees.common.Status:
+    def update(self) -> None:
         game = self.blackboard.game
         motion_controller = self.blackboard.motion_controller
 
@@ -486,10 +482,10 @@ class PrepareKickoffOursStep(AbstractBehaviour):
 # ---------------------------------------------------------------------------
 
 
-class PrepareKickoffTheirsStep(AbstractBehaviour):
+class PrepareKickoffTheirsStep:
     """Moves all our robots to own half, outside the centre circle, for the opponent kickoff."""
 
-    def update(self) -> py_trees.common.Status:
+    def update(self) -> None:
         game = self.blackboard.game
 
         positions = _formation_positions(game, KICKOFF_DEFENCE_POSITION_RATIOS_OWN_HALF)
@@ -508,7 +504,7 @@ class PrepareKickoffTheirsStep(AbstractBehaviour):
 # ---------------------------------------------------------------------------
 
 
-class PreparePenaltyOursStep(AbstractBehaviour):
+class PreparePenaltyOursStep:
     """Positions robots for our penalty kick.
 
     Kicker (lowest non-keeper ID): moves to the penalty mark, faces goal.
@@ -518,7 +514,7 @@ class PreparePenaltyOursStep(AbstractBehaviour):
     and can be tuned here by the strategy team.
     """
 
-    def update(self) -> py_trees.common.Status:
+    def update(self) -> None:
         game = self.blackboard.game
         ref = game.referee
         motion_controller = self.blackboard.motion_controller
@@ -552,15 +548,13 @@ class PreparePenaltyOursStep(AbstractBehaviour):
                 self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, pos, 0.0)
                 behind_idx += 1
 
-        return py_trees.common.Status.RUNNING
-
 
 # ---------------------------------------------------------------------------
 # PREPARE_PENALTY — theirs
 # ---------------------------------------------------------------------------
 
 
-class PreparePenaltyTheirsStep(AbstractBehaviour):
+class PreparePenaltyTheirsStep:
     """Positions our robots for the opponent's penalty kick.
 
     Goalkeeper: moves to our goal line centre.
@@ -570,7 +564,7 @@ class PreparePenaltyTheirsStep(AbstractBehaviour):
     and can be tuned here by the strategy team.
     """
 
-    def update(self) -> py_trees.common.Status:
+    def update(self) -> None:
         game = self.blackboard.game
         ref = game.referee
         motion_controller = self.blackboard.motion_controller
@@ -604,15 +598,13 @@ class PreparePenaltyTheirsStep(AbstractBehaviour):
                 self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, pos, 0.0)
                 behind_idx += 1
 
-        return py_trees.common.Status.RUNNING
-
 
 # ---------------------------------------------------------------------------
 # DIRECT_FREE — ours
 # ---------------------------------------------------------------------------
 
 
-class DirectFreeOursStep(AbstractBehaviour):
+class DirectFreeOursStep:
     """Positions our robots for our direct free kick.
 
     The robot closest to the ball becomes the kicker and approaches from the
@@ -641,7 +633,7 @@ class DirectFreeOursStep(AbstractBehaviour):
             return 1, game.enemy_robots[1]
         return self._nearest_enemy_to_ball(game, ball_pos)
 
-    def update(self) -> py_trees.common.Status:
+    def update(self) -> None:
         game = self.blackboard.game
         motion_controller = self.blackboard.motion_controller
         ball = game.ball
@@ -685,18 +677,16 @@ class DirectFreeOursStep(AbstractBehaviour):
             else:
                 self.blackboard.cmd_map[robot_id] = empty_command(False)
 
-        return py_trees.common.Status.RUNNING
-
 
 # ---------------------------------------------------------------------------
 # DIRECT_FREE — theirs
 # ---------------------------------------------------------------------------
 
 
-class DirectFreeTheirsStep(AbstractBehaviour):
+class DirectFreeTheirsStep:
     """Actively clear our robots out of the ball keep-out radius."""
 
-    def update(self) -> py_trees.common.Status:
+    def update(self) -> None:
         return _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
