@@ -227,6 +227,31 @@ right/left decisiveness-vs-draw asymmetry (finding 2 above) persists —
 would need the same per-cell breakdown this run didn't isolate before
 overwriting; worth a follow-up if that asymmetry is investigated directly.
 
+## Full-match, decoupled side x kickoff round-robin, tiki_taka_plus added (2026-08-23, competitive tier)
+
+First round-robin including `tiki_taka_plus` alongside the existing 4
+competitive strategies: 5 configs, 10 pairs x 4 cells (side x kickoff) = 40
+matches, 600s each, same decoupled methodology as the run above. Run:
+`replays/tournament_20260823_202520/summary.json`.
+
+| Strategy | W-D (16 matches each) |
+|---|---|
+| `counter_flow` | 6W-8D |
+| `tiki_taka_plus` | 6W-7D |
+| `tiki_taka` | 3W-10D |
+| `zone_fluid` | 3W-8D |
+| `counter_press` | 2W-7D |
+
+`tiki_taka_plus` ties `counter_flow` for most wins and clearly outperforms its
+own base `tiki_taka` (3W-10D) despite differing from it by exactly one
+change: a final-third handoff from the give-and-go/press/shadow trio to
+`DecoyOverloadTactic`'s 2-robot overload duet (see `_tiki_taka_plus_picker`,
+`utama_core/strategy/kernel_strategy.py`). Direct head-to-head vs `tiki_taka`
+across the 4 cells: 2W-2D-0L for `tiki_taka_plus`. Promoted into
+`COMPETITIVE` (`full_match_tournament.py`) on this result — worth a second
+independent run to confirm before leaning on it further, since one 40-match
+tournament is not yet enough to rule out variance at this sample size.
+
 ## Baselines — don't fix, don't judge by these
 
 Several of these don't have both a real attack and a real defense answer, or
@@ -255,6 +280,7 @@ signal; do not treat a loss here as something to fix.
 | `tiki_taka` | 2026-08-20 | competitive, but now mid-pack on wins | Possession team: 3 give-and-go attackers + 2 shadow-and-mark cover when we have the ball; 3 pressers + 2 shadow when we don't. In the 2026-08-21 backfill (post full reset-fix pass): 1W-8D-4L, GF5-GA9 — down from the pre-fix-era 4W-8D-1L. Not a regression: a `GiveAndGoTactic` orientation-discontinuity bug (fixed 2026-08-21, see Known open bugs) had been suppressing this strategy's own scoring the whole time the earlier numbers were recorded (`vs zone_fluid` is now a reproducible 1-0 rather than 2-1; `vs counter_flow` is 2-2 rather than a 1-2 loss), but all 4 of its current losses are to strategies that themselves got materially stronger from the *same* shared-tactic fixes this session (`high_press`, `press_and_pass`, `split_shape`, `give_and_go_solo`) — the whole `GiveAndGoTactic`-using cohort moved together, so `tiki_taka`'s *relative* standing dropped even though its own play improved. Worth another look if the anti-tiki_taka thread continues, but not an open bug. |
 | `zone_fluid` | 2026-08-20 | competitive, real but weaker | Zone-adaptive team: man-shape defense throughout; give-and-go trio builds through the middle thirds, hands off to the decoy/overload duet in the final third. 2-6-5 in the 2026-08-21 backfill, GF3-GA8 — genuinely reactive (unlike the baselines) but loses more than it draws or wins. Also runs `GiveAndGoTactic`, so benefited from the same fix as `tiki_taka`; `vs tiki_taka` is now a reproducible 1-0 rather than the earlier 2-1 loss. |
 | `counter_press` | 2026-08-20 | **5 layered bugs root-caused and fixed 2026-08-21; still scores in no match — turn-budget mismatch, see Known open bugs** | Transition team: full press when the ball is lost and pressable, low block (`BlockShapeTactic`) when it isn't, 4-up switch-of-play attack the moment the ball is won. In the 2026-08-21 backfill (post full reset-fix pass): 0W-6D-7L, GF0 — zero goals scored in any match, same as every prior backfill. Neither the `block_attacker` fix nor the `go_to_ball` fix resolved this — the actual cause was 5 separate bugs in `SwitchOfPlayTactic`'s relay/finish path, all fixed and individually trace-verified (see Known open bugs), and confirmed capable of scoring in isolated traces (1-0 vs `low_block`). The remaining, still-open blocker is a turn-budget-vs-window-duration mismatch (a design tension, not a bug in these 5 fixes) — see Known open bugs for why it isn't cleanly fixable as a small patch. |
+| `tiki_taka_plus` | 2026-08-23 | competitive, promoted — final-third overload variant of `tiki_taka` | Same 3/2 give-and-go/press/shadow base as `tiki_taka`, with one change: in the final third while holding the possession edge, hands off from the give-and-go trio to `DecoyOverloadTactic`'s 2-robot overload duet (mirroring `zone_fluid`'s existing final-third handoff, grafted onto `tiki_taka`'s base instead of the man-shape-defense-throughout shape). See `_tiki_taka_plus_picker`, `utama_core/strategy/kernel_strategy.py`. A second candidate change (giving cover robots explicit press applicability) was investigated and found to already be covered by `PressAndContainTactic.applicable()`'s existing global range check — correctly not implemented as a separate change. First round-robin (2026-08-23, 5-config decoupled round-robin above): 6W-7D, tied with `counter_flow` for most wins, 2W-2D-0L head-to-head against plain `tiki_taka`. Not yet re-tested independently to confirm the result holds beyond one 40-match sample. |
 
 ## Parked — tried against tiki_taka, didn't win, not being iterated further
 

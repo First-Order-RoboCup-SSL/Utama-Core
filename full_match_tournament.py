@@ -107,6 +107,7 @@ COMPETITIVE = [
     "build_tiki_taka_kernel_strategy",
     "build_zone_fluid_kernel_strategy",
     "build_counter_press_kernel_strategy",
+    "build_tiki_taka_plus_kernel_strategy",
 ]
 
 N_OUTFIELD = tournament.N_OUTFIELD
