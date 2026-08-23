@@ -1376,3 +1376,20 @@ Deliberately *not* bundled into the BT-removal pass — same reasoning as
 - 9 `demo_*.py` scripts plus `main.py` sit loose in the repo root, no `demos/`
   or `scripts/` directory. Now that the broken-demo triage above is done,
   worth deciding whether the survivors move into a proper subdirectory.
+
+## Known open bug: FastPathPlanning convergence stall (`test_mirror_swap`)
+
+`utama_core/tests/motion_planning/multiple_robots_test.py::test_mirror_swap`
+is `xfail(strict=False)`, not passing. Traced during the `AbstractStrategy`
+port (2026-08-15): in one specific 6v6 mirrored geometry, the two outer
+"wing" robots (starting at `(-3.5, +/-0.75)`) consistently stall 0.53-0.54m
+from their target — inside the 45s episode timeout but outside
+`endpoint_tolerance=0.3` — while the other 4 robots converge to within a few
+mm. Reproduced identically via plain `move()` commands independent of
+strategy class (kernel vs the old BT path), so this is a genuine
+`FastPathPlanning` convergence/local-minimum behaviour for this geometry, not
+a kernel-port regression and not test flakiness. Root cause and fix are both
+out of scope for whoever finds this next — this is a planner-level gap, not
+a one-line patch. Worth a dedicated investigation at some point since it's a
+real behaviour that could show up in an actual match with similar robot
+spacing, not just a test artifact.
