@@ -195,6 +195,38 @@ and kickoff didn't move anything. Treat any pair's record here as "this is
 what happens on the right side" plus "this is what happens on the left side,"
 not as one converged number.
 
+## Full-match, decoupled side x kickoff round-robin, both kickoff-ceremony + hysteresis fixes active (2026-08-23, competitive tier only)
+
+Re-run of the same 4-cell decoupled methodology above (jitter axis dropped —
+see finding 1 above), now with both fixes from Known open bugs' "kickoff
+tie" entry active: the real `PREPARE_KICKOFF_YELLOW`/`_BLUE` ceremony (this
+was already active in the 2026-08-22/23 run above) plus
+`kernel_strategy.py`'s `_CLOSER_TO_BALL_MARGIN = 0.05` hysteresis margin
+(new this run — not active in the run above). 6 pairs x 4 cells = 24
+matches, 600s each. Run: `replays/tournament_20260823_173432/summary.json`.
+
+| Strategy | W-D-L (12 matches each) | Points (3/1/0) |
+|---|---|---|
+| `counter_flow` | 5W-6D-1L | 21 |
+| `tiki_taka` | 2W-8D-2L | 14 |
+| `zone_fluid` | 2W-7D-3L | 13 |
+| `counter_press` | 2W-5D-5L | 11 |
+
+Compared to the pre-hysteresis-fix run: `counter_press` goes from 0W-24D-0L
+(never lost, never won, never scored across 48 matches) to 2W-5D-5L over half
+as many matches — it now both wins and loses, and (per the raw per-cell log)
+scores real goals in several matches, e.g. `counter_press` 2-0 and 1-0 wins
+over `zone_fluid`. That's a materially different qualitative picture than
+"can never break a tie," consistent with the hysteresis margin actually
+letting the tie-break resolve on real kinematics rather than rsim noise in at
+least some matches. The overall draw-heavy shape persists (13 of 24 matches
+this run were draws), so the tie is reduced, not eliminated, matching the
+residual-edge-case caveat already documented for `_CLOSER_TO_BALL_MARGIN`
+(first-contact can still be a near-zero-distance crossing). Not re-tested this run: whether the
+right/left decisiveness-vs-draw asymmetry (finding 2 above) persists —
+would need the same per-cell breakdown this run didn't isolate before
+overwriting; worth a follow-up if that asymmetry is investigated directly.
+
 ## Baselines — don't fix, don't judge by these
 
 Several of these don't have both a real attack and a real defense answer, or
