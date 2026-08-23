@@ -61,13 +61,19 @@ from typing import Optional
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.custom_referee import CustomReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.replay_writer import ReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
 N_OUTFIELD = 5  # + 1 goalkeeper per side
 OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
-MATCH_DURATION_SECONDS = 60.0
+# 60s of intended play, +5s for a real PREPARE_KICKOFF_YELLOW ceremony
+# (prepare_duration_seconds=3.0 in the "simulation" profile, plus the kicker's
+# walk to the centre circle — observed ~5s total; see run_match's
+# referee_initial_command) so a "60s" tournament match still gets 60s of live
+# play rather than 60s minus ceremony overhead.
+MATCH_DURATION_SECONDS = 65.0
 TICKS_PER_SECOND = 60  # matches rsim's default step rate
 
 # build_default_kernel_strategy is excluded from the auto-discovered catalog:
@@ -127,6 +133,16 @@ def run_match(config_a_name: str, config_b_name: str, run_dir: Optional[Path] = 
     referee = CustomReferee.from_profile_name(
         "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1
     )
+    # "simulation" profile's kickoff_team defaults to "yellow", and config_a is
+    # always yellow (my_team_is_yellow=True below) — so config_a always kicks
+    # off. Without this, StrategyRunner defaults sim-mode matches to
+    # FORCE_START (both teams released simultaneously at a ball equidistant
+    # from mirror-symmetric formations), which — root-caused 2026-08-23, see
+    # docs/strategies.md's "Known open bugs" — lets sub-millimetre rsim
+    # physics noise decide who's "closer to the ball" and cascade into a
+    # different match. A real PREPARE_KICKOFF_YELLOW ceremony avoids that
+    # simultaneous-race condition entirely.
+    initial_command = RefereeCommand.PREPARE_KICKOFF_YELLOW
 
     match_tag = f"{_short_name(config_a_name)}_vs_{_short_name(config_b_name)}"
     extra_kwargs = {}
@@ -151,6 +167,7 @@ def run_match(config_a_name: str, config_b_name: str, run_dir: Optional[Path] = 
         exp_ball=True,
         referee=referee,
         enable_vision_stream=False,
+        referee_initial_command=initial_command,
         **extra_kwargs,
     )
 

@@ -14,6 +14,7 @@ from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import RobotId
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
+from utama_core.entities.referee.stage import Stage
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.tactics.block_shape import BlockShapeTactic
 from utama_core.tactics.clear_ball import ClearBallTactic
@@ -510,8 +511,29 @@ def build_switch_of_play_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
 # ---------------------------------------------------------------------------
 
 
+# Deadzone for `_friendly_closer_to_ball`'s distance comparison. Root-caused
+# 2026-08-23: at a genuine tie (mirror-symmetric formations, ball equidistant
+# — the normal case at kickoff, and possible any time both teams race a loose
+# ball to a near-identical distance), rsim's physics does not resolve the two
+# teams' positions with perfect left/right symmetry — traced directly at
+# ~0.1-0.3mm off a true mirror after a single tick. A bare `<` comparison
+# turns that sub-millimetre noise into a hard, match-shaping tactical branch
+# (every caller below picks a materially different attack/press allocation
+# based on this one boolean, and none of them revisit the choice once
+# committed). `_CLOSER_TO_BALL_MARGIN` is chosen well above that noise floor
+# (500-1500x) but well below `ROBOT_RADIUS` (0.09m, the smallest physically
+# meaningful separation between two robots converging on the same ball), so a
+# real contest between two robots that are genuinely almost equidistant still
+# resolves by real distance, not by which one the deadzone happens to favour.
+_CLOSER_TO_BALL_MARGIN = 0.05  # metres
+
+
 def _friendly_closer_to_ball(game: Game) -> Optional[bool]:
-    """True if a friendly robot is closer to the ball than every enemy.
+    """True if a friendly robot is closer to the ball than every enemy, by
+    more than `_CLOSER_TO_BALL_MARGIN` — a plain "who's closer" comparison is
+    not treated as decided until one side clears that margin, so noise-level
+    ties are decided the same way every caller already reads an unreadable
+    result: `is not True` means "not clearly ours," the conservative default.
 
     None when the proximity lookup cannot read the ball's side (ball missing
     or no robots on one side) — callers should fall back to the conservative
@@ -524,7 +546,7 @@ def _friendly_closer_to_ball(game: Game) -> Optional[bool]:
     # Explicit `bool()`: the proximity lookup returns numpy floats, and a raw
     # comparison yields np.bool_ — whose `is True` is False, which a caller
     # checking `edge is True` would read as "unknown/losing" forever.
-    return bool(friendly_dist < enemy_dist)
+    return bool(friendly_dist < enemy_dist - _CLOSER_TO_BALL_MARGIN)
 
 
 def _ball_zone(game: Game) -> str:
@@ -573,6 +595,20 @@ def _allocate_ordered(
     out[primary] = frozenset(ordered[:primary_n])
     out[secondary] = frozenset(ordered[primary_n:])
     return out
+
+
+def _friendly_score_diff(game: Game) -> Optional[int]:
+    """Friendly score minus enemy score, or None if no referee data is present
+    (e.g. a match run without a `CustomReferee`/real referee feed) — callers
+    should fall back to their score-blind posture in that case, the same
+    pattern `_friendly_closer_to_ball` uses for an unreadable ball side.
+    """
+    referee = game.referee
+    if referee is None:
+        return None
+    friendly_team = referee.yellow_team if game.my_team_is_yellow else referee.blue_team
+    enemy_team = referee.blue_team if game.my_team_is_yellow else referee.yellow_team
+    return friendly_team.score - enemy_team.score
 
 
 def _tiki_taka_picker(
@@ -817,6 +853,129 @@ def build_zone_fluid_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
                 "defense": ShadowAndMarkTactic(),
             },
             partitioner=_zone_flow_picker,
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
+# ---------------------------------------------------------------------------
+# Score-aware zone-flow (2026-08-23 addition)
+#
+# Every existing picker reads possession/ball-zone but none reads the
+# scoreline itself, even though `game.referee.{yellow,blue}_team.score` is
+# already populated in any refereed match (`full_match_tournament.py`/
+# `tournament.py` already read the same fields to report a match's result).
+# This variant is `_zone_flow_picker`'s allocation with one added axis: late
+# in a half, shift the *size* of the attack/defense split based on whether
+# we're ahead or behind, instead of holding the same 3/2-ish split regardless
+# of score. Ahead late: fewer bodies committed forward, more men behind the
+# ball to protect the lead. Behind late: the reverse, chase the game. Tied,
+# early in the half, or score unreadable (`game.referee is None`): identical
+# to `_zone_flow_picker`, so this strategy only diverges from `zone_fluid`
+# when the new signal actually has something to say.
+# ---------------------------------------------------------------------------
+
+_LATE_GAME_THRESHOLD_SECONDS = 60.0
+
+
+def _is_late_in_half(game: Game) -> bool:
+    """True once `stage_time_left` is inside the last `_LATE_GAME_THRESHOLD_SECONDS`
+    of a live playing half. False (not late) for stoppages, breaks, or any
+    stage `stage_time_left` isn't counting down playing time in, and when no
+    referee data is present — a picker should not treat "unreadable" as
+    "late."
+    """
+    referee = game.referee
+    if referee is None:
+        return False
+    if referee.stage not in (Stage.NORMAL_FIRST_HALF, Stage.NORMAL_SECOND_HALF):
+        return False
+    return referee.stage_time_left <= _LATE_GAME_THRESHOLD_SECONDS
+
+
+def _score_aware_zone_flow_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    applicable_tactic_ids: frozenset[str],
+) -> dict[str, frozenset[RobotId]]:
+    """`_zone_flow_picker`'s allocation, with the attack/defense split size
+    shifted late in a half by whether we're ahead or behind.
+
+    Not late, tied, or score unreadable: identical to `_zone_flow_picker`
+    (3 attackers/2 defenders when we have the ball, everyone shadows when we
+    don't). Late and ahead: only 2 forward, 3 back, to protect the lead. Late
+    and behind: 4 forward, 1 back, to chase an equaliser. The final-third
+    overload duet always stays 2 robots regardless (that tactic is a
+    two-role duet by design, see `_zone_flow_picker`) — only the
+    own/mid-third give-and-go split size reacts to the scoreline.
+    """
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    friendly_edge = _friendly_closer_to_ball(game)
+    losing_possession = friendly_edge is not True
+
+    defense_ok = "defense" in applicable_tactic_ids
+    givego_ok = "givego" in applicable_tactic_ids
+    overload_ok = "overload" in applicable_tactic_ids
+
+    if losing_possession:
+        if defense_ok:
+            return _allocate_ordered(ordered, "defense", len(ordered))
+        if givego_ok:
+            return _allocate_ordered(ordered, "givego", len(ordered))
+        if overload_ok:
+            return _allocate_ordered(ordered, "overload", len(ordered))
+        return {}
+
+    zone = _ball_zone(game)
+    if zone == "final" and overload_ok:
+        return _allocate_ordered(ordered, "overload", 2, "defense" if defense_ok else None)
+
+    if givego_ok:
+        attackers = 3
+        if _is_late_in_half(game):
+            score_diff = _friendly_score_diff(game)
+            if score_diff is not None and score_diff > 0:
+                attackers = 2
+            elif score_diff is not None and score_diff < 0:
+                attackers = 4
+        return _allocate_ordered(ordered, "givego", attackers, "defense" if defense_ok else None)
+    if overload_ok:
+        return _allocate_ordered(ordered, "overload", len(ordered))
+    if defense_ok:
+        return _allocate_ordered(ordered, "defense", len(ordered))
+    return {}
+
+
+def build_score_aware_zone_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """Zone-flow team (see `build_zone_fluid_kernel_strategy`) with one added
+    decision input nothing else in the catalog uses: the scoreline. Late in a
+    half, the give-and-go attack/defense split shrinks when we're ahead
+    (protect the lead) and grows when we're behind (chase the game), instead
+    of holding the same split regardless of score. Same three tactics/slots
+    as `zone_fluid` (`GiveAndGoTactic`/`DecoyOverloadTactic`/
+    `ShadowAndMarkTactic`) — only the picker differs, so any difference in
+    results is attributable to the new score-aware allocation, not a
+    different tactic set.
+
+    Returns a `build_kernel_strategy(motion_controller)` callable suitable
+    for `AbstractStrategy`'s constructor argument of the same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = KernelContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={
+                "givego": GiveAndGoTactic(),
+                "overload": DecoyOverloadTactic(),
+                "defense": ShadowAndMarkTactic(),
+            },
+            partitioner=_score_aware_zone_flow_picker,
             outfield_robot_ids=outfield_robot_ids,
             ctx=ctx,
         )

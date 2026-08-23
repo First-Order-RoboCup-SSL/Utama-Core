@@ -71,6 +71,130 @@ at all — expected and already explained: its remaining blocker is the
 turn-budget-vs-window-duration mismatch documented below, a design tension,
 not a bug this pass touches.
 
+## Full-match, both-sides round-robin (2026-08-22, competitive tier only)
+
+Every prior backfill ran 60s per match — enough to compare tactic-level
+behaviour, but short of a real match (regulation half is 300s per
+`half_duration_seconds` in `utama_core/custom_referee/profiles/simulation.yaml`,
+so a full match is 600s of sim time across both halves). This run played just
+the 4 `competitive`-tier strategies (`counter_flow`, `tiki_taka`, `zone_fluid`,
+`counter_press`) at full 600s length, every pair both ways (each config once
+as yellow/right, once as blue/left — see `tournament.py --both-sides`'s
+docstring for why this is a real second data point, not a duplicate): 12
+matches total. Driver: `full_match_tournament.py` (new, thin wrapper around
+`tournament.py`'s `run_match`/round-robin machinery with `MATCH_DURATION_SECONDS`
+overridden to 600.0 and the config pool restricted to the competitive subset).
+Run: `replays/tournament_20260822_224929/summary.json`.
+
+**This run only exists because the first attempt at it (yellow-side-only,
+`replays/tournament_20260822_221958/`) uncovered a real deadlock bug — every
+one of those 6 matches froze in a `DIRECT_FREE_*` restart within the first two
+minutes and sat stalled for the rest of the 600s, so the scores it produced
+were meaningless. See Known open bugs below for the root cause and fix; this
+section's numbers are from the re-run after that fix, and are the first
+full-length numbers for these 4 strategies that actually reflect complete
+matches.**
+
+| Strategy | W-D-L | Elo (start 1000, K=24) |
+|---|---|---|
+| `counter_flow` | 3W-2D-1L | 1022.4 |
+| `tiki_taka` | 3W-2D-1L | 1020.9 |
+| `zone_fluid` | 0W-5D-1L | 988.1 |
+| `counter_press` | 0W-3D-3L | 968.6 |
+
+`counter_flow` and `tiki_taka` are effectively co-leaders (tied on W-D-L, ~2
+points apart on Elo) — a change from the 60s-backfill picture where
+`tiki_taka` was mid-pack; a full match apparently lets its possession-based
+approach compound its advantage rather than getting cut short. Side matters:
+`counter_flow` vs `tiki_taka` flips outright by which side each plays (`counter_flow`
+loses 0-2 as yellow/right, wins 1-0 as blue/left), and `counter_press`'s only
+non-loss against `counter_flow` (a scoreless draw feel) disappears on the
+other side (loses 0-5) — a single-sided run would have materially
+misrepresented at least these two matchups. `counter_press` again never won
+and scored only 1 goal across all 6 of its matches, consistent with its
+already-documented turn-budget-vs-window-duration mismatch, not a new issue.
+
+Elo/plots: `pixi run python elo.py <summary.json>` then
+`pixi run python plot_elo.py <run_dir>/elo_history.json <run_dir>/summary.json`
+(both pre-existing, unchanged this session) — writes `elo_history.json` plus
+`elo_history.png`/`wdl_matrix.png`/`goal_diff.png` alongside the summary.
+Elo here is the textbook rating (no Glicko/TrueSkill uncertainty modelling,
+see `elo.py`'s docstring), so treat the numbers as ballpark separation, not
+a precise strength measurement from only 12 games.
+
+## Full-match, decoupled side x kickoff x seed round-robin (2026-08-22/23, competitive tier only)
+
+The both-sides run above conflates side, colour, and kickoff into one combined
+swap (colour and kickoff are pinned together via the `simulation` referee
+profile's `kickoff_team: "yellow"` default, and `config_a` is always yellow),
+so a 2-game "both sides" sample can't attribute an outcome difference to any
+one cause — confirmed live: `counter_flow` vs `tiki_taka` flips (0-2 -> 1-0)
+under that combined swap alone. `full_match_tournament.py` decouples side and
+kickoff into independent axes (colour stays tied to "config_a is yellow" — no
+tactic reads raw colour, only `my_team_is_right`) and adds seeded per-robot
+formation jitter (`JITTER_POS_STD=0.15m`, `JITTER_THETA_STD=0.2rad`) as a
+third axis, aiming for more independent samples than side x kickoff's 4
+combinations alone. Per pair: all 4 side x kickoff cells x 2 jitter seeds = 8
+matches, still full 600s length. 6 pairs x 8 cells = 48 matches total. Run:
+`replays/tournament_20260822_234112/summary.json`.
+
+| Strategy | W-D-L (24 matches each) |
+|---|---|
+| `tiki_taka` | 12W-12D-0L |
+| `counter_flow` | 8W-16D-0L |
+| `zone_fluid` | 4W-20D-0L |
+| `counter_press` | 0W-24D-0L |
+
+**Two findings, both load-bearing for how to read this table and for any
+future tournament methodology:**
+
+1. **Formation jitter added zero variance.** Every pair's `seed=0` and
+   `seed=1` runs produced byte-identical scores, in every one of the 4
+   side x kickoff cells, across all 6 pairs — 48/48 matches confirm this,
+   zero exceptions. A ±0.15m/±0.2rad per-robot starting-position perturbation
+   is not enough to change which branch any of these deterministic matches
+   takes. Practical upshot: the real independent sample count per pair here
+   is **4** (side x kickoff), not 8 — seed was not, in practice, a third
+   axis. Getting genuinely more independent samples would need either much
+   larger jitter, or randomness injected somewhere that actually changes
+   early tactical branching (e.g. randomizing which side starts with
+   possession), not sub-half-meter formation noise.
+2. **Side is the dominant variable; kickoff contributes nothing on its own.**
+   Every single pair shows the identical shape: the outcome is constant
+   across both kickoff states for a given side, and changes (or doesn't)
+   only when side flips:
+   - `counter_flow` vs `tiki_taka`: right -> `tiki_taka` wins 0-2 (both
+     kickoff states, both seeds); left -> 2-2 draw (both kickoff states,
+     both seeds). Confirms the earlier combined-swap flip was a side effect,
+     not a kickoff or colour effect.
+   - `counter_flow` vs `zone_fluid`: 0-0 in all 8 cells — fully deadlocked
+     regardless of side, kickoff, or seed.
+   - `counter_press` vs `tiki_taka`: right -> 0-0 draw; left -> `tiki_taka`
+     wins 0-1.
+   - `counter_press` vs `zone_fluid`: right -> 0-0 draw; left -> `zone_fluid`
+     wins 0-1.
+   - `tiki_taka` vs `zone_fluid`: right -> `tiki_taka` wins 2-0; left -> 0-0
+     draw.
+   - `counter_flow` vs `counter_press`: `counter_flow` wins every cell
+     (2-0 right, 1-0 left) — the one pair where side changes the margin, not
+     the winner.
+
+   Right-side play is consistently more decisive (wins or clean losses);
+   left-side play consistently trends toward a draw. This holds with zero
+   exceptions across all 6 pairs. Not yet root-caused — plausibly a
+   `my_team_is_right`-dependent asymmetry somewhere in geometry/goal-side
+   logic shared across tactics, since the pattern is uniform across
+   architecturally different strategies rather than isolated to one tactic.
+   Worth a real investigation before trusting any single-side tournament
+   result again, but out of scope for this run.
+
+**Read on statistical robustness**: 4 truly independent structural samples
+per pair (not 8) is thin, and the side effect above means those 4 aren't even
+symmetric — they're 2 conditions (right, left) each duplicated by kickoff,
+and kickoff didn't move anything. Treat any pair's record here as "this is
+what happens on the right side" plus "this is what happens on the left side,"
+not as one converged number.
+
 ## Baselines — don't fix, don't judge by these
 
 Several of these don't have both a real attack and a real defense answer, or
@@ -94,6 +218,7 @@ signal; do not treat a loss here as something to fix.
 
 | Strategy | Added | Status | Description |
 |---|---|---|---|
+| `score_aware_zone_flow` | 2026-08-23 | competitive, new — not yet tournament-tested | `zone_fluid`'s exact tactic set (`GiveAndGoTactic`/`DecoyOverloadTactic`/`ShadowAndMarkTactic`) with one added decision input nothing else in the catalog reads: the scoreline. Every existing picker reads possession/ball-zone only — `game.referee.{yellow,blue}_team.score` is already populated in any refereed match but was unused. In the last 60s of a playing half (`game.referee.stage in {NORMAL_FIRST_HALF, NORMAL_SECOND_HALF}` and `stage_time_left <= 60`), the give-and-go attack/defense split shrinks from 3/2 to 2/3 when ahead (protect the lead) and grows to 4/1 when behind (chase an equaliser); tied, early, or with no referee data (`game.referee is None`) it's identical to `_zone_flow_picker`. New helpers: `_friendly_score_diff`, `_is_late_in_half` (`utama_core/strategy/kernel_strategy.py`). Unit-verified directly against a mocked `Game` (ahead-late → 2 givego/3 defense, behind-late → 4 givego/1 defense, not-late → 3/2 matching `zone_fluid`); smoke-tested via `tournament.py score_aware_zone_flow zone_fluid` (1-0, 60s match — too short to exercise the late-game branch, since that only fires in a half's final 60s). Not yet run in a full-length round-robin against the other 3 competitive strategies. |
 | `counter_flow` | 2026-08-20 | competitive, undefeated (0L across 91 matches) | Third anti-tiki_taka strategy, after `overload_press`/`high_line_zone` were parked. Instead of trying to out-number tiki_taka's 2-robot shadow defense (the bet both prior attempts made and lost before ever getting to test it), fights tiki_taka on its own ground: `GiveAndGoTactic` for attack (tiki_taka's own proven engine), `PressAndContainTactic` for our own press on turnover, `BlockShapeTactic` for the defensive screen. 3/2 split in both postures, with possession-edge hysteresis (same fix `high_line_zone` needed). Building this surfaced two shared bugs, both now fixed (see Known open bugs): `block_attacker` never contesting the ball, and `go_to_ball` having no opponent-awareness. Beat `tiki_taka` 2-1 (reproducible) at just 22% possession, the first loss `tiki_taka` had anywhere in the catalog — now a 2-2 draw post-`GiveAndGoTactic`-fix (below). In the 2026-08-21 backfill (post full reset-fix pass), `counter_flow` is 5W-8D-**0L**, still undefeated. |
 | `tiki_taka` | 2026-08-20 | competitive, but now mid-pack on wins | Possession team: 3 give-and-go attackers + 2 shadow-and-mark cover when we have the ball; 3 pressers + 2 shadow when we don't. In the 2026-08-21 backfill (post full reset-fix pass): 1W-8D-4L, GF5-GA9 — down from the pre-fix-era 4W-8D-1L. Not a regression: a `GiveAndGoTactic` orientation-discontinuity bug (fixed 2026-08-21, see Known open bugs) had been suppressing this strategy's own scoring the whole time the earlier numbers were recorded (`vs zone_fluid` is now a reproducible 1-0 rather than 2-1; `vs counter_flow` is 2-2 rather than a 1-2 loss), but all 4 of its current losses are to strategies that themselves got materially stronger from the *same* shared-tactic fixes this session (`high_press`, `press_and_pass`, `split_shape`, `give_and_go_solo`) — the whole `GiveAndGoTactic`-using cohort moved together, so `tiki_taka`'s *relative* standing dropped even though its own play improved. Worth another look if the anti-tiki_taka thread continues, but not an open bug. |
 | `zone_fluid` | 2026-08-20 | competitive, real but weaker | Zone-adaptive team: man-shape defense throughout; give-and-go trio builds through the middle thirds, hands off to the decoy/overload duet in the final third. 2-6-5 in the 2026-08-21 backfill, GF3-GA8 — genuinely reactive (unlike the baselines) but loses more than it draws or wins. Also runs `GiveAndGoTactic`, so benefited from the same fix as `tiki_taka`; `vs tiki_taka` is now a reproducible 1-0 rather than the earlier 2-1 loss. |
@@ -107,6 +232,177 @@ signal; do not treat a loss here as something to fix.
 | `high_line_zone` | 2026-08-20 | parked, **regression root-caused and fixed 2026-08-21** | Built to deny tiki_taka's give-and-go trio 1v1s via a zone screen (`BlockShapeTactic`) instead of man-marking, switching the ball past its thin 2-robot cover. Original backfill: real mid-pack strategy (2-8-2, GF4-GA3) — beat `low_block` 1-0 and `zone_fluid` 3-1. Post-`block_attacker`/`go_to_ball` re-run backfill regressed to 0-13-0, GF0-GA0 (see Known open bugs for the root cause and fix) — verified fixed via direct re-run (vs `low_block` scores 1-0 again), and the 2026-08-21 backfill (after also fixing `DecoyOverloadTactic`'s own reset gap, see Known open bugs) confirms it at scale: 2-7-4, GF2-GA5 — real wins again, though not yet back to the original 2-8-2 mid-pack form. |
 
 ## Known open bugs
+
+- **Every sim-mode tournament match started at `FORCE_START`, skipping
+  `PREPARE_KICKOFF` entirely — so "kickoff" possession was a simultaneous
+  release-and-race, and the resulting tie was broken by sub-millimetre rsim
+  floating-point noise, which then locked in a whole match's shape
+  (root-caused 2026-08-23; both fixes below implemented and verified
+  2026-08-23 — real, substantial improvement, not a total elimination, see
+  the "Conclusion" paragraph for why)** — root cause of the "side is the
+  dominant variable" finding in the decoupled tournament above. First
+  correction to an earlier framing of this bug: it is **not** a
+  `PREPARE_KICKOFF_*`-stage issue — `StrategyRunner` seeds `CustomReferee`
+  with `RefereeCommand.FORCE_START` by default for every sim-mode match
+  (`strategy_runner.py:389-401`, `self.mode != Mode.REAL`; both
+  `tournament.py` and `full_match_tournament.py` never pass
+  `referee_initial_command`, so every tournament match to date has used this
+  default), by design ("sim matches... releas[e] both teams at the ball at
+  the same instant" rather than going through a real kickoff ceremony with
+  `RefereeOverride`/`PrepareKickoffOursStep` and encroachment enforcement).
+  Confirmed via direct trace: `game.referee.referee_command` reads
+  `FORCE_START` from tick 0, not `PREPARE_KICKOFF_YELLOW`/`BLUE`, for the
+  whole match. So `RefereeOverride` is never engaged at the start of these
+  matches at all — both teams' normal pickers are live and racing for the
+  ball from tick 0, which is itself a real rules deviation from a proper
+  kickoff worth knowing about independent of the bug below.
+
+  Given that framing, the mechanism: at force-start the ball sits exactly at
+  the centre and both teams' formations are true mirror images
+  (`formations.py`'s `_mirror` verified exact: `2*cx - x`, `theta -> pi -
+  theta`) — so `_friendly_closer_to_ball` (`kernel_strategy.py:513-527`)
+  should read as a genuine tie either way `my_team_is_right` is set. It
+  doesn't: traced directly (`counter_flow` vs `tiki_taka`, tick 1), rsim's
+  physics resolves the two teams' near-identical starting robots to positions
+  ~0.1-0.3mm off their true mirror point (e.g. right-side friendly robot 3 at
+  `x=0.71999`, its exact mirror opponent at `x=-0.71986` — a 0.00012m gap that
+  should be zero under perfect mirror symmetry). `_friendly_closer_to_ball`'s
+  bare `friendly_dist < enemy_dist` comparison has no tie margin, so this
+  sub-millimetre noise deterministically resolves to `False` on the right and
+  `True` on the left — confirmed via direct trace, not inferred. Both
+  `counter_flow` and `tiki_taka`'s pickers branch hard on this single boolean
+  (attack-heavy split vs press-heavy split) and neither ever revisits the
+  choice once robots commit to their first tactic, so one coin-flip-width
+  difference at tick 1 cascades into a completely different match: by tick 60
+  the same nominal robot (id 3) is at `(0.399, -0.874)` on the right and
+  `(0.028, 0.504)` on the left — not a small drift, a different tactical
+  branch entirely. This is the same bug *class* already fixed twice elsewhere
+  in this codebase (`_find_best_shot`'s hysteresis, `_score_goal`'s
+  `switch_margin` — see below) — a fresh-every-evaluation comparison with no
+  tie tolerance — just triggered once at force-start instead of flickering
+  tick-to-tick.
+
+  **Tested both candidate fixes directly, so this is verified, not
+  speculated.** Seeding `StrategyRunner(referee_initial_command=
+  RefereeCommand.PREPARE_KICKOFF_YELLOW)` (auto-advance state machine
+  confirmed sound for this: all 5 `auto_advance` stages plus the legacy
+  `force_start_after_goal` path each gate on a real physical readiness
+  condition with a sustained-delay debounce — `_all_robots_clear`,
+  `_kicker_in_centre_circle`, `_penalty_kicker_ready`, `_free_kick_ready`,
+  `_ball_placement_done` — none silently skips a stage; the only shortcut was
+  `StrategyRunner`'s initial-command default) does produce a real kickoff:
+  `PREPARE_KICKOFF_YELLOW` for `prepare_duration_seconds` (3s) plus the
+  kicker's walk to the centre circle (~5s total observed), then `NORMAL_START`
+  with the kicker correctly mirror-positioned on both sides (traced:
+  `(0.797, -0.010)` right vs `(-0.797, 0.005)` left — a true mirror, unlike
+  force-start's already-diverged formation). **This measurably improves
+  things — `_friendly_closer_to_ball` now agrees between sides through the
+  entire approach phase, not just at tick 1 — but does not fully eliminate
+  the bug.** Traced past `NORMAL_START`: the edge stays `True` (friendly
+  closer) identically on both sides until the kicker actually reaches the
+  ball, then flips to `False` at a slightly different tick on each side
+  (tick 320 left vs 321 right in one trace) and the same cascade as before
+  follows. Root cause: reaching the ball is inherently a near-zero-distance
+  moment regardless of how the approach itself started, so the same
+  sub-millimetre rsim tie recurs right at first touch — the real kickoff
+  ceremony narrows the window this bug can fire in (no longer exposed for
+  the entire match, only right at first contact) but doesn't close it.
+  **Conclusion: both fixes were needed, not either one alone — both are now
+  implemented and verified.**
+
+  1. **Real kickoff ceremony.** `tournament.py` and `full_match_tournament.py`
+     now seed `referee_initial_command=PREPARE_KICKOFF_YELLOW`/`_BLUE`
+     (`tournament.py:127-137`, always `_YELLOW` since `config_a` is always
+     yellow and the `simulation` profile's `kickoff_team` defaults to
+     `"yellow"`; `full_match_tournament.py`'s `run_match_cell` picks
+     `_YELLOW`/`_BLUE` matching its own `a_kicks_off` parameter). Verified
+     the state machine itself has no other shortcut hiding nearby: all 5
+     `auto_advance` stages plus the legacy `force_start_after_goal` path
+     (`state_machine.py:198-397`) each gate on a real physical readiness
+     condition with a sustained-delay debounce (`_all_robots_clear`,
+     `_kicker_in_centre_circle`, `_penalty_kicker_ready`, `_free_kick_ready`,
+     `_ball_placement_done`) — the only shortcut was `StrategyRunner`'s
+     initial-command default, now overridden. `tournament.py`'s
+     `MATCH_DURATION_SECONDS` bumped 60.0 -> 65.0 to compensate for the ~5s
+     ceremony overhead a "60s" match now spends before live play starts
+     (`prepare_duration_seconds=3.0` plus kicker walk time), so total live
+     play time is unchanged.
+  2. **Hysteresis margin on `_friendly_closer_to_ball`.** Added
+     `_CLOSER_TO_BALL_MARGIN = 0.05` (`kernel_strategy.py`, right above the
+     function): `friendly_dist < enemy_dist - margin` instead of a bare `<`.
+     0.05m is ~500-1500x the observed noise floor (~0.1-0.3mm) but well below
+     `ROBOT_RADIUS` (0.09m), so a genuine near-tie between two robots
+     actually converging on the same loose ball still resolves by real
+     distance, not by which side the deadzone happens to favour. All 8
+     call sites already treat `is not True` (i.e. `False` or `None`) as
+     "not clearly ours, play conservative," so a margin-induced `False` on a
+     noise-level tie needed no caller changes — verified by reading every
+     call site.
+
+  **Verified effect, and why it's a real improvement without being a total
+  fix.** Traced `counter_flow` vs `tiki_taka`, both fixes active: the tick-1
+  noise-only tie (previously `False` right / `True` left, a 0.00012m gap) is
+  now correctly suppressed to `False`/`False` on both sides. Across a 400-tick
+  post-kickoff window, disagreement between mirrored right/left runs dropped
+  from 233/400 ticks (before either fix, `FORCE_START` only) to 0 ticks during
+  the actual approach phase — but one genuine disagreement remains right at
+  first ball contact (tick ~320): both sides' friendly-enemy distance gap
+  crosses the 0.05m deadzone boundary within one tick of each other (real,
+  non-noise gaps of several centimetres, not sub-millimetre), so one side
+  crosses first purely from reaching the ball a few milliseconds sooner. A
+  margin cannot fix this — it suppresses noise-level ties, but two independent
+  physics runs converging on a moving threshold will not always cross a fixed
+  discrete tick boundary simultaneously even with a real (if tiny) kinematic
+  difference between them. That single-tick edge case can still cascade over
+  a long match, the same way the original bug did, just far more rarely (one
+  narrow real-crossing window instead of the entire match being exposed to
+  noise). Full test suite green after both fixes (736 passed, 4 skipped, 2
+  xfailed, unchanged from before). Not attempted this session: re-running the
+  48-match decoupled tournament with both fixes active to measure how much
+  the side-dependence pattern actually shrinks in aggregate — the per-tick
+  trace above shows the mechanism is real and improved, but only a fresh
+  tournament run would show the practical size of the remaining effect on
+  match outcomes.
+
+- **Out-of-bounds ball froze every full-match `DIRECT_FREE_*`/ball-placement
+  restart forever (fixed 2026-08-22)** — found via the first full-length
+  (600s) tournament run (`replays/tournament_20260822_221958/`): all 6
+  matches froze in a restart within the first two minutes and stayed frozen
+  for the rest of the 600s (confirmed via the replay trail: the referee
+  command genuinely never changed again after the freeze — not a slow
+  strategy, a real deadlock). Root cause, two compounding bugs:
+  1. `DirectFreeOursStep`/`BallPlacementOursStep` (`utama_core/custom_referee/actions.py`)
+     computed the kicker/placer's approach point relative to the ball, then
+     clamped it to `_clamp_to_field`'s 0.1m in-bounds inset — fine when the
+     ball is in play, but a `DIRECT_FREE`/ball-placement restart is routinely
+     awarded *because* the ball went out of bounds, so the true approach
+     point sits outside the line too. The clamp then stranded the robot 0.1m
+     inside the line while the ball sat farther out — confirmed via direct
+     per-tick trace: the kicker converged smoothly to a dead stop exactly
+     0.307m from a ball resting 0.307m past the boundary (`_KICKER_READY_DIST`
+     is 0.3m), so `CustomReferee`'s auto-advance-3 condition could never
+     fire. Fixed with a new `_clamp_to_field_or_ball` helper: only clamp if
+     doing so doesn't push the target *farther* from the ball than it already
+     is (used by both steps' ball-approach targets; `_clear_to_legal_positions`,
+     used for parking clear robots away from the ball, keeps the plain clamp).
+  2. Fixing (1) exposed a second bug: `FastPathPlanner` still treated the
+     field-boundary wall as a real obstacle to detour around even once the
+     target was legitimately allowed to sit beyond it (`sanitize_target`
+     already exempted boundaries from *target* repulsion, but not from *path*
+     routing) — the kicker then orbited the boundary forever, swinging
+     between ~0.13m and ~0.44m from the ball every cycle, confirmed via
+     per-tick trace with zero real obstacles anywhere nearby (ball
+     stationary, nearest enemy >1m away) to rule out the detour-hysteresis
+     mechanism instead. Fixed in `FastPathPlanner._path_to`: field-boundary
+     segments are now dropped from the path-routing obstacle list whenever
+     the (pre-projection) target itself is outside the field, matching
+     `sanitize_target`'s existing boundary exemption so the two don't
+     disagree about whether crossing the line is allowed.
+  Verified: the exact frozen match now resolves the restart in ~3 seconds and
+  plays the rest of the 600s normally; full test suite unaffected (736
+  passed, 4 skipped, 2 xfailed). Re-run: `replays/tournament_20260822_224929/`
+  (see the full-match section above) — all 12 matches completed with no
+  further freeze.
 
 **Note (2026-08-22): the manual `ctx.motion_controller.reset()` fixes described
 throughout this section no longer exist in the tactic files.** They've been

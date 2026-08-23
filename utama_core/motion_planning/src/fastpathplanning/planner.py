@@ -674,6 +674,38 @@ class FastPathPlanner:
         # 1. Get obstacles and draw Red velocity lines
         obstacles = self._get_obstacles(game, robot_id, our_pos, field_bounds)
 
+        # 1b. A target that's genuinely outside the field (e.g. a free-kick
+        # kicker's approach point for a ball that went out of bounds — the
+        # ball's real resting spot, which the restart requires actually
+        # reaching, not a synthetic in-bounds substitute) can never be routed
+        # to if the boundary wall is still treated as an obstacle to detour
+        # around: `check_segment` sees the wall "blocking" every straight
+        # line to an out-of-field target and keeps generating a subgoal
+        # alongside it, which the robot approaches, re-triggering the same
+        # detour choice next tick — an oscillating orbit along the boundary
+        # that never resolves (found live: a `DIRECT_FREE` kicker approaching
+        # a ball resting ~0.28m past the line circled it forever, 60+ seconds
+        # into an otherwise-clean full-length match). `sanitize_target`
+        # already exempts boundary walls from *target* repulsion for exactly
+        # this reason (see its docstring) — this extends the same exemption
+        # to path *routing* once the target has actually crossed the line, so
+        # the two don't disagree about whether crossing it is allowed.
+        # Excluded by the same `field_bounds`-derived identity `sanitize_target`
+        # uses, not a blanket "ignore all boundaries" — a target that's still
+        # in-bounds keeps every wall as a real obstacle.
+        if not self.is_point_in_field(raw_target, field_bounds):
+            tl = np.array(field_bounds.top_left)
+            br = np.array(field_bounds.bottom_right)
+            tr = np.array([br[0], tl[1]])
+            bl = np.array([tl[0], br[1]])
+            boundary_segments = {
+                (tuple(tl), tuple(tr)),
+                (tuple(tr), tuple(br)),
+                (tuple(br), tuple(bl)),
+                (tuple(bl), tuple(tl)),
+            }
+            obstacles = [o for o in obstacles if (tuple(o[0]), tuple(o[1])) not in boundary_segments]
+
         # 2. A target inside the (enclosed) opponent defense area needs its own
         # check: `sanitize_target` below only reacts to a target close to an
         # obstacle *line*, so a point deep in a rectangle's interior — farther

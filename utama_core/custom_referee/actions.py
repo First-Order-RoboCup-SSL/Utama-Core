@@ -117,6 +117,32 @@ def _clamp_to_field(point: Vector2D, game) -> Vector2D:
     )
 
 
+def _clamp_to_field_or_ball(point: Vector2D, game, ball_pos: Vector2D) -> Vector2D:
+    """Like `_clamp_to_field`, but never clamps a point *farther* from the ball
+    than it already is.
+
+    A direct-free/ball-placement restart is routinely awarded exactly when the
+    ball has gone out of bounds, so an approach point derived from the ball's
+    real position (a fixed offset toward the field, e.g. `DirectFreeOursStep`'s
+    kick-approach point) can itself sit just outside the line — clamping that
+    straight to `_clamp_to_field`'s inset margin then strands the robot ~0.1m
+    inside the line while the ball sits farther out, permanently short of
+    `_KICKER_READY_DIST`/placement-done range with no way to close the gap
+    (confirmed live: a full-length tournament match froze in DIRECT_FREE_YELLOW
+    for the rest of the game this way — the kicker converged to exactly
+    ball_pos.x clamped to -half_length+0.1, ~0.31m from a ball resting ~0.21m
+    past the line). The field boundary isn't a physical wall in SSL, so a
+    robot briefly crossing it to reach a ball that's legitimately out there is
+    fine; `_clamp_to_field` only exists to keep *other* geometry (formation
+    spots, clearing targets) from drifting to absurd off-field points, not to
+    block a ball-approach target from reaching the ball itself.
+    """
+    clamped = _clamp_to_field(point, game)
+    if (clamped - ball_pos).mag() <= (point - ball_pos).mag():
+        return clamped
+    return point
+
+
 def _is_in_own_defense_area(game, x: float, y: float) -> bool:
     """Return True if (x, y) is inside our own defense area."""
     own_goal_sign = 1.0 if game.my_team_is_right else -1.0
@@ -375,7 +401,8 @@ class BallPlacementOursStep(AbstractBehaviour):
                             game, motion_controller, robot_id, target_pos, oren, dribbling=True
                         )
                 else:
-                    target_for_move = _clamp_to_field(Vector2D(ball.p.x, ball.p.y), game)
+                    ball_pos_for_clamp = Vector2D(ball.p.x, ball.p.y)
+                    target_for_move = _clamp_to_field_or_ball(ball_pos_for_clamp, game, ball_pos_for_clamp)
                     oren = robot.p.angle_to(target_for_move)
                     self.blackboard.cmd_map[robot_id] = move(
                         game, motion_controller, robot_id, target_for_move, oren, dribbling=True
@@ -641,7 +668,7 @@ class DirectFreeOursStep(AbstractBehaviour):
                     ball_pos.x - kick_dir.x * self._APPROACH_OFFSET,
                     ball_pos.y - kick_dir.y * self._APPROACH_OFFSET,
                 )
-                approach = _clamp_to_field(approach, game)
+                approach = _clamp_to_field_or_ball(approach, game, ball_pos)
                 distance_to_approach = robot.p.distance_to(approach)
                 face_error = self._angle_error(robot.orientation, target_oren)
 
