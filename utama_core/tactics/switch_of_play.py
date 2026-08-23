@@ -321,6 +321,26 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
         runner_id = mem.runner_id
         two_robot_mode = pivot_id is None or runner_id == pivot_id
 
+        # Every debugging session on this tactic (see docs/strategies.md's
+        # "Known open bugs") has hand-written a one-off print of exactly this
+        # tuple in a throwaway trace script. Recording it here instead means
+        # any future investigation can get it back for free via
+        # `debug_match.py --match-log <path>` + `load_jsonl`, with zero
+        # runtime cost when match_log is unset (the default for every normal
+        # run/test/tournament).
+        if ctx.match_log is not None:
+            ctx.match_log.trace(
+                tick=0,
+                sim_time=getattr(game, "ts", 0.0),
+                key="switch_of_play.phase",
+                value={
+                    "phase": mem.phase,
+                    "carrier_id": carrier_id,
+                    "pivot_id": pivot_id,
+                    "runner_id": runner_id,
+                },
+            )
+
         if runner_id is None:
             # Solo allocation (a picker gave this slot exactly 1 robot): there
             # is no one to relay or pass to, so "switch"/"relay"/"finish" can
@@ -440,6 +460,13 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # along with it and never settle.
             runner_target = _runner_target(game, mem.weak_side if mem.weak_side is not None else 1)
             runner_ready = _settled_at(game, runner_id, runner_target)
+            if ctx.match_log is not None:
+                ctx.match_log.trace(
+                    tick=0,
+                    sim_time=getattr(game, "ts", 0.0),
+                    key="switch_of_play.relay_gate",
+                    value={"runner_ready": runner_ready},
+                )
             if not runner_ready:
                 commands[runner_id] = go_to_point(
                     game=game, motion_controller=ctx.motion_controller, robot_id=runner_id, target_coords=runner_target
