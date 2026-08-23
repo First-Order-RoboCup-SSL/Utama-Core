@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utama Dashboard</title>
+<style>__CSS__</style>
+</head>
+<body>
+
+<div id="tabs">
+  <button class="tab" id="tab-live">Live</button>
+  <button class="tab" id="tab-replay">Replay</button>
+  <button class="tab" id="tab-tournament">Tournament</button>
+</div>
+
+<div class="view" id="view-live" style="gap:8px; padding:8px;">
+  <div class="panel" style="flex:2">
+    <div class="panel-title" id="ref-profile-name">Field</div>
+    <div class="field-wrap"><canvas id="ref-field-canvas"></canvas></div>
+  </div>
+  <div class="panel stack" style="flex:1; padding:12px; overflow-y:auto;">
+    <div class="row" style="justify-content:space-between; align-items:baseline;">
+      <div><span class="muted">Yellow</span> <span id="ref-yellow-score">—</span></div>
+      <div><span class="muted">Blue</span> <span id="ref-blue-score">—</span></div>
+    </div>
+    <div><span class="muted">Command</span> <span id="ref-command">—</span></div>
+    <div><span class="muted">Stage</span> <span id="ref-stage">—</span></div>
+    <div class="row">
+      <button class="btn-halt" data-cmd="HALT">Halt</button>
+      <button data-cmd="STOP">Stop</button>
+      <button class="btn-accent" data-cmd="NORMAL_START">Normal Start</button>
+      <button data-cmd="FORCE_START">Force Start</button>
+    </div>
+    <div class="row">
+      <button data-cmd="PREPARE_KICKOFF_YELLOW">Kickoff Yellow</button>
+      <button data-cmd="PREPARE_KICKOFF_BLUE">Kickoff Blue</button>
+    </div>
+    <div class="row">
+      <button data-cmd="DIRECT_FREE_YELLOW">Free Kick Yellow</button>
+      <button data-cmd="DIRECT_FREE_BLUE">Free Kick Blue</button>
+    </div>
+    <div class="ref-section-title">Tactics</div>
+    <div id="ref-tactic-entries" style="font-size:.75rem;"></div>
+    <div id="ref-status-entries" style="font-size:.75rem;"></div>
+    <div class="row" style="margin-top:auto; align-items:center;">
+      <span class="conn-dot" id="ref-conn-dot"></span>
+      <span class="muted" style="font-size:.65rem;">space = halt / resume</span>
+    </div>
+  </div>
+</div>
+
+<div class="view" id="view-replay" style="gap:8px; padding:8px;">
+  <div class="panel stack" style="flex:2;">
+    <div class="row" style="padding:8px 10px 0; align-items:center; justify-content:space-between;">
+      <select id="replay-select" style="flex:1; max-width:340px;"><option value="">Select a replay…</option></select>
+      <span class="muted" id="replay-no-tactics" style="font-size:.68rem; display:none;">no tactic data for this replay</span>
+      <span class="muted" id="replay-no-referee" style="font-size:.68rem; display:none;">no referee data for this replay</span>
+    </div>
+    <div class="field-wrap" style="flex:1;"><canvas id="replay-field-canvas"></canvas></div>
+    <div class="stack" style="padding:6px 10px 10px; gap:4px;">
+      <input type="range" id="replay-slider" min="0" max="0" value="0" style="width:100%;">
+      <div class="row" style="align-items:center; justify-content:space-between;">
+        <div class="row" style="align-items:center;">
+          <button id="replay-step-back" title="Previous frame (←)">⏮</button>
+          <button class="btn-accent" id="replay-play" style="min-width:70px;">Play</button>
+          <button id="replay-step-fwd" title="Next frame (→)">⏭</button>
+          <span class="muted" id="replay-frame-label" style="min-width:100px; font-variant-numeric:tabular-nums;">0:00 / 0:00</span>
+        </div>
+        <select id="replay-speed" title="Playback speed">
+          <option value="0.25">0.25x</option>
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+          <option value="4">4x</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="panel stack" style="flex:1; padding:12px; overflow-y:auto;">
+    <div class="row" style="justify-content:space-between; align-items:baseline;">
+      <div><span class="muted">Yellow</span> <span id="replay-yellow-score">—</span></div>
+      <div><span class="muted">Blue</span> <span id="replay-blue-score">—</span></div>
+    </div>
+    <div><span class="muted">Command</span> <span id="replay-command">—</span></div>
+    <div><span class="muted">Stage</span> <span id="replay-stage">—</span></div>
+    <div class="ref-section-title">Tactics</div>
+    <div id="replay-tactic-entries" style="font-size:.75rem;"></div>
+    <div id="replay-status-entries" style="font-size:.75rem;"></div>
+    <div class="ref-section-title">Intention log</div>
+    <div id="replay-intention-log" style="font-size:.72rem; max-height:180px; overflow-y:auto;"></div>
+  </div>
+</div>
+
+<div class="view" id="view-tournament" style="padding:8px; overflow-y:auto;">
+  <div id="tournament-runs" style="flex:1; width:100%;"></div>
+</div>
+
+<script>__FIELD_CANVAS_JS__</script>
+<script>__STATUS_PANEL_JS__</script>
+<script>__APP_JS__</script>
+<script>__LIVE_JS__</script>
+<script>__REPLAY_JS__</script>
+<script>__TOURNAMENT_JS__</script>
+<script>Dashboard.init("live");</script>
+</body>
+</html>

@@ -71,10 +71,12 @@ class CustomReferee:
         referee = CustomReferee.from_profile_name("simulation")
         ref_data = referee.step(game_frame, time.time())
 
-    To also open the browser GUI (http://localhost:8080) when the referee
-    is created, pass ``enable_gui=True``::
+    To surface state in the browser dashboard, attach it after construction::
 
-        referee = CustomReferee(profile, enable_gui=True, gui_port=8080)
+        from utama_core.dashboard import attach_dashboard
+        from utama_core.dashboard.views import referee as referee_view
+        server = attach_dashboard()
+        referee_view.attach(server, referee, profile)
     """
 
     def __init__(
@@ -82,8 +84,6 @@ class CustomReferee:
         profile: RefereeProfile,
         n_robots_yellow: int = 3,
         n_robots_blue: int = 3,
-        enable_gui: bool = False,
-        gui_port: int = 8080,
     ) -> None:
         self._profile_name = profile.profile_name
         self._geometry: RefereeGeometry = RefereeGeometry.from_field_dims(
@@ -102,9 +102,12 @@ class CustomReferee:
             geometry=self._geometry,
             auto_advance=profile.game.auto_advance,
         )
-        self._gui_server = None
+        self._dashboard_notifier: Optional[callable] = None
         self._bt_nodes_per_robot: dict[int, list[str]] = {}
         self._robot_feedback_data: list[dict] = []
+        self._match_log = None
+        self._match_log_tick = 0
+        self._last_logged_ref_data: Optional[RefereeData] = None
         # The `RuleViolation` (if any) detected on the most recent `step()`
         # call — independent of whether the state machine actually applied
         # it (it may be suppressed by a transition cooldown). Exposed so
@@ -112,15 +115,6 @@ class CustomReferee:
         # detected events (goals, etc.) without `RuleViolation` needing to
         # round-trip through `RefereeData`, which doesn't carry it.
         self.last_violation: Optional[RuleViolation] = None
-        if enable_gui:
-            # Lazy import to keep this module free of HTTP/GUI dependencies
-            # when the GUI is not needed.
-            from utama_core.custom_referee.gui import _RefereeGUIServer
-
-            self._gui_server = _RefereeGUIServer(self, profile, gui_port, run_tick_loop=False)
-            self._gui_server.start()
-            print(f"Referee GUI  →  http://localhost:{gui_port}")
-            print(f"Profile:        {profile.profile_name}")
 
     @classmethod
     def from_profile_name(
@@ -128,18 +122,24 @@ class CustomReferee:
         name: str,
         n_robots_yellow: int = 3,
         n_robots_blue: int = 3,
-        enable_gui: bool = False,
-        gui_port: int = 8080,
     ) -> "CustomReferee":
         """Convenience constructor: load profile by built-in name or file path."""
         profile = load_profile(name)
-        return cls(
-            profile,
-            n_robots_yellow=n_robots_yellow,
-            n_robots_blue=n_robots_blue,
-            enable_gui=enable_gui,
-            gui_port=gui_port,
-        )
+        return cls(profile, n_robots_yellow=n_robots_yellow, n_robots_blue=n_robots_blue)
+
+    def attach_dashboard_notifier(self, notifier: callable) -> None:
+        """Set the callback invoked with (ref_data, game_frame, bt_nodes, robot_feedback)
+        on every `step()`. Set by `dashboard.views.referee.attach()`; not meant
+        to be called directly by strategy code.
+        """
+        self._dashboard_notifier = notifier
+
+    def attach_match_log(self, match_log) -> None:
+        """Set a `MatchLog` to record referee-state changes (score/command/
+        stage/designated position) into, sparsely — one row per change, not
+        per tick. Set by `StrategyRunner`; mirrors `attach_dashboard_notifier`.
+        """
+        self._match_log = match_log
 
     # ------------------------------------------------------------------
     # Main loop interface
@@ -167,8 +167,21 @@ class CustomReferee:
         if self._state.command != previous_command:
             for rule in self._rules:
                 rule.reset()
-        if self._gui_server is not None:
-            self._gui_server.notify(result, game_frame, self._bt_nodes_per_robot, self._robot_feedback_data)
+        if self._dashboard_notifier is not None:
+            self._dashboard_notifier(result, game_frame, self._bt_nodes_per_robot, self._robot_feedback_data)
+
+        self._match_log_tick += 1
+        if self._match_log is not None and result != self._last_logged_ref_data:
+            self._last_logged_ref_data = result
+            self._match_log.referee(
+                tick=self._match_log_tick,
+                sim_time=game_frame.ts,
+                command=result.referee_command.name,
+                stage=result.stage.name,
+                yellow_score=result.yellow_team.score,
+                blue_score=result.blue_team.score,
+                designated=result.designated_position,
+            )
         return result
 
     def set_debug_status(self, bt_nodes_per_robot: dict[int, list[str]]) -> None:

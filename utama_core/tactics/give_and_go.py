@@ -196,7 +196,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         carrier_has_ball = has_ball(game, carrier_id)
 
         if ctx.match_log is not None:
-            ctx.match_log.trace(
+            ctx.match_log.trace_if_changed(
                 tick=0, sim_time=getattr(game, "ts", 0.0), key="give_and_go.carrier_has_ball", value=carrier_has_ball
             )
 

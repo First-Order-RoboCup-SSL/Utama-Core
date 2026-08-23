@@ -5,14 +5,14 @@ Run:
     # RSim window opens; open http://localhost:8080 in a browser
 
 What it does:
-  - Creates a CustomReferee (human profile) with enable_gui=True so the
-    browser panel starts automatically.
+  - Creates a CustomReferee (human profile) and attaches it to the browser
+    dashboard's referee tab.
   - Passes the referee to StrategyRunner via referee=. StrategyRunner
     calls referee.step() on every tick and handles ball teleports on STOP
     automatically — no patching required.
   - WanderingTactic is used as the base strategy so robots visibly move and
     you can watch kernel.RefereeOverride interrupt them when you issue
-    commands from the GUI (Halt, Kickoff Yellow, etc.).
+    commands from the dashboard (Halt, Kickoff Yellow, etc.).
 
 Operator workflow:
   1. Open http://localhost:8080 in a browser.
@@ -24,6 +24,8 @@ Operator workflow:
 
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
+from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard.views import referee as referee_view
 from utama_core.run import StrategyRunner
 from utama_core.tests.referee.wandering_strategy import wandering_strategy
 
@@ -32,7 +34,7 @@ from utama_core.tests.referee.wandering_strategy import wandering_strategy
 # ---------------------------------------------------------------------------
 
 PROFILE = "human"  # "human" or "simulation"
-GUI_PORT = 8080
+DASHBOARD_PORT = 8080
 N_ROBOTS = 3  # robots per side
 MY_TEAM_IS_YELLOW = True
 MY_TEAM_IS_RIGHT = True
@@ -45,16 +47,13 @@ MY_TEAM_IS_RIGHT = True
 def main() -> None:
     profile = load_profile(PROFILE)
 
-    # enable_gui=True starts the HTTP server in a background daemon thread.
-    # referee.step() is called by StrategyRunner on every tick; the GUI
-    # receives state automatically after each call.
-    referee = CustomReferee(
-        profile,
-        n_robots_yellow=N_ROBOTS,
-        n_robots_blue=N_ROBOTS,
-        enable_gui=True,
-        gui_port=GUI_PORT,
-    )
+    referee = CustomReferee(profile, n_robots_yellow=N_ROBOTS, n_robots_blue=N_ROBOTS)
+
+    # attach_dashboard() starts the HTTP server in a background daemon
+    # thread; referee.step() is called by StrategyRunner on every tick, and
+    # the referee tab receives state automatically after each call.
+    server = attach_dashboard(port=DASHBOARD_PORT)
+    referee_view.attach(server, referee, profile)
 
     runner = StrategyRunner(
         strategy=wandering_strategy(tuple(range(N_ROBOTS))),

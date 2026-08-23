@@ -329,7 +329,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
         # runtime cost when match_log is unset (the default for every normal
         # run/test/tournament).
         if ctx.match_log is not None:
-            ctx.match_log.trace(
+            ctx.match_log.trace_if_changed(
                 tick=0,
                 sim_time=getattr(game, "ts", 0.0),
                 key="switch_of_play.phase",

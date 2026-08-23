@@ -1,5 +1,8 @@
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.custom_referee import CustomReferee
+from utama_core.custom_referee.profiles.profile_loader import load_profile
+from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard.views import referee as referee_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.game.field import FieldBounds
 from utama_core.replay import ReplayWriterConfig
@@ -9,7 +12,10 @@ from utama_core.strategy.kernel_strategy import build_give_and_go_solo_kernel_st
 
 
 def main():
-    referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=3, n_robots_blue=3, enable_gui=True)
+    profile = load_profile("simulation")
+    referee = CustomReferee(profile, n_robots_yellow=3, n_robots_blue=3)
+    server = attach_dashboard()
+    referee_view.attach(server, referee, profile)
 
     # Setup for real testing
     # Custom field size based setup in real

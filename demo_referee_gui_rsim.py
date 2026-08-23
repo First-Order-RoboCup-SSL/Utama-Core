@@ -5,18 +5,22 @@ Run:
     # RSim window opens; open http://localhost:8080 in a browser
 
 What it does:
-  - Creates a CustomReferee (human profile) with enable_gui=True so the
-    browser panel starts automatically.
+  - Creates a CustomReferee (human profile) and attaches it to the browser
+    dashboard's referee tab.
   - Passes the referee to StrategyRunner via referee=. StrategyRunner
     calls referee.step() on every tick and handles ball teleports on STOP
     automatically — no patching required.
-  - WanderingStrategy is used as the base strategy so robots visibly move and
-    you can watch the RefereeOverride tree interrupt them when you issue
-    commands from the GUI (Halt, Kickoff Yellow, etc.).
+  - build_tiki_taka_plus_kernel_strategy() builds the give-and-go +
+    final-third decoy-overload kernel strategy (competitive tier, see
+    docs/strategies.md) so you can watch real tactic assignments in the
+    dashboard's Live tab instead of an aimless wandering tactic, and watch
+    RefereeOverride interrupt them when you issue commands from the
+    dashboard (Halt, Kickoff Yellow, etc.).
 
 Operator workflow:
   1. Open http://localhost:8080 in a browser.
-  2. Robots start moving under WanderingStrategy.
+  2. Robots start playing under tiki_taka_plus; the Live tab's Tactics panel
+     shows each robot's current slot ("attack"/"overload"/"press"/"defense").
   3. Click any command button (Halt, Stop, Kickoff Yellow…) — robots reposition.
   4. Click Normal Start to resume free play.
   5. With the human profile, the referee stays in STOP after a goal until the operator advances play.
@@ -24,16 +28,19 @@ Operator workflow:
 
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
+from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard.views import referee as referee_view
+from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.run import StrategyRunner
-from utama_core.tests.referee.wandering_strategy import WanderingStrategy
+from utama_core.strategy.kernel_strategy import build_tiki_taka_plus_kernel_strategy
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
 PROFILE = "human"  # "human" or "simulation"
-GUI_PORT = 8080
-N_ROBOTS = 3  # robots per side
+DASHBOARD_PORT = 8080
+N_ROBOTS = 6  # robots per side (5 outfield + 1 goalkeeper) — tiki_taka_plus's tournament size
 MY_TEAM_IS_YELLOW = True
 MY_TEAM_IS_RIGHT = True
 
@@ -45,19 +52,17 @@ MY_TEAM_IS_RIGHT = True
 def main() -> None:
     profile = load_profile(PROFILE)
 
-    # enable_gui=True starts the HTTP server in a background daemon thread.
-    # referee.step() is called by StrategyRunner on every tick; the GUI
-    # receives state automatically after each call.
-    referee = CustomReferee(
-        profile,
-        n_robots_yellow=N_ROBOTS,
-        n_robots_blue=N_ROBOTS,
-        enable_gui=True,
-        gui_port=GUI_PORT,
-    )
+    referee = CustomReferee(profile, n_robots_yellow=N_ROBOTS, n_robots_blue=N_ROBOTS)
 
+    # attach_dashboard() starts the HTTP server in a background daemon
+    # thread; referee.step() is called by StrategyRunner on every tick, and
+    # the referee tab receives state automatically after each call.
+    server = attach_dashboard(port=DASHBOARD_PORT)
+    referee_view.attach(server, referee, profile)
+
+    outfield_robot_ids = tuple(range(1, N_ROBOTS))
     runner = StrategyRunner(
-        strategy=WanderingStrategy(),
+        strategy=AbstractStrategy(build_kernel_strategy=build_tiki_taka_plus_kernel_strategy(outfield_robot_ids)),
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,
         mode="rsim",
@@ -66,7 +71,7 @@ def main() -> None:
         exp_enemy=N_ROBOTS,
         referee=referee,  # StrategyRunner drives referee.step() each tick
         show_live_status=True,
-        opp_strategy=WanderingStrategy(),
+        opp_strategy=AbstractStrategy(build_kernel_strategy=build_tiki_taka_plus_kernel_strategy(outfield_robot_ids)),
     )
 
     runner.run()

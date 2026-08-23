@@ -1,6 +1,4 @@
-import json
-
-from utama_core.custom_referee.gui import _serialise_state
+from utama_core.dashboard.views.referee import _serialise_state
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
@@ -26,7 +24,7 @@ def _referee_data() -> RefereeData:
 
 
 def test_serialise_state_defaults_robot_feedback_to_empty_list():
-    payload = json.loads(_serialise_state(_referee_data()))
+    payload = _serialise_state(_referee_data())
 
     assert payload["robot_feedback"] == []
 
@@ -44,6 +42,6 @@ def test_serialise_state_includes_robot_feedback_rows():
         }
     ]
 
-    payload = json.loads(_serialise_state(_referee_data(), robot_feedback_data=robot_feedback))
+    payload = _serialise_state(_referee_data(), robot_feedback_data=robot_feedback)
 
     assert payload["robot_feedback"] == robot_feedback

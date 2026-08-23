@@ -364,6 +364,8 @@ class StrategyRunner:
         # into the kernel `Strategy` right after `load_motion_controller`.
         self.match_log_path = match_log_path
         self.match_log = MatchLog() if match_log_path else None
+        if self.match_log is not None and isinstance(self.referee, CustomReferee):
+            self.referee.attach_match_log(self.match_log)
         self.stats_path = stats_path
         self.match_stats = MatchStatsAccumulator() if stats_path else None
         self.referee_initial_command = referee_initial_command

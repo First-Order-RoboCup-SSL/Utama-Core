@@ -12,9 +12,11 @@ What it does:
     festival steward can control the game from the browser GUI.
   - 2v2 format: two yellow robots vs two blue robots, matching the small field.
   - WanderingStrategy is used so robots visibly move and you can watch the
-    RefereeOverride tree interrupt them when you issue commands from the GUI.
-  - enable_gui=True starts the browser panel at http://localhost:8080 so the
-    crowd can watch the referee state in real time.
+    RefereeOverride tree interrupt them when you issue commands from the
+    dashboard.
+  - The referee is attached to the browser dashboard at
+    http://localhost:8080 so the crowd can watch the referee state in real
+    time.
 
 Operator workflow:
   1. Open http://localhost:8080 in a browser.
@@ -37,6 +39,8 @@ from utama_core.custom_referee.profiles.profile_loader import (
     RefereeProfile,
     RulesConfig,
 )
+from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard.views import referee as referee_view
 from utama_core.run import StrategyRunner
 from utama_core.tests.referee.wandering_strategy import WanderingStrategy
 
@@ -44,7 +48,7 @@ from utama_core.tests.referee.wandering_strategy import WanderingStrategy
 # Configuration
 # ---------------------------------------------------------------------------
 
-GUI_PORT = 8080
+DASHBOARD_PORT = 8080
 N_ROBOTS = 2  # 2v2 fits the compact exhibition field
 MY_TEAM_IS_YELLOW = True
 MY_TEAM_IS_RIGHT = True
@@ -106,13 +110,9 @@ _EXHIBITION_PROFILE = RefereeProfile(
 
 
 def main() -> None:
-    referee = CustomReferee(
-        _EXHIBITION_PROFILE,
-        n_robots_yellow=N_ROBOTS,
-        n_robots_blue=N_ROBOTS,
-        enable_gui=True,
-        gui_port=GUI_PORT,
-    )
+    referee = CustomReferee(_EXHIBITION_PROFILE, n_robots_yellow=N_ROBOTS, n_robots_blue=N_ROBOTS)
+    server = attach_dashboard(port=DASHBOARD_PORT)
+    referee_view.attach(server, referee, _EXHIBITION_PROFILE)
 
     runner = StrategyRunner(
         strategy=WanderingStrategy(field_dims=GREAT_EXHIBITION_FIELD_DIMS),

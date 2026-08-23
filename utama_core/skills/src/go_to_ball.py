@@ -131,7 +131,7 @@ def go_to_ball(
         # No per-tick counter available at skill level (only `Strategy` tracks
         # that) — `sim_time` alone is enough to order/locate a trace event,
         # same key `render_around_event` already anchors on.
-        ctx.match_log.trace(
+        ctx.match_log.trace_if_changed(
             tick=0,
             sim_time=getattr(game, "ts", 0.0),
             key=f"go_to_ball[{robot_id}].approach",

@@ -262,5 +262,12 @@ class ClearBallTactic(BaseTactic[ClearBallMem]):
         value: dict[str, object] = {"phase": phase}
         if phase == "aim" and command is not None:
             robot = game.friendly_robots[clearer_id]
-            value["oren"] = round(float(robot.orientation), 3)
-        ctx.match_log.trace(tick=0, sim_time=getattr(game, "ts", 0.0), key=f"clear_ball[{clearer_id}]", value=value)
+            # Coarser than the 3-decimal precision this used to log: aiming
+            # is a continuous rotation, so at full precision this would
+            # "change" almost every tick and defeat trace_if_changed's dedup.
+            # 1 decimal (~0.1 rad, ~5.7°) still captures meaningful aim
+            # movement without recording every rounding-noise tick.
+            value["oren"] = round(float(robot.orientation), 1)
+        ctx.match_log.trace_if_changed(
+            tick=0, sim_time=getattr(game, "ts", 0.0), key=f"clear_ball[{clearer_id}]", value=value
+        )

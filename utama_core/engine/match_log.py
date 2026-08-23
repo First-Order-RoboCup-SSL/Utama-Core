@@ -29,6 +29,8 @@ from typing import Any, Optional, Union
 
 from utama_core.engine.tactic import RobotId, TacticId, TacticTag
 
+_UNSET = object()
+
 
 @dataclass(frozen=True)
 class IntentionEvent:
@@ -48,11 +50,31 @@ class TraceEvent:
     value: Any
 
 
+@dataclass(frozen=True)
+class RefereeEvent:
+    """One row per referee-state *change* (score/command/stage/designated
+    position) — not per tick. "Changed" is decided by the caller comparing
+    consecutive `RefereeData` via its own `__eq__` (which already excludes
+    noisy fields like timestamps/game_events); this dataclass just records
+    what changed to.
+    """
+
+    tick: int
+    sim_time: float
+    command: str
+    stage: str
+    yellow_score: int
+    blue_score: int
+    designated: Optional[tuple] = None
+    note: Optional[str] = None
+
+
 class MatchLog:
-    """Accumulates `IntentionEvent`s/`TraceEvent`s during a match; flush once via `to_jsonl()`."""
+    """Accumulates `IntentionEvent`s/`TraceEvent`s/`RefereeEvent`s during a match; flush once via `to_jsonl()`."""
 
     def __init__(self) -> None:
-        self._events: list[Union[IntentionEvent, TraceEvent]] = []
+        self._events: list[Union[IntentionEvent, TraceEvent, RefereeEvent]] = []
+        self._last_trace_value: dict[str, Any] = {}
 
     def intention(
         self,
@@ -78,31 +100,80 @@ class MatchLog:
         """Record one arbitrary scalar fact for this tick (JSON-serializable `value`)."""
         self._events.append(TraceEvent(tick=tick, sim_time=sim_time, key=key, value=value))
 
-    def events(self) -> list[Union[IntentionEvent, TraceEvent]]:
+    def trace_if_changed(self, tick: int, sim_time: float, key: str, value: Any) -> None:
+        """Like `trace()`, but only records when `value` differs from the last value logged for `key`."""
+        if self._last_trace_value.get(key, _UNSET) != value:
+            self._last_trace_value[key] = value
+            self.trace(tick, sim_time, key, value)
+
+    def referee(
+        self,
+        tick: int,
+        sim_time: float,
+        command: str,
+        stage: str,
+        yellow_score: int,
+        blue_score: int,
+        designated: Optional[tuple] = None,
+        note: Optional[str] = None,
+    ) -> None:
+        """Record a referee-state change. Caller decides "changed" (see `RefereeEvent`)."""
+        self._events.append(
+            RefereeEvent(
+                tick=tick,
+                sim_time=sim_time,
+                command=command,
+                stage=stage,
+                yellow_score=yellow_score,
+                blue_score=blue_score,
+                designated=tuple(designated) if designated is not None else None,
+                note=note,
+            )
+        )
+
+    def events(self) -> list[Union[IntentionEvent, TraceEvent, RefereeEvent]]:
         return list(self._events)
 
     def to_jsonl(self, path: Union[str, Path]) -> None:
         with open(path, "w") as f:
             for event in self._events:
                 row = asdict(event)
-                row["event"] = "trace" if isinstance(event, TraceEvent) else "intention"
-                if isinstance(event, IntentionEvent):
+                if isinstance(event, TraceEvent):
+                    row["event"] = "trace"
+                elif isinstance(event, RefereeEvent):
+                    row["event"] = "referee"
+                else:
+                    row["event"] = "intention"
                     row["tag"] = event.tag.value
                 f.write(json.dumps(row) + "\n")
 
 
-def load_jsonl(path: Union[str, Path]) -> list[Union[IntentionEvent, TraceEvent]]:
-    """Read back a `MatchLog.to_jsonl()` file as `IntentionEvent`/`TraceEvent`s, in order."""
-    events: list[Union[IntentionEvent, TraceEvent]] = []
+def load_jsonl(path: Union[str, Path]) -> list[Union[IntentionEvent, TraceEvent, RefereeEvent]]:
+    """Read back a `MatchLog.to_jsonl()` file as `IntentionEvent`/`TraceEvent`/`RefereeEvent`s, in order."""
+    events: list[Union[IntentionEvent, TraceEvent, RefereeEvent]] = []
     with open(path) as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             row = json.loads(line)
-            if row.get("event") == "trace":
+            kind = row.get("event")
+            if kind == "trace":
                 events.append(
                     TraceEvent(tick=row["tick"], sim_time=row["sim_time"], key=row["key"], value=row["value"])
+                )
+            elif kind == "referee":
+                events.append(
+                    RefereeEvent(
+                        tick=row["tick"],
+                        sim_time=row["sim_time"],
+                        command=row["command"],
+                        stage=row["stage"],
+                        yellow_score=row["yellow_score"],
+                        blue_score=row["blue_score"],
+                        designated=tuple(row["designated"]) if row.get("designated") is not None else None,
+                        note=row.get("note"),
+                    )
                 )
             else:
                 events.append(

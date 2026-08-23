@@ -7,7 +7,7 @@ process — connect via the standard SSL ports; must already be running).
 Runs for a fixed wall-clock duration rather than `runner.run()`'s
 run-until-SIGINT, so it terminates on its own.
 
-The referee GUI (enable_gui=True) shows a live per-robot debug panel via
+The dashboard's referee tab shows a live per-robot debug panel via
 `AbstractStrategy.debug_status()` — which tactic slot each robot is in, and
 whether that slot is currently `committed()` (the "why won't this robot get
 reassigned" signal in this model, since there's no BT node to point at).
@@ -17,6 +17,9 @@ Open http://localhost:8080 while this is running.
 import time
 
 from utama_core.custom_referee import CustomReferee
+from utama_core.custom_referee.profiles.profile_loader import load_profile
+from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard.views import referee as referee_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.run import StrategyRunner
 from utama_core.strategy.kernel_strategy import build_split_shape_kernel_strategy
@@ -28,7 +31,10 @@ def main():
     my_strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
     opp_strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
 
-    referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=6, n_robots_blue=6, enable_gui=True)
+    profile = load_profile("simulation")
+    referee = CustomReferee(profile, n_robots_yellow=6, n_robots_blue=6)
+    server = attach_dashboard()
+    referee_view.attach(server, referee, profile)
 
     runner = StrategyRunner(
         strategy=my_strategy,

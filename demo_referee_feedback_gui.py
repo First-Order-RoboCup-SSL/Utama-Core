@@ -17,6 +17,8 @@ import time
 
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
+from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard.views import referee as referee_view
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
@@ -111,17 +113,14 @@ def _preview_feedback(elapsed: float) -> list[dict]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Preview the referee GUI controller-feedback panel.")
-    parser.add_argument("--port", type=int, default=8080, help="HTTP port for the referee GUI.")
+    parser = argparse.ArgumentParser(description="Preview the referee dashboard controller-feedback panel.")
+    parser.add_argument("--port", type=int, default=8080, help="HTTP port for the dashboard.")
     args = parser.parse_args()
 
-    referee = CustomReferee(
-        load_profile("human"),
-        n_robots_yellow=2,
-        n_robots_blue=1,
-        enable_gui=True,
-        gui_port=args.port,
-    )
+    profile = load_profile("human")
+    referee = CustomReferee(profile, n_robots_yellow=2, n_robots_blue=1)
+    server = attach_dashboard(port=args.port)
+    referee_view.attach(server, referee, profile)
 
     start = time.time()
     referee.seed_clock(start, RefereeCommand.FORCE_START)

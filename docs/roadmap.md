@@ -961,6 +961,62 @@ dropping py_trees) — not urgent, revisit once there's a concrete forcing case:
   smaller lift than a from-scratch GUI — worth checking those for reuse
   before building new serialization.
 
+## Idea: geometric intention data for Replay-tab overlays (flagged 2026-08-24, not started)
+
+User's idea, raised while testing the new dashboard Replay tab: the
+intention log currently surfaces *what* changed (`IntentionEvent`: which
+tactic a robot slot holds; `RefereeEvent`: score/command/stage) but nothing
+about the *geometry* of a tactic's decision — which specific enemy robot a
+marker is covering, where a pass-and-shoot tactic intends to receive/shoot,
+etc. The ask: log enough of that geometric intent that the Replay tab could
+eventually draw it on the field canvas — a line from marker to marked
+opponent, a pass-target arrow, a planned shot line — not just show text like
+"robot 3: defense".
+
+Why this looks tractable, not speculative: the data mostly already exists
+mid-tick and is just discarded. Confirmed by inspection (not yet logged):
+- `ShadowAndMarkTactic._assign_marks()` (`utama_core/tactics/shadow_and_mark.py:94-108`)
+  computes a `{marker_id: opponent_id}` dict every tick — exactly "who is
+  blocking/marking whom" — then only uses it to compute a go-to point,
+  never records the assignment itself.
+- `_mark_target()` (same file, line 65) computes the actual standoff point
+  a marker is heading to relative to its marked opponent — the geometric
+  target, not just the opponent id.
+- Likely similar unlogged geometric targets exist in `give_and_go.py`
+  (pass/receive point) and `switch_of_play.py` (already partially traced via
+  `switch_of_play.phase`/`.relay_gate`, but as robot ids/phase strings, not
+  as target coordinates) — not yet audited file-by-file, this list is a
+  starting point from the one tactic actually read closely, not a complete
+  survey.
+
+Natural fit with existing infra rather than new infrastructure: this is
+another use of `MatchLog.trace_if_changed()` (added this session for the
+`go_to_ball`/`give_and_go`/`clear_ball`/`switch_of_play` dedup pass) — e.g.
+`ctx.match_log.trace_if_changed(tick, sim_time, key=f"shadow_and_mark.mark[{marker_id}]", value={"opponent_id": opponent_id, "target": [x, y]})`.
+Marking assignments are noted as non-sticky/recomputed every tick
+(`ShadowAndMarkTactic`'s own docstring: "not sticky — a marker can switch
+targets tick to tick"), so `trace_if_changed`'s dedup is exactly the right
+mechanism — most ticks the assignment is unchanged and would dedupe away,
+same as the other trace call sites' ~97% redundancy found and fixed this
+session.
+
+Rendering side is a separate, larger piece of work, not yet designed: the
+Replay tab's `FieldCanvas` (`dashboard/static/field_canvas.js`) currently
+only draws robots/ball/tactic-panel text — no line/arrow overlay primitive
+exists yet. Would need: (1) a `draw()` extension accepting an optional list
+of geometric annotations (line from A to B, point marker, etc.), (2) the
+Replay-tab forward-fill logic (already handles sparse `tactic_events`/
+`referee_events` client-side, see `dashboard/static/replay.js`) extended to
+forward-fill this new trace-derived geometric data the same way, and (3)
+probably a toggle/legend since overlaying every tactic's internal targets
+on top of the live robot rendering at once would get visually noisy fast —
+likely wants to be opt-in per-tactic or per-robot, not always-on.
+
+Not started: no tracing added, no canvas overlay support added. Logged here
+as a concrete, scoped idea for whoever picks it up next — the tactic-side
+half (adding `trace_if_changed` calls with target geometry) is small and
+mechanical; the canvas-overlay half is the real design work.
+
 ## CustomReferee gaps (2026-08-16 re-derivation) — all 3 resolved
 
 From the 2026-08-16 re-derivation in `docs/custom_referee.md`'s "Known gaps"
@@ -1393,3 +1449,69 @@ out of scope for whoever finds this next — this is a planner-level gap, not
 a one-line patch. Worth a dedicated investigation at some point since it's a
 real behaviour that could show up in an actual match with similar robot
 spacing, not just a test artifact.
+
+## Gameplay bugs observed via dashboard Live view (flagged 2026-08-24, not yet investigated)
+
+User-observed while watching a live `tiki_taka_plus` 6v6 match through the
+new dashboard's Live tab (see the dashboard-revamp work elsewhere this
+session — `utama_core/dashboard/`). Three distinct issues, logged here as
+seen, not yet traced to a root cause or reproduced in isolation:
+
+1. **Ball-contest deadlock.** Two robots (one per team) converging on a
+   loose/contested ball don't resolve possession — they push against each
+   other and slowly drift together while stuck in contact, neither gaining
+   clear control nor backing off. Possibly related to `PressAndContainTactic`/
+   `go_to_ball`'s obstacle-avoidance interaction when both sides' targets
+   coincide on the same ball position, but not confirmed — could equally be
+   an rSim contact-physics artifact (two robot hitboxes shoving rather than
+   one cleanly out-accelerating the other) rather than a tactic-logic bug.
+   Worth checking whether either side's tactic has any "I'm losing this
+   contest, back off" branch at all, or whether both sides just keep
+   re-issuing the same `go_to_ball` target every tick indefinitely.
+2. **Goalkeeper overshoot.** GK "overshoots very often" per direct
+   observation — visually consistent with the PID braking-distance class of
+   bug already root-caused and fixed once in this file (see "Root cause of
+   the residual PID overshoot" above, `TwoDPID` braking-distance cap) and
+   the defender-standoff-margin fix (`OWN_DEFENSE_AREA_STANDOFF_DISTANCE`).
+   Not confirmed whether this is the same mechanism recurring for the GK's
+   specific motion-controller path/gains, a GK-specific target-recompute
+   pattern causing repeated discontinuous targets, or something not yet
+   covered by either existing fix — needs its own trace, not assumed to be
+   identical to either precedent.
+3. **Direct free kick failure / stalls to FORCE_START.** Kicker doesn't
+   manage to reach the ball or pass to a teammate before whatever auto-
+   advance timeout applies, and the referee ends up force-starting (or some
+   other non-clean transition) instead of a normal direct-free sequence
+   completing. Could be the same "pass phase machine has no timeout/retry"
+   class of bug already found and fixed once for `pass_and_shoot`/
+   `PassAndShootTactic` (see "Scoreless-draw pattern" section above) showing
+   up in a different tactic/pathway, or could be specific to how
+   `RefereeOverride`/`DIRECT_FREE_*` auto-advance interacts with whichever
+   tactic is active during the restart. Not traced.
+
+All three need an actual match trace (ideally via the dashboard's new Replay
+tab, scrubbing to the moment each happens) before attempting a fix — same
+discipline as every other entry in this file: root-cause from real per-tick
+state, not from the screenshot/description alone.
+
+4. **Ball placement into/near the defense area stalls the restart.** Flagged
+   2026-08-24, separately from #3 above, and possibly a distinct root cause
+   even though the visible symptom (restart never cleanly completes) looks
+   similar: when the ball ends up inside or near a defense area and the
+   *opposing* team needs to retrieve/place it to restart play, the ball
+   placement itself appears unreliable — user is confident the specific
+   failure is "they can't place the ball for setup reliably," not (or not
+   only) a failed kick/pass attempt after a successful placement. Suspect
+   areas: `DefenseAreaRule`'s keep-out enforcement possibly fighting the
+   placing robot's approach path, `BALL_PLACEMENT_*` command handling in
+   `GameStateMachine`/`CustomReferee` for a designated position that lands
+   inside/near a defense area boundary, or a tactic that has no explicit
+   "placement point is inside a keep-out zone" case and just stalls
+   re-issuing an unreachable target. Not traced — needs the same
+   Replay-tab, scrub-to-the-moment treatment as #1-3, specifically hunting
+   for a match where the ball dies inside/near a defense area and watching
+   what the placing robot's target/command does (or doesn't do) each tick.
+   User's suspicion, not yet confirmed: this may be the single largest
+   contributor to matches "going stale after a certain time," more so than
+   #1 or #3 individually, since a stuck restart blocks all subsequent play
+   until some other timeout/force mechanism intervenes.
