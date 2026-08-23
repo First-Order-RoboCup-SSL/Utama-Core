@@ -223,7 +223,12 @@ def main() -> None:
     print(f"6v6, {tournament.MATCH_DURATION_SECONDS:.0f}s sim time per match (full match), headless rsim")
     print(f"Recording to replays/{run_id}/\n")
 
-    n_workers = min(len(jobs), max(1, (os.cpu_count() or 1) - 1))
+    # Each match is 1 pool-worker process + 2 robosim subprocesses (friendly +
+    # enemy sim), so oversubscription hits at ~1/3 of cpu_count() concurrent
+    # matches, not cpu_count() itself -- learned live: 15 workers on 16 cores
+    # (45+ total processes) left every worker around 70% CPU with zero
+    # matches finishing in 7+ minutes.
+    n_workers = min(len(jobs), max(1, (os.cpu_count() or 1) // 3))
     print(f"Running {n_workers} matches concurrently\n")
 
     results: list[CellResult] = []
