@@ -147,9 +147,14 @@ the full investigation narrative for anything already fixed lives in git log
 
 3. **AbstractStrategy follow-ups**, deferred from the BT-removal rewrite, not
    urgent:
-   - `KernelContext` — reconsider whether it's still needed as a
-     `motion_controller`-threading wrapper once `AbstractStrategy` itself is
-     simpler.
+   - `KernelContext` — still open, re-verified 2026-08-26 (not touched by
+     any work this session). Already holds 2 fields, not just
+     `motion_controller` as this note originally described — `match_log`
+     was added at some point before this session (a pure rename in its own
+     commit, unrelated to the referee-override work), so it's no longer a
+     single-field wrapper. Worth reconsidering now precisely because it's
+     already grown past its original shape once, not because anything about
+     it is broken.
    - (Resolved 2026-08-26: `goalkeeper_id` now has a real, load-bearing
      override path — the kickoff-formation goalkeeper-exemption fix reads
      the actual keeper ID off the referee packet rather than assuming 0, and
@@ -247,29 +252,52 @@ the full investigation narrative for anything already fixed lives in git log
     though worth re-verifying that fix fully covers the originally-reported
     symptom; touchline/defense-area placement stalls — see "Done" above).
     One remains open:
-    - **Ball-contest deadlock** (traced 2026-08-25, not fixed). Root-caused
-      via a real replay (`counter_press_vs_tiki_taka_plus_Rk.pkl`,
-      t=40.23-46.17s: a `GiveAndGoTactic` carrier held 0.11-0.34m from a
-      stationary ball for 5.9s of live play, orbiting rather than closing).
-      Mechanism: `FastPathPlanner._path_to`'s `ball_adjacent_obstacles`
-      exemption (added for an earlier, similar stall) only exempts a
-      ball-adjacent opponent from *target* sanitization, not from
-      `check_segment`'s path *routing* — so the last approach segment to a
-      contested ball is never collision-free and the planner detours
-      forever, sweeping the carrot around the opponent's `OBSTACLE_CLEARANCE`
-      ring instead of closing the gap.
-      Tried and reverted: exempting the same obstacle from routing too
+    - **Ball-contest deadlock** (traced 2026-08-25; believed resolved
+      2026-08-26 via `PushingRule`, confirmed with a targeted regression
+      test — not fixed at the `go_to_ball`/planner level, and deliberately
+      so). Root-caused via a real replay
+      (`counter_press_vs_tiki_taka_plus_Rk.pkl`, t=40.23-46.17s: a
+      `GiveAndGoTactic` carrier held 0.11-0.34m from a stationary ball for
+      5.9s of live play, orbiting rather than closing). Mechanism:
+      `FastPathPlanner._path_to`'s `ball_adjacent_obstacles` exemption
+      (added for an earlier, similar stall) only exempts a ball-adjacent
+      opponent from *target* sanitization, not from `check_segment`'s path
+      *routing* — so the last approach segment to a contested ball is never
+      collision-free and the planner detours forever, sweeping the carrot
+      around the opponent's `OBSTACLE_CLEARANCE` ring instead of closing the
+      gap. Tried and reverted: exempting the same obstacle from routing too
       (mirroring the existing defense-area-retrieval exemption) does let the
       robot reach the ball, but then exposes a worse failure — both robots'
       dribblers register `has_ball` simultaneously and grind in place
       (bodies pinned at exactly `ROBOT_DIAMETER` apart, ball crawling
       ~0.3m/5s instead of frozen). That's a genuine 50/50-contest physics
-      case with no possession-arbitration logic to resolve it, a different
-      and likely larger problem than the routing gap. Left unfixed pending a
-      decision on whether/how simultaneous-touch possession should be
-      arbitrated — not a `go_to_ball`/planner fix. (Note: the touchline/
-      defense-area routing fix above deliberately does NOT apply here — it's
-      scoped to static, non-robot obstacles only, for exactly this reason.)
+      case with no possession-arbitration logic to resolve it at the planner
+      level — reframed via SSL rulebook §8.4.1 ("Pushing": "if both robots
+      are pushing each other with similar force, no team is at fault") as a
+      referee-level no-fault state, not a `go_to_ball`/planner bug. (Note:
+      the touchline/defense-area routing fix above deliberately does NOT
+      apply here — it's scoped to static, non-robot obstacles only, for
+      exactly this reason.)
+      `PushingRule` (built as part of the §8.4 rules audit, see "Done"
+      above) detects exactly this geometry — position/velocity-only via
+      `robot_contact.py`, no `has_ball` — and its symmetric-force branch
+      issues `STOP` (no-fault, `offending_teams=()`) followed by
+      `FORCE_START` at the ball's position, matching the rulebook exactly.
+      `STOP` is a real `RefereeOverride` command, so `StopStep` then
+      actively drives the encroaching robot outside the 0.8m ball keep-out
+      radius — physically separating the pinned pair, not just logging a
+      foul. Verified end-to-end by
+      `tests/custom_referee/test_ball_contest_deadlock.py` (new,
+      2026-08-26): one test drives the exact pinned-pair geometry through
+      the real `CustomReferee.step()` call path (not `PushingRule.check()`
+      directly — closes `docs/testing_gaps.md` gap #1 for this scenario) and
+      confirms `STOP` is issued; a second confirms `RefereeOverride`'s
+      `StopStep` actually moves the encroaching robot's target outside the
+      keep-out radius. This was previously unverified even after
+      `PushingRule` existed — the one live tournament check
+      (`docs/testing_gaps.md` gap #6) never happened to trigger Pushing at
+      all, so nothing had confirmed the fix actually covers the originally
+      traced scenario until now.
 
     All open items need an actual match trace (via the dashboard's Replay
     tab, or `debug_match.py` + a temporary `trace()`/print hook) before
