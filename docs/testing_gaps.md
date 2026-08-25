@@ -8,6 +8,13 @@ kind of gap let that happen, plus a few adjacent gaps noticed along the way,
 so the next round of rule/rule-adjacent work doesn't rediscover the same
 thing from zero.
 
+**Update 2026-08-26**: gaps #1, #2, #3, and the Pushing-specific part of #6
+are now closed — see the "Closed" note under each. #4 (static type checking)
+and #5 (`game_frame=None` convention) remain open as tooling/design
+decisions, not test-writing tasks. #6 remains open for the two rules
+(`keeper_held_ball`, `ball_placement_interference`) that still haven't fired
+in a live tournament, even though they're now integration-tested.
+
 ## 1. Unit-testing a rule in isolation doesn't test the interface it's actually called through
 
 Every new rule's tests called `rule.check(frame, geometry, command)`
@@ -46,6 +53,19 @@ actual logic/thresholds — but at least one integration-shaped test per rule
 would have caught this specific class of bug immediately, and generalizes
 to catching any future interface drift the same way.
 
+**Closed 2026-08-26.** One integration-shaped test per new §8.4 rule now
+exists, each driven through the real `CustomReferee.step()` call path:
+`Pushing` in `tests/custom_referee/test_ball_contest_deadlock.py`; the
+remaining 6 (`Crashing`, `KeeperHeldBall`, `ExcessiveDribbling`,
+`RobotStopSpeed`, `BallPlacementInterference`, `DefenseAreaStoppage`) in
+`tests/custom_referee/test_referee_rules_integration.py`. Two real (not
+bugs, just non-obvious) wiring behaviors surfaced while writing these:
+`KeeperHeldBallRule`'s foul auto-advances `STOP -> BALL_PLACEMENT_BLUE`
+within the same tick when no robot is present to keep the "all clear" gate
+pending, and `RobotStopSpeedRule`'s grace clock starts from the first
+`step()` call that observes `STOP`, not from `force_command`'s timestamp —
+both now documented in the new test file's comments.
+
 ## 2. No test drives the foul-counter/yellow-card mechanism end-to-end
 
 `RuleViolation.offending_teams`/`counts_toward_foul_counter` and
@@ -59,6 +79,17 @@ returns a violation with `offending_teams=(True,)`" and "the state machine
 actually increments the right team's counter and awards a card on the 3rd"
 is exactly the kind of connective logic that unit tests of the two
 endpoints, individually, don't cover.
+
+**Closed 2026-08-26** by `tests/custom_referee/test_foul_counter_end_to_end.py`
+(7 tests) — drives real `RuleViolation`s through `GameStateMachine.step()`
+in sequence for both teams, confirms the 3rd/6th foul awards a 2nd card
+(not a one-shot special case), confirms `counts_toward_foul_counter=False`
+and `offending_teams=()` both correctly charge nobody, and confirms a
+non-stopping foul still applies its foul-counter side effect without
+touching `command`. Bonus finding, not a bug: non-stopping fouls never
+update `_last_transition_time`, so unlike stopping fouls they're never
+suppressed by the 0.3s transition cooldown — several non-stopping
+violations at the exact same timestamp all land.
 
 ## 3. No test exercises two rules firing in the same tick, or a non-stopping foul's interaction with a stopping one
 
@@ -75,6 +106,21 @@ and asserts which one actually gets applied and why. Given how easy this
 kind of scan-order logic is to get subtly wrong (and how little visual
 signal a wrong-but-plausible result gives), it's worth its own focused test
 independent of any single rule's behavior.
+
+**Closed 2026-08-26** by `tests/custom_referee/test_referee_scan_order.py`
+(3 tests): confirms a lone non-stopping violation (real `CrashingRule`) is
+recorded as `last_violation` without changing `referee_command`; confirms
+the first stopping rule in priority order (`GoalRule`) wins and a
+call-counting wrapper proves the next rule in order (`OutOfBoundsRule`)
+is never even consulted that tick, not just that its result is unused; and
+—since the real rule set's command-gating currently can't produce a
+non-stopping violation earlier in list order than a same-tick stopping one
+(documented in the file's module docstring: every rule sharing
+`CrashingRule`'s `NORMAL_START`/`FORCE_START` gate sits before it, every
+stopping rule after it only fires during stoppage commands Crashing never
+checks)—exercises that specific ordering directly via two minimal stub
+`BaseRule`s, proving the earlier non-stopping violation doesn't suppress or
+pre-empt the later stopping one.
 
 ## 4. No static type checking in CI to catch signature drift automatically
 
@@ -129,3 +175,17 @@ sustained push, a long defense-area ball hold, or a ball-placement
 restart is worth checking specifically for whether those three fire
 sanely (right team, right threshold, not spuriously) rather than assuming
 silence means correctness.
+
+**Partially closed 2026-08-26.** `pushing` specifically is no longer just
+"unfired in one tournament + isolated unit tests" — a targeted regression
+test (`tests/custom_referee/test_ball_contest_deadlock.py`) now drives the
+*exact* traced ball-contest-deadlock geometry (two robots pinned around a
+ball, symmetric force, neither dribbler registering contact) through the
+real `CustomReferee.step()` call path and confirms both that `PushingRule`
+fires correctly and that the resulting `STOP` command actually causes
+`RefereeOverride`'s `StopStep` to drive the pinned robots apart. That's a
+real scenario, not a synthetic one — see `docs/roadmap.md` item 11. Still
+genuinely open: `keeper_held_ball` and `ball_placement_interference` have
+never fired in *any* live match/tournament run, integration-tested or not —
+a future tournament producing a long defense-area ball hold or a
+ball-placement restart is still worth checking for these two specifically.

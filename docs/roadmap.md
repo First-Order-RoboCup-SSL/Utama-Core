@@ -309,16 +309,18 @@ the full investigation narrative for anything already fixed lives in git log
     symptom description alone.
 
 12. **Testing-gap follow-ups from the §8.4 referee-rules audit** — see
-    `docs/testing_gaps.md` for full detail. Short version: (1) add at least
-    one integration-shaped test per new referee rule that goes through
-    `CustomReferee.step()` itself, not just the rule class directly; (2) a
-    test driving 3 real fouls through `GameStateMachine` and asserting a
-    yellow card lands; (3) a test for the stopping/non-stopping scan-order
-    interaction in `CustomReferee.step()`; (4) investigate whether adopting
-    mypy/pyright in CI (Ruff-only today) is worth it — would have caught the
-    signature-drift bug behind (1) for free; (5) `pushing_rule.py`/
-    `crashing_rule.py`/`robot_stop_speed_rule.py` share
+    `docs/testing_gaps.md` for full detail; (1), (2), (3), and the Pushing
+    part of (6) closed 2026-08-26 (16 new tests: `test_ball_contest_deadlock.py`,
+    `test_referee_rules_integration.py`, `test_foul_counter_end_to_end.py`,
+    `test_referee_scan_order.py` — full suite 799 passed, 0 failed). Still
+    open: (4) investigate whether adopting mypy/pyright in CI (Ruff-only
+    today) is worth it — would have caught the original signature-drift bug
+    for free, this is a tooling decision, not a test to write; (5)
+    `pushing_rule.py`/`crashing_rule.py`/`robot_stop_speed_rule.py` share
     `ball_placement_interference_rule.py`'s latent "assumes `game_frame` is
-    never `None`" bug, just never exercised; (6) Pushing/Keeper Held Ball/
-    Ball Placement Interference never fired in a 3-match live tournament
-    sanity check — least field-validated of the 7 new rules.
+    never `None`" bug, just never exercised — a design/hardening decision,
+    not urgent; (6, partial) `keeper_held_ball`/`ball_placement_interference`
+    still haven't fired in any live tournament run (integration-tested now,
+    but not field-validated) — worth checking specifically next time a
+    tournament produces a long defense-area ball hold or a ball-placement
+    restart.
