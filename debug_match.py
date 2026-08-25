@@ -50,6 +50,16 @@ def main() -> None:
     )
     parser.add_argument("--print-trace", action="store_true", help="print every TraceEvent as it's written back")
     parser.add_argument("--headless", action="store_true", help="accepted for CLI-convention compatibility; unused")
+    parser.add_argument(
+        "--stats-path",
+        default=None,
+        help=(
+            "If set, also accumulate and write the same possession/shots/ball-travel "
+            "summary tournament.py records (utama_core.engine.match_stats.MatchStats) to "
+            "this path. Off by default since most debugging sessions only care about the "
+            "match_log/trace output, not aggregate stats."
+        ),
+    )
     args = parser.parse_args()
 
     build_a = getattr(kernel_strategy, args.strategy)
@@ -74,6 +84,7 @@ def main() -> None:
         enable_vision_stream=False,
         referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
         match_log_path=args.match_log,
+        stats_path=args.stats_path,
     )
 
     try:
@@ -90,7 +101,19 @@ def main() -> None:
         ref_data = runner.my.game.referee
         print(f"Final score: yellow={ref_data.yellow_team.score} blue={ref_data.blue_team.score}")
     finally:
+        # match_stats.finalize()/.to_json() (if --stats-path was given) happens
+        # inside close() itself — see StrategyRunner.close().
         runner.close()
+
+    if args.stats_path and runner.match_stats is not None:
+        stats = runner.match_stats.finalize()
+        print(f"Stats written: {args.stats_path}")
+        poss = stats.possession_pct
+        shots = stats.shots
+        print(
+            f"possession {poss['friendly']:.0%}/{poss['enemy']:.0%}  "
+            f"shots {shots['friendly']}-{shots['enemy']}  ball_travel {stats.ball_travel_m:.1f}m"
+        )
 
     if runner.match_log is not None:
         runner.match_log.to_jsonl(args.match_log)

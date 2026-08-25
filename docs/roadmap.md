@@ -73,6 +73,26 @@ the full investigation narrative for anything already fixed lives in git log
   duplication; ~97% redundant per-tick `trace()` calls deduped via
   `MatchLog.trace_if_changed()`. `dashboard_server.py` is the standing way to
   browse replays/tournaments without a live match.
+- **Touchline avoidance + ball-placement-into-defense-area stall** — same
+  routing gap as the ball-contest deadlock below, triggered by a static
+  obstacle (field wall / enemy defense-area rect) instead of a robot:
+  `ball_adjacent_obstacles` was only applied to target sanitization, never to
+  `check_segment`/`smooth_path` routing, so a ball near a touchline or a
+  `BALL_PLACEMENT_OURS` carry into the opponent's box both converged just
+  short and stalled. Fixed via a routing exemption scoped to *static*
+  obstacles only (never robots — that's the reverted case below) plus
+  extending `_enemy_defense_area_retrieval_exempt` to cover carry-to-place,
+  not just retrieval.
+- **SSL rulebook §8.3/8.4 audit + 7 new referee rules** — Pushing, Crashing
+  (both position/velocity-only, no `has_ball` — see `robot_contact.py`),
+  Keeper Held Ball, Excessive Dribbling, Robot Stop Speed, Ball Placement
+  Interference, stoppage-time Robot-Too-Close-To-Opponent-Defense-Area, plus
+  a Multiple Defenders sanction fix (penalty kick + ball-touch gating, not
+  occupancy + free kick). Foul-counter/yellow-card mechanism
+  (`TeamInfo.increment_foul_counter()`) wired up for the first time — no
+  prior rule incremented it. Built via 3 parallel agents; see
+  `docs/testing_gaps.md` for what the merge process caught and what it
+  didn't.
 
 ## Open
 
@@ -189,32 +209,52 @@ the full investigation narrative for anything already fixed lives in git log
     behavior that could show up in an actual match with similar spacing.
 
 11. **Gameplay bugs observed via dashboard Live view** (flagged 2026-08-24).
-    User-observed watching a live `tiki_taka_plus` 6v6 match. Two of the
+    User-observed watching a live `tiki_taka_plus` 6v6 match. Three of the
     original four are resolved (goalkeeper overshoot — see "Done" above;
     direct-free-kick retrieval — see "Defense-area retrieval stall" above,
     though worth re-verifying that fix fully covers the originally-reported
-    symptom). Two remain open, not yet traced:
-    - **Ball-contest deadlock.** Two robots (one per team) converging on a
-      loose/contested ball don't resolve possession — push against each
-      other and slowly drift together, neither gaining clear control nor
-      backing off. Possibly `PressAndContainTactic`/`go_to_ball` obstacle-
-      avoidance interaction when both sides' targets coincide on the ball, or
-      an rSim contact-physics artifact — not confirmed. Worth checking
-      whether either side's tactic has any "I'm losing this contest, back
-      off" branch at all.
-    - **Ball placement into/near the defense area stalls the restart.** When
-      the ball ends up inside/near a defense area and the opposing team needs
-      to retrieve/place it to restart play, placement itself appears
-      unreliable (distinct from a failed kick/pass attempt after a
-      successful placement). Suspect areas: `DefenseAreaRule`'s keep-out
-      enforcement fighting the placing robot's approach path,
-      `BALL_PLACEMENT_*` handling for a designated position landing inside/
-      near a defense area boundary, or a tactic with no explicit "placement
-      point is inside a keep-out zone" case. Not traced. User's suspicion,
-      not yet confirmed: this may be the single largest contributor to
-      matches "going stale after a certain time."
+    symptom; touchline/defense-area placement stalls — see "Done" above).
+    One remains open:
+    - **Ball-contest deadlock** (traced 2026-08-25, not fixed). Root-caused
+      via a real replay (`counter_press_vs_tiki_taka_plus_Rk.pkl`,
+      t=40.23-46.17s: a `GiveAndGoTactic` carrier held 0.11-0.34m from a
+      stationary ball for 5.9s of live play, orbiting rather than closing).
+      Mechanism: `FastPathPlanner._path_to`'s `ball_adjacent_obstacles`
+      exemption (added for an earlier, similar stall) only exempts a
+      ball-adjacent opponent from *target* sanitization, not from
+      `check_segment`'s path *routing* — so the last approach segment to a
+      contested ball is never collision-free and the planner detours
+      forever, sweeping the carrot around the opponent's `OBSTACLE_CLEARANCE`
+      ring instead of closing the gap.
+      Tried and reverted: exempting the same obstacle from routing too
+      (mirroring the existing defense-area-retrieval exemption) does let the
+      robot reach the ball, but then exposes a worse failure — both robots'
+      dribblers register `has_ball` simultaneously and grind in place
+      (bodies pinned at exactly `ROBOT_DIAMETER` apart, ball crawling
+      ~0.3m/5s instead of frozen). That's a genuine 50/50-contest physics
+      case with no possession-arbitration logic to resolve it, a different
+      and likely larger problem than the routing gap. Left unfixed pending a
+      decision on whether/how simultaneous-touch possession should be
+      arbitrated — not a `go_to_ball`/planner fix. (Note: the touchline/
+      defense-area routing fix above deliberately does NOT apply here — it's
+      scoped to static, non-robot obstacles only, for exactly this reason.)
 
     All open items need an actual match trace (via the dashboard's Replay
     tab, or `debug_match.py` + a temporary `trace()`/print hook) before
     attempting a fix — root-cause from real per-tick state, not from the
     symptom description alone.
+
+12. **Testing-gap follow-ups from the §8.4 referee-rules audit** — see
+    `docs/testing_gaps.md` for full detail. Short version: (1) add at least
+    one integration-shaped test per new referee rule that goes through
+    `CustomReferee.step()` itself, not just the rule class directly; (2) a
+    test driving 3 real fouls through `GameStateMachine` and asserting a
+    yellow card lands; (3) a test for the stopping/non-stopping scan-order
+    interaction in `CustomReferee.step()`; (4) investigate whether adopting
+    mypy/pyright in CI (Ruff-only today) is worth it — would have caught the
+    signature-drift bug behind (1) for free; (5) `pushing_rule.py`/
+    `crashing_rule.py`/`robot_stop_speed_rule.py` share
+    `ball_placement_interference_rule.py`'s latent "assumes `game_frame` is
+    never `None`" bug, just never exercised; (6) Pushing/Keeper Held Ball/
+    Ball Placement Interference never fired in a 3-match live tournament
+    sanity check — least field-validated of the 7 new rules.
