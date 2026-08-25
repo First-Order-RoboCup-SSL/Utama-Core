@@ -17,12 +17,13 @@ from dataclasses import dataclass
 from typing import Optional
 
 from utama_core.config.enums import Role
-from utama_core.engine.referee_override import is_override_command
+from utama_core.engine.referee_override import RefereeActionOverride
 from utama_core.engine.referee_reset import is_paused
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.math_utils import (
     assert_contains,
     assert_valid_bounding_box,
@@ -67,6 +68,19 @@ class AbstractStrategy:
             field. If True, and StrategyRunner's exp_ball is False, StrategyRunner
             will raise an error and not run the strategy. If False, but the ball
             exists, we will just rock on.
+        referee_overrides: optional per-`RefereeCommand` replacements for the
+            built-in restart formations (kickoff/penalty/free-kick/ball-
+            placement/STOP — see `referee_override.is_override_command` for
+            the full set). Each value is called as
+            `fn(game, motion_controller) -> dict[RobotId, RobotCommand]` in
+            place of the corresponding built-in `*Step` for exactly that
+            command; commands not present in this dict keep the default
+            behaviour. A robot the returned dict doesn't mention falls
+            through to `execute_default_action`, same as any tick. Applied to
+            the kernel `Strategy` in `load_motion_controller` (see
+            `Strategy.referee_overrides`'s setter docstring for why this is a
+            post-construction assignment rather than a constructor kwarg on
+            `build_kernel_strategy` itself).
     """
 
     def __init__(
@@ -74,6 +88,7 @@ class AbstractStrategy:
         build_kernel_strategy,
         goalkeeper_id: int = 0,
         exp_ball: bool = True,
+        referee_overrides: Optional[dict[RefereeCommand, RefereeActionOverride]] = None,
     ):
         self.exp_ball = exp_ball
         self._build_kernel_strategy = build_kernel_strategy
@@ -81,6 +96,7 @@ class AbstractStrategy:
         self._goalkeeper = GoalkeeperTactic(robot_id=goalkeeper_id)
         self._goalkeeper_id = goalkeeper_id
         self._goalkeeper_mem = self._goalkeeper.initial_mem()
+        self._referee_overrides = referee_overrides
 
         ### These attributes are set by the StrategyRunner before the strategy is run. ###
         self.robot_controller: Optional[AbstractRobotController] = None
@@ -147,6 +163,8 @@ class AbstractStrategy:
         is the right timing)."""
         self.motion_controller = motion_controller
         self._kernel_strategy = self._build_kernel_strategy(motion_controller)
+        if self._referee_overrides:
+            self._kernel_strategy.referee_overrides = self._referee_overrides
 
     def assert_field_requirements(self, game: Game):
         """
@@ -203,13 +221,19 @@ class AbstractStrategy:
 
         # During a referee-restart override (including STOP and TIMEOUT_* —
         # see `referee_override.py`'s module docstring for why both are
-        # override commands, not just a pause), `outfield_commands` already
-        # covers every friendly robot including the goalkeeper (the
-        # override's Step classes compute for all of `game.friendly_robots`,
-        # not just the outfield pool, and `StopStep` in particular will drive
-        # the keeper off the ball if it's inside the keep-out radius) —
-        # ticking GoalkeeperTactic on top would overwrite that with normal
-        # ball-tracking logic mid-restart.
+        # override commands, not just a pause), most Step classes still
+        # compute a command for every friendly robot including the goalkeeper
+        # (e.g. `StopStep` will drive the keeper off the ball if it's inside
+        # the keep-out radius, and `PreparePenalty*Step` places the keeper on
+        # the goal line) — ticking GoalkeeperTactic on top of those would
+        # overwrite the override's intent with normal ball-tracking logic.
+        # `PrepareKickoff{Ours,Theirs}Step` are the exception: they exempt the
+        # real goalkeeper from formation entirely (a kickoff has no reason to
+        # pull the keeper off its line), so the keeper is genuinely absent
+        # from `cmd_map` during those two commands specifically, and
+        # `GoalkeeperTactic` should tick normally to fill the gap — hence
+        # gating on `self._goalkeeper_id not in cmd_map` rather than only on
+        # `is_override_command`.
         #
         # During HALT, the goalkeeper must stop issuing motion commands for
         # the same reason `Strategy.tick()` freezes the outfield pool via
@@ -218,11 +242,7 @@ class AbstractStrategy:
         # the correct "stop" command.
         referee = getattr(game, "referee", None)
         current_command = getattr(referee, "referee_command", None) if referee is not None else None
-        if (
-            not is_override_command(current_command)
-            and not is_paused(current_command)
-            and self._goalkeeper_id not in cmd_map
-        ):
+        if not is_paused(current_command) and self._goalkeeper_id not in cmd_map:
             gk_commands, self._goalkeeper_mem = self._goalkeeper.tick(
                 game, self._kernel_strategy._ctx, (self._goalkeeper_id,), self._goalkeeper_mem
             )

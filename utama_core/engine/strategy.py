@@ -39,11 +39,16 @@ from typing import Callable, Optional
 
 from utama_core.engine.context import KernelContext
 from utama_core.engine.match_log import MatchLog
-from utama_core.engine.referee_override import RefereeOverride, is_override_command
+from utama_core.engine.referee_override import (
+    RefereeActionOverride,
+    RefereeOverride,
+    is_override_command,
+)
 from utama_core.engine.referee_reset import ResetTier, classify_transition, is_paused
 from utama_core.engine.tactic import RobotId, Tactic, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
+from utama_core.entities.referee.referee_command import RefereeCommand
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +103,7 @@ class Strategy:
         partitioner: Partitioner,
         outfield_robot_ids: tuple[RobotId, ...],
         ctx: KernelContext,
+        referee_overrides: Optional[dict[RefereeCommand, RefereeActionOverride]] = None,
     ):
         if not tactics:
             raise ValueError("Strategy needs at least one registered tactic")
@@ -109,7 +115,7 @@ class Strategy:
         self._slots: dict[TacticId, _TacticSlot] = {}
         self._prev_partition: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._prev_referee_command = None
-        self._referee_override = RefereeOverride()
+        self._referee_override = RefereeOverride(overrides=referee_overrides)
 
         # Optional structured intention/trace log — assigned post-construction
         # by `StrategyRunner` (see its `match_log_path` param), not threaded
@@ -121,6 +127,23 @@ class Strategy:
         # the only place a caller ever needs to touch.
         self._match_log: Optional[MatchLog] = None
         self._tick_count = 0
+
+    @property
+    def referee_overrides(self) -> dict[RefereeCommand, RefereeActionOverride]:
+        return self._referee_override.overrides
+
+    @referee_overrides.setter
+    def referee_overrides(self, value: dict[RefereeCommand, RefereeActionOverride]) -> None:
+        """Replace the strategy-supplied restart overrides on the live `RefereeOverride`.
+
+        Assigned post-construction the same way `match_log` is — `AbstractStrategy.__init__`
+        runs before `load_motion_controller` builds the kernel `Strategy` via each
+        `build_kernel_strategy(motion_controller)` factory, none of which know about
+        `referee_overrides`, so `AbstractStrategy.load_motion_controller` sets this right
+        after construction instead of threading a new constructor kwarg through every
+        existing factory.
+        """
+        self._referee_override.overrides = value
 
     @property
     def match_log(self) -> Optional[MatchLog]:

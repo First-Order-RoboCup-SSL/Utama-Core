@@ -93,6 +93,36 @@ the full investigation narrative for anything already fixed lives in git log
   prior rule incremented it. Built via 3 parallel agents; see
   `docs/testing_gaps.md` for what the merge process caught and what it
   didn't.
+- **Referee restart-formation fixes + strategy override hook** (2026-08-26).
+  `PrepareKickoffOursStep`/`PrepareKickoffTheirsStep` (`custom_referee/
+  actions.py`) hardcoded "goalkeeper = robot id 0" and folded the keeper into
+  the outfield kickoff formation — a real bug once `AbstractStrategy
+  .goalkeeper_id` is ever non-zero (item 3 below), and wrong even at id 0
+  (unlike `PreparePenalty{Ours,Theirs}Step`, which already read the real
+  keeper ID off the referee packet). Both kickoff steps now do the same:
+  read `ref.{yellow,blue}_team.goalkeeper`, exempt that robot from formation
+  entirely (absent from `cmd_map`, not just excluded from kicker choice), and
+  pass `clear_own_defense_area=True`/`clear_opp_defense_area=True` to
+  `_clear_to_legal_positions` as a live legality net (previously only
+  `StopStep` did this for kickoff-adjacent formations — no live check meant a
+  bad ratio/non-standard field could silently place a robot in a defense area
+  with nothing to catch it before `NORMAL_START` fires and immediately
+  refouls). Companion fix in `AbstractStrategy.step()`: `GoalkeeperTactic` now
+  ticks whenever the goalkeeper's robot ID is absent from `cmd_map`, not only
+  when no override command is active — needed because the keeper is now
+  legitimately absent from the kickoff steps' output and must fall through to
+  real goalkeeper logic instead of freezing.
+  Also added: strategy implementers can now override any restart formation
+  (`RefereeOverride`/`Strategy`/`AbstractStrategy` all gained a
+  `referee_overrides: dict[RefereeCommand, Callable[[Game, MotionController],
+  dict[RobotId, RobotCommand]]]` — pass it to `AbstractStrategy(...)` and a
+  registered command bypasses the built-in `*Step` entirely; unregistered
+  commands are unaffected). Previously there was no extension point at all —
+  the only documented customization path was editing `actions.py` directly.
+  12 new tests (`test_kickoff_goalkeeper_exemption.py`,
+  `test_referee_overrides_customization.py`) plus 4 pre-existing
+  `test_referee_unit.py` kickoff tests fixed (they asserted the old buggy
+  behavior). Full suite: 781 passed, 0 failed.
 
 ## Open
 
@@ -117,12 +147,14 @@ the full investigation narrative for anything already fixed lives in git log
 
 3. **AbstractStrategy follow-ups**, deferred from the BT-removal rewrite, not
    urgent:
-   - `goalkeeper_id`/`exp_ball` as `AbstractStrategy.__init__` params —
-     `goalkeeper_id` has zero real overrides today; worth reconsidering
-     whether it belongs as a constructor param at all.
    - `KernelContext` — reconsider whether it's still needed as a
      `motion_controller`-threading wrapper once `AbstractStrategy` itself is
      simpler.
+   - (Resolved 2026-08-26: `goalkeeper_id` now has a real, load-bearing
+     override path — the kickoff-formation goalkeeper-exemption fix reads
+     the actual keeper ID off the referee packet rather than assuming 0, and
+     the new `referee_overrides` hook gives strategy implementers a way to
+     customize restart formations per-command. See "Done" above.)
 
 4. **Idea: geometric intention data for Replay-tab overlays** (user's idea,
    2026-08-24). The intention log currently surfaces *what* changed (which

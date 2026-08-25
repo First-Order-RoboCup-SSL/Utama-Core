@@ -57,7 +57,7 @@ implemented in `actions.py`, just never wired into the kernel path).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Callable, Optional
 
 from utama_core.custom_referee.actions import (
     BallPlacementOursStep,
@@ -104,6 +104,17 @@ def is_override_command(command: Optional[RefereeCommand]) -> bool:
     return command in _OVERRIDE_COMMANDS
 
 
+# A strategy-supplied replacement for one restart command's built-in Step.
+# Receives the same (game, motion_controller) the built-in Step classes read
+# from the blackboard shim, and must return a full cmd_map for whichever
+# friendly robots it wants to drive this tick (typically every friendly robot
+# except the goalkeeper, mirroring the built-ins — see `AbstractStrategy`'s
+# `referee_overrides` param docstring for the exact contract). A robot absent
+# from the returned dict falls through to `execute_default_action`, same as
+# any other unaddressed robot.
+RefereeActionOverride = Callable[[Game, MotionController], dict[RobotId, RobotCommand]]
+
+
 @dataclass
 class _BlackboardShim:
     """The only three attributes any `actions.py` Step class reads or writes."""
@@ -121,9 +132,19 @@ class RefereeOverride:
     cross-tick state (`_release_started_at`/`_placer_id`) exactly like it does
     on the BT path — a fresh instance every tick would lose that state and
     re-trigger the release-delay logic every tick.
+
+    `overrides`: an optional per-`RefereeCommand` map of strategy-supplied
+    replacements (see `AbstractStrategy.__init__`'s `referee_overrides` param).
+    A command present in this map is dispatched to the supplied callable
+    instead of the corresponding built-in `*Step`; a command absent from it
+    behaves exactly as before. Only commands actually reached via
+    `_step_for` (i.e. members of `_OVERRIDE_COMMANDS`) are ever consulted —
+    an override for e.g. `NORMAL_START` would simply never fire, since
+    `Strategy.tick()` only calls into `RefereeOverride` at all when
+    `is_override_command(current_command)` is true.
     """
 
-    def __init__(self):
+    def __init__(self, overrides: Optional[dict[RefereeCommand, RefereeActionOverride]] = None):
         self._stop = StopStep()
         self._ball_placement_ours = BallPlacementOursStep()
         self._ball_placement_theirs = BallPlacementTheirsStep()
@@ -133,11 +154,24 @@ class RefereeOverride:
         self._penalty_theirs = PreparePenaltyTheirsStep()
         self._direct_free_ours = DirectFreeOursStep()
         self._direct_free_theirs = DirectFreeTheirsStep()
+        self._overrides = dict(overrides) if overrides else {}
+
+    @property
+    def overrides(self) -> dict[RefereeCommand, RefereeActionOverride]:
+        return dict(self._overrides)
+
+    @overrides.setter
+    def overrides(self, value: dict[RefereeCommand, RefereeActionOverride]) -> None:
+        self._overrides = dict(value)
 
     def tick(
         self, game: Game, motion_controller: MotionController, command: RefereeCommand
     ) -> dict[RobotId, RobotCommand]:
         """Compute every friendly robot's command for this restart, or {} if not an override command."""
+        override_fn = self._overrides.get(command)
+        if override_fn is not None:
+            return dict(override_fn(game, motion_controller))
+
         step = self._step_for(command, game.my_team_is_yellow)
         if step is None:
             return {}

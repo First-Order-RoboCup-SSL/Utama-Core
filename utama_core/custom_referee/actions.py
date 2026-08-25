@@ -434,22 +434,31 @@ class BallPlacementTheirsStep:
 class PrepareKickoffOursStep:
     """Positions robots for our kickoff.
 
-    Robot with the lowest ID approaches the ball at (0, 0).
-    All other robots move to own-half support positions outside the centre circle.
+    Goalkeeper (real ID from the referee packet) is exempt from formation and
+    left for `GoalkeeperTactic`/the caller to handle. Lowest-ID non-keeper
+    outfield robot approaches the ball at (0, 0); all other non-keeper robots
+    move to own-half support positions outside the centre circle.
     """
 
     def update(self) -> None:
         game = self.blackboard.game
         motion_controller = self.blackboard.motion_controller
+        ref = game.referee
 
-        robot_ids = sorted(game.friendly_robots.keys())
-        # The goalkeeper (id 0) is pinned outside the kernel scheduler and is
-        # exempt from restart positioning — it must not be chosen as the
-        # kicker, or the "kickoff" becomes the keeper standing on the ball
-        # and then returning to its line without ever touching it (observed:
-        # kernel matches with the kicker = robot 0). Lowest-ID *outfield*
-        # robot takes the kick instead.
-        kicker_id = next((rid for rid in robot_ids if rid != 0), robot_ids[0])
+        # Real goalkeeper ID from the referee packet — not assumed to be 0.
+        # The keeper must not be chosen as the kicker, or the "kickoff"
+        # becomes the keeper standing on the ball and then returning to its
+        # line without ever touching it (observed: kernel matches with the
+        # kicker = robot 0, back when 0 was assumed). Also exempt it from the
+        # support formation entirely: unlike the penalty steps below, a
+        # kickoff has no reason to pull the keeper off its line at all.
+        our_team_info = ref.yellow_team if game.my_team_is_yellow else ref.blue_team
+        keeper_id = our_team_info.goalkeeper
+
+        robot_ids = sorted(rid for rid in game.friendly_robots.keys() if rid != keeper_id)
+        if not robot_ids:
+            return None
+        kicker_id = robot_ids[0]
 
         # Kicker: approach from own-half side so the robot doesn't push the ball.
         own_half_sign = 1.0 if game.my_team_is_right else -1.0
@@ -472,7 +481,9 @@ class PrepareKickoffOursStep:
         return _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
-            exempt_robot_ids={kicker_id},
+            clear_own_defense_area=True,
+            clear_opp_defense_area=True,
+            exempt_robot_ids={kicker_id, keeper_id},
             intended_targets=intended,
         )
 
@@ -483,18 +494,25 @@ class PrepareKickoffOursStep:
 
 
 class PrepareKickoffTheirsStep:
-    """Moves all our robots to own half, outside the centre circle, for the opponent kickoff."""
+    """Moves all our non-keeper robots to own half, outside the centre circle,
+    for the opponent kickoff. Goalkeeper (real ID from the referee packet) is
+    exempt from formation, same as `PrepareKickoffOursStep`."""
 
     def update(self) -> None:
         game = self.blackboard.game
+        ref = game.referee
+        our_team_info = ref.yellow_team if game.my_team_is_yellow else ref.blue_team
+        keeper_id = our_team_info.goalkeeper
 
         positions = _formation_positions(game, KICKOFF_DEFENCE_POSITION_RATIOS_OWN_HALF)
-        robot_ids = sorted(game.friendly_robots.keys())
+        robot_ids = sorted(rid for rid in game.friendly_robots.keys() if rid != keeper_id)
         intended = {robot_id: positions[idx % len(positions)] for idx, robot_id in enumerate(robot_ids)}
 
         return _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            clear_own_defense_area=True,
+            exempt_robot_ids={keeper_id},
             intended_targets=intended,
         )
 

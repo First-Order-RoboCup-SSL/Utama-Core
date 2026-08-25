@@ -730,6 +730,9 @@ class TestVariableFieldScaling:
         }
         custom_bounds = FieldBounds(top_left=(-6.0, 4.0), bottom_right=(6.0, -4.0))
         referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_YELLOW)
+        # yellow_team.goalkeeper=2 (see _make_referee_data's default) — robot 2
+        # is the real keeper here, not robot 0. It must be fully exempt from
+        # formation (absent from cmd_map), not just excluded from kicker choice.
         game = _make_game(
             friendly_robots=robots,
             referee=referee,
@@ -742,24 +745,17 @@ class TestVariableFieldScaling:
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
-        # Kicker must be the lowest-ID *outfield* robot — robot 0 is the pinned
-        # goalkeeper and must not leave its line to take kickoffs (it is a
-        # support robot here, not the kicker).
-        kicker_target = next(target for robot_id, target in captured if robot_id == 1)
-        keeper_target = next(target for robot_id, target in captured if robot_id == 0)
-        second_support_target = next(target for robot_id, target in captured if robot_id == 2)
+        assert cmd_map[2] is None, "goalkeeper must be exempt from kickoff formation entirely"
+
+        # Kicker must be the lowest-ID non-keeper robot.
+        kicker_target = next(target for robot_id, target in captured if robot_id == 0)
+        support_target = next(target for robot_id, target in captured if robot_id == 1)
 
         assert kicker_target.distance_to(Vector2D(0.12, 0.0)) < 1e-9
-        # The keeper starts ON the ball (0, 0): it is encroaching, so it is
-        # cleared straight out of the keep-out zone along the own-half
-        # fallback direction instead of heading to its formation slot (which
-        # would cut across the exclusion zone).
-        assert keeper_target.distance_to(Vector2D(0.8, 0.0)) < 1e-9
-        assert keeper_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
-        # Non-encroaching support robots head to the field-scaled formation slots.
-        assert second_support_target.x == pytest.approx(6.0 * (0.8 / 4.5))
-        assert second_support_target.y == pytest.approx(-4.0 * (0.5 / 3.0))
-        assert second_support_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
+        # Non-encroaching support robot heads to the field-scaled formation slot.
+        assert support_target.x == pytest.approx(6.0 * (0.8 / 4.5))
+        assert support_target.y == pytest.approx(4.0 * (0.5 / 3.0))
+        assert support_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
 
     def test_prepare_kickoff_ours_uses_own_half_when_defending_left(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
@@ -778,6 +774,9 @@ class TestVariableFieldScaling:
         }
         custom_bounds = FieldBounds(top_left=(-6.0, 4.0), bottom_right=(6.0, -4.0))
         referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_YELLOW)
+        # yellow_team.goalkeeper=2 (see _make_referee_data's default), which
+        # isn't even on the field here — both robots 0 and 1 are legitimate
+        # outfield robots, so robot 0 (lowest ID) is the kicker.
         game = _make_game(
             friendly_robots=robots,
             referee=referee,
@@ -790,16 +789,12 @@ class TestVariableFieldScaling:
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
-        # Robot 1 is the lowest-ID outfield robot → the kicker; the keeper
-        # (robot 0) is a support robot.
-        kicker_target = next(target for robot_id, target in captured if robot_id == 1)
-        # Keeper starts ON the ball (0, 0): cleared straight out of the
-        # keep-out zone toward own half (negative x when defending left).
-        keeper_target = next(target for robot_id, target in captured if robot_id == 0)
+        kicker_target = next(target for robot_id, target in captured if robot_id == 0)
+        support_target = next(target for robot_id, target in captured if robot_id == 1)
 
         assert kicker_target.distance_to(Vector2D(-0.12, 0.0)) < 1e-9
-        assert keeper_target.distance_to(Vector2D(-0.8, 0.0)) < 1e-9
-        assert keeper_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
+        assert support_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
+        assert support_target.x < 0.0, "support robot must stay on own half (defending left)"
 
     def test_prepare_penalty_ours_scales_penalty_mark_with_field_bounds(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
@@ -870,7 +865,9 @@ class TestPrepareKickoffTheirsStep:
 
         robots = {i: _robot(i, float(i), 0.0) for i in range(3)}
         referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_BLUE)
-        # my_team_is_right=True → own half is positive-x side
+        # my_team_is_right=True → own half is positive-x side.
+        # yellow_team.goalkeeper=2 (see _make_referee_data's default): robot 2
+        # is the real keeper and must be exempt from formation entirely.
         game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
         cmd_map = _make_cmd_map(game)
         node = referee_actions.PrepareKickoffTheirsStep()
@@ -878,7 +875,8 @@ class TestPrepareKickoffTheirsStep:
 
         node.update()
 
-        assert len(captured) == 3
+        assert 2 not in captured, "goalkeeper must be exempt from kickoff formation entirely"
+        assert len(captured) == 2
         for _, target in captured.items():
             assert target.x > 0.0, f"Expected positive-x (own half right), got {target}"
 
@@ -895,7 +893,9 @@ class TestPrepareKickoffTheirsStep:
 
         robots = {i: _robot(i, float(i), 0.0) for i in range(3)}
         referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_YELLOW)
-        # my_team_is_right=False → own half is negative-x side
+        # my_team_is_right=False → own half is negative-x side.
+        # yellow_team.goalkeeper=2 (see _make_referee_data's default): robot 2
+        # is the real keeper and must be exempt from formation entirely.
         game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=False)
         cmd_map = _make_cmd_map(game)
         node = referee_actions.PrepareKickoffTheirsStep()
@@ -903,7 +903,8 @@ class TestPrepareKickoffTheirsStep:
 
         node.update()
 
-        assert len(captured) == 3
+        assert 2 not in captured, "goalkeeper must be exempt from kickoff formation entirely"
+        assert len(captured) == 2
         for _, target in captured.items():
             assert target.x < 0.0, f"Expected negative-x (own half left), got {target}"
 
