@@ -19,6 +19,34 @@ rules:
     max_speed_mps: 6.5
   double_touch:
     enabled: false
+  keeper_held_ball:
+    enabled: false
+    max_hold_seconds: 10.0
+  excessive_dribbling:
+    enabled: false
+    max_dribble_meters: 1.0
+  robot_stop_speed:
+    enabled: false
+    max_speed_mps: 1.5
+    grace_seconds: 2.0
+  pushing:
+    enabled: false
+    min_closing_speed_mps: 0.05
+    similar_force_margin_mps: 0.15
+    persistence_frames: 15
+  crashing:
+    enabled: false
+    fault_speed_threshold_mps: 1.5
+    both_fault_threshold_mps: 0.3
+    retrigger_cooldown_seconds: 2.0
+  defense_area_stoppage:
+    enabled: false
+    min_distance_meters: 0.2
+    grace_seconds: 2.0
+  ball_placement_interference:
+    enabled: false
+    stadium_radius_meters: 0.5
+    grace_seconds: 2.0
 game:
   half_duration_seconds: 300.0
   kickoff_team: "yellow"

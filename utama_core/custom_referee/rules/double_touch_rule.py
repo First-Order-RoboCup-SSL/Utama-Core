@@ -68,6 +68,7 @@ class DoubleTouchRule(BaseRule):
         game_frame: GameFrame,
         geometry: RefereeGeometry,
         current_command: RefereeCommand,
+        designated_position: Optional[tuple[float, float]] = None,
     ) -> Optional[RuleViolation]:
         if current_command == RefereeCommand.NORMAL_START and self._prev_command in _RESTART_COMMANDS:
             self._armed = True

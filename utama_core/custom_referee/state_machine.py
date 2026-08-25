@@ -665,7 +665,13 @@ class GameStateMachine:
         else:
             self._handle_foul(violation, current_time)
 
-        self._last_transition_time = current_time
+        # A non-stopping foul (§8.4.2 — "the game continues normally") makes
+        # no command transition at all, so it must not consume the
+        # transition cooldown either: doing so would wrongly block a real
+        # transition (a goal, a stopping foul) detected up to
+        # _TRANSITION_COOLDOWN seconds later for no reason connected to it.
+        if violation.is_stopping:
+            self._last_transition_time = current_time
 
     def _handle_goal(self, violation: RuleViolation, current_time: float) -> None:
         # Determine scorer from next_command (loser gets the kickoff).
@@ -698,6 +704,22 @@ class GameStateMachine:
         self._stop_entered_time = current_time
 
     def _handle_foul(self, violation: RuleViolation, current_time: float) -> None:
+        if violation.counts_toward_foul_counter:
+            for is_yellow in violation.offending_teams:
+                team = self.yellow_team if is_yellow else self.blue_team
+                if team.increment_foul_counter():
+                    logger.info("Yellow card: %s (3rd foul: %s)", team.name, violation.rule_name)
+
+        if not violation.is_stopping:
+            # SSL rulebook §8.4.2 "non-stopping foul": the foul-counter/card
+            # side effect above is the entire response — the state machine
+            # must NOT touch command/command_counter/next_command, or "the
+            # game continues normally" would be violated (a spurious
+            # command_counter bump reads as a real transition to every
+            # other piece of code that watches it, e.g. rule.reset()).
+            logger.info("Non-stopping foul detected: %s", violation.rule_name)
+            return
+
         self.command = violation.suggested_command
         self.command_counter += 1
         self.command_timestamp = current_time

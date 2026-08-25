@@ -54,6 +54,68 @@ class DoubleTouchConfig:
 
 
 @dataclass
+class KeeperHeldBallConfig:
+    enabled: bool = True
+    # SSL rulebook §8.4.1: 5s (Division A) or 10s (Division B). No
+    # division-selection concept exists elsewhere in this profile loader, so
+    # default to the (looser) Division B value; override per-profile for A.
+    max_hold_seconds: float = 10.0
+
+
+@dataclass
+class ExcessiveDribblingConfig:
+    enabled: bool = True
+    max_dribble_meters: float = 1.0
+
+
+@dataclass
+class RobotStopSpeedConfig:
+    enabled: bool = True
+    max_speed_mps: float = 1.5
+    grace_seconds: float = 2.0
+
+
+@dataclass
+class PushingConfig:
+    """SSL rulebook §8.4.1 "Pushing" — see PushingRule's docstring."""
+
+    enabled: bool = True
+    min_closing_speed_mps: float = 0.05
+    similar_force_margin_mps: float = 0.15
+    persistence_frames: int = 15
+
+
+@dataclass
+class CrashingConfig:
+    """SSL rulebook §8.4.2 "Crashing" — see CrashingRule's docstring."""
+
+    enabled: bool = True
+    fault_speed_threshold_mps: float = 1.5  # SSL rulebook value
+    both_fault_threshold_mps: float = 0.3  # SSL rulebook value
+    retrigger_cooldown_seconds: float = 2.0  # SSL rulebook value
+
+
+@dataclass
+class DefenseAreaStoppageConfig:
+    """SSL rulebook §8.4.1 "Robot Too Close To Opponent Defense Area" (the
+    stoppage-time version) — see DefenseAreaStoppageRule's docstring."""
+
+    enabled: bool = True
+    min_distance_meters: float = 0.2
+    grace_seconds: float = 2.0
+
+
+@dataclass
+class BallPlacementInterferenceConfig:
+    """SSL rulebook §8.4.3 "Ball Placement Interference" — see
+    BallPlacementInterferenceRule's docstring."""
+
+    enabled: bool = True
+    stadium_radius_meters: float = 0.5
+    grace_seconds: float = 2.0
+
+
+@dataclass
 class RulesConfig:
     goal_detection: GoalDetectionConfig = field(default_factory=GoalDetectionConfig)
     out_of_bounds: OutOfBoundsConfig = field(default_factory=OutOfBoundsConfig)
@@ -61,6 +123,15 @@ class RulesConfig:
     keep_out: KeepOutConfig = field(default_factory=KeepOutConfig)
     ball_speed: BallSpeedConfig = field(default_factory=BallSpeedConfig)
     double_touch: DoubleTouchConfig = field(default_factory=DoubleTouchConfig)
+    keeper_held_ball: KeeperHeldBallConfig = field(default_factory=KeeperHeldBallConfig)
+    excessive_dribbling: ExcessiveDribblingConfig = field(default_factory=ExcessiveDribblingConfig)
+    robot_stop_speed: RobotStopSpeedConfig = field(default_factory=RobotStopSpeedConfig)
+    pushing: PushingConfig = field(default_factory=PushingConfig)
+    crashing: CrashingConfig = field(default_factory=CrashingConfig)
+    defense_area_stoppage: DefenseAreaStoppageConfig = field(default_factory=DefenseAreaStoppageConfig)
+    ball_placement_interference: BallPlacementInterferenceConfig = field(
+        default_factory=BallPlacementInterferenceConfig
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +272,55 @@ def _parse_profile(data: dict) -> RefereeProfile:
         enabled=dt.get("enabled", True),
     )
 
+    khb = rules_d.get("keeper_held_ball", {})
+    khb_cfg = KeeperHeldBallConfig(
+        enabled=khb.get("enabled", True),
+        max_hold_seconds=khb.get("max_hold_seconds", 10.0),
+    )
+
+    ed = rules_d.get("excessive_dribbling", {})
+    ed_cfg = ExcessiveDribblingConfig(
+        enabled=ed.get("enabled", True),
+        max_dribble_meters=ed.get("max_dribble_meters", 1.0),
+    )
+
+    rss = rules_d.get("robot_stop_speed", {})
+    rss_cfg = RobotStopSpeedConfig(
+        enabled=rss.get("enabled", True),
+        max_speed_mps=rss.get("max_speed_mps", 1.5),
+        grace_seconds=rss.get("grace_seconds", 2.0),
+    )
+
+    pu = rules_d.get("pushing", {})
+    pu_cfg = PushingConfig(
+        enabled=pu.get("enabled", True),
+        min_closing_speed_mps=pu.get("min_closing_speed_mps", 0.05),
+        similar_force_margin_mps=pu.get("similar_force_margin_mps", 0.15),
+        persistence_frames=pu.get("persistence_frames", 15),
+    )
+
+    cr = rules_d.get("crashing", {})
+    cr_cfg = CrashingConfig(
+        enabled=cr.get("enabled", True),
+        fault_speed_threshold_mps=cr.get("fault_speed_threshold_mps", 1.5),
+        both_fault_threshold_mps=cr.get("both_fault_threshold_mps", 0.3),
+        retrigger_cooldown_seconds=cr.get("retrigger_cooldown_seconds", 2.0),
+    )
+
+    das = rules_d.get("defense_area_stoppage", {})
+    das_cfg = DefenseAreaStoppageConfig(
+        enabled=das.get("enabled", True),
+        min_distance_meters=das.get("min_distance_meters", 0.2),
+        grace_seconds=das.get("grace_seconds", 2.0),
+    )
+
+    bpi = rules_d.get("ball_placement_interference", {})
+    bpi_cfg = BallPlacementInterferenceConfig(
+        enabled=bpi.get("enabled", True),
+        stadium_radius_meters=bpi.get("stadium_radius_meters", 0.5),
+        grace_seconds=bpi.get("grace_seconds", 2.0),
+    )
+
     rules = RulesConfig(
         goal_detection=goal_cfg,
         out_of_bounds=oob_cfg,
@@ -208,6 +328,13 @@ def _parse_profile(data: dict) -> RefereeProfile:
         keep_out=ko_cfg,
         ball_speed=bs_cfg,
         double_touch=dt_cfg,
+        keeper_held_ball=khb_cfg,
+        excessive_dribbling=ed_cfg,
+        robot_stop_speed=rss_cfg,
+        pushing=pu_cfg,
+        crashing=cr_cfg,
+        defense_area_stoppage=das_cfg,
+        ball_placement_interference=bpi_cfg,
     )
 
     game_d = data.get("game", {})

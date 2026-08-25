@@ -103,6 +103,21 @@ class TeamInfo:
     def increment_yellow_cards(self):
         self.yellow_cards += 1
 
+    def increment_foul_counter(self) -> bool:
+        """Record one foul against this team; return True if this foul was
+        the team's 3rd (6th, 9th, ...) — i.e. a yellow card is due.
+
+        Per SSL rulebook §8.4: "Every third increase to the foul counter
+        causes a yellow card to be awarded." `foul_counter` is nullable
+        (`Optional[int]`, matching every other rarely-set `TeamInfo` field)
+        so treat an unset counter as starting from 0 rather than raising.
+        """
+        self.foul_counter = (self.foul_counter or 0) + 1
+        if self.foul_counter % 3 == 0:
+            self.increment_yellow_cards()
+            return True
+        return False
+
     def decrement_timeouts(self):
         if self.timeouts > 0:
             self.timeouts -= 1

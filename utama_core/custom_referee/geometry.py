@@ -61,3 +61,22 @@ class RefereeGeometry:
     def is_in_right_defense_area(self, x: float, y: float) -> bool:
         """True if (x, y) is inside the right defense area."""
         return x >= self.half_length - 2 * self.half_defense_depth and abs(y) <= self.half_defense_width
+
+    def distance_to_left_defense_area(self, x: float, y: float) -> float:
+        """Distance from (x, y) to the nearest edge of the left defense area
+        rectangle — 0.0 if already inside. Used by rules like
+        `DefenseAreaStoppageRule` that need a standoff distance (rulebook
+        §8.4.1: "0.2 meters distance to the opponent defense area"), not
+        just an inside/outside check.
+        """
+        rect_max_x = -self.half_length + 2 * self.half_defense_depth
+        dx = max(0.0, x - rect_max_x) if x > rect_max_x else 0.0
+        dy = max(0.0, abs(y) - self.half_defense_width)
+        return (dx * dx + dy * dy) ** 0.5
+
+    def distance_to_right_defense_area(self, x: float, y: float) -> float:
+        """Mirror of `distance_to_left_defense_area` for the right defense area."""
+        rect_min_x = self.half_length - 2 * self.half_defense_depth
+        dx = max(0.0, rect_min_x - x) if x < rect_min_x else 0.0
+        dy = max(0.0, abs(y) - self.half_defense_width)
+        return (dx * dx + dy * dy) ** 0.5

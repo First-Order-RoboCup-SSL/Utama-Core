@@ -10,13 +10,26 @@ from utama_core.custom_referee.profiles.profile_loader import (
     RefereeProfile,
     load_profile,
 )
+from utama_core.custom_referee.rules.ball_placement_interference_rule import (
+    BallPlacementInterferenceRule,
+)
 from utama_core.custom_referee.rules.ball_speed_rule import BallSpeedRule
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
+from utama_core.custom_referee.rules.crashing_rule import CrashingRule
 from utama_core.custom_referee.rules.defense_area_rule import DefenseAreaRule
+from utama_core.custom_referee.rules.defense_area_stoppage_rule import (
+    DefenseAreaStoppageRule,
+)
 from utama_core.custom_referee.rules.double_touch_rule import DoubleTouchRule
+from utama_core.custom_referee.rules.excessive_dribbling_rule import (
+    ExcessiveDribblingRule,
+)
 from utama_core.custom_referee.rules.goal_rule import GoalRule
 from utama_core.custom_referee.rules.keep_out_rule import KeepOutRule
+from utama_core.custom_referee.rules.keeper_held_ball_rule import KeeperHeldBallRule
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
+from utama_core.custom_referee.rules.pushing_rule import PushingRule
+from utama_core.custom_referee.rules.robot_stop_speed_rule import RobotStopSpeedRule
 from utama_core.custom_referee.state_machine import GameStateMachine
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.game_frame import GameFrame
@@ -54,6 +67,78 @@ def _build_active_rules(rules_cfg) -> List[BaseRule]:
             KeepOutRule(
                 radius_meters=rules_cfg.keep_out.radius_meters,
                 violation_persistence_frames=rules_cfg.keep_out.violation_persistence_frames,
+            )
+        )
+
+    # PushingRule is a stopping foul (§8.4.1) and so DOES compete for the
+    # "first stopping violation wins" slot above — placed last among the
+    # stopping-foul group since a sustained, force-asymmetric push is a
+    # slower-forming condition (persistence_frames-gated) than any of the
+    # single-tick checks above it, so it should never pre-empt one of them
+    # firing on the same tick a push also happens to be building up.
+    if rules_cfg.pushing.enabled:
+        active.append(
+            PushingRule(
+                min_closing_speed_mps=rules_cfg.pushing.min_closing_speed_mps,
+                similar_force_margin_mps=rules_cfg.pushing.similar_force_margin_mps,
+                persistence_frames=rules_cfg.pushing.persistence_frames,
+            )
+        )
+
+    # KeeperHeldBallRule / ExcessiveDribblingRule / RobotStopSpeedRule added
+    # after the existing stopping-foul rules above: none of the three can
+    # ever fire during the same tick as GoalRule/OutOfBoundsRule/BallSpeed/
+    # DoubleTouch/DefenseArea/KeepOut's actual trigger conditions (different
+    # command-gating and geometry), so their relative priority position
+    # among themselves and the existing list doesn't change behaviour either
+    # way — appended here to keep this diff additive.
+    if rules_cfg.keeper_held_ball.enabled:
+        active.append(KeeperHeldBallRule(max_hold_seconds=rules_cfg.keeper_held_ball.max_hold_seconds))
+
+    if rules_cfg.excessive_dribbling.enabled:
+        active.append(ExcessiveDribblingRule(max_dribble_meters=rules_cfg.excessive_dribbling.max_dribble_meters))
+
+    if rules_cfg.robot_stop_speed.enabled:
+        active.append(
+            RobotStopSpeedRule(
+                max_speed_mps=rules_cfg.robot_stop_speed.max_speed_mps,
+                grace_seconds=rules_cfg.robot_stop_speed.grace_seconds,
+            )
+        )
+
+    # CrashingRule is a non-stopping foul (`is_stopping=False`) — it never
+    # competes for the "first stopping violation wins" slot (see
+    # CustomReferee.step()), so its position in this list only matters
+    # relative to other non-stopping rules, of which there currently are
+    # none. Appended here to keep this diff additive, same rationale as the
+    # three rules directly above.
+    if rules_cfg.crashing.enabled:
+        active.append(
+            CrashingRule(
+                fault_speed_threshold_mps=rules_cfg.crashing.fault_speed_threshold_mps,
+                both_fault_threshold_mps=rules_cfg.crashing.both_fault_threshold_mps,
+                retrigger_cooldown_seconds=rules_cfg.crashing.retrigger_cooldown_seconds,
+            )
+        )
+
+    # DefenseAreaStoppageRule is a stoppage-time (STOP/free-kick) rule with
+    # no active-play overlap with DefenseAreaRule above, and
+    # BallPlacementInterferenceRule only ever fires during BALL_PLACEMENT_*
+    # (which no other rule in this list checks at all) — appended here to
+    # keep this diff additive, same rationale as the rules directly above.
+    if rules_cfg.defense_area_stoppage.enabled:
+        active.append(
+            DefenseAreaStoppageRule(
+                min_distance_meters=rules_cfg.defense_area_stoppage.min_distance_meters,
+                grace_seconds=rules_cfg.defense_area_stoppage.grace_seconds,
+            )
+        )
+
+    if rules_cfg.ball_placement_interference.enabled:
+        active.append(
+            BallPlacementInterferenceRule(
+                stadium_radius_meters=rules_cfg.ball_placement_interference.stadium_radius_meters,
+                grace_seconds=rules_cfg.ball_placement_interference.grace_seconds,
             )
         )
 
@@ -148,15 +233,30 @@ class CustomReferee:
     def step(self, game_frame: GameFrame, current_time: float) -> RefereeData:
         """Evaluate all rules and advance the state machine by one tick.
 
-        First matching rule (in priority order) wins; subsequent rules are
-        not evaluated.
+        First *stopping* violation (in priority order) wins and stops the
+        scan early, same as before non-stopping fouls existed. A
+        non-stopping foul (`RuleViolation.is_stopping=False` — SSL rulebook
+        §8.4.2, "the game continues normally") does not compete for that
+        slot: it never suppresses a later stopping rule's check, and a
+        stopping violation found later in priority order still overrides it
+        as this tick's `last_violation`/applied violation. If nothing
+        stopping is found, the first non-stopping violation (if any) is
+        still applied, since its only effect is the foul-counter/card side
+        effect in `GameStateMachine._handle_foul` — it never touches
+        `command`.
         """
         violation: Optional[RuleViolation] = None
+        non_stopping_violation: Optional[RuleViolation] = None
         for rule in self._rules:
-            result = rule.check(game_frame, self._geometry, self._state.command)
-            if result is not None:
+            result = rule.check(game_frame, self._geometry, self._state.command, self._state.ball_placement_target)
+            if result is None:
+                continue
+            if result.is_stopping:
                 violation = result
                 break
+            if non_stopping_violation is None:
+                non_stopping_violation = result
+        violation = violation or non_stopping_violation
         self.last_violation = violation
 
         previous_command = self._state.command

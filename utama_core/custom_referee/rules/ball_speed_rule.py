@@ -41,6 +41,7 @@ class BallSpeedRule(BaseRule):
         game_frame: GameFrame,
         geometry: RefereeGeometry,
         current_command: RefereeCommand,
+        designated_position: Optional[tuple[float, float]] = None,
     ) -> Optional[RuleViolation]:
         if current_command not in _ACTIVE_PLAY_COMMANDS:
             self._was_over_limit = False
@@ -60,18 +61,21 @@ class BallSpeedRule(BaseRule):
         if not rising_edge or self._last_touch_was_friendly is None:
             return None
 
-        # Non-kicking team gets the free kick.
+        # Non-kicking team gets the free kick; the kicking team is charged
+        # the foul (SSL rulebook §8.4.2 "Ball Speed").
         my_team_is_yellow = game_frame.my_team_is_yellow
-        if self._last_touch_was_friendly:
-            next_cmd = RefereeCommand.DIRECT_FREE_BLUE if my_team_is_yellow else RefereeCommand.DIRECT_FREE_YELLOW
+        kicking_team_is_yellow = self._last_touch_was_friendly == my_team_is_yellow
+        if kicking_team_is_yellow:
+            next_cmd = RefereeCommand.DIRECT_FREE_BLUE
         else:
-            next_cmd = RefereeCommand.DIRECT_FREE_YELLOW if my_team_is_yellow else RefereeCommand.DIRECT_FREE_BLUE
+            next_cmd = RefereeCommand.DIRECT_FREE_YELLOW
 
         return RuleViolation(
             rule_name="ball_speed",
             suggested_command=RefereeCommand.STOP,
             next_command=next_cmd,
             status_message=f"Ball speed exceeded {self._max_speed:.1f} m/s",
+            offending_teams=(kicking_team_is_yellow,),
         )
 
     def reset(self) -> None:

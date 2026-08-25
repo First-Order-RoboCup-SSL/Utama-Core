@@ -512,17 +512,31 @@ class TestDefenseAreaRule:
         v = rule.check(frame, GEO, RefereeCommand.FORCE_START)
         assert v is not None
 
-    def test_too_many_defenders(self):
+    def test_too_many_defenders_without_ball_touch_does_not_fire(self):
+        # SSL rulebook §8.4.1 "Multiple Defenders": occupancy alone is not a
+        # foul ("best-effort to stay outside") — only an extra defender
+        # actually touching the ball while inside the box is.
         rule = DefenseAreaRule(max_defenders=1)
-        # Two friendly robots in own (left) defense area.
         friendly = {
             0: _robot(0, -4.3, 0.0, is_friendly=True),
             1: _robot(1, -4.3, 0.5, is_friendly=True),
         }
         frame = _frame(ball=_ball(0, 0), friendly_robots=friendly, my_team_is_right=False, my_team_is_yellow=True)
         v = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert v is None
+
+    def test_too_many_defenders_touching_ball_awards_penalty(self):
+        rule = DefenseAreaRule(max_defenders=1)
+        # Two friendly robots in own (left) defense area, one touching the ball.
+        friendly = {
+            0: _robot(0, -4.3, 0.0, is_friendly=True),
+            1: _robot(1, -4.3, 0.5, is_friendly=True, has_ball=True),
+        }
+        frame = _frame(ball=_ball(0, 0), friendly_robots=friendly, my_team_is_right=False, my_team_is_yellow=True)
+        v = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert v is not None
-        assert v.next_command == RefereeCommand.DIRECT_FREE_BLUE
+        assert v.next_command == RefereeCommand.PREPARE_PENALTY_BLUE
+        assert v.counts_toward_foul_counter is False
 
 
 # ---------------------------------------------------------------------------

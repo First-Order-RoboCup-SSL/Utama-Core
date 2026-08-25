@@ -29,6 +29,7 @@ class GoalRule(BaseRule):
         game_frame: GameFrame,
         geometry: RefereeGeometry,
         current_command: RefereeCommand,
+        designated_position: Optional[tuple[float, float]] = None,
     ) -> Optional[RuleViolation]:
         if current_command not in _ACTIVE_PLAY_COMMANDS:
             return None

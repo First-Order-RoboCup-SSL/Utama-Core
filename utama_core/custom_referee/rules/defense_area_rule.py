@@ -7,7 +7,21 @@ from typing import Optional
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.entities.game.game_frame import GameFrame
+from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
+
+
+# Contact distance for "this defender is the one who touched the ball" —
+# matches `has_ball` semantics elsewhere (dribbler contact), but this rule
+# needs to identify *which* extra-defender robot touched it, not just
+# whether any friendly/enemy robot did, so it checks `has_ball` directly
+# per-robot rather than importing the whole-frame `infer_last_touch_team`
+# machinery (last_touch.py), which answers a different question (which
+# *team*, colour-blind, across the whole field) than this rule needs
+# (which specific robot, already known to be inside its own box).
+def _defenders_touching_ball(robots: list[Robot]) -> bool:
+    return any(r.has_ball for r in robots)
+
 
 _ACTIVE_PLAY_COMMANDS = {
     RefereeCommand.NORMAL_START,
@@ -40,6 +54,7 @@ class DefenseAreaRule(BaseRule):
         game_frame: GameFrame,
         geometry: RefereeGeometry,
         current_command: RefereeCommand,
+        designated_position: Optional[tuple[float, float]] = None,
     ) -> Optional[RuleViolation]:
         if current_command not in _ACTIVE_PLAY_COMMANDS:
             return None
@@ -54,13 +69,27 @@ class DefenseAreaRule(BaseRule):
         yellow_robots, blue_robots = (list(g) for g in _split_by_color(game_frame))
 
         # --- Yellow defense area ---
-        n_yellow_defenders = sum(1 for r in yellow_robots if in_yellow_defense(r.p.x, r.p.y))
-        if n_yellow_defenders > self._max_defenders:
+        # "Multiple Defenders" (rulebook §8.4.1): the rule as written is
+        # "any non-keeper robot touches the ball while entirely inside its
+        # own defense area" — it has nothing to do with occupancy count.
+        # This rule has no way to know which specific robot is the keeper
+        # (`TeamInfo.goalkeeper` isn't threaded into `BaseRule.check()`,
+        # only `game_frame`/`geometry`/`current_command`/
+        # `designated_position` are), so `max_defenders` (default 1) is
+        # used as-is, as an occupancy proxy for "at most the keeper is
+        # allowed in here" — the real fix is gating on ball-touch by
+        # whichever defender is *beyond* that allowance, not on ball-touch
+        # by any occupant (which could wrongly flag the keeper itself).
+        # Sanction is a penalty kick, not a free kick, and "the foul
+        # counter is not increased" (counts_toward_foul_counter=False).
+        yellow_in_own_area = [r for r in yellow_robots if in_yellow_defense(r.p.x, r.p.y)]
+        if len(yellow_in_own_area) > self._max_defenders and _defenders_touching_ball(yellow_in_own_area):
             return RuleViolation(
                 rule_name="defense_area",
                 suggested_command=RefereeCommand.STOP,
-                next_command=RefereeCommand.DIRECT_FREE_BLUE,
-                status_message="Too many yellow defenders in own area",
+                next_command=RefereeCommand.PREPARE_PENALTY_BLUE,
+                status_message="Extra yellow defender touched ball inside own defense area",
+                counts_toward_foul_counter=False,
             )
 
         if self._attacker_infringement:
@@ -73,14 +102,16 @@ class DefenseAreaRule(BaseRule):
                         status_message="Blue attacker in yellow defense area",
                     )
 
-        # --- Blue defense area ---
-        n_blue_defenders = sum(1 for r in blue_robots if in_blue_defense(r.p.x, r.p.y))
-        if n_blue_defenders > self._max_defenders:
+        # --- Blue defense area --- (mirror of the yellow branch above; see
+        # its comment for the ball-touch/occupancy-proxy reasoning.)
+        blue_in_own_area = [r for r in blue_robots if in_blue_defense(r.p.x, r.p.y)]
+        if len(blue_in_own_area) > self._max_defenders and _defenders_touching_ball(blue_in_own_area):
             return RuleViolation(
                 rule_name="defense_area",
                 suggested_command=RefereeCommand.STOP,
-                next_command=RefereeCommand.DIRECT_FREE_YELLOW,
-                status_message="Too many blue defenders in own area",
+                next_command=RefereeCommand.PREPARE_PENALTY_YELLOW,
+                status_message="Extra blue defender touched ball inside own defense area",
+                counts_toward_foul_counter=False,
             )
 
         if self._attacker_infringement:
