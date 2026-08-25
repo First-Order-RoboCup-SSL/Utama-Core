@@ -143,7 +143,7 @@ class FastPathPlanner:
         max_y = max(c[1] for c in corners) + margin
         return min_x, max_x, min_y, max_y
 
-    def _enemy_defense_area_retrieval_exempt(self, game: Game) -> bool:
+    def _enemy_defense_area_retrieval_exempt(self, game: Game, robot_id: Optional[int] = None) -> bool:
         """True when a robot must be allowed to actually enter the opponent's
         defense area to retrieve the ball, rather than have every target/
         waypoint there clamped to the boundary.
@@ -152,20 +152,27 @@ class FastPathPlanner:
         (`_ACTIVE_PLAY_COMMANDS` — NORMAL_START/FORCE_START; every other
         command, e.g. DIRECT_FREE_*/BALL_PLACEMENT_*, is a stoppage where
         attacker encroachment into the opponent's box is not penalized). Also
-        requires the ball to actually be resting inside the enemy defense area
-        right now — this is deliberately narrower than "any stoppage", so a
-        formation/support target that happens to be computed near the box
-        during a restart is still clamped as before; only a genuine
-        ball-in-the-box retrieval is exempted.
+        requires either the ball to actually be resting inside the enemy
+        defense area right now, OR (for `BALL_PLACEMENT_OURS`) this robot to
+        already have the ball AND the referee's `designated_position` to sit
+        inside the rectangle — this is deliberately narrower than "any
+        stoppage", so a formation/support target that happens to be computed
+        near the box during a restart is still clamped as before; only a
+        genuine ball-in-the-box retrieval or carry-to-place is exempted.
 
         Without this, `DIRECT_FREE_OURS`/`BALL_PLACEMENT_OURS`
         (`custom_referee/actions.py`) can correctly choose to approach the
-        ball, but the planner refuses to route anywhere inside the rectangle
-        at all — the kicker/placer converges to just outside
+        ball (or, once carrying it, drive toward `designated_position`), but
+        the planner refuses to route anywhere inside the rectangle at all —
+        the kicker/placer converges to just outside
         `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE` from the box and can never close
-        the last stretch to the ball, stalling the restart indefinitely (the
-        referee never sees the ball move, so no auto-advance condition is
-        ever satisfied either).
+        the last stretch, stalling the restart indefinitely (the referee
+        never sees the ball reach the target, so no auto-advance condition is
+        ever satisfied either). Confirmed live: a `BallPlacementOursStep`
+        carrier whose `designated_position` landed inside the opponent's box
+        held ~0.3m short of it for the rest of a match, since the ball-inside
+        check alone only covers the *retrieval* half of placement, not the
+        *delivery* half.
         """
         referee = game.referee
         command = getattr(referee, "referee_command", None) if referee is not None else None
@@ -175,7 +182,16 @@ class FastPathPlanner:
         if ball is None:
             return False
         min_x, max_x, min_y, max_y = self._enemy_defense_rect(game, margin=0.0)
-        return min_x <= ball.p.x <= max_x and min_y <= ball.p.y <= max_y
+        if min_x <= ball.p.x <= max_x and min_y <= ball.p.y <= max_y:
+            return True
+        if robot_id is not None:
+            robot = game.friendly_robots.get(robot_id)
+            designated = getattr(referee, "designated_position", None) if referee is not None else None
+            if robot is not None and robot.has_ball and designated is not None:
+                dx, dy = designated
+                if min_x <= dx <= max_x and min_y <= dy <= max_y:
+                    return True
+        return False
 
     def _project_outside_rect(self, point: np.ndarray, rect: Tuple[float, float, float, float]) -> np.ndarray:
         """Push `point` to the nearest edge of `rect` if it lies inside; otherwise return it unchanged."""
@@ -735,7 +751,7 @@ class FastPathPlanner:
         # exemption so steps 2/7 skip clamping the target/waypoint back out of
         # the rectangle. See `_enemy_defense_area_retrieval_exempt`'s docstring
         # for the stall this prevents.
-        defense_area_retrieval_exempt = self._enemy_defense_area_retrieval_exempt(game)
+        defense_area_retrieval_exempt = self._enemy_defense_area_retrieval_exempt(game, robot_id)
         if defense_area_retrieval_exempt:
             defense_rect = self._enemy_defense_rect(game, margin=OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
             rmin_x, rmax_x, rmin_y, rmax_y = defense_rect
@@ -837,9 +853,31 @@ class FastPathPlanner:
             raw_target, obstacles, our_pos, field_bounds, exempt_obstacles=ball_adjacent_obstacles
         )
 
+        # 3a. Extend the same exemption to path *routing*, but only for the
+        # static (field-boundary / enemy-defense-area) obstacles within
+        # `ball_adjacent_obstacles` — never for another robot's segment, even
+        # if that robot happens to be next to the ball. A static line/rect
+        # can't contest the ball back, so briefly routing through its
+        # clearance ring to close the last few centimetres is always safe;
+        # a robot can, and doing the same for a robot segment was tried and
+        # reverted (see git history) — it does let the approach close, but
+        # then exposes an unarbitrated simultaneous-dribbler-contact grind
+        # with no possession logic to resolve it, a worse failure than the
+        # orbiting stall it fixes. Restricting to static obstacles here gets
+        # the touchline/defense-area cases (a wall or keep-out rect the robot
+        # is legally allowed to enter to retrieve a resting/placed ball)
+        # without reopening that regression.
+        static_keys = {(tuple(o[0]), tuple(o[1])) for o in self._obstacle_cache_static}
+        routing_exempt = ball_adjacent_obstacles & static_keys
+        routing_obstacles = (
+            obstacles
+            if not routing_exempt
+            else [o for o in obstacles if (tuple(o[0]), tuple(o[1])) not in routing_exempt]
+        )
+
         # 4. Plan geometric path
         final_trajectory, _ = self.check_segment(
-            (our_pos, safe_target), obstacles, 0, safe_target, field_bounds, robot_id
+            (our_pos, safe_target), routing_obstacles, 0, safe_target, field_bounds, robot_id
         )
 
         # 5. Draw the resulting safe path segments when an RSim renderer is available.
@@ -848,7 +886,7 @@ class FastPathPlanner:
                 self._env.draw_line(i)
 
         # 6. Smooth the path and draw the final "Carrot" target in Blue
-        new_target = self.smooth_path(final_trajectory, safe_target, our_pos, obstacles)
+        new_target = self.smooth_path(final_trajectory, safe_target, our_pos, routing_obstacles)
 
         # 7. Last-line safety net, specific to the defense-area rectangle: the
         # smoothing/blending steps above (subgoal search, carrot projection,
