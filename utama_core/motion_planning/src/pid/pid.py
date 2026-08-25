@@ -126,6 +126,49 @@ class TwoDPID(AbstractPID[Vector2D]):
         super().__init__(config)
         self.max_velocity = config.max_velocity
         self.max_acceleration = config.max_acceleration
+        # Set by a caller (`FastPathPlanningController`) right before
+        # `calculate()` when `target` is a lookahead "carrot" rather than the
+        # robot's actual destination — see `set_final_target`'s docstring for
+        # why the braking-distance cap needs this distinction.
+        self._final_targets: dict[int, Vector2D] = {}
+
+    def set_final_target(self, robot_id: int, final_target: Vector2D | None) -> None:
+        """Tell the braking-distance cap the robot's true destination, when
+        `target` passed to `calculate()` is a path-planning waypoint instead.
+
+        `FastPathPlanner._path_to`'s `smooth_path` deliberately projects a
+        "carrot" up to `PROJECTION_DISTANCE` (1m) ahead of the robot, not at
+        the real destination, so `check_segment`'s obstacle-aware routing has
+        somewhere useful to aim while still far away. But `_calculate`'s
+        braking-distance cap (`max_brake_vel = sqrt(2*a*error)`) needs the
+        *true* remaining distance to know when to start slowing down — fed
+        the carrot's distance instead, `error` stays pinned near 1m for the
+        entire approach (the carrot recedes at the same rate the robot closes
+        on it), so the cap never engages until the carrot snaps to the real
+        target on the final ~1m, by which point the robot may already be at
+        full speed with too little runway left to stop. Confirmed via a live
+        tournament replay (`counter_flow_vs_tiki_taka_plus_Lk.pkl`,
+        t=13-17.5s): the keeper's own target (`stop_y`) was smoothly settled
+        at -0.5 well before t=16.5s, yet its measured `y` velocity kept
+        flipping sign every few ticks — 6+ reversals — as it repeatedly shot
+        past the target and corrected, until the ball rolled out of play
+        during the oscillation window. Reproduced synthetically too
+        (`debug_match.py` trace): carrot pinned at `carrot_err≈1.0` while
+        `true_err` closed from >3m to <0.15m at 1.5-2.0 m/s, no deceleration
+        signal reaching the PID until far too late.
+
+        Direction still comes from `target` (the carrot) — only the braking
+        cap's distance uses `final_target`, so obstacle-aware path-following
+        is unaffected; this only changes when the robot starts slowing down
+        for its own eventual stop. Cleared (`None`) by callers that don't use
+        a carrot (e.g. `PIDController`, which never sets this) so `_calculate`
+        falls back to the carrot-derived `error` — the direct-target case
+        where they're the same value anyway.
+        """
+        if final_target is None:
+            self._final_targets.pop(robot_id, None)
+        else:
+            self._final_targets[robot_id] = final_target
 
     def _target_jumped(self, target: Vector2D, last_target: Vector2D) -> bool:
         # Unlike orientation, translation targets legitimately move by
@@ -207,7 +250,19 @@ class TwoDPID(AbstractPID[Vector2D]):
         # rate-limited ramp-down (accel_limiter, applied after this returns)
         # isn't fast enough to prevent overshoot. v = sqrt(2*a*d) is the max
         # speed that can still be braked to zero by the time distance d closes.
-        max_brake_vel = math.sqrt(2 * self.max_acceleration * error) if self.max_acceleration > 0 else self.max_velocity
+        #
+        # `error` (the carrot's distance) is the wrong `d` whenever `target`
+        # is a path-planning lookahead point rather than the robot's actual
+        # destination — see `set_final_target`'s docstring. Use the true
+        # remaining distance for this cap when the caller has provided one;
+        # direction (`dx/dy` above) still follows the carrot regardless.
+        final_target = self._final_targets.get(robot_id)
+        brake_distance = (
+            error if final_target is None else math.hypot(final_target[0] - current[0], final_target[1] - current[1])
+        )
+        max_brake_vel = (
+            math.sqrt(2 * self.max_acceleration * brake_distance) if self.max_acceleration > 0 else self.max_velocity
+        )
         return self._apply_speed_limits(x_vel, y_vel, min(self.max_velocity, max_brake_vel))
 
     def _apply_speed_limits(self, x_vel: float, y_vel: float, max_vel: float) -> Vector2D:
@@ -217,6 +272,10 @@ class TwoDPID(AbstractPID[Vector2D]):
             x_vel *= scaling_factor
             y_vel *= scaling_factor
         return Vector2D(x_vel, y_vel)
+
+    def reset(self, robot_id: int):
+        super().reset(robot_id)
+        self._final_targets.pop(robot_id, None)
 
 
 def get_pids(

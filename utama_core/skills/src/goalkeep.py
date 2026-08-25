@@ -21,6 +21,8 @@ match pinned for the last 28 s of a 60 s game this way (see
 `docs/strategies.md`'s "Known open bugs").
 """
 
+from typing import Optional
+
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
@@ -44,6 +46,17 @@ from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
 
 _RETRIEVE_BALL_SPEED = 0.3  # m/s — below this, a ball in our box is "at rest," not a live shot to block
 _CLEAR_ARRIVED_MARGIN = ROBOT_RADIUS + 0.1  # how close to the box exit point counts as "arrived, ready to kick"
+
+# `predict_ball_pos_at_x` returns None the instant the ball's x reaches (or
+# passes) `keeper_x`, since `t = (x - pos.x) / vel.x` goes negative right at
+# that crossing -- including the single tick a live shot actually crosses
+# the goal line, which is exactly the moment a stable target matters most.
+# Within this x-distance of the line, the ball's raw `ball_pos.y` is itself
+# already an accurate stand-in for the vanished prediction (the ball is
+# right there), so use that instead of falling back to `stop_y` -- the
+# goal's center by default, often the opposite direction from an incoming
+# shot. See the `target is None` branch in `goalkeep` below.
+_NEAR_LINE_DISTANCE = 0.5  # m
 
 
 def _ball_needs_retrieval(game: Game, robot_id: int) -> bool:
@@ -205,7 +218,18 @@ def goalkeep(
             # If robots with IDs 1 or 2 are not available, keep existing stop_y
             pass
     if target is None:
-        target = Vector2D(keeper_x, stop_y)
+        if abs(ball_pos.x - keeper_x) < _NEAR_LINE_DISTANCE:
+            # The ball is right at the line -- most likely `predict_ball_pos_
+            # at_x` just lost the shot because `t` crossed zero, not because
+            # there's genuinely nothing to cover. Track the ball's own
+            # position (clamped to the posts) instead of snapping away to
+            # `stop_y`, which is often the opposite side of the goal from an
+            # incoming shot and would otherwise yank the keeper off a save
+            # in progress on exactly this tick.
+            clamped_y = max(-post_limit, min(post_limit, ball_pos.y))
+            target = Vector2D(keeper_x, clamped_y)
+        else:
+            target = Vector2D(keeper_x, stop_y)
     elif abs(target.y) > goal_half_width:
         # Ball heading toward goal but predicted wide -- clamp to nearest post
         # instead of snapping to stop_y, so the keeper stays reactive to the shot

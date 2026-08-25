@@ -28,6 +28,11 @@ class FastPathPlanningController(MotionController):
         oren = self.pid_oren.calculate(target_oren, robot.orientation, robot_id)
 
         pos = self.fpp._path_to(game, robot_id, target_pos, field_bounds)
+        # `pos` is a lookahead carrot, not the robot's real destination — see
+        # `TwoDPID.set_final_target`'s docstring for why the braking-distance
+        # cap needs `target_pos` (the true destination) directly, even though
+        # `calculate()` below still steers toward the carrot.
+        self.pid_trans.set_final_target(robot_id, target_pos)
         vel = self.pid_trans.calculate(pos, robot.p, robot_id)
 
         return vel, oren
