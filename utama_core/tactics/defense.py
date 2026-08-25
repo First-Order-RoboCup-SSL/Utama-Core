@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
@@ -71,7 +71,7 @@ class DefenseTactic(BaseTactic[DefenseMem]):
         return DefenseMem()
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: DefenseMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: DefenseMem
     ) -> tuple[dict[RobotId, RobotCommand], DefenseMem]:
         retriever_id = None
         if ball_is_loose(game):

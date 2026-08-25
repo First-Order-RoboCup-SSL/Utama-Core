@@ -6,7 +6,7 @@ Durable context for building/debugging anything under `utama_core/engine/`,
 `AGENTS.md` for repo-wide facts (what the repo is, testing commands, minimalism
 discipline). That file links here; this file assumes you've read it first.
 
-`engine/` (infra: `Strategy`, `Tactic`, `KernelContext`, `MatchLog`, `AbstractStrategy`,
+`engine/` (infra: `Strategy`, `Tactic`, `TickContext`, `MatchLog`, `AbstractStrategy`,
 referee-override plumbing) and `strategy/` (the actual `build_*_kernel_strategy` factories
 — `tiki_taka`, `counter_flow`, etc.) used to both be named `kernel/`, which was confusing:
 "kernel strategy" is the model's own vocabulary (baked into every factory/class name below),
@@ -142,7 +142,7 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
 
 ## Where things live
 
-- `utama_core/engine/` — scheduler/protocol infra (`Strategy`, `Tactic`, `KernelContext`,
+- `utama_core/engine/` — scheduler/protocol infra (`Strategy`, `Tactic`, `TickContext`,
   `MatchLog`, `AbstractStrategy`, referee-override plumbing). Rarely touched to add a new
   strategy; touched to add a new kernel-level primitive.
 - `utama_core/strategy/kernel_strategy.py` — every `build_*_kernel_strategy` factory. This

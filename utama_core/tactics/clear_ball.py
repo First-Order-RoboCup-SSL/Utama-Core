@@ -41,7 +41,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
@@ -163,7 +163,7 @@ class ClearBallTactic(BaseTactic[ClearBallMem]):
         return in_danger(game)
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: ClearBallMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: ClearBallMem
     ) -> tuple[dict[RobotId, RobotCommand], ClearBallMem]:
         commands: dict[RobotId, RobotCommand] = {}
         if not robot_ids or game.ball is None:
@@ -181,7 +181,7 @@ class ClearBallTactic(BaseTactic[ClearBallMem]):
     def _command_clearer(
         self,
         game: Game,
-        ctx: KernelContext,
+        ctx: TickContext,
         clearer_id: RobotId,
         ball_p: Vector2D,
         mem: ClearBallMem,
@@ -224,7 +224,7 @@ class ClearBallTactic(BaseTactic[ClearBallMem]):
     def _hold_cover_line(
         self,
         game: Game,
-        ctx: KernelContext,
+        ctx: TickContext,
         other_ids: list[RobotId],
         ball_p: Vector2D,
         commands: dict[RobotId, RobotCommand],
@@ -248,7 +248,7 @@ class ClearBallTactic(BaseTactic[ClearBallMem]):
 
     def _trace(
         self,
-        ctx: KernelContext,
+        ctx: TickContext,
         game: Game,
         clearer_id: RobotId,
         phase: str,

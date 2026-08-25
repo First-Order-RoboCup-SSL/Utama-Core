@@ -16,7 +16,7 @@ from typing import Optional
 
 import pytest
 
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.match_log import MatchLog
 from utama_core.engine.strategy import Strategy
 from utama_core.engine.tactic import BaseTactic, TacticTag
@@ -65,8 +65,8 @@ class RecordingTactic(BaseTactic[RecordingMem]):
         return self._applicable
 
 
-def _ctx() -> KernelContext:
-    return KernelContext(motion_controller=None)
+def _ctx() -> TickContext:
+    return TickContext(motion_controller=None)
 
 
 # --- single-active-tactic shape (Strategy.single_tactic_picker) ---

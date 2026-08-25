@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
@@ -168,7 +168,7 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
         return has_ball(game, mem.leader_id)
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: LeadAndSupportMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: LeadAndSupportMem
     ) -> tuple[dict[RobotId, RobotCommand], LeadAndSupportMem]:
         if mem.leader_id is None or mem.leader_id not in robot_ids or not self.is_committed(game, mem):
             mem.leader_id = choose_leader(game, robot_ids)

@@ -40,7 +40,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
@@ -79,7 +79,7 @@ class BlockShapeTactic(BaseTactic[BlockShapeMem]):
         return BlockShapeMem()
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: BlockShapeMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: BlockShapeMem
     ) -> tuple[dict[RobotId, RobotCommand], BlockShapeMem]:
         commands: dict[RobotId, RobotCommand] = {}
         if not robot_ids:

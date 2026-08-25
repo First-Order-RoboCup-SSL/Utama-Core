@@ -15,7 +15,7 @@ import math
 from dataclasses import dataclass
 
 from utama_core.engine.abstract_strategy import AbstractStrategy
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
@@ -43,7 +43,7 @@ class _GoToPointTactic(BaseTactic[_GoToPointMem]):
         return _GoToPointMem()
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: _GoToPointMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: _GoToPointMem
     ) -> tuple[dict[RobotId, RobotCommand], _GoToPointMem]:
         commands: dict[RobotId, RobotCommand] = {}
         for robot_id in robot_ids:
@@ -67,7 +67,7 @@ def go_to_point_strategy(
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         tactic = _GoToPointTactic(robot_targets, target_orientation)
         return KernelSchedulerStrategy(
             tactics={"go_to_point": tactic},
@@ -114,7 +114,7 @@ class _OscillatingObstacleTactic(BaseTactic[_OscillateMem]):
         return _OscillateMem()
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: _OscillateMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: _OscillateMem
     ) -> tuple[dict[RobotId, RobotCommand], _OscillateMem]:
         if mem.start_ts is None:
             mem.start_ts = game.ts
@@ -155,7 +155,7 @@ def oscillating_obstacle_strategy(obstacle_configs: list) -> AbstractStrategy:
     ]
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         tactic = _OscillatingObstacleTactic(configs)
         return KernelSchedulerStrategy(
             tactics={"oscillate": tactic},

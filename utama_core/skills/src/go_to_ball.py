@@ -23,7 +23,7 @@ import math
 from typing import Optional
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -94,7 +94,7 @@ def go_to_ball(
     robot_id: int,
     dribble_when_near: bool = True,
     dribble_threshold: float = 0.5,
-    ctx: Optional[KernelContext] = None,
+    ctx: Optional[TickContext] = None,
 ) -> RobotCommand:
     """Drive `robot_id` to the ball, approaching from the far side of any contesting enemy.
 
@@ -105,7 +105,7 @@ def go_to_ball(
             (currently 0 — stop exactly at the ball, no dribbler).
         dribble_threshold: unused by this function currently; kept for
             call-site compatibility with callers that pass it positionally.
-        ctx: optional `KernelContext` — when its `match_log` is set, records
+        ctx: optional `TickContext` — when its `match_log` is set, records
             which approach branch ("shield" vs "direct") was taken this call.
             Omit for callers outside a `Tactic.tick()` that don't have a `ctx`.
     """

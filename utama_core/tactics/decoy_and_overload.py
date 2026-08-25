@@ -55,7 +55,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from utama_core.config.settings import CONTROL_FREQUENCY
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
@@ -211,7 +211,7 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
         return None
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: DecoyOverloadMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: DecoyOverloadMem
     ) -> tuple[dict[RobotId, RobotCommand], DecoyOverloadMem]:
         if len(robot_ids) < 2:
             # No marker to drag *and* nobody to feed — degrade to a plain

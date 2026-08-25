@@ -59,7 +59,7 @@ from typing import Optional
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.config.referee_constants import OWN_DEFENSE_AREA_STANDOFF_DISTANCE
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
@@ -268,7 +268,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
         return None
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: SwitchOfPlayMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: SwitchOfPlayMem
     ) -> tuple[dict[RobotId, RobotCommand], SwitchOfPlayMem]:
         if len(robot_ids) < 1:
             return {}, mem

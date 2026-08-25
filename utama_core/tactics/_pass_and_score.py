@@ -18,7 +18,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Optional
 
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -139,7 +139,7 @@ def _setup_positions(
     return mem
 
 
-def _move_to(game: Game, ctx: KernelContext, robot_id: int, target: Vector2D) -> tuple[RobotCommand, bool]:
+def _move_to(game: Game, ctx: TickContext, robot_id: int, target: Vector2D) -> tuple[RobotCommand, bool]:
     robot = game.friendly_robots[robot_id]
     target_oren = robot.p.angle_to(game.ball.p.to_2d())
     arrived = at_target(game, robot_id, target)
@@ -153,7 +153,7 @@ def _move_to(game: Game, ctx: KernelContext, robot_id: int, target: Vector2D) ->
     return command, arrived
 
 
-def _hold_or_acquire_ball(game: Game, ctx: KernelContext, robot_id: int) -> RobotCommand:
+def _hold_or_acquire_ball(game: Game, ctx: TickContext, robot_id: int) -> RobotCommand:
     if has_ball(game, robot_id, visual=True):
         return empty_command(dribbler_on=True)
     return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx)
@@ -164,7 +164,7 @@ _SETUP_BALL_LOSS_GRACE_TICKS = 10  # ~0.17s at 60Hz — see comment below
 
 def run_setup_phase(
     game: Game,
-    ctx: KernelContext,
+    ctx: TickContext,
     passer_id: int,
     receiver_id: int,
     mem: "PassAndScoreMem",
@@ -207,7 +207,7 @@ def run_setup_phase(
 
 def _pass_exec(
     game: Game,
-    ctx: KernelContext,
+    ctx: TickContext,
     passer_id: int,
     receiver_id: int,
 ) -> tuple[dict[int, RobotCommand], bool]:
@@ -288,7 +288,7 @@ _SHOT_SWITCH_MARGIN = (
 
 
 def _score_goal(
-    game: Game, ctx: KernelContext, robot_id: int, prev_best_shot_y: Optional[float] = None
+    game: Game, ctx: TickContext, robot_id: int, prev_best_shot_y: Optional[float] = None
 ) -> tuple[RobotCommand, bool, Optional[float]]:
     goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
     robot = game.friendly_robots[robot_id]

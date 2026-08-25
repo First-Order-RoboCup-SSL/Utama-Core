@@ -213,7 +213,7 @@ model would duplicate all of that infrastructure to replace only the one part
 empty `Selector`, since `AbstractStrategy.__init__` unconditionally builds a tree — it is
 simply never ticked.
 
-**Motion controller timing constraint:** `KernelContext` needs a `MotionController` instance,
+**Motion controller timing constraint:** `TickContext` needs a `MotionController` instance,
 but `KernelStrategy` doesn't have one at construction time — `StrategyRunner` only injects it
 via `load_motion_controller()` onto the blackboard. Confirmed from `StrategyRunner.__init__`'s
 call order that `_load_robot_controllers()` (which calls `load_motion_controller`) always runs

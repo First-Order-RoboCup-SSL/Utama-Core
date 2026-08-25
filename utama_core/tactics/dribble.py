@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
@@ -116,7 +116,7 @@ class DribbleTactic(BaseTactic[DribbleMem]):
         return DribbleMem(final_target=self.corners[0])
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: DribbleMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: DribbleMem
     ) -> tuple[dict[RobotId, RobotCommand], DribbleMem]:
         robot_id = robot_ids[0]
 

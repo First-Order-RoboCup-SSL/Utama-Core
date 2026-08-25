@@ -12,7 +12,7 @@ What this does
 
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.engine.abstract_strategy import AbstractStrategy
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.run import StrategyRunner
@@ -24,7 +24,7 @@ MY_TEAM_IS_RIGHT = True
 
 
 def _build_dribbler_kernel_strategy(motion_controller: MotionController) -> KernelSchedulerStrategy:
-    ctx = KernelContext(motion_controller=motion_controller)
+    ctx = TickContext(motion_controller=motion_controller)
     return KernelSchedulerStrategy(
         tactics={"dribble": DribbleTactic()},
         partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "dribble"),

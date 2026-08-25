@@ -15,7 +15,7 @@ from __future__ import annotations
 import enum
 from typing import Generic, Optional, Protocol, TypeVar
 
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 
@@ -52,7 +52,7 @@ class Tactic(Protocol[MemT]):
         ...
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: MemT
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: MemT
     ) -> tuple[dict[RobotId, RobotCommand], MemT]:
         """Compute this tick's commands for `robot_ids` and the next `mem`."""
         ...

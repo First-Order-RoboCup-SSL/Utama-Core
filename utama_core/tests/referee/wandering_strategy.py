@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.engine.abstract_strategy import AbstractStrategy
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
@@ -69,7 +69,7 @@ class WanderingTactic(BaseTactic[WanderingMem]):
         return WanderingMem()
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: WanderingMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: WanderingMem
     ) -> tuple[dict[RobotId, RobotCommand], WanderingMem]:
         commands: dict[RobotId, RobotCommand] = {}
         for slot, robot_id in enumerate(sorted(robot_ids)):
@@ -105,7 +105,7 @@ def wandering_strategy(
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         tactic = WanderingTactic(field_dims)
         return KernelSchedulerStrategy(
             tactics={"wander": tactic},

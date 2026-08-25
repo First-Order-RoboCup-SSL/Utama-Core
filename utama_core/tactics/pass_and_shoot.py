@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from utama_core.config.settings import CONTROL_FREQUENCY
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
@@ -115,7 +115,7 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
         return mem.pass_and_score.phase != "setup"
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: PassAndShootMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: PassAndShootMem
     ) -> tuple[dict[RobotId, RobotCommand], PassAndShootMem]:
         pair = (robot_ids[0], robot_ids[1])
 

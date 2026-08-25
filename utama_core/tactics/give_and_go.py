@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from utama_core.config.settings import CONTROL_FREQUENCY
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
@@ -185,7 +185,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         return None
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: GiveAndGoMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: GiveAndGoMem
     ) -> tuple[dict[RobotId, RobotCommand], GiveAndGoMem]:
         if mem.carrier_id is None or mem.carrier_id not in robot_ids:
             mem.carrier_id, mem.receiver_id, mem.hop_count, mem.ticks_held = robot_ids[0], None, 0, 0
@@ -288,7 +288,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
     def _relocate_others(
         self,
         game: Game,
-        ctx: KernelContext,
+        ctx: TickContext,
         robot_ids: tuple[RobotId, ...],
         carrier_id: RobotId,
         commands: dict[RobotId, RobotCommand],

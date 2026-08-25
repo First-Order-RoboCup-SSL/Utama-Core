@@ -42,7 +42,7 @@ from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
 from utama_core.engine.abstract_strategy import AbstractStrategy
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
@@ -97,7 +97,7 @@ class _GoToBallUntilPossessionTactic(BaseTactic[_GoToBallUntilPossessionMem]):
         return _GoToBallUntilPossessionMem()
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: _GoToBallUntilPossessionMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: _GoToBallUntilPossessionMem
     ) -> tuple[dict[RobotId, RobotCommand], _GoToBallUntilPossessionMem]:
         robot_id = robot_ids[0]
         robot = game.friendly_robots[robot_id]
@@ -114,7 +114,7 @@ def _go_to_ball_strategy(robot_id: int) -> AbstractStrategy:
     command, so the (otherwise-unused) goalkeeper tick is simply skipped."""
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"go_to_ball": _GoToBallUntilPossessionTactic()},
             partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "go_to_ball"),

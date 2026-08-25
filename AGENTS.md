@@ -11,7 +11,7 @@ and is stale — all active strategy work happens here, on top of the tactic-ker
 
 ## Repo map
 
-- `utama_core/engine/` — the scheduler/protocol infra: `Strategy`, `Tactic`, `KernelContext`,
+- `utama_core/engine/` — the scheduler/protocol infra: `Strategy`, `Tactic`, `TickContext`,
   `MatchLog`, `AbstractStrategy`, referee-override plumbing. Strategy-dev work touches this
   rarely, mostly to add a new primitive, not a new strategy. Named `engine/`, not `kernel/`,
   specifically to avoid colliding with "kernel strategy" — the model's own established

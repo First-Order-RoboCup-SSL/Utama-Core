@@ -12,7 +12,7 @@ line, not thousands.
 skill wants to record mid-`tick()` — e.g. "which branch did `go_to_ball` take
 this tick", "was a shot lane open" — the exact things that used to get
 answered with a hand-added `os.environ`-gated `print()`, run, read stdout,
-then revert before committing. `KernelContext.match_log` (set by `Strategy`
+then revert before committing. `TickContext.match_log` (set by `Strategy`
 from the same instance passed to `to_jsonl()`) is how a tactic/skill reaches
 this without every call site threading a separate logger through. Same file,
 same reader (`load_jsonl` returns both event kinds in tick order) — a second

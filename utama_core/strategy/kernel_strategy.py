@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import RobotId
 from utama_core.entities.data.object import TeamType
@@ -44,7 +44,7 @@ def build_default_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"pass_and_shoot": PassAndShootTactic()},
             partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "pass_and_shoot"),
@@ -134,7 +134,7 @@ def build_split_shape_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": LeadAndSupportTactic(), "defense": ShadowAndMarkTactic()},
             partitioner=_possession_split_picker,
@@ -207,7 +207,7 @@ def build_press_and_pass_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": GiveAndGoTactic(), "defense": PressAndContainTactic()},
             partitioner=_press_and_pass_split_picker,
@@ -294,7 +294,7 @@ def build_high_press_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": GiveAndGoTactic(), "defense": PressAndContainTactic()},
             partitioner=_fixed_ratio_picker("attack", "defense", attack_fraction=0.8),
@@ -321,7 +321,7 @@ def build_low_block_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": PassAndShootTactic(), "defense": DefenseTactic()},
             partitioner=_fixed_ratio_picker("attack", "defense", attack_fraction=0.2, min_attack=2),
@@ -397,7 +397,7 @@ def build_three_slot_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
                 "press": PressAndContainTactic(),
@@ -430,7 +430,7 @@ def build_decoy_and_overload_kernel_strategy(outfield_robot_ids: tuple[int, ...]
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": DecoyOverloadTactic(), "defense": ShadowAndMarkTactic()},
             partitioner=_fixed_ratio_picker("attack", "defense", attack_fraction=0.5, min_attack=2),
@@ -457,7 +457,7 @@ def build_give_and_go_solo_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": GiveAndGoTactic()},
             partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "attack"),
@@ -489,7 +489,7 @@ def build_switch_of_play_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": SwitchOfPlayTactic(), "defense": DefenseTactic()},
             partitioner=_fixed_ratio_picker("attack", "defense", attack_fraction=0.5, min_attack=3),
@@ -776,7 +776,7 @@ def build_tiki_taka_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
                 "attack": GiveAndGoTactic(),
@@ -915,7 +915,7 @@ def build_tiki_taka_plus_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
                 "attack": GiveAndGoTactic(),
@@ -950,7 +950,7 @@ def build_counter_press_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
                 "attack": SwitchOfPlayTactic(),
@@ -985,7 +985,7 @@ def build_zone_fluid_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
                 "givego": GiveAndGoTactic(),
@@ -1108,7 +1108,7 @@ def build_score_aware_zone_flow_kernel_strategy(outfield_robot_ids: tuple[int, .
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
                 "givego": GiveAndGoTactic(),
@@ -1218,7 +1218,7 @@ def build_overload_press_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
                 "overload": DecoyOverloadTactic(),
@@ -1415,7 +1415,7 @@ def build_counter_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
                 "attack": GiveAndGoTactic(),
@@ -1449,7 +1449,7 @@ def build_high_line_zone_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
                 "switch": SwitchOfPlayTactic(),
@@ -1560,7 +1560,7 @@ def build_clear_danger_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = KernelContext(motion_controller=motion_controller)
+        ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
                 "attack": GiveAndGoTactic(),

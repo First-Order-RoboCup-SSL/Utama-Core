@@ -37,7 +37,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.match_log import MatchLog
 from utama_core.engine.referee_override import (
     RefereeActionOverride,
@@ -102,7 +102,7 @@ class Strategy:
         tactics: dict[TacticId, Tactic],
         partitioner: Partitioner,
         outfield_robot_ids: tuple[RobotId, ...],
-        ctx: KernelContext,
+        ctx: TickContext,
         referee_overrides: Optional[dict[RefereeCommand, RefereeActionOverride]] = None,
     ):
         if not tactics:

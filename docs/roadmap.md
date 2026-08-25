@@ -147,14 +147,18 @@ the full investigation narrative for anything already fixed lives in git log
 
 3. **AbstractStrategy follow-ups**, deferred from the BT-removal rewrite, not
    urgent:
-   - `KernelContext` — still open, re-verified 2026-08-26 (not touched by
-     any work this session). Already holds 2 fields, not just
-     `motion_controller` as this note originally described — `match_log`
-     was added at some point before this session (a pure rename in its own
-     commit, unrelated to the referee-override work), so it's no longer a
-     single-field wrapper. Worth reconsidering now precisely because it's
-     already grown past its original shape once, not because anything about
-     it is broken.
+   - (Resolved 2026-08-26: `KernelContext` renamed to `TickContext` —
+     "kernel" wasn't disambiguating anything (most of `engine`/`strategy`
+     already reads as kernel-something), while `TickContext` says exactly
+     what it is and matches its pre-port name
+     (`utama_strategy.functional.core.TickContext`). Global rename across
+     all 29 referencing files (`engine/`, `tactics/`, `skills/`, `tests/`,
+     `demo_dribbler_test.py`, `AGENTS.md`, `docs/STRATEGY_DEVELOPMENT.md`,
+     `docs/tactic_model_design_decisions.md`); this file's own historical
+     bullets below keep the old name since they describe past state.
+     Reconsidering whether the class needs new responsibilities beyond
+     `motion_controller`/`match_log` remains open, but the naming half of
+     this item is done.)
    - (Resolved 2026-08-26: `goalkeeper_id` now has a real, load-bearing
      override path — the kickoff-formation goalkeeper-exemption fix reads
      the actual keeper ID off the referee packet rather than assuming 0, and

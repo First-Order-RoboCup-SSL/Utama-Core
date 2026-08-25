@@ -120,7 +120,7 @@ def test_override_for_non_override_command_is_never_called():
     true, so `RefereeOverride.tick()` itself is never even asked about
     NORMAL_START in real use. This test drives `Strategy.tick()` directly
     (rather than just `RefereeOverride.tick()`) to prove that end-to-end."""
-    from utama_core.engine.context import KernelContext
+    from utama_core.engine.context import TickContext
     from utama_core.engine.strategy import Strategy
     from utama_core.engine.tactic import BaseTactic, TacticTag
 
@@ -134,7 +134,7 @@ def test_override_for_non_override_command_is_never_called():
             return {}, mem
 
     normal_start_override = Mock(return_value={})
-    ctx = KernelContext(motion_controller=Mock())
+    ctx = TickContext(motion_controller=Mock())
     strategy = Strategy(
         tactics={"dummy": _DummyTactic()},
         partitioner=Strategy.single_tactic_picker(lambda game, active: "dummy"),

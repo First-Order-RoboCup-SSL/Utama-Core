@@ -26,7 +26,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import TacticTag
 from utama_core.tactics.clear_ball import ClearBallTactic
 from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
@@ -79,9 +79,9 @@ def runner_factory():
         r.close()
 
 
-def _ctx(runner) -> KernelContext:
+def _ctx(runner) -> TickContext:
     motion_controller = runner.my.motion_controller(runner.mode, runner.rsim_env)
-    return KernelContext(motion_controller=motion_controller)
+    return TickContext(motion_controller=motion_controller)
 
 
 @pytest.mark.parametrize("tactic_cls, robot_ids, exp_friendly, exp_enemy", _TACTIC_CASES)

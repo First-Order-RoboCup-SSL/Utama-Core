@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from utama_core.engine.context import KernelContext
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
@@ -90,7 +90,7 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
         return distance is not None and distance <= _PRESS_RANGE
 
     def tick(
-        self, game: Game, ctx: KernelContext, robot_ids: tuple[RobotId, ...], mem: PressAndContainMem
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: PressAndContainMem
     ) -> tuple[dict[RobotId, RobotCommand], PressAndContainMem]:
         pressed_enemy_id, _distance = _enemy_nearest_ball(game)
 
