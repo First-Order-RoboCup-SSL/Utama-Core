@@ -77,10 +77,6 @@ class BallPlacementInterferenceRule(BaseRule):
             self._over_since = None
             return None
 
-        if game_frame is None:
-            self._over_since = None
-            return None
-
         ball = game_frame.ball
         if ball is None:
             self._over_since = None

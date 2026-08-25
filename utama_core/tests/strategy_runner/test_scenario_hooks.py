@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 from utama_core.custom_referee import CustomReferee
+from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.rsoccer_simulator.src.ssl import ssl_gym_base
 from utama_core.run.strategy_runner import StrategyRunner
@@ -25,7 +26,21 @@ def test_custom_referee_set_command_accepts_scripted_metadata():
         next_command=RefereeCommand.NORMAL_START,
         status_message="scripted placement",
     )
-    data = referee.step(game_frame=None, current_time=3.0)
+    # A minimal but real GameFrame — no ball, no robots — not None. Every
+    # real caller (StrategyRunner) always has an actual frame; step() is
+    # never meant to be called with game_frame=None (see
+    # docs/testing_gaps.md gap #5: this test used to pass None here, which
+    # is the only reason every rule's check() needed a defensive
+    # `if game_frame is None` guard at all).
+    empty_frame = GameFrame(
+        ts=3.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={},
+        enemy_robots={},
+        ball=None,
+    )
+    data = referee.step(empty_frame, current_time=3.0)
 
     assert data.referee_command == RefereeCommand.BALL_PLACEMENT_YELLOW
     assert data.designated_position == (1.0, -0.5)

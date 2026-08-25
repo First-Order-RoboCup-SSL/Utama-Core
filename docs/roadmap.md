@@ -309,17 +309,22 @@ the full investigation narrative for anything already fixed lives in git log
     symptom description alone.
 
 12. **Testing-gap follow-ups from the §8.4 referee-rules audit** — see
-    `docs/testing_gaps.md` for full detail; (1), (2), (3), and the Pushing
-    part of (6) closed 2026-08-26 (16 new tests: `test_ball_contest_deadlock.py`,
-    `test_referee_rules_integration.py`, `test_foul_counter_end_to_end.py`,
-    `test_referee_scan_order.py` — full suite 799 passed, 0 failed). Still
-    open: (4) investigate whether adopting mypy/pyright in CI (Ruff-only
-    today) is worth it — would have caught the original signature-drift bug
-    for free, this is a tooling decision, not a test to write; (5)
-    `pushing_rule.py`/`crashing_rule.py`/`robot_stop_speed_rule.py` share
-    `ball_placement_interference_rule.py`'s latent "assumes `game_frame` is
-    never `None`" bug, just never exercised — a design/hardening decision,
-    not urgent; (6, partial) `keeper_held_ball`/`ball_placement_interference`
+    `docs/testing_gaps.md` for full detail; (1), (2), (3), (5), and the
+    Pushing part of (6) closed 2026-08-26. (1)-(3): 16 new tests
+    (`test_ball_contest_deadlock.py`, `test_referee_rules_integration.py`,
+    `test_foul_counter_end_to_end.py`, `test_referee_scan_order.py`). (5)
+    was root-caused differently than first framed: not "7 rules missing a
+    `game_frame is None` guard" but one test
+    (`test_custom_referee_set_command_accepts_scripted_metadata`) calling
+    `CustomReferee.step()` with `game_frame=None` when its own signature
+    declares `game_frame: GameFrame` — no real caller ever does that. Fixed
+    the test to pass a minimal real `GameFrame` instead, and removed
+    `BallPlacementInterferenceRule`'s now-dead guard rather than propagating
+    it to the other 3 rules. Full suite: 799 passed, 0 failed. **On hold,
+    revisit later**: (4) mypy/pyright adoption — would have caught the
+    original signature-drift bug for free, but needs its own investigation
+    into how much of the existing codebase would fail a cold run. Still
+    open: (6, partial) `keeper_held_ball`/`ball_placement_interference`
     still haven't fired in any live tournament run (integration-tested now,
     but not field-validated) — worth checking specifically next time a
     tournament produces a long defense-area ball hold or a ball-placement

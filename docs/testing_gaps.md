@@ -143,20 +143,24 @@ underlying gap #1's specific symptom.
 `BallPlacementInterferenceRule` dereferenced `game_frame.ball` without
 checking `game_frame is None` first, breaking
 `test_custom_referee_set_command_accepts_scripted_metadata` (a scripted
-test that calls `referee.step(game_frame=None, current_time=...)` to check
-state-machine command transitions without a real physics frame). Fixed
-with a `if game_frame is None: return None` guard. But checking why the
-other 6 pre-existing rules never hit this: they don't guard against it
-either — they're just never called with `game_frame=None` while gated on
-an active command, because that specific scripted test only exercises
-`BALL_PLACEMENT_*`, which none of the original 6 rules check. In other
-words, this isn't "6 correct rules and 1 buggy one" — it's 7 rules that all
-assume a non-`None` `game_frame` once their own command-gate passes, and
-only one of them has ever been asked to prove otherwise. `pushing_rule.py`,
-`crashing_rule.py`, and `robot_stop_speed_rule.py` all have this same latent
-assumption for `NORMAL_START`/`FORCE_START`/`STOP` respectively — not fixed
-here since nothing currently exercises that path for them, but worth
-knowing it's there before assuming those three are hardened.
+test that called `referee.step(game_frame=None, current_time=...)` to check
+state-machine command transitions without a real physics frame). Originally
+"fixed" with a `if game_frame is None: return None` guard on the rule — the
+wrong shape of fix, per a user correction: `CustomReferee.step()`'s own
+signature declares `game_frame: GameFrame`, not `Optional[GameFrame]` — no
+real caller (`StrategyRunner`) ever passes `None`, so a guard defending
+against it doesn't belong scattered across every rule. The actual bug was
+in the test, which was calling `step()` outside its real contract.
+
+**Closed 2026-08-26.** Fixed at the source: the test now passes a minimal
+but real `GameFrame` (`ball=None`, empty robot dicts, real `ts`/team-colour
+fields) instead of `None` itself. `BallPlacementInterferenceRule`'s
+now-dead `game_frame is None` guard was removed — its existing `ball is
+None` check already covers the "no ball in the frame" case correctly.
+`pushing_rule.py`/`crashing_rule.py`/`robot_stop_speed_rule.py` never had
+this guard and still don't need one: no caller, test or production, has
+ever passed `game_frame=None` to `CustomReferee.step()`. Full suite: 799
+passed, 0 failed.
 
 ## 6. New rules verified in isolation and via a small live tournament, not systematically fuzzed against thresholds
 
