@@ -16,19 +16,27 @@ authoring style — not because the kernel schedules it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional
 
 from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
+from utama_core.motion_planning.src.controllers.pid_controller import PIDController
 from utama_core.skills.src.goalkeep import goalkeep
 from utama_core.skills.src.utils.move_utils import empty_command
 
 
 @dataclass
 class GoalkeeperMem:
-    """No cross-tick state: goalkeeping recomputes its target from scratch every tick."""
+    """Caches the keeper's own dedicated `PIDController` (see
+    `GoalkeeperTactic.tick`'s docstring for why the keeper never uses
+    `ctx.motion_controller`) — built lazily on first tick since it needs
+    `ctx.motion_controller`'s `mode`/`rsim_env` to construct, neither of
+    which is available in `initial_mem`."""
+
+    pid_controller: Optional[PIDController] = field(default=None)
 
 
 class GoalkeeperTactic(BaseTactic[GoalkeeperMem]):
@@ -45,7 +53,31 @@ class GoalkeeperTactic(BaseTactic[GoalkeeperMem]):
     def tick(
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: GoalkeeperMem
     ) -> tuple[dict[RobotId, RobotCommand], GoalkeeperMem]:
-        command = goalkeep(game, ctx.motion_controller, self.robot_id)
+        # Deliberately never uses ctx.motion_controller (the team's shared
+        # scheme, "fpp"/FastPathPlanningController by default): a live
+        # tournament trace (2026-08-26, gap #6/#9 validation run —
+        # replays/gap6_validation_20260826_124653/counter_flow_vs_tiki_taka_RK.pkl)
+        # found the keeper oscillating with a ~1.6s period and ~0.74m
+        # amplitude around a completely static target (ball at rest,
+        # predicted goal-line intercept fixed to <1e-6 drift) during
+        # PREPARE_KICKOFF, never converging. Isolated PID gains alone
+        # (same gains, same start/target) converged cleanly in isolation,
+        # so the oscillation only reproduces through FastPathPlanner's
+        # carrot/detour-side routing — plausibly its persistent per-robot
+        # "last chosen detour side" cache flip-flopping against an
+        # obstacle the keeper doesn't actually need to route around for a
+        # simple hold-a-goal-line-point motion. The keeper's task never
+        # needs obstacle-avoidance path planning (it holds a point on its
+        # own goal line, inside its own defense area, where no legal
+        # opponent or teammate should be routing through), so it gets its
+        # own dedicated PIDController instead of sharing the team's
+        # scheme — sidesteps the planner entirely rather than debugging
+        # its detour logic, and cannot regress any other tactic since
+        # nothing else references this controller.
+        if mem.pid_controller is None:
+            mem.pid_controller = PIDController(ctx.motion_controller.mode, ctx.motion_controller.rsim_env)
+
+        command = goalkeep(game, mem.pid_controller, self.robot_id)
         if command is None:
             command = empty_command(False)
         return {self.robot_id: command}, mem

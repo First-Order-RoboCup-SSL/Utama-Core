@@ -61,6 +61,58 @@ the full investigation narrative for anything already fixed lives in git log
   ~40% avg / ~60-65% worst-case overshoot reduction in the reproduction
   match. Residual overshoot (~0.17-0.26m) is now consistent with the robot's
   physical acceleration limit, not a logic bug.
+  **Update 2026-08-26:** that residual turned out to still be a live logic
+  bug, not just acceleration-limited overshoot — a sustained, undamped
+  oscillation (~1.6s period, ~0.74m amplitude, never converging) traced live
+  during the gap #6/#9 referee-rule tournament validation
+  (`replays/gap6_validation_20260826_124653/counter_flow_vs_tiki_taka_RK.pkl`),
+  with the ball completely at rest and the predicted goal-line intercept
+  fixed to <1e-6 drift for 2+ seconds — i.e. not the shot-approach dynamics
+  the 08-24 fix targeted, but a keeper that can't hold still at all against a
+  static target. Isolated `TwoDPID` gains alone (same gains, same
+  start/target, no rsim in the loop) converged cleanly, so the instability
+  only reproduces through the full sim loop with `FastPathPlanner` (`"fpp"`,
+  `StrategyRunner`'s default `control_scheme`) in the path — consistent with
+  `TwoDPID.set_final_target()` only having patched the carrot/braking-cap
+  interaction, not eliminated whatever in `FastPathPlanner`'s
+  carrot/detour-side routing was driving the underlying oscillation.
+  **Fixed** by sidestepping the planner for the keeper entirely rather than
+  debugging its detour logic further:
+  `GoalkeeperTactic` (`utama_core/tactics/goalkeeper.py`) now builds its own
+  dedicated `PIDController` (cached in `GoalkeeperMem`) instead of using
+  `ctx.motion_controller` — the keeper's task never needs obstacle-avoidance
+  path planning (it holds a point on its own goal line, inside its own
+  defense area, where no legal opponent/teammate should be routing through),
+  so nothing is lost by skipping `FastPathPlanner` for this one tactic, and
+  no other tactic's motion control is touched. Verified via a live
+  before/after measurement in the exact traced conditions (ball parked
+  during `PREPARE_KICKOFF`, `prepare_duration_seconds` set very high so the
+  target is provably fixed): steady-state y-position range over the last 2s
+  went from **0.385m (oscillating) to 0.000m (fully converged)** with the
+  fix. New regression test:
+  `tests/strategy_runner/test_goalkeeper_stability.py::test_goalkeeper_converges_on_static_target_without_oscillating`.
+- **Stuck-match root causes (2026-08-26)** — found via a new offline
+  detector (`utama_core/replay/stuck_detector.py`'s `find_stuck_windows`,
+  see `docs/testing_gaps.md` gap #11) run over the gap #6/#9 validation
+  corpus. Two genuine multi-hundred-second stuck states, two distinct root
+  causes, both fixed:
+  (1) `PressAndContainTactic`'s presser positioned relative to a tracked
+  enemy's *own* position when that enemy didn't have the ball, rather than
+  straight at the ball — when the tracked enemy was itself stationary (its
+  own team locked in an unrelated all-defense posture), the presser's
+  target never converged on a fully loose ball, and it sat parked beside it
+  for 566s. Fixed: `PressAndContainTactic.tick()` now drives straight at
+  the ball via `go_to_ball()` whenever `game.robot_with_ball is None`.
+  (2) `GiveAndGoTactic`'s `_pass_exec` synchronized passer/receiver
+  handshake had no timeout — if the receiver never became ready, the
+  passer held the ball indefinitely (`is_committed()` stays `True` for as
+  long as `receiver_id is not None`), observed holding for ~335s in one
+  match. Fixed: a new `hop_ticks` counter on `GiveAndGoMem` abandons a hop
+  past `_MAX_HOP_TICKS` (4s), falling through to the tactic's existing
+  shoot-or-reposition fallback. New regression tests:
+  `test_press_and_contain_goes_straight_for_a_fully_loose_ball` and
+  `test_give_and_go_abandons_a_hop_that_never_completes`
+  (`utama_core/tests/engine/test_all_tactics.py`).
 - **Defense-area retrieval stall** — a robot legally retrieving a ball resting
   in the opponent's defense area during a stoppage (`DIRECT_FREE_*`,
   `BALL_PLACEMENT_*`) previously stalled ~0.25m short — `FastPathPlanner`
