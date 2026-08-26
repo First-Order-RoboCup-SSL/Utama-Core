@@ -210,3 +210,37 @@ class TestRobotStopSpeedRule:
                 RefereeCommand.BALL_PLACEMENT_YELLOW,
             )
         assert v is None
+
+    def test_exempt_while_still_inside_keep_out_zone_past_grace_period(self):
+        """A robot that entered STOP already inside BALL_KEEP_OUT_DISTANCE (0.8m)
+        of the ball is being actively driven out by RefereeOverride's
+        `_clear_to_legal_positions` at full motion-controller speed. Fouling it
+        for that — just because the 2s grace clock expired before it physically
+        cleared 0.8m — would penalize the robot for complying with the
+        referee's own override. See docs/testing_gaps.md / the referee-override
+        restart-safety audit (2026-08-26).
+        """
+        rule = RobotStopSpeedRule(max_speed_mps=1.5, grace_seconds=2.0)
+        # Robot sits 0.3m from the ball (inside the 0.8m keep-out zone) and is
+        # moving fast, as it would be while RefereeOverride drives it out.
+        robot_still_clearing = _robot(0, 0.3, 0.0, is_friendly=True, vx=3.0, vy=0.0)
+        ball = _ball(0.0, 0.0)
+        v = None
+        for ts in [0.0, 1.0, 2.5, 4.0]:
+            v = rule.check(
+                _frame(ball=ball, friendly_robots={0: robot_still_clearing}, ts=ts), GEO, RefereeCommand.STOP
+            )
+        assert v is None
+
+    def test_fires_once_robot_clears_keep_out_zone_and_still_speeds(self):
+        """Once a robot is outside the keep-out zone (i.e. has had the chance to
+        comply), the ordinary grace-period/speed check applies as before.
+        """
+        rule = RobotStopSpeedRule(max_speed_mps=1.5, grace_seconds=2.0)
+        # 2.0m from the ball: well outside the 0.8m keep-out radius.
+        robot_clear_of_zone = _robot(0, 2.0, 0.0, is_friendly=True, vx=3.0, vy=0.0)
+        ball = _ball(0.0, 0.0)
+        rule.check(_frame(ball=ball, friendly_robots={0: robot_clear_of_zone}, ts=0.0), GEO, RefereeCommand.STOP)
+        v = rule.check(_frame(ball=ball, friendly_robots={0: robot_clear_of_zone}, ts=2.5), GEO, RefereeCommand.STOP)
+        assert v is not None
+        assert v.rule_name == "robot_stop_speed"

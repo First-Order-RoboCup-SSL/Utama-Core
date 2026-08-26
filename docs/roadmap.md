@@ -329,3 +329,39 @@ the full investigation narrative for anything already fixed lives in git log
     but not field-validated) — worth checking specifically next time a
     tournament produces a long defense-area ball hold or a ball-placement
     restart.
+
+    **2026-08-26: pre-live-tournament restart-safety audit.** Before
+    proceeding to that (6, partial) field validation, did a full pass over
+    every referee override action (`engine/referee_override.py`,
+    `custom_referee/actions.py`, `custom_referee.py`, `state_machine.py`, all
+    13 rule files) looking for restart-sequencing bugs, command-transition
+    edge cases, and rule-vs-override interactions. Found and fixed two —
+    `docs/testing_gaps.md` gaps #7 and #8:
+    - **Gap #7**: `RobotStopSpeedRule` could foul a robot for still being
+      driven out of the ball keep-out zone by `StopStep`'s own clearing
+      motion (2s grace clock could expire before the override finished
+      physically moving a robot that started deep inside the zone). Fixed:
+      the rule now exempts a robot from the speed check while it remains
+      inside `BALL_KEEP_OUT_DISTANCE` of the ball, regardless of elapsed
+      grace time.
+    - **Gap #8**: HALT (e.g. `DefenseAreaStoppageRule`'s 2nd-foul
+      escalation) has no auto-advance anywhere, by rulebook design — a real
+      match needs a human referee/GC to resume it. But no automated
+      tournament/sim harness (`StrategyRunner`, `*_tournament.py`) ever did
+      that either, so a live sim run tripping a HALT-issuing rule would
+      freeze forever with no test failure, just silent non-progress — worse
+      than the "rule never fires" trap (6, partial) already worries about.
+      Fixed: `StrategyRunner` now auto-resumes HALT to `NORMAL_START` after a
+      5s grace period, but only when `sim_controller is not None` (sim-only —
+      never short-circuits a real match with an actual human present).
+
+    Both fixes are regression-tested
+    (`tests/custom_referee/test_dribble_placement_stopspeed.py`,
+    `tests/strategy_runner/test_referee_rsim.py::test_halt_auto_resumes_to_normal_start_in_sim`)
+    and confirmed against the full suite. No other confirmed bugs found —
+    the override dispatch table covers all 13 commands correctly and
+    keep-out/defense-area geometry math (radius vs. diameter, sign,
+    reference point) checked out. `KeeperHeldBallRule`'s dwell clock
+    resetting on every stoppage was also noted as a plausible (non-bug,
+    rulebook-matching) reason it's never fired in tournament play — relevant
+    context for the (6, partial) field validation still to come.

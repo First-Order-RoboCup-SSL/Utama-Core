@@ -430,6 +430,60 @@ def test_out_of_bounds_restart_spot_is_capturable_by_go_to_ball(headless):
 
 
 # ---------------------------------------------------------------------------
+# Scenario 5: HALT auto-resumes in simulation (no human GC to un-halt)
+# ---------------------------------------------------------------------------
+
+
+class _HaltAutoResumeManager(AbstractTestManager):
+    """HALT is forced in reset_field; StrategyRunner must auto-resume via
+    NORMAL_START after the sim-only grace period, since GameStateMachine has
+    no auto-advance out of HALT by design (real matches need a human referee
+    or GameController to resume) — see strategy_runner.py's
+    `_SIM_HALT_AUTO_RESUME_SECONDS` handling.
+    """
+
+    n_episodes = 1
+
+    def __init__(self, referee: CustomReferee):
+        super().__init__()
+        self._referee = referee
+        self.halt_seen: bool = False
+        self.resumed: bool = False
+
+    def reset_field(self, sim_controller: AbstractSimController, game: Game):
+        sim_controller.teleport_ball(0.0, 0.0)
+        self._referee.force_command(RefereeCommand.HALT, game.ts)
+
+    def eval_status(self, game: Game) -> TestingStatus:
+        ref = game.referee
+        if ref is None:
+            return TestingStatus.IN_PROGRESS
+
+        if ref.referee_command == RefereeCommand.HALT:
+            self.halt_seen = True
+            return TestingStatus.IN_PROGRESS
+
+        if self.halt_seen and ref.referee_command == RefereeCommand.NORMAL_START:
+            self.resumed = True
+            return TestingStatus.SUCCESS
+
+        return TestingStatus.IN_PROGRESS
+
+
+def test_halt_auto_resumes_to_normal_start_in_sim(headless):
+    """A HALT issued in simulation must not freeze the match forever."""
+    referee = CustomReferee.from_profile_name("simulation")
+    runner = _make_runner(referee)
+    tm = _HaltAutoResumeManager(referee)
+
+    passed = runner.run_test(tm, episode_timeout=10.0, rsim_headless=headless)
+
+    assert tm.halt_seen, "CustomReferee never entered HALT"
+    assert tm.resumed, "StrategyRunner did not auto-resume out of HALT in simulation"
+    assert passed
+
+
+# ---------------------------------------------------------------------------
 # Future work: full out-of-bounds sequence integration test
 #
 # Intended scenario:

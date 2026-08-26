@@ -11,6 +11,16 @@ separate command in this codebase's enum and is never STOP, so the
 rulebook's placement exemption holds automatically without an explicit
 check; robots are also naturally allowed to move fast again once any other
 command (PREPARE_*, DIRECT_FREE_*, NORMAL_START, ...) takes over.
+
+A robot still outside `BALL_KEEP_OUT_DISTANCE` from the ball is exempt from
+the speed check regardless of the grace clock: `RefereeOverride`'s
+`_clear_to_legal_positions` (actions.py) actively drives any robot caught
+inside that radius at STOP-entry back out at full motion-controller speed,
+so a robot that entered STOP deep inside the keep-out zone can still be
+legitimately mid-clear past the 2s grace mark. Fouling it for that would
+penalize the robot for complying with the referee's own override — the
+rule should only fire once a robot has reached (or already was at) a legal
+distance from the ball and *then* moves too fast.
 """
 
 from __future__ import annotations
@@ -18,6 +28,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.entities.game.game_frame import GameFrame
@@ -64,11 +75,17 @@ class RobotStopSpeedRule(BaseRule):
         if game_frame.ts - self._stop_entered_at < self._grace_seconds:
             return None
 
+        ball = game_frame.ball
         my_team_is_yellow = game_frame.my_team_is_yellow
         for is_friendly, robots in ((True, game_frame.friendly_robots), (False, game_frame.enemy_robots)):
             for robot in robots.values():
                 key = (is_friendly, robot.id)
                 if key in self._already_charged:
+                    continue
+                if ball is not None and math.hypot(robot.p.x - ball.p.x, robot.p.y - ball.p.y) < BALL_KEEP_OUT_DISTANCE:
+                    # Still inside the keep-out zone: may still be being
+                    # actively driven out by RefereeOverride, not evidence of
+                    # non-compliance.
                     continue
                 speed = math.hypot(robot.v.x, robot.v.y)
                 if speed <= self._max_speed:

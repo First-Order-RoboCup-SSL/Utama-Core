@@ -71,6 +71,7 @@ if TYPE_CHECKING:
 
 _GEOMETRY_MATCH_TOLERANCE_M = 0.001  # mm-precision integers from vision → 1 mm tolerance
 _VS_KICK_THRESHOLD = 0.5  # m/s — ball speed above this triggers kick commentary
+_SIM_HALT_AUTO_RESUME_SECONDS = 5.0  # sim-only: no human GC to resume a HALT, see below
 
 logging.basicConfig(
     filename="Utama.log",
@@ -270,6 +271,7 @@ class StrategyRunner:
         self.logger = logging.getLogger(__name__)
 
         self._prev_custom_ref_command: Optional[RefereeCommand] = None
+        self._halt_entered_at: Optional[float] = None
         self._last_referee_data: Optional["RefereeData"] = None
         self._vs_team_names: tuple[str, str] = self._assign_team_names()
         self._vs_commentary: str = "Welcome to the match!"
@@ -1359,6 +1361,20 @@ class StrategyRunner:
                     # simulation, so we simulate placement instantly.
                     x, y = ref_data.designated_position
                     self.sim_controller.teleport_ball(x, y)
+            if self.sim_controller is not None:
+                # HALT (e.g. DefenseAreaStoppageRule's 2nd-foul escalation) has
+                # no auto-advance in GameStateMachine by design — on a real
+                # pitch it requires a human referee/GameController to resume.
+                # An automated sim/tournament run has neither, so left alone
+                # a HALT here would freeze the match forever. Auto-resume to
+                # NORMAL_START after a grace period, sim-only.
+                if ref_data.referee_command == RefereeCommand.HALT:
+                    if self._prev_custom_ref_command != RefereeCommand.HALT:
+                        self._halt_entered_at = self.my.current_game_frame.ts
+                    elif self.my.current_game_frame.ts - self._halt_entered_at >= _SIM_HALT_AUTO_RESUME_SECONDS:
+                        self.referee.force_command(RefereeCommand.NORMAL_START, self.my.current_game_frame.ts)
+                else:
+                    self._halt_entered_at = None
             self._prev_custom_ref_command = ref_data.referee_command
 
         if self.mode == Mode.RSIM:

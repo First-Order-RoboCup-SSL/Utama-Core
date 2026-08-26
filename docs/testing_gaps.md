@@ -15,6 +15,59 @@ decisions, not test-writing tasks. #6 remains open for the two rules
 (`keeper_held_ball`, `ball_placement_interference`) that still haven't fired
 in a live tournament, even though they're now integration-tested.
 
+**Update 2026-08-26 (2)**: a full audit of the referee override/restart
+machinery (asked for before proceeding to live-tournament validation of
+`keeper_held_ball`/`ball_placement_interference`) found and fixed two
+restart-safety issues — see gap #7 and gap #8 below.
+
+## 7. `RobotStopSpeedRule` could foul a robot for obeying `RefereeOverride`'s own STOP-clearing motion
+
+`StopStep`/`_clear_to_legal_positions` (`custom_referee/actions.py`) drives
+any robot caught inside `BALL_KEEP_OUT_DISTANCE` (0.8m) at STOP-entry back
+out to a legal point via the normal motion controller, at up to `MAX_VEL`
+(2 m/s in rsim/grsim). `RobotStopSpeedRule` started its 2-second grace clock
+the moment STOP was observed, then fouled any robot exceeding 1.5 m/s. A
+robot that entered STOP already deep inside the keep-out zone (e.g.
+mid-dribble at the ball) can genuinely still be moving — driven by the
+referee's own override — past the 2s mark, so the referee could end up
+penalizing a robot for complying with its own restart command. This would
+show up in live play as a spurious `robot_stop_speed` foul with no real
+non-compliance behind it.
+
+**Fixed 2026-08-26.** `RobotStopSpeedRule.check()` (`rules/robot_stop_speed_rule.py`)
+now exempts a robot from the speed check for as long as it remains inside
+`BALL_KEEP_OUT_DISTANCE` of the ball, regardless of the grace clock — once a
+robot reaches (or already was at) a legal distance, the ordinary
+grace-period/speed check applies as before. Two new tests in
+`tests/custom_referee/test_dribble_placement_stopspeed.py` cover both the
+exemption (`test_exempt_while_still_inside_keep_out_zone_past_grace_period`)
+and that the rule still fires normally once a robot is clear of the zone
+(`test_fires_once_robot_clears_keep_out_zone_and_still_speeds`).
+
+## 8. HALT has no auto-advance anywhere, and no automated harness resumes it
+
+`DefenseAreaStoppageRule`'s 2nd-foul escalation (and any future rule that
+issues `HALT`) has no auto-advance path in `GameStateMachine` — by design,
+per the SSL rulebook, HALT requires a human referee/GameController to
+resume. That's correct behavior for a real match. But grepping
+`full_match_tournament.py`, `arena_tournament.py`, `tournament.py`, and
+`StrategyRunner` found no code path that ever resumes a HALT — an automated
+sim/tournament run that trips a HALT-issuing rule would freeze the match
+forever with no test failure or crash, just silent non-progress. This is
+exactly the kind of "silence looks like nothing happened" trap gap #6 warns
+about for `keeper_held_ball`/`ball_placement_interference` — except worse,
+since a wedged match wouldn't just fail to fire a rule, it would hang the
+whole run.
+
+**Fixed 2026-08-26.** `StrategyRunner._run_step` (`run/strategy_runner.py`)
+now auto-resumes HALT to `NORMAL_START` after `_SIM_HALT_AUTO_RESUME_SECONDS`
+(5.0s), but only when `self.sim_controller is not None` — i.e. only in
+simulation, never on real hardware, where an actual human/GC is expected to
+be present and this would be wrong to short-circuit. Covered by
+`tests/strategy_runner/test_referee_rsim.py::test_halt_auto_resumes_to_normal_start_in_sim`,
+which forces HALT via a real `CustomReferee`/rsim `StrategyRunner` and
+confirms the match resumes to `NORMAL_START` rather than staying frozen.
+
 ## 1. Unit-testing a rule in isolation doesn't test the interface it's actually called through
 
 Every new rule's tests called `rule.check(frame, geometry, command)`
