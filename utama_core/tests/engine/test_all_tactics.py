@@ -206,6 +206,83 @@ def test_press_and_contain_inapplicable_when_no_enemy_is_near_the_ball():
     assert tactic.applicable(empty_game) is False
 
 
+def test_press_and_contain_goes_straight_for_a_fully_loose_ball(runner_factory):
+    """Found live (stuck-match investigation, 2026-08-26, docs/testing_gaps.md
+    gap #11): a ball can be genuinely loose (no robot on either team
+    possesses it) while the tracked "nearest enemy" is itself stationary
+    and far away — e.g. that enemy's own team is locked into an all-defense
+    posture by a separate bug. `block_attacker`'s no-possession branch
+    computes the presser's target *relative to that enemy's own position*
+    (a shot-line-style standoff), not straight at the ball — so when the
+    tracked enemy never moves, the computed target never converges on the
+    ball either, and the presser parks nearby without ever actually
+    collecting it. Traced in a real replay: this held for 566s of a 600s
+    match, with two independently-reasonable tactics (containment; don't
+    chase a ball the opponent is closer to) jointly deadlocking on a ball
+    neither side ever collects.
+
+    Regression: with the tracked enemy stationary and far from the ball,
+    the presser must still close in on the ball itself.
+    """
+    import dataclasses
+
+    from utama_core.entities.data.vector import Vector2D, Vector3D
+    from utama_core.entities.game.ball import Ball
+    from utama_core.entities.game.game_frame import GameFrame
+
+    runner = runner_factory(exp_friendly=3, exp_enemy=2)
+    game = runner.my.game
+    tactic = PressAndContainTactic()
+    mem = tactic.initial_mem()
+
+    frame = game.current
+    friendly = dict(frame.friendly_robots)
+    friendly[1] = dataclasses.replace(friendly[1], has_ball=False, p=Vector2D(-1.5, 0.0))
+    enemy = dict(frame.enemy_robots)
+    # Tracked enemy far from the ball and stationary — the exact condition
+    # observed live: nothing drives it toward the ball either.
+    enemy[1] = dataclasses.replace(enemy[1], has_ball=False, p=Vector2D(3.0, 3.0))
+    ball = Ball(p=Vector3D(0.0, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0))
+    loose_frame = GameFrame(
+        ts=frame.ts,
+        my_team_is_yellow=frame.my_team_is_yellow,
+        my_team_is_right=frame.my_team_is_right,
+        friendly_robots=friendly,
+        enemy_robots=enemy,
+        ball=ball,
+        referee=frame.referee,
+    )
+    game.add_game_frame(loose_frame)
+    game = runner.my.game
+    assert game.robot_with_ball is None, "setup didn't produce a loose ball — test would pass vacuously"
+
+    import utama_core.tactics.press_and_contain as press_and_contain_module
+
+    calls = {}
+    orig_go_to_ball = press_and_contain_module.go_to_ball
+    orig_block_attacker = press_and_contain_module.block_attacker
+
+    def spy_go_to_ball(*args, **kwargs):
+        calls["go_to_ball"] = True
+        return orig_go_to_ball(*args, **kwargs)
+
+    def spy_block_attacker(*args, **kwargs):
+        calls["block_attacker"] = True
+        return orig_block_attacker(*args, **kwargs)
+
+    press_and_contain_module.go_to_ball = spy_go_to_ball
+    press_and_contain_module.block_attacker = spy_block_attacker
+    try:
+        commands, _mem = tactic.tick(game, _ctx(runner), (1, 2, 3), mem)
+    finally:
+        press_and_contain_module.go_to_ball = orig_go_to_ball
+        press_and_contain_module.block_attacker = orig_block_attacker
+
+    assert 1 in commands
+    assert calls.get("go_to_ball") is True, "presser should drive straight at a fully loose ball"
+    assert calls.get("block_attacker") is None, "block_attacker's enemy-relative standoff must not be used here"
+
+
 def test_give_and_go_reassigned_carrier_resets_role_state(runner_factory):
     """If the kernel hands this tactic a robot set that no longer contains
     the previous carrier (e.g. after a scheduler reassignment), roles must
@@ -221,6 +298,70 @@ def test_give_and_go_reassigned_carrier_resets_role_state(runner_factory):
     assert mem.receiver_id is None
     assert mem.hop_count == 0
     assert set(commands.keys()) == {1, 2, 3}
+
+
+def test_give_and_go_abandons_a_hop_that_never_completes(runner_factory):
+    """Found live (stuck-match investigation, 2026-08-26, docs/testing_gaps.md
+    gap #11): a carrier that locks a receiver_id and then never sees that
+    receiver become ready (_pass_exec's synchronized handshake has no
+    timeout of its own) held the ball motionless for the rest of a 600s
+    match — is_committed() stays True forever since it only checks
+    receiver_id is not None, so nothing ever reassigns these robots either.
+
+    This test locks receiver_id directly (bypassing _best_receiver's own
+    pick, which needs real geometry to trigger) and never advances the sim
+    clock, so the receiver's position never changes and _pass_exec's
+    handshake can never resolve — the simplest deterministic way to force
+    the exact stalled state, regardless of what real-match geometry
+    originally caused it. After _MAX_HOP_TICKS worth of tick() calls,
+    receiver_id must have been abandoned (reset to None) rather than held
+    forever, and the tactic must be reassignable again (is_committed()
+    False) once that happens.
+    """
+    import dataclasses
+
+    from utama_core.entities.data.vector import Vector2D, Vector3D
+    from utama_core.entities.game.ball import Ball
+    from utama_core.entities.game.game_frame import GameFrame
+    from utama_core.tactics.give_and_go import _MAX_HOP_TICKS, GiveAndGoMem
+
+    runner = runner_factory(exp_friendly=5, exp_enemy=2)
+    game = runner.my.game
+    tactic = GiveAndGoTactic()
+    mem = GiveAndGoMem(carrier_id=1, receiver_id=2, hop_count=0, hop_ticks=0)
+
+    # Synthesize a frame where robot 1 possesses the ball and robot 2 (the
+    # locked receiver) sits far enough away that it can never reach
+    # _pass_exec's intercept point — has_ball is sensor/contact-derived, not
+    # directly settable, and no sim stepping is needed for a pure decision-
+    # logic test like this one, so build the frame directly instead of
+    # driving real physics.
+    frame = game.current
+    friendly = dict(frame.friendly_robots)
+    friendly[1] = dataclasses.replace(friendly[1], has_ball=True, p=Vector2D(0.0, 0.0))
+    friendly[2] = dataclasses.replace(friendly[2], has_ball=False, p=Vector2D(-4.0, 2.8))
+    ball = Ball(p=Vector3D(0.09, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0))
+    stalled_frame = GameFrame(
+        ts=frame.ts,
+        my_team_is_yellow=frame.my_team_is_yellow,
+        my_team_is_right=frame.my_team_is_right,
+        friendly_robots=friendly,
+        enemy_robots=dict(frame.enemy_robots),
+        ball=ball,
+        referee=frame.referee,
+    )
+    game.add_game_frame(stalled_frame)
+    game = runner.my.game
+    assert game.friendly_robots[1].has_ball, "setup didn't establish possession — test would pass vacuously"
+
+    for _ in range(_MAX_HOP_TICKS + 1):
+        assert tactic.is_committed(game, mem) is True
+        _commands, mem = tactic.tick(game, _ctx(runner), (1, 2, 3), mem)
+        if mem.receiver_id is None:
+            break
+
+    assert mem.receiver_id is None, "hop was never abandoned — carrier would hold the ball forever"
+    assert tactic.is_committed(game, mem) is False
 
 
 class _FakeVec:

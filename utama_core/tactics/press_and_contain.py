@@ -35,6 +35,7 @@ from utama_core.shared.pass_and_score_geometry import (
     own_defense_area_exit_point,
 )
 from utama_core.skills.src.block import block_attacker
+from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.man_mark import man_mark
 
@@ -113,6 +114,27 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
                 motion_controller=ctx.motion_controller,
                 robot_id=presser_id,
                 target_coords=own_defense_area_exit_point(game, game.ball.p.to_2d().y),
+            )
+        elif game.robot_with_ball is None:
+            # Ball is fully loose — nobody on either team currently has it.
+            # block_attacker's "attacker doesn't have ball" branch computes
+            # the presser's target relative to the tracked enemy's *own*
+            # position (a shot-line-style standoff, 70% of the way from
+            # that enemy toward the ball), not straight at the ball itself.
+            # Found live (stuck-match investigation, 2026-08-26,
+            # docs/testing_gaps.md gap #11): when the tracked enemy is
+            # itself stationary and far from the ball (e.g. its own team is
+            # locked into an all-defense posture with nobody assigned to
+            # fetch a loose ball — a separate bug of its own), the computed
+            # target never converges on the ball, so the presser parks
+            # nearby and never actually closes in to take possession. Two
+            # tactics that are each individually reasonable in isolation
+            # (contain a threat; don't chase a ball the opponent is closer
+            # to) combined into a ball that nobody ever collects, for the
+            # rest of a 600s match. When the ball is genuinely unclaimed,
+            # go straight for it instead of shadowing a non-threat.
+            commands[presser_id] = go_to_ball(
+                game=game, motion_controller=ctx.motion_controller, robot_id=presser_id, ctx=ctx
             )
         else:
             commands[presser_id] = block_attacker(

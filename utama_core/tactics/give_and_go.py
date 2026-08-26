@@ -67,6 +67,22 @@ from utama_core.tactics._pass_and_score import _pass_exec
 _MAX_HOPS_PER_POSSESSION = 6  # safety valve — force a shot attempt rather than passing forever
 _SUGGEST_HANDOFF_TIME = 2.0  # seconds — see suggest_next below
 _SUGGEST_HANDOFF_TICKS = round(_SUGGEST_HANDOFF_TIME * CONTROL_FREQUENCY)
+# Safety valve for a single in-flight hop, mirroring _MAX_HOPS_PER_POSSESSION's
+# role for the whole possession: _pass_exec's synchronized passer/receiver
+# handshake (both must reach position + orientation before either kicks) has
+# no timeout of its own. Found live (stuck-match investigation,
+# 2026-08-26, docs/testing_gaps.md gap #11): a carrier trapped in an extreme
+# field corner locked a receiver_id and then held the ball motionless for
+# the rest of a 600s match — `is_committed()` returns True whenever
+# receiver_id is not None, so nothing ever reassigns these robots either,
+# and no custom_referee rule catches a legally-dribbling, barely-moving
+# ball outside a defense area (keeper_held_ball only watches the defense
+# area; excessive_dribbling only watches distance carried, not hold time).
+# Abandoning a hop that's taken too long and forcing the fallback shoot/
+# reposition path (same one used when no pass lane exists at all) breaks
+# the deadlock regardless of which specific geometry caused the receiver to
+# never arrive.
+_MAX_HOP_TICKS = round(4.0 * CONTROL_FREQUENCY)  # 4s — generous vs. a real catch, short vs. a match
 _RELOCATE_MIN_SEPARATION = 0.9  # metres — a relocating support point must clear the carrier and other supports
 # Retreat standoff from our own area front edge while the ball is in our own
 # half: support robots hold this far off the box line instead of packing it.
@@ -138,6 +154,7 @@ class GiveAndGoMem:
     receiver_id: Optional[int] = None  # locked target for the in-flight hop, None while deciding
     hop_count: int = 0
     ticks_held: int = 0  # ticks since the current carrier was assigned; feeds suggest_next's timeout below
+    hop_ticks: int = 0  # ticks since receiver_id was locked for the current hop; feeds _MAX_HOP_TICKS below
 
 
 class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
@@ -188,7 +205,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: GiveAndGoMem
     ) -> tuple[dict[RobotId, RobotCommand], GiveAndGoMem]:
         if mem.carrier_id is None or mem.carrier_id not in robot_ids:
-            mem.carrier_id, mem.receiver_id, mem.hop_count, mem.ticks_held = robot_ids[0], None, 0, 0
+            mem.carrier_id, mem.receiver_id, mem.hop_count, mem.ticks_held, mem.hop_ticks = robot_ids[0], None, 0, 0, 0
 
         mem.ticks_held += 1
         carrier_id = mem.carrier_id
@@ -238,15 +255,27 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         force_shot = mem.hop_count >= _MAX_HOPS_PER_POSSESSION or not others
         if not force_shot and mem.receiver_id is None and not _has_open_shot(game, carrier_id):
             mem.receiver_id = _best_receiver(game, carrier_id, others)
+            mem.hop_ticks = 0
 
         if mem.receiver_id is not None:
-            hop_commands, pass_complete = _pass_exec(game, ctx, carrier_id, mem.receiver_id)
-            commands.update(hop_commands)
-            self._relocate_others(game, ctx, robot_ids, carrier_id, commands, also_exclude=mem.receiver_id)
-            if pass_complete:
-                mem.carrier_id, mem.receiver_id = mem.receiver_id, None
-                mem.hop_count += 1
-            return commands, mem
+            mem.hop_ticks += 1
+            if mem.hop_ticks >= _MAX_HOP_TICKS:
+                # Receiver never became ready (unreachable intercept point,
+                # stuck itself, or any other reason _pass_exec's handshake
+                # never resolves) — abandon this hop rather than holding the
+                # ball forever. Falls through to the shoot-or-reposition
+                # branch below on this same tick.
+                mem.receiver_id = None
+                mem.hop_ticks = 0
+            else:
+                hop_commands, pass_complete = _pass_exec(game, ctx, carrier_id, mem.receiver_id)
+                commands.update(hop_commands)
+                self._relocate_others(game, ctx, robot_ids, carrier_id, commands, also_exclude=mem.receiver_id)
+                if pass_complete:
+                    mem.carrier_id, mem.receiver_id = mem.receiver_id, None
+                    mem.hop_count += 1
+                    mem.hop_ticks = 0
+                return commands, mem
 
         # No pass in flight: either we have an open shot, or we've hit the hop
         # cap and are forcing one regardless of lane quality.
