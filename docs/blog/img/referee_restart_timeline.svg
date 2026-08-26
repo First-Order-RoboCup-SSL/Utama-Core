@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 660" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .lbl { fill: #8a9099; font-size: 13px; }
+      .sub { fill: #6a7078; font-size: 11px; }
+      .seg-text { fill: #eceef0; font-size: 12.5px; font-weight: 500; }
+      .seg-note { fill: #ffffff; font-size: 10px; font-weight: 400; opacity: 0.85; }
+      .annot { fill: #e0a14a; font-size: 11.5px; font-weight: 500; }
+      .annot-red { fill: #e08279; font-size: 12px; font-weight: 600; }
+      .annot-grey { fill: #9aa0a8; font-size: 12px; }
+      .tick { fill: #6a7078; font-size: 11px; }
+      .legend-text { fill: #9aa0a8; font-size: 12px; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="660" fill="#15181c"/>
+
+  <text x="24" y="30" class="lbl" style="font-size:13px; letter-spacing:0.05em; text-transform:uppercase;">
+    Referee restart — <tspan fill="#e0a14a">partition &amp; commitment across a barrier reset</tspan>
+  </text>
+
+  <!-- Row labels -->
+  <text x="24" y="70" class="lbl">referee</text>
+  <text x="24" y="112" class="lbl">robot 0</text>
+  <text x="24" y="127" class="sub">goalkeeper</text>
+  <text x="24" y="176" class="lbl">robot 1</text>
+  <text x="24" y="220" class="lbl">robot 2</text>
+  <text x="24" y="264" class="lbl">robot 3</text>
+  <text x="24" y="308" class="lbl">robot 4</text>
+  <text x="24" y="352" class="lbl">robot 5</text>
+
+  <!-- Column x-ranges: col A [140,560], barrier [560,600], col B [600,860], col C [860,1156] -->
+
+  <!-- referee row: y 52-82 -->
+  <rect x="140" y="52" width="420" height="30" rx="4" fill="#4a4f57"/>
+  <text x="350" y="71" text-anchor="middle" class="seg-text">NORMAL_START</text>
+
+  <rect x="560" y="52" width="40" height="30" fill="#c0524a"/>
+
+  <rect x="600" y="52" width="260" height="30" rx="4" fill="#6f6bcf"/>
+  <text x="730" y="71" text-anchor="middle" class="seg-text">BALL_PLACEMENT_THEIRS</text>
+
+  <rect x="860" y="52" width="296" height="30" rx="4" fill="#4a4f57"/>
+  <text x="1008" y="71" text-anchor="middle" class="seg-text">NORMAL_START</text>
+
+  <!-- robot 0: y 96-132 -->
+  <rect x="140" y="96" width="420" height="36" rx="4" fill="#4a4f57"/>
+  <text x="350" y="118" text-anchor="middle" class="seg-text">GoalkeeperTactic</text>
+  <rect x="560" y="96" width="40" height="36" fill="#c0524a"/>
+  <rect x="600" y="96" width="260" height="36" rx="4" fill="#6f6bcf"/>
+  <text x="730" y="113" text-anchor="middle" class="seg-text">frozen</text>
+  <text x="730" y="126" text-anchor="middle" class="seg-note">(override owns cmd)</text>
+  <rect x="860" y="96" width="296" height="36" rx="4" fill="#4a4f57"/>
+  <text x="1008" y="118" text-anchor="middle" class="seg-text">GoalkeeperTactic</text>
+
+  <!-- annotation: pinned — its own dedicated band, y 140-154, clear of every row -->
+  <text x="440" y="152" class="annot" text-anchor="start">robots 1–2 pinned — partitioner never sees them as free</text>
+
+  <!-- robot 1: y 160-196 -->
+  <rect x="140" y="160" width="420" height="36" rx="4" fill="#3e6b58" stroke="#6fbf9f"/>
+  <text x="350" y="182" text-anchor="middle" class="seg-text">LeadAndSupportTactic</text>
+  <rect x="560" y="160" width="40" height="36" fill="#c0524a"/>
+  <rect x="600" y="160" width="260" height="36" rx="4" fill="#6f6bcf"/>
+  <text x="730" y="177" text-anchor="middle" class="seg-text">BallPlacementTheirsStep</text>
+  <text x="730" y="190" text-anchor="middle" class="seg-note">(RefereeOverride owns this tick)</text>
+  <rect x="860" y="160" width="296" height="36" rx="4" fill="#4a4f57"/>
+  <text x="1008" y="182" text-anchor="middle" class="seg-text">ShadowAndMarkTactic</text>
+
+  <!-- robot 2: y 204-240 -->
+  <rect x="140" y="204" width="420" height="36" rx="4" fill="#3e6b58" stroke="#6fbf9f"/>
+  <text x="350" y="226" text-anchor="middle" class="seg-text">LeadAndSupportTactic</text>
+  <rect x="560" y="204" width="40" height="36" fill="#c0524a"/>
+  <rect x="600" y="204" width="260" height="36" rx="4" fill="#6f6bcf"/>
+  <text x="730" y="226" text-anchor="middle" class="seg-text">BallPlacementTheirsStep</text>
+  <rect x="860" y="204" width="296" height="36" rx="4" fill="#4a4f57"/>
+  <text x="1008" y="226" text-anchor="middle" class="seg-text">ShadowAndMarkTactic</text>
+
+  <!-- committed() box around robot 1-2's last segment before reset, sized to stay inside col A -->
+  <rect x="436" y="158" width="120" height="84" rx="6" fill="none" stroke="#e0a14a" stroke-width="2"/>
+  <text x="496" y="204" text-anchor="middle" class="seg-text" style="font-weight:600;">committed()</text>
+
+  <!-- robot 3: y 248-284 -->
+  <rect x="140" y="248" width="420" height="36" rx="4" fill="#4a4f57"/>
+  <text x="350" y="270" text-anchor="middle" class="seg-text">ShadowAndMarkTactic</text>
+  <rect x="560" y="248" width="40" height="36" fill="#c0524a"/>
+  <rect x="600" y="248" width="260" height="36" rx="4" fill="#6f6bcf"/>
+  <text x="730" y="270" text-anchor="middle" class="seg-text">BallPlacementTheirsStep</text>
+  <rect x="860" y="248" width="296" height="36" rx="4" fill="#4a4f57"/>
+  <text x="1008" y="270" text-anchor="middle" class="seg-text">ShadowAndMarkTactic</text>
+
+  <!-- robot 4: y 292-328 -->
+  <rect x="140" y="292" width="420" height="36" rx="4" fill="#4a4f57"/>
+  <text x="350" y="314" text-anchor="middle" class="seg-text">ShadowAndMarkTactic</text>
+  <rect x="560" y="292" width="40" height="36" fill="#c0524a"/>
+  <rect x="600" y="292" width="260" height="36" rx="4" fill="#6f6bcf"/>
+  <text x="730" y="314" text-anchor="middle" class="seg-text">BallPlacementTheirsStep</text>
+  <rect x="860" y="292" width="296" height="36" rx="4" fill="#3e6b58" stroke="#6fbf9f"/>
+  <text x="1008" y="314" text-anchor="middle" class="seg-text">LeadAndSupportTactic</text>
+
+  <!-- robot 5: y 336-372 -->
+  <rect x="140" y="336" width="420" height="36" rx="4" fill="#4a4f57"/>
+  <text x="350" y="358" text-anchor="middle" class="seg-text">ShadowAndMarkTactic</text>
+  <rect x="560" y="336" width="40" height="36" fill="#c0524a"/>
+  <rect x="600" y="336" width="260" height="36" rx="4" fill="#6f6bcf"/>
+  <text x="730" y="358" text-anchor="middle" class="seg-text">BallPlacementTheirsStep</text>
+  <rect x="860" y="336" width="296" height="36" rx="4" fill="#3e6b58" stroke="#6fbf9f"/>
+  <text x="1008" y="358" text-anchor="middle" class="seg-text">LeadAndSupportTactic</text>
+
+  <!-- vertical dashed lines: stop at the row band, well clear of the footer text below -->
+  <line x1="580" y1="52" x2="580" y2="380" stroke="#c0524a" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="1008" y1="52" x2="1008" y2="380" stroke="#7a7f87" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+  <!-- partition redraw annotation -->
+  <line x1="1008" y1="384" x2="1008" y2="404" stroke="#9aa0a8" stroke-width="1.5"/>
+  <polygon points="1008,384 1003,393 1013,393" fill="#9aa0a8"/>
+  <text x="1008" y="421" text-anchor="middle" class="annot-grey">partition redrawn: 3↔4/5 swap tactics freely</text>
+
+  <!-- footer notes -->
+  <text x="580" y="459" text-anchor="middle" class="annot-red">t9: restart arrives → commitments + mem cleared instantly, for every slot</text>
+  <text x="590" y="484" text-anchor="middle" class="annot-grey">t14: NORMAL_START → no tactic was "mid-commitment" to reconcile — reset already happened at t9</text>
+
+  <!-- tick axis -->
+  <line x1="140" y1="509" x2="1156" y2="509" stroke="#3a3f45" stroke-width="1"/>
+  <text x="140" y="529" class="tick">t0</text>
+  <text x="560" y="529" class="tick">t9</text>
+  <text x="600" y="529" class="tick">t10</text>
+  <text x="860" y="529" class="tick">t14</text>
+  <text x="1140" y="529" class="tick">t18</text>
+
+  <!-- legend -->
+  <rect x="140" y="580" width="12" height="12" rx="2" fill="#4a4f57"/>
+  <text x="160" y="590" class="legend-text">ordinary Tactic slot</text>
+
+  <rect x="330" y="580" width="12" height="12" rx="2" fill="#3e6b58" stroke="#6fbf9f"/>
+  <text x="350" y="590" class="legend-text">tactic currently is_committed()</text>
+
+  <rect x="590" y="580" width="12" height="12" rx="2" fill="#6f6bcf"/>
+  <text x="610" y="590" class="legend-text">RefereeOverride owns the robot directly</text>
+
+  <rect x="900" y="580" width="12" height="12" rx="2" fill="#c0524a"/>
+  <text x="920" y="590" class="legend-text">barrier reset tick</text>
+</svg>
