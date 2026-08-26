@@ -484,6 +484,85 @@ def test_halt_auto_resumes_to_normal_start_in_sim(headless):
 
 
 # ---------------------------------------------------------------------------
+# Scenario 6: a real out-of-bounds restart reaches BALL_PLACEMENT_* through
+# StrategyRunner, not just through GameStateMachine in isolation
+#
+# GameStateMachine._handle_foul/_handle_goal always route a stopping restart
+# through BALL_PLACEMENT_* first (see state_machine.py: designated_position
+# non-None on STOP implies next_command is a BALL_PLACEMENT_* command). But
+# StrategyRunner._run_step had a sim-only fast path that raced this: on the
+# very first STOP tick with a designated_position, it teleported the ball and
+# force_command()'d straight to FORCE_START — winning the race every time,
+# since STOP is observed strictly before BALL_PLACEMENT_* is. That made
+# BallPlacementInterferenceRule structurally unreachable in every rsim/grsim
+# run, which is exactly why it had never fired in any tournament (see
+# docs/testing_gaps.md gap #6/#9) — not under-sampling, a real bug. Every
+# test in test_ball_placement_rsim.py already worked around this by injecting
+# BALL_PLACEMENT_YELLOW directly via force_command() instead of going through
+# set_command()/a real restart (see those tests' own comments).
+#
+# Fixed by gating that fast path on ref_data.next_command not being a
+# BALL_PLACEMENT_* command (strategy_runner.py). This test proves the fix by
+# driving the real OutOfBoundsRule → STOP → BALL_PLACEMENT_YELLOW path (no
+# force_command shortcut) and confirming BALL_PLACEMENT_YELLOW is actually
+# observed in game.referee before the restart concludes.
+# ---------------------------------------------------------------------------
+
+
+class _RealOutOfBoundsReachesBallPlacementManager(AbstractTestManager):
+    """A real (rule-detected, not force_command-injected) out-of-bounds
+    restart must pass through BALL_PLACEMENT_YELLOW/BLUE, not skip it."""
+
+    n_episodes = 1
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.ball_placement_seen: bool = False
+
+    def reset_field(self, sim_controller: AbstractSimController, game: Game) -> None:
+        # Ball just inside the sideline with outward velocity — drifts out of
+        # bounds within a tick or two, same as a real in-play kick, rather
+        # than teleporting it to an already-illegal (and rejected) position.
+        # Robot 0 stays planted right next to the exit point (inside
+        # _BALL_CLEAR_DIST, GameStateMachine's 0.5m) instead of starting far
+        # away: this is what actually forces STOP to persist for multiple
+        # ticks with designated_position already set — the exact race window
+        # StrategyRunner's fast path used to win every time (see this
+        # scenario's module comment above). Starting all robots far away
+        # (as an earlier version of this test did) let STOP auto-advance
+        # within the same tick it was entered, which never exercised the
+        # race at all and passed identically with or without the fix.
+        sim_controller.teleport_ball(0.0, STANDARD_FIELD_DIMS.full_field_half_width - 0.1, vx=0.0, vy=3.0)
+        sim_controller.teleport_robot(game.my_team_is_yellow, 0, 0.1, STANDARD_FIELD_DIMS.full_field_half_width - 0.1)
+        for rid in (1, 2):
+            sim_controller.teleport_robot(game.my_team_is_yellow, rid, -2.0 - rid, -2.0)
+
+    def eval_status(self, game: Game) -> TestingStatus:
+        ref = game.referee
+        if ref is None:
+            return TestingStatus.IN_PROGRESS
+        if ref.referee_command in (RefereeCommand.BALL_PLACEMENT_YELLOW, RefereeCommand.BALL_PLACEMENT_BLUE):
+            self.ball_placement_seen = True
+            return TestingStatus.SUCCESS
+        return TestingStatus.IN_PROGRESS
+
+
+def test_real_out_of_bounds_restart_reaches_ball_placement(headless):
+    referee = CustomReferee.from_profile_name("simulation")
+    referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+    runner = _make_runner(referee)
+    tm = _RealOutOfBoundsReachesBallPlacementManager()
+
+    passed = runner.run_test(tm, episode_timeout=10.0, rsim_headless=headless)
+
+    assert tm.ball_placement_seen, (
+        "A real out-of-bounds restart never reached BALL_PLACEMENT_* — "
+        "StrategyRunner's STOP fast path is hijacking it into FORCE_START again"
+    )
+    assert passed
+
+
+# ---------------------------------------------------------------------------
 # Future work: full out-of-bounds sequence integration test
 #
 # Intended scenario:
@@ -504,8 +583,4 @@ def test_halt_auto_resumes_to_normal_start_in_sim(headless):
 #   mechanics need tighter integration (approach from behind, slower final
 #   approach speed, or a dedicated "get-behind-ball" skill) before ball
 #   placement via robot carry can be reliably tested end-to-end.
-#
-# Additionally, OutOfBoundsRule currently issues STOP → DIRECT_FREE directly
-# (no automatic ball placement step). Ball placement must be injected manually
-# via set_command(), which makes the test scenario somewhat artificial.
 # ---------------------------------------------------------------------------

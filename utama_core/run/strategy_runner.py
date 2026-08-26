@@ -1344,10 +1344,27 @@ class StrategyRunner:
                 if (
                     ref_data.referee_command == RefereeCommand.STOP
                     and self._prev_custom_ref_command != RefereeCommand.STOP
+                    and ref_data.next_command not in _BALL_PLACEMENT_COMMANDS
                 ):
                     # On transition into STOP with a designated position, teleport
                     # the ball immediately and skip straight to FORCE_START so
                     # simulation doesn't wait for physical ball placement.
+                    #
+                    # Guarded on next_command: GameStateMachine sets
+                    # designated_position on EVERY stopping restart (goals
+                    # included, via ball_placement_target), and whenever it does,
+                    # next_command is always the matching BALL_PLACEMENT_* command
+                    # (state_machine.py's _handle_foul/_handle_goal). So without
+                    # this guard, this branch raced the BALL_PLACEMENT_* branch
+                    # below and always won — STOP is observed strictly before
+                    # BALL_PLACEMENT_*, so every restart got hijacked into
+                    # FORCE_START before the state machine ever reached
+                    # BALL_PLACEMENT_*. That made BallPlacementInterferenceRule
+                    # structurally unreachable in every rsim/grsim run, which is
+                    # why it had never fired in any tournament (see
+                    # docs/testing_gaps.md gap #6/#9). This branch must only
+                    # fire for STOP-preceded restarts that do NOT go through
+                    # ball placement.
                     x, y = ref_data.designated_position
                     self.sim_controller.teleport_ball(x, y)
                     self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)

@@ -213,7 +213,7 @@ Convenience constructor:
 
 ## Profiles
 
-Three built-in YAML profiles select the active rule set. Load by name or file path:
+Two built-in YAML profiles select the active rule set. Load by name or file path:
 
 ```python
 referee = CustomReferee.from_profile_name("simulation")
@@ -233,11 +233,15 @@ referee = CustomReferee.from_profile_name("/path/to/my_profile.yaml")
 
 **`simulation`** — Full SSL-compatible rule set with auto-advance enabled for most restarts. Use for simulator testing, AI-vs-AI development, and RL training.
 
-**`human`** — Goal detection only, with operator-controlled stage transitions. Use for human-involved scenarios such as real-world testing and physical field sessions where a referee operator should control restarts explicitly.
+**`human`** — every rule disabled, operator-controlled stage transitions. Use for human-involved scenarios — real-world testing, physical field sessions, and human-vs-robot exhibition play — where strict SSL rules would constantly foul a human player and a referee operator should control restarts explicitly instead. (A third profile, `gerf`, existed for one specific 2026 exhibition event and has since been removed now that event is over; `human` is the profile for this use case going forward.)
+
+A third-party or one-off profile is just another YAML file passed by path — see the schema below.
 
 ### YAML schema
 
 The YAML profile manages rules and game settings. Geometry is always overridden from `full_field_dims` at startup when running through `StrategyRunner`. For standalone use, geometry can be passed explicitly to the `CustomReferee` constructor (and defaults to `STANDARD_FIELD_DIMS`). The YAML profile does not configure geometry.
+
+Every rule listed under `rules:` should be given an explicit `enabled: true/false` — a rule block **omitted** from the YAML silently falls back to `enabled: true` with the rule's stock (sim-tuned) defaults, which `load_profile()` now warns about (`UserWarning`, listing every missing rule by name) precisely because that fallback has already caused one real bug: a profile meant to relax strict rules for human/exhibition play silently ran 9 unlisted rules fully enabled. Copy `human.yaml` or `simulation.yaml` as a starting point for a new profile so every rule stays explicit.
 
 ```yaml
 profile_name: "simulation"
@@ -261,6 +265,11 @@ rules:
     max_speed_mps: 6.5
   double_touch:
     enabled: true
+  # keeper_held_ball, excessive_dribbling, robot_stop_speed, pushing,
+  # crashing, defense_area_stoppage, ball_placement_interference also exist
+  # (see profile_loader.py's RulesConfig for the full list/current defaults
+  # of each) — omitted here only because this doc snippet predates them;
+  # a real profile YAML (see simulation.yaml/human.yaml) must list all 13.
 game:
   half_duration_seconds: 300.0
   kickoff_team: "yellow"

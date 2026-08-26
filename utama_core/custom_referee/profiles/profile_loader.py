@@ -232,8 +232,37 @@ def load_profile(name_or_path: str) -> RefereeProfile:
     return _parse_profile(data)
 
 
+_ALL_RULE_NAMES = frozenset(
+    {
+        "goal_detection",
+        "out_of_bounds",
+        "defense_area",
+        "keep_out",
+        "ball_speed",
+        "double_touch",
+        "keeper_held_ball",
+        "excessive_dribbling",
+        "robot_stop_speed",
+        "pushing",
+        "crashing",
+        "defense_area_stoppage",
+        "ball_placement_interference",
+    }
+)
+
+
 def _parse_profile(data: dict) -> RefereeProfile:
     rules_d = data.get("rules", {})
+
+    missing = _ALL_RULE_NAMES - rules_d.keys()
+    if missing:
+        warnings.warn(
+            f"Referee profile {data.get('profile_name', 'unknown')!r} does not list rule(s) "
+            f"{sorted(missing)} — each silently defaults to enabled=True with stock thresholds. "
+            "List every rule explicitly (enabled: true/false) to avoid an unintended rule "
+            "firing in a profile that didn't mean to enable it.",
+            stacklevel=2,
+        )
 
     gd = rules_d.get("goal_detection", {})
     goal_cfg = GoalDetectionConfig(
