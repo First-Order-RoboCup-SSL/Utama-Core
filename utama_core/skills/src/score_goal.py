@@ -143,7 +143,7 @@ def _find_best_shot(
             similar-clearance gaps tick to tick while the true underlying
             defensive picture was near-static. Same class of fix as
             `_weak_side`'s margin gate in `switch_of_play.py` and
-            `go_to_ball`'s `_COMMIT_RANGE` — require a real margin before
+            `shielding.py`'s `COMMIT_RANGE` — require a real margin before
             switching, not a raw greater-than comparison.
 
     Returns:

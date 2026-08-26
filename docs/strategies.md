@@ -699,6 +699,23 @@ the full account of what replaced them and why.
   call site in `_pass_and_score.py` uses `visual=True`; brought in line.
   Verified fixed: `high_line_zone` vs `low_block` now scores 1-0 (was 0-0,
   0 shots). Full 91-match backfill not yet re-run post-fix.
+  **Update 2026-08-26:** the shield-approach logic and `_COMMIT_RANGE`
+  described above were extracted out of `go_to_ball.py` into their own
+  module, `utama_core/skills/src/shielding.py` (now `COMMIT_RANGE`/
+  `CONTEST_RANGE`, no leading underscore). Same values, same behavior by
+  default (`go_to_ball(shield=True)` is still the default) — this was a
+  placement fix, not a logic change: the original 2026-08-20 commit put
+  shielding inside `go_to_ball` for reach ("many tactics call this
+  function, so fixing it here fixes them all"), not because it was a
+  natural fit for a shared movement primitive, and the `_COMMIT_RANGE`
+  patch documented in this same entry was itself a second data point that
+  the blanket behavior didn't fit every caller. `go_to_ball(shield=False)`
+  now lets a tactic opt out explicitly instead of every caller inheriting
+  it unconditionally. Whether shielding is still needed as often as it was
+  when the pin problem was first found (it required two robots racing
+  *symmetrically* to the same point, e.g. a kickoff with no ceremony —
+  since fixed) is an open question, not yet investigated; see
+  `docs/testing_gaps.md` if that investigation happens.
 - **`default` vs `low_block` still draws 0-0 after the `go_to_ball` fix** — partial
   improvement only (possession moved from a near-total pin to 55%/44%, ball
   travel from ~6.8m to 8.78m) — see
