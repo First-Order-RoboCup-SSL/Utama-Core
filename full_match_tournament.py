@@ -84,6 +84,7 @@ import dataclasses
 import itertools
 import json
 import os
+import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -211,18 +212,31 @@ def main() -> None:
     if missing:
         raise SystemExit(f"Missing expected competitive config(s): {missing}")
 
+    # --no-save: skip the replay/intention-log/stats/summary.json trail for a
+    # throwaway smoke-test run that doesn't need to be analyzed afterward —
+    # this run's per-match replays can be tens to hundreds of MB each, and an
+    # always-on run_dir with no opt-out is exactly how replays/ silently
+    # filled up with unreferenced gigabytes before (cleaned up 2026-08-26;
+    # see docs/STRATEGY_DEVELOPMENT.md's Observability section).
+    no_save = "--no-save" in sys.argv[1:]
+
     base_pairs = list(itertools.combinations(sorted(COMPETITIVE), 2))
     cells = list(itertools.product([True, False], [True, False]))
     jobs = [(a, b, a_is_right, a_kicks_off) for a, b in base_pairs for a_is_right, a_kicks_off in cells]
 
     run_id = datetime.now(timezone.utc).strftime("tournament_%Y%m%d_%H%M%S")
-    run_dir = REPLAY_BASE_PATH / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
+    run_dir: Optional[Path] = None
+    if not no_save:
+        run_dir = REPLAY_BASE_PATH / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Competitive-only decoupled round-robin: {len(COMPETITIVE)} configs, {len(base_pairs)} pairs")
     print(f"{len(cells)} cells/pair (side x kickoff) = {len(jobs)} matches")
     print(f"6v6, {tournament.MATCH_DURATION_SECONDS:.0f}s sim time per match (full match), headless rsim")
-    print(f"Recording to replays/{run_id}/\n")
+    if no_save:
+        print("--no-save: not recording replay/intention-log/stats for this run\n")
+    else:
+        print(f"Recording to replays/{run_id}/\n")
 
     # Each match is 1 pool-worker process + 2 robosim subprocesses (friendly +
     # enemy sim), so oversubscription hits at ~1/3 of cpu_count() concurrent
@@ -279,10 +293,11 @@ def main() -> None:
         ],
         "standings": {name: {"wins": wins[name], "draws": draws[name]} for name in COMPETITIVE},
     }
-    summary_path = run_dir / "summary.json"
-    with open(summary_path, "w") as f:
-        json.dump(summary, f, indent=2)
-    print(f"\nFull results + stats: replays/{run_id}/summary.json")
+    if run_dir is not None:
+        summary_path = run_dir / "summary.json"
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=2)
+        print(f"\nFull results + stats: replays/{run_id}/summary.json")
 
 
 if __name__ == "__main__":

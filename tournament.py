@@ -29,9 +29,15 @@ Every run records the full observability stack (structured intention log,
 aggregate stats, replay trail — see `utama_core.engine.match_log`/
 `match_stats`, `utama_core.replay`) per match under
 `replays/tournament_<UTC-timestamp>/`, plus one `summary.json` for the whole
-run. `--verbose`/`-v` also prints a possession/shots/ball-travel line per
-match as it completes; the recording itself is unconditional since it's
-cheap and is what a tournament run is actually for.
+run — on by default, since it's cheap and is what a tournament run is
+usually for. Pass `--no-save` for a quick throwaway run (e.g. a smoke test
+of a code change) that doesn't need the trace kept afterward — replays in
+particular can be tens to hundreds of MB per match, and a `--no-save` run
+that's forgotten about is exactly how `replays/` silently filled up with
+unreferenced gigabytes before (cleaned up 2026-08-26; see
+`docs/STRATEGY_DEVELOPMENT.md`'s Observability section). `--verbose`/`-v`
+also prints a possession/shots/ball-travel line per match as it completes,
+independent of `--no-save`.
 
 `--both-sides` plays each pair twice — once with each config as
 `config_a` (yellow, defending/attacking the right side per `run_match`'s
@@ -213,12 +219,13 @@ def main() -> None:
     # `--verbose`/`-v` prints each match's possession/shots/ball-travel line
     # alongside the score. The full observability stack (intention log, full
     # stats JSON, replay trail — see `utama_core.engine.match_log`/
-    # `match_stats`, `utama_core.replay`) is always recorded regardless of
-    # this flag, under `replays/tournament_<timestamp>/`: it's cheap (a few
-    # KB of JSON/JSONL plus one replay per match) and is the point of running
-    # a tournament at all — a bare win/loss tally without the trace behind it
-    # was exactly what made the earlier scoreless-match investigations start
-    # from zero every time.
+    # `match_stats`, `utama_core.replay`) is recorded by default, under
+    # `replays/tournament_<timestamp>/`: it's cheap per match and is the
+    # point of running a tournament at all — a bare win/loss tally without
+    # the trace behind it was exactly what made the earlier scoreless-match
+    # investigations start from zero every time. `--no-save` skips all of
+    # it (no run_dir created, no summary.json) for a throwaway smoke-test
+    # run that doesn't need to be analyzed afterward.
     args = sys.argv[1:]
     sequential = "--sequential" in args
     args = [a for a in args if a != "--sequential"]
@@ -231,6 +238,8 @@ def main() -> None:
         idx = args.index("--max-workers")
         max_workers_override = int(args[idx + 1])
         args = args[:idx] + args[idx + 2 :]
+    no_save = "--no-save" in args
+    args = [a for a in args if a != "--no-save"]
 
     if args:
         requested = set(args)
@@ -258,12 +267,17 @@ def main() -> None:
     pairs = [(a, b) for a, b in base_pairs] + ([(b, a) for a, b in base_pairs] if both_sides else [])
 
     run_id = datetime.now(timezone.utc).strftime("tournament_%Y%m%d_%H%M%S")
-    run_dir = REPLAY_BASE_PATH / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
+    run_dir: Optional[Path] = None
+    if not no_save:
+        run_dir = REPLAY_BASE_PATH / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Round-robin: {len(config_names)} configs, {len(pairs)} matches" + (" (both sides)" if both_sides else ""))
     print(f"{N_OUTFIELD + 1}v{N_OUTFIELD + 1}, {MATCH_DURATION_SECONDS:.0f}s sim time per match, headless rsim")
-    print(f"Recording to replays/{run_id}/ (per-match replay, intention log, stats)")
+    if no_save:
+        print("--no-save: not recording replay/intention-log/stats for this run")
+    else:
+        print(f"Recording to replays/{run_id}/ (per-match replay, intention log, stats)")
     if not sequential:
         default_workers = max(1, (os.cpu_count() or 1) - 1)
         n_workers = min(len(pairs), max_workers_override or default_workers)
@@ -339,10 +353,11 @@ def main() -> None:
         ],
         "standings": {name: {"wins": wins[name], "draws": draws[name]} for name in config_names},
     }
-    summary_path = run_dir / "summary.json"
-    with open(summary_path, "w") as f:
-        json.dump(summary, f, indent=2)
-    print(f"\nFull results + stats: replays/{run_id}/summary.json")
+    if run_dir is not None:
+        summary_path = run_dir / "summary.json"
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=2)
+        print(f"\nFull results + stats: replays/{run_id}/summary.json")
 
 
 if __name__ == "__main__":

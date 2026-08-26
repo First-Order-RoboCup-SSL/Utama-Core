@@ -126,6 +126,12 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
   trails over a time window from a replay `.pkl`, for the one thing text traces are bad at
   (spatial motion). `render_around_event()` anchors the window on a `MatchLog` event index
   directly, instead of guessing a raw timestamp.
+  **Default to this over `replay_player.load_frames_in_range()` when investigating a replay
+  window** — a wall of per-tick floating-point coordinates is expensive to hold in context
+  and easy to misread spatially (an LLM reconstructing "who's moving which way" from a
+  number table is slower and less reliable than looking at a picture). Reach for
+  `load_frames_in_range` only after the image has localized what to look at and you need an
+  exact numeric value (a precise distance, a threshold check) — not as the first move.
 - **`docs/strategies.md`** — the strategy catalog: every `build_*_kernel_strategy` factory,
   its status (`baseline`/`competitive`/`parked`/`experimental`), and real round-robin
   results. Check here before treating an old strategy's win/loss record as current, and
