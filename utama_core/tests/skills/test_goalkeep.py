@@ -115,8 +115,8 @@ def test_goalkeep_fallback_uses_side_aware_shadow_target(monkeypatch):
         my_team_is_right=False,
         field=_std_field(False),
         friendly_robots={
-            0: SimpleNamespace(p=Vector2D(-4.2, 0.0)),
-            1: SimpleNamespace(p=Vector2D(-3.0, 0.2)),
+            0: SimpleNamespace(p=Vector2D(-4.2, 0.0), orientation=0.0),
+            1: SimpleNamespace(p=Vector2D(-3.0, 0.2), orientation=0.0),
         },
         ball=SimpleNamespace(
             p=Vector3D(-1.0, -0.3, 0.0),
@@ -151,8 +151,8 @@ def test_goalkeep_uses_predicted_intercept_inside_goal(monkeypatch):
         my_team_is_right=False,
         field=_std_field(False),
         friendly_robots={
-            0: SimpleNamespace(p=Vector2D(-4.2, 0.0)),
-            1: SimpleNamespace(p=Vector2D(-3.0, 0.2)),
+            0: SimpleNamespace(p=Vector2D(-4.2, 0.0), orientation=0.0),
+            1: SimpleNamespace(p=Vector2D(-3.0, 0.2), orientation=0.0),
         },
         ball=SimpleNamespace(
             p=Vector3D(-1.0, 0.0, 0.0),
@@ -184,7 +184,7 @@ def test_goalkeep_single_keeper_no_prediction_tracks_ball_y(monkeypatch):
         my_team_is_right=False,
         field=_std_field(False),
         friendly_robots={
-            0: SimpleNamespace(p=Vector2D(-4.2, 0.0)),
+            0: SimpleNamespace(p=Vector2D(-4.2, 0.0), orientation=0.0),
         },
         ball=SimpleNamespace(
             p=Vector3D(-1.0, 0.2, 0.0),
@@ -212,7 +212,7 @@ def test_goalkeep_single_keeper_no_prediction_clamps_to_upper_post(monkeypatch):
         my_team_is_right=False,
         field=_custom_field(-1.5, 0.4),
         friendly_robots={
-            0: SimpleNamespace(p=Vector2D(-1.35, 0.0)),
+            0: SimpleNamespace(p=Vector2D(-1.35, 0.0), orientation=0.0),
         },
         ball=SimpleNamespace(
             p=Vector3D(-0.679, 0.623, 0.0),
@@ -242,7 +242,7 @@ def test_goalkeep_single_keeper_no_prediction_clamps_to_lower_post(monkeypatch):
         my_team_is_right=False,
         field=_custom_field(-1.5, 0.4),
         friendly_robots={
-            0: SimpleNamespace(p=Vector2D(-1.35, 0.0)),
+            0: SimpleNamespace(p=Vector2D(-1.35, 0.0), orientation=0.0),
         },
         ball=SimpleNamespace(
             p=Vector3D(-0.626, -0.495, 0.0),
@@ -272,9 +272,9 @@ def test_goalkeep_three_robots_uses_midpoint_of_two_shadow_edges(monkeypatch):
         my_team_is_right=False,
         field=_std_field(False),
         friendly_robots={
-            0: SimpleNamespace(p=Vector2D(-4.2, 0.0)),
-            1: SimpleNamespace(p=Vector2D(-3.0, 0.0)),
-            2: SimpleNamespace(p=Vector2D(-3.0, 0.4)),
+            0: SimpleNamespace(p=Vector2D(-4.2, 0.0), orientation=0.0),
+            1: SimpleNamespace(p=Vector2D(-3.0, 0.0), orientation=0.0),
+            2: SimpleNamespace(p=Vector2D(-3.0, 0.4), orientation=0.0),
         },
         ball=SimpleNamespace(
             p=Vector3D(-1.0, -0.2, 0.0),
@@ -316,8 +316,8 @@ def test_goalkeep_missing_expected_defender_id_falls_back_to_centre(monkeypatch)
         my_team_is_right=False,
         field=_std_field(False),
         friendly_robots={
-            0: SimpleNamespace(p=Vector2D(-4.2, 0.0)),
-            2: SimpleNamespace(p=Vector2D(-3.0, 0.2)),
+            0: SimpleNamespace(p=Vector2D(-4.2, 0.0), orientation=0.0),
+            2: SimpleNamespace(p=Vector2D(-3.0, 0.2), orientation=0.0),
         },
         ball=SimpleNamespace(
             p=Vector3D(-1.0, 0.0, 0.0),
@@ -370,8 +370,8 @@ def test_goalkeep_custom_goal_line_changes_intercept_x(monkeypatch):
         my_team_is_right=False,
         field=_custom_field(-6.0, 0.8),
         friendly_robots={
-            0: SimpleNamespace(p=Vector2D(-5.5, 0.0)),
-            1: SimpleNamespace(p=Vector2D(-4.0, 0.2)),
+            0: SimpleNamespace(p=Vector2D(-5.5, 0.0), orientation=0.0),
+            1: SimpleNamespace(p=Vector2D(-4.0, 0.2), orientation=0.0),
         },
         ball=SimpleNamespace(
             p=Vector3D(-1.0, -0.3, 0.0),
@@ -399,7 +399,7 @@ def test_goalkeep_custom_goal_width_changes_clamp_range(monkeypatch):
         my_team_is_right=False,
         field=_custom_field(-4.5, 0.8),
         friendly_robots={
-            0: SimpleNamespace(p=Vector2D(-4.2, 0.0)),
+            0: SimpleNamespace(p=Vector2D(-4.2, 0.0), orientation=0.0),
         },
         ball=SimpleNamespace(
             p=Vector3D(-1.0, 0.0, 0.0),
@@ -429,7 +429,7 @@ def test_goalkeep_wide_shot_clamps_to_post_limit(monkeypatch):
         my_team_is_right=False,
         field=_custom_field(-4.5, 0.3),
         friendly_robots={
-            0: SimpleNamespace(p=Vector2D(-4.2, 0.0)),
+            0: SimpleNamespace(p=Vector2D(-4.2, 0.0), orientation=0.0),
         },
         ball=SimpleNamespace(
             p=Vector3D(-1.0, 0.0, 0.0),
@@ -467,7 +467,7 @@ def test_goalkeep_drives_to_ball_at_rest_in_own_box(monkeypatch):
     game = SimpleNamespace(
         my_team_is_right=False,
         field=_std_field(False),
-        friendly_robots={0: SimpleNamespace(p=Vector2D(-4.2, 0.0), has_ball=False)},
+        friendly_robots={0: SimpleNamespace(p=Vector2D(-4.2, 0.0), orientation=0.0, has_ball=False)},
         ball=SimpleNamespace(p=Vector3D(-4.0, 0.3, 0.0), v=Vector3D(0.05, 0.0, 0.0)),
     )
     captured = {}
@@ -492,7 +492,7 @@ def test_goalkeep_ignores_fast_ball_in_box_treats_as_shot(monkeypatch):
     game = SimpleNamespace(
         my_team_is_right=False,
         field=_std_field(False),
-        friendly_robots={0: SimpleNamespace(p=Vector2D(-4.2, 0.0), has_ball=False)},
+        friendly_robots={0: SimpleNamespace(p=Vector2D(-4.2, 0.0), orientation=0.0, has_ball=False)},
         ball=SimpleNamespace(p=Vector3D(-4.0, 0.3, 0.0), v=Vector3D(2.0, 0.0, 0.0)),
     )
     captured = {}

@@ -8,7 +8,8 @@ module's docstring). Since this code now lives in Core, it uses Core's
 own `_find_best_shot` directly instead of carrying the duplicate forward.
 
 Each function is `(game, ...) -> value`: no blackboard, no py_trees
-Status, no hidden state.
+Status, no hidden state — with one deliberate exception, `has_ball`'s
+`_POSSESSION_STATE`, see that function's docstring for why.
 """
 
 from __future__ import annotations
@@ -27,8 +28,51 @@ from utama_core.skills.src.score_goal import (  # noqa: F401  (re-exported)
 
 ORIENTATION_TOLERANCE_RAD = 0.05
 
+# `has_ball(visual=True)`'s dribbler-relative acquire/release box — see that
+# function's docstring for the derivation. Measured against rsim's own
+# `isTouchingBall()`-backed `robot.has_ball` (`vendor/rSim/src/robosim/
+# sslrobot.cpp:127-144`, config constants in `sslconfig.h`:
+# `distanceCenterKicker=0.081`, `kickerWidth=0.080`) across two replays
+# (`switch_of_play_vs_default.pkl`, `tiki_taka_vs_counter_press.pkl`):
+# every real-sensor-True tick had the ball's chassis-frame forward offset in
+# [0.091, 0.112]m and lateral offset within ±0.043m. `_ACQUIRE_*` below adds
+# a small margin around that envelope (enough to say "yes" slightly before
+# rsim's own hold hinge would latch, since this fallback must also work for
+# robots/situations with no real sensor at all — enemy inference, real
+# hardware); `_RELEASE_*` is wider again, for the hysteresis band.
+_ACQUIRE_FORWARD_MIN = 0.0
+_ACQUIRE_FORWARD_MAX = 0.14
+_ACQUIRE_LATERAL_MAX = 0.05
+_RELEASE_FORWARD_MAX = 0.17
+_RELEASE_LATERAL_MAX = 0.065
 
-def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: float = 0.15) -> bool:
+# Per-robot "did the last tick's visual has_ball read True" state, keyed by
+# robot_id only (matching `shielding.py`'s `_COMMITTED_ROBOTS` — friendly-only
+# callers, so no team key needed). This is a deliberate departure from this
+# module's "no hidden state" rule, for the same reason `shielding.py` made
+# the same departure (see its `_COMMITTED_ROBOTS` docstring): a bare
+# stateless threshold cannot implement hysteresis, because the decision must
+# depend on which side of the band the caller last committed to, and a bare
+# threshold right at the dribbler-box boundary was confirmed to chatter
+# tick-to-tick (this fallback's whole reason for existing — see the
+# docstring's flicker paragraph). Never grows unboundedly: at most one entry
+# per robot ID actually in play.
+_POSSESSION_STATE: dict[int, bool] = {}
+
+
+def reset_possession_state(robot_id: int) -> None:
+    """Forget any held-ball hysteresis state for `robot_id`.
+
+    Call this wherever a robot's ball possession is being reset for an
+    unrelated reason (role reassignment, a fresh acquisition attempt after
+    losing the ball to an enemy) so a stale "was holding" commitment doesn't
+    widen the acquire box to the release box on the next tick. Safe to call
+    even if no state is held (no-op). Mirrors `shielding.reset_shield_state`.
+    """
+    _POSSESSION_STATE.pop(robot_id, None)
+
+
+def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: float = _ACQUIRE_FORWARD_MAX) -> bool:
     """Friendly-only: `robot.has_ball` (the non-visual path) is our own robots'
     IR contact sensor. There is no equivalent real sensor for enemy robots —
     in sim, rsim's physics engine happens to expose ground-truth contact for
@@ -39,19 +83,84 @@ def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: 
     reads `Robot.has_ball` directly off frame objects rather than through this
     helper, is the one place sim's ground-truth enemy contact data is used.)
 
-    `capture_distance` default: `ROBOT_RADIUS + BALL_RADIUS` (contact distance)
-    is ~0.1115m. The previous 0.12m default left only ~0.008m of margin above
-    contact — well inside typical per-tick simulator jitter (observed: a
-    stationary dribbling robot's distance-to-ball oscillates by ~0.01-0.02m
-    tick to tick), so `has_ball(..., visual=True)` chattered True/False every
-    tick right at pickup, which made every caller's "if has_ball: X else: Y"
-    branch flip every tick too and never make sustained progress in either
-    branch. 0.15m gives real margin above contact distance.
+    `visual=True` used to be a plain circle around the robot's chassis center
+    (`distance_to(ball) < capture_distance`) — no orientation or lateral
+    check at all, so it read True for a ball merely beside the chassis, or in
+    front of a robot facing away from it (ball chassis-adjacent but nowhere
+    near the dribbler). Measured directly against `robot.has_ball` (the real
+    sensor) tick-by-tick across two replays: the old circle false-positived
+    on 6.43% and 1.49% of friendly-robot ticks, roughly three-quarters of
+    which were >30 degrees off the ball's true bearing (facing-away or
+    lateral cases), not just marginal boundary chatter. This is the "robot
+    thought it had the ball but didn't" failure that broke grab-ball-and-go.
+
+    Now shaped like rsim's own kicker box instead of a chassis-centered
+    circle: `capture_distance` is a *forward* depth from the chassis center
+    along `robot.orientation` (approximating the kicker/dribbler position,
+    ~0.081m forward per rsim's `distanceCenterKicker` — see module-level
+    `_ACQUIRE_FORWARD_MAX`/`_ACQUIRE_LATERAL_MAX` for the measured box), with
+    a separate, narrower lateral half-width, rather than a symmetric radius.
+    Re-measured after this change (box geometry plus the hysteresis
+    described below — i.e. the actual shipped behaviour): false positives
+    dropped to 1.21% and 0.98% on the same two replays (from 6.43%/1.49%)
+    with zero new false negatives (every real-sensor True tick's ball offset
+    already sat well inside the new box, per the measured envelope above) —
+    see `docs/investigation_ball_contact_orientation_divergence.md`'s
+    sibling investigation for the kicker-box geometry this approximates, and
+    this function's own git history / commit message for the exact
+    before/after table.
+
+    Hysteresis (commit/release) is layered on top of that shaped box, via
+    module-level `_POSSESSION_STATE`, to address the flicker half of the
+    same complaint: once a robot's visual read goes True, it keeps reading
+    True until the ball leaves the wider `_RELEASE_*` box, not just the
+    tighter `_ACQUIRE_*` one — the same commit/release pattern
+    `shielding.py`'s `_COMMIT_RANGE`/`_RELEASE_RANGE` uses, for the same
+    reason (a bare threshold right at a boundary chatters when per-tick
+    simulator jitter straddles it). Measured cost of this hysteresis: in the
+    worst observed case across both replays, the visual read stayed True for
+    up to 15 ticks (~0.25s at 60Hz) after the real sensor had already gone
+    False — bounded and comparable to other deliberate grace periods already
+    in this codebase (e.g. `_pass_and_score.py`'s
+    `_SETUP_BALL_LOSS_GRACE_TICKS=10`), not a runaway "stuck thinking it has
+    the ball forever" failure mode.
+
+    `capture_distance` keeps its old name/position (positional- and
+    keyword-compatible) and still means "how far the ball can be and still
+    count as possessed" for existing callers — it now bounds the forward
+    depth of the acquire box instead of a circle's radius, tightened from the
+    old 0.15m default to 0.14m per the measured envelope above (still
+    comfortably above `ROBOT_RADIUS + BALL_RADIUS ≈ 0.1115m` contact
+    distance). Passing a custom `capture_distance` widens/narrows only the
+    forward reach of the *acquire* box; the release box and lateral
+    half-widths are not parameterized (no caller needs that yet — add it if
+    one does).
     """
     robot = game.friendly_robots[robot_id]
-    if visual:
-        return robot.p.distance_to(game.ball.p.to_2d()) < capture_distance
-    return bool(robot.has_ball)
+    if not visual:
+        return bool(robot.has_ball)
+
+    ball = game.ball.p.to_2d()
+    dx = ball.x - robot.p.x
+    dy = ball.y - robot.p.y
+    cos_o, sin_o = math.cos(robot.orientation), math.sin(robot.orientation)
+    # Rotate the robot->ball vector into the robot's own frame: `forward` is
+    # the component along `robot.orientation` (positive = in front of the
+    # chassis, toward the dribbler), `lateral` is the perpendicular component.
+    forward = dx * cos_o + dy * sin_o
+    lateral = -dx * sin_o + dy * cos_o
+
+    already_had_it = _POSSESSION_STATE.get(robot_id, False)
+    # A caller-supplied `capture_distance` only ever sets the *acquire*
+    # forward reach (see docstring) — once already committed (hysteresis),
+    # the release box is fixed, matching `shielding.py`'s pattern of not
+    # letting the acquire-side parameter reach into the release band.
+    forward_max = _RELEASE_FORWARD_MAX if already_had_it else capture_distance
+    lateral_max = _RELEASE_LATERAL_MAX if already_had_it else _ACQUIRE_LATERAL_MAX
+
+    result = (_ACQUIRE_FORWARD_MIN <= forward <= forward_max) and (abs(lateral) <= lateral_max)
+    _POSSESSION_STATE[robot_id] = result
+    return result
 
 
 def at_target(game: Game, robot_id: int, target: Vector2D, tolerance: float = 0.08) -> bool:
