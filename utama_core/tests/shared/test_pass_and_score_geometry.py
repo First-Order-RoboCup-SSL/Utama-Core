@@ -13,6 +13,7 @@ from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, 
 from utama_core.shared.pass_and_score_geometry import (
     ball_in_enemy_defense_area,
     enemy_defense_area_hold_point,
+    has_ball,
 )
 
 _FIELD = Field(
@@ -24,11 +25,11 @@ _FIELD = Field(
 _ENEMY_BOX_FRONT_X = float(_FIELD.enemy_defense_area[1][0])
 
 
-def _robot(rid: int, x: float, y: float, is_friendly: bool) -> Robot:
+def _robot(rid: int, x: float, y: float, is_friendly: bool, has_ball: bool = False) -> Robot:
     return Robot(
         id=rid,
         is_friendly=is_friendly,
-        has_ball=False,
+        has_ball=has_ball,
         p=Vector2D(x, y),
         v=Vector2D(0, 0),
         a=Vector2D(0, 0),
@@ -83,3 +84,29 @@ def test_enemy_defense_area_hold_point_clamps_y_inside_box_width():
     half_width = STANDARD_FIELD_DIMS.half_defense_area_width
     hold = enemy_defense_area_hold_point(game, at_y=half_width + 5.0)
     assert hold.y < half_width + 5.0
+
+
+def test_has_ball_only_ever_reads_the_friendly_roster():
+    """`has_ball` must have no team switch — enemy robots have no real IR
+    sensor for tactic code to read, even in sim where rsim's physics engine
+    happens to expose ground-truth contact for both teams. A friendly and an
+    enemy robot sharing an id, with different `has_ball` values, would make a
+    roster mix-up (or a reintroduced team switch defaulting the wrong way)
+    read the wrong answer instead of raising."""
+    zv = Vector3D(0, 0, 0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={3: _robot(3, 0.0, 0.0, True, has_ball=True)},
+        enemy_robots={3: _robot(3, 1.0, 1.0, False, has_ball=False)},
+        ball=Ball(p=Vector3D(0.0, 0.0, 0), v=zv, a=zv),
+    )
+    game = Game(
+        past=GameHistory(10),
+        current=frame,
+        field=Field(
+            my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+        ),
+    )
+    assert has_ball(game, 3) is True

@@ -29,7 +29,17 @@ ORIENTATION_TOLERANCE_RAD = 0.05
 
 
 def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: float = 0.15) -> bool:
-    """`capture_distance` default: `ROBOT_RADIUS + BALL_RADIUS` (contact distance)
+    """Friendly-only: `robot.has_ball` (the non-visual path) is our own robots'
+    IR contact sensor. There is no equivalent real sensor for enemy robots —
+    in sim, rsim's physics engine happens to expose ground-truth contact for
+    both teams, but tactic decision-making must behave the same in sim and on
+    real hardware, where we will never have an opponent's IR reading. Enemy
+    possession must be inferred visually (`visual=True`) instead; don't add a
+    team switch here for tactic code. (The referee's own bookkeeping, which
+    reads `Robot.has_ball` directly off frame objects rather than through this
+    helper, is the one place sim's ground-truth enemy contact data is used.)
+
+    `capture_distance` default: `ROBOT_RADIUS + BALL_RADIUS` (contact distance)
     is ~0.1115m. The previous 0.12m default left only ~0.008m of margin above
     contact — well inside typical per-tick simulator jitter (observed: a
     stationary dribbling robot's distance-to-ball oscillates by ~0.01-0.02m
