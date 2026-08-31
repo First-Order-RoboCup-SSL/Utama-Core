@@ -315,7 +315,7 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
             mem.goal_scored = scored
             return commands, mem
 
-        pass_cmds, pass_complete = _pass_exec(game, ctx, mem.decoy_id, mem.overloader_id)
+        pass_cmds, pass_complete, _lane_blocked = _pass_exec(game, ctx, mem.decoy_id, mem.overloader_id)
         commands.update(pass_cmds)
         if pass_complete:
             shot_cmd, scored, mem.prev_best_shot_y = _score_goal(game, ctx, mem.overloader_id, mem.prev_best_shot_y)

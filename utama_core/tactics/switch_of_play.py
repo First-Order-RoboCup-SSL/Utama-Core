@@ -92,6 +92,7 @@ _WEAK_SIDE_MARGIN = 1  # enemies — the more-open side must have at least this 
 # into a clean shot lane, etc.) resets back to "assess" instead of stranding
 # these robots forever.
 _PHASE_TIMEOUT_TICKS = 600  # ~10s at 60Hz, one full leg should never need this long
+_LANE_BLOCKED_ABANDON_TICKS = 30  # ~0.5s at 60Hz — sustained-block bar, not one noisy tick
 
 _RUNNER_DEPTH_FRACTION = 0.55  # how far up the weak flank the runner advances (fraction of half_length from centre)
 
@@ -228,6 +229,7 @@ class SwitchOfPlayMem:
     goal_scored: bool = False
     phase_ticks: int = 0  # ticks spent in the current phase; drives the timeout reset (guidance point 1)
     prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _pass_and_score.py
+    lane_blocked_ticks: int = 0  # consecutive ticks _pass_exec reported the lane blocked; feeds early phase timeout
 
 
 class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
@@ -319,6 +321,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
         timed_out = False
         if mem.phase == "assess":
             mem.phase_ticks = 0
+            mem.lane_blocked_ticks = 0
         else:
             mem.phase_ticks += 1
             if mem.phase_ticks > _PHASE_TIMEOUT_TICKS:
@@ -460,8 +463,17 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # Carrier -> pivot leg. Runner keeps advancing into the weak side
             # while this happens rather than waiting, so it is already in
             # position for the relay leg.
-            leg_commands, leg_complete = _pass_exec(game, ctx, carrier_id, pivot_id)
+            leg_commands, leg_complete, lane_blocked = _pass_exec(game, ctx, carrier_id, pivot_id)
             commands.update(leg_commands)
+            # An enemy settling onto the direct carrier-pivot line makes this
+            # an easily-intercepted pass — force the existing phase timeout
+            # early (after a short sustained block, not one noisy tick)
+            # rather than waiting the full ~10s budget, which "assess"'s own
+            # re-entry (fresh carrier/pivot/runner assignment) exists to
+            # resolve anyway.
+            mem.lane_blocked_ticks = mem.lane_blocked_ticks + 1 if lane_blocked else 0
+            if mem.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS:
+                mem.phase_ticks = max(mem.phase_ticks, _PHASE_TIMEOUT_TICKS + 1)
             if runner_id is not None and runner_id not in commands:
                 runner_target = _runner_target(game, mem.weak_side if mem.weak_side is not None else 1)
                 commands[runner_id] = go_to_point(
@@ -530,8 +542,11 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
                     )
                 return commands, mem
 
-            leg_commands, leg_complete = _pass_exec(game, ctx, source_id, runner_id)
+            leg_commands, leg_complete, lane_blocked = _pass_exec(game, ctx, source_id, runner_id)
             commands.update(leg_commands)
+            mem.lane_blocked_ticks = mem.lane_blocked_ticks + 1 if lane_blocked else 0
+            if mem.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS:
+                mem.phase_ticks = max(mem.phase_ticks, _PHASE_TIMEOUT_TICKS + 1)
             if leg_complete:
                 mem.phase = "finish"
             return commands, mem

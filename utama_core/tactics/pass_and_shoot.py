@@ -89,6 +89,7 @@ class PassAndShootMem:
 
 _PHASE_TIMEOUT_TIME = 12.0  # seconds — generous budget for the full aim+position+kick+catch(+aim+shoot) chain
 _PHASE_TIMEOUT_TICKS = round(_PHASE_TIMEOUT_TIME * CONTROL_FREQUENCY)
+_LANE_BLOCKED_ABANDON_TICKS = round(0.5 * CONTROL_FREQUENCY)  # sustained-block bar, not one noisy tick
 
 
 class PassAndShootTactic(BaseTactic[PassAndShootMem]):
@@ -170,7 +171,20 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
             if complete:
                 inner.phase = "pass_then_score"
         elif inner.phase == "pass_then_score":
-            commands, pass_complete = _pass_exec(game, ctx, passer_id, receiver_id)
+            commands, pass_complete, lane_blocked = _pass_exec(game, ctx, passer_id, receiver_id)
+            # An enemy settling onto the direct passer-receiver line makes
+            # this a bad pass to keep aiming (easily intercepted) — force
+            # the existing phase timeout early (after a short sustained
+            # block, not one noisy tick — an enemy grazing the clearance
+            # boundary while running through shouldn't restart the whole
+            # setup) rather than waiting the full 12s budget meant for a
+            # receiver that's merely slow to arrive. `_setup_positions`/
+            # `run_setup_phase` (re-entered once "setup" is reached again)
+            # already reject a blocked lane via `score_pass_setup`, so this
+            # re-sampling is where a genuinely open pairing gets picked.
+            inner.lane_blocked_ticks = inner.lane_blocked_ticks + 1 if lane_blocked else 0
+            if inner.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS:
+                inner.phase_ticks = max(inner.phase_ticks, _PHASE_TIMEOUT_TICKS + 1)
             if pass_complete:
                 inner.phase = "score"
         elif inner.phase == "score":

@@ -84,6 +84,12 @@ _SUGGEST_HANDOFF_TICKS = round(_SUGGEST_HANDOFF_TIME * CONTROL_FREQUENCY)
 # the deadlock regardless of which specific geometry caused the receiver to
 # never arrive.
 _MAX_HOP_TICKS = round(4.0 * CONTROL_FREQUENCY)  # 4s — generous vs. a real catch, short vs. a match
+# An enemy walking onto the direct carrier-receiver line mid-hop makes the
+# pass interceptable, but is a much more urgent signal than "receiver is
+# slow to arrive" — bail well before _MAX_HOP_TICKS's 4s once it's clearly
+# not a one-tick noise blip (an enemy grazing the clearance boundary for a
+# single frame while running through, not actually planted in the lane).
+_LANE_BLOCKED_ABANDON_TICKS = round(0.5 * CONTROL_FREQUENCY)
 _RELOCATE_MIN_SEPARATION = 0.9  # metres — a relocating support point must clear the carrier and other supports
 # Retreat standoff from our own area front edge while the ball is in our own
 # half: support robots hold this far off the box line instead of packing it.
@@ -188,6 +194,7 @@ class GiveAndGoMem:
     hop_count: int = 0
     ticks_held: int = 0  # ticks since the current carrier was assigned; feeds suggest_next's timeout below
     hop_ticks: int = 0  # ticks since receiver_id was locked for the current hop; feeds _MAX_HOP_TICKS below
+    lane_blocked_ticks: int = 0  # consecutive ticks _pass_exec reported the lane blocked; feeds early hop abandon
 
 
 class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
@@ -319,9 +326,11 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             # `score_pass_setup` would reject all of them.
             mem.receiver_id = _nearest_safe_receiver(game, carrier_id, others)
             mem.hop_ticks = 0
+            mem.lane_blocked_ticks = 0
         elif not force_shot and mem.receiver_id is None and not _has_open_shot(game, carrier_id):
             mem.receiver_id = _best_receiver(game, carrier_id, others)
             mem.hop_ticks = 0
+            mem.lane_blocked_ticks = 0
 
         if first_touch_of_possession and mem.receiver_id is None and not force_shot:
             # No teammate was even reachable/unblocked (e.g. boxed in by
@@ -358,22 +367,27 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 )
 
             mem.hop_ticks += 1
-            if mem.hop_ticks >= _MAX_HOP_TICKS:
+            if mem.hop_ticks >= _MAX_HOP_TICKS or mem.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS:
                 # Receiver never became ready (unreachable intercept point,
                 # stuck itself, or any other reason _pass_exec's handshake
-                # never resolves) — abandon this hop rather than holding the
-                # ball forever. Falls through to the shoot-or-reposition
-                # branch below on this same tick.
+                # never resolves), or an enemy has settled onto the direct
+                # line to this receiver — abandon this hop rather than
+                # holding the ball (or aiming through the enemy) forever.
+                # Falls through to the shoot-or-reposition branch below on
+                # this same tick.
                 mem.receiver_id = None
                 mem.hop_ticks = 0
+                mem.lane_blocked_ticks = 0
             else:
-                hop_commands, pass_complete = _pass_exec(game, ctx, carrier_id, mem.receiver_id)
+                hop_commands, pass_complete, lane_blocked = _pass_exec(game, ctx, carrier_id, mem.receiver_id)
+                mem.lane_blocked_ticks = mem.lane_blocked_ticks + 1 if lane_blocked else 0
                 commands.update(hop_commands)
                 self._relocate_others(game, ctx, robot_ids, carrier_id, commands, also_exclude=mem.receiver_id)
                 if pass_complete:
                     mem.carrier_id, mem.receiver_id = mem.receiver_id, None
                     mem.hop_count += 1
                     mem.hop_ticks = 0
+                    mem.lane_blocked_ticks = 0
                 return commands, mem
 
         # No pass in flight: either we have an open shot, or we've hit the hop

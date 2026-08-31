@@ -36,6 +36,7 @@ from utama_core.shared.pass_and_score_geometry import (
     no_shot_reposition_target,
     oriented_towards,
     score_pass_setup,
+    segment_blocked,
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.utils.move_utils import (
@@ -101,6 +102,7 @@ class PassAndScoreMem:
     phase_ticks: int = 0  # ticks spent in the current non-setup phase; drives the timeout reset
     setup_ticks_without_ball: int = 0  # consecutive setup ticks the passer has read has_ball=False
     prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _score_goal below
+    lane_blocked_ticks: int = 0  # consecutive ticks _pass_exec reported the lane blocked; feeds early phase timeout
 
 
 def _setup_positions(
@@ -205,13 +207,28 @@ def run_setup_phase(
     return {passer_id: passer_cmd, receiver_id: receiver_cmd}, passer_arrived and receiver_arrived
 
 
+# A hop in progress never re-picks its receiver — the lane it targets can
+# still close after the receiver was chosen (an enemy walks onto the direct
+# line mid-hop). Reported back so a caller's existing hop-timeout reset path
+# can fire early instead of the passer/receiver holding the same doomed
+# aim for the rest of `_MAX_HOP_TICKS` (found live: a give-and-go hop kept
+# targeting the same receiver for 4+ seconds after two enemies closed in on
+# the direct line, `pass_target` visibly re-aiming through them every tick).
 def _pass_exec(
     game: Game,
     ctx: TickContext,
     passer_id: int,
     receiver_id: int,
-) -> tuple[dict[int, RobotCommand], bool]:
-    """Synchronized aiming, intercept positioning, and kick. Returns (commands, pass_complete)."""
+) -> tuple[dict[int, RobotCommand], bool, bool]:
+    """Synchronized aiming, intercept positioning, and kick.
+
+    Returns (commands, pass_complete, lane_blocked) — `lane_blocked` is True
+    when an enemy sits on the ball-to-receive-point line this tick; the
+    caller decides what "blocked" means for its own state machine (usually:
+    abandon this hop and let the existing timeout-reset path re-pick a
+    receiver), since `_pass_exec` itself has no opinion on retry/backoff
+    policy.
+    """
     intercept_pos_raw, intercept_oren = intercept_point(game, passer_id, receiver_id)
     # A receiver (or the passer's aim) may never enter our own defense area —
     # the keeper owns the box ("too many defenders in own area" fouls trip on
@@ -321,7 +338,8 @@ def _pass_exec(
 
     receiver_has_ball = has_ball(game, receiver_id, visual=True)
     pass_complete = receiver_has_ball
-    return commands, pass_complete
+    lane_blocked = segment_blocked(game.ball.p.to_2d(), intercept_pos, enemy_positions(game))
+    return commands, pass_complete, lane_blocked
 
 
 _SHOT_SWITCH_MARGIN = (
