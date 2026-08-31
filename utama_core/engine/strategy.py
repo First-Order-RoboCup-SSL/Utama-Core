@@ -60,12 +60,16 @@ logger = logging.getLogger(__name__)
 # barrier reset), and the set of tactic ids currently applicable() (design
 # doc §15) — a tactic id absent from this set must not be given any robots
 # this tick, whether because it isn't registered or because its applicable()
-# just returned False. It must return a partition that exactly covers
-# `free_robot_ids` — every free robot in exactly one slot, no slot given a
-# robot outside that pool, and no non-empty slot for a tactic id outside
-# `applicable_tactic_ids`. `Strategy.tick()` raises if it doesn't. Committed
-# slots are never passed to the partitioner as available; it only ever
-# decides what happens to the robots nobody has vetoed keeping.
+# just returned False. Every free robot must end up in at most one slot (no
+# robot given to two slots at once — `Strategy._validate_partition` raises if
+# so) and no slot may be given a robot outside `free_robot_ids` or a
+# non-empty slot for a tactic id outside `applicable_tactic_ids`. A free
+# robot need NOT appear in the returned partition at all — a Partitioner has
+# no obligation to invent an applicable tactic for a robot nothing currently
+# wants; an uncovered robot simply isn't ticked by any tactic that tick (see
+# `Strategy._validate_partition`'s docstring). Committed slots are never
+# passed to the partitioner as available; it only ever decides what happens
+# to the robots nobody has vetoed keeping.
 Partitioner = Callable[
     [Game, frozenset[RobotId], Optional[dict[TacticId, frozenset[RobotId]]], frozenset[TacticId]],
     dict[TacticId, frozenset[RobotId]],
@@ -121,10 +125,10 @@ class Strategy:
 
         # The goalkeeper (see `set_goalkeeper`): a permanently pinned slot,
         # entirely outside `_outfield_robot_ids`/`_slots` — no `Partitioner`
-        # ever sees its robot, `_validate_partition`'s exhaustive-cover check
-        # never has to account for it, and `_barrier_reset` never touches it.
-        # `None` until `set_goalkeeper` is called (goalkeeper-less callers,
-        # e.g. most of `tests/engine/test_strategy.py`, are unaffected).
+        # ever sees its robot, `_validate_partition` never has to account for
+        # it, and `_barrier_reset` never touches it. `None` until
+        # `set_goalkeeper` is called (goalkeeper-less callers, e.g. most of
+        # `tests/engine/test_strategy.py`, are unaffected).
         self._pinned_slot: Optional[_TacticSlot] = None
         self._pinned_robot_id: Optional[RobotId] = None
 
@@ -494,6 +498,26 @@ class Strategy:
         return result
 
     def _validate_partition(self, partition: dict[TacticId, frozenset[RobotId]]) -> None:
+        """Enforce the single-writer invariant and reject picker bugs — but NOT
+        an incomplete cover, which is a legitimate outcome, not a bug.
+
+        A free robot can legitimately end up claimed by nobody: every
+        registered Tactic can simultaneously be either committed elsewhere
+        or `applicable() == False` for that robot's current situation (e.g.
+        `PressAndContainTactic.applicable()` is range-gated and can go False
+        for a lone free robot while every other slot is mid-commitment) —
+        `Partitioner`s have no obligation to invent a tactic that wants an
+        unwanted robot. `Strategy.tick()` simply doesn't tick a robot missing
+        from every slot's `assigned_robots` that tick; the robot falls
+        through to whatever the caller does for "no tactic addressed this
+        robot" (`AbstractStrategy.execute_default_action`, a safe stop by
+        default) — the exact same fallback path an unaddressed robot already
+        takes for other reasons. Still a hard error, unchanged: a picker
+        naming an unregistered tactic id, double-claiming one robot across
+        two slots (breaks the single-writer invariant this whole class
+        exists to guarantee), or inventing a robot id outside the outfield
+        pool.
+        """
         seen: set[RobotId] = set()
         for tactic_id, robots in partition.items():
             if tactic_id not in self._tactics:
@@ -503,13 +527,9 @@ class Strategy:
                 raise ValueError(f"picker assigned robot(s) {sorted(overlap)} to more than one tactic in the same tick")
             seen |= robots
 
-        if seen != self._outfield_robot_ids:
-            missing = self._outfield_robot_ids - seen
-            extra = seen - self._outfield_robot_ids
-            raise ValueError(
-                "picker's partition is not an exhaustive, exact cover of the outfield pool "
-                f"(missing={sorted(missing)}, unexpected={sorted(extra)})"
-            )
+        extra = seen - self._outfield_robot_ids
+        if extra:
+            raise ValueError(f"picker assigned robot(s) {sorted(extra)} outside the outfield pool")
 
     def _barrier_reset(self, game: Game) -> None:
         pre_reset = {tid: slot.assigned_robots for tid, slot in self._slots.items() if slot.assigned_robots}

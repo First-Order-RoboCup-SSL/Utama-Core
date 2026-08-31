@@ -350,7 +350,12 @@ def test_picker_assigning_to_a_committed_tactic_raises():
         strategy.tick(_FakeGame())
 
 
-def test_partition_must_be_exhaustive_and_disjoint():
+def test_partition_may_leave_a_free_robot_unassigned():
+    """A Partitioner has no obligation to invent an applicable tactic for a
+    robot nothing currently wants (e.g. every tactic's applicable() is False
+    for it while others are mid-commitment) — an uncovered free robot is
+    simply not ticked by anyone that tick, not a scheduler error. See
+    `Strategy._validate_partition`'s docstring."""
     tactic_a, tactic_b = RecordingTactic(), RecordingTactic()
 
     def missing_robot_picker(game, free_robots, prev, applicable_tactic_ids):
@@ -363,7 +368,24 @@ def test_partition_must_be_exhaustive_and_disjoint():
         outfield_robot_ids=(1, 2, 3),
         ctx=_ctx(),
     )
-    with pytest.raises(ValueError, match="exhaustive"):
+    strategy.tick(_FakeGame())  # must not raise
+    assert 3 not in tactic_a.last_robot_ids
+    assert 3 not in tactic_b.last_robot_ids
+
+
+def test_partition_rejects_a_robot_outside_the_outfield_pool():
+    tactic_a = RecordingTactic()
+
+    def rogue_robot_picker(game, free_robots, prev, applicable_tactic_ids):
+        return {"a": free_robots | {99}}  # invents a robot id outside the pool
+
+    strategy = Strategy(
+        tactics={"a": tactic_a},
+        partitioner=rogue_robot_picker,
+        outfield_robot_ids=(1, 2, 3),
+        ctx=_ctx(),
+    )
+    with pytest.raises(ValueError, match="outside the outfield pool"):
         strategy.tick(_FakeGame())
 
 
