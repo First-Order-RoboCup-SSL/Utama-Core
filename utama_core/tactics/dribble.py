@@ -162,4 +162,11 @@ class DribbleTactic(BaseTactic[DribbleMem]):
             target_oren=robot.p.angle_to(mem.segment_target),
             dribbling=True,
         )
+        if ctx.match_log is not None:
+            ctx.match_log.trace_if_changed(
+                tick=0,
+                sim_time=getattr(game, "ts", 0.0),
+                key="dribble.segment_target",
+                value={"x": mem.segment_target.x, "y": mem.segment_target.y},
+            )
         return {robot_id: command}, mem

@@ -50,6 +50,9 @@ class GoalkeeperTactic(BaseTactic[GoalkeeperMem]):
     def initial_mem(self) -> GoalkeeperMem:
         return GoalkeeperMem()
 
+    def highlights(self, mem: GoalkeeperMem) -> dict[RobotId, str]:
+        return {self.robot_id: "keeper"}
+
     def tick(
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: GoalkeeperMem
     ) -> tuple[dict[RobotId, RobotCommand], GoalkeeperMem]:

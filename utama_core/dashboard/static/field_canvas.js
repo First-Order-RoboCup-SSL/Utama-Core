@@ -302,6 +302,59 @@ class FieldCanvas {
       }
     }
 
+    const shadowPost = overlays["defense.shadow_post"];
+    if (shadowPost) {
+      ctx.strokeStyle = FIELD_COLORS.laneOpen;
+      ctx.setLineDash([2, 3]);
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.arc(toX(shadowPost.x), toY(shadowPost.y), 4, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    const screenLine = overlays["block_shape.screen_line"];
+    if (screenLine) {
+      ctx.strokeStyle = FIELD_COLORS.laneOpen;
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(toX(screenLine.x), toY(screenLine.y1));
+      ctx.lineTo(toX(screenLine.x), toY(screenLine.y2));
+      ctx.stroke();
+    }
+
+    const runnerTarget = overlays["switch_of_play.runner_target"];
+    if (runnerTarget) {
+      const runner = byId["f" + runnerTarget.runner_id];
+      if (runner) {
+        ctx.strokeStyle = FIELD_COLORS.ball;
+        ctx.setLineDash([2, 4]);
+        ctx.lineWidth = 1.25;
+        this._drawArrow(ctx, toX(runner.x), toY(runner.y), toX(runnerTarget.x), toY(runnerTarget.y));
+        ctx.setLineDash([]);
+      }
+      const rtx = toX(runnerTarget.x), rty = toY(runnerTarget.y);
+      ctx.strokeStyle = FIELD_COLORS.ball;
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.arc(rtx, rty, 4, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
+
+    const press = overlays["press_and_contain.press"];
+    if (press) {
+      const presser = byId["f" + press.presser_id];
+      const pressed = byId["e" + press.pressed_enemy_id];
+      if (presser && pressed) {
+        ctx.strokeStyle = FIELD_COLORS.laneBlocked;
+        ctx.setLineDash([3, 3]);
+        ctx.lineWidth = 1;
+        this._drawArrow(ctx, toX(presser.x), toY(presser.y), toX(pressed.x), toY(pressed.y));
+        ctx.setLineDash([]);
+      }
+    }
+
     const passTarget = overlays["give_and_go.pass_target"];
     if (passTarget) {
       const receiver = byId["f" + passTarget.receiver_id];
@@ -322,6 +375,50 @@ class FieldCanvas {
       ctx.beginPath();
       ctx.arc(tx, ty, 4, 0, 2 * Math.PI);
       ctx.stroke();
+    }
+
+    const clearTarget = overlays["clear_ball.clear_target"];
+    if (clearTarget) {
+      ctx.strokeStyle = FIELD_COLORS.laneOpen;
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(toX(clearTarget.from.x), toY(clearTarget.from.y));
+      ctx.lineTo(toX(clearTarget.to.x), toY(clearTarget.to.y));
+      ctx.stroke();
+    }
+
+    const dribbleTarget = overlays["dribble.segment_target"];
+    if (dribbleTarget) {
+      ctx.strokeStyle = FIELD_COLORS.marker;
+      ctx.setLineDash([2, 3]);
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.arc(toX(dribbleTarget.x), toY(dribbleTarget.y), 4, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    const lureTarget = overlays["decoy_and_overload.lure_target"];
+    if (lureTarget) {
+      ctx.strokeStyle = FIELD_COLORS.laneBlocked;
+      ctx.setLineDash([2, 3]);
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.arc(toX(lureTarget.x), toY(lureTarget.y), 4, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    const overloadTarget = overlays["decoy_and_overload.overload_target"];
+    if (overloadTarget) {
+      ctx.strokeStyle = FIELD_COLORS.laneOpen;
+      ctx.setLineDash([2, 3]);
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.arc(toX(overloadTarget.x), toY(overloadTarget.y), 4, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
 
     // Any tactic's optional, purely cosmetic per-robot highlight (see

@@ -162,6 +162,9 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
     def initial_mem(self) -> LeadAndSupportMem:
         return LeadAndSupportMem()
 
+    def highlights(self, mem: LeadAndSupportMem) -> dict[RobotId, str]:
+        return {mem.leader_id: "leader"} if mem.leader_id is not None else {}
+
     def is_committed(self, game: Game, mem: LeadAndSupportMem) -> bool:
         if mem.leader_id is None:
             return False
@@ -181,6 +184,9 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
 
         leader_has_ball = has_ball(game, leader_id)
         if not leader_has_ball:
+            # go_to_ball itself holds outside the enemy's box instead of
+            # chasing an unreachable ball when the keeper is holding it
+            # there during active play — see that function's docstring.
             commands[leader_id] = go_to_ball(
                 game=game, motion_controller=ctx.motion_controller, robot_id=leader_id, ctx=ctx
             )

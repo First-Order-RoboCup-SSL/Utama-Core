@@ -28,6 +28,7 @@ empty.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
@@ -47,7 +48,13 @@ _LOOSE_BALL_CLAIM_RANGE = 1.5  # metres — matches ball_is_loose's own contest 
 
 @dataclass
 class DefenseMem:
-    """No cross-tick state: `defend_parameter` recomputes its target every tick."""
+    """No cross-tick decision state — `defend_parameter` recomputes its
+    target every tick. `shadow_ids`/`retriever_id` are last-tick's role
+    split, kept only so `highlights()` (called with the *previous* tick's
+    mem, before `tick()` runs again) has something to report."""
+
+    shadow_ids: tuple[RobotId, ...] = ()
+    retriever_id: Optional[RobotId] = None
 
 
 class DefenseTactic(BaseTactic[DefenseMem]):
@@ -70,6 +77,11 @@ class DefenseTactic(BaseTactic[DefenseMem]):
     def initial_mem(self) -> DefenseMem:
         return DefenseMem()
 
+    def highlights(self, mem: DefenseMem) -> dict[RobotId, str]:
+        return {rid: "shadow" for rid in mem.shadow_ids} | (
+            {mem.retriever_id: "retriever"} if mem.retriever_id is not None else {}
+        )
+
     def tick(
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: DefenseMem
     ) -> tuple[dict[RobotId, RobotCommand], DefenseMem]:
@@ -79,6 +91,17 @@ class DefenseTactic(BaseTactic[DefenseMem]):
             nearest_id = min(robot_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball_pos))
             if game.friendly_robots[nearest_id].p.distance_to(ball_pos) <= _LOOSE_BALL_CLAIM_RANGE:
                 retriever_id = nearest_id
+        mem.shadow_ids = tuple(rid for rid in robot_ids if rid != retriever_id)
+        mem.retriever_id = retriever_id
+
+        if ctx.match_log is not None:
+            goal_x = game.field.my_goal_line[0][0]
+            ctx.match_log.trace_if_changed(
+                tick=0,
+                sim_time=getattr(game, "ts", 0.0),
+                key="defense.shadow_post",
+                value={"x": goal_x, "y": game.ball.p.to_2d().y},
+            )
 
         commands: dict[RobotId, RobotCommand] = {}
         for robot_id in robot_ids:

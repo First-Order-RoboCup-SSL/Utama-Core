@@ -3,12 +3,15 @@
 `StrategyRunner` drives a strategy through a fixed contract: `load_rsim_env`,
 `load_robot_controller`, `load_motion_controller`, `load_game`, `assert_exp_robots`,
 `assert_exp_goals`, and once per tick, `step()`. A concrete `AbstractStrategy` wraps a
-`kernel.Strategy` (see `utama_core.engine.strategy`): `step()` ticks that `Strategy` (plus
-the goalkeeper, pinned outside the kernel scheduler) directly every frame.
+`kernel.Strategy` (see `utama_core.engine.strategy`): `step()` ticks that `Strategy` directly
+every frame.
 
-Robot 0 is always the goalkeeper, ticked directly and never handed to the kernel
-`Strategy` — see `tactics/goalkeeper.py` and the "Tactics as Processes" design note,
-section 1.
+Robot 0 is always the goalkeeper. It is a permanently pinned slot inside the kernel
+`Strategy` (see `Strategy.set_goalkeeper`) — never handed to a `Partitioner`, never
+part of the outfield partition's exhaustive cover, never cleared by a barrier reset —
+rather than something this class ticks directly; `load_motion_controller` just tells
+the freshly built `Strategy` which robot that is. See `tactics/goalkeeper.py` and the
+"Tactics as Processes" design note, section 1.
 """
 
 from __future__ import annotations
@@ -18,7 +21,6 @@ from typing import Optional
 
 from utama_core.config.enums import Role
 from utama_core.engine.referee_override import RefereeActionOverride
-from utama_core.engine.referee_reset import is_paused
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
@@ -31,7 +33,6 @@ from utama_core.global_utils.math_utils import (
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.src.utils.move_utils import empty_command
-from utama_core.tactics.goalkeeper import GoalkeeperTactic
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
@@ -93,9 +94,7 @@ class AbstractStrategy:
         self.exp_ball = exp_ball
         self._build_kernel_strategy = build_kernel_strategy
         self._kernel_strategy: Optional[KernelSchedulerStrategy] = None
-        self._goalkeeper = GoalkeeperTactic(robot_id=goalkeeper_id)
         self._goalkeeper_id = goalkeeper_id
-        self._goalkeeper_mem = self._goalkeeper.initial_mem()
         self._referee_overrides = referee_overrides
 
         ### These attributes are set by the StrategyRunner before the strategy is run. ###
@@ -165,6 +164,7 @@ class AbstractStrategy:
         self._kernel_strategy = self._build_kernel_strategy(motion_controller)
         if self._referee_overrides:
             self._kernel_strategy.referee_overrides = self._referee_overrides
+        self._kernel_strategy.set_goalkeeper(self._goalkeeper_id)
 
     def assert_field_requirements(self, game: Game):
         """
@@ -214,39 +214,10 @@ class AbstractStrategy:
     def step(self):
         game = self.game
 
-        outfield_commands = self._kernel_strategy.tick(game)
-
-        cmd_map: dict[int, RobotCommand] = {}
-        cmd_map.update(outfield_commands)
-
-        # During a referee-restart override (including STOP and TIMEOUT_* —
-        # see `referee_override.py`'s module docstring for why both are
-        # override commands, not just a pause), most Step classes still
-        # compute a command for every friendly robot including the goalkeeper
-        # (e.g. `StopStep` will drive the keeper off the ball if it's inside
-        # the keep-out radius, and `PreparePenalty*Step` places the keeper on
-        # the goal line) — ticking GoalkeeperTactic on top of those would
-        # overwrite the override's intent with normal ball-tracking logic.
-        # `PrepareKickoff{Ours,Theirs}Step` are the exception: they exempt the
-        # real goalkeeper from formation entirely (a kickoff has no reason to
-        # pull the keeper off its line), so the keeper is genuinely absent
-        # from `cmd_map` during those two commands specifically, and
-        # `GoalkeeperTactic` should tick normally to fill the gap — hence
-        # gating on `self._goalkeeper_id not in cmd_map` rather than only on
-        # `is_override_command`.
-        #
-        # During HALT, the goalkeeper must stop issuing motion commands for
-        # the same reason `Strategy.tick()` freezes the outfield pool via
-        # `is_paused` — skipping the tick here falls through to
-        # `execute_default_action` below, which returns `empty_command(False)`,
-        # the correct "stop" command.
-        referee = getattr(game, "referee", None)
-        current_command = getattr(referee, "referee_command", None) if referee is not None else None
-        if not is_paused(current_command) and self._goalkeeper_id not in cmd_map:
-            gk_commands, self._goalkeeper_mem = self._goalkeeper.tick(
-                game, self._kernel_strategy._ctx, (self._goalkeeper_id,), self._goalkeeper_mem
-            )
-            cmd_map.update(gk_commands)
+        # `Strategy.tick()` drives both the outfield partition and the
+        # pinned goalkeeper slot (see `Strategy.set_goalkeeper`) in one call
+        # — this class no longer special-cases the goalkeeper itself.
+        cmd_map: dict[int, RobotCommand] = dict(self._kernel_strategy.tick(game))
 
         for robot_id in game.friendly_robots:
             if robot_id in cmd_map:

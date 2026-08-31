@@ -267,6 +267,16 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             return "givego"
         return None
 
+    def highlights(self, mem: SwitchOfPlayMem) -> dict[RobotId, str]:
+        highlights: dict[RobotId, str] = {}
+        if mem.carrier_id is not None:
+            highlights[mem.carrier_id] = "carrier"
+        if mem.pivot_id is not None:
+            highlights[mem.pivot_id] = "pivot"
+        if mem.runner_id is not None:
+            highlights[mem.runner_id] = "runner"
+        return highlights
+
     def tick(
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: SwitchOfPlayMem
     ) -> tuple[dict[RobotId, RobotCommand], SwitchOfPlayMem]:
@@ -340,6 +350,17 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
                     "runner_id": runner_id,
                 },
             )
+            # Where the weak-side run is heading — the one piece of this
+            # tactic's decision that highlights() can't express as a label,
+            # since it's a target point, not a robot to call out.
+            if runner_id is not None:
+                target = _runner_target(game, mem.weak_side if mem.weak_side is not None else 1)
+                ctx.match_log.trace_if_changed(
+                    tick=0,
+                    sim_time=getattr(game, "ts", 0.0),
+                    key="switch_of_play.runner_target",
+                    value={"runner_id": runner_id, "x": target.x, "y": target.y},
+                )
 
         if runner_id is None:
             # Solo allocation (a picker gave this slot exactly 1 robot): there

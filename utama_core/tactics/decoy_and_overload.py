@@ -187,6 +187,14 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
     def initial_mem(self) -> DecoyOverloadMem:
         return DecoyOverloadMem()
 
+    def highlights(self, mem: DecoyOverloadMem) -> dict[RobotId, str]:
+        highlights: dict[RobotId, str] = {}
+        if mem.decoy_id is not None:
+            highlights[mem.decoy_id] = "decoy"
+        if mem.overloader_id is not None:
+            highlights[mem.overloader_id] = "overload"
+        return highlights
+
     def is_committed(self, game: Game, mem: DecoyOverloadMem) -> bool:
         # Once roles are locked and the lure/finish sequence has started,
         # reassigning robots mid-sequence would strand a decoy run or a pass
@@ -257,6 +265,13 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
                     target_coords=target,
                     dribbling=True,
                 )
+                if ctx.match_log is not None:
+                    ctx.match_log.trace_if_changed(
+                        tick=0,
+                        sim_time=getattr(game, "ts", 0.0),
+                        key="decoy_and_overload.lure_target",
+                        value={"x": target.x, "y": target.y},
+                    )
 
             overload_target = _overload_target(game, mem.marker_start_y)
             commands[mem.overloader_id] = go_to_point(
@@ -265,6 +280,13 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
                 robot_id=mem.overloader_id,
                 target_coords=overload_target,
             )
+            if ctx.match_log is not None:
+                ctx.match_log.trace_if_changed(
+                    tick=0,
+                    sim_time=getattr(game, "ts", 0.0),
+                    key="decoy_and_overload.overload_target",
+                    value={"x": overload_target.x, "y": overload_target.y},
+                )
 
             mem.lure_ticks += 1
             dragged = False

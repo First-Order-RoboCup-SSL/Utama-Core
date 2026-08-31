@@ -24,7 +24,8 @@ without needing its own game-state logic to know when pressing is sensible.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional
 
 from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
@@ -68,7 +69,13 @@ def _assign_markers(game: Game, marker_ids: tuple[int, ...], exclude_enemy_id: i
 
 @dataclass
 class PressAndContainMem:
-    """No cross-tick state: presser/marker choice is recomputed every tick."""
+    """No cross-tick decision state — presser/marker choice is recomputed
+    every tick. `presser_id`/`marks` are last-tick's picks, kept only so
+    `highlights()` (called with the *previous* tick's mem) has something to
+    report."""
+
+    presser_id: Optional[RobotId] = None
+    marks: dict = field(default_factory=dict)
 
 
 class PressAndContainTactic(BaseTactic[PressAndContainMem]):
@@ -90,6 +97,12 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
         _enemy_id, distance = _enemy_nearest_ball(game)
         return distance is not None and distance <= _PRESS_RANGE
 
+    def highlights(self, mem: PressAndContainMem) -> dict[RobotId, str]:
+        highlights: dict[RobotId, str] = {rid: "marker" for rid in mem.marks}
+        if mem.presser_id is not None:
+            highlights[mem.presser_id] = "presser"
+        return highlights
+
     def tick(
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: PressAndContainMem
     ) -> tuple[dict[RobotId, RobotCommand], PressAndContainMem]:
@@ -99,10 +112,20 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
 
         if pressed_enemy_id is None:
             # No enemies on the field at all — nothing to press or mark.
+            mem.presser_id, mem.marks = None, {}
             return commands, mem
 
         presser_id = robot_ids[0]
         marker_ids = robot_ids[1:]
+        mem.presser_id = presser_id
+
+        if ctx.match_log is not None:
+            ctx.match_log.trace_if_changed(
+                tick=0,
+                sim_time=getattr(game, "ts", 0.0),
+                key="press_and_contain.press",
+                value={"presser_id": presser_id, "pressed_enemy_id": pressed_enemy_id},
+            )
 
         if ball_in_own_defense_area(game):
             # The ball is inside our own box — pressing there means an
@@ -146,6 +169,7 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
             )
 
         marks = _assign_markers(game, marker_ids, exclude_enemy_id=pressed_enemy_id)
+        mem.marks = marks
         for marker_id in marker_ids:
             opponent_id = marks.get(marker_id)
             if opponent_id is None:

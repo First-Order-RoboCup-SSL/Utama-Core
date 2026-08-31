@@ -49,6 +49,7 @@ from utama_core.engine.tactic import RobotId, Tactic, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.tactics.goalkeeper import GoalkeeperTactic
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,15 @@ class Strategy:
         self._pending_barrier_reset: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._referee_override = RefereeOverride(overrides=referee_overrides)
 
+        # The goalkeeper (see `set_goalkeeper`): a permanently pinned slot,
+        # entirely outside `_outfield_robot_ids`/`_slots` — no `Partitioner`
+        # ever sees its robot, `_validate_partition`'s exhaustive-cover check
+        # never has to account for it, and `_barrier_reset` never touches it.
+        # `None` until `set_goalkeeper` is called (goalkeeper-less callers,
+        # e.g. most of `tests/engine/test_strategy.py`, are unaffected).
+        self._pinned_slot: Optional[_TacticSlot] = None
+        self._pinned_robot_id: Optional[RobotId] = None
+
         # Optional structured intention/trace log — assigned post-construction
         # by `StrategyRunner` (see its `match_log_path` param), not threaded
         # through every `build_*_kernel_strategy` factory's constructor
@@ -154,6 +164,28 @@ class Strategy:
     def match_log(self, value: Optional[MatchLog]) -> None:
         self._match_log = value
         self._ctx.match_log = value
+
+    def set_goalkeeper(self, robot_id: int, tactic: Optional[Tactic] = None) -> None:
+        """Pin `robot_id` to `tactic` (default `GoalkeeperTactic(robot_id)`) outside the scheduler entirely.
+
+        Assigned post-construction the same way `match_log`/`referee_overrides`
+        are — `AbstractStrategy` knows `goalkeeper_id` independently of
+        whichever `build_kernel_strategy` factory built this `Strategy`, so
+        this is the one place a caller needs to touch, not a constructor
+        param threaded through every factory.
+
+        The pinned slot is ticked unconditionally every tick (see `tick()`),
+        with the same referee-gating a normal outfield tactic gets
+        (frozen during HALT/STOP, exempted from most restart-formation
+        overrides except kickoff — see `tick()`'s comments for exactly why),
+        but is never handed to a `Partitioner`, never validated as part of
+        the outfield partition's exhaustive cover, and never cleared by a
+        barrier reset — "pinned" here means permanently, not just
+        `is_committed()`-style revocably.
+        """
+        self._pinned_slot = _TacticSlot(tactic=tactic or GoalkeeperTactic(robot_id))
+        self._pinned_slot.mem = self._pinned_slot.tactic.initial_mem()
+        self._pinned_robot_id = robot_id
 
     @staticmethod
     def single_tactic_picker(picker: Picker) -> Partitioner:
@@ -252,11 +284,27 @@ class Strategy:
                 # reset on the transition in; tactics simply don't tick while
                 # this is active, so there is nothing further to reconcile
                 # once the restart ends and normal picking resumes.
-                return self._referee_override.tick(game, self._ctx.motion_controller, current_command)
+                override_commands = self._referee_override.tick(game, self._ctx.motion_controller, current_command)
+                # Most override Steps still compute a command for every
+                # friendly robot including the goalkeeper (e.g. `StopStep`
+                # drives the keeper off the ball if it's inside the keep-out
+                # radius; `PreparePenalty*Step` places it on the goal line) —
+                # ticking the pinned tactic on top would overwrite that
+                # intent with normal ball-tracking logic. `PrepareKickoff*Step`
+                # is the exception: it exempts the goalkeeper from formation
+                # entirely (a kickoff has no reason to pull it off its line),
+                # so it's genuinely absent from `override_commands` during
+                # those two commands specifically, and the pinned tactic
+                # should tick normally to fill the gap — hence gating on
+                # absence from the result rather than only on the command.
+                if self._pinned_slot is not None and self._pinned_robot_id not in override_commands:
+                    override_commands.update(self._tick_pinned(game))
+                return override_commands
 
             if is_paused(current_command):
                 # HALT: mem and commitments survive untouched, but no tactic
-                # issues motion commands while play is stopped.
+                # issues motion commands while play is stopped — including
+                # the pinned slot, for the same reason.
                 return {}
 
         partition = self._choose_partition(game)
@@ -332,8 +380,35 @@ class Strategy:
                     value=slot.tactic.highlights(slot.mem),
                 )
 
+        if self._pinned_slot is not None and self._pinned_robot_id not in commands:
+            # Gated the same way the override branch gates it (see there):
+            # in the ordinary case the pinned robot is never in
+            # `_outfield_robot_ids` so this is always true, but a caller that
+            # (unusually) also gives the pinned robot to an outfield tactic
+            # must have that tactic's command win, not be silently
+            # overwritten by the pinned tactic ticking on top of it.
+            commands.update(self._tick_pinned(game))
+
         self._prev_partition = partition
         self._pending_barrier_reset = None
+        return commands
+
+    def _tick_pinned(self, game: Game) -> dict[RobotId, RobotCommand]:
+        """Tick the pinned slot (see `set_goalkeeper`) and log its highlight trace.
+
+        Never touches `_slots`/`_prev_partition`/`_pending_barrier_reset` —
+        the pinned slot has no partition membership to reconcile, it simply
+        runs every tick it's called.
+        """
+        slot = self._pinned_slot
+        commands, slot.mem = slot.tactic.tick(game, self._ctx, (self._pinned_robot_id,), slot.mem)
+        if self.match_log is not None:
+            self.match_log.trace_if_changed(
+                tick=self._tick_count,
+                sim_time=getattr(game, "ts", 0.0),
+                key="highlights.goalkeeper",
+                value=slot.tactic.highlights(slot.mem),
+            )
         return commands
 
     def _slot_for(self, tactic_id: TacticId) -> _TacticSlot:

@@ -146,6 +146,7 @@ class ClearBallMem:
     """Last clearance target, kept only for direction-choice hysteresis."""
 
     prev_clear_target: Optional[Vector2D] = None
+    clearer_id: Optional[int] = None  # this tick's nearest-to-ball robot; display-only, see highlights()
 
 
 class ClearBallTactic(BaseTactic[ClearBallMem]):
@@ -162,6 +163,9 @@ class ClearBallTactic(BaseTactic[ClearBallMem]):
     def applicable(self, game: Game) -> bool:
         return in_danger(game)
 
+    def highlights(self, mem: ClearBallMem) -> dict[RobotId, str]:
+        return {mem.clearer_id: "clearer"} if mem.clearer_id is not None else {}
+
     def tick(
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: ClearBallMem
     ) -> tuple[dict[RobotId, RobotCommand], ClearBallMem]:
@@ -171,6 +175,7 @@ class ClearBallTactic(BaseTactic[ClearBallMem]):
 
         ball_p = game.ball.p.to_2d()
         clearer_id = min(robot_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball_p))
+        mem.clearer_id = clearer_id
         others = [rid for rid in sorted(robot_ids) if rid != clearer_id]
 
         phase = self._command_clearer(game, ctx, clearer_id, ball_p, mem, commands)
@@ -206,6 +211,13 @@ class ClearBallTactic(BaseTactic[ClearBallMem]):
             return "chase"
 
         target = _best_clear_target(game, ball_p, mem.prev_clear_target)
+        if ctx.match_log is not None:
+            ctx.match_log.trace_if_changed(
+                tick=0,
+                sim_time=getattr(game, "ts", 0.0),
+                key="clear_ball.clear_target",
+                value={"from": {"x": ball_p.x, "y": ball_p.y}, "to": {"x": target.x, "y": target.y}},
+            )
         target_oren = game.friendly_robots[clearer_id].p.angle_to(target)
         if oriented_towards(game, clearer_id, target_oren):
             commands[clearer_id] = kick()

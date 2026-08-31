@@ -38,6 +38,7 @@ behind it.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.engine.context import TickContext
@@ -67,7 +68,11 @@ _LANE_SPREADS = ((0.0,), (-0.9, 0.9), (-1.4, 0.0, 1.4), (-1.8, -0.6, 0.6, 1.8), 
 
 @dataclass
 class BlockShapeMem:
-    """No cross-tick state: the screen is re-derived from the ball every tick."""
+    """No cross-tick decision state — the screen is re-derived from the ball
+    every tick. `presser_id` is last-tick's pick, kept only so `highlights()`
+    (called with the *previous* tick's mem) has something to report."""
+
+    presser_id: Optional[RobotId] = None
 
 
 class BlockShapeTactic(BaseTactic[BlockShapeMem]):
@@ -77,6 +82,9 @@ class BlockShapeTactic(BaseTactic[BlockShapeMem]):
 
     def initial_mem(self) -> BlockShapeMem:
         return BlockShapeMem()
+
+    def highlights(self, mem: BlockShapeMem) -> dict[RobotId, str]:
+        return {mem.presser_id: "presser"} if mem.presser_id is not None else {}
 
     def tick(
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: BlockShapeMem
@@ -101,6 +109,7 @@ class BlockShapeTactic(BaseTactic[BlockShapeMem]):
 
         # --- step 1: nearest robot steps out to press the ball on the axis ---
         presser_id = min(robot_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball_p))
+        mem.presser_id = presser_id
 
         if ball_is_loose(game) and not ball_in_own_defense_area(game):
             # No carrier to stand off from — go get it instead of guarding an
@@ -128,6 +137,18 @@ class BlockShapeTactic(BaseTactic[BlockShapeMem]):
         screen_x = own_goal_x - own_goal_sign * (_DEFENSE_AREA_DEPTH + _SCREEN_OFFSET)
         center_y = ball_p.y * _SHIFT_FACTOR
         lane_limit = half_width - 0.7
+
+        if ctx.match_log is not None:
+            # The screen's held depth (x) and the ball-shifted lane band it
+            # spans (y) — not per-robot lane targets, which `highlights()`
+            # already can't express as a single line anyway.
+            ctx.match_log.trace_if_changed(
+                tick=0,
+                sim_time=getattr(game, "ts", 0.0),
+                key="block_shape.screen_line",
+                value={"x": screen_x, "y1": -lane_limit, "y2": lane_limit},
+            )
+
         spreads = _LANE_SPREADS[min(len(screen_ids), len(_LANE_SPREADS) - 1)]
         for rid, offset in zip(sorted(screen_ids), spreads):
             target_y = max(-lane_limit, min(lane_limit, center_y + offset))
