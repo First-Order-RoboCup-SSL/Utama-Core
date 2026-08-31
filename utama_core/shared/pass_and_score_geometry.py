@@ -177,6 +177,32 @@ def ball_in_own_defense_area(game: Game) -> bool:
     return in_own_defense_area(game, game.ball.p.to_2d())
 
 
+def in_enemy_defense_area(game: Game, point: Vector2D) -> bool:
+    """True if `point` is inside the enemy's defense area. Mirror of `in_own_defense_area`."""
+    defense_area = game.field.enemy_defense_area
+    front_x = float(defense_area[1][0])
+    goal_x = game.field.enemy_goal_line[0][0]
+    half_width = abs(float(defense_area[0][1]))
+    x_inside = (point.x - front_x) * (goal_x - front_x) >= 0.0
+    return x_inside and abs(point.y) <= half_width
+
+
+def ball_in_enemy_defense_area(game: Game) -> bool:
+    """True if the ball center is inside the enemy's defense area (see `in_enemy_defense_area`).
+
+    An attacker may not enter to retrieve it during active play — see
+    `FastPathPlanner._enemy_defense_area_retrieval_exempt`'s docstring, which
+    only lifts that keep-out during a stoppage restart, never during
+    NORMAL_START/FORCE_START. A tactic must check this itself and hold
+    rather than call `go_to_ball` at the literal ball position, or the
+    planner clamps every target back to the boundary and the robot
+    oscillates along it indefinitely (found live: `LeadAndSupportTactic`'s
+    sole leader orbiting the enemy box edge for 20+ seconds while the enemy
+    goalkeeper held the ball inside it, see `docs/investigation_*.md`).
+    """
+    return in_enemy_defense_area(game, game.ball.p.to_2d())
+
+
 def clamp_outside_own_defense_area(game: Game, point: Vector2D, margin: float = 2.0 * ROBOT_RADIUS + 0.05) -> Vector2D:
     """Clamp a target point to just outside our own defense area's front edge.
 
@@ -238,6 +264,23 @@ def clamp_outside_enemy_defense_area(
     if sign < 0 and point.x < exit_x:
         return Vector2D(exit_x, point.y)
     return point
+
+
+def enemy_defense_area_hold_point(game: Game, at_y: float, margin: float = 2.0 * ROBOT_RADIUS + 0.05) -> Vector2D:
+    """A hold point just outside the enemy's defense area front edge at `at_y`.
+
+    Mirror of `own_defense_area_exit_point`, for an attacker that needs to
+    wait near a ball resting inside the enemy's area (which it may not enter
+    during active play — see `ball_in_enemy_defense_area`) instead of
+    endlessly re-targeting the ball itself.
+    """
+    defense_area = game.field.enemy_defense_area
+    front_x = float(defense_area[1][0])
+    half_width = abs(float(defense_area[0][1]))
+    sign = -1.0 if game.my_team_is_right else 1.0
+    exit_x = front_x - sign * margin
+    y = max(-(half_width - margin), min(half_width - margin, at_y))
+    return Vector2D(exit_x, y)
 
 
 def find_best_shot(

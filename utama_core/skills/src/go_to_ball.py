@@ -11,12 +11,26 @@ the `default_vs_lowblock` stalemate investigation
 Pass `shield=False` to opt a call site out and always approach directly from
 the robot's own position instead.
 
-See `utama_core.skills.src.shielding`'s module docstring for why this logic
-was pulled out of this file rather than kept as private helpers here (in
-short: it was reach-driven — "many tactics call `go_to_ball`, so fixing it
-here fixes them all" — not a considered fit for a shared movement primitive,
-and it has already needed one behavior-narrowing patch, `COMMIT_RANGE`, to
-stop it oscillating against a mobile defender it wasn't designed against).
+Also holds outside the enemy's defense area instead of chasing a ball inside
+it (see `ball_in_enemy_defense_area`'s docstring): during active play an
+outfield robot may never enter that box, but `FastPathPlanner` clamps
+*every* target back to the box boundary regardless of which tactic asked for
+it — a caller that keeps targeting the literal ball position there converges
+just outside the keep-out margin and never actually closes the gap,
+oscillating along the boundary indefinitely (found live: `LeadAndSupportTactic`'s
+sole leader doing exactly this for 20+ seconds while the enemy keeper legally
+held the ball in its own box). Handled here, not per-tactic, since every
+`go_to_ball` caller hits the same planner clamp the same way.
+
+See `utama_core.skills.src.shielding`'s module docstring for why the
+shielding logic was pulled out of this file rather than kept as private
+helpers here (in short: it was reach-driven — "many tactics call
+`go_to_ball`, so fixing it here fixes them all" — not a considered fit for a
+shared movement primitive, and it has already needed one
+behavior-narrowing patch, `COMMIT_RANGE`, to stop it oscillating against a
+mobile defender it wasn't designed against). The enemy-box hold below is the
+same reach-driven fit, kept inline rather than split out since it's a single
+early-return, not a family of helpers.
 """
 
 import math
@@ -28,6 +42,11 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.shared.pass_and_score_geometry import (
+    ball_in_enemy_defense_area,
+    enemy_defense_area_hold_point,
+)
+from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.shielding import shielded_approach_angle
 from utama_core.skills.src.utils.move_utils import move
 
@@ -77,6 +96,19 @@ def go_to_ball(
     """
     ball = game.ball.p.to_2d()
     robot = game.friendly_robots[robot_id].p
+
+    if ball_in_enemy_defense_area(game):
+        if ctx is not None and ctx.match_log is not None:
+            ctx.match_log.trace_if_changed(
+                tick=0,
+                sim_time=getattr(game, "ts", 0.0),
+                key=f"go_to_ball[{robot_id}].approach",
+                value="hold_outside_enemy_box",
+            )
+        hold = enemy_defense_area_hold_point(game, ball.y)
+        return go_to_point(
+            game=game, motion_controller=motion_controller, robot_id=robot_id, target_coords=hold, dribbling=False
+        )
 
     if shield:
         approach_oren, shielding = shielded_approach_angle(game, robot, ball)
