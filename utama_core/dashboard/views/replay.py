@@ -42,7 +42,12 @@ from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.dashboard.server import DashboardServer
 from utama_core.dashboard.views.referee import _serialise_ball, _serialise_robots
-from utama_core.engine.match_log import IntentionEvent, RefereeEvent, load_jsonl
+from utama_core.engine.match_log import (
+    IntentionEvent,
+    RefereeEvent,
+    TraceEvent,
+    load_jsonl,
+)
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.replay.replay_player import _load_replay
 
@@ -74,7 +79,7 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
     if REPLAY_BASE_PATH.resolve() not in replay_path.parents or not replay_path.exists():
         return json.dumps({"error": "replay not found"}).encode()
 
-    intention_events, referee_events = _load_match_log_events(replay_path)
+    intention_events, referee_events, trace_events = _load_match_log_events(replay_path)
 
     frames = []
     my_team_is_right = None
@@ -110,7 +115,13 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
         # frontend forward-fills these against the currently-viewed frame's
         # `ts`, mirroring what this module used to do server-side.
         "tactic_events": [
-            {"sim_time": e.sim_time, "tactic_id": e.tactic_id, "robot_ids": list(e.robot_ids)} for e in intention_events
+            {
+                "sim_time": e.sim_time,
+                "tactic_id": e.tactic_id,
+                "robot_ids": list(e.robot_ids),
+                "note": e.note,
+            }
+            for e in intention_events
         ],
         "referee_events": [
             {
@@ -123,27 +134,35 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
             }
             for e in referee_events
         ],
+        # Sparse, same forward-fill contract as tactic_events — arbitrary
+        # per-tactic geometry (e.g. shadow_and_mark.marks: {marker_id:
+        # opponent_id}) keyed by whatever string a tactic chose when calling
+        # `ctx.match_log.trace_if_changed(...)`. The frontend doesn't
+        # interpret `key`/`value` here, it just forward-fills and hands them
+        # to whichever overlay renderer knows that key.
+        "trace_events": [{"sim_time": e.sim_time, "key": e.key, "value": e.value} for e in trace_events],
         "has_tactic_data": len(intention_events) > 0,
         "has_referee_data": len(referee_events) > 0,
     }
     return json.dumps(payload).encode()
 
 
-def _load_match_log_events(replay_path: Path) -> tuple[list, list]:
+def _load_match_log_events(replay_path: Path) -> tuple[list, list, list]:
     """Best-effort: load a sibling `.intentions.jsonl`'s events, split by kind, each sorted by sim_time.
 
-    Returns ([], []) if no such file exists or it fails to parse — this
+    Returns ([], [], []) if no such file exists or it fails to parse — this
     overlay is optional, absence must never break loading the replay itself.
     """
     intentions_path = replay_path.with_suffix("").with_suffix(".intentions.jsonl")
     if not intentions_path.exists():
-        return [], []
+        return [], [], []
 
     try:
         events = load_jsonl(intentions_path)
     except (OSError, json.JSONDecodeError):
-        return [], []
+        return [], [], []
 
     intention_events = sorted((e for e in events if isinstance(e, IntentionEvent)), key=lambda e: e.sim_time)
     referee_events = sorted((e for e in events if isinstance(e, RefereeEvent)), key=lambda e: e.sim_time)
-    return intention_events, referee_events
+    trace_events = sorted((e for e in events if isinstance(e, TraceEvent)), key=lambda e: e.sim_time)
+    return intention_events, referee_events, trace_events

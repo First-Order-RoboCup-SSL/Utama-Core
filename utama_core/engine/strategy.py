@@ -115,6 +115,7 @@ class Strategy:
         self._slots: dict[TacticId, _TacticSlot] = {}
         self._prev_partition: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._prev_referee_command = None
+        self._pending_barrier_reset: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._referee_override = RefereeOverride(overrides=referee_overrides)
 
         # Optional structured intention/trace log — assigned post-construction
@@ -290,13 +291,24 @@ class Strategy:
                 slot.mem = slot.tactic.initial_mem() if robot_ids else None
                 slot.assigned_robots = robot_ids
                 slot.committed_ticks = 0
-                if self.match_log is not None and robot_ids:
+                # A barrier reset (see `_barrier_reset`) wipes assigned_robots
+                # unconditionally, including for slots the very next partition
+                # just reassigns right back to their pre-reset robots — that
+                # pairing is scheduler bookkeeping reasserting the status quo,
+                # not a real reassignment, so it's not worth an intention-log
+                # entry (the paired release from `_barrier_reset` was already
+                # skipped for the same reason).
+                reasserted = (
+                    self._pending_barrier_reset is not None and self._pending_barrier_reset.get(tactic_id) == robot_ids
+                )
+                if self.match_log is not None and robot_ids and not reasserted:
                     self.match_log.intention(
                         tick=self._tick_count,
                         sim_time=getattr(game, "ts", 0.0),
                         tactic_id=tactic_id,
                         robot_ids=robot_ids,
                         tag=slot.tactic.tag,
+                        note=type(slot.tactic).__name__,
                     )
 
             if not robot_ids:
@@ -309,7 +321,19 @@ class Strategy:
             slot_commands, slot.mem = slot.tactic.tick(game, self._ctx, ordered_robots, slot.mem)
             commands.update(slot_commands)
 
+            if self.match_log is not None:
+                # Purely cosmetic per-tactic highlight (see `Tactic.highlights()`)
+                # — logged under one shared key per slot so the dashboard/replay
+                # canvas can render it without knowing every tactic id in advance.
+                self.match_log.trace_if_changed(
+                    tick=self._tick_count,
+                    sim_time=getattr(game, "ts", 0.0),
+                    key=f"highlights.{tactic_id}",
+                    value=slot.tactic.highlights(slot.mem),
+                )
+
         self._prev_partition = partition
+        self._pending_barrier_reset = None
         return commands
 
     def _slot_for(self, tactic_id: TacticId) -> _TacticSlot:
@@ -357,6 +381,20 @@ class Strategy:
         pinned_robots = frozenset().union(*pinned.values()) if pinned else frozenset()
         free_robots = self._outfield_robot_ids - pinned_robots
 
+        if self.match_log is not None:
+            # Which robots are currently pinned by an is_committed() slot —
+            # purely a display fact for the dashboard/replay canvas (see
+            # design doc's single-writer invariant), not consulted by
+            # anything in this class. Logged as a flat robot-id list, not
+            # per-tactic-id, since a viewer wants "is this robot locked"
+            # regardless of which slot holds it.
+            self.match_log.trace_if_changed(
+                tick=self._tick_count,
+                sim_time=getattr(game, "ts", 0.0),
+                key="committed_robot_ids",
+                value=sorted(pinned_robots),
+            )
+
         applicable_tactic_ids = {
             tactic_id
             for tactic_id, tactic in self._tactics.items()
@@ -399,17 +437,26 @@ class Strategy:
             )
 
     def _barrier_reset(self, game: Game) -> None:
-        had_any_assignment = any(slot.assigned_robots for slot in self._slots.values())
+        pre_reset = {tid: slot.assigned_robots for tid, slot in self._slots.items() if slot.assigned_robots}
         for slot in self._slots.values():
             slot.mem = None
             slot.assigned_robots = frozenset()
             slot.committed_ticks = 0
         self._prev_partition = None
-        if self.match_log is not None and had_any_assignment:
+        # Remembered so the very next tick's reassignment can tell "this is
+        # the barrier's own mem/commitment wipe reasserting the same
+        # partition" apart from a genuine reassignment, and skip logging the
+        # reassignment half when it's a no-op restore. A referee command
+        # flicker (e.g. STOP -> NORMAL_START -> STOP) otherwise produces two
+        # intention-log entries every cycle even though nothing about which
+        # robots are doing what actually changed.
+        self._pending_barrier_reset = pre_reset if pre_reset else None
+        if self.match_log is not None and pre_reset:
             self.match_log.intention(
                 tick=self._tick_count,
                 sim_time=getattr(game, "ts", 0.0),
-                tactic_id="__barrier_reset__",
+                tactic_id="referee reset",
                 robot_ids=(),
                 tag=TacticTag.MIXED,
+                note="referee restart cleared all tactic state",
             )

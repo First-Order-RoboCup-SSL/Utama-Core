@@ -106,6 +106,22 @@ class Tactic(Protocol[MemT]):
         """
         return None
 
+    def highlights(self, mem: MemT) -> dict[RobotId, str]:
+        """Optional, purely cosmetic: which of this tactic's *own* robots to
+        visually call out this tick, and a short label for each (shown by
+        the dashboard/replay canvas as a highlight ring + tooltip).
+
+        Never read by the kernel/scheduler — has no bearing on
+        `applicable()`/`is_committed()`/partitioning, and cannot be used to
+        influence any of them. Purely a tactic deciding what's worth a
+        human's attention right now (e.g. "this is the one I consider
+        committed", "this one is the pass target"), for whatever reason it
+        wants — the kernel does not interpret the label string at all.
+
+        Default: nothing highlighted.
+        """
+        return {}
+
 
 class BaseTactic(Generic[MemT]):
     """Convenience base providing the defaults `Tactic` doesn't strictly need.
@@ -124,3 +140,6 @@ class BaseTactic(Generic[MemT]):
 
     def suggest_next(self, game: Game, mem: MemT) -> Optional[TacticId]:
         return None
+
+    def highlights(self, mem: MemT) -> dict[RobotId, str]:
+        return {}

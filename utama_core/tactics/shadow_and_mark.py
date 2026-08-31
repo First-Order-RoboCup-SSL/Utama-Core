@@ -159,6 +159,11 @@ class ShadowAndMarkTactic(BaseTactic[ShadowAndMarkMem]):
                 commands[robot_id] = defend_parameter(game, ctx.motion_controller, robot_id, defender_group=shadow_ids)
 
         marks = _assign_marks(game, marker_ids)
+        if ctx.match_log is not None:
+            ctx.match_log.trace_if_changed(
+                tick=0, sim_time=getattr(game, "ts", 0.0), key="shadow_and_mark.marks", value=marks
+            )
+
         fallback_index = 0
         for marker_id in marker_ids:
             opponent_id = marks.get(marker_id)

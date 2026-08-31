@@ -17,7 +17,7 @@ from typing import Optional
 import pytest
 
 from utama_core.engine.context import TickContext
-from utama_core.engine.match_log import MatchLog
+from utama_core.engine.match_log import IntentionEvent, MatchLog
 from utama_core.engine.strategy import Strategy
 from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.entities.referee.referee_command import RefereeCommand
@@ -572,7 +572,7 @@ def test_match_log_records_intention_on_fresh_assignment():
 
     strategy.tick(_FakeGame())
 
-    events = strategy.match_log.events()
+    events = [e for e in strategy.match_log.events() if isinstance(e, IntentionEvent)]
     assert len(events) == 1
     assert events[0].tactic_id == "a"
     assert events[0].robot_ids == (1, 2)
@@ -593,7 +593,8 @@ def test_match_log_does_not_repeat_for_unchanged_assignment():
     strategy.tick(_FakeGame())
     strategy.tick(_FakeGame())  # same robot set — no new event
 
-    assert len(strategy.match_log.events()) == 1
+    events = [e for e in strategy.match_log.events() if isinstance(e, IntentionEvent)]
+    assert len(events) == 1
 
 
 def test_match_log_records_reassignment_when_active_tactic_switches():
@@ -610,7 +611,7 @@ def test_match_log_records_reassignment_when_active_tactic_switches():
     strategy.tick(_FakeGame())
     strategy.tick(_FakeGame())
 
-    events = strategy.match_log.events()
+    events = [e for e in strategy.match_log.events() if isinstance(e, IntentionEvent)]
     # tick 1: "a" gets the pool. tick 2: the picker switches to "b", so "a"
     # is released (robot_ids=()) before "b" picks up the freed pool.
     assert [(e.tactic_id, e.robot_ids) for e in events] == [
@@ -635,7 +636,7 @@ def test_match_log_records_tactic_release_without_commitment():
     strategy.tick(_FakeGame())
     strategy.tick(_FakeGame())
 
-    release_event = strategy.match_log.events()[1]
+    release_event = [e for e in strategy.match_log.events() if isinstance(e, IntentionEvent)][1]
     assert release_event.tactic_id == "a"
     assert release_event.robot_ids == ()
     assert "committed=False" in release_event.note
@@ -655,8 +656,49 @@ def test_match_log_records_barrier_reset():
     strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
     strategy.tick(_FakeGame(RefereeCommand.GOAL_YELLOW))  # barrier-tier transition
 
-    tactic_ids = [e.tactic_id for e in strategy.match_log.events()]
-    assert "__barrier_reset__" in tactic_ids
+    tactic_ids = [e.tactic_id for e in strategy.match_log.events() if isinstance(e, IntentionEvent)]
+    assert "referee reset" in tactic_ids
+
+
+def test_match_log_skips_reassignment_event_when_barrier_reset_reasserts_same_partition():
+    """A barrier reset followed by the picker reassigning the exact same
+    tactic to the exact same robots is scheduler bookkeeping reasserting the
+    status quo, not a real reassignment — must log the reset but not a
+    redundant "tactic X -> same robots" line right after it."""
+    tactic = RecordingTactic()
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy.match_log = MatchLog()
+
+    strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))  # "a" gets (1, 2)
+    strategy.tick(_FakeGame(RefereeCommand.GOAL_YELLOW))  # barrier reset, then picker reasserts "a" -> (1, 2)
+
+    events = [(e.tactic_id, e.robot_ids) for e in strategy.match_log.events() if isinstance(e, IntentionEvent)]
+    assert events == [("a", (1, 2)), ("referee reset", ())]
+
+
+def test_match_log_records_reassignment_event_when_barrier_reset_changes_partition():
+    """Contrast with the reassertion case above: if the partition genuinely
+    differs after a barrier reset, the reassignment must still be logged."""
+    tactic_a, tactic_b = RecordingTactic(), RecordingTactic()
+    picks = iter(["a", "b"])
+    strategy = Strategy(
+        tactics={"a": tactic_a, "b": tactic_b},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: next(picks)),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy.match_log = MatchLog()
+
+    strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))  # "a" gets (1, 2)
+    strategy.tick(_FakeGame(RefereeCommand.GOAL_YELLOW))  # barrier reset, then picker switches to "b"
+
+    events = [(e.tactic_id, e.robot_ids) for e in strategy.match_log.events() if isinstance(e, IntentionEvent)]
+    assert events == [("a", (1, 2)), ("referee reset", ()), ("b", (1, 2))]
 
 
 def test_match_log_skips_barrier_reset_event_when_nothing_was_assigned():
@@ -675,5 +717,5 @@ def test_match_log_skips_barrier_reset_event_when_nothing_was_assigned():
     # is a barrier tier, but no slot has held robots yet.
     strategy.tick(_FakeGame(RefereeCommand.GOAL_YELLOW))
 
-    tactic_ids = [e.tactic_id for e in strategy.match_log.events()]
-    assert "__barrier_reset__" not in tactic_ids
+    tactic_ids = [e.tactic_id for e in strategy.match_log.events() if isinstance(e, IntentionEvent)]
+    assert "referee reset" not in tactic_ids

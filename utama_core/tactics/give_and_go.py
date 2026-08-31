@@ -53,6 +53,7 @@ from utama_core.shared.pass_and_score_geometry import (
     find_best_shot,
     has_ball,
     in_own_defense_area,
+    intercept_point,
     no_shot_reposition_target,
     oriented_towards,
     own_defense_area_exit_point,
@@ -201,6 +202,14 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             return "switch"
         return None
 
+    def highlights(self, mem: GiveAndGoMem) -> dict[RobotId, str]:
+        highlights: dict[RobotId, str] = {}
+        if mem.carrier_id is not None:
+            highlights[mem.carrier_id] = "carrier"
+        if mem.receiver_id is not None:
+            highlights[mem.receiver_id] = "receiver"
+        return highlights
+
     def tick(
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: GiveAndGoMem
     ) -> tuple[dict[RobotId, RobotCommand], GiveAndGoMem]:
@@ -258,6 +267,15 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             mem.hop_ticks = 0
 
         if mem.receiver_id is not None:
+            if ctx.match_log is not None:
+                intercept_pos, _intercept_oren = intercept_point(game, carrier_id, mem.receiver_id)
+                ctx.match_log.trace_if_changed(
+                    tick=0,
+                    sim_time=getattr(game, "ts", 0.0),
+                    key="give_and_go.pass_target",
+                    value={"receiver_id": mem.receiver_id, "x": intercept_pos.x, "y": intercept_pos.y},
+                )
+
             mem.hop_ticks += 1
             if mem.hop_ticks >= _MAX_HOP_TICKS:
                 # Receiver never became ready (unreachable intercept point,
@@ -282,6 +300,19 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
         carrier_pos = game.friendly_robots[carrier_id].p
         best_shot_y, _gap = find_best_shot(carrier_pos, list(game.enemy_robots.values()), goal_x, goal_y1, goal_y2)
+
+        if ctx.match_log is not None:
+            ctx.match_log.trace_if_changed(
+                tick=0,
+                sim_time=getattr(game, "ts", 0.0),
+                key="give_and_go.shot_lane",
+                value={
+                    "from": {"x": carrier_pos.x, "y": carrier_pos.y},
+                    "to": {"x": goal_x, "y": best_shot_y} if best_shot_y is not None else None,
+                    "open": best_shot_y is not None,
+                },
+            )
+
         if best_shot_y is None:
             # No open lane at all — freezing here (the old behaviour) never
             # resolves against a stationary blocker (e.g. a keeper at the

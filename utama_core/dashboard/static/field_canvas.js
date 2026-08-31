@@ -10,11 +10,21 @@
 const FIELD_COLORS = {
   pitch: "#242832",
   line: "#4b5162",
-  friendly: "#e8eaf0",
-  enemy: "#6b7280",
+  yellow: "#e0a527",
+  blue: "#3d7fd1",
   ball: "#c98a3f",
   marker: "#e8eaf0",
+  laneOpen: "#5fb87a",
+  laneBlocked: "#c0524a",
+  committed: "#e0a14a",
 };
+
+// Robot body radius, world meters -> px is ROBOT_RADIUS * scale so the drawn
+// robot is proportional to the actual field (division-I robots are 0.09m
+// radius; see utama_core/config/physical_constants.py:ROBOT_RADIUS). Do not
+// hardcode a pixel radius here — it drifts out of proportion as soon as the
+// canvas or field geometry changes size.
+const ROBOT_RADIUS_M = 0.09;
 
 class FieldCanvas {
   constructor(canvas, geometry, { myTeamIsRight = false, myTeamIsYellow = true } = {}) {
@@ -170,7 +180,9 @@ class FieldCanvas {
     const robots = state.robots;
     const tactics = state.tactics || {};
     if (robots) {
-      const r = 5;
+      const r = Math.max(2, ROBOT_RADIUS_M * scale);
+      const friendlyFill = this.myTeamIsYellow ? FIELD_COLORS.yellow : FIELD_COLORS.blue;
+      const enemyFill = this.myTeamIsYellow ? FIELD_COLORS.blue : FIELD_COLORS.yellow;
       const drawTeam = (list, fill, label) => {
         for (const bot of list || []) {
           const cx = toX(bot.x), cy = toY(bot.y);
@@ -178,25 +190,28 @@ class FieldCanvas {
           ctx.beginPath();
           ctx.arc(cx, cy, r, 0, 2 * Math.PI);
           ctx.fill();
+          // Heading dash extends past the body edge so it reads as a
+          // direction pointer rather than disappearing into the fill.
           ctx.strokeStyle = FIELD_COLORS.pitch;
-          ctx.lineWidth = 0.8;
+          ctx.lineWidth = Math.max(1, r * 0.28);
+          const headingLen = r * 1.6;
           ctx.beginPath();
           ctx.moveTo(cx, cy);
-          ctx.lineTo(cx + r * Math.cos(bot.orientation), cy - r * Math.sin(bot.orientation));
+          ctx.lineTo(cx + headingLen * Math.cos(bot.orientation), cy - headingLen * Math.sin(bot.orientation));
           ctx.stroke();
           ctx.fillStyle = fill;
           ctx.font = "7px ui-monospace, monospace";
           ctx.textAlign = "center";
           ctx.fillText(bot.id, cx, cy - r - 1);
           if (label && tactics[String(bot.id)]) {
-            ctx.fillStyle = FIELD_COLORS.friendly;
+            ctx.fillStyle = FIELD_COLORS.marker;
             ctx.font = "6px ui-monospace, monospace";
             ctx.fillText(tactics[String(bot.id)], cx, cy + r + 7);
           }
         }
       };
-      drawTeam(robots.enemy, FIELD_COLORS.enemy, false);
-      drawTeam(robots.friendly, FIELD_COLORS.friendly, true);
+      drawTeam(robots.enemy, enemyFill, false);
+      drawTeam(robots.friendly, friendlyFill, true);
     }
 
     if (state.ball) {
@@ -206,6 +221,151 @@ class FieldCanvas {
       ctx.arc(bx, by, 3.5, 0, 2 * Math.PI);
       ctx.fill();
     }
+
+    this._drawOverlays(ctx, state, robots, toX, toY);
+  }
+
+  // Tactic-specific geometric intentions (which enemy a marker covers, a
+  // pass's intended receive point, ...), forward-filled by the caller from
+  // sparse TraceEvents keyed by whatever string the tactic chose when
+  // calling `ctx.match_log.trace_if_changed(...)`. This renderer only knows
+  // the few keys below by name — a tactic's trace value is inert here until
+  // a case is added for its key, same opt-in shape as everything else in
+  // this file.
+  _drawOverlays(ctx, state, robots, toX, toY) {
+    const overlays = state.overlays;
+    if (!overlays || !robots) return;
+
+    const byId = {};
+    for (const bot of robots.friendly || []) byId["f" + bot.id] = bot;
+    for (const bot of robots.enemy || []) byId["e" + bot.id] = bot;
+
+    // A robot whose tactic slot currently returns is_committed() — the
+    // scheduler will not reassign it until it releases or a barrier reset
+    // clears everything. Drawn first/underneath so a robot that is also
+    // highlights()-called-out this tick still shows both distinctly (a
+    // bigger dashed lock ring vs. the smaller solid highlight ring).
+    const committedIds = overlays["committed_robot_ids"];
+    if (committedIds) {
+      ctx.strokeStyle = FIELD_COLORS.committed;
+      ctx.setLineDash([2, 2]);
+      ctx.lineWidth = 1.5;
+      for (const robotId of committedIds) {
+        const bot = byId["f" + robotId];
+        if (!bot) continue;
+        const cx = toX(bot.x), cy = toY(bot.y);
+        ctx.beginPath();
+        ctx.arc(cx, cy, 11, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+
+    const marks = overlays["shadow_and_mark.marks"];
+    if (marks) {
+      ctx.strokeStyle = FIELD_COLORS.marker;
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1;
+      for (const markerId in marks) {
+        const opponentId = marks[markerId];
+        const marker = byId["f" + markerId];
+        const opponent = byId["e" + opponentId];
+        if (!marker || !opponent) continue;
+        this._drawArrow(ctx, toX(marker.x), toY(marker.y), toX(opponent.x), toY(opponent.y));
+      }
+      ctx.setLineDash([]);
+    }
+
+    const shotLane = overlays["give_and_go.shot_lane"];
+    if (shotLane) {
+      const fx = toX(shotLane.from.x), fy = toY(shotLane.from.y);
+      if (shotLane.to) {
+        ctx.strokeStyle = FIELD_COLORS.laneOpen;
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(toX(shotLane.to.x), toY(shotLane.to.y));
+        ctx.stroke();
+      } else {
+        // No open lane: a short blocked-red stub toward goal instead of a
+        // full line to nowhere, so "no shot" still reads at a glance.
+        ctx.strokeStyle = FIELD_COLORS.laneBlocked;
+        ctx.setLineDash([2, 3]);
+        ctx.lineWidth = 1.5;
+        const goalDir = shotLane.from.x < 0 ? 1 : -1;
+        ctx.beginPath();
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(fx + goalDir * 14, fy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    const passTarget = overlays["give_and_go.pass_target"];
+    if (passTarget) {
+      const receiver = byId["f" + passTarget.receiver_id];
+      if (receiver) {
+        ctx.strokeStyle = FIELD_COLORS.ball;
+        ctx.setLineDash([2, 4]);
+        ctx.lineWidth = 1.25;
+        this._drawArrow(ctx, toX(receiver.x), toY(receiver.y), toX(passTarget.x), toY(passTarget.y));
+        ctx.setLineDash([]);
+      }
+      // The intended receive point itself, whether or not the receiver has
+      // reached it yet — the whole point of tracing this is to see when the
+      // two diverge (the exact silent-aim bug class STRATEGY_DEVELOPMENT.md
+      // warns intercept_point() can produce).
+      const tx = toX(passTarget.x), ty = toY(passTarget.y);
+      ctx.strokeStyle = FIELD_COLORS.ball;
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.arc(tx, ty, 4, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
+
+    // Any tactic's optional, purely cosmetic per-robot highlight (see
+    // `Tactic.highlights()`), logged one key per active slot as
+    // "highlights.<tactic_id>" -> {robot_id: label}. Not tied to any
+    // specific tactic or to is_committed() — a tactic decides what's worth
+    // calling out and why; this renderer just draws whatever comes through.
+    for (const key in overlays) {
+      if (!key.startsWith("highlights.")) continue;
+      const labels = overlays[key];
+      for (const robotId in labels) {
+        const bot = byId["f" + robotId];
+        if (!bot) continue;
+        const cx = toX(bot.x), cy = toY(bot.y);
+        ctx.strokeStyle = FIELD_COLORS.marker;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 8, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.fillStyle = FIELD_COLORS.marker;
+        ctx.font = "6px ui-monospace, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(labels[robotId], cx, cy - 8 - 3);
+      }
+    }
+  }
+
+  _drawArrow(ctx, x1, y1, x2, y2) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    const headLen = 5;
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+    ctx.stroke();
+    ctx.restore();
   }
 
   canvasToField(clientX, clientY) {

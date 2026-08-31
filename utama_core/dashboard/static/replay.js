@@ -30,11 +30,15 @@
 
   let tacticEvents = [];
   let refereeEvents = [];
+  let traceEvents = [];
   let tacticIdx = 0;
   let refereeIdx = 0;
+  let traceIdx = 0;
   let slotRobots = {}; // tactic_id -> currently-assigned robot_ids
   let lastIndex = 0;
   let refereeState = null; // last-seen referee event, or null if none yet
+  let traceValues = {}; // key -> last-seen value, e.g. "shadow_and_mark.marks" -> {marker_id: opponent_id}
+  let overlaysEnabled = true;
 
   function frameTs(i) {
     return frames.length ? frames[i].ts : 0;
@@ -53,8 +57,10 @@
   function resetEventCursors() {
     tacticIdx = 0;
     refereeIdx = 0;
+    traceIdx = 0;
     slotRobots = {};
     refereeState = null;
+    traceValues = {};
   }
 
   function advanceEventCursors(ts) {
@@ -66,6 +72,11 @@
     while (refereeIdx < refereeEvents.length && refereeEvents[refereeIdx].sim_time <= ts) {
       refereeState = refereeEvents[refereeIdx];
       refereeIdx++;
+    }
+    while (traceIdx < traceEvents.length && traceEvents[traceIdx].sim_time <= ts) {
+      const e = traceEvents[traceIdx];
+      traceValues[e.key] = e.value;
+      traceIdx++;
     }
   }
 
@@ -106,7 +117,18 @@
     let html = "";
     for (let i = 0; i < tacticEvents.length; i++) {
       const e = tacticEvents[i];
-      const label = e.robot_ids.length ? e.tactic_id + " → " + e.robot_ids.join(",") : e.tactic_id + " (released)";
+      // `note` carries the tactic's actual class name (e.g. "GiveAndGoTactic")
+      // when this event is a real assignment — `e.tactic_id` alone is just
+      // the kernel-strategy slot id ("attack"/"defense"), not descriptive of
+      // what the tactic does. Release/reset events instead put a
+      // human-readable reason in `note`, so those are shown as-is.
+      let label;
+      if (e.robot_ids.length) {
+        const name = e.note ? e.note + " (" + e.tactic_id + ")" : e.tactic_id;
+        label = name + " → " + e.robot_ids.join(",");
+      } else {
+        label = e.note || e.tactic_id + " (released)";
+      }
       html +=
         '<div class="ref-row" style="cursor:pointer;" data-event-idx="' +
         i +
@@ -143,9 +165,10 @@
     updateReadouts();
     if (!frames.length) return;
     const frame = frames[index];
+    advanceEventCursors(frame.ts);
+    frame.overlays = overlaysEnabled ? traceValues : null;
     if (fieldView) fieldView.draw(frame);
     renderRobotStatusInto("replay-status-entries", frame, { hideFeedback: true });
-    advanceEventCursors(frame.ts);
     renderTacticStatusInto("replay-tactic-entries", tacticStatusFromSlots(), {
       emptyLabel: "no tactic data at this frame",
     });
@@ -247,6 +270,7 @@
     frames = [];
     tacticEvents = [];
     refereeEvents = [];
+    traceEvents = [];
     lastIndex = 0;
     resetEventCursors();
     setIndex(0);
@@ -261,6 +285,7 @@
         frames = data.frames || [];
         tacticEvents = data.tactic_events || [];
         refereeEvents = data.referee_events || [];
+        traceEvents = data.trace_events || [];
         lastIndex = 0;
         resetEventCursors();
         const canvas = document.getElementById("replay-field-canvas");
@@ -311,6 +336,10 @@
     });
     document.getElementById("replay-speed").addEventListener("change", (e) => {
       speed = Number(e.target.value);
+    });
+    document.getElementById("replay-overlays-toggle").addEventListener("change", (e) => {
+      overlaysEnabled = e.target.checked;
+      setIndex(index);
     });
     document.getElementById("replay-intention-log").addEventListener("click", (e) => {
       const row = e.target.closest("[data-event-idx]");
