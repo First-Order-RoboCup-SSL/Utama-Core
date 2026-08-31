@@ -111,7 +111,7 @@ def go_to_ball(
         )
 
     if shield:
-        approach_oren, shielding = shielded_approach_angle(game, robot, ball)
+        approach_oren, shielding = shielded_approach_angle(game, robot, ball, robot_id)
     else:
         approach_oren, shielding = robot.angle_to(ball), False
 

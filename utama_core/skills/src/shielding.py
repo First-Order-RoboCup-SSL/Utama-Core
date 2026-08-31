@@ -52,15 +52,66 @@ CONTEST_RANGE = 0.5
 # trace, `high_line_zone` vs `low_block` — the robot closed to 0.34m, then
 # the shield target moved and it drifted back out to 0.62m, a 7.5s
 # oscillation that ate the entire scoring window (see `docs/strategies.md`'s
-# "Known open bugs"). This is not a persistent freeze (no per-robot memory
-# exists at this stateless-skill level, and adding one would be new
-# general-purpose state for a single call site) — it is a proximity gate
-# recomputed fresh each tick from information already on hand, which has the
-# same practical effect: near the ball, the enemy's exact position stops
-# mattering because there is no more room left to route around it, so
-# tracking it any further only introduces churn. Must stay smaller than
-# `CONTEST_RANGE` or shield mode would never have room to operate at all.
+# "Known open bugs"). Must stay smaller than `CONTEST_RANGE` or shield mode
+# would never have room to operate at all.
+#
+# A bare one-sided threshold here (originally: "no per-robot memory exists
+# at this stateless-skill level, and adding one would be new general-purpose
+# state for a single call site") was found to actively cause a second,
+# separate bug: `docs/investigation_ball_contact_orientation_divergence.md`
+# traced a robot's facing error growing monotonically for 300+ ms right at
+# the point its chassis distance to the ball first dips under `COMMIT_RANGE`.
+# The commit-direct target (`robot.angle_to(ball)`) differs from the shield
+# target by 100+ degrees in the confirmed case, which the orientation PID's
+# own jump-detection (`AbstractPID._target_jumped`) correctly resets for —
+# but `dist` doesn't monotonically stay under `COMMIT_RANGE` once committed:
+# the robot's own approach dynamics (braking/rotation near the contact
+# radius) wobble it back and forth across the boundary, re-triggering the
+# shield<->direct flip (and therefore another 100+ degree target jump and
+# another PID reset) every few ticks — faster than the ~300ms a single reset
+# needs to actually converge. Confirmed via instrumented trace
+# (`switch_of_play_vs_default.pkl`-equivalent rerun, enemy robot 1,
+# t=39.6-39.9s): `shielding` flipped True->False->True twice within 0.3s
+# while `dist` oscillated 0.199 -> 0.175 -> 0.200, each flip re-triggering a
+# ~3 radian `target_oren` jump before the previous reset's recovery
+# completed. A bare threshold cannot fix this — hysteresis is inherently
+# stateful (the decision must depend on which side it last committed to) —
+# so `_COMMITTED_ROBOTS` below is deliberately reintroducing the per-robot
+# memory this module previously avoided, now that avoiding it has a
+# confirmed cost. See `_RELEASE_RANGE` for the other half of the band.
 COMMIT_RANGE = 0.2
+
+# Once committed to a direct approach (`COMMIT_RANGE`), don't re-engage
+# shielding until the robot has backed off past this larger radius. Without
+# this gap, `dist` wobbling by even a few centimetres right at `COMMIT_RANGE`
+# (which happens routinely — see `COMMIT_RANGE`'s docstring) flips the
+# decision every few ticks. The gap only needs to comfortably exceed that
+# wobble band (observed ~2.5cm in the confirmed trace); this is a generous
+# multiple of that with room to spare, still well inside `CONTEST_RANGE` so
+# shielding still has room to operate against a genuinely distant approach.
+_RELEASE_RANGE = 0.35
+
+# Per-robot "have we committed to a direct approach and not yet released"
+# state — see `COMMIT_RANGE`'s docstring for why this module needs it now.
+# Keyed by `robot_id` only (not team), matching every other caller in this
+# module/its call sites (`go_to_ball`, tactics) which only ever pass
+# friendly robots through here. Never grows unboundedly: at most one entry
+# per robot ID actually in play.
+_COMMITTED_ROBOTS: dict[int, bool] = {}
+
+
+def reset_shield_state(robot_id: int) -> None:
+    """Forget any committed-direct-approach state for `robot_id`.
+
+    Call this wherever a robot's ball-approach is being restarted from
+    scratch for an unrelated reason (new possession, role reassignment) so a
+    stale commitment from a previous, unrelated approach doesn't suppress
+    shielding on this new one. Safe to call even if no state is held (no-op).
+    Primarily for tests; most call sites don't need this since a fresh
+    approach with the enemy now far away simply won't re-trigger the
+    `CONTEST_RANGE` check in the first place.
+    """
+    _COMMITTED_ROBOTS.pop(robot_id, None)
 
 
 def nearest_contesting_enemy(game: Game, ball: Vector2D) -> Optional[Vector2D]:
@@ -75,16 +126,40 @@ def nearest_contesting_enemy(game: Game, ball: Vector2D) -> Optional[Vector2D]:
     return nearest_pos
 
 
-def shielded_approach_angle(game: Game, robot: Vector2D, ball: Vector2D) -> tuple[float, bool]:
+def shielded_approach_angle(game: Game, robot: Vector2D, ball: Vector2D, robot_id: int) -> tuple[float, bool]:
     """Approach angle to the ball, shielding it from a contesting enemy if one is near.
 
     Returns `(approach_oren, shielding)` — `approach_oren` is the angle to
     approach the ball from (already `robot.angle_to(ball)` if not
     shielding), and `shielding` reports whether the shield branch was taken,
     for callers that want to log/trace it.
+
+    `robot_id` keys the commit/release hysteresis (see `COMMIT_RANGE`'s and
+    `_RELEASE_RANGE`'s docstrings) — required, not optional, since a wrong or
+    reused ID would silently share hysteresis state between two different
+    robots' approaches.
     """
     contesting_enemy = nearest_contesting_enemy(game, ball)
-    shielding = contesting_enemy is not None and robot.distance_to(ball) > COMMIT_RANGE
+    dist = robot.distance_to(ball)
+
+    if contesting_enemy is None:
+        _COMMITTED_ROBOTS.pop(robot_id, None)
+        return robot.angle_to(ball), False
+
+    # Hysteresis: once committed to a direct approach, stay committed until
+    # comfortably clear of the ball again (`_RELEASE_RANGE`), rather than
+    # flipping back the moment `dist` ticks back over `COMMIT_RANGE` by a
+    # centimetre. See `COMMIT_RANGE`'s docstring for the confirmed failure
+    # this replaces (bare-threshold chatter repeatedly re-triggering large
+    # `target_oren` jumps faster than the orientation PID could recover from
+    # the previous one).
+    already_committed = _COMMITTED_ROBOTS.get(robot_id, False)
+    if already_committed:
+        shielding = dist > _RELEASE_RANGE
+    else:
+        shielding = dist > COMMIT_RANGE
+    _COMMITTED_ROBOTS[robot_id] = not shielding
+
     if shielding:
         # Approach from the far side of the ball relative to the contesting
         # enemy — our body ends up between the enemy and the ball (a shield),

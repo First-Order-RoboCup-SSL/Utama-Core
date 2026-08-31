@@ -6,11 +6,26 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
 from utama_core.skills.src.shielding import (
+    _RELEASE_RANGE,
     COMMIT_RANGE,
     CONTEST_RANGE,
     nearest_contesting_enemy,
+    reset_shield_state,
     shielded_approach_angle,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_shield_commit_state():
+    """`shielded_approach_angle`'s commit/release hysteresis (see
+    `shielding.COMMIT_RANGE`'s docstring) is per-robot-id module state, so a
+    stale commitment from one test could otherwise leak into the next test
+    reusing the same robot id (every test here uses `robot_id=0`)."""
+    reset_shield_state(0)
+    reset_shield_state(1)
+    yield
+    reset_shield_state(0)
+    reset_shield_state(1)
 
 
 def _robot(rid: int, x: float, y: float, is_friendly: bool) -> Robot:
@@ -83,7 +98,7 @@ def test_shielded_approach_angle_shields_when_enemy_contesting_and_far_from_ball
     enemy = Vector2D(0.3, 0.0)  # within CONTEST_RANGE
     game = _game({0: _robot(0, robot.x, robot.y, True)}, {0: _robot(0, enemy.x, enemy.y, False)}, (0.0, 0.0))
 
-    angle, shielding = shielded_approach_angle(game, robot, ball)
+    angle, shielding = shielded_approach_angle(game, robot, ball, robot_id=0)
 
     assert shielding is True
     assert angle == pytest.approx(enemy.angle_to(ball))
@@ -95,7 +110,7 @@ def test_shielded_approach_angle_commits_direct_once_close_to_ball():
     enemy = Vector2D(0.3, 0.3)  # still within CONTEST_RANGE
     game = _game({0: _robot(0, robot.x, robot.y, True)}, {0: _robot(0, enemy.x, enemy.y, False)}, (0.0, 0.0))
 
-    angle, shielding = shielded_approach_angle(game, robot, ball)
+    angle, shielding = shielded_approach_angle(game, robot, ball, robot_id=0)
 
     assert shielding is False
     assert angle == pytest.approx(robot.angle_to(ball))
@@ -106,7 +121,57 @@ def test_shielded_approach_angle_direct_when_no_contesting_enemy():
     robot = Vector2D(-5.0, 0.0)
     game = _game({0: _robot(0, robot.x, robot.y, True)}, {}, (0.0, 0.0))
 
-    angle, shielding = shielded_approach_angle(game, robot, ball)
+    angle, shielding = shielded_approach_angle(game, robot, ball, robot_id=0)
 
     assert shielding is False
     assert angle == pytest.approx(robot.angle_to(ball))
+
+
+def test_shielded_approach_angle_does_not_rechatter_near_commit_boundary():
+    """Regression test for
+    `docs/investigation_ball_contact_orientation_divergence.md`: a robot
+    whose chassis distance to the ball wobbles back and forth across
+    `COMMIT_RANGE` (routine near the physical contact radius — see
+    `COMMIT_RANGE`'s docstring) must not flip back to shielding until it has
+    backed off past `_RELEASE_RANGE`. Without hysteresis, each re-crossing
+    re-triggers a 100+ degree `target_oren` jump, which is what the
+    investigation traced as the divergence's proximate cause."""
+    ball = Vector2D(0.0, 0.0)
+    enemy = Vector2D(0.3, 0.3)  # within CONTEST_RANGE, contesting throughout
+
+    def _shielding_at(dist: float) -> bool:
+        robot = Vector2D(dist, 0.0)
+        game = _game({0: _robot(0, robot.x, robot.y, True)}, {0: _robot(0, enemy.x, enemy.y, False)}, (0.0, 0.0))
+        _, shielding = shielded_approach_angle(game, robot, ball, robot_id=0)
+        return shielding
+
+    # Approach from far away: shielding, as before.
+    assert _shielding_at(CONTEST_RANGE - 0.01) is True
+    # Cross into COMMIT_RANGE: commits to direct, as before.
+    assert _shielding_at(COMMIT_RANGE - 0.005) is False
+    # Wobble back out just past COMMIT_RANGE (routine near the contact
+    # radius) — must NOT re-engage shielding; that's the bug.
+    assert _shielding_at(COMMIT_RANGE + 0.01) is False
+    assert _shielding_at(COMMIT_RANGE + 0.03) is False
+    # Only once genuinely clear of the ball (past _RELEASE_RANGE) does
+    # shielding re-engage.
+    assert _shielding_at(_RELEASE_RANGE + 0.01) is True
+
+
+def test_shielded_approach_angle_commit_state_is_per_robot():
+    """Two robots' hysteresis states must not interfere with each other."""
+    ball = Vector2D(0.0, 0.0)
+    enemy = Vector2D(0.3, 0.3)
+
+    def _shielding_for(robot_id: int, dist: float) -> bool:
+        robot = Vector2D(dist, 0.0)
+        game = _game(
+            {robot_id: _robot(robot_id, robot.x, robot.y, True)}, {0: _robot(0, enemy.x, enemy.y, False)}, (0.0, 0.0)
+        )
+        _, shielding = shielded_approach_angle(game, robot, ball, robot_id=robot_id)
+        return shielding
+
+    # Robot 0 commits direct.
+    assert _shielding_for(0, COMMIT_RANGE - 0.005) is False
+    # Robot 1, still far away, should independently still shield.
+    assert _shielding_for(1, CONTEST_RANGE - 0.01) is True
