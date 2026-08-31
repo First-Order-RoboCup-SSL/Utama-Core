@@ -219,7 +219,16 @@ class ClearBallTactic(BaseTactic[ClearBallMem]):
                 value={"from": {"x": ball_p.x, "y": ball_p.y}, "to": {"x": target.x, "y": target.y}},
             )
         target_oren = game.friendly_robots[clearer_id].p.angle_to(target)
-        if oriented_towards(game, clearer_id, target_oren):
+        # `has_ball(visual=True)` above (line 207) is deliberately loose —
+        # right for deciding chase-vs-aim, wrong for deciding whether a kick
+        # fired *this tick* will actually contact the ball (see
+        # `_pass_and_score.py`'s `ready_to_kick` for the same reasoning and
+        # the live bug this mirrors: a kick fired outside rsim's real contact
+        # box is a silent no-op). Re-check the real per-tick sensor
+        # (`has_ball(game, clearer_id)`, no `visual=`) right at the instant of
+        # firing; a false-negative tick here just re-aims/holds and tries
+        # again next tick, which is harmless.
+        if oriented_towards(game, clearer_id, target_oren) and has_ball(game, clearer_id):
             commands[clearer_id] = kick()
             mem.prev_clear_target = None
             return "kick"

@@ -421,6 +421,80 @@ def test_give_and_go_first_touch_never_shoots_solo_with_a_teammate_available(run
     assert mem.receiver_id is not None, "first touch shot solo instead of passing — double-touch risk"
 
 
+def test_clear_ball_does_not_kick_when_real_sensor_disagrees_with_visual(runner_factory):
+    """`_command_clearer` gates its `kick()` on `has_ball(visual=True)` alone
+    (see `clear_ball.py`) for the chase-vs-aim decision, which is deliberately
+    loose — a ball just inside the dribbler-box's forward/lateral margin but
+    not in rsim's actual contact box would let `oriented_towards` pass while
+    the real per-tick sensor still reads False, firing `kick()` into empty
+    air (the same silent-no-op failure `_pass_and_score.py`'s `ready_to_kick`
+    already guards against — see its own comment for the live bug this
+    mirrors). The real sensor is the ground truth here, so pin it False
+    directly and confirm the tactic re-checks it before firing rather than
+    kicking on the visual read alone."""
+    import dataclasses
+    import math
+
+    from utama_core.entities.data.vector import Vector2D, Vector3D
+    from utama_core.entities.game.ball import Ball
+    from utama_core.entities.game.game_frame import GameFrame
+    from utama_core.tactics.clear_ball import (
+        ClearBallMem,
+        ClearBallTactic,
+        _best_clear_target,
+    )
+
+    runner = runner_factory(exp_friendly=5, exp_enemy=2)
+    game = runner.my.game
+    tactic = ClearBallTactic()
+    mem = ClearBallMem()
+
+    clearer_p = Vector2D(2.0, 0.0)
+    # `_best_clear_target` picks an upfield lane independent of the robot's
+    # own facing — computing it directly and pointing the clearer straight
+    # at it is what actually satisfies `oriented_towards` inside
+    # `_command_clearer`, rather than assuming the ball sits along whatever
+    # arbitrary orientation is picked (it wouldn't: the target is a spread
+    # lane, not necessarily the ball's own bearing). Without matching them
+    # up, the tactic falls through to "aim" regardless of the real-sensor
+    # check, making the test pass vacuously either way.
+    clear_target = _best_clear_target(game, clearer_p, prev_target=None)
+    facing_clear_target = clearer_p.angle_to(clear_target)
+    # Ball placed 0.09m directly ahead of the clearer *along that same
+    # facing* — inside the loose visual dribbler-box (forward-only check) —
+    # so both `oriented_towards` and `has_ball(visual=True)` read True,
+    # isolating the real-sensor recheck as the only thing standing between
+    # this setup and a fired kick.
+    ball_p = clearer_p + Vector2D(math.cos(facing_clear_target), math.sin(facing_clear_target)) * 0.09
+
+    frame = game.current
+    friendly = dict(frame.friendly_robots)
+    # Clearer well outside our own defense area (skips the hold_exit branch),
+    # oriented at the actual clearance target `_best_clear_target` will pick
+    # (satisfies oriented_towards) — but has_ball=False, the real sensor's
+    # ground truth, while the ball sits well inside the loose visual box.
+    friendly[1] = dataclasses.replace(friendly[1], has_ball=False, p=clearer_p, orientation=facing_clear_target)
+    ball = Ball(p=Vector3D(ball_p.x, ball_p.y, 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0))
+    frame_with_ball_visually_close = GameFrame(
+        ts=frame.ts,
+        my_team_is_yellow=frame.my_team_is_yellow,
+        my_team_is_right=frame.my_team_is_right,
+        friendly_robots=friendly,
+        enemy_robots=dict(frame.enemy_robots),
+        ball=ball,
+        referee=frame.referee,
+    )
+    game.add_game_frame(frame_with_ball_visually_close)
+    game = runner.my.game
+    assert not game.friendly_robots[1].has_ball, "setup didn't establish the real-sensor-False premise"
+
+    commands: dict = {}
+    phase = tactic._command_clearer(game, _ctx(runner), 1, ball.p.to_2d(), mem, commands)
+
+    assert phase != "kick", "fired kick() off the loose visual read alone, ignoring the real sensor's False"
+    assert commands[1].kick == 0
+
+
 class _FakeVec:
     def __init__(self, x, y):
         self.x, self.y = x, y
