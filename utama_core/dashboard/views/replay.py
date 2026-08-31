@@ -131,6 +131,7 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
                 "yellow_score": e.yellow_score,
                 "blue_score": e.blue_score,
                 "designated": list(e.designated) if e.designated is not None else None,
+                "note": e.note,
             }
             for e in referee_events
         ],

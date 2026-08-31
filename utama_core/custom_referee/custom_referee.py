@@ -281,6 +281,7 @@ class CustomReferee:
                 yellow_score=result.yellow_team.score,
                 blue_score=result.blue_team.score,
                 designated=result.designated_position,
+                note=violation.status_message if violation is not None else None,
             )
         return result
 

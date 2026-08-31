@@ -104,6 +104,7 @@
     blueScore: "replay-blue-score",
     command: "replay-command",
     stage: "replay-stage",
+    reason: "replay-command-reason",
   };
 
   function renderIntentionLog() {

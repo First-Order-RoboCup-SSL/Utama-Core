@@ -3,14 +3,33 @@
 // same DOM structure, same markup, so a replay looks like the live match it
 // was recorded from, not a second implementation with its own drift.
 
+// Commands that can carry a foul/violation reason worth surfacing next to
+// them — anything the referee only enters *because* a rule fired, not a
+// normal-play/restart-progression command reached on its own.
+const _REASON_COMMANDS = new Set([
+  "STOP",
+  "DIRECT_FREE_YELLOW",
+  "DIRECT_FREE_BLUE",
+  "INDIRECT_FREE_YELLOW",
+  "INDIRECT_FREE_BLUE",
+  "BALL_PLACEMENT_YELLOW",
+  "BALL_PLACEMENT_BLUE",
+]);
+
 // Renders the score/command/stage header block both views share. `ids` is
-// {yellowScore, blueScore, command, stage} element ids; `state` is
-// {yellow_score, blue_score, command, stage} or null (all placeholders).
+// {yellowScore, blueScore, command, stage, reason?} element ids; `state` is
+// {yellow_score, blue_score, command, stage, note?} or null (all
+// placeholders). `note` (when present, from RuleViolation.status_message —
+// see CustomReferee.step) is the human-readable reason the referee left
+// normal play, e.g. "Double touch" — only shown for commands in
+// _REASON_COMMANDS, since a note surviving on an unrelated later command
+// would misleadingly look like it caused that command too.
 function renderRefereeHeaderInto(ids, state) {
   const yellowEl = document.getElementById(ids.yellowScore);
   const blueEl = document.getElementById(ids.blueScore);
   const commandEl = document.getElementById(ids.command);
   const stageEl = document.getElementById(ids.stage);
+  const reasonEl = ids.reason ? document.getElementById(ids.reason) : null;
   if (yellowEl) yellowEl.textContent = state && state.yellow_score !== undefined ? state.yellow_score : "—";
   if (blueEl) blueEl.textContent = state && state.blue_score !== undefined ? state.blue_score : "—";
   if (commandEl) {
@@ -18,6 +37,11 @@ function renderRefereeHeaderInto(ids, state) {
     commandEl.className = state && state.command === "HALT" ? "accent" : "";
   }
   if (stageEl) stageEl.textContent = state && state.stage ? state.stage.replace(/_/g, " ") : "—";
+  if (reasonEl) {
+    const showReason = state && state.note && _REASON_COMMANDS.has(state.command);
+    reasonEl.textContent = showReason ? state.note : "";
+    reasonEl.style.display = showReason ? "" : "none";
+  }
 }
 
 function renderTacticStatusInto(containerId, tacticStatus, options) {
