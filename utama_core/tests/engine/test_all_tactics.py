@@ -364,6 +364,63 @@ def test_give_and_go_abandons_a_hop_that_never_completes(runner_factory):
     assert tactic.is_committed(game, mem) is False
 
 
+def test_give_and_go_first_touch_never_shoots_solo_with_a_teammate_available(runner_factory):
+    """A kickoff-shaped position (carrier at center, empty goal ahead) must
+    never be taken as a solo shot on the *first* touch of a possession, even
+    though `_has_open_shot` would say the lane is clear — an unblocked lane
+    right after a restart only means nobody has moved into the way yet, not
+    that the shot will land, and this tactic's shot is a single uncontested
+    kick with no in-flight recovery. If the shot doesn't score, the carrier
+    ends up the only robot near the dead ball and re-touches it itself,
+    which SSL's double-touch rule forbids for the whole window from
+    NORMAL_START until some *other* robot touches the ball first. Found
+    live: `build_tiki_taka_kernel_strategy` vs `build_counter_press_kernel_strategy`,
+    robot 1 shot from the kickoff spot on the very first tick with two idle
+    teammates standing by, then re-collected its own dead ball ~3.5s later.
+
+    With a teammate positioned within a safe, unblocked passing lane, the
+    fix (`_nearest_safe_receiver`, used only for `hop_count == 0`) must lock
+    a receiver instead of shooting.
+    """
+    import dataclasses
+
+    from utama_core.entities.data.vector import Vector2D, Vector3D
+    from utama_core.entities.game.ball import Ball
+    from utama_core.entities.game.game_frame import GameFrame
+    from utama_core.tactics.give_and_go import GiveAndGoMem
+
+    runner = runner_factory(exp_friendly=5, exp_enemy=2)
+    game = runner.my.game
+    tactic = GiveAndGoTactic()
+    mem = GiveAndGoMem(carrier_id=1, receiver_id=None, hop_count=0, hop_ticks=0)
+
+    frame = game.current
+    friendly = dict(frame.friendly_robots)
+    # Carrier at center (kickoff spot), goal wide open dead ahead (empty
+    # enemy_robots below) — _has_open_shot would say True here.
+    friendly[1] = dataclasses.replace(friendly[1], has_ball=True, p=Vector2D(0.0, 0.0))
+    # A teammate 2m away, clear of the carrier and any obstacle — a safe,
+    # unblocked pass target.
+    friendly[2] = dataclasses.replace(friendly[2], has_ball=False, p=Vector2D(2.0, 0.0))
+    ball = Ball(p=Vector3D(0.09, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0))
+    kickoff_frame = GameFrame(
+        ts=frame.ts,
+        my_team_is_yellow=frame.my_team_is_yellow,
+        my_team_is_right=frame.my_team_is_right,
+        friendly_robots=friendly,
+        enemy_robots={},
+        ball=ball,
+        referee=frame.referee,
+    )
+    game.add_game_frame(kickoff_frame)
+    game = runner.my.game
+    assert game.friendly_robots[1].has_ball, "setup didn't establish possession — test would pass vacuously"
+
+    _commands, mem = tactic.tick(game, _ctx(runner), (1, 2, 3), mem)
+
+    assert mem.receiver_id is not None, "first touch shot solo instead of passing — double-touch risk"
+
+
 class _FakeVec:
     def __init__(self, x, y):
         self.x, self.y = x, y

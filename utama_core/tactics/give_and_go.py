@@ -104,6 +104,38 @@ def _best_receiver(game: Game, carrier_id: int, candidate_ids: tuple[int, ...]) 
     return best_id
 
 
+_MIN_SAFE_PASS_DISTANCE = 0.7  # metres — matches score_pass_setup's own min_pass_distance
+
+
+def _nearest_safe_receiver(game: Game, carrier_id: int, candidate_ids: tuple[int, ...]) -> Optional[int]:
+    """Nearest teammate with a clear passing lane — no scoring-setup bar.
+
+    `_best_receiver`/`score_pass_setup` require the *receiver* to already
+    have an open shot from its current position — a fine bar for choosing
+    the best of several plausible receivers mid-possession, but far too
+    strict for the very first touch of a possession (kickoff, restart):
+    right then, every teammate is typically still in its kickoff/defensive
+    formation spot, nowhere near a scoring position, so `_best_receiver`
+    legitimately returns None every tick. This picks *any* reachable
+    teammate with an unblocked lane instead, purely to get a second robot's
+    touch on the ball before the carrier could possibly touch it again
+    (SSL's double-touch rule) — not to set up a good shot.
+    """
+    carrier_pos = game.friendly_robots[carrier_id].p
+    enemies = enemy_positions(game)
+    best_id, best_dist = None, None
+    for candidate_id in candidate_ids:
+        candidate_pos = game.friendly_robots[candidate_id].p
+        dist = carrier_pos.distance_to(candidate_pos)
+        if dist < _MIN_SAFE_PASS_DISTANCE:
+            continue
+        if segment_blocked(carrier_pos, candidate_pos, enemies):
+            continue
+        if best_dist is None or dist < best_dist:
+            best_id, best_dist = candidate_id, dist
+    return best_id
+
+
 def _has_open_shot(game: Game, robot_id: int) -> bool:
     robot_pos = game.friendly_robots[robot_id].p
     goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
@@ -262,8 +294,57 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         others = tuple(rid for rid in robot_ids if rid != carrier_id)
 
         force_shot = mem.hop_count >= _MAX_HOPS_PER_POSSESSION or not others
-        if not force_shot and mem.receiver_id is None and not _has_open_shot(game, carrier_id):
+        # Never let the *first* touch of a possession be a solo shot when a
+        # teammate is available, even if `_has_open_shot` says the lane is
+        # clear — an unblocked lane right after a kickoff/restart is not
+        # evidence the shot will land, only that nobody has moved into the
+        # way yet, and every one of this tactic's shots is a single
+        # uncontested kick with no in-flight recovery. If it doesn't score,
+        # the carrier is the only robot near the dead ball afterward and
+        # ends up touching it again itself: SSL's double-touch rule forbids
+        # exactly this for the entire window from NORMAL_START until some
+        # *other* robot touches the ball first (see DoubleTouchRule) — found
+        # live at kickoff, where the goal is wide open by construction and
+        # `_has_open_shot` fires on hop 0 with two idle teammates standing
+        # by. hop_count >= 1 keeps today's "shoot when open" behavior for
+        # every later touch in the same possession, once a genuine
+        # intervening touch has already happened.
+        first_touch_of_possession = mem.hop_count == 0
+        if not force_shot and mem.receiver_id is None and first_touch_of_possession:
+            # The very first touch of a possession must never be a solo shot
+            # (see the block comment above `first_touch_of_possession`'s
+            # definition, moved here) — use the relaxed selector, not
+            # `_best_receiver`, since a kickoff/restart formation has no
+            # teammate anywhere near a scoring position yet and
+            # `score_pass_setup` would reject all of them.
+            mem.receiver_id = _nearest_safe_receiver(game, carrier_id, others)
+            mem.hop_ticks = 0
+        elif not force_shot and mem.receiver_id is None and not _has_open_shot(game, carrier_id):
             mem.receiver_id = _best_receiver(game, carrier_id, others)
+            mem.hop_ticks = 0
+
+        if first_touch_of_possession and mem.receiver_id is None and not force_shot:
+            # No teammate was even reachable/unblocked (e.g. boxed in by
+            # opponents right at kickoff) — hold rather than fall through to
+            # the shoot branch below, which would reintroduce the double-
+            # touch bug this whole block exists to prevent. Retry next tick
+            # as `_relocate_others` keeps repositioning teammates; give up
+            # and force a solo shot only after `_MAX_HOP_TICKS`, the same
+            # timeout budget the in-flight pass handshake already uses.
+            mem.hop_ticks += 1
+            if mem.hop_ticks < _MAX_HOP_TICKS:
+                carrier_pos = game.friendly_robots[carrier_id].p
+                goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
+                commands[carrier_id] = move(
+                    game=game,
+                    motion_controller=ctx.motion_controller,
+                    robot_id=carrier_id,
+                    target_coords=carrier_pos,
+                    target_oren=carrier_pos.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
+                    dribbling=True,
+                )
+                self._relocate_others(game, ctx, robot_ids, carrier_id, commands)
+                return commands, mem
             mem.hop_ticks = 0
 
         if mem.receiver_id is not None:
