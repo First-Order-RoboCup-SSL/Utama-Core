@@ -251,6 +251,31 @@ def _pass_exec(
             target_oren=passer_target_oren,
             dribbling=True,
         )
+    elif not has_ball(game, passer_id):
+        # `passer_has_ball` (visual=True, ~0.15m) already said "close enough
+        # to stop chasing" — that's the right call for a state-machine
+        # decision (see run_setup_phase's comment on why the loose check
+        # exists), but it's well outside rsim's actual kick-contact box
+        # (~3cm forward/4cm lateral) and can be several cm short of it.
+        # Freezing here (the old `empty_command`) left the passer parked
+        # just outside contact range forever, `kick()` re-firing into empty
+        # air every tick with the ball never actually moving (found live:
+        # `SwitchOfPlayTactic`'s "switch" phase, 8+ seconds, ball velocity
+        # staying exactly 0). Close the last few cm with `move()` directly
+        # at the already-computed `passer_target_oren` (not `go_to_ball`,
+        # which always faces the ball — that would rotate the passer off
+        # the pivot-aimed angle while it's still closing the gap, feeding
+        # `intercept_point()`'s passer-orientation-dependent receive point a
+        # moving target and making the pivot chase a drifting aim, exactly
+        # the failure mode this function's own docstring warns about).
+        commands[passer_id] = move(
+            game=game,
+            motion_controller=ctx.motion_controller,
+            robot_id=passer_id,
+            target_coords=game.ball.p.to_2d(),
+            target_oren=passer_target_oren,
+            dribbling=True,
+        )
     else:
         commands[passer_id] = empty_command(dribbler_on=True)
 
@@ -273,7 +298,24 @@ def _pass_exec(
     else:
         commands[receiver_id] = empty_command(dribbler_on=True)
 
-    ready_to_kick = passer_has_ball and passer_aimed and receiver_ready
+    # `passer_has_ball` (visual=True, ~0.15m) is deliberately loose — right
+    # for deciding *which state* the passer is in (chase/aim/hold), wrong for
+    # deciding whether a kick fired *this tick* will actually contact the
+    # ball: rsim's kicker only ever applies a directional impulse within its
+    # own contact box (~3cm forward/4cm lateral — see `has_ball`'s own
+    # sensor semantics), so kicking from the outer half of the 0.15m radius
+    # is a silent no-op, and this state machine has no way to notice ("ready
+    # to kick" stays true forever, so it just keeps re-firing into nothing —
+    # found live: `SwitchOfPlayTactic`'s "switch" phase re-issuing `kick()`
+    # for 8+ straight seconds with the ball's velocity staying exactly 0).
+    # `has_ball(game, passer_id)` (no `visual=`) is the real per-tick contact
+    # sensor (`isTouchingBall()` in rsim, the actual IR sensor on real
+    # hardware) — an extra, narrow check only at the instant of firing, not a
+    # replacement for `passer_has_ball` above. A false-negative tick here
+    # just means "don't kick yet, try again next tick", which is harmless;
+    # it's the false-positive from the looser check that silently wastes the
+    # whole window.
+    ready_to_kick = passer_has_ball and passer_aimed and receiver_ready and has_ball(game, passer_id)
     if ready_to_kick:
         commands[passer_id] = kick()
 
