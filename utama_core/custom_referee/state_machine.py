@@ -728,9 +728,34 @@ class GameStateMachine:
             if violation.designated_position is not None
             else None
         )
-        self.next_command = placement_command or violation.next_command
-        self._post_ball_placement_command = violation.next_command if placement_command is not None else None
-        self.ball_placement_target = violation.designated_position
+        # A violation with no next_command/designated_position of its own
+        # (e.g. DefenseAreaStoppageRule's HALT escalation) is not saying "the
+        # restart in flight is cancelled" -- on a real pitch a HALT here just
+        # means a human ref decides what happens next, and the previously
+        # queued restart (e.g. a goal's PREPARE_KICKOFF_*/ball_placement_
+        # target) is still the right thing to resume once play continues.
+        # Overwriting these with None here previously erased that restart
+        # entirely: a goal's queued kickoff got discarded the instant a
+        # HALT-escalating foul fired before the restart's own STOP could
+        # auto-advance, and since sim mode has no human to resume a HALT
+        # (see StrategyRunner's _SIM_HALT_AUTO_RESUME_SECONDS), the auto-
+        # resume had nothing left to restore into -- it jumped straight to
+        # NORMAL_START with the ball still sitting wherever the interrupted
+        # restart left it (e.g. still in the goal mouth right after a goal),
+        # which let GoalRule immediately re-fire and repeat the whole cycle
+        # every ~9s for the rest of the match (found live, tournament
+        # replay counter_flow_vs_zone_fluid_LK.pkl, 2026-09-01: one real
+        # goal at t=43.6s, then 23 more "goals" every ~9s from t=394s on,
+        # via this exact STOP(goal)->HALT(2nd defense-area-stoppage foul)->
+        # NORMAL_START(force_command, no teleport)->STOP(goal) loop).
+        # Preserving instead of clobbering only changes behaviour for a
+        # violation that provides nothing new -- every rule that has a real
+        # next_command/designated_position to give still overrides freely.
+        if violation.next_command is not None:
+            self.next_command = placement_command or violation.next_command
+            self._post_ball_placement_command = violation.next_command if placement_command is not None else None
+        if violation.designated_position is not None:
+            self.ball_placement_target = violation.designated_position
         self.status_message = violation.status_message
         logger.info(
             "Foul detected: %s → %s (next: %s)",

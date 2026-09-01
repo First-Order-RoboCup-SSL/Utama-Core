@@ -1389,6 +1389,23 @@ class StrategyRunner:
                     if self._prev_custom_ref_command != RefereeCommand.HALT:
                         self._halt_entered_at = self.my.current_game_frame.ts
                     elif self.my.current_game_frame.ts - self._halt_entered_at >= _SIM_HALT_AUTO_RESUME_SECONDS:
+                        # A HALT can interrupt a restart already in flight
+                        # (e.g. DefenseAreaStoppageRule 2nd-foul-escalating
+                        # mid-goal-restart) — GameStateMachine now preserves
+                        # that restart's designated_position through the HALT
+                        # rather than discarding it (see _handle_foul), so
+                        # replay it here before resuming, same as the
+                        # STOP-transition branch above. Without this, force-
+                        # resuming to NORMAL_START left the ball exactly where
+                        # the interrupted restart left it (e.g. still sitting
+                        # in the goal mouth right after a goal), which let
+                        # GoalRule immediately re-fire and repeat the whole
+                        # cycle every ~9s for the rest of the match (found
+                        # live, tournament replay
+                        # counter_flow_vs_zone_fluid_LK.pkl, 2026-09-01).
+                        if ref_data.designated_position is not None:
+                            x, y = ref_data.designated_position
+                            self.sim_controller.teleport_ball(x, y)
                         self.referee.force_command(RefereeCommand.NORMAL_START, self.my.current_game_frame.ts)
                 else:
                     self._halt_entered_at = None

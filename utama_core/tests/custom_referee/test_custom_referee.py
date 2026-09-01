@@ -671,6 +671,78 @@ class TestGameStateMachine:
         data = sm.step(current_time=10.0, violation=violation)
         assert data.status_message == "Goal by Yellow"
 
+    def test_halt_escalation_mid_goal_restart_preserves_kickoff_and_ball_target(self):
+        """Found live in a tournament replay
+        (counter_flow_vs_zone_fluid_LK.pkl, 2026-09-01): a goal queues
+        PREPARE_KICKOFF_*/ball_placement_target=(0,0), but before the
+        resulting STOP can auto-advance, DefenseAreaStoppageRule's 2nd-foul
+        HALT escalation used to blindly overwrite both with the violation's
+        own (empty) next_command/designated_position — discarding the
+        restart entirely. Sim mode has no human to resume a HALT, so its
+        auto-resume then force-jumped straight to NORMAL_START with the ball
+        still sitting wherever the interrupted restart left it (e.g. still
+        in the goal mouth), letting GoalRule immediately re-fire — a ~9s
+        repeating STOP(goal)->HALT->NORMAL_START loop for the rest of the
+        match. _handle_foul must preserve next_command/ball_placement_target
+        when the escalating violation doesn't provide its own.
+        """
+        from utama_core.custom_referee.rules.base_rule import RuleViolation
+
+        sm = _state_machine()
+        goal = RuleViolation(
+            rule_name="goal",
+            suggested_command=RefereeCommand.STOP,
+            next_command=RefereeCommand.PREPARE_KICKOFF_BLUE,
+            status_message="Goal by Yellow",
+        )
+        data = sm.step(current_time=10.0, violation=goal)
+        assert data.next_command == RefereeCommand.BALL_PLACEMENT_BLUE
+        assert data.designated_position == (0.0, 0.0)
+
+        halt_escalation = RuleViolation(
+            rule_name="defense_area_stoppage",
+            suggested_command=RefereeCommand.HALT,
+            next_command=None,
+            status_message="Yellow too close to opponent defense area during stoppage (2nd foul — HALT)",
+            offending_teams=(True,),
+        )
+        data = sm.step(current_time=14.0, violation=halt_escalation)
+        assert data.referee_command == RefereeCommand.HALT
+        # Before the fix: both of these went to None, and force-resuming
+        # from HALT had no restart left to replay.
+        assert data.next_command == RefereeCommand.BALL_PLACEMENT_BLUE
+        assert data.designated_position == (0.0, 0.0)
+
+    def test_halt_escalation_with_its_own_restart_still_overrides(self):
+        """A violation that DOES provide a real next_command/designated_position
+        (e.g. a genuinely new stopping foul) must still take effect as before
+        -- the preservation above only guards against an escalation with
+        nothing of its own to give."""
+        from utama_core.custom_referee.rules.base_rule import RuleViolation
+
+        sm = _state_machine()
+        goal = RuleViolation(
+            rule_name="goal",
+            suggested_command=RefereeCommand.STOP,
+            next_command=RefereeCommand.PREPARE_KICKOFF_BLUE,
+            status_message="Goal by Yellow",
+        )
+        sm.step(current_time=10.0, violation=goal)
+
+        new_foul = RuleViolation(
+            rule_name="out_of_bounds",
+            suggested_command=RefereeCommand.DIRECT_FREE_BLUE,
+            next_command=RefereeCommand.DIRECT_FREE_BLUE,
+            status_message="Ball out of bounds",
+            designated_position=(1.5, 2.0),
+        )
+        data = sm.step(current_time=14.0, violation=new_foul)
+        # designated_position is set, so this restart routes through ball
+        # placement first (same as the goal case above) rather than jumping
+        # straight to DIRECT_FREE_BLUE -- see _ball_placement_command_for.
+        assert data.next_command == RefereeCommand.BALL_PLACEMENT_BLUE
+        assert data.designated_position == (1.5, 2.0)
+
     def test_manual_command_clears_status_message(self):
         from utama_core.custom_referee.rules.base_rule import RuleViolation
 
