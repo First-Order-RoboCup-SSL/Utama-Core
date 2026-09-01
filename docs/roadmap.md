@@ -242,30 +242,48 @@ the full investigation narrative for anything already fixed lives in git log
 
 7. **grsim as a CI/tournament environment, alongside rsim** (raised by user).
    Three separable sub-problems:
-   - **rsim ball-stickiness bug (fix ready, NOT shipped — blocked).** Root
-     cause found and fixed in `rc-robosim`/`vendor/rSim` (upstream C++, ODE
-     physics): `SSLWorld::setActions()` never called `setDribbler(false)` (a
-     one-way latch), and `unholdBall()` didn't actually move the ball clear of
-     the kicker collision envelope. Both fixed in
+   - **rsim ball-stickiness bug — fixed and shipped (resolved 2026-08-16,
+     re-confirmed 2026-09-01).** Root cause found and fixed in
+     `rc-robosim`/`vendor/rSim` (upstream C++, ODE physics):
+     `SSLWorld::setActions()` never called `setDribbler(false)` (a one-way
+     latch), and `unholdBall()` didn't actually move the ball clear of the
+     kicker collision envelope. Both fixed in
      `docs/patches/rSim-dribbler-release.diff` (source: `vendor/rSim/`, see
-     `FORK_NOTES.md`). **Blocker**: installing the patched build regresses
+     `FORK_NOTES.md`). The patched build has been built and installed over
+     stock `rc-robosim` in `.pixi/envs/robosim` since 2026-08-16 — this
+     section previously and incorrectly said it was reverted to stock and
+     blocked; that was stale/wrong, corrected 2026-09-01 after independently
+     verifying the installed artifact's provenance (`direct_url.json` points
+     at a local skbuild wheel, not PyPI; the installed `.so`'s md5 is
+     byte-identical to `vendor/rSim`'s own build-tree output; the source tree
+     already contains all three patches).
+     The previously-suspected blocker —
      `test_referee_override.py::test_their_kickoff_clears_our_robots_outside_center_circle`
-     (a robot's path planner stalls at `dist_to_center≈0.24m`, well short of
-     the required 0.75m; `has_ball` is `False` throughout, so not
-     dribbler-related). Leading hypothesis, not confirmed: the ball's
-     slightly different post-release resting position pushes
-     `FastPathPlanning`'s geometry into a degenerate case (an `invalid value
-     encountered in divide` warning from `planner.py`'s `perp_dir /
-     np.linalg.norm(perp_dir)` appears in the same run). **Do not install the
-     patched build over stock `rc-robosim` in `.pixi/envs/robosim` until this
-     is root-caused** — currently reverted to stock 1.2. Whoever picks this up:
-     reproduce standalone, confirm/rule out the degenerate-perpendicular-
-     vector hypothesis, only then re-attempt installing over stock. Not
-     confirmed whether this is the same issue as
-     [[project_rsim_dribble_issues]], but at minimum consistent with it.
-     Scope note: `DribbleTactic` (the tactic that surfaced this) is not wired
-     into any of the tournament configs, so this did not cause the
-     scoreless-draw pattern above.
+     regressing under the patch (`dist_to_center≈0.24m` vs. the required
+     0.75m) — was root-caused on 2026-08-16 (see `FORK_NOTES.md`'s "Known
+     issue: test fragility" section) as a **test-assertion bug, not a
+     physics or planner bug**: the test measured distance from a fixed
+     field-center point instead of the live ball position, while
+     `_clear_to_legal_positions` was already correctly using
+     `game.ball.p`. The dribbler fix changes ODE contact-solver branching
+     during an incidental early-tick ball touch, chaotically shifting the
+     ball's resting position ~0.56m from center — the tested robot was the
+     whole time correctly 0.797m from the *real* ball position, comfortably
+     clear of the 0.75m keep-out radius. Fixed by asserting against
+     `game.ball.p` instead of a fixed origin, matching the sibling
+     ball-placement test's existing pattern. The `perp_dir /
+     np.linalg.norm(perp_dir)` degenerate-vector theory floated at the time
+     was independently re-investigated and refuted twice (2026-08-16 and
+     2026-09-01): `rotate_vector()`
+     (`utama_core/global_utils/math_utils.py`) is norm-preserving by
+     construction, and `planner.py` already guards the true zero-norm case
+     before reaching that line — the numpy warning seen in that run was a
+     red herring, not this code path's real failure mode.
+     Re-verified 2026-09-01: targeted test 11 passed; full suite (CI's exact
+     invocation) 843 passed, 4 skipped, 2 xfailed, exit 0. Not confirmed
+     whether this was ever the same issue as
+     [[project_rsim_dribble_issues]], but at minimum consistent with it —
+     worth checking whether that memory is now stale too.
    - **grsim headless/dependency/speed investigation** — not yet verified:
      what grsim's actual runtime dependencies are and whether they're
      installable in a GitHub Actions runner at all (grsim is an external
