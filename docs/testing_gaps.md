@@ -674,3 +674,24 @@ passed, 4 skipped, 2 xfailed. This is the strongest signal so far that the
 detector + fix combination has converged for the current strategy catalog:
 two independent tournament samples (15 and 30 matches) after the shielding
 fix produced zero unexplained anomalies. Replays deleted after analysis.
+
+**Expanded-coverage verification, 2026-09-02 (8 configs, 28 matches).**
+Note: an attempt to run the *entire* 17-config catalog round-robin
+(`tournament.py` with no args, `C(17,2)=136` matches) was interrupted as
+too slow for this kind of iterative check — round-robin match count grows
+quadratically with catalog size, so a full-catalog sweep is not the right
+default for a "keep checking for regressions" loop. Scaled back instead to
+the existing 6 competitive configs plus the two "parked but improved"
+strategies flagged as worth another look (`overload_press`,
+`high_line_zone`) — 8 configs, 28 matches, comparable in size to the prior
+30-match run. 21 raw-flagged windows, **all classify as
+`held_or_contested`, 0 unclassified** — including two windows on the newly-
+added strategies (`high_line_zone_vs_overload_press.pkl` t=25-28s,
+`overload_press_vs_tiki_taka.pkl` t=16-19s), both individually spot-checked
+directly against frame data (not just the classifier) and confirmed to be
+ordinary loose-ball convergence ending in real possession, not a defect.
+Full suite: 867 passed, 4 skipped, 2 xfailed. Three independent post-fix
+samples (15, 30, and 28 matches, the last exercising two previously-
+unswept strategies) now show zero unexplained anomalies — the detector +
+shielding fix combination holds up under broader coverage, not just the
+original 6-config set. Replays deleted after analysis.
