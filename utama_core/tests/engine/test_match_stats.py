@@ -210,6 +210,40 @@ def test_shot_counted_when_trajectory_is_on_target_off_center():
     assert stats.shots == {"friendly": 1, "enemy": 0}
 
 
+def test_no_shot_for_fast_center_field_clearance_even_if_extrapolation_lines_up():
+    # Found live in a 2026-09-02 tournament re-run (score_aware_zone_flow_vs_tiki_taka.pkl,
+    # t=16.27s): a clearance from essentially the center circle (x=-0.08) at
+    # 3.83 m/s toward the enemy goal, extrapolated in a straight line, landed
+    # inside the 1m-wide goal mouth 4.5m away purely by chance -- the ball's
+    # real velocity collapsed within two ticks (a robot intercepted it), well
+    # before it could have reached the goal line. Being in the attacking half
+    # is not enough for a long-range straight-line projection to be a
+    # meaningful on-target signal; the ball must already be in the attacking
+    # third. Matches this file's other tests' shape but at x=-0.08 (attacking
+    # half, NOT attacking third: half_length=4.5, _SHOT_ATTACKING_THIRD_M=1.5,
+    # so the gate is `progress_from_own_goal > 6.0`, and this ball only
+    # reaches ~4.58).
+    acc = MatchStatsAccumulator()
+    acc.record_tick(_fast_frame((-0.08, -0.09), (-3.83, -0.12)))
+
+    stats = acc.finalize()
+    assert stats.shots == {"friendly": 0, "enemy": 0}
+
+
+def test_shot_still_counted_from_within_the_attacking_third():
+    # Same shape as the center-field case above, but from inside the
+    # attacking third (x=-2.21, well past the half_length + 1.5m gate) --
+    # must still count. Real case from the same replay at t=25.72s (the
+    # ball curved off after this tick, but the on-target check only looks
+    # at the instantaneous straight-line extrapolation, so this is still a
+    # correctly-counted shot attempt).
+    acc = MatchStatsAccumulator()
+    acc.record_tick(_fast_frame((-2.21, -0.29), (-3.91, -0.01)))
+
+    stats = acc.finalize()
+    assert stats.shots == {"friendly": 1, "enemy": 0}
+
+
 def test_ball_travel_skips_teleport_jumps():
     acc = MatchStatsAccumulator()
     acc.record_tick(_fast_frame((0.0, 0.0), (0.0, 0.0)))

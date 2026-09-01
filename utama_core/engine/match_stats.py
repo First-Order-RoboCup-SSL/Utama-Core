@@ -67,6 +67,13 @@ _SHOT_SPEED_MPS = 3.5
 _SHOT_LOCK_RELEASE_MPS = 1.0
 # Ball deltas larger than this are placements/teleports, not travel.
 _PLACEMENT_JUMP_M = 2.0
+# A straight-line extrapolation from this far out is unreliable as an
+# on-target check (see the shots detector's docstring below): require the
+# ball to already be in the attacking third, not just past midfield.
+# Matches the `signed_x > 1.5` boundary `record_tick()`'s zone-time bucketing
+# already uses for "attacking" -- one convention for "close enough to goal
+# to matter", not two.
+_SHOT_ATTACKING_THIRD_M = 1.5
 # A robot moving faster than this is "in motion" for the motion-share stat.
 _MOTION_SPEED_MPS = 0.15
 
@@ -114,15 +121,24 @@ class MatchStatsAccumulator:
         self._last_ball_xy = ball_xy
 
         # Shot attempts: hard balls hit toward the attacking goal from the
-        # attacking half, on a straight-line trajectory that actually reaches
+        # attacking third, on a straight-line trajectory that actually reaches
         # the goal mouth (not just "moving in the right x-direction with some
         # speed", which also passes for a hard clear or cross-field switch —
         # see `docs/roadmap.md`'s "why is it 0-0" investigation, which found
         # this heuristic counting balls whose extrapolated path missed the
-        # goal by several metres of lateral distance). Edge-detected per
-        # side (locked until the ball slows). `GameFrame` carries no field
-        # geometry, so boxscore heuristics use the standard SSL field dims
-        # (the sim always plays on them).
+        # goal by several metres of lateral distance). "Attacking third", not
+        # merely "attacking half" (found live in a 2026-09-02 tournament
+        # re-run: a center-circle clearance at (-0.08, -0.09) with speed
+        # 3.83 m/s satisfied the old attacking-half gate and, purely by
+        # chance, extrapolated to land inside the 1m-wide goal mouth 4.5m
+        # away — the ball's real velocity collapsed within 1-2 ticks in
+        # every traced case, well before reaching goal, since a straight-
+        # line projection from that far out ignores the interception/
+        # friction/spin that make long-range "shots" essentially never
+        # arrive as aimed). Edge-detected per side (locked until the ball
+        # slows). `GameFrame` carries no field geometry, so boxscore
+        # heuristics use the standard SSL field dims (the sim always plays
+        # on them).
         half_length = STANDARD_FIELD_DIMS.full_field_half_length
         half_goal_width = STANDARD_FIELD_DIMS.half_goal_width
         own_goal_sign = 1.0 if game_frame.my_team_is_right else -1.0
@@ -134,12 +150,17 @@ class MatchStatsAccumulator:
             if self._shot_lock[side]:
                 continue
             # Progress is measured from each side's *own* goal line (their
-            # defensive line), so ``> half_length`` is precisely \"ball past
-            # midfield in that side's attacking half\".
+            # defensive line), so ``> half_length + _SHOT_ATTACKING_THIRD_M``
+            # is precisely "ball in that side's attacking third", not merely
+            # past midfield.
             ref_goal_x = (own_goal_sign if side == "friendly" else -own_goal_sign) * half_length
             progress_from_own_goal = (ball.p.x - ref_goal_x) * attack_sign
             toward_goal = ball.v.x * attack_sign > 0.0
-            if not (speed >= _SHOT_SPEED_MPS and toward_goal and progress_from_own_goal > half_length):
+            if not (
+                speed >= _SHOT_SPEED_MPS
+                and toward_goal
+                and progress_from_own_goal > half_length + _SHOT_ATTACKING_THIRD_M
+            ):
                 continue
             # On-target check: extrapolate the current straight-line velocity
             # to the attacking goal's line (x = attack_sign * half_length)

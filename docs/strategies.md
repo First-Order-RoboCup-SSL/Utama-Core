@@ -435,11 +435,12 @@ signal; do not treat a loss here as something to fix.
 
 - **`go_to_ball`'s "approach with dribbler back facing the ball" angle has
   been a silent no-op since the function's creation — found 2026-09-01,
-  not fixed** — found while investigating a second replay-review report (a
-  robot's orientation settling a full second-plus before it reached the
-  ball, then making contact moving in a direction unrelated to its facing).
-  The dribbler-back angle is computed as `(approach_oren + math.pi) % (2 *
-  math.pi) - math.pi` — this is `normalise_heading`'s own formula
+  root cause identified 2026-09-02, still not fixed** — found while
+  investigating a second replay-review report (a robot's orientation
+  settling a full second-plus before it reached the ball, then making
+  contact moving in a direction unrelated to its facing). The dribbler-back
+  angle is computed as `(approach_oren + math.pi) % (2 * math.pi) - math.pi`
+  — this is `normalise_heading`'s own formula
   (`utama_core/global_utils/math_utils.py`) applied to an angle that is
   already normalized, which is a pure identity for every input in
   `(-pi, pi]`, not a flip (confirmed by a full sweep of test angles: 9/9
@@ -447,21 +448,72 @@ signal; do not treat a loss here as something to fix.
   every `go_to_ball` call in the codebase has always approached facing the
   ball directly, never dribbler-back-first, since this function's creation
   — the "orientation settles early" symptom is real, but secondary to this.
+
   A fix (flip the angle correctly via `normalise_heading(approach_oren +
-  math.pi)`) was implemented and then **reverted the same session**: on a
-  straight-line head-on approach, the correct dribbler-back angle requires
-  the robot to translate one way while facing the opposite way (an
-  effectively backward approach), and it could not close the final ~0.11m
-  before `test_out_of_bounds_restart_spot_is_capturable_by_go_to_ball`'s 5s
-  timeout — tried both an unconditional flip and a distance-gated version
-  (flip only within 0.2m/0.3m of the ball); both produced the identical
-  ~0.11m closest-approach failure, ruling out the gate distance as the
-  cause. Whether backward-approach convergence is a motion-planning gap
-  (translating opposite to facing may simply need more room/time to
-  converge than a forward approach) or something else was not
-  investigated further — real fix needs that answered first, not another
-  constant tweak. `go_to_ball.py` and its tests are back to their
-  pre-2026-09-01 state; nothing changed.
+  math.pi)`) was implemented and then **reverted the same session** (2026-
+  09-01): it broke `test_out_of_bounds_restart_spot_is_capturable_by_go_to_ball`,
+  stalling at a closest approach of ~0.11m at both an unconditional flip and
+  a distance-gated version, misdiagnosed at the time as a possible
+  motion-planning/PID convergence gap.
+
+  **Follow-up (2026-09-02) found the real mechanism, and it isn't
+  convergence at all.** Isolated repro
+  (`repro_backward_approach.py`, applying the correct flip in a standalone
+  copy of `go_to_ball` and tracing every tick): the robot reaches the ball
+  and stalls at exactly `ROBOT_RADIUS + BALL_RADIUS = 0.1115m` within ~1s
+  — well inside the 5s budget — then holds that separation dead flat
+  (both robot and ball drifting forward in lockstep) for the rest of the
+  episode. That distance is chassis-surface contact, not a failure to
+  reach the ball: with the flip applied, the robot arrives **front-first**
+  (since orientation now faces away from the ball) and pushes the ball
+  ahead of its bumper in a stable equilibrium, instead of catching it in
+  the rear-mounted dribbler cage. The bug is in `_target_past_ball`'s
+  overshoot geometry: the overshoot direction is derived purely from
+  `approach_oren` (the direction *toward* the ball) and has no dependency
+  on which way the chassis ends up facing, so it only ever produces a
+  correct capture when facing and travel direction match — true for the
+  original (buggy, always-facing-the-ball) behavior, false the moment
+  `target_oren` is genuinely flipped. Fixing this needs the overshoot
+  target (and possibly the approach path) to account for `target_oren`
+  directly — e.g. overshoot so the ball ends up behind the chassis in the
+  direction of travel — not another tweak to `target_oren` or the gate
+  distance. `go_to_ball.py` and its tests are still at their
+  pre-2026-09-01 state; nothing has shipped yet, but the next attempt has
+  a concrete, verified mechanism to fix instead of a guess.
+
+- **`MatchStats`'s "shots" boxscore heuristic over-counted long-range
+  clearances as on-target shots — found and fixed 2026-09-02** — found
+  while spot-checking a 1-match-per-pair competitive-tournament re-run
+  (`tournament.py counter_flow tiki_taka zone_fluid counter_press
+  tiki_taka_plus score_aware_zone_flow`): several 0-0 draws logged 1-3
+  "shots" with no goals, which turned out not to be keeper saves. The
+  2026-09-01 on-target fix (`e024249`, see its own commit message) already
+  required the ball's straight-line extrapolation to land within the goal
+  mouth, but still gated purely on "past midfield" (`progress_from_own_goal
+  > half_length`) before trusting that extrapolation. Traced directly
+  against replay frames (`score_aware_zone_flow_vs_tiki_taka.pkl`,
+  `counter_flow_vs_zone_fluid.pkl`): a hard clearance from essentially the
+  center circle (e.g. ball at x=-0.08, 4.5m from the far goal line) can
+  extrapolate into the 1m-wide goal mouth by pure chance, and in every
+  traced case the ball's real velocity collapsed within 1-2 ticks (a robot
+  intercepted it) long before it could have travelled that far — a
+  straight-line projection from center field ignores interception,
+  friction, and spin, so it isn't a meaningful on-target signal until the
+  ball is genuinely close to goal. Fixed by tightening the gate from
+  "attacking half" to "attacking third" (`half_length +
+  _SHOT_ATTACKING_THIRD_M`, reusing the same 1.5m-from-center boundary
+  `record_tick()`'s zone-time bucketing already calls "attacking" —
+  `utama_core/engine/match_stats.py`). Re-verified directly against both
+  traced replays: false-positive shot counts dropped from 3→1 and 1→1 (the
+  remaining "1" in each case is a genuine attacking-third attempt).
+  Regression tests: `test_no_shot_for_fast_center_field_clearance_even_if_extrapolation_lines_up`
+  and `test_shot_still_counted_from_within_the_attacking_third`
+  (`utama_core/tests/engine/test_match_stats.py`). This only affects the
+  `shots` boxscore stat (a post-hoc heuristic) — goal counts themselves
+  come from the referee's real goal-line detection and were never affected
+  — but every `shots` figure in this doc's historical tournament tables
+  predates this fix and should be read as an upper bound, not a precise
+  count.
 
 - **Every sim-mode tournament match started at `FORCE_START`, skipping
   `PREPARE_KICKOFF` entirely — so "kickoff" possession was a simultaneous
