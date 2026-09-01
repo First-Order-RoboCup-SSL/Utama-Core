@@ -662,3 +662,15 @@ either a robot legitimately holding the ball or the same still-open
 `go_to_ball` chassis-contact-without-capture symptom documented in
 `docs/strategies.md`'s Known open bugs, not a new defect. No further fixes
 made this pass; replays deleted after analysis (nothing new to keep).
+
+**Broader verification, 2026-09-02 (`--both-sides`, 30 fresh matches).** Ran
+the same 6 configs with `tournament.py --both-sides` for genuine new
+coverage (not a repeat of an already-analyzed deterministic pairing) — 30
+matches, 21 raw-flagged windows after the existing kickoff filter, **all 21
+classify as `held_or_contested`, 0 unclassified**. Same ~0.7
+windows/match rate as the smaller run, same shape (legitimate possession or
+the known `go_to_ball` capture-geometry gap), no new bugs. Full suite: 867
+passed, 4 skipped, 2 xfailed. This is the strongest signal so far that the
+detector + fix combination has converged for the current strategy catalog:
+two independent tournament samples (15 and 30 matches) after the shielding
+fix produced zero unexplained anomalies. Replays deleted after analysis.
