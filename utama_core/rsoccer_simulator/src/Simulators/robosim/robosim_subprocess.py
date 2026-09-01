@@ -4,10 +4,39 @@ It receives JSON commands via stdin and returns simulator state via stdout.
 """
 
 import json
+import os
 import sys
 
 import numpy as np
 import robosim
+
+# rc-robosim's native (C++) layer occasionally writes plain-text diagnostics
+# (e.g. "turnover 0.86 robot x: ... ball y: ...") straight to the process's
+# real stdout fd via printf/std::cout -- bypassing `sys.stdout` entirely, so
+# nothing on the Python side can intercept or filter it. That text lands on
+# the exact same pipe as this protocol's JSON replies. Confirmed live,
+# 2026-09-01: one such line came out *in place of* a tick's JSON state
+# reply (not just interleaved before it), which either raises a
+# JSONDecodeError in `robosim_wrapper.py` or, if the caller instead loops
+# skipping non-JSON lines, can deadlock forever waiting for a reply that
+# was silently replaced rather than delayed.
+#
+# Fix at the source: duplicate the original stdout fd to a private fd our
+# own `print()`s use, then repoint the real fd 1 at devnull *before*
+# `robosim` (the native extension) is even imported/constructs anything --
+# any native write to fd 1 lands in devnull, and our own protocol replies
+# go out `_PROTOCOL_OUT` on the untouched duplicate, so the pipe our parent
+# reads from only ever sees valid JSON.
+_PROTOCOL_FD = os.dup(1)
+_PROTOCOL_OUT = os.fdopen(_PROTOCOL_FD, "w", buffering=1)
+_devnull_fd = os.open(os.devnull, os.O_WRONLY)
+os.dup2(_devnull_fd, 1)
+os.close(_devnull_fd)
+
+
+def _emit(payload: dict) -> None:
+    _PROTOCOL_OUT.write(json.dumps(payload) + "\n")
+    _PROTOCOL_OUT.flush()
 
 
 # Example: simple wrapper class
@@ -81,22 +110,21 @@ def main():
                 cmd = json.loads(line)
                 if "commands" in cmd:
                     state = sim.step(cmd["commands"])
-                    print(json.dumps({"state": state}))
+                    _emit({"state": state})
                 elif "reset" in cmd:
                     r = cmd["reset"]
                     sim.reset(r["ball_pos"], r["blue_robots_pos"], r["yellow_robots_pos"])
-                    print(json.dumps({"ack": True}))
+                    _emit({"ack": True})
                 elif "get_field_params" in cmd:
                     fp = sim.get_field_params()
-                    print(json.dumps({"field_params": fp}))
+                    _emit({"field_params": fp})
                 elif "get_state" in cmd:
                     state = sim.get_state()
-                    print(json.dumps({"state": state}))
+                    _emit({"state": state})
                 else:
-                    print(json.dumps({"error": "unknown command"}))
+                    _emit({"error": "unknown command"})
             except Exception as e:
-                print(json.dumps({"error": str(e)}))
-            sys.stdout.flush()
+                _emit({"error": str(e)})
     except KeyboardInterrupt:
         sys.exit(0)
 

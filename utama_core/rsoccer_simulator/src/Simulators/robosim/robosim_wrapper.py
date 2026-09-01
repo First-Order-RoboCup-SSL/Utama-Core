@@ -53,6 +53,43 @@ class RSimSubprocessWrapper:
             cwd=project_root,
         )
 
+    _MAX_NON_JSON_LINES = 10  # generous vs. one stray diagnostic; see docstring below
+
+    def _read_json_line(self) -> dict:
+        # rc-robosim's native layer occasionally writes plain-text diagnostics
+        # (e.g. "turnover 0.862573 robot x: ... ball y: ...") straight to its
+        # own stdout, which shares this pipe with our JSON RPC protocol --
+        # confirmed live, 2026-09-01: a `full_match_tournament.py` match
+        # deterministically hit this at the exact same tick every run, and
+        # the subprocess was still alive (`proc.poll() is None`) when it
+        # happened, so this was never a subprocess crash despite raising
+        # JSONDecodeError one line up the stack. Skip any line that isn't
+        # valid JSON instead of letting it blow up the caller.
+        #
+        # IMPORTANT: an unbounded skip loop is not safe here. Verified live
+        # that at least one "turnover" diagnostic came out *instead of* that
+        # tick's JSON state reply, not merely ahead of it: after discarding
+        # it, `readline()` blocked forever waiting on a reply that was never
+        # coming, while the subprocess sat idle (`S` state, 0 bytes buffered
+        # on the pipe) waiting for its *next* command -- a silent, one-sided
+        # deadlock, strictly worse than the JSONDecodeError this replaced
+        # (that at least surfaced loudly). Cap the number of stray lines
+        # tolerated per call and fail loudly past that instead of hanging.
+        for _ in range(self._MAX_NON_JSON_LINES):
+            if self.proc.poll() is not None:
+                raise RuntimeError(f"robosim subprocess exited (code {self.proc.returncode}) while awaiting a response")
+            line = self.proc.stdout.readline()
+            if line == "":
+                raise RuntimeError("robosim subprocess closed its stdout while awaiting a response")
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                logger.warning("Discarding non-JSON line from robosim subprocess stdout: %r", line)
+        raise RuntimeError(
+            f"robosim subprocess sent {self._MAX_NON_JSON_LINES} consecutive non-JSON lines "
+            "without a valid reply -- treating this as a missing response, not more diagnostics to skip"
+        )
+
     def step(self, commands: np.ndarray):
         # Serialize commands as JSON and send to subprocess
         data = json.dumps({"commands": commands.tolist()})
@@ -60,8 +97,7 @@ class RSimSubprocessWrapper:
         self.proc.stdin.flush()
 
         # Read simulator state back
-        line = self.proc.stdout.readline()
-        state = json.loads(line)["state"]
+        state = self._read_json_line()["state"]
         return np.array(state)
 
     def reset(self, ball_pos, blue_robots_pos, yellow_robots_pos):
@@ -77,20 +113,20 @@ class RSimSubprocessWrapper:
         self.proc.stdin.write(data + "\n")
         self.proc.stdin.flush()
         # Optionally read acknowledgement
-        self.proc.stdout.readline()
+        self._read_json_line()
 
     def get_field_params(self):
         data = json.dumps({"get_field_params": True})
         self.proc.stdin.write(data + "\n")
         self.proc.stdin.flush()
-        resp = json.loads(self.proc.stdout.readline())
+        resp = self._read_json_line()
         return resp["field_params"]
 
     def get_state(self):
         data = json.dumps({"get_state": True})
         self.proc.stdin.write(data + "\n")
         self.proc.stdin.flush()
-        resp = json.loads(self.proc.stdout.readline())
+        resp = self._read_json_line()
         return resp["state"]
 
     def close(self):
