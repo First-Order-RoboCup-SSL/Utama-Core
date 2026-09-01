@@ -652,3 +652,13 @@ Updated next steps: (b) (merge-span verification) and (d)
 (`_friendly_closer_to_ball`) are unchanged and still open. (c) is
 superseded by this pass's own from-scratch classification, which is more
 thorough than a raw re-sweep would have been.
+
+**Verification re-run, 2026-09-02.** Re-ran the same 6-config, 1-match-per-
+pair competitive tournament after the shielding fix landed:
+`counter_flow_vs_tiki_taka.pkl` now flags **zero** windows (previously the
+one confirmed real bug), and the remaining 11 windows across the other 5
+matches all classify as `held_or_contested` (0 unclassified) — every one is
+either a robot legitimately holding the ball or the same still-open
+`go_to_ball` chassis-contact-without-capture symptom documented in
+`docs/strategies.md`'s Known open bugs, not a new defect. No further fixes
+made this pass; replays deleted after analysis (nothing new to keep).
