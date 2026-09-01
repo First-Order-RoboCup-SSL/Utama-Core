@@ -273,7 +273,7 @@ def test_press_and_contain_goes_straight_for_a_fully_loose_ball(runner_factory):
     press_and_contain_module.go_to_ball = spy_go_to_ball
     press_and_contain_module.block_attacker = spy_block_attacker
     try:
-        commands, _mem = tactic.tick(game, _ctx(runner), (1, 2, 3), mem)
+        commands, _mem = tactic.tick(game, _ctx(runner), (1, 2), mem)
     finally:
         press_and_contain_module.go_to_ball = orig_go_to_ball
         press_and_contain_module.block_attacker = orig_block_attacker
@@ -283,10 +283,73 @@ def test_press_and_contain_goes_straight_for_a_fully_loose_ball(runner_factory):
     assert calls.get("block_attacker") is None, "block_attacker's enemy-relative standoff must not be used here"
 
 
+def test_press_and_contain_picks_the_closest_robot_as_presser(runner_factory):
+    """Found live (competitive `full_match_tournament.py` stuck-window sweep,
+    2026-09-01): the scheduler hands `tick()` a numerically-sorted
+    `robot_ids` tuple (`Strategy._run_step`'s `tuple(sorted(robot_ids))`),
+    but `presser_id = robot_ids[0]` treated that as "closest to the ball" —
+    it actually just means "lowest robot id". In one real match, robot 1
+    (id-wise first, but 0.8m from a parked ball-holder — outside
+    `_STEAL_RANGE`) was stuck as presser shadowing a shot line forever,
+    while robot 4 (0.47m away, genuinely close enough to contest the ball)
+    was demoted to marking duty and never engaged. Nobody contested the
+    ball again for the rest of that 600s match.
+
+    Regression: with robot 4 the closer of the two assigned robots, it must
+    be picked as presser even though its id sorts after robot 1's.
+    """
+    import dataclasses
+
+    from utama_core.entities.data.vector import Vector2D, Vector3D
+    from utama_core.entities.game.ball import Ball
+    from utama_core.entities.game.game_frame import GameFrame
+
+    runner = runner_factory(exp_friendly=4, exp_enemy=3)
+    game = runner.my.game
+    tactic = PressAndContainTactic()
+    mem = tactic.initial_mem()
+
+    frame = game.current
+    ball_pos = Vector2D(4.0, -2.7)
+    friendly = dict(frame.friendly_robots)
+    # Lower id, farther from the ball (outside _STEAL_RANGE).
+    friendly[0] = dataclasses.replace(friendly[0], has_ball=False, p=Vector2D(3.2, -2.4))
+    # Higher id, closer to the ball (inside _STEAL_RANGE) -- must win presser.
+    friendly[3] = dataclasses.replace(friendly[3], has_ball=False, p=Vector2D(3.6, -2.5))
+    enemy = dict(frame.enemy_robots)
+    enemy[1] = dataclasses.replace(enemy[1], has_ball=True, p=Vector2D(ball_pos.x, ball_pos.y))
+    ball = Ball(p=Vector3D(ball_pos.x, ball_pos.y, 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0))
+    held_frame = GameFrame(
+        ts=frame.ts,
+        my_team_is_yellow=frame.my_team_is_yellow,
+        my_team_is_right=frame.my_team_is_right,
+        friendly_robots=friendly,
+        enemy_robots=enemy,
+        ball=ball,
+        referee=frame.referee,
+    )
+    game.add_game_frame(held_frame)
+    game = runner.my.game
+
+    r0_dist = friendly[0].p.distance_to(ball_pos)
+    r3_dist = friendly[3].p.distance_to(ball_pos)
+    assert r3_dist < r0_dist, "setup didn't make robot 3 the closer robot -- test would pass vacuously"
+
+    _commands, mem = tactic.tick(game, _ctx(runner), (0, 3), mem)
+    assert mem.presser_id == 3, f"expected the closer robot (3) as presser, got {mem.presser_id}"
+
+
 def test_give_and_go_reassigned_carrier_resets_role_state(runner_factory):
     """If the kernel hands this tactic a robot set that no longer contains
     the previous carrier (e.g. after a scheduler reassignment), roles must
-    reset rather than keep pointing at a robot this tactic no longer owns."""
+    reset rather than keep pointing at a robot this tactic no longer owns.
+
+    The new carrier must be picked by ball proximity, not `robot_ids[0]`
+    (see `test_give_and_go_initial_carrier_is_the_closest_robot`'s docstring
+    for why the latter was a real bug) -- assert membership in `robot_ids`
+    plus the reset fields, not a specific id, so this test doesn't itself
+    re-encode the old lowest-id assumption.
+    """
     from utama_core.tactics.give_and_go import GiveAndGoMem
 
     runner = runner_factory(exp_friendly=5, exp_enemy=2)
@@ -294,10 +357,64 @@ def test_give_and_go_reassigned_carrier_resets_role_state(runner_factory):
     tactic = GiveAndGoTactic()
     mem = GiveAndGoMem(carrier_id=99, receiver_id=98, hop_count=3)
     commands, mem = tactic.tick(game, _ctx(runner), (1, 2, 3), mem)
-    assert mem.carrier_id == 1
+    assert mem.carrier_id in (1, 2, 3)
     assert mem.receiver_id is None
     assert mem.hop_count == 0
     assert set(commands.keys()) == {1, 2, 3}
+
+
+def test_give_and_go_initial_carrier_is_the_closest_robot(runner_factory):
+    """`robot_ids` arrives numerically sorted by the scheduler (see
+    `Strategy._run_step`'s `tuple(sorted(robot_ids))`), not ordered by
+    proximity. Picking `robot_ids[0]` as the initial carrier on a fresh
+    assignment therefore meant "lowest id", not "closest to the ball" --
+    the same bug shape found and fixed in `PressAndContainTactic`
+    (2026-09-01), here self-correcting (the wrong pick just fetches the
+    ball via `go_to_ball`) rather than a permanent lockout, but still a
+    real waste: a farther robot chases the ball while a closer teammate
+    that could have gotten there first relocates instead.
+
+    Regression: with robot 3 the closer of the two assigned robots, it
+    must be picked as the initial carrier even though its id sorts last.
+    """
+    import dataclasses
+
+    from utama_core.entities.data.vector import Vector2D, Vector3D
+    from utama_core.entities.game.ball import Ball
+    from utama_core.entities.game.game_frame import GameFrame
+    from utama_core.tactics.give_and_go import GiveAndGoMem
+
+    runner = runner_factory(exp_friendly=5, exp_enemy=2)
+    game = runner.my.game
+    tactic = GiveAndGoTactic()
+    mem = GiveAndGoMem()
+
+    frame = game.current
+    ball_pos = Vector2D(2.0, 0.0)
+    friendly = dict(frame.friendly_robots)
+    # Lower id, farther from the ball.
+    friendly[1] = dataclasses.replace(friendly[1], has_ball=False, p=Vector2D(-2.0, 0.0))
+    # Higher id, closer to the ball -- must win the initial carrier pick.
+    friendly[3] = dataclasses.replace(friendly[3], has_ball=False, p=Vector2D(2.3, 0.0))
+    ball = Ball(p=Vector3D(ball_pos.x, ball_pos.y, 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0))
+    fresh_frame = GameFrame(
+        ts=frame.ts,
+        my_team_is_yellow=frame.my_team_is_yellow,
+        my_team_is_right=frame.my_team_is_right,
+        friendly_robots=friendly,
+        enemy_robots=dict(frame.enemy_robots),
+        ball=ball,
+        referee=frame.referee,
+    )
+    game.add_game_frame(fresh_frame)
+    game = runner.my.game
+
+    r1_dist = friendly[1].p.distance_to(ball_pos)
+    r3_dist = friendly[3].p.distance_to(ball_pos)
+    assert r3_dist < r1_dist, "setup didn't make robot 3 the closer robot -- test would pass vacuously"
+
+    _commands, mem = tactic.tick(game, _ctx(runner), (1, 3), mem)
+    assert mem.carrier_id == 3, f"expected the closer robot (3) as initial carrier, got {mem.carrier_id}"
 
 
 def test_give_and_go_abandons_a_hop_that_never_completes(runner_factory):

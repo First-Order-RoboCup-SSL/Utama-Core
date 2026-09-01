@@ -270,7 +270,25 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: GiveAndGoMem
     ) -> tuple[dict[RobotId, RobotCommand], GiveAndGoMem]:
         if mem.carrier_id is None or mem.carrier_id not in robot_ids:
-            mem.carrier_id, mem.receiver_id, mem.hop_count, mem.ticks_held, mem.hop_ticks = robot_ids[0], None, 0, 0, 0
+            # `robot_ids` arrives numerically sorted by the scheduler (see
+            # `Strategy._run_step`'s `tuple(sorted(robot_ids))`), not ordered
+            # by proximity -- `robot_ids[0]` here previously meant "whichever
+            # assigned robot has the lowest id", not "whichever is closest to
+            # the ball". Self-correcting (the wrong pick just fetches the
+            # ball via `go_to_ball` below) rather than a permanent lockout
+            # like the equivalent bug found in `PressAndContainTactic`
+            # (2026-09-01), but still wastes time sending a farther robot
+            # after the ball while a closer teammate relocates instead. Pick
+            # the actually-closest assigned robot as the initial carrier.
+            ball_pos = game.ball.p.to_2d()
+            initial_carrier = min(robot_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball_pos))
+            mem.carrier_id, mem.receiver_id, mem.hop_count, mem.ticks_held, mem.hop_ticks = (
+                initial_carrier,
+                None,
+                0,
+                0,
+                0,
+            )
 
         mem.ticks_held += 1
         carrier_id = mem.carrier_id

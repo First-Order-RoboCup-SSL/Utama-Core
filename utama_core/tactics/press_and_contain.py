@@ -115,8 +115,21 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
             mem.presser_id, mem.marks = None, {}
             return commands, mem
 
-        presser_id = robot_ids[0]
-        marker_ids = robot_ids[1:]
+        # `robot_ids` arrives numerically sorted by the scheduler (see
+        # `Strategy._run_step`'s `tuple(sorted(robot_ids))`), not ordered by
+        # proximity -- picking `robot_ids[0]` here silently meant "whichever
+        # assigned robot has the lowest id", not "whichever is closest to
+        # the ball". Confirmed live, 2026-09-01 (full_match_tournament.py
+        # stuck-window sweep): a fixed low-id robot sat 0.8m from a parked
+        # ball-holder (outside `_STEAL_RANGE`, so it only ever shadowed the
+        # shot line) while a different assigned robot sat 0.47m away --
+        # inside steal range, close enough to win the ball -- and was
+        # demoted to marking duty and never engaged. Nobody ever contested
+        # the ball again for the remaining 500s of that match. Pick the
+        # actually-closest assigned robot as presser instead.
+        pressed_enemy = game.enemy_robots[pressed_enemy_id]
+        presser_id = min(robot_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(pressed_enemy.p))
+        marker_ids = tuple(rid for rid in robot_ids if rid != presser_id)
         mem.presser_id = presser_id
 
         if ctx.match_log is not None:
