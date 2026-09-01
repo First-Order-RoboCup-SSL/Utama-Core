@@ -905,9 +905,12 @@ def build_tiki_taka_plus_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     overload/cover in the final third, 3+2 press/cover when the ball is
     lost.
 
-    Not part of any tournament tier yet -- an untested experimental variant,
-    kept out of `full_match_tournament.py`'s `competitive` tier until it has
-    results to justify inclusion.
+    Promoted into `full_match_tournament.py`'s `competitive` tier 2026-08-23
+    on its first decoupled side x kickoff round-robin result (6W-7D over 16
+    matches, tying `counter_flow` for most wins and clearly outperforming its
+    own base `tiki_taka`, 3W-10D) -- see `docs/strategies.md`'s "tiki_taka_plus
+    added" section for the full writeup, including the caveat that one
+    40-match run isn't yet enough to rule out variance at this sample size.
 
     Returns a `build_kernel_strategy(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
