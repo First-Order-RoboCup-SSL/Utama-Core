@@ -449,6 +449,20 @@ def no_shot_reposition_target(
     inputs. Falls back to sliding toward goal-center if there are no
     enemies at all (shouldn't happen when `find_best_shot` just returned
     `None`, but keeps this total).
+
+    Clamped-at-the-sideline case (found live, 2026-09-01 tournament stuck-
+    match investigation): a carrier already within `margin` of the field's
+    y-boundary has its away-from-blocker step clamped right back to
+    (near-)its own current position — the intended 0.6m strafe collapses to
+    a few millimetres, which recreates the exact "nothing about this
+    position ever changes" freeze this function exists to avoid, just from
+    a boundary clamp instead of a stationary keeper. Traced live: a carrier
+    pinned at y=-2.697 (half_width=3.0, margin=0.3, clamp at -2.7) computing
+    a step toward -2.7 moved a net 0.3cm and then repeated the identical
+    clamped target forever. If the preferred direction is clamped away to
+    within `_NO_SHOT_STRAFE_STEP / 2` of the current position, strafe the
+    other way instead — the opposite direction always has room, since a
+    field can't be narrower than one strafe step in total width.
     """
     if enemy_robots:
         nearest = min(enemy_robots, key=lambda e: carrier_pos.distance_to(e))
@@ -460,9 +474,17 @@ def no_shot_reposition_target(
         goal_mid_y = (goal_y1 + goal_y2) / 2.0
         away_sign = 1.0 if carrier_pos.y >= goal_mid_y else -1.0
     margin = 0.3
-    target_y = max(
-        -field_half_width + margin, min(field_half_width - margin, carrier_pos.y + away_sign * _NO_SHOT_STRAFE_STEP)
-    )
+
+    def _clamped_target_y(sign: float) -> float:
+        return max(
+            -field_half_width + margin, min(field_half_width - margin, carrier_pos.y + sign * _NO_SHOT_STRAFE_STEP)
+        )
+
+    target_y = _clamped_target_y(away_sign)
+    if abs(target_y - carrier_pos.y) < _NO_SHOT_STRAFE_STEP / 2:
+        # The preferred direction was clamped away to a near-zero step —
+        # flip direction rather than silently freezing against the boundary.
+        target_y = _clamped_target_y(-away_sign)
     return Vector2D(carrier_pos.x, target_y)
 
 

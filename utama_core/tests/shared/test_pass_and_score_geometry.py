@@ -16,11 +16,13 @@ from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
 from utama_core.shared.pass_and_score_geometry import (
     _ACQUIRE_LATERAL_MAX,
+    _NO_SHOT_STRAFE_STEP,
     _RELEASE_FORWARD_MAX,
     _RELEASE_LATERAL_MAX,
     ball_in_enemy_defense_area,
     enemy_defense_area_hold_point,
     has_ball,
+    no_shot_reposition_target,
     reset_possession_state,
 )
 
@@ -303,3 +305,40 @@ def test_has_ball_visual_acquire_state_is_per_robot():
         assert has_ball(game, 1, visual=True) is False
     finally:
         reset_possession_state(0)
+
+
+def test_no_shot_reposition_target_flips_direction_when_clamped_at_the_sideline():
+    """Found live (tournament stuck-match investigation, 2026-09-01): a
+    carrier already within `margin` of the field's y-boundary has its
+    away-from-blocker strafe step clamped right back to (near-)its own
+    current position -- the intended `_NO_SHOT_STRAFE_STEP` (0.6m) strafe
+    collapses to a few millimetres, recreating the exact "nothing about
+    this position ever changes" freeze this function exists to avoid.
+    Traced live: a carrier pinned at y=-2.697 (half_width=3.0, margin=0.3,
+    clamp at -2.7) computing a step toward -2.7 moved a net 0.3cm and then
+    repeated the identical clamped target forever (568 of 600 seconds).
+    Regression: when the preferred direction is clamped away, strafe the
+    other way instead.
+    """
+    carrier_pos = Vector2D(0.7576935794358924, -2.6970753163492853)
+    # Nearest enemy below the carrier -> away_sign pushes further negative,
+    # straight into the clamp -- the exact live scenario.
+    enemies = [Vector2D(0.157, -2.694)]
+
+    target = no_shot_reposition_target(
+        carrier_pos, enemies, goal_x=4.5, goal_y1=-0.5, goal_y2=0.5, field_half_width=3.0
+    )
+
+    assert abs(target.y - carrier_pos.y) == pytest.approx(_NO_SHOT_STRAFE_STEP, abs=1e-6)
+    assert target.y > carrier_pos.y  # flipped to the only direction with room
+
+
+def test_no_shot_reposition_target_takes_the_preferred_direction_when_not_clamped():
+    carrier_pos = Vector2D(0.0, 0.0)
+    enemies = [Vector2D(0.0, 1.0)]  # enemy above -> step down (away_sign negative)
+
+    target = no_shot_reposition_target(
+        carrier_pos, enemies, goal_x=4.5, goal_y1=-0.5, goal_y2=0.5, field_half_width=3.0
+    )
+
+    assert target.y == pytest.approx(carrier_pos.y - _NO_SHOT_STRAFE_STEP)

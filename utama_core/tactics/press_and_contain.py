@@ -42,6 +42,18 @@ from utama_core.skills.src.man_mark import man_mark
 
 _PRESS_RANGE = 1.5  # metres — ball must be within this of an enemy for pressing to be applicable
 
+# Hysteresis for the loose-ball/contested classification in `tick()` — a
+# plain per-tick re-read of `game.robot_with_ball is None` flickers almost
+# every tick when two robots are both right on the ball (found live,
+# 2026-09-01: a yellow robot already touching the ball turned toward it,
+# then away, then back, several times a second, until the unstable contact
+# knocked the ball out of bounds — mirrors the same "sticky edge" fix
+# `_friendly_closer_to_ball`-consuming pickers already needed, see
+# `kernel_strategy.py`'s `_counter_flow_picker`/`_high_line_zone_picker`).
+# Require the *opposite* classification to hold for this many consecutive
+# ticks before actually switching mode.
+_LOOSE_BALL_HYSTERESIS_TICKS = 15  # 0.25s at 60Hz — enough to reject single-tick flicker, short enough to react promptly once a contest genuinely resolves
+
 
 def _enemy_nearest_ball(game: Game) -> tuple[int, float] | tuple[None, None]:
     ball_pos = game.ball.p.to_2d()
@@ -72,10 +84,16 @@ class PressAndContainMem:
     """No cross-tick decision state — presser/marker choice is recomputed
     every tick. `presser_id`/`marks` are last-tick's picks, kept only so
     `highlights()` (called with the *previous* tick's mem) has something to
-    report."""
+    report.
+
+    `ball_is_loose`/`loose_ball_flip_ticks` feed the loose/contested
+    hysteresis in `tick()` (see `_LOOSE_BALL_HYSTERESIS_TICKS`'s comment) —
+    the one piece of real cross-tick state here."""
 
     presser_id: Optional[RobotId] = None
     marks: dict = field(default_factory=dict)
+    ball_is_loose: bool = True
+    loose_ball_flip_ticks: int = 0
 
 
 class PressAndContainTactic(BaseTactic[PressAndContainMem]):
@@ -140,6 +158,22 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
                 value={"presser_id": presser_id, "pressed_enemy_id": pressed_enemy_id},
             )
 
+        # Hysteresis on the loose/contested read (see `_LOOSE_BALL_HYSTERESIS_TICKS`'s
+        # comment) — a raw `game.robot_with_ball is None` re-read flickers
+        # almost every tick when two robots are both right on the ball.
+        # `loose_ball_flip_ticks` counts consecutive ticks *disagreeing* with
+        # the currently-committed classification (`mem.ball_is_loose`); only
+        # flip once that streak clears the threshold, so a single-tick
+        # flicker can't retarget the presser mid-approach.
+        raw_ball_loose = game.robot_with_ball is None
+        if raw_ball_loose == mem.ball_is_loose:
+            mem.loose_ball_flip_ticks = 0
+        else:
+            mem.loose_ball_flip_ticks += 1
+            if mem.loose_ball_flip_ticks >= _LOOSE_BALL_HYSTERESIS_TICKS:
+                mem.ball_is_loose = raw_ball_loose
+                mem.loose_ball_flip_ticks = 0
+
         if ball_in_own_defense_area(game):
             # The ball is inside our own box — pressing there means an
             # outfield robot in the keeper's area (DefenseAreaRule foul).
@@ -151,7 +185,7 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
                 robot_id=presser_id,
                 target_coords=own_defense_area_exit_point(game, game.ball.p.to_2d().y),
             )
-        elif game.robot_with_ball is None:
+        elif mem.ball_is_loose:
             # Ball is fully loose — nobody on either team currently has it.
             # block_attacker's "attacker doesn't have ball" branch computes
             # the presser's target relative to the tracked enemy's *own*

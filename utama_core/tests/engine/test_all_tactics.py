@@ -339,6 +339,73 @@ def test_press_and_contain_picks_the_closest_robot_as_presser(runner_factory):
     assert mem.presser_id == 3, f"expected the closer robot (3) as presser, got {mem.presser_id}"
 
 
+def test_press_and_contain_loose_ball_hysteresis_absorbs_single_tick_flicker(runner_factory):
+    """Found live (tournament replay review, 2026-09-01): a raw per-tick
+    `game.robot_with_ball is None` re-read flickers almost every tick when
+    two robots are both right on the ball -- one tick reads "loose"
+    (drive straight at the ball), the next reads "contested" (aim relative
+    to the enemy instead), a materially different target angle each time.
+    Observed live: a robot already touching the ball turned toward it, away,
+    then back, several times a second, until the unstable contact knocked
+    the ball out of bounds.
+
+    Regression: a single-tick disagreement (or an alternating flicker) must
+    not flip the committed loose/contested classification; only a streak of
+    `_LOOSE_BALL_HYSTERESIS_TICKS` consecutive disagreeing ticks should.
+    """
+    import dataclasses
+
+    from utama_core.entities.data.vector import Vector2D, Vector3D
+    from utama_core.entities.game.ball import Ball
+    from utama_core.entities.game.game_frame import GameFrame
+    from utama_core.tactics.press_and_contain import _LOOSE_BALL_HYSTERESIS_TICKS
+
+    def _frame(game, *, friendly_has_ball: bool) -> GameFrame:
+        frame = game.current
+        friendly = dict(frame.friendly_robots)
+        friendly[1] = dataclasses.replace(friendly[1], has_ball=friendly_has_ball, p=Vector2D(0.1, 0.0))
+        enemy = dict(frame.enemy_robots)
+        enemy[1] = dataclasses.replace(enemy[1], has_ball=False, p=Vector2D(0.15, 0.0))
+        ball = Ball(p=Vector3D(0.1, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0))
+        return GameFrame(
+            ts=frame.ts,
+            my_team_is_yellow=frame.my_team_is_yellow,
+            my_team_is_right=frame.my_team_is_right,
+            friendly_robots=friendly,
+            enemy_robots=enemy,
+            ball=ball,
+            referee=frame.referee,
+        )
+
+    runner = runner_factory(exp_friendly=3, exp_enemy=2)
+    game = runner.my.game
+    tactic = PressAndContainTactic()
+    mem = tactic.initial_mem()
+    ctx = _ctx(runner)
+
+    game.add_game_frame(_frame(game, friendly_has_ball=False))
+    _commands, mem = tactic.tick(game, ctx, (1, 2), mem)
+    assert mem.ball_is_loose is True
+
+    # Single-tick flicker to "contested" must not flip the classification.
+    game.add_game_frame(_frame(game, friendly_has_ball=True))
+    _commands, mem = tactic.tick(game, ctx, (1, 2), mem)
+    assert mem.ball_is_loose is True
+
+    # Back to loose immediately -- an alternating flicker must not
+    # accumulate toward a flip either.
+    game.add_game_frame(_frame(game, friendly_has_ball=False))
+    _commands, mem = tactic.tick(game, ctx, (1, 2), mem)
+    assert mem.ball_is_loose is True
+    assert mem.loose_ball_flip_ticks == 0
+
+    # A genuinely sustained change must still flip it within the threshold.
+    for _ in range(_LOOSE_BALL_HYSTERESIS_TICKS):
+        game.add_game_frame(_frame(game, friendly_has_ball=True))
+        _commands, mem = tactic.tick(game, ctx, (1, 2), mem)
+    assert mem.ball_is_loose is False, "sustained change never flipped the classification"
+
+
 def test_give_and_go_reassigned_carrier_resets_role_state(runner_factory):
     """If the kernel hands this tactic a robot set that no longer contains
     the previous carrier (e.g. after a scheduler reassignment), roles must
