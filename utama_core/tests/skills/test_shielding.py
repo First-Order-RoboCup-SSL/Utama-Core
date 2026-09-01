@@ -158,6 +158,63 @@ def test_shielded_approach_angle_does_not_rechatter_near_commit_boundary():
     assert _shielding_at(_RELEASE_RANGE + 0.01) is True
 
 
+def test_shielded_approach_angle_survives_a_transient_enemy_exit_from_contest_range():
+    """Regression test for a live 2026-09-02 tournament finding
+    (`counter_flow_vs_tiki_taka.pkl`, t=14.7-15.4s): a contesting enemy
+    routinely steps in and out of `CONTEST_RANGE` on a contested midfield
+    loose ball, not just once. Committing to a direct approach, then having
+    the enemy step out and back in, must not restart the hysteresis from
+    scratch (which would re-run the tight `dist > COMMIT_RANGE` check
+    instead of the wide `_RELEASE_RANGE` check on re-entry) -- that
+    reproduced the exact approach/retreat oscillation `_RELEASE_RANGE` was
+    added to prevent in the first place, just gated by the enemy's in/out
+    timing instead of our own distance wobble."""
+    ball = Vector2D(0.0, 0.0)
+
+    def _shielding_at(dist: float, enemy: Vector2D | None) -> bool:
+        robot = Vector2D(dist, 0.0)
+        enemy_robots = {0: _robot(0, enemy.x, enemy.y, False)} if enemy is not None else {}
+        game = _game({0: _robot(0, robot.x, robot.y, True)}, enemy_robots, (0.0, 0.0))
+        _, shielding = shielded_approach_angle(game, robot, ball, robot_id=0)
+        return shielding
+
+    # Commit to direct while still contested.
+    assert _shielding_at(COMMIT_RANGE - 0.005, Vector2D(0.3, 0.3)) is False
+    # Robot itself stays well within _RELEASE_RANGE, but the contesting
+    # enemy transiently steps outside CONTEST_RANGE (no enemy at all here).
+    assert _shielding_at(COMMIT_RANGE + 0.05, None) is False
+    # Enemy re-enters contest range -- must still honor the earlier
+    # commitment (release check), not restart at the tight commit check.
+    assert _shielding_at(COMMIT_RANGE + 0.05, Vector2D(0.3, 0.3)) is False
+
+
+def test_shielded_approach_angle_forgets_commitment_once_genuinely_clear_of_the_ball():
+    """The no-contesting-enemy branch must still eventually drop a stale
+    commitment -- once this robot is far past `_RELEASE_RANGE` from the
+    ball (a wholly separate, later approach), it must not silently inherit
+    an old commitment from a previous, unrelated ball chase. Nothing in the
+    production codebase calls `reset_shield_state` today, so this distance-
+    based fallback is the only thing preventing that leak."""
+    ball = Vector2D(0.0, 0.0)
+    enemy = Vector2D(0.3, 0.3)
+
+    def _shielding_at(dist: float, contested: bool) -> bool:
+        robot = Vector2D(dist, 0.0)
+        enemy_robots = {0: _robot(0, enemy.x, enemy.y, False)} if contested else {}
+        game = _game({0: _robot(0, robot.x, robot.y, True)}, enemy_robots, (0.0, 0.0))
+        _, shielding = shielded_approach_angle(game, robot, ball, robot_id=0)
+        return shielding
+
+    # Commit to direct while contested.
+    assert _shielding_at(COMMIT_RANGE - 0.005, contested=True) is False
+    # Robot moves well clear of the ball with no enemy contesting -- a
+    # genuinely separate later approach, not a transient enemy blip.
+    assert _shielding_at(_RELEASE_RANGE + 1.0, contested=False) is False
+    # A fresh contest from far away should shield again, not stay
+    # incorrectly committed to direct from the earlier, unrelated approach.
+    assert _shielding_at(CONTEST_RANGE - 0.01, contested=True) is True
+
+
 def test_shielded_approach_angle_commit_state_is_per_robot():
     """Two robots' hysteresis states must not interfere with each other."""
     ball = Vector2D(0.0, 0.0)

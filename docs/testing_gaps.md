@@ -593,3 +593,62 @@ a clean stuck-match rate now that a fourth root cause
 above) if another stuck instance surfaces without a `PressAndContainTactic`
 presser involved, before considering any of this a candidate for a
 tournament-level automated check.
+
+**(a) done, 2026-09-02 — three false-positive classes added, not just the
+kickoff one.** A 1-match-per-pair competitive tournament re-run
+(`tournament_20260901_232355/`) surfaced 82 raw windows across 15 matches,
+63 surviving the existing `t_start >= 10s` kickoff filter — manually
+classifying every one of those 63 (`load_frames_in_range` + direct field
+checks, not a rendered PNG) found **zero** were genuine stuck-match bugs:
+38 were a robot legitimately holding/shielding the ball (`has_ball=True`
+for a real fraction of the window, e.g. a carrier paused mid-decision), 8
+were the ball sitting in a defense area under the referee's own held-
+ball/interference handling (already correctly resolving itself via
+`STOP`/`BALL_PLACEMENT` on a timeout — one case traced in full: "Ball held
+in blue defense area over 10s" firing right at the 10s mark, the detector
+just re-reporting what the referee had already caught), and the remaining
+17 were either the same two shapes at a lower duty-cycle or a **mid-match**
+kickoff restart (a goal or an earlier stoppage resolving into a fresh
+`PREPARE_KICKOFF_YELLOW`/`BALL_PLACEMENT_YELLOW` sequence) — the original
+`t_start >= 10s` filter only ever covered a match's *opening* kickoff, not
+a restart later in the match, which is exactly as common in a 6v6 game with
+goals and fouls.
+
+`find_stuck_windows` (`utama_core/replay/stuck_detector.py`) now excludes
+all three classes directly, before the frozen/oscillating check even runs:
+a window is skipped if the referee command isn't `NORMAL_START`/
+`FORCE_START` for at least `live_play_fraction` (default 0.9) of its
+frames (skipped entirely for replays with no referee data, e.g. unit-test
+fixtures), if any robot has `has_ball=True` for at least
+`possession_fraction` (default 0.3) of its frames, or if the ball spends at
+least `defense_area_fraction` (default 0.5) of its frames inside either
+defense box. Re-swept the same 15-match corpus: raw/genuine windows dropped
+from 82/63 to **11, across 7 matches** — each of those 11 was individually
+traced and confirmed to be ordinary multi-robot contested-loose-ball play
+(several robots converging on a 50/50 ball, one eventually winning
+possession), except one, which led to a real fix (see below). Unit tests
+(`utama_core/tests/replay/test_stuck_detector.py`) all still pass unchanged
+(fixtures carry no `referee` field, so the new checks no-op for them, by
+design — see the possession/live-play checks' docstrings).
+
+**One of the 11 remaining windows was a real bug, now fixed:**
+`counter_flow_vs_tiki_taka.pkl` t=14.7-15.4s traced to
+`shielding.shielded_approach_angle`'s commit/release hysteresis
+(`utama_core/skills/src/shielding.py`) unconditionally clearing
+`_COMMITTED_ROBOTS` the instant no enemy was within `CONTEST_RANGE` —
+against a midfield loose ball, the contesting enemy routinely stepped in
+and out of that range from moment to moment, and each exit silently reset
+the hysteresis, so the *next* re-entry always restarted from
+`already_committed=False` (the tight `dist > COMMIT_RANGE` check) instead
+of honoring the wider `_RELEASE_RANGE` release check — reproducing the
+exact approach/retreat oscillation `_RELEASE_RANGE` was added to prevent
+in the first place (see `COMMIT_RANGE`'s own docstring for that original
+bug), just gated by the enemy's in/out timing instead of the robot's own
+distance wobble. See `docs/strategies.md`'s Known open bugs for the fix
+description. Full suite after both this fix and the detector changes: 867
+passed, 4 skipped, 2 xfailed — zero regressions.
+
+Updated next steps: (b) (merge-span verification) and (d)
+(`_friendly_closer_to_ball`) are unchanged and still open. (c) is
+superseded by this pass's own from-scratch classification, which is more
+thorough than a raw re-sweep would have been.

@@ -143,7 +143,28 @@ def shielded_approach_angle(game: Game, robot: Vector2D, ball: Vector2D, robot_i
     dist = robot.distance_to(ball)
 
     if contesting_enemy is None:
-        _COMMITTED_ROBOTS.pop(robot_id, None)
+        # Only clear the commitment once *we* are genuinely clear of the
+        # ball (past `_RELEASE_RANGE`), not merely because no enemy happens
+        # to be contesting it this exact tick (found live, 2026-09-02
+        # tournament re-run, `counter_flow_vs_tiki_taka.pkl` t=14.7-15.4s):
+        # an enemy contesting a midfield loose ball routinely steps in and
+        # out of `CONTEST_RANGE` from moment to moment, not just once —
+        # unconditionally popping the commitment on every exit meant the
+        # *next* re-entry always restarted hysteresis from
+        # `already_committed=False`, silently defeating `_RELEASE_RANGE`'s
+        # whole purpose (re-running the tight `dist > COMMIT_RANGE` check
+        # instead of the wide release check) and reproducing the same
+        # approach/retreat oscillation `_RELEASE_RANGE` was added to
+        # prevent, just gated by the enemy's in/out timing instead of our
+        # own distance wobble. Gating the clear on `dist` instead (rather
+        # than never clearing at all) avoids a *different* bug: nothing
+        # calls `reset_shield_state` today (checked directly — no call site
+        # exists outside its own tests), so an unconditional "never clear"
+        # would let a stale commitment from one approach silently suppress
+        # shielding on a later, unrelated one once this robot is done with
+        # the current ball entirely.
+        if dist > _RELEASE_RANGE:
+            _COMMITTED_ROBOTS.pop(robot_id, None)
         return robot.angle_to(ball), False
 
     # Hysteresis: once committed to a direct approach, stay committed until

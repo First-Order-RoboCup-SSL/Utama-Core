@@ -42,8 +42,15 @@ from typing import Union
 
 import numpy as np
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.entities.game import GameFrame
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.replay_player import _load_replay
+
+# Referee commands where the ball is expected to be legally stationary (a
+# stoppage, restart ceremony, or placement) — a window spent mostly in one
+# of these is not a "stuck match" in gap #11's sense, just normal officiating.
+_LIVE_PLAY_COMMANDS = frozenset({RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START})
 
 
 @dataclass(frozen=True)
@@ -85,6 +92,15 @@ def _dominant_non_dc_fraction(trace: np.ndarray) -> float:
     return float(non_dc.max() / total)
 
 
+def _in_defense_area(x: float, y: float, field_dims: FieldDimensions) -> bool:
+    depth = field_dims.half_defense_area_depth * 2
+    half_width = field_dims.half_defense_area_width
+    half_length = field_dims.full_field_half_length
+    in_left = x <= -half_length + depth and abs(y) <= half_width
+    in_right = x >= half_length - depth and abs(y) <= half_width
+    return in_left or in_right
+
+
 def find_stuck_windows(
     replay_path: Union[str, Path],
     *,
@@ -93,11 +109,40 @@ def find_stuck_windows(
     ball_still_tol: float = 0.05,
     oscillation_energy_tol: float = 0.8,
     min_duration_s: float = 3.0,
+    live_play_fraction: float = 0.9,
+    possession_fraction: float = 0.3,
+    defense_area_fraction: float = 0.5,
+    field_dims: FieldDimensions = STANDARD_FIELD_DIMS,
 ) -> list[StuckWindow]:
     """Slide a `window_s`-wide window (every `stride_s`) across a replay and
     flag windows where the ball is frozen (`ball_std < ball_still_tol`) and
     at least one friendly robot's position trace has non-DC spectral energy
     fraction above `oscillation_energy_tol`.
+
+    Three false-positive classes are excluded before the frozen/oscillating
+    check even runs, all found via a 2026-09-02 sweep of a competitive
+    tournament re-run (every one of that run's "genuine" raw-flagged windows
+    turned out to be one of these three, not a real stuck-match bug):
+
+    - **Not live play.** A window where the referee command is
+      `NORMAL_START`/`FORCE_START` for less than `live_play_fraction` of its
+      frames is a legal stoppage/restart (kickoff standstill, a mid-match
+      restart after a goal, a `STOP`<->`FORCE_START` violation cycle), not a
+      stuck match — the ball is *supposed* to be frozen there. Replays with
+      no referee data (`frame.referee is None`) skip this check entirely
+      rather than being unflaggable by construction, since not every replay
+      (e.g. a unit-test fixture, or a non-refereed `debug_match.py` run)
+      carries referee state.
+    - **Ball possessed.** A window where some robot (either team) has
+      `has_ball=True` for at least `possession_fraction` of its frames is a
+      robot legitimately holding/shielding the ball, not a stall — this is
+      the majority case in practice (e.g. a carrier paused mid-decision).
+    - **Ball in a defense area.** A window where the ball spends at least
+      `defense_area_fraction` of its frames inside either team's defense
+      box is already governed by the referee's own held-ball/interference
+      rules (which resolve it via `STOP`/`BALL_PLACEMENT` on their own
+      timeout, distinct from and faster than this detector's), so flagging
+      it here would just be re-reporting a case the referee already handles.
 
     Adjacent/overlapping flagged windows are merged before returning, and
     merged spans shorter than `min_duration_s` are dropped — a single
@@ -117,6 +162,29 @@ def find_stuck_windows(
     while t + window_s <= t_last:
         window_frames = [f for f in frames if t <= f.ts <= t + window_s]
         if len(window_frames) >= 4 and all(f.ball is not None for f in window_frames):
+            if window_frames[0].referee is not None:
+                live_frac = sum(
+                    f.referee.referee_command in _LIVE_PLAY_COMMANDS for f in window_frames if f.referee
+                ) / len(window_frames)
+                if live_frac < live_play_fraction:
+                    t += stride_s
+                    continue
+
+            held_frac = sum(
+                any(r.has_ball for r in f.friendly_robots.values()) or any(r.has_ball for r in f.enemy_robots.values())
+                for f in window_frames
+            ) / len(window_frames)
+            if held_frac >= possession_fraction:
+                t += stride_s
+                continue
+
+            defense_frac = sum(_in_defense_area(f.ball.p.x, f.ball.p.y, field_dims) for f in window_frames) / len(
+                window_frames
+            )
+            if defense_frac >= defense_area_fraction:
+                t += stride_s
+                continue
+
             ball_xs = np.array([f.ball.p.x for f in window_frames])
             ball_ys = np.array([f.ball.p.y for f in window_frames])
             ball_std = float(np.hypot(ball_xs.std(), ball_ys.std()))

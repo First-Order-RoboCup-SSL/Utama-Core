@@ -982,6 +982,34 @@ the full account of what replaced them and why.
   help winning the ball back) before revisiting `low_block`'s backfill
   record.
 
+- **`shielding.shielded_approach_angle`'s commit/release hysteresis reset on
+  every transient enemy exit from `CONTEST_RANGE` — found and fixed
+  2026-09-02** — a second-generation instance of the exact bug class
+  `COMMIT_RANGE`/`_RELEASE_RANGE` were added to prevent (see their own
+  docstrings in `utama_core/skills/src/shielding.py`), found via the stuck-
+  detector improvements above: after filtering out the three false-positive
+  classes, `counter_flow_vs_tiki_taka.pkl` t=14.7-15.4s still flagged a
+  genuine oscillation. Traced directly: `friendly1` committed to a direct
+  approach on a contested midfield loose ball, then the contesting enemy
+  transiently stepped outside `CONTEST_RANGE` (0.5m) — which unconditionally
+  popped `_COMMITTED_ROBOTS[robot_id]` in the `contesting_enemy is None`
+  branch — so when the enemy re-entered range half a second later, the
+  hysteresis restarted from `already_committed=False` and re-ran the tight
+  `dist > COMMIT_RANGE` check instead of the wide `_RELEASE_RANGE` release
+  check, reproducing the same approach/retreat cycle the hysteresis exists
+  to prevent, just gated by the enemy's in/out timing rather than the
+  robot's own distance wobble. Fixed by only clearing the commitment once
+  the *robot itself* is past `_RELEASE_RANGE` from the ball, not merely
+  because no enemy happens to be contesting it this exact tick — this also
+  avoids a second latent bug (nothing in production code actually calls
+  `reset_shield_state`, confirmed by grep, so an unconditional "never clear
+  on enemy-exit" fix would have let a stale commitment leak into a later,
+  wholly unrelated approach once this robot moved on to a different ball).
+  Regression tests:
+  `test_shielded_approach_angle_survives_a_transient_enemy_exit_from_contest_range`
+  and `test_shielded_approach_angle_forgets_commitment_once_genuinely_clear_of_the_ball`
+  (`utama_core/tests/skills/test_shielding.py`).
+
 ## Updating this file
 
 - New strategy added → add a row here in the appropriate section (or a new
