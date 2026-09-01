@@ -90,6 +90,23 @@ _MAX_HOP_TICKS = round(4.0 * CONTROL_FREQUENCY)  # 4s — generous vs. a real ca
 # not a one-tick noise blip (an enemy grazing the clearance boundary for a
 # single frame while running through, not actually planted in the lane).
 _LANE_BLOCKED_ABANDON_TICKS = round(0.5 * CONTROL_FREQUENCY)
+# Safety valve for the first-touch receiver *search* itself, distinct from
+# _MAX_HOP_TICKS (which only bounds a single locked-in hop): in congested
+# play, `_nearest_safe_receiver` can keep finding a fresh candidate every
+# time the previous one gets lane-blocked and abandoned (_LANE_BLOCKED_
+# ABANDON_TICKS, ~0.5s each) without a single hop ever completing --
+# `hop_count` never leaves 0, so `_MAX_HOPS_PER_POSSESSION`'s force_shot
+# never triggers either. Found live (tournament stall investigation,
+# 2026-09-01): 10 distinct receiver-lock attempts over 12.5s, hop_count
+# stuck at 0 throughout. `ticks_held` already counts ticks since this exact
+# first-touch situation began (reset only where mem itself resets, never by
+# a completed hop while hop_count is still 0) making it the right budget to
+# reuse here. Deliberately routes to the no-open-lane dribble/reposition
+# fallback, never `kick()`: DoubleTouchRule only re-arms right after a real
+# restart, but GiveAndGoTactic can't see referee state here, so a stuck
+# first-touch situation must still be treated as though a solo shot might
+# be an illegal second touch on the ball.
+_MAX_FIRST_TOUCH_TICKS = round(8.0 * CONTROL_FREQUENCY)  # 8s — generous vs. real congested play
 _RELOCATE_MIN_SEPARATION = 0.9  # metres — a relocating support point must clear the carrier and other supports
 # Retreat standoff from our own area front edge while the ball is in our own
 # half: support robots hold this far off the box line instead of packing it.
@@ -317,7 +334,18 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         # every later touch in the same possession, once a genuine
         # intervening touch has already happened.
         first_touch_of_possession = mem.hop_count == 0
-        if not force_shot and mem.receiver_id is None and first_touch_of_possession:
+        # Cumulative give-up: unlike `hop_ticks` (which only bounds a single
+        # locked-in hop or a single no-candidate hold and gets reset on every
+        # fresh attempt), `ticks_held` never resets while `hop_count` is
+        # still 0 — see `_MAX_FIRST_TOUCH_TICKS`'s definition for why a
+        # per-attempt budget alone lets this loop run forever in congested
+        # play. Never treated as a `force_shot` (that would route to
+        # `kick()` below): a stuck-since-restart first touch must still
+        # avoid a solo shot, so this instead disables further receiver
+        # search and drops straight to the no-open-lane dribble/reposition
+        # path, same as a stationary keeper leaves no lane at all.
+        first_touch_stuck = first_touch_of_possession and mem.ticks_held >= _MAX_FIRST_TOUCH_TICKS
+        if not force_shot and not first_touch_stuck and mem.receiver_id is None and first_touch_of_possession:
             # The very first touch of a possession must never be a solo shot
             # (see the block comment above `first_touch_of_possession`'s
             # definition, moved here) — use the relaxed selector, not
@@ -328,12 +356,17 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             if mem.receiver_id is not None:
                 mem.hop_ticks = 0
                 mem.lane_blocked_ticks = 0
-        elif not force_shot and mem.receiver_id is None and not _has_open_shot(game, carrier_id):
+        elif (
+            not force_shot
+            and not first_touch_stuck
+            and mem.receiver_id is None
+            and not _has_open_shot(game, carrier_id)
+        ):
             mem.receiver_id = _best_receiver(game, carrier_id, others)
             mem.hop_ticks = 0
             mem.lane_blocked_ticks = 0
 
-        if first_touch_of_possession and mem.receiver_id is None and not force_shot:
+        if first_touch_of_possession and not first_touch_stuck and mem.receiver_id is None and not force_shot:
             # No teammate was even reachable/unblocked (e.g. boxed in by
             # opponents right at kickoff) — hold rather than fall through to
             # the shoot branch below, which would reintroduce the double-
@@ -409,7 +442,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 },
             )
 
-        if best_shot_y is None:
+        if best_shot_y is None or first_touch_stuck:
             # No open lane at all — freezing here (the old behaviour) never
             # resolves against a stationary blocker (e.g. a keeper at the
             # goal mouth): nothing about the position changes, so the shot

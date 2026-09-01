@@ -1,4 +1,4 @@
-"""Regression test for `GiveAndGoTactic`'s first-touch `hop_ticks` timeout.
+"""Regression tests for `GiveAndGoTactic`'s first-touch give-up timeouts.
 
 Found live in a tournament replay (`counter_flow_vs_counter_press.pkl`,
 2026-09-01): a carrier with no reachable/unblocked teammate held the ball
@@ -7,6 +7,17 @@ Root cause: the first-touch-of-possession branch in `tick()` unconditionally
 reset `mem.hop_ticks = 0` right before incrementing it whenever
 `_nearest_safe_receiver` was called, even when it returned `None` — pinning
 `hop_ticks` at exactly 1 forever instead of climbing toward `_MAX_HOP_TICKS`.
+
+A second, distinct stall was found live the same day
+(`counter_press_vs_counter_flow.pkl`, t=29-41s+): congested play let
+`_nearest_safe_receiver` keep finding a *different* fresh candidate every
+time the previous one got lane-blocked and abandoned
+(`_LANE_BLOCKED_ABANDON_TICKS`, ~0.5s each) — 10 distinct receiver-lock
+attempts over 12.5s, no pass ever completed, `hop_count` stuck at 0 the
+whole time so `_MAX_HOPS_PER_POSSESSION`'s force_shot never triggered
+either. `_MAX_FIRST_TOUCH_TICKS`/`first_touch_stuck` bounds the *cumulative*
+time spent in this retry loop, using `mem.ticks_held` (which persists
+across individual receiver attempts, unlike `hop_ticks`).
 """
 
 from __future__ import annotations
@@ -19,7 +30,11 @@ from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.tactics.give_and_go import _MAX_HOP_TICKS, GiveAndGoTactic
+from utama_core.tactics.give_and_go import (
+    _MAX_FIRST_TOUCH_TICKS,
+    _MAX_HOP_TICKS,
+    GiveAndGoTactic,
+)
 
 
 class _NullMotionController(MotionController):
@@ -100,3 +115,62 @@ def test_carrier_eventually_abandons_the_hold_after_max_hop_ticks():
 
     assert mem.hop_ticks < _MAX_HOP_TICKS
     assert mem.receiver_id is None
+
+
+def _make_flicker_game() -> Game:
+    """Carrier facing +x, teammate off-axis at (1.5, 2.0), enemy at (1.0, 0.0).
+
+    `_nearest_safe_receiver`'s raw carrier->teammate segment check passes
+    (the enemy is nowhere near that line) so the teammate is selected every
+    time — but `_pass_exec`'s intercept point follows the carrier's fixed
+    orientation (+x, since the fixture never turns it), landing right next
+    to the enemy, so the hop's own lane-blocked check trips almost
+    immediately and the hop gets abandoned via `_LANE_BLOCKED_ABANDON_TICKS`
+    (~0.5s) every single time — the same teammate gets re-picked next tick,
+    forever, without ever completing a single pass.
+    """
+    carrier_pos = Vector2D(0.0, 0.0)
+    teammate_pos = Vector2D(1.5, 2.0)
+    enemy_pos = Vector2D(1.0, 0.0)
+    return _make_game(carrier_pos, teammate_pos, enemy_pos)
+
+
+def test_ticks_held_keeps_climbing_across_repeated_abandoned_hops():
+    """Found live (`counter_press_vs_counter_flow.pkl`, 2026-09-01): 10
+    distinct receiver-lock attempts over 12.5s, hop_count stuck at 0 the
+    whole time because every hop got lane-blocked-abandoned before
+    completing. `ticks_held` (unlike `hop_ticks`, which resets on every
+    fresh attempt) must keep climbing across these repeated abandons.
+    """
+    game = _make_flicker_game()
+    ctx = TickContext(motion_controller=_NullMotionController(), match_log=None)
+    tactic = GiveAndGoTactic()
+    mem = tactic.initial_mem()
+
+    for _ in range(400):
+        _, mem = tactic.tick(game, ctx, (1, 2), mem)
+
+    assert mem.hop_count == 0  # no pass ever actually completed
+    assert mem.ticks_held == 400  # kept climbing despite many hop_ticks resets
+
+
+def test_first_touch_stuck_gives_up_after_max_first_touch_ticks():
+    """Past `_MAX_FIRST_TOUCH_TICKS`, the carrier must stop re-locking a new
+    receiver once any hop already in flight at that point finishes running
+    its own course (its own `_LANE_BLOCKED_ABANDON_TICKS` budget), rather
+    than retrying forever.
+    """
+    game = _make_flicker_game()
+    ctx = TickContext(motion_controller=_NullMotionController(), match_log=None)
+    tactic = GiveAndGoTactic()
+    mem = tactic.initial_mem()
+
+    # +40 (not just +5): a hop already in flight when ticks_held crosses
+    # _MAX_FIRST_TOUCH_TICKS is allowed to run to its own abandon before
+    # `first_touch_stuck` blocks the next selection (see `tick()`'s
+    # `mem.receiver_id is not None` in-flight branch).
+    for _ in range(_MAX_FIRST_TOUCH_TICKS + 40):
+        _, mem = tactic.tick(game, ctx, (1, 2), mem)
+
+    assert mem.receiver_id is None
+    assert mem.hop_count == 0
