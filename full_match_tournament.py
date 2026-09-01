@@ -265,10 +265,31 @@ def main() -> None:
             flush=True,
         )
 
+    failures: list[BaseException] = []
+    future_to_job = {}
     with ProcessPoolExecutor(max_workers=n_workers) as pool:
         futures = [pool.submit(run_match_cell, a, b, right, kickoff, run_dir) for a, b, right, kickoff in jobs]
+        future_to_job = dict(zip(futures, jobs))
         for future in as_completed(futures):
-            _record(future.result())
+            try:
+                _record(future.result())
+            except Exception as exc:
+                # A worker can die after it has already written its
+                # stats/intentions/replay files to disk (e.g. a transient
+                # empty/malformed read off the rsim subprocess's stdout pipe
+                # on shutdown) -- that's a lost CellResult, not lost match
+                # data. Previously this propagated straight out of
+                # as_completed() and killed the whole run, discarding every
+                # other already-completed result's summary.json entry along
+                # with it (found live, 2026-09-01: all 40/40 match cells had
+                # written their files fine, but one bad future.result() took
+                # down collection before any of them could be recorded).
+                a, b, right, kickoff = future_to_job[future]
+                print(f"ERROR: match cell {a} vs {b} (right={right}, kickoff={kickoff}) failed: {exc!r}", flush=True)
+                failures.append(exc)
+
+    if failures:
+        print(f"\n{len(failures)} of {len(jobs)} match cell(s) failed to report a result (see errors above).")
 
     print("\nStandings (wins, draws) across all cells:")
     for name in sorted(COMPETITIVE, key=lambda n: (-wins[n], -draws[n])):
