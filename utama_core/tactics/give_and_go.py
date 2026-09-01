@@ -325,8 +325,9 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             # teammate anywhere near a scoring position yet and
             # `score_pass_setup` would reject all of them.
             mem.receiver_id = _nearest_safe_receiver(game, carrier_id, others)
-            mem.hop_ticks = 0
-            mem.lane_blocked_ticks = 0
+            if mem.receiver_id is not None:
+                mem.hop_ticks = 0
+                mem.lane_blocked_ticks = 0
         elif not force_shot and mem.receiver_id is None and not _has_open_shot(game, carrier_id):
             mem.receiver_id = _best_receiver(game, carrier_id, others)
             mem.hop_ticks = 0
