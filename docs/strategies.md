@@ -291,6 +291,57 @@ signal; do not treat a loss here as something to fix.
 
 ## Known open bugs
 
+- **`PressAndContainTactic`/`GiveAndGoTactic` picked the wrong robot for
+  press/carrier roles via a sorted-tuple indexing bug — a third, distinct
+  bug generation in these same two tactics (found and fixed 2026-09-01,
+  `c68e450`)** — found via a stuck-window sweep (`find_stuck_windows`, see
+  Known open bugs' "no automated detector" entry in `docs/testing_gaps.md`
+  gap #11) over a fresh 40-match competitive-tier `full_match_tournament.py`
+  run: 34/40 matches flagged, 175 total stuck windows, worst case 74.7% of
+  one match (`counter_flow_vs_tiki_taka_Lk.pkl`) spent stuck. This is
+  **not** the same bug as either tactic's 2026-08-26 fix below (that fix
+  covers the presser's behavior once it's *already* the presser, and only
+  in the fully-loose-ball branch) — this is a bug in *which* robot gets
+  assigned the role in the first place, and fires even when an enemy
+  actively holds the ball.
+
+  Root cause: `robot_ids` arrives numerically sorted by the scheduler
+  (`Strategy._run_step`'s `tuple(sorted(robot_ids))`), not ordered by
+  proximity to the ball. Both tactics used `robot_ids[0]` to mean "closest
+  to the ball," which actually meant "lowest assigned id" — a scheduler
+  artifact with no relation to game state. Traced live in the worst stuck
+  match: friendly robot 1 (0.795m from the ball, outside
+  `PressAndContainTactic._STEAL_RANGE=0.5m`) was the permanent presser
+  purely by having the lowest id, shadowing the shot line forever, while
+  friendly robot 4 (0.468m, inside steal range, could have won the ball)
+  was relegated to marking duty and never engaged — an enemy robot held the
+  ball motionless in a corner for 340+ continuous seconds as a result.
+  `GiveAndGoTactic` had the identical shape on its initial-carrier pick;
+  lower severity there since it's self-correcting (the wrong-picked robot
+  just chases the ball via `go_to_ball`) rather than a permanent lockout,
+  but still wastes time sending a farther robot after the ball while a
+  closer teammate does something else — relevant here since
+  `GiveAndGoTactic` is `counter_flow`'s and `tiki_taka`'s attack engine.
+
+  Fixed by picking `min(robot_ids, key=...distance_to(ball or tracked
+  enemy))` instead of `robot_ids[0]` at both call sites. Audited every
+  other tactic file for the same `robot_ids[N]`-direct-indexing shape while
+  fixing this: `shadow_and_mark.py`'s `robot_ids[:2]`/`robot_ids[2:]` split
+  is a deliberate fixed-role-count design (first two shadow the shot line,
+  the rest mark), not proximity-based by intent — flagged as worth
+  watching, not a bug, and not changed. `dribble.py`, `lead_and_support.py`,
+  `decoy_and_overload.py`, and `pass_and_shoot.py` all already do a real
+  distance check before falling back to positional indexing, or only use
+  it in a degenerate single-robot case — no bug found in any of them. New
+  regression tests: `test_press_and_contain_picks_the_closest_robot_as_presser`,
+  `test_give_and_go_initial_carrier_is_the_closest_robot`
+  (`utama_core/tests/engine/test_all_tactics.py`). Full suite green (860
+  passed, 4 skipped, 2 xfailed) after this fix plus an unrelated
+  `robosim` IPC fix landed the same session (see `docs/roadmap.md`'s Done
+  list). Fresh 40-match tournament re-run to measure how much the
+  stuck-match rate actually drops: pending as of this writing — see the
+  top of this file for results once available.
+
 - **Every sim-mode tournament match started at `FORCE_START`, skipping
   `PREPARE_KICKOFF` entirely — so "kickoff" possession was a simultaneous
   release-and-race, and the resulting tie was broken by sub-millimetre rsim

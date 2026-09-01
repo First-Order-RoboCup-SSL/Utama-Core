@@ -175,6 +175,29 @@ the full investigation narrative for anything already fixed lives in git log
   `test_referee_overrides_customization.py`) plus 4 pre-existing
   `test_referee_unit.py` kickoff tests fixed (they asserted the old buggy
   behavior). Full suite: 781 passed, 0 failed.
+- **`robosim` native stdout polluting the JSON protocol pipe (2026-09-01,
+  `f613411`)** — found while root-causing 5/40 "crashed" cells in a
+  competitive-tier `full_match_tournament.py` run. `rc-robosim`'s native
+  (C++) layer occasionally writes a plain-text diagnostic (e.g. `"turnover
+  0.86 robot x: ... ball y: ..."`) straight to the process's real stdout fd
+  via `printf`/`std::cout`, bypassing `sys.stdout` entirely — confirmed via
+  `strings` on the installed `.so` and live process/pipe inspection
+  (`/proc/<pid>/fdinfo`). That text shares the same pipe as
+  `robosim_subprocess.py`'s JSON replies; one such line coming out *in
+  place of* a tick's reply (not just interleaved before it) either raised a
+  `JSONDecodeError` one process up, or — in a first, reverted fix attempt
+  that looped skipping non-JSON lines unboundedly — silently deadlocked
+  forever waiting for a reply that would never arrive (verified live via
+  `ps`/`/proc` inspection: the subprocess was idle, zero bytes buffered on
+  the pipe). Fixed at the source in `robosim_subprocess.py`: duplicate the
+  original stdout fd before the native extension is even imported, repoint
+  fd 1 at `/dev/null`, and route the protocol's own JSON writes through the
+  untouched duplicate — verified directly with an isolated positive-control
+  test (a raw `os.write(1, ...)`, mimicking exactly how the native layer
+  writes, confirmed landing in the redirect target while the JSON pipe
+  stayed clean). `robosim_wrapper.py`'s read side also now bounds its
+  non-JSON-line skip loop (10 lines) instead of looping unboundedly, so any
+  future instance of this bug class fails loudly rather than hanging.
 
 ## Open
 
