@@ -183,6 +183,33 @@ def test_shot_for_enemy_mirrored():
     assert stats.shots == {"friendly": 0, "enemy": 1}
 
 
+def test_no_shot_for_hard_lateral_ball_that_would_miss_the_goal():
+    # A cross-field switch or hard clear can satisfy "fast, past midfield,
+    # moving in the attacking x-direction" while its actual trajectory is
+    # aimed metres wide of the goal mouth (half_goal_width=0.5) -- this must
+    # not be counted as a shot. vx=-0.68 dominated by vy=-3.78 means the
+    # ball leaves the +/-0.5m goal-mouth band long before reaching the goal
+    # line, matching a real case found in `counter_flow_vs_zone_fluid.pkl`.
+    acc = MatchStatsAccumulator()
+    acc.record_tick(_fast_frame((-2.44, -0.10), (-0.68, -3.78)))
+
+    stats = acc.finalize()
+    assert stats.shots == {"friendly": 0, "enemy": 0}
+
+
+def test_shot_counted_when_trajectory_is_on_target_off_center():
+    # Off-center but still within the goal mouth at the goal line should
+    # still count -- the fix is about lateral misses, not about requiring
+    # dead center.
+    acc = MatchStatsAccumulator()
+    # From (-3.0, 0.2) with v=(-6.0, 0.3): predicted y at x=-4.5 is
+    # 0.2 + 0.3 * ((-4.5 - -3.0) / -6.0) = 0.2 + 0.3*0.25 = 0.275, within 0.5.
+    acc.record_tick(_fast_frame((-3.0, 0.2), (-6.0, 0.3)))
+
+    stats = acc.finalize()
+    assert stats.shots == {"friendly": 1, "enemy": 0}
+
+
 def test_ball_travel_skips_teleport_jumps():
     acc = MatchStatsAccumulator()
     acc.record_tick(_fast_frame((0.0, 0.0), (0.0, 0.0)))

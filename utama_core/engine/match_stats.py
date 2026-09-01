@@ -114,10 +114,17 @@ class MatchStatsAccumulator:
         self._last_ball_xy = ball_xy
 
         # Shot attempts: hard balls hit toward the attacking goal from the
-        # attacking half, edge-detected per side (locked until the ball slows).
-        # `GameFrame` carries no field geometry, so boxscore heuristics use
-        # the standard SSL field dims (the sim always plays on them).
+        # attacking half, on a straight-line trajectory that actually reaches
+        # the goal mouth (not just "moving in the right x-direction with some
+        # speed", which also passes for a hard clear or cross-field switch —
+        # see `docs/roadmap.md`'s "why is it 0-0" investigation, which found
+        # this heuristic counting balls whose extrapolated path missed the
+        # goal by several metres of lateral distance). Edge-detected per
+        # side (locked until the ball slows). `GameFrame` carries no field
+        # geometry, so boxscore heuristics use the standard SSL field dims
+        # (the sim always plays on them).
         half_length = STANDARD_FIELD_DIMS.full_field_half_length
+        half_goal_width = STANDARD_FIELD_DIMS.half_goal_width
         own_goal_sign = 1.0 if game_frame.my_team_is_right else -1.0
         for side, attack_sign in (("friendly", -own_goal_sign), ("enemy", own_goal_sign)):
             speed = math.hypot(ball.v.x, ball.v.y)
@@ -132,7 +139,18 @@ class MatchStatsAccumulator:
             ref_goal_x = (own_goal_sign if side == "friendly" else -own_goal_sign) * half_length
             progress_from_own_goal = (ball.p.x - ref_goal_x) * attack_sign
             toward_goal = ball.v.x * attack_sign > 0.0
-            if speed >= _SHOT_SPEED_MPS and toward_goal and progress_from_own_goal > half_length:
+            if not (speed >= _SHOT_SPEED_MPS and toward_goal and progress_from_own_goal > half_length):
+                continue
+            # On-target check: extrapolate the current straight-line velocity
+            # to the attacking goal's line (x = attack_sign * half_length)
+            # and require the predicted y to land within the goal mouth.
+            # `ball.v.x` can't be ~0 here (`toward_goal` + `speed >=
+            # _SHOT_SPEED_MPS` already bound it away from 0), so this
+            # division is safe.
+            attacking_goal_x = attack_sign * half_length
+            ticks_to_goal_line = (attacking_goal_x - ball.p.x) / ball.v.x
+            predicted_y_at_goal = ball.p.y + ball.v.y * ticks_to_goal_line
+            if abs(predicted_y_at_goal) <= half_goal_width:
                 self._shots[side] += 1
                 self._shot_lock[side] = True
 
