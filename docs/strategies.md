@@ -252,6 +252,38 @@ across the 4 cells: 2W-2D-0L for `tiki_taka_plus`. Promoted into
 independent run to confirm before leaning on it further, since one 40-match
 tournament is not yet enough to rule out variance at this sample size.
 
+## Full-match, decoupled side x kickoff round-robin, second confirmation run (2026-09-01, competitive tier)
+
+Second independent run of the same 5-config `COMPETITIVE` pool, requested
+specifically to confirm the 2026-08-23 `tiki_taka_plus` promotion and to
+validate two same-session fixes (the `robosim` stdout/IPC crash fix and the
+`robot_ids[0]`-closest-robot fix — see `docs/roadmap.md`'s Done list and
+Known open bugs above) under full concurrent load. Same methodology: 10
+pairs x 4 cells = 40 matches, 600s each, headless rsim, 5 concurrent
+workers. Run: `replays/tournament_20260901_193644/summary.json`.
+
+| Strategy | W-D (16 matches each) |
+|---|---|
+| `tiki_taka_plus` | 10W-6D |
+| `counter_flow` | 5W-8D |
+| `tiki_taka` | 4W-7D |
+| `zone_fluid` | 1W-10D |
+| `counter_press` | 0W-9D |
+
+`tiki_taka_plus`'s promotion is confirmed, and more decisively than the
+first run: it clears the field outright this time (10W, next-best is
+`counter_flow`'s 5W) rather than tying `counter_flow` for most wins.
+Relative ordering of the other four is otherwise unchanged from the
+2026-08-23 run. **0/40 matches crashed** (down from 5/40 in the run that
+motivated the `robosim` IPC fix) — the fix holds under this run's full
+5-way concurrent load, consistent with the isolated positive-control test
+run before this tournament. Ball travel: min 3.9m, median 120.4m, max
+379.6m — 6/40 matches under 50m total travel, the same rough
+near-zero/active bimodal split seen before. The `robot_ids[0]` fix's actual
+effect on the stuck-match rate was inconclusive — see the entry above in
+Known open bugs for why (most long-stuck matches turned out to share a
+different, still-open root cause).
+
 ## Baselines — don't fix, don't judge by these
 
 Several of these don't have both a real attack and a real defense answer, or
@@ -338,9 +370,98 @@ signal; do not treat a loss here as something to fix.
   (`utama_core/tests/engine/test_all_tactics.py`). Full suite green (860
   passed, 4 skipped, 2 xfailed) after this fix plus an unrelated
   `robosim` IPC fix landed the same session (see `docs/roadmap.md`'s Done
-  list). Fresh 40-match tournament re-run to measure how much the
-  stuck-match rate actually drops: pending as of this writing — see the
-  top of this file for results once available.
+  list).
+
+  **Fresh 40-match tournament re-run (2026-09-01,
+  `replays/tournament_20260901_193644/`)**: 0/40 crashed (the `robosim` IPC
+  fix holds under full concurrent load — down from 5/40), but the
+  stuck-window sweep got *worse* on its raw numbers: 40/40 matches flagged,
+  1303 total windows, worst case 98.5%. That headline is misleading, not a
+  regression — 82% of the 1303 windows are ≤10s, matching exactly the
+  kickoff/legal-stoppage false-positive class `docs/testing_gaps.md` gap
+  #11 already documents as a known detector limitation (unfiltered here;
+  the 34/40 baseline above already had this same noise folded in). Filtering
+  to windows starting ≥10s into the match (past kickoff settling): **20/40
+  matches still have a genuine long stuck window (34s–568s)** — comparable
+  in scope to the pre-fix baseline, meaning the `robot_ids[0]` fix reduced
+  neither the count nor the severity of long stuck matches, because most of
+  them are a *different* bug.
+
+  Root-caused the worst instance (`counter_flow_vs_zone_fluid_LK.pkl`,
+  stuck 568/600s, 3.9m total ball travel), **fixed in
+  `pass_and_score_geometry.py`**: `GiveAndGoTactic`'s carrier holds the ball
+  (`has_ball=True`, the real per-tick IR-contact sensor, confirmed via
+  direct frame inspection) with `mem.ticks_held` correctly reaching
+  `_MAX_FIRST_TOUCH_TICKS` (an earlier fix this session, working exactly as
+  designed) — but once `first_touch_stuck` trips, `tick()` unconditionally
+  routes to the no-open-lane reposition branch regardless of whether a lane
+  is actually open (`best_shot_y is None or first_touch_stuck`), calling
+  `no_shot_reposition_target` to strafe 0.6m away from the nearest defender.
+  The carrier was pinned almost exactly at the field's y-boundary
+  (y=-2.697, clamp at -2.7 for half_width=3.0/margin=0.3): the strafe
+  target's clamp collapsed the intended 0.6m step to a ~0.3cm net move,
+  recreating the exact "nothing about this position ever changes" freeze
+  `no_shot_reposition_target` was originally written to avoid — just from a
+  boundary clamp instead of a stationary keeper. Confirmed live via a
+  deterministic full-length repro of this exact match (same side/kickoff
+  cell) with added tracing: `mem.hop_ticks` stayed at 0 for the entire
+  560+ second freeze, confirming execution reached this branch every tick
+  and never budged. **Fixed**: when the preferred strafe direction is
+  clamped away to within half a strafe step of the carrier's current
+  position, flip to the opposite direction instead of collapsing in place —
+  the opposite direction always has room, since a field can't be narrower
+  than one strafe step. Regression tests:
+  `test_no_shot_reposition_target_flips_direction_when_clamped_at_the_sideline`,
+  `test_no_shot_reposition_target_takes_the_preferred_direction_when_not_clamped`
+  (`utama_core/tests/shared/test_pass_and_score_geometry.py`).
+
+- **`PressAndContainTactic`'s loose/contested classification had no
+  hysteresis, flickering every tick when two robots both touch the ball at
+  once (found and fixed 2026-09-01)** — found via direct replay review: a
+  yellow robot already touching the ball turned toward it, then away, then
+  back, several times a second, until the unstable contact knocked the ball
+  out of bounds. Root cause: a plain per-tick `game.robot_with_ball is
+  None` re-read decides whether the presser drives straight at the ball
+  ("loose") or aims relative to the tracked enemy ("contested") — with an
+  enemy also right on the ball, this read can flip almost every tick, and
+  each flip retargets the presser at a materially different angle, mid
+  approach. Fixed by adding commit/release hysteresis
+  (`_LOOSE_BALL_HYSTERESIS_TICKS=15`, ~0.25s at 60Hz): the committed
+  classification only flips after that many *consecutive* disagreeing
+  ticks, absorbing single-tick and alternating flicker while still
+  reacting promptly once a contest genuinely resolves. Regression test:
+  `test_press_and_contain_loose_ball_hysteresis_absorbs_single_tick_flicker`
+  (`utama_core/tests/engine/test_all_tactics.py`).
+
+- **`go_to_ball`'s "approach with dribbler back facing the ball" angle has
+  been a silent no-op since the function's creation — found 2026-09-01,
+  not fixed** — found while investigating a second replay-review report (a
+  robot's orientation settling a full second-plus before it reached the
+  ball, then making contact moving in a direction unrelated to its facing).
+  The dribbler-back angle is computed as `(approach_oren + math.pi) % (2 *
+  math.pi) - math.pi` — this is `normalise_heading`'s own formula
+  (`utama_core/global_utils/math_utils.py`) applied to an angle that is
+  already normalized, which is a pure identity for every input in
+  `(-pi, pi]`, not a flip (confirmed by a full sweep of test angles: 9/9
+  angles from -179° to 179° came back completely unchanged). This means
+  every `go_to_ball` call in the codebase has always approached facing the
+  ball directly, never dribbler-back-first, since this function's creation
+  — the "orientation settles early" symptom is real, but secondary to this.
+  A fix (flip the angle correctly via `normalise_heading(approach_oren +
+  math.pi)`) was implemented and then **reverted the same session**: on a
+  straight-line head-on approach, the correct dribbler-back angle requires
+  the robot to translate one way while facing the opposite way (an
+  effectively backward approach), and it could not close the final ~0.11m
+  before `test_out_of_bounds_restart_spot_is_capturable_by_go_to_ball`'s 5s
+  timeout — tried both an unconditional flip and a distance-gated version
+  (flip only within 0.2m/0.3m of the ball); both produced the identical
+  ~0.11m closest-approach failure, ruling out the gate distance as the
+  cause. Whether backward-approach convergence is a motion-planning gap
+  (translating opposite to facing may simply need more room/time to
+  converge than a forward approach) or something else was not
+  investigated further — real fix needs that answered first, not another
+  constant tweak. `go_to_ball.py` and its tests are back to their
+  pre-2026-09-01 state; nothing changed.
 
 - **Every sim-mode tournament match started at `FORCE_START`, skipping
   `PREPARE_KICKOFF` entirely — so "kickoff" possession was a simultaneous

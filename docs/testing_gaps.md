@@ -550,20 +550,46 @@ run:**
   was fixed this pass — both are about the detector's own precision, not
   about whether it's useful (it found two real bugs despite them).
 
-**Status: prototyped, validated on real data (found and fixed two genuine
-stuck-match root causes), still not wired into any automated check**
+**Status: prototyped, validated on real data (found and fixed three genuine
+stuck-match root causes so far), still not wired into any automated check**
 (tournament run, CI, or otherwise) and still not a live in-match rule —
 deliberately, since a false-positive "stuck" call during live play would
 itself be a referee bug of the same shape as gap #9. Full test suite after
-both fixes: 817 passed, 4 skipped, 2 xfailed — zero regressions. Next
-steps, if picked up: (a) address the kickoff-standstill false positive
+all three fixes: 860 passed, 4 skipped, 2 xfailed — zero regressions.
+
+**Step (c) done, 2026-09-01 — result: the stuck pattern did *not* clear,
+and confirmed step (a) is now load-bearing, not optional.** Ran
+`find_stuck_windows` over all 40 replays from a fresh competitive-tier
+`full_match_tournament.py` run (`replays/tournament_20260901_193644/`,
+after landing the `robot_ids[0]` fix — see `docs/strategies.md`'s Known
+open bugs). Raw sweep: 40/40 matches flagged, 1303 total windows. That
+number is dominated by exactly the false-positive class in (a): 82% of the
+1303 windows are ≤10s, and manually checking, 30/40 matches have their
+first flagged window start within 2s of kickoff — this run never addressed
+(a), so every legal kickoff/goal-restart pause across all 40 matches got
+counted as "stuck" alongside genuine ones, making the raw 40/40 headline
+meaningless on its own. Filtering to windows starting ≥10s into the match:
+**20/40 matches still have a genuine long stuck window (34s–568s
+duration)** — comparable in scope to the pre-fix 34/40 baseline, meaning
+this run's fix (`robot_ids[0]`) did not measurably reduce the stuck-match
+rate, because most surviving instances share a *different*, still-unfixed
+root cause (traced for the worst case — see `docs/strategies.md`'s Known
+open bugs for the `GiveAndGoTactic` orientation-tolerance/PID-to-physics
+gap found there). This makes (a) no longer just a detector-precision nice-
+to-have: without it, any future confirmation run's headline numbers are
+uninterpretable without a manual filter pass like this one.
+
+Next steps, if picked up: (a) address the kickoff-standstill false positive
 (e.g. only run the detector once `RefereeCommand` has been
-`NORMAL_START`/`FORCE_START` for some minimum duration), (b) tighten the
-merge logic to verify frozen/oscillating status holds across the full
-merged span, not just its constituent windows, (c) re-run a fresh
-tournament with both fixes active to confirm neither stuck pattern
-recurs and to give the detector a clean corpus to validate against, (d)
-revisit `_friendly_closer_to_ball`'s permanent-conservative-posture shape
-(noted above) if another stuck instance surfaces without a
-`PressAndContainTactic` presser involved, before considering any of this a
-candidate for a tournament-level automated check.
+`NORMAL_START`/`FORCE_START` for some minimum duration) — now the
+highest-priority item, since it blocks getting a clean number from any
+future run without manual post-filtering; (b) tighten the merge logic to
+verify frozen/oscillating status holds across the full merged span, not
+just its constituent windows; (c*) once (a) is fixed, re-run again to get
+a clean stuck-match rate now that a fourth root cause
+(`GiveAndGoTactic`'s orientation-tolerance/turn-on-spot gap, see
+`docs/strategies.md`) is also fixed; (d) revisit
+`_friendly_closer_to_ball`'s permanent-conservative-posture shape (noted
+above) if another stuck instance surfaces without a `PressAndContainTactic`
+presser involved, before considering any of this a candidate for a
+tournament-level automated check.
