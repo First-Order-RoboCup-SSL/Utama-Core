@@ -298,11 +298,49 @@ class FastPathPlanner:
         obstacles: List,
         subgoal_direction: int,
         multiple: int,
-    ) -> np.ndarray:
+        origin_obstacle: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+        blocked_by_origin: bool = False,
+    ) -> Optional[np.ndarray]:
+        """`origin_obstacle`: the actual obstacle segment `check_segment` is
+        trying to route around (as opposed to `obstacle_pos`, just the
+        intersection point) — used only to classify a failsafe timeout below,
+        never to change the stepping itself. `blocked_by_origin` carries
+        forward whether the *previous* recursion step's collision was with
+        this same segment, so the failsafe can tell "still blocked by the
+        thing I'm trying to get around" (a real dead end) apart from "blocked
+        by something else, just haven't found a clear spot yet" (this search
+        wandering through a crowded obstacle field, not fundamentally stuck).
+        """
 
-        # Failsafe to prevent infinite loops if completely trapped
+        # Failsafe to prevent infinite loops if completely trapped. Handing
+        # back `obstacle_pos` (the exact point ON the obstacle) unconditionally
+        # used to be safe-ish in a crowded field -- if some *other* obstacle
+        # was still in the way at every step, the search was genuinely
+        # struggling and a rough, on-obstacle point was still better than
+        # nothing (confirmed: `test_our_kickoff_nonzero_keeper_...` needs
+        # exactly this, resolving in 100+ steps in a busy 6-robot scrum).
+        # But when it's the *same* obstacle this call started out avoiding
+        # that's still blocking at the cutoff, stepping further in that
+        # direction is not going to help -- it means the perpendicular
+        # direction chosen happens to run roughly *along* a long obstacle
+        # (e.g. the field boundary wall, when the robot is standing right at
+        # it and detouring "sideways" walks down the wall instead of away
+        # from it) rather than across it, and no amount of extra steps
+        # within a sane budget clears it (confirmed: the wall case needs
+        # 130+ steps in one direction and never fully clears in the other).
+        # Returning that on-the-obstacle point here as if it were a valid
+        # subgoal is what let `check_segment` steer straight at the wall it
+        # was supposed to route around. Found live: a `SwitchOfPlayTactic`
+        # pivot standing right at the field's edge (x=4.5) with its target
+        # inside the field to one side got this exact failsafe result on
+        # alternating ticks, sending its carrot flip-flopping between the
+        # true route and this bogus one every tick for the rest of a match
+        # (full_match_tournament.py replay counter_press_vs_tiki_taka_RK.pkl,
+        # 2026-09-01: 540s of continuous back-and-forth motion). `None` is
+        # handled by `check_segment` the same as an out-of-field point --
+        # "no valid subgoal on this side."
         if multiple > 10:
-            return obstacle_pos
+            return None if blocked_by_origin else obstacle_pos
 
         direction = target - robot_pos
         direction_norm = math.hypot(direction[0], direction[1])
@@ -352,6 +390,9 @@ class FastPathPlanner:
 
             # OPTIMIZATION: Removed np.isclose, ensuring strictly less-than for clearance
             if distance_point_to_segment(subgoal, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
+                is_origin = origin_obstacle is not None and (
+                    np.array_equal(o[0], origin_obstacle[0]) and np.array_equal(o[1], origin_obstacle[1])
+                )
                 return self._find_subgoal(
                     robot_pos,
                     target,
@@ -359,6 +400,8 @@ class FastPathPlanner:
                     obstacles,
                     subgoal_direction,
                     multiple + 1,
+                    origin_obstacle=origin_obstacle,
+                    blocked_by_origin=is_origin,
                 )
         return subgoal
 
@@ -536,12 +579,26 @@ class FastPathPlanner:
         if obstacle_memory_key is not None:
             self._last_obstacle[obstacle_memory_key] = obstacle_segment
 
-        # Generate left and right detours
-        subgoal_left = self._find_subgoal(segment[0], segment[1], closest_obstacle, obstacles, 1, 1)
-        subgoal_right = self._find_subgoal(segment[0], segment[1], closest_obstacle, obstacles, 0, 1)
+        # Generate left and right detours. `origin_obstacle=obstacle_segment`
+        # lets `_find_subgoal` tell a genuine dead-end (still blocked by this
+        # same obstacle after exhausting its step budget -- e.g. stepping
+        # along a long obstacle like the field boundary wall instead of away
+        # from it) apart from merely struggling in a crowded field (blocked
+        # by something else at the cutoff, where the old "take the point
+        # anyway" fallback is still the more useful answer) -- see
+        # `_find_subgoal`'s docstring/failsafe comment.
+        subgoal_left = self._find_subgoal(
+            segment[0], segment[1], closest_obstacle, obstacles, 1, 1, origin_obstacle=obstacle_segment
+        )
+        subgoal_right = self._find_subgoal(
+            segment[0], segment[1], closest_obstacle, obstacles, 0, 1, origin_obstacle=obstacle_segment
+        )
 
-        left_valid = self.is_point_in_field(subgoal_left, field_bounds)
-        right_valid = self.is_point_in_field(subgoal_right, field_bounds)
+        # `_find_subgoal` returns None for a genuine dead-end (see above) --
+        # treated the same as an out-of-field point, not passed to
+        # `is_point_in_field` (which assumes a real point).
+        left_valid = subgoal_left is not None and self.is_point_in_field(subgoal_left, field_bounds)
+        right_valid = subgoal_right is not None and self.is_point_in_field(subgoal_right, field_bounds)
 
         best_subgoal = None
         chosen_side: Optional[int] = None
