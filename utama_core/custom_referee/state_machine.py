@@ -24,6 +24,17 @@ _BALL_CLEAR_DIST = 0.5  # metres — all robots must be this far from ball befor
 _KICKER_READY_DIST = 0.3  # metres — kicker must be within this distance to trigger free kick start
 _PLACEMENT_DONE_DIST = 0.15  # metres — ball within this dist of target → placement complete
 _AUTO_ADVANCE_DELAY = 2.0  # seconds — readiness must be sustained this long before play starts
+# Seconds a STOP can wait on _all_robots_clear() before advancing anyway. A
+# real GC operator would eventually force it through if a robot never backs
+# off; without this, one robot that fails to clear the ball (whatever the
+# root cause -- e.g. a motion-planner convergence stall near a stationary
+# ball) freezes the STOP forever, since _all_robots_clear() has no other way
+# to become true. Found live, 2026-09-01: a full_match_tournament.py replay
+# (counter_press_vs_tiki_taka_RK.pkl) froze at t=58s on exactly this and
+# never played another tick for the remaining 540s of a 600s match -- caught
+# by the stuck-window detector, not by score (it stayed a correct 0-0, just
+# a dead one).
+_STOP_CLEAR_TIMEOUT_SECONDS = 15.0
 
 
 class GameStateMachine:
@@ -196,16 +207,29 @@ class GameStateMachine:
 
         # ----------------------------------------------------------------
         # Auto-advance 1: STOP → next queued restart
-        # Fires when all robots are ≥ _BALL_CLEAR_DIST from the ball.
+        # Fires when all robots are ≥ _BALL_CLEAR_DIST from the ball, or --
+        # regardless -- once _STOP_CLEAR_TIMEOUT_SECONDS has elapsed, so a
+        # single robot that never clears (e.g. stuck oscillating next to a
+        # stationary ball) can't freeze the STOP forever.
         # ----------------------------------------------------------------
         if (
             self._auto_advance.stop_to_next_command
             and self.command == RefereeCommand.STOP
             and self.next_command in self._NEEDS_STOP_FIRST
             and game_frame is not None
-            and self._all_robots_clear(game_frame)
+            and (
+                self._all_robots_clear(game_frame)
+                or (current_time - self._stop_entered_time) >= _STOP_CLEAR_TIMEOUT_SECONDS
+            )
         ):
-            logger.info("All robots clear — auto-advancing STOP → %s", self.next_command.name)
+            if not self._all_robots_clear(game_frame):
+                logger.warning(
+                    "STOP clear timeout (%.1fs) — auto-advancing STOP → %s despite an uncleared robot",
+                    _STOP_CLEAR_TIMEOUT_SECONDS,
+                    self.next_command.name,
+                )
+            else:
+                logger.info("All robots clear — auto-advancing STOP → %s", self.next_command.name)
             self.command = self.next_command
             self.command_counter += 1
             self.command_timestamp = current_time
@@ -723,6 +747,14 @@ class GameStateMachine:
         self.command = violation.suggested_command
         self.command_counter += 1
         self.command_timestamp = current_time
+        if self.command == RefereeCommand.STOP:
+            # Unlike _handle_goal and force_command, this path never recorded
+            # when STOP was entered -- _stop_entered_time was left stale from
+            # whatever STOP (or none) came before, which would have made the
+            # new STOP-clear timeout above fire immediately (or never track
+            # correctly) for every foul-triggered STOP, e.g. an out-of-bounds
+            # restart. Found while adding that timeout, 2026-09-01.
+            self._stop_entered_time = current_time
         placement_command = (
             self._ball_placement_command_for(violation.next_command)
             if violation.designated_position is not None

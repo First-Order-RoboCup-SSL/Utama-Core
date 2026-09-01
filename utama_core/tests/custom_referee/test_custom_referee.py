@@ -948,6 +948,78 @@ class TestCustomReferee:
         assert data.referee_command == RefereeCommand.DIRECT_FREE_BLUE
         assert data.next_command == RefereeCommand.NORMAL_START
 
+    def test_simulation_stop_advances_after_timeout_even_if_a_robot_never_clears(self):
+        """Found live in a full_match_tournament.py replay
+        (counter_press_vs_tiki_taka_RK.pkl, 2026-09-01): an out-of-bounds STOP
+        queued a DIRECT_FREE_BLUE restart, but one robot parked itself
+        oscillating just inside _BALL_CLEAR_DIST of the stationary ball and
+        never backed off -- _all_robots_clear() never returned True, so the
+        STOP never auto-advanced for the rest of the 600s match (froze at
+        t=58s, played nothing for the remaining 540s). _STOP_CLEAR_TIMEOUT_SECONDS
+        must force the advance through regardless once enough time has passed,
+        the same way a real GC operator eventually would.
+        """
+        from utama_core.custom_referee.rules.base_rule import RuleViolation
+
+        sm = _state_machine()
+        stuck_ball = _ball(0.0, 0.0)
+        stuck_frame = _frame(
+            ball=stuck_ball,
+            enemy_robots={0: _robot(0, 0.1, 0.0, is_friendly=False)},  # inside _BALL_CLEAR_DIST, never moves
+            my_team_is_yellow=True,
+            ts=10.0,
+        )
+
+        out_of_bounds = RuleViolation(
+            rule_name="out_of_bounds",
+            suggested_command=RefereeCommand.STOP,
+            next_command=RefereeCommand.DIRECT_FREE_BLUE,
+            status_message="Ball out of bounds",
+            designated_position=(0.0, 0.0),
+        )
+        data = sm.step(current_time=10.0, violation=out_of_bounds, game_frame=stuck_frame)
+        # The queued restart is recorded, but the offending robot is inside
+        # _BALL_CLEAR_DIST, so auto-advance 1 does not fire this tick --
+        # command stays STOP rather than entering BALL_PLACEMENT_BLUE.
+        assert data.referee_command == RefereeCommand.STOP
+        assert data.next_command == RefereeCommand.BALL_PLACEMENT_BLUE
+
+        # Well under the timeout: still stuck in STOP (robot never clears).
+        still_stuck = sm.step(current_time=10.0 + 10.0, violation=None, game_frame=stuck_frame)
+        assert still_stuck.referee_command == RefereeCommand.STOP
+
+        # Past the timeout: forces through despite the robot never clearing --
+        # this is the exact freeze from the tournament replay, now escaped.
+        forced = sm.step(current_time=10.0 + 16.0, violation=None, game_frame=stuck_frame)
+        assert forced.referee_command == RefereeCommand.BALL_PLACEMENT_BLUE
+
+    def test_simulation_stop_still_advances_immediately_when_robots_clear_normally(self):
+        """Sanity check alongside the timeout test above: when robots DO
+        clear the ball, STOP still advances immediately rather than waiting
+        out the new timeout -- the timeout is a fallback, not a new floor on
+        every restart's latency."""
+        from utama_core.custom_referee.rules.base_rule import RuleViolation
+
+        sm = _state_machine()
+        clear_frame = _frame(
+            ball=_ball(0.0, 0.0),
+            enemy_robots={0: _robot(0, 5.0, 5.0, is_friendly=False)},
+            my_team_is_yellow=True,
+            ts=10.0,
+        )
+        out_of_bounds = RuleViolation(
+            rule_name="out_of_bounds",
+            suggested_command=RefereeCommand.STOP,
+            next_command=RefereeCommand.DIRECT_FREE_BLUE,
+            status_message="Ball out of bounds",
+            designated_position=(0.0, 0.0),
+        )
+        # Robot is already clear on the very same tick the violation applies,
+        # so auto-advance 1 fires immediately -- no need to wait a tick, let
+        # alone the new timeout.
+        data = sm.step(current_time=10.0, violation=out_of_bounds, game_frame=clear_frame)
+        assert data.referee_command == RefereeCommand.BALL_PLACEMENT_BLUE
+
     def test_human_manual_direct_free_stays_in_stop_until_operator_advances(self):
         referee = CustomReferee.from_profile_name("human")
         referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
