@@ -157,10 +157,31 @@ def find_stuck_windows(
     t0 = frames[0].ts
     t_last = frames[-1].ts
 
+    # `frames` is time-ordered, so each window's frame slice can be found by
+    # advancing two indices rather than rescanning the whole list from t0 on
+    # every stride step. Both indices only ever move forward across the
+    # entire sweep (never reset between iterations), since consecutive
+    # windows' start/end times are non-decreasing — this makes the total
+    # index movement O(n_frames) instead of the previous O(n_frames *
+    # n_strides), the dominant cost for a full-length (600s @ 60Hz = 36k
+    # frames) replay. Output is unchanged: `frames[start:end]` is exactly
+    # the same frame set the old `[f for f in frames if t <= f.ts <= t +
+    # window_s]` filter produced, since both select on the same half-open
+    # condition over an already-sorted sequence.
+    start_idx = 0
+    end_idx = 0
+    n = len(frames)
+
     raw_windows: list[StuckWindow] = []
     t = t0
     while t + window_s <= t_last:
-        window_frames = [f for f in frames if t <= f.ts <= t + window_s]
+        while start_idx < n and frames[start_idx].ts < t:
+            start_idx += 1
+        if end_idx < start_idx:
+            end_idx = start_idx
+        while end_idx < n and frames[end_idx].ts <= t + window_s:
+            end_idx += 1
+        window_frames = frames[start_idx:end_idx]
         if len(window_frames) >= 4 and all(f.ball is not None for f in window_frames):
             if window_frames[0].referee is not None:
                 live_frac = sum(
