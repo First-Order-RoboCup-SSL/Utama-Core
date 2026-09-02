@@ -29,6 +29,7 @@ from utama_core.engine.strategy import Strategy
 from utama_core.entities.data.object import TeamType
 from utama_core.strategy.kernel_strategy import (
     _clear_danger_picker,
+    _clear_press_plus_picker,
     _counter_press_picker,
     _fixed_ratio_picker,
     _three_way_picker,
@@ -439,3 +440,39 @@ def test_clear_danger_valve_overrides_standing_attack():
         _CLEAR_ALL,
     )
     assert len(partition["clear"]) == 1
+
+
+def test_clear_danger_holds_block_while_a_clearer_is_still_pinned():
+    """Regression for a real 2026-09-02 full-length-tournament freeze
+    (`clear_press_plus_vs_shadow_switch_LK.pkl`, t=205.8s): robot 1 pinned to
+    "clear" from a prior tick (not in `free_robots` this tick — still out
+    fetching the ball) must not let the remaining free robots fall through to
+    "attack", even when the possession-edge read on its own would say we're
+    winning — `GiveAndGoTactic`'s carrier and the still-pinned clearer would
+    otherwise independently converge on the identical ball and stall at
+    `FastPathPlanner.OBSTACLE_CLEARANCE` apart forever, since neither tactic
+    has any awareness of the other. Everyone else must hold the screen
+    instead until the clearer finishes or releases."""
+    free = frozenset({2, 3, 4, 5})  # robot 1 pinned to "clear", not free
+    prev = {"clear": frozenset({1})}
+    partition = _clear_danger_picker(
+        _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=0.0),  # we're closer: would be "attack" otherwise
+        free,
+        prev,
+        _CLEAR_ALL,
+    )
+    assert partition == {"block": free}
+
+
+def test_clear_press_plus_holds_block_while_a_clearer_is_still_pinned():
+    """Same regression as `test_clear_danger_holds_block_while_a_clearer_is_still_pinned`,
+    for `_clear_press_plus_picker` — the config the original freeze was traced in."""
+    free = frozenset({2, 3, 4, 5})
+    prev = {"clear": frozenset({1})}
+    partition = _clear_press_plus_picker(
+        _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=0.0),
+        free,
+        prev,
+        _CLEAR_ALL | {"overload"},
+    )
+    assert partition == {"block": free}

@@ -1521,6 +1521,19 @@ def _clear_danger_picker(
             return {"clear": frozenset(ordered)}
         return {"clear": frozenset(ordered[:1]), "block": frozenset(ordered[1:])}
 
+    # A clearer robot pinned to "clear" from a prior tick is still out
+    # fetching a loose ball -- see `_clear_press_plus_picker`'s identical
+    # check for the full root-cause trace (2026-09-02,
+    # `clear_press_plus_vs_shadow_switch_LK.pkl`, t=205.8s): without this,
+    # `GiveAndGoTactic`'s carrier can independently target the same ball the
+    # still-pinned clearer is already converging on, and the two robots
+    # (different tactics, no shared awareness) stall at
+    # `FastPathPlanner.OBSTACLE_CLEARANCE` apart forever. Hold everyone else
+    # on the screen instead while a clearer is still out.
+    clearer_pinned = "clear" in pinned_ids
+    if clearer_pinned and block_ok:
+        return {"block": frozenset(ordered)}
+
     currently_attacking = bool(prev_partition.get("attack"))
     friendly_edge = _friendly_closer_to_ball(game)
     if currently_attacking:
@@ -1731,6 +1744,27 @@ def _clear_press_plus_picker(
         if len(ordered) == 1 or not block_ok:
             return {"clear": frozenset(ordered)}
         return {"clear": frozenset(ordered[:1]), "block": frozenset(ordered[1:])}
+
+    # A clearer robot pinned to "clear" from a prior tick is still out
+    # fetching a loose ball -- it isn't in `free_robots` this tick (that's
+    # what "pinned" means), so `clear_ok` above is already False and every
+    # branch below would otherwise be free to also send a robot after the
+    # exact same ball. Found live 2026-09-02 (full-length tournament,
+    # `clear_press_plus_vs_shadow_switch_LK.pkl`, t=205.8s): a free-kick
+    # restart placed the ball right where a still-pinned clearer was already
+    # headed, the `losing` check below independently flipped `GiveAndGoTactic`
+    # onto the ball too, and both robots (different tactics, no shared
+    # awareness of each other) converged and stalled at
+    # `FastPathPlanner.OBSTACLE_CLEARANCE` apart -- frozen for the remaining
+    # ~394s of the match. `go_to_ball` has no cross-tactic "is someone else
+    # already inbound for this ball" signal to check, so the fix is here:
+    # while a clearer is still pinned, hold everyone else on the screen
+    # instead of also committing to attack/press, the same "hold shape,
+    # don't also chase it" stance `clear_ok`'s own block share already takes
+    # for its teammates.
+    clearer_pinned = "clear" in pinned_ids
+    if clearer_pinned and block_ok:
+        return {"block": frozenset(ordered)}
 
     currently_attacking = bool(prev_partition.get("attack")) or bool(prev_partition.get("overload"))
     friendly_edge = _friendly_closer_to_ball(game)
