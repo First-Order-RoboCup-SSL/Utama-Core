@@ -1157,17 +1157,37 @@ the full account of what replaced them and why.
     identical 12s budget. Regression tests:
     `utama_core/tests/engine/test_decoy_and_overload_tactic.py`.
   - Both fixes are independently real and correct for their own mechanism.
-    **Neither has been cleanly confirmed via a live full-length re-run of
-    this exact fixture**: re-running it again with both fixes applied hit a
-    *third*, unrelated, already-documented freeze first — a referee
-    `HALT`↔`DIRECT_FREE_YELLOW` foul-never-clears cycle at a defense-area
-    corner (see Known open bugs' referee thrash entries), upstream of
-    where either scenario above would even occur in this deterministic
-    fixture. The unit tests are the reliable evidence each fix works in
-    isolation. Any other attack tactic with a goal-only-release
-    `is_committed()` and no phase timeout is a plausible candidate for the
-    same "finish" bug shape and is worth auditing proactively. Full suite
-    after both fixes: 872 passed, 4 skipped, 2 xfailed.
+    Re-running the exact `clear_press_plus_vs_shadow_switch_LK` fixture
+    with both fixes applied did **not** cleanly confirm either in isolation
+    — it hit a *third*, unrelated, already-documented freeze first (a
+    referee `HALT`↔`DIRECT_FREE_YELLOW` foul-never-clears cycle at a
+    defense-area corner, see Known open bugs' referee thrash entries),
+    upstream of where either scenario above would even occur in this
+    deterministic fixture. The unit tests are the reliable evidence each
+    fix works in isolation.
+  - **Aggregate confirmation, 2026-09-02 (fresh 40-match full-length
+    5-strategy tournament, `tournament_20260902_080238`, both fixes
+    applied).** A full stuck-detector sweep of all 40 matches found
+    `defense_box: 0` and `corner_boundary: 0` — the exact two buckets that
+    previously caught real freezes (this one and the FastPathPlanner
+    dead-end fix) — with zero occurrences. `held_or_contested: 184` (up
+    from 191 pre-fix, same order of magnitude) and `unclassified: 0`; the
+    two longest `held_or_contested` windows (23s and 17s) were traced
+    directly and are the already-documented benign
+    chassis-contact-without-capture pattern (a robot sitting ~0.13-0.17m
+    from a touchline-adjacent ball, `has_ball` never `True`), not new
+    freezes. Standings shifted from the earlier pre-fix run but the same
+    strategies lead/trail: `clear_press_plus` 10W-6D-0L (up from 9W-7D-0L,
+    still unbeaten), `press_trigger_flow` 3W-8D, `overload_flow` 2W-10D,
+    `score_aware_counter_flow` 0W-14D, `shadow_switch` 0W-12D. This is
+    genuine aggregate evidence both fixes reduce/eliminate this freeze
+    class across a fresh sample, even though the single-fixture re-run
+    above couldn't isolate either fix's effect cleanly due to the
+    unrelated referee-thrash bug. Any other attack tactic with a
+    goal-only-release `is_committed()` and no phase timeout remains a
+    plausible candidate for the same "finish" bug shape and is worth
+    auditing proactively. Full suite after both fixes: 872 passed, 4
+    skipped, 2 xfailed. Replays deleted after analysis.
 
 ## Updating this file
 
