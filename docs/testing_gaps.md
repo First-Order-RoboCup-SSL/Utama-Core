@@ -744,3 +744,24 @@ to line up), and never a NEW finding this loop. Per the standing goal's
 condition: with full-catalog coverage now reached and the fifth
 consecutive sample turning up nothing new, this loop is treated as
 converged for the current codebase state. Replays deleted after analysis.
+
+**Extra-confidence re-run, 2026-09-02 (final 6 configs, `--both-sides`, 30
+matches).** Re-ran the same last-6-config batch above with `--both-sides`
+(each pairing played with both configs on each side, doubling the sample
+rather than adding new configs) for one more independent look before
+declaring this loop done. 10 raw-flagged windows, all classify as
+`held_or_contested`, 0 unclassified. The longest
+(`three_slot_vs_low_block.pkl` t=55-64s, 9s — notably longer than the
+typical 3-6s window, so traced individually rather than trusted from the
+classifier bucket alone) is ordinary multi-robot congestion: the ball stays
+confined to a ~6cm x 24cm box the whole window, `has_ball` flips between
+three different robots (friendly1, friendly5, enemy1) roughly once a
+second, and each flip corresponds to a real, small ball-position change
+rather than one robot's target freezing while it oscillates in place — the
+same pattern already judged legitimate for
+`switch_of_play_vs_tiki_taka.pkl [50-61]` above, not a new defect. Full
+suite: 867 passed, 4 skipped, 2 xfailed. Replay deleted after analysis.
+
+**Cumulative result, updated: six independent post-fix tournament samples,
+193 matches total, zero new bugs found beyond the one shielding fix.**
+This re-run confirms rather than changes the prior convergence call.
