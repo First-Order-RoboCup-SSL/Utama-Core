@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Callable
 
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.context import TickContext
@@ -84,6 +85,65 @@ def single_robot_go_to_point_strategy(
 ) -> AbstractStrategy:
     """Convenience wrapper for the single-robot case."""
     return go_to_point_strategy({robot_id: target_position}, target_orientation)
+
+
+@dataclass
+class _GoToTrajectoryMem:
+    start_ts: float | None = None
+
+
+class _GoToTrajectoryTactic(BaseTactic[_GoToTrajectoryMem]):
+    """Drives each robot to a per-robot, time-varying target every tick.
+
+    ``robot_targets`` maps a robot id to a callable ``elapsed_seconds ->
+    (x, y)``, evaluated against time since this tactic's own first tick (not
+    ``game.ts`` directly), so a scenario's target motion always starts at the
+    scenario's own t=0 regardless of when the episode began.
+    """
+
+    tag = TacticTag.MIXED
+
+    def __init__(
+        self,
+        robot_targets: dict[int, Callable[[float], tuple[float, float]]],
+        target_orientation: float = 0.0,
+    ):
+        self.robot_targets = robot_targets
+        self.target_orientation = target_orientation
+
+    def initial_mem(self) -> _GoToTrajectoryMem:
+        return _GoToTrajectoryMem()
+
+    def tick(
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: _GoToTrajectoryMem
+    ) -> tuple[dict[RobotId, RobotCommand], _GoToTrajectoryMem]:
+        if mem.start_ts is None:
+            mem.start_ts = game.ts
+        elapsed = game.ts - mem.start_ts
+
+        commands: dict[RobotId, RobotCommand] = {}
+        for robot_id in robot_ids:
+            target = Vector2D(*self.robot_targets[robot_id](elapsed))
+            commands[robot_id] = move(game, ctx.motion_controller, robot_id, target, self.target_orientation)
+        return commands, mem
+
+
+def go_to_trajectory_strategy(
+    robot_targets: dict[int, Callable[[float], tuple[float, float]]], target_orientation: float = 0.0
+) -> AbstractStrategy:
+    """Time-varying counterpart of `go_to_point_strategy`, for interception-style scenarios."""
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = TickContext(motion_controller=motion_controller)
+        tactic = _GoToTrajectoryTactic(robot_targets, target_orientation)
+        return KernelSchedulerStrategy(
+            tactics={"go_to_trajectory": tactic},
+            partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "go_to_trajectory"),
+            outfield_robot_ids=tuple(robot_targets.keys()),
+            ctx=ctx,
+        )
+
+    return AbstractStrategy(build_kernel_strategy=_build, exp_ball=False)
 
 
 @dataclass
@@ -170,5 +230,6 @@ def oscillating_obstacle_strategy(obstacle_configs: list) -> AbstractStrategy:
 __all__ = [
     "go_to_point_strategy",
     "single_robot_go_to_point_strategy",
+    "go_to_trajectory_strategy",
     "oscillating_obstacle_strategy",
 ]

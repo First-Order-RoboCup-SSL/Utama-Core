@@ -485,3 +485,221 @@ the full investigation narrative for anything already fixed lives in git log
     resetting on every stoppage was also noted as a plausible (non-bug,
     rulebook-matching) reason it's never fired in tournament play — relevant
     context for the (6, partial) field validation still to come.
+
+13. **Trajectory-sampling planner (`trajsampling/`) — architecture-level
+    follow-ups, 2026-09-02.** This session did a Numba speedup pass on
+    `trajsampling` (whole-loop-batched `@njit` kernels for `_first_collision`
+    and the obstacle-distance functions, `collision_numba.py`; a per-tick
+    shared-obstacle cache in `planner.py` that preserves mid-tick
+    trajectory-commit visibility between sequentially-planned teammates —
+    see the session's own reasoning about why a naive tick-cache would have
+    silently broken that), then fixed a real correctness bug in the
+    underlying `BangBang1D` primitive (`d_kill` sign error causing an
+    endpoint discontinuity for opposing initial velocity — see the "Done"
+    pointer below). A second agent, working independently in the same
+    session, built the first dedicated test coverage for this planner
+    (`utama_core/tests/motion_planning/implementation/
+    trajsampling_correctness_test.py` — bang-bang/`Trajectory2D` invariants,
+    Numba-vs-Python kernel equivalence) plus a scheme-agnostic controller
+    contract test (`utama_core/tests/motion_planning/contract/
+    controller_contract_test.py`) and a black-box, planner-independent
+    standardized-scenario benchmark (`utama_core/tests/motion_planning/
+    standardized/` + `tools/motion_planning_benchmark.py` +
+    `docs/motion_planning_comparison.md`), none of which existed before —
+    `trajsampling`/`fastpathplanning`/`dwa` had no common comparison harness
+    prior to this. All of the below assumes that harness as the way to
+    validate any future change here; see `docs/motion_planning_comparison.md`
+    for how to run it and what it deliberately does and doesn't measure
+    (no single weighted "winner" score — pass/fail is a safety-and-completion
+    gate, ranking is left to reading multiple metrics together).
+
+    A parallel review (an external research-agent consultation, not this
+    codebase's own analysis) compared this implementation against the TIGERs
+    Mannheim 2024 champion paper's published trajectory-sampling design (the
+    architecture this module is modeled on) and flagged several gaps, in
+    roughly the order worth tackling them:
+
+    - **Directional-tube enemy-obstacle model (attempted, reverted — start
+      here).** `EnemyRobotObstacle` (`obstacles.py`) currently models a
+      moving enemy's reachable region as an isotropic expanding circle
+      grown from two `BangBang1D` profiles. TIGERs' paper uses a directional
+      tube instead — reachable envelope grows mostly along the enemy's
+      current heading, staying near robot-width laterally — specifically to
+      reduce unnecessary detours around opponents the circle over-avoids.
+      **Attempted 2026-09-02, reverted the same session.** A capsule-shaped
+      implementation (with full Numba-kernel parity and 6 passing unit
+      tests) benchmarked clean in isolation but surfaced two real problems
+      head-to-head against the pre-change baseline: (1) rsim's sensor/filter
+      jitter on a "stationary" enemy (~0.0006 m/s) was enough to pick an
+      effectively random tube direction, doubling `static_slalom`'s
+      completion time (5.3s → 11.4s) before a stationary-speed threshold
+      fix; (2) even after that fix, the dense `mirror_swap` (6v6) scenario
+      regressed from "0 collisions, doesn't fully converge" to a
+      **reproducible 1.1mm collision at t=7.37s**, and `static_slalom`'s
+      slowdown persisted via a second, unisolated mechanism. Reverted
+      rather than ship a known regression. **Next attempt should**: size the
+      lateral bound to stay strictly conservative relative to the old
+      circle at small time horizons (e.g.
+      `lateral = max(0.5*a_max*tc**2, some old-circle-derived floor at that
+      tc)`), and debug `static_slalom`'s regression and `mirror_swap`'s
+      collision as two separate problems rather than in the same pass — use
+      the new benchmark suite's per-scenario cells to isolate each fix
+      independently before combining them.
+    - **`Trajectory2D` discards lateral (transverse) velocity.**
+      `Trajectory2D` is a 2D-space wrapper around a single `BangBang1D` solve
+      along the straight line from `p0` to `p1` — see `bang_bang.py`'s
+      module structure and the correctness test's own
+      `velocity_cross_products ≈ 0` invariant. Any velocity component
+      transverse to that line is silently dropped at trajectory start,
+      which can demand an instantaneous direction change — most risky right
+      after avoiding another robot, switching intermediate targets, or
+      leaving a curved/lateral maneuver. Frequent replanning masks this in
+      practice but doesn't enforce acceleration limits at the discontinuity
+      itself. This is an architecture-level change to the hot path this
+      session just finished optimizing (both `BangBang1D`/`Trajectory2D` and
+      the surrounding Numba kernels assume the current single-axis shape) —
+      wants a concrete failure case (a replay showing a bad
+      velocity-direction snap) before starting, not just the theoretical
+      argument, and should be benchmarked against the full standardized
+      suite before/after given the blast radius.
+    - **Every trajectory ends at zero terminal velocity.** Simple, but
+      forces accelerate-brake-to-zero-accelerate cycles for continuous
+      motion (moving-ball interception, support-role repositioning,
+      dribbling) — TIGERs identify this as a known limitation of their own
+      earlier bang-bang system. Likely the single largest behavioral
+      improvement available here, per the external review, but is coupled
+      to the lateral-velocity item above (a nonzero terminal velocity with a
+      transverse component needs the 2D state model fixed first to be
+      meaningful) — do that item first.
+    - **Fixed robot-ID priority ordering is a valid symmetry-breaker but
+      strategically weak.** `robot_id > other_id` prevents two robots from
+      both deciding the other yields, but can make the wrong robot yield
+      (a ball interceptor yielding to a distant support robot, a
+      ball-carrier yielding unnecessarily). A stable multi-key ordering
+      (goalkeeper/restart safety > possession/interception urgency > tactic
+      role > distance-to-target > robot ID as final tie-break) would need to
+      live in the planner's priority policy, not a new scheduler
+      abstraction — and is really a `[[project_tactic_model]]`-adjacent
+      concern (role/urgency signals) more than a pure motion-planning patch.
+    - **No explicit stop/yield planner result.** When every candidate
+      collides, the planner currently returns the longest-surviving
+      candidate and relies on the controller's residual emergency brake.
+      Making "yield" a first-class planner return value (rather than an
+      indirect side effect of velocity scaling) would apply when the first
+      collision is imminent, every candidate is priority-blocked, or the
+      robot has no valid route.
+    - **Collision sampling is adaptive-timestep, not a formal swept/
+      continuous check.** Distance-based adaptive stepping (matching the
+      TIGERs paper) can still in principle miss a narrow collision event
+      between samples for a fast-moving obstacle. Bounding timestep by
+      relative speed in addition to distance, or an analytic
+      time-of-impact calculation for the linear-relative-motion case, would
+      close this. The external review rates this as higher-value than
+      further raw speed optimization at this point — a correctness-margin
+      question, not a performance one.
+    - **Intermediate-target sampling is random, not geometry-guided.**
+      Matches the TIGERs paper's own five-random-target approach (not
+      wrong), but can produce poor samples in narrow corridors and makes
+      rare failures hard to reproduce/diagnose. Adding a handful of
+      deterministic candidates (tangents around the first blocking
+      obstacle, obstacle-normal offsets, forward/lateral offsets, the
+      previous winner) alongside the existing random samples, then ranking
+      by progress/clearance/duration/continuity, would improve
+      reproducibility without giving up the random exploration.
+    - **Stale committed-trajectory reuse could validate more.** Current
+      reuse check: same target, robot still near predicted position,
+      trajectory still collision-free, priority checks still valid.
+      Possible additions: compare actual vs. planned velocity, invalidate on
+      a sharp obstacle-velocity change, use a target-distance tolerance
+      instead of exact-tuple equality, invalidate when a new obstacle enters
+      the swept corridor, cap maximum reuse age.
+    - **Bigger-picture, not yet decided**: the standardized benchmark's own
+      existing strict-`xfail`s already show DWA independently resolving at
+      least one known `FastPathPlanner` local-minimum-class failure
+      (`test_mirror_swap`, see item 10 above). The external review's
+      suggestion of a DWA-as-short-horizon-recovery-mode hybrid is plausible
+      but is a planner-selection architecture question, not a same-planner
+      patch — don't start it speculatively unless the full-matrix findings
+      below make a concrete case for it.
+    - Only after the above: consider Ruckig or another jerk-limited
+      multi-axis trajectory generator as a full primitive replacement — per
+      the external review, the nearer-term weaknesses are in obstacle
+      modeling and multi-robot coordination, not in the bang-bang algebra
+      itself, so this is explicitly a last item, not a starting point.
+
+    **Done this session**: `BangBang1D` endpoint-continuity fix for opposing
+    initial velocity (`d_kill` sign error in both `compute()` and
+    `state_at()`, `7370736`) — see the corresponding strict-`xfail` test that
+    now passes unmarked in `trajsampling_correctness_test.py`.
+
+    **Locked baseline, 2026-09-02 (git rev `7370736`).** Ran the full
+    extended benchmark matrix (12 scenarios × 3 schemes,
+    `tools/motion_planning_benchmark.py`) after the benchmark-suite extension
+    above landed — first as a single-repeat sweep, then re-ran the 3
+    failing/borderline scenarios (`mirror_swap`, `crossing`, `narrow_passage`)
+    at `--repeats 5` to separate real behavior from single-run noise. Every
+    repeated cell reproduced byte-identical sim time across all 5 repeats
+    (rsim is deterministic here, no RNG in the loop) — every finding below is
+    a confirmed, reproducible behavior, not flakiness. Full reports:
+    `benchmark_results/motion_planning_20260902_215718.md` (full matrix, 1
+    repeat) and `benchmark_results/motion_planning_20260902_220040.md`
+    (3-scenario, 5-repeat confirmation).
+
+    Pass rate: fpp 9/12, dwa 8/12, trajsample 10/12 — **no scheme sweeps the
+    board**; each has distinct, real failure modes:
+    - `mirror_swap` (dense 6v6): fpp collides (5/5), dwa passes cleanly
+      (5/5, matching the long-documented `test_mirror_swap` resolution —
+      item 10 above), **trajsample stalls at `sim_timeout` with 8/12 robots
+      reached, 0 collisions (5/5)** — this is a new, previously-unconfirmed
+      finding. It directly contradicts this session's earlier informal
+      head-to-head kernel-strategy match (which found trajsample winning
+      cleanly against fpp) and is consistent with the same
+      `mirror_swap`-fragility the reverted directional-tube attempt above
+      separately found. Command-jump proxy count is the smoking gun:
+      13,471 jumps / 5,295 direction changes / 1,253 brake events in this
+      one cell — roughly 5x the next-highest cell in the whole matrix — real
+      thrashing, not just slow convergence. **New open item**: root-cause
+      why trajsample stalls (not collides) in this dense geometry; the
+      informal head-to-head match's different result likely comes from a
+      differently-shaped scenario (real kernel-strategy play vs. this fixed
+      6v6 mirrored-swap geometry) rather than either result being wrong —
+      worth reconciling once someone picks this up.
+    - `crossing` (2 robots, perpendicular): fpp and dwa both collide (5/5
+      each); only trajsample passes (5/5) — the one scenario where
+      trajsample is the unique safe choice among the three.
+    - `narrow_passage` (0.24m gap): fpp and trajsample pass (5/5 each); dwa
+      collides (5/5) — matches the newly-added strict `xfail` in
+      `test_scenarios.py` exactly.
+    - `static_slalom`/`grid_intersection`: dwa fails both (collision); fpp
+      and trajsample pass both.
+
+    **DWA controller cost is real and matches the user's own recollection of
+    DWA getting laggy in live matches.** Across every scenario in the
+    5-repeat confirmation, dwa's `MotionController.calculate()` mean/p95 is
+    consistently the highest of the three schemes (e.g. `narrow_passage`:
+    fpp 0.28/0.73ms, dwa 0.63/1.00ms, trajsample 0.25/0.41ms —
+    `mirror_swap`/`crossing` show the same pattern, dwa 2-3x trajsample's
+    cost). This is a 60Hz control loop computed per-robot; DWA's per-tick
+    full-velocity-space resampling doesn't reuse anything across ticks or
+    robots the way trajsample's committed-trajectory reuse does, and this
+    cost is measured here on only 1-2 controlled robots per scenario — a
+    full 6-robot team is a plausible multiplier this benchmark doesn't
+    directly exercise yet (all current scenarios control at most 2 robots
+    per side; `mirror_swap` controls 6, but the per-cell latency numbers
+    above are already visible even there). This directly informs the
+    "switch the default scheme" question in item 10 above: DWA is not a free
+    upgrade over fpp even where it's safer — it trades collision-robustness
+    in specific geometries for a real, consistent per-tick compute cost
+    increase, which likely compounds at full 6v6 scale into exactly the
+    real-match lagginess previously observed. Any future default-scheme
+    decision should weigh this directly, not just pass/fail rate.
+
+    **Net effect on priorities above**: the `mirror_swap`/trajsample stall
+    is now a second concrete trajsample gap (alongside the reverted
+    directional-tube attempt) worth investigating before assuming
+    trajsample is a strict improvement over fpp — the lateral-velocity and
+    terminal-velocity items further up may or may not be related (a
+    stalled, thrashing dense scrum is exactly where discarding lateral
+    velocity would bite hardest), so whoever roots-causes the `mirror_swap`
+    stall should check whether it's the same underlying mechanism before
+    treating them as two separate fixes.
