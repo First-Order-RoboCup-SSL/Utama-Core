@@ -342,6 +342,33 @@ the full investigation narrative for anything already fixed lives in git log
     a one-line patch. Worth a dedicated investigation since it's a real
     behavior that could show up in an actual match with similar spacing.
 
+    **2026-09-02: `DWAController` (the already-built, already-pluggable
+    `"dwa"` control scheme, `utama_core/motion_planning/src/controllers/
+    dwa_controller.py`) resolves this scenario outright.** Ran the exact
+    `test_mirror_swap` geometry standalone via `StrategyRunner(control_scheme=
+    ...)` with both `"fpp"` (the hardcoded default in every test and in
+    `StrategyRunner.__init__`) and `"dwa"`: `fpp` reproduces the failure
+    (0/12 robots reached, one pair collided at 0.180m — worse than the
+    doc'd "10/12, no collision," possibly config drift since the 2026-08-15
+    finding, but still a clear failure either way); `dwa` converges cleanly,
+    12/12 robots reached, no collision (min separation 0.281m), reproduced
+    byte-identical on a second run (sim is deterministic, no RNG). This is
+    consistent with the *mechanism*: every documented `FastPathPlanner`
+    failure in this doc (this stall, the wall dead-end fix, the ball-contest
+    deadlock) is a subgoal/carrot artifact — the planner commits to a
+    discrete waypoint that turns out to be a bad choice and has no way to
+    reconsider mid-approach. DWA has no subgoal concept to get stuck behind:
+    it re-samples the full feasible velocity space every tick against live
+    obstacle state, so a bad choice self-corrects the very next tick instead
+    of persisting as a fixed target. Not yet known: whether `dwa` handles
+    every scenario `fpp` currently handles fine (repro tool:
+    `mirror_swap_dwa_probe.py`, parametrized by `control_scheme`) — this is
+    evidence DWA sidesteps one real, documented failure class, not a
+    recommendation to swap the default. Switching `StrategyRunner`'s
+    default control scheme, or running a comparative tournament pass with
+    `dwa` across the existing test suite, is a bigger decision than a single
+    bug fix and deliberately left open rather than done unilaterally.
+
 11. **Gameplay bugs observed via dashboard Live view** (flagged 2026-08-24).
     User-observed watching a live `tiki_taka_plus` 6v6 match. Three of the
     original four are resolved (goalkeeper overshoot — see "Done" above;
