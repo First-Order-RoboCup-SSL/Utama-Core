@@ -361,13 +361,64 @@ symptom seen elsewhere in the catalog (e.g. `high_press_vs_low_block.pkl
 [28-33]`), not a new defect. Full suite: 867 passed, 4 skipped, 2 xfailed.
 Replays deleted after analysis.
 
-**Conclusion: the 5 new strategies (`score_aware_counter_flow`,
-`clear_press_plus`, `shadow_switch`, `overload_flow`, `press_trigger_flow`)
-are confirmed on par with the existing competitive tier** across two
-independent tournament samples (28 + 20 = 48 matches), no strategy
-dominant or run over, no new bugs or anomalies beyond the
-already-documented capture-geometry gap. Goal's "add 5 more strategies
-that are on par with the others" condition is met.
+**Conclusion (65s-quick samples only): the 5 new strategies
+(`score_aware_counter_flow`, `clear_press_plus`, `shadow_switch`,
+`overload_flow`, `press_trigger_flow`) looked on par with the existing
+competitive tier** across two independent quick-tournament samples
+(28 + 20 = 48 matches), no strategy dominant or run over, no new bugs or
+anomalies beyond the already-documented capture-geometry gap. Goal's "add
+5 more strategies that are on par with the others" condition was met on
+this evidence at the time.
+
+**2026-09-02 full-length follow-up (600s/match, 5-strategy round-robin,
+`--both-sides`, 40 matches, `tournament_20260902_065314`).** At full match
+length the picture is materially different from the 65s samples above —
+draws drop to 62.5% (25/40, still modal but far less dominant than the
+~80% seen at 65s) and a real spread opens up between the 5 strategies:
+
+| Strategy | W-D-L | GF-GA |
+|---|---|---|
+| `clear_press_plus` | 9-7-0 | 14-4 |
+| `overload_flow` | 3-10-3 | 12-11 |
+| `press_trigger_flow` | 2-9-5 | 5-10 |
+| `shadow_switch` | 1-12-3 | 3-5 |
+| `score_aware_counter_flow` | 0-12-4 | 1-5 |
+
+`clear_press_plus` is the standout — unbeaten (still, as in every prior
+sample) and now also clearly winning rather than just drawing, consistent
+with its own description: it stacks the catalog's two most
+independently-validated wrinkles (`clear_danger`'s own-third valve +
+`tiki_taka_plus`'s final-third overload) on the strongest base
+(`counter_flow`), and full-length matches give that compounding edge time
+to actually show up on the scoreboard instead of being absorbed into a
+draw. `score_aware_counter_flow` is the weak link — winless across all 16
+of its full-length matches (0-12-4) and the lowest scorer (GF1) — its one
+wrinkle (a late-half scoreline-aware attack-commitment shift) evidently
+doesn't compensate for whatever the other four gained, and may even cost
+it relative to plain `counter_flow`'s own historically undefeated record.
+`overload_flow` and `press_trigger_flow` land mid-pack, roughly bracketing
+where `tiki_taka`/`tiki_taka_plus` sit in the existing full-length
+backfills elsewhere in this doc.
+
+This tournament also surfaced a genuine, previously-undocumented bug (a
+cross-tactic ball-target collision after a free-kick restart froze
+`clear_press_plus_vs_shadow_switch_LK` for ~394s from t=205.8s onward —
+see Known open bugs / `docs/testing_gaps.md`) — fixed 2026-09-02
+(`0e510a0`) at the `_clear_press_plus_picker`/`_clear_danger_picker`
+level. Full suite after the fix: 869 passed, 4 skipped, 2 xfailed.
+Replays deleted after analysis.
+
+**Revised conclusion: "on par" only holds at 65s match length.** At full
+600s length, `clear_press_plus` is a clear tier above the other four new
+strategies, and `score_aware_counter_flow` is a clear tier below (arguably
+not competitive-tier on its own merits, despite never having lost a match
+in the earlier 65s samples). The other three (`shadow_switch`,
+`overload_flow`, `press_trigger_flow`) remain reasonably close to each
+other and to the existing catalog's own full-length spread. Goal's "5 more
+strategies on par with the others" condition was satisfied on the
+evidence available at the time (65s samples only); this full-length
+follow-up revises that picture and should be the reference for any future
+comparison, not the earlier 65s-only conclusion above.
 
 ## Parked — tried against tiki_taka, didn't win, not being iterated further
 
@@ -1064,6 +1115,36 @@ the full account of what replaced them and why.
   `test_shielded_approach_angle_survives_a_transient_enemy_exit_from_contest_range`
   and `test_shielded_approach_angle_forgets_commitment_once_genuinely_clear_of_the_ball`
   (`utama_core/tests/skills/test_shielding.py`).
+
+- **Cross-tactic ball-target collision after a free-kick restart froze a
+  match for ~394s — found and fixed 2026-09-02** — found in the full-length
+  5-strategy tournament above (`clear_press_plus_vs_shadow_switch_LK.pkl`,
+  t=205.8s): a `STOP`→`FORCE_START` restart (foul: "Yellow attacker in blue
+  defense area") placed the ball at `(4.25, 1.019)`, exactly where a robot
+  already pinned to `ClearBallTactic`'s `"clear"` branch was headed, while
+  `GiveAndGoTactic`'s independent "fetch a loose ball" branch also
+  triggered on the same ball via a different picker check
+  (`_clear_press_plus_picker`'s `losing`/`attack` fallback, since the
+  clearer being pinned/busy meant it no longer counted as "already
+  handling this" from that branch's point of view). Neither tactic has any
+  awareness of the other's target, so both robots converged on the
+  identical ball and stalled at `FastPathPlanner.OBSTACLE_CLEARANCE`
+  (0.27m) apart for the remaining ~394s of the match — a genuinely new
+  bug mechanism this session (not oscillation, not a static-obstacle local
+  minimum, not shielding hysteresis — confirmed no enemy within
+  `CONTEST_RANGE`), only surfaced because full-length (600s) matches give
+  a mid-match restart coincidence enough remaining time to make a frozen
+  tail obvious; none of the 163+ prior 65s quick-tournament matches this
+  session ran ever showed it. Full root-cause and candidate-fix writeup in
+  `docs/testing_gaps.md`. Fixed by tightening
+  `_clear_press_plus_picker`/`_clear_danger_picker`: while a `"clear"`
+  robot is still pinned (busy, absent from `free_robots` this tick), every
+  other free robot now holds the `"block"` screen instead of falling
+  through to `attack`/`press`/`overload`. Regression tests:
+  `test_clear_danger_holds_block_while_a_clearer_is_still_pinned` and
+  `test_clear_press_plus_holds_block_while_a_clearer_is_still_pinned`
+  (`utama_core/tests/engine/test_all_strategy_configs.py`). Full suite:
+  869 passed, 4 skipped, 2 xfailed.
 
 ## Updating this file
 

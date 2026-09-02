@@ -830,18 +830,31 @@ Traced directly:
   samples this session ran earlier (163+ matches) never showed this
   pattern, consistent with it needing both a specific restart geometry and
   enough remaining match time to make the frozen tail obvious.
-- **Not yet fixed.** Candidate fix directions (not yet attempted, deserves
-  its own investigation rather than a rushed patch): (a) a shared
-  "ball already claimed" flag at the kernel-scheduler level so a second
-  tactic's `go_to_ball` call for an already-being-fetched ball backs off
-  or holds instead of racing to the same point — the most general fix,
-  but a new cross-tactic coordination primitive that doesn't exist
-  anywhere else in this codebase yet; (b) tighten `_clear_press_plus_picker`
-  (and `_clear_danger_picker` it inherits from) so the `"clear"` branch and
-  the `"attack"`/`"press"` branches are mutually exclusive on a genuinely
-  loose ball, not just on "deep in our own third" — narrower, but only
-  fixes this one strategy's picker, not the underlying gap any other
-  two-tactic combination could hit the same way. Regression test should
-  reproduce this exact restart geometry (ball at `(4.25, 1.019)`, two
-  robots from different tactics both targeting it) rather than a synthetic
-  simplification.
+- **Fixed 2026-09-02** (commit `0e510a0`), option (b) from the two
+  candidates below: `_clear_press_plus_picker` and `_clear_danger_picker`
+  now check `pinned_ids` for a still-pinned `"clear"` robot (busy, absent
+  from `free_robots` this tick — i.e. still out fetching the ball) and, if
+  found, hold every other free robot on the `"block"` screen instead of
+  letting them fall through to `attack`/`press`/`overload`. Two regression
+  tests added (`test_clear_danger_holds_block_while_a_clearer_is_still_pinned`,
+  `test_clear_press_plus_holds_block_while_a_clearer_is_still_pinned`) —
+  synthetic partition-level reproductions (pinned `"clear"` robot, a
+  possession read that would otherwise say "attack") rather than a replay
+  of the exact restart geometry, since the picker logic itself is the unit
+  under test. Full suite green: 869 passed, 4 skipped, 2 xfailed. This only
+  closes the gap for this one strategy family's picker — candidate (a)
+  below (a general cross-tactic "ball already claimed" primitive) remains
+  undone and would still be needed if a different tactic pairing hits the
+  same collision shape through a picker that doesn't route through
+  `pinned_ids` the same way.
+  Candidate fix directions considered: (a) a shared "ball already claimed"
+  flag at the kernel-scheduler level so a second tactic's `go_to_ball` call
+  for an already-being-fetched ball backs off or holds instead of racing to
+  the same point — the most general fix, but a new cross-tactic
+  coordination primitive that doesn't exist anywhere else in this codebase
+  yet, and not attempted; (b) tighten `_clear_press_plus_picker` (and
+  `_clear_danger_picker` it inherits from) so the `"clear"` branch and the
+  `"attack"`/`"press"` branches are mutually exclusive on a genuinely loose
+  ball — narrower, only fixes this one strategy's picker, not the
+  underlying gap any other two-tactic combination could hit the same way —
+  **this is the one implemented.**
