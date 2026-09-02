@@ -76,6 +76,8 @@ from utama_core.tactics._pass_and_score import _pass_exec, _score_goal
 _LURE_DRAG_THRESHOLD = 0.8  # metres — marker must be pulled at least this far off the central shot lane's y
 _LURE_MAX_TIME = 1.5  # seconds — cap so a marker that doesn't bite can't stall the tactic forever
 _LURE_MAX_TICKS = round(_LURE_MAX_TIME * CONTROL_FREQUENCY)
+_FINISH_TIMEOUT_TIME = 12.0  # seconds — same pass+shoot budget as pass_and_shoot._PHASE_TIMEOUT_TIME
+_FINISH_TIMEOUT_TICKS = round(_FINISH_TIMEOUT_TIME * CONTROL_FREQUENCY)
 _LURE_TOUCHLINE_MARGIN = 0.5  # metres in from the touchline — how close the decoy's lure run goes
 _OVERLOAD_STANDOFF = 0.4  # metres — how far past the marker's original shadow the overloader sits
 
@@ -161,6 +163,7 @@ class DecoyOverloadMem:
     marker_id: Optional[int] = None
     marker_start_y: Optional[float] = None
     lure_ticks: int = 0
+    finish_ticks: int = 0
     goal_scored: bool = False
     prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _pass_and_score.py
 
@@ -300,6 +303,22 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
 
         # phase == "finish": decoy shoots if its own lane is now open,
         # otherwise passes to the overloader sitting in the vacated lane.
+        # Found live 2026-09-02 (full-length tournament,
+        # clear_press_plus_vs_shadow_switch_LK.pkl, t=205.8s): a referee
+        # restart (STOP -> FORCE_START, ball placed far from both decoy and
+        # overloader) can strand this phase with the ball nowhere near
+        # either robot and no path back to "setup" -- is_committed() only
+        # releases on goal_scored, so with no goal ever scored this held the
+        # slot's two robots for the remaining ~394s of the match while a
+        # different tactic's robot converged on the same displaced ball with
+        # no cross-tactic awareness of the other, and both stalled at
+        # FastPathPlanner.OBSTACLE_CLEARANCE apart. Same stalled-phase-with-
+        # no-timeout bug class pass_and_shoot.py's own _PHASE_TIMEOUT_TICKS
+        # was added to fix; apply the identical budget here.
+        mem.finish_ticks += 1
+        if mem.finish_ticks > _FINISH_TIMEOUT_TICKS:
+            return {}, DecoyOverloadMem()
+
         if has_ball(game, mem.decoy_id, visual=True) and _decoy_shot_open(game, mem.decoy_id):
             shot_cmd, scored, mem.prev_best_shot_y = _score_goal(game, ctx, mem.decoy_id, mem.prev_best_shot_y)
             commands[mem.decoy_id] = shot_cmd
