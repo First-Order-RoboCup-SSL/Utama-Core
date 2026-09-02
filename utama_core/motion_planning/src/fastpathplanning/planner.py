@@ -11,13 +11,17 @@ from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.math_utils import (
     closest_point_on_segment,
     distance,
-    distance_between_line_segments,
     distance_point_to_segment,
     find_intersection,
     rotate_vector,
 )
 from utama_core.motion_planning.src.fastpathplanning.config import (
     fastpathplanningconfig as config,
+)
+from utama_core.motion_planning.src.fastpathplanning.numba_kernels import (
+    flatten_obstacles,
+    scan_collides_nb,
+    scan_find_subgoal_nb,
 )
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
 
@@ -48,9 +52,39 @@ class FastPathPlanner:
         self.PROJECTEDFRAMES = self.config.PROJECTEDFRAMES
         self.PROJECTION_DISTANCE = self.config.PROJECTION_DISTANCE
         self.DETOUR_SWITCH_MARGIN = self.config.DETOUR_SWITCH_MARGIN_RATIO * self.config.SUBGOAL_DISTANCE
+        self.CROWDING_COUNT_MIN = self.config.CROWDING_COUNT_MIN
+        self.CROWDING_COUNT_MAX = self.config.CROWDING_COUNT_MAX
+        self.CROWDING_CLEARANCE_FLOOR_RATIO = self.config.CROWDING_CLEARANCE_FLOOR_RATIO
 
         # Initialize collision cache dictionary
         self._collision_cache = {}
+
+        # `collides()`/`_find_subgoal()` scan the same `obstacles` list many
+        # times per `_path_to()` call (once per recursive `check_segment`
+        # node, once per subgoal-search step) — flattening it into the
+        # float64 arrays the njit scan kernels need is itself real,
+        # non-trivial work (see `numba_kernels.flatten_obstacles`), so it's
+        # cached per obstacle-list object rather than redone on every scan.
+        #
+        # Deliberately a small list of `(list_object, arrays)` pairs checked
+        # by `is` identity, NOT a `dict` keyed by `id(obstacles)`: an earlier
+        # version used `id()` as a dict key and was caught live by
+        # `fpp_correctness_check.py` returning a WRONG (stale) obstacle for
+        # an unrelated list — `id()` is a memory address, and CPython freely
+        # reassigns it to a new object the moment the old one is garbage
+        # collected (confirmed directly: a short-lived intermediate list from
+        # one `_path_to` step, e.g. the `[o for o in obstacles if ...]`
+        # filters in steps 1a/1b, was collected and a *different* obstacle
+        # list built moments later landed on the exact same `id()`, silently
+        # returning the first list's flattened arrays for the second list's
+        # obstacles). Holding a strong reference to the list itself alongside
+        # its arrays prevents that object from ever being collected while
+        # the cache entry exists, closing the hazard entirely — at the cost
+        # of an `is`-comparison linear scan instead of a dict lookup, cheap
+        # since only a handful of distinct obstacle-list objects exist per
+        # `_path_to()` call. Cleared at the start of every `_path_to()` call
+        # (alongside `_collision_cache`) so it never grows unboundedly.
+        self._obstacle_arrays_cache: List[Tuple[List, tuple]] = []
 
         # Per-robot memory of the last chosen detour side (`subgoal_direction`,
         # 0=right/1=left) in `check_segment` — see that method's docstring for
@@ -85,6 +119,65 @@ class FastPathPlanner:
         self._obstacle_cache_ts: float | None = None
         self._obstacle_cache_moving: List[Tuple[bool, int, np.ndarray, np.ndarray]] = []
         self._obstacle_cache_static: List[Tuple[np.ndarray, np.ndarray]] = []
+
+        # Per-robot memory of the last full replan's sanitized target and the
+        # resulting detour trajectory (the geometric waypoint list
+        # `check_segment` produces), keyed by robot_id. `_path_to` reuses
+        # this trajectory instead of re-running `check_segment` (the
+        # recursive detour search — the single largest cost in a call per
+        # cProfile on a full 6v6 match) whenever it's still provably safe,
+        # but always re-derives the actual carrot from
+        # `smooth_path` against the robot's *current* position every tick —
+        # `smooth_path`'s output is a lookahead point relative to the robot's
+        # live position by construction (`robot_position + unit_vec *
+        # safe_distance`), so caching *that* instead of the trajectory was
+        # tried first and reverted: it froze the carrot at a fixed absolute
+        # point instead of one that advances as the robot moves along the
+        # trajectory, and two robots crossing perpendicular lanes
+        # (`test_grid_intersection`) hung in a real live-lock orbiting a
+        # stale carrot that fell behind them once they'd moved past it.
+        self._last_trajectory: dict[int, Tuple[np.ndarray, np.ndarray, List[Tuple[np.ndarray, np.ndarray]]]] = {}
+        # Requested target must match the cached one to within this radius —
+        # a tactic nudging its target by float noise between ticks (e.g.
+        # tracking a slowly-drifting ball) shouldn't force a full replan, but
+        # a genuinely new destination must. Small relative to
+        # OBSTACLE_CLEARANCE/SUBGOAL_DISTANCE so it can never mask a real
+        # target change large enough to matter for routing.
+        self._REPLAN_TARGET_TOLERANCE = 0.02  # metres
+        # The robot's own position must also still be close to where the
+        # cached trajectory was planned from — see the skip check's comment
+        # in `_path_to` for why. A fraction of `SUBGOAL_DISTANCE` (itself
+        # derived from robot diameter/clearance), not a bare constant, so it
+        # scales sensibly if those config values ever change.
+        self._REPLAN_POSITION_TOLERANCE = 0.25 * self.SUBGOAL_DISTANCE
+
+        # `_enemy_defense_rect` result cache, keyed by `margin` (the only
+        # thing that varies across its call sites — two fixed constants, 0.0
+        # and OPPONENT_DEFENSE_AREA_KEEP_DISTANCE). `game.field.enemy_defense_area`
+        # depends only on `my_team_is_right` and static field dimensions, both
+        # fixed for this planner instance's entire lifetime (one instance
+        # serves a whole team for the whole match — see `_obstacle_cache_*`
+        # above), so the rectangle can never actually change and needs no
+        # invalidation. Found via cProfile on a real 6v6 match: 15,778 calls
+        # recomputing four min/max scans over the same four corners, ~0.16s
+        # cumulative (~7% of `_path_to`'s own cumulative cost) for a value
+        # that's provably constant.
+        self._defense_rect_cache: dict[float, Tuple[float, float, float, float]] = {}
+
+        # A fixed-interval skip of collides()'s per-tick revalidation
+        # (reusing cached_trajectory's shape without re-checking it for
+        # several ticks in a row) was tried and reverted: at a 3-tick
+        # interval it let a support robot drift ~5cm inside the kickoff
+        # centre keep-out zone before the next forced check caught it
+        # (`test_our_kickoff_nonzero_keeper_is_never_kicker_or_in_formation`,
+        # a real regression); tightened to a 2-tick interval still made
+        # `test_mirror_swap`'s head-on 6v6 crossing scenario ~14x slower to
+        # converge (3.3s baseline vs 45s+, confirmed via direct git-stash
+        # comparison) even though it technically still passed. A fixed
+        # tick-count skip isn't safe here regardless of interval — a
+        # movement-aware trigger (only skip revalidation while nothing
+        # relevant has actually moved) would need to replace it, not just a
+        # smaller N.
 
     @property
     def _should_draw(self) -> bool:
@@ -136,12 +229,18 @@ class FastPathPlanner:
         lets `_path_to` check "is this point inside?" directly and project it
         to the nearest edge before anything else runs.
         """
+        cached = self._defense_rect_cache.get(margin)
+        if cached is not None:
+            return cached
+
         corners = game.field.enemy_defense_area
         min_x = min(c[0] for c in corners) - margin
         max_x = max(c[0] for c in corners) + margin
         min_y = min(c[1] for c in corners) - margin
         max_y = max(c[1] for c in corners) + margin
-        return min_x, max_x, min_y, max_y
+        result = (min_x, max_x, min_y, max_y)
+        self._defense_rect_cache[margin] = result
+        return result
 
     def _enemy_defense_area_retrieval_exempt(self, game: Game, robot_id: Optional[int] = None) -> bool:
         """True when a robot must be allowed to actually enter the opponent's
@@ -269,9 +368,15 @@ class FastPathPlanner:
 
     def _get_obstacles(
         self, game: Game, robot_id: int, our_pos: np.ndarray, field_bounds: FieldBounds
-    ) -> List[Tuple[np.ndarray, np.ndarray]]:
+    ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float, float]:
         """
         Compiles obstacles and draws projected velocity lines in Red.
+
+        Returns `(obstacles, clearance, subgoal_distance)` — the latter two
+        are this robot's effective (possibly crowding-shrunk) values for the
+        current tick, computed once here and threaded through the rest of
+        `_path_to`'s call chain so a single planning call is internally
+        consistent. See `_effective_clearance`.
         """
         self._refresh_obstacle_cache(game, field_bounds)
 
@@ -287,8 +392,50 @@ class FastPathPlanner:
                 if self._should_draw:
                     self._env.draw_line(obstacle_segment, color="Red")
 
+        # Crowding is judged on *moving* (robot) obstacles actually within
+        # `LOOK_AHEAD_RANGE` of this robot, not the count including the 8
+        # static field-bound/enemy-defense-area segments appended below —
+        # those are always present regardless of how many robots are nearby,
+        # so counting them would put every robot permanently at or near the
+        # crowded floor and defeat the point of scaling with actual density.
+        clearance, subgoal_distance = self._effective_clearance(len(obstacle_list))
+
         obstacle_list.extend(self._obstacle_cache_static)
-        return obstacle_list
+        return obstacle_list, clearance, subgoal_distance
+
+    def _effective_clearance(self, nearby_obstacle_count: int) -> Tuple[float, float]:
+        """`(clearance, subgoal_distance)` for a robot with `nearby_obstacle_count`
+        moving obstacles within `LOOK_AHEAD_RANGE` — full config values below
+        `CROWDING_COUNT_MIN`, linearly interpolated down to
+        `CROWDING_CLEARANCE_FLOOR_RATIO` of them at/above `CROWDING_COUNT_MAX`.
+        `SUBGOAL_DISTANCE` scales by the same ratio as clearance so a shrunk
+        detour still steps a proportionally sane distance past the (now
+        closer) clearance boundary, rather than overshooting it relative to
+        the smaller margin. See `fastpathplanningconfig`'s docstring for why
+        this exists and why the floor is bounded well above `ROBOT_DIAMETER`.
+        """
+        if nearby_obstacle_count <= self.CROWDING_COUNT_MIN:
+            ratio = 1.0
+        elif nearby_obstacle_count >= self.CROWDING_COUNT_MAX:
+            ratio = self.CROWDING_CLEARANCE_FLOOR_RATIO
+        else:
+            span = self.CROWDING_COUNT_MAX - self.CROWDING_COUNT_MIN
+            t = (nearby_obstacle_count - self.CROWDING_COUNT_MIN) / span
+            ratio = 1.0 - t * (1.0 - self.CROWDING_CLEARANCE_FLOOR_RATIO)
+        return self.OBSTACLE_CLEARANCE * ratio, self.SUBGOAL_DISTANCE * ratio
+
+    def _obstacle_arrays(self, obstacles: List) -> tuple:
+        """Flattened `(ox0, oy0, ox1, oy1)` float64 arrays for `obstacles`,
+        for the njit scan kernels in `numba_kernels.py` — see
+        `_obstacle_arrays_cache`'s docstring in `__init__` for why this is a
+        small `is`-identity-checked list, not a dict keyed by `id()`.
+        """
+        for cached_obstacles, arrays in self._obstacle_arrays_cache:
+            if cached_obstacles is obstacles:
+                return arrays
+        arrays = flatten_obstacles(obstacles)
+        self._obstacle_arrays_cache.append((obstacles, arrays))
+        return arrays
 
     def _find_subgoal(
         self,
@@ -298,6 +445,8 @@ class FastPathPlanner:
         obstacles: List,
         subgoal_direction: int,
         multiple: int,
+        clearance: float,
+        subgoal_distance: float,
         origin_obstacle: Optional[Tuple[np.ndarray, np.ndarray]] = None,
         blocked_by_origin: bool = False,
     ) -> Optional[np.ndarray]:
@@ -362,10 +511,10 @@ class FastPathPlanner:
             return obstacle_pos
         perp_dir = rotate_vector(direction[0], direction[1], math.pi * (subgoal_direction + 0.5))
         unitvec = np.array([perp_dir[0] / direction_norm, perp_dir[1] / direction_norm])
-        subgoal = obstacle_pos + self.SUBGOAL_DISTANCE * unitvec * multiple
+        subgoal = obstacle_pos + subgoal_distance * unitvec * multiple
 
         # Broad-phase bounding-box prune (same idea as collides()): a point can
-        # only be within OBSTACLE_CLEARANCE of a segment if it's within that
+        # only be within `clearance` of a segment if it's within that
         # distance of the segment's bounding box, so obstacles whose box misses
         # this margin around subgoal can never trigger the clearance check below
         # and are skipped without calling distance_point_to_segment at all. This
@@ -373,40 +522,47 @@ class FastPathPlanner:
         # full match (cProfile), since it's retried on every recursive subgoal
         # attempt against every obstacle.
         sub_x, sub_y = subgoal[0], subgoal[1]
-        box_min_x = sub_x - self.OBSTACLE_CLEARANCE
-        box_max_x = sub_x + self.OBSTACLE_CLEARANCE
-        box_min_y = sub_y - self.OBSTACLE_CLEARANCE
-        box_max_y = sub_y + self.OBSTACLE_CLEARANCE
 
-        for o in obstacles:
-            o_min_x = min(o[0][0], o[1][0])
-            o_max_x = max(o[0][0], o[1][0])
-            if o_max_x < box_min_x or o_min_x > box_max_x:
-                continue
-            o_min_y = min(o[0][1], o[1][1])
-            o_max_y = max(o[0][1], o[1][1])
-            if o_max_y < box_min_y or o_min_y > box_max_y:
-                continue
-
-            # OPTIMIZATION: Removed np.isclose, ensuring strictly less-than for clearance
-            if distance_point_to_segment(subgoal, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
-                is_origin = origin_obstacle is not None and (
-                    np.array_equal(o[0], origin_obstacle[0]) and np.array_equal(o[1], origin_obstacle[1])
-                )
-                return self._find_subgoal(
-                    robot_pos,
-                    target,
-                    obstacle_pos,
-                    obstacles,
-                    subgoal_direction,
-                    multiple + 1,
-                    origin_obstacle=origin_obstacle,
-                    blocked_by_origin=is_origin,
-                )
+        # Batched replacement for the bounding-box-pruned obstacle scan --
+        # see `numba_kernels.scan_find_subgoal_nb`'s docstring. Returns the
+        # same FIRST-hit-in-scan-order index the original Python loop would
+        # have returned (not the closest), since `_find_subgoal` recurses on
+        # the first collision found, not the nearest one.
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        hit_idx = scan_find_subgoal_nb(sub_x, sub_y, clearance, ox0, oy0, ox1, oy1)
+        if hit_idx >= 0:
+            o = obstacles[hit_idx]
+            is_origin = origin_obstacle is not None and (
+                np.array_equal(o[0], origin_obstacle[0]) and np.array_equal(o[1], origin_obstacle[1])
+            )
+            return self._find_subgoal(
+                robot_pos,
+                target,
+                obstacle_pos,
+                obstacles,
+                subgoal_direction,
+                multiple + 1,
+                clearance,
+                subgoal_distance,
+                origin_obstacle=origin_obstacle,
+                blocked_by_origin=is_origin,
+            )
         return subgoal
 
-    def collides(self, segment: Tuple, obstacles: List, sticky_obstacle: Optional[Tuple] = None):
+    def collides(
+        self,
+        segment: Tuple,
+        obstacles: List,
+        sticky_obstacle: Optional[Tuple] = None,
+        clearance: Optional[float] = None,
+    ):
         """Find the obstacle segment nearest the path segment's start (the robot).
+
+        `clearance`: defaults to `self.OBSTACLE_CLEARANCE` when omitted (the
+        pre-adaptive-clearance behaviour) — callers that plan with a
+        crowding-adjusted clearance (see `_effective_clearance`) pass it
+        explicitly so this method's notion of "too close" matches the rest
+        of that call's pipeline.
 
         `sticky_obstacle`: the obstacle segment this same robot/recursion-depth
         picked last tick (from `check_segment`'s `_last_obstacle` memory), if
@@ -427,67 +583,52 @@ class FastPathPlanner:
         same "don't flip without a real reason" pattern as the left/right
         choice.
         """
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+
         # OPTIMIZATION: Cache collision results (convert numpy arrays to tuples for hashability).
         # `sticky_obstacle` is part of the key, not just the segment: it can
         # change the result for an otherwise-identical segment (see
         # docstring), so conflating the two would let a cache hit from a
         # differently-stickied call silently return the wrong obstacle.
+        # `clearance` is part of the key for the same reason since adaptive
+        # clearance was added: the same segment can legitimately collide
+        # under a normal clearance but not under a crowding-shrunk one, so a
+        # cache keyed on segment+sticky alone could return a stale answer
+        # from a different clearance computed earlier in the same tick (a
+        # different robot's call, or this robot's obstacle count changing
+        # between calls within one recursion).
         sticky_key = (tuple(sticky_obstacle[0]), tuple(sticky_obstacle[1])) if sticky_obstacle is not None else None
-        seg_key = (tuple(segment[0]), tuple(segment[1]), sticky_key)
+        seg_key = (tuple(segment[0]), tuple(segment[1]), sticky_key, clearance)
         if seg_key in self._collision_cache:
             return self._collision_cache[seg_key]
 
-        closest_obstacle = None
-        min_dist_to_robot = float("inf")
-        sticky_dist_to_robot: Optional[float] = None
+        # Batched replacement for the bounding-box-pruned obstacle scan --
+        # see `numba_kernels.scan_collides_nb`'s docstring. `sticky_idx` is
+        # resolved once per call (cheap linear identity/value scan, not
+        # inside the hot per-obstacle loop) so the njit kernel can track
+        # `sticky_dist_to_robot` internally without needing to compare numpy
+        # arrays from native code.
+        sticky_idx = -1
+        if sticky_obstacle is not None:
+            for i, o in enumerate(obstacles):
+                if np.array_equal(o[0], sticky_obstacle[0]) and np.array_equal(o[1], sticky_obstacle[1]):
+                    sticky_idx = i
+                    break
 
-        # Broad-phase bounding-box prune: the true minimum distance between
-        # two segments can never be smaller than the gap between their
-        # axis-aligned bounding boxes, so if that gap alone already exceeds
-        # OBSTACLE_CLEARANCE, distance_between_line_segments (4x
-        # distance_point_to_segment calls plus an intersection test) is
-        # guaranteed to return >= OBSTACLE_CLEARANCE too — safe to skip
-        # without ever producing a false negative. cProfile showed
-        # distance_point_to_segment as the single largest per-tick cost even
-        # after removing its numpy overhead; most obstacles on a full-size
-        # field are nowhere near a given path segment, so this prunes the
-        # large majority of calls rather than making each one cheaper.
-        seg_min_x = min(segment[0][0], segment[1][0]) - self.OBSTACLE_CLEARANCE
-        seg_max_x = max(segment[0][0], segment[1][0]) + self.OBSTACLE_CLEARANCE
-        seg_min_y = min(segment[0][1], segment[1][1]) - self.OBSTACLE_CLEARANCE
-        seg_max_y = max(segment[0][1], segment[1][1]) + self.OBSTACLE_CLEARANCE
-
-        for o in obstacles:
-            o_min_x = min(o[0][0], o[1][0])
-            o_max_x = max(o[0][0], o[1][0])
-            if o_max_x < seg_min_x or o_min_x > seg_max_x:
-                continue
-            o_min_y = min(o[0][1], o[1][1])
-            o_max_y = max(o[0][1], o[1][1])
-            if o_max_y < seg_min_y or o_min_y > seg_max_y:
-                continue
-
-            # OPTIMIZATION: Removed double distance call
-            dist_between_segs = distance_between_line_segments(o[0], o[1], segment[0], segment[1])
-
-            if dist_between_segs < self.OBSTACLE_CLEARANCE:
-                # We want the obstacle closest to the START of the segment (the robot)
-                dist_to_robot = distance_point_to_segment(segment[0], o[0], o[1])
-                if (
-                    sticky_obstacle is not None
-                    and np.array_equal(o[0], sticky_obstacle[0])
-                    and np.array_equal(o[1], sticky_obstacle[1])
-                ):
-                    sticky_dist_to_robot = dist_to_robot
-                if dist_to_robot < min_dist_to_robot:
-                    min_dist_to_robot = dist_to_robot
-                    closest_obstacle = o
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        seg_x0, seg_y0 = float(segment[0][0]), float(segment[0][1])
+        seg_x1, seg_y1 = float(segment[1][0]), float(segment[1][1])
+        closest_idx, min_dist_to_robot, sticky_dist_to_robot_raw = scan_collides_nb(
+            seg_x0, seg_y0, seg_x1, seg_y1, clearance, ox0, oy0, ox1, oy1, sticky_idx
+        )
+        closest_obstacle = obstacles[closest_idx] if closest_idx >= 0 else None
+        sticky_dist_to_robot: Optional[float] = sticky_dist_to_robot_raw if sticky_dist_to_robot_raw >= 0.0 else None
 
         # Require a real margin before a different obstacle displaces the one
         # this robot was already avoiding at this recursion depth last tick —
         # see this method's docstring. `sticky_dist_to_robot` is None when the
         # sticky obstacle isn't even in range this tick (it fell outside
-        # OBSTACLE_CLEARANCE entirely, e.g. the robot moved past it), in
+        # `clearance` entirely, e.g. the robot moved past it), in
         # which case there is nothing to stick to and the true closest wins
         # unconditionally, same as before this fix.
         if (
@@ -538,10 +679,19 @@ class FastPathPlanner:
         target: np.ndarray,
         field_bounds: FieldBounds,
         robot_id: Optional[int] = None,
+        clearance: Optional[float] = None,
+        subgoal_distance: Optional[float] = None,
     ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float]:
         """
         Recursively checks a segment for collisions and generates subgoals with
         a hysteresis bias to prevent path-switching jitter (indecisiveness).
+
+        `clearance`/`subgoal_distance`: this robot's effective (possibly
+        crowding-shrunk) values, computed once by `_get_obstacles` and passed
+        down through every recursive call so a single planning call is
+        internally consistent. Default to `self.OBSTACLE_CLEARANCE`/
+        `self.SUBGOAL_DISTANCE` for the same internal/test call sites that
+        default `robot_id`.
 
         `robot_id`: keys `self._last_detour_side`'s per-tick memory of which
         side (`subgoal_direction`) this robot detoured around a given
@@ -563,11 +713,16 @@ class FastPathPlanner:
         still treating a materially different point (a different edge, or
         the far side of a corner) as a fresh decision with no prior bias.
         """
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        subgoal_distance = self.SUBGOAL_DISTANCE if subgoal_distance is None else subgoal_distance
+
         obstacle_memory_key = (robot_id, recursion_length) if robot_id is not None else None
         sticky_obstacle_segment = (
             self._last_obstacle.get(obstacle_memory_key) if obstacle_memory_key is not None else None
         )
-        closest_obstacle, obstacle_segment = self.collides(segment, obstacles, sticky_obstacle=sticky_obstacle_segment)
+        closest_obstacle, obstacle_segment = self.collides(
+            segment, obstacles, sticky_obstacle=sticky_obstacle_segment, clearance=clearance
+        )
         segment_length = distance(segment[0], segment[1])
 
         # Base case: Path is clear or maximum detour complexity reached
@@ -588,10 +743,26 @@ class FastPathPlanner:
         # anyway" fallback is still the more useful answer) -- see
         # `_find_subgoal`'s docstring/failsafe comment.
         subgoal_left = self._find_subgoal(
-            segment[0], segment[1], closest_obstacle, obstacles, 1, 1, origin_obstacle=obstacle_segment
+            segment[0],
+            segment[1],
+            closest_obstacle,
+            obstacles,
+            1,
+            1,
+            clearance,
+            subgoal_distance,
+            origin_obstacle=obstacle_segment,
         )
         subgoal_right = self._find_subgoal(
-            segment[0], segment[1], closest_obstacle, obstacles, 0, 1, origin_obstacle=obstacle_segment
+            segment[0],
+            segment[1],
+            closest_obstacle,
+            obstacles,
+            0,
+            1,
+            clearance,
+            subgoal_distance,
+            origin_obstacle=obstacle_segment,
         )
 
         # `_find_subgoal` returns None for a genuine dead-end (see above) --
@@ -647,6 +818,8 @@ class FastPathPlanner:
             target,
             field_bounds,
             robot_id,
+            clearance,
+            subgoal_distance,
         )
         seg2, len2 = self.check_segment(
             (best_subgoal, segment[1]),
@@ -655,12 +828,19 @@ class FastPathPlanner:
             target,
             field_bounds,
             robot_id,
+            clearance,
+            subgoal_distance,
         )
 
         return seg1 + seg2, len1 + len2
 
     def _clamp_to_obstacle_clearance(
-        self, origin: np.ndarray, unit_vec: np.ndarray, max_distance: float, obstacles: List
+        self,
+        origin: np.ndarray,
+        unit_vec: np.ndarray,
+        max_distance: float,
+        obstacles: List,
+        clearance: Optional[float] = None,
     ) -> float:
         """Shrink `max_distance` so the point `origin + unit_vec * distance` never lands
         inside `OBSTACLE_CLEARANCE` of any obstacle segment.
@@ -672,10 +852,11 @@ class FastPathPlanner:
         obstacle: a robot approaching it head-on crossed the boundary by several centimetres
         even though the underlying trajectory correctly routed around it).
         """
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
         clamped = max_distance
         for o in obstacles:
             end_point = origin + unit_vec * clamped
-            if distance_point_to_segment(end_point, o[0], o[1]) >= self.OBSTACLE_CLEARANCE:
+            if distance_point_to_segment(end_point, o[0], o[1]) >= clearance:
                 continue
             # Binary search along the ray for the furthest distance that still
             # keeps clearance — cheap, bounded, and avoids deriving a closed-form
@@ -684,20 +865,24 @@ class FastPathPlanner:
             for _ in range(12):
                 mid = (lo + hi) / 2.0
                 point = origin + unit_vec * mid
-                if distance_point_to_segment(point, o[0], o[1]) >= self.OBSTACLE_CLEARANCE:
+                if distance_point_to_segment(point, o[0], o[1]) >= clearance:
                     lo = mid
                 else:
                     hi = mid
             clamped = min(clamped, lo)
         return clamped
 
-    def smooth_path(self, trajectory, target, robot_position, obstacles: List) -> np.ndarray:
+    def smooth_path(
+        self, trajectory, target, robot_position, obstacles: List, clearance: Optional[float] = None
+    ) -> np.ndarray:
         if len(trajectory) == 1:
             return target
 
         direction = trajectory[0][1] - robot_position
         unit_vec = direction / math.hypot(direction[0], direction[1])
-        safe_distance = self._clamp_to_obstacle_clearance(robot_position, unit_vec, self.PROJECTION_DISTANCE, obstacles)
+        safe_distance = self._clamp_to_obstacle_clearance(
+            robot_position, unit_vec, self.PROJECTION_DISTANCE, obstacles, clearance=clearance
+        )
         new_target = robot_position + unit_vec * safe_distance
 
         # Removed redundant math ops by caching distance calls here too
@@ -717,6 +902,7 @@ class FastPathPlanner:
         robot_pos: np.ndarray,
         field_bounds: FieldBounds | None = None,
         exempt_obstacles: Optional[set] = None,
+        clearance: Optional[float] = None,
     ) -> np.ndarray:
         """
         Ensures the target isn't inside a velocity-line obstacle.
@@ -744,6 +930,7 @@ class FastPathPlanner:
         """
         if exempt_obstacles is None:
             exempt_obstacles = set()
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
         if field_bounds is not None:
             # Build the set of field-boundary segments so we can skip them below.
             tl = np.array(field_bounds.top_left)
@@ -766,13 +953,13 @@ class FastPathPlanner:
                 o_key = (tuple(o[0]), tuple(o[1]))
                 if o_key in boundary_segments or o_key in exempt_obstacles:
                     continue
-                if distance_point_to_segment(safe_target, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
+                if distance_point_to_segment(safe_target, o[0], o[1]) < clearance:
                     closest_pt = closest_point_on_segment(safe_target, o[0], o[1])
                     push_dir = safe_target - closest_pt
                     if math.hypot(push_dir[0], push_dir[1]) == 0:
                         push_dir = robot_pos - closest_pt
                     unit_push = push_dir / math.hypot(push_dir[0], push_dir[1])
-                    safe_target = closest_pt + unit_push * (self.OBSTACLE_CLEARANCE * 1.05)
+                    safe_target = closest_pt + unit_push * (clearance * 1.05)
                     collision_found = True
             if not collision_found:
                 break
@@ -789,13 +976,16 @@ class FastPathPlanner:
         Main entry point. Clears cache, sanitizes target, and plans path.
         """
         self._collision_cache.clear()
+        self._obstacle_arrays_cache.clear()
 
         robot = game.friendly_robots[robot_id]
         our_pos = np.array([robot.p.x, robot.p.y])
         raw_target = np.array(target)
 
         # 1. Get obstacles and draw Red velocity lines
-        obstacles = self._get_obstacles(game, robot_id, our_pos, field_bounds)
+        obstacles, clearance, subgoal_distance = self._get_obstacles(game, robot_id, our_pos, field_bounds)
+
+        defense_area_retrieval_exempt = self._enemy_defense_area_retrieval_exempt(game, robot_id)
 
         # 1a. Same idea as 1b below, one obstacle-class earlier: when the ball
         # itself is legitimately resting in the opponent's defense area during
@@ -807,8 +997,8 @@ class FastPathPlanner:
         # way `boundary_segments` gets excluded below, and remember the
         # exemption so steps 2/7 skip clamping the target/waypoint back out of
         # the rectangle. See `_enemy_defense_area_retrieval_exempt`'s docstring
-        # for the stall this prevents.
-        defense_area_retrieval_exempt = self._enemy_defense_area_retrieval_exempt(game, robot_id)
+        # for the stall this prevents. (Computed above, before 1a-skip, since
+        # the recompute-skip's own defense-area re-check needs it too.)
         if defense_area_retrieval_exempt:
             defense_rect = self._enemy_defense_rect(game, margin=OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
             rmin_x, rmax_x, rmin_y, rmax_y = defense_rect
@@ -902,12 +1092,17 @@ class FastPathPlanner:
         if game.ball is not None:
             ball_pos = np.array([game.ball.p.x, game.ball.p.y])
             diff = raw_target - ball_pos
-            if math.hypot(diff[0], diff[1]) < self.OBSTACLE_CLEARANCE:
+            if math.hypot(diff[0], diff[1]) < clearance:
                 for o in obstacles:
-                    if distance_point_to_segment(ball_pos, o[0], o[1]) < self.OBSTACLE_CLEARANCE:
+                    if distance_point_to_segment(ball_pos, o[0], o[1]) < clearance:
                         ball_adjacent_obstacles.add((tuple(o[0]), tuple(o[1])))
         safe_target = self.sanitize_target(
-            raw_target, obstacles, our_pos, field_bounds, exempt_obstacles=ball_adjacent_obstacles
+            raw_target,
+            obstacles,
+            our_pos,
+            field_bounds,
+            exempt_obstacles=ball_adjacent_obstacles,
+            clearance=clearance,
         )
 
         # 3a. Extend the same exemption to path *routing*, but only for the
@@ -932,10 +1127,73 @@ class FastPathPlanner:
             else [o for o in obstacles if (tuple(o[0]), tuple(o[1])) not in routing_exempt]
         )
 
-        # 4. Plan geometric path
-        final_trajectory, _ = self.check_segment(
-            (our_pos, safe_target), routing_obstacles, 0, safe_target, field_bounds, robot_id
-        )
+        # 4. Plan geometric path. Recompute-skip: if this robot was asked for
+        # essentially the same target last call and every segment of the
+        # detour trajectory that call computed is still clear of every
+        # current obstacle (including this tick's freshly-projected moving
+        # ones), that trajectory's *shape* is still valid — reuse it instead
+        # of re-running `check_segment`'s recursive detour search, which is
+        # the single largest cost in this method (cProfile on a full 6v6
+        # match: ~40% of `_path_to`'s own time). Every segment is still
+        # revalidated against `collides()` fresh every tick, even when
+        # reusing the cached shape — skipping that revalidation itself for a
+        # few ticks at a time was tried (both a 3-tick and a 2-tick fixed
+        # interval) and reverted after each caused a real regression (a
+        # kickoff support robot briefly inside the centre keep-out zone at
+        # the 3-tick interval; `test_mirror_swap` converging ~14x slower at
+        # the 2-tick interval — see git history). `smooth_path` below is still
+        # called fresh from the robot's *current* position every tick
+        # regardless — the carrot it derives is a live lookahead point
+        # relative to wherever the robot actually is now
+        # (`robot_position + unit_vec * safe_distance`), not something that
+        # can be cached itself. (An earlier version of this skip cached
+        # `smooth_path`'s output directly instead of the trajectory feeding
+        # it — reverted after it froze the carrot at a fixed absolute point
+        # that fell behind the robot as it advanced, live-locking two robots
+        # crossing perpendicular lanes in `test_grid_intersection`.)
+        #
+        # `sanitize_target`'s bounded loop above still runs fresh every call
+        # rather than being skipped too — it's a small fraction of this
+        # method's cost next to `check_segment` (per the same profile) and
+        # its output (`safe_target`) is exactly what the cache key and the
+        # trajectory's own validity are compared against, so skipping it as
+        # well would mean re-deriving what to compare against anyway.
+        # The robot's own position must also still be close to where it was
+        # when the cached trajectory was planned: `check_segment`'s first
+        # segment starts at *that* old position, not the current one, so
+        # `smooth_path`'s direction/clamping below (derived from
+        # `trajectory[0][1]`) would otherwise be reasoning about a subgoal
+        # placed relative to a position the robot has since moved well away
+        # from, even though the segment itself still tests as collision-free
+        # in isolation. Bounded to a fraction of `SUBGOAL_DISTANCE` — small
+        # enough that the cached subgoal is still a reasonable waypoint from
+        # the robot's current position, generous enough to actually skip
+        # work across most of a tick-to-tick position change at 60Hz.
+        cached = self._last_trajectory.get(robot_id)
+        final_trajectory = None
+        if cached is not None:
+            cached_origin, cached_target, cached_trajectory = cached
+            if (
+                distance(safe_target, cached_target) <= self._REPLAN_TARGET_TOLERANCE
+                and distance(our_pos, cached_origin) <= self._REPLAN_POSITION_TOLERANCE
+                and all(
+                    self.collides(seg, routing_obstacles, clearance=clearance)[0] is None for seg in cached_trajectory
+                )
+            ):
+                final_trajectory = cached_trajectory
+
+        if final_trajectory is None:
+            final_trajectory, _ = self.check_segment(
+                (our_pos, safe_target),
+                routing_obstacles,
+                0,
+                safe_target,
+                field_bounds,
+                robot_id,
+                clearance,
+                subgoal_distance,
+            )
+            self._last_trajectory[robot_id] = (our_pos.copy(), safe_target.copy(), final_trajectory)
 
         # 5. Draw the resulting safe path segments when an RSim renderer is available.
         if self._should_draw:
@@ -943,7 +1201,7 @@ class FastPathPlanner:
                 self._env.draw_line(i)
 
         # 6. Smooth the path and draw the final "Carrot" target in Blue
-        new_target = self.smooth_path(final_trajectory, safe_target, our_pos, routing_obstacles)
+        new_target = self.smooth_path(final_trajectory, safe_target, our_pos, routing_obstacles, clearance=clearance)
 
         # 7. Last-line safety net, specific to the defense-area rectangle: the
         # smoothing/blending steps above (subgoal search, carrot projection,

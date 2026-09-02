@@ -54,6 +54,8 @@ class TestFindSubgoalDeadEnd:
             obstacles=[wall],
             subgoal_direction=0,
             multiple=1,
+            clearance=planner.OBSTACLE_CLEARANCE,
+            subgoal_distance=planner.SUBGOAL_DISTANCE,
             origin_obstacle=wall,
         )
         assert result is None
@@ -101,6 +103,8 @@ class TestFindSubgoalDeadEnd:
             obstacles=[other_far_obstacle],
             subgoal_direction=0,
             multiple=11,  # already past the step budget on entry
+            clearance=planner.OBSTACLE_CLEARANCE,
+            subgoal_distance=planner.SUBGOAL_DISTANCE,
             origin_obstacle=origin,
             blocked_by_origin=False,  # last blocker was NOT the origin obstacle
         )

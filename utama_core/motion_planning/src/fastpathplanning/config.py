@@ -35,3 +35,20 @@ class fastpathplanningconfig:
     # class of instability `docs/roadmap.md` already flagged as a known,
     # unresolved `FastPathPlanning` convergence/local-minimum limitation.
     DETOUR_SWITCH_MARGIN_RATIO = 0.25
+
+    # Adaptive clearance: in a crowded scrum (e.g. a 6-robot kickoff), several
+    # overlapping fixed-radius clearance zones can leave little or no fully-
+    # clear point for `_find_subgoal`'s recursive search to land on, forcing
+    # 100+ recursion steps to resolve (`test_our_kickoff_nonzero_keeper_...`
+    # needs exactly this). Shrinking clearance a bounded amount when nearby
+    # obstacle count is high gives the search more room to find a valid
+    # subgoal sooner, at the cost of routing a little closer to obstacles in
+    # exactly those crowded moments. Below `CROWDING_COUNT_MIN` obstacles,
+    # clearance is unchanged; at or above `CROWDING_COUNT_MAX`, it's held at
+    # the floor; in between it interpolates linearly. The floor
+    # (`CROWDING_CLEARANCE_FLOOR_RATIO`) is deliberately conservative — still
+    # well above `ROBOT_DIAMETER` alone — so a crowded-field shrink can never
+    # let two robots' collision circles actually overlap.
+    CROWDING_COUNT_MIN = 4
+    CROWDING_COUNT_MAX = 8
+    CROWDING_CLEARANCE_FLOOR_RATIO = 0.8
