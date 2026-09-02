@@ -695,3 +695,26 @@ samples (15, 30, and 28 matches, the last exercising two previously-
 unswept strategies) now show zero unexplained anomalies — the detector +
 shielding fix combination holds up under broader coverage, not just the
 original 6-config set. Replays deleted after analysis.
+
+**Further-expanded verification, 2026-09-02 (11 configs, 55 matches).**
+Added `press_and_pass`, `split_shape`, `switch_of_play` to the 8-config
+set (all three are baselines/experimental with real documented records,
+not untested scaffolding) — 11 configs, 55 matches, still well short of
+the full 136-match catalog round-robin. 35 raw-flagged windows, all
+classify as `held_or_contested`, 0 unclassified. Two of the longer windows
+(8-11s, vs. the typical 3-6s) were individually traced in full rather than
+trusting the classifier's duration alone:
+`switch_of_play_vs_tiki_taka.pkl` t=50-61s (11s) is a genuine multi-robot
+scrum — the ball stays within a 0.25m×0.14m box near the right sideline
+while 5-6 robots from both teams cycle through as nearest, resolving into
+real possession at the very end; `friendly1`'s `go_to_ball` approach
+flips shield/direct a few times but 5-8s apart (not the sub-second flicker
+the shielding fix addressed), consistent with ordinary re-evaluation
+against a repositioning opponent, not the fixed bug recurring.
+`switch_of_play_vs_zone_fluid.pkl` t=42-50s shows the same corner-adjacent
+approach/retreat/reapproach/capture pattern as the already-documented
+`go_to_ball` capture-geometry gap. Full suite: 867 passed, 4 skipped, 2
+xfailed. Four independent post-fix samples (15, 30, 28, 55 matches; 148
+matches total across 11 distinct configs) now show zero new bugs — only
+legitimate contested play and the one already-known open issue. Replays
+deleted after analysis.
