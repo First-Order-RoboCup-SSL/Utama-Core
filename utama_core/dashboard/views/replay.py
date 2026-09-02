@@ -1,4 +1,5 @@
-"""Replay view — lists and serves recorded `.pkl` match replays.
+"""Replay view — lists and serves recorded match replays (`.pkl` or the
+faster columnar `.npz` — see `utama_core.replay.columnar_writer`).
 
 Fully standalone: reads files under `REPLAY_BASE_PATH` only, no coupling to
 a running match. `/replay/list` enumerates available files; `/replay/frames`
@@ -49,6 +50,7 @@ from utama_core.engine.match_log import (
     load_jsonl,
 )
 from utama_core.entities.game.game_frame import GameFrame
+from utama_core.replay.columnar_reader import load_columnar_replay
 from utama_core.replay.replay_player import _load_replay
 
 _DEFAULT_GEOMETRY = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
@@ -66,7 +68,24 @@ def _list_bytes() -> bytes:
 def _list_replays() -> List[str]:
     if not REPLAY_BASE_PATH.exists():
         return []
-    return sorted(str(p.relative_to(REPLAY_BASE_PATH)) for p in REPLAY_BASE_PATH.rglob("*.pkl"))
+    # `*.sparse_referee.pkl` is a columnar replay's rare-field sidecar (see
+    # `columnar_writer.py`), not a browsable replay on its own — it also
+    # ends in ".pkl" so `rglob("*.pkl")` would otherwise list it twice
+    # (once under its own name, once implicitly via its paired ".npz").
+    pkl_paths = [p for p in REPLAY_BASE_PATH.rglob("*.pkl") if not p.name.endswith(".sparse_referee.pkl")]
+    paths = pkl_paths + list(REPLAY_BASE_PATH.rglob("*.npz"))
+    return sorted(str(p.relative_to(REPLAY_BASE_PATH)) for p in paths)
+
+
+def _iter_game_frames(replay_path: Path):
+    """Yield `GameFrame`s from either replay format, dispatching on
+    extension — same idea as `replay_player.load_frames_in_range`."""
+    if replay_path.suffix == ".npz":
+        yield from load_columnar_replay(replay_path).iter_frames()
+        return
+    for obj in _load_replay(replay_path):
+        if isinstance(obj, GameFrame):
+            yield obj
 
 
 def _frames_bytes(query: Optional[dict] = None) -> bytes:
@@ -84,19 +103,18 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
     frames = []
     my_team_is_right = None
     my_team_is_yellow = True
-    for obj in _load_replay(replay_path):
-        if isinstance(obj, GameFrame):
-            if my_team_is_right is None:
-                my_team_is_right = obj.my_team_is_right
-                my_team_is_yellow = obj.my_team_is_yellow
+    for obj in _iter_game_frames(replay_path):
+        if my_team_is_right is None:
+            my_team_is_right = obj.my_team_is_right
+            my_team_is_yellow = obj.my_team_is_yellow
 
-            frames.append(
-                {
-                    "ts": obj.ts,
-                    "robots": _serialise_robots(obj),
-                    "ball": _serialise_ball(obj),
-                }
-            )
+        frames.append(
+            {
+                "ts": obj.ts,
+                "robots": _serialise_robots(obj),
+                "ball": _serialise_ball(obj),
+            }
+        )
 
     payload = {
         "my_team_is_right": bool(my_team_is_right),

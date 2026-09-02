@@ -10,10 +10,11 @@ path over `[t_start, t_end]` is drawn as a trail fading from faint (oldest)
 to solid (newest), so direction of travel is visible without arrows, plus
 solid markers at the final frame's positions.
 
-Reads from the existing replay `.pkl` (`utama_core.replay.replay_writer`),
-not `GameHistory` — `GameHistory` is bounded to `MAX_GAME_HISTORY` (20
-frames), far shorter than a useful window, per the same limitation
-`match_stats.py` hit.
+Reads from an existing replay file (`.pkl` via `replay_writer.py`, or the
+faster columnar `.npz` via `columnar_writer.py` — `load_frames_in_range`
+dispatches on extension), not `GameHistory` — `GameHistory` is bounded to
+`MAX_GAME_HISTORY` (20 frames), far shorter than a useful window, per the
+same limitation `match_stats.py` hit.
 """
 
 from __future__ import annotations

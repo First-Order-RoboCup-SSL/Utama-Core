@@ -45,6 +45,7 @@ import numpy as np
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.entities.game import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.replay.columnar_reader import ColumnarReplay, load_columnar_replay
 from utama_core.replay.replay_player import _load_replay
 
 # Referee commands where the ball is expected to be legally stationary (a
@@ -149,7 +150,30 @@ def find_stuck_windows(
     flagged 3s window on its own is exactly `window_s`, so `min_duration_s`
     only starts filtering once windows are tuned to overlap more (smaller
     `stride_s`) or `window_s` itself is shortened.
+
+    Dispatches on `replay_path`'s extension: a `.npz` (columnar) replay is
+    swept via `_find_stuck_windows_columnar`, working directly on the
+    loaded numpy arrays with no per-tick `GameFrame` reconstruction at all
+    (measured ~9ms for a full 600s match's ball-frozen pass alone, versus
+    multi-second cost through object reconstruction) — see
+    `columnar_writer.py`'s module docstring for why this format exists.
+    Everything else falls through to the original `.pkl` path below.
     """
+    replay_path = Path(replay_path)
+    if replay_path.suffix == ".npz":
+        return _find_stuck_windows_columnar(
+            load_columnar_replay(replay_path),
+            window_s=window_s,
+            stride_s=stride_s,
+            ball_still_tol=ball_still_tol,
+            oscillation_energy_tol=oscillation_energy_tol,
+            min_duration_s=min_duration_s,
+            live_play_fraction=live_play_fraction,
+            possession_fraction=possession_fraction,
+            defense_area_fraction=defense_area_fraction,
+            field_dims=field_dims,
+        )
+
     frames: list[GameFrame] = [obj for obj in _load_replay(replay_path) if isinstance(obj, GameFrame)]
     if not frames:
         return []
@@ -227,6 +251,109 @@ def find_stuck_windows(
                             t_end=t + window_s,
                             ball_std=ball_std,
                             oscillating_robot_ids=tuple(oscillating),
+                        )
+                    )
+        t += stride_s
+
+    return _merge_windows(raw_windows, min_duration_s=min_duration_s)
+
+
+def _find_stuck_windows_columnar(
+    replay: ColumnarReplay,
+    *,
+    window_s: float,
+    stride_s: float,
+    ball_still_tol: float,
+    oscillation_energy_tol: float,
+    min_duration_s: float,
+    live_play_fraction: float,
+    possession_fraction: float,
+    defense_area_fraction: float,
+    field_dims: FieldDimensions,
+) -> list[StuckWindow]:
+    """Array-native equivalent of the sliding-window sweep above. Every
+    per-window reduction here (`live_frac`, `held_frac`, `defense_frac`,
+    `ball_std`, oscillation energy) is the exact same formula as the
+    `.pkl` path, just evaluated as a numpy slice-and-reduce instead of a
+    Python loop over reconstructed `GameFrame`s — this is what turns a
+    multi-second sweep into single-digit milliseconds (see this function's
+    caller for the measured number). Output is the same `StuckWindow`
+    sequence a `.pkl` version of the same replay would produce, modulo
+    floating-point reduction order (immaterial at the tolerances used
+    here).
+    """
+    n = replay.n_ticks
+    if n == 0:
+        return []
+
+    ts = replay.ts
+    t0 = float(ts[0])
+    t_last = float(ts[-1])
+
+    live_play_mask = np.isin(replay.referee_command, [c.value for c in _LIVE_PLAY_COMMANDS])
+    held_mask = replay.friendly_has_ball.any(axis=1) | replay.enemy_has_ball.any(axis=1)
+    half_length = field_dims.full_field_half_length
+    depth = field_dims.half_defense_area_depth * 2
+    half_width = field_dims.half_defense_area_width
+    ball_x, ball_y = replay.ball_p[:, 0], replay.ball_p[:, 1]
+    in_defense_mask = ((ball_x <= -half_length + depth) | (ball_x >= half_length - depth)) & (
+        np.abs(ball_y) <= half_width
+    )
+
+    raw_windows: list[StuckWindow] = []
+    start_idx = 0
+    end_idx = 0
+    t = t0
+    while t + window_s <= t_last:
+        while start_idx < n and ts[start_idx] < t:
+            start_idx += 1
+        if end_idx < start_idx:
+            end_idx = start_idx
+        while end_idx < n and ts[end_idx] <= t + window_s:
+            end_idx += 1
+        sl = slice(start_idx, end_idx)
+        window_len = end_idx - start_idx
+
+        if window_len >= 4 and not np.isnan(ball_x[sl]).any():
+            has_referee_here = replay.has_referee[sl]
+            if has_referee_here[0]:
+                live_frac = live_play_mask[sl].sum() / window_len
+                if live_frac < live_play_fraction:
+                    t += stride_s
+                    continue
+
+            held_frac = held_mask[sl].sum() / window_len
+            if held_frac >= possession_fraction:
+                t += stride_s
+                continue
+
+            defense_frac = in_defense_mask[sl].sum() / window_len
+            if defense_frac >= defense_area_fraction:
+                t += stride_s
+                continue
+
+            ball_std = float(np.hypot(ball_x[sl].std(), ball_y[sl].std()))
+
+            if ball_std < ball_still_tol:
+                # Only robots present (non-NaN) for the *entire* window
+                # count, matching the `.pkl` path's
+                # `set.intersection(*(set(f.friendly_robots) ...))`.
+                present = ~np.isnan(replay.friendly_p[sl, :, 0]).any(axis=0)
+                oscillating: list[int] = []
+                for slot in np.flatnonzero(present):
+                    xs = replay.friendly_p[sl, slot, 0]
+                    ys = replay.friendly_p[sl, slot, 1]
+                    energy = max(_dominant_non_dc_fraction(xs), _dominant_non_dc_fraction(ys))
+                    if energy > oscillation_energy_tol:
+                        oscillating.append(int(replay.friendly_ids[slot]))
+
+                if oscillating:
+                    raw_windows.append(
+                        StuckWindow(
+                            t_start=t,
+                            t_end=t + window_s,
+                            ball_std=ball_std,
+                            oscillating_robot_ids=tuple(sorted(oscillating)),
                         )
                     )
         t += stride_s

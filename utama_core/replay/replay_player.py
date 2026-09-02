@@ -3,6 +3,7 @@ import io
 import logging
 import pickle
 import warnings
+from pathlib import Path
 from typing import Generator, Union
 
 import pygame
@@ -154,13 +155,24 @@ def play_replay(file_name: str, play_by_play: bool = False):
 
 
 def load_frames_in_range(replay_path, t_start: float, t_end: float) -> list[GameFrame]:
-    """Load frames from a replay `.pkl` file whose `ts` falls within `[t_start, t_end]`.
+    """Load frames from a replay file whose `ts` falls within `[t_start, t_end]`.
 
-    A 60s/3600-tick match's replay is small enough (tens of thousands of
-    small dataclasses) that full-load-then-filter is simpler than adding a
-    seek-aware reader, and this is only ever called for one short window at
-    a time, not the whole file repeatedly.
+    Dispatches on extension: `.npz` is the columnar format written by
+    `ColumnarReplayWriter` (see that module's docstring) — reconstructing
+    `GameFrame`s only for ticks actually in range, via `ColumnarReplay.
+    frames_in_range`, skips ever paying the pickle-object-reconstruction
+    cost for the rest of the match. `.pkl` is the original one-pickle-per-
+    frame format; a 60s/3600-tick match there is small enough that full-
+    load-then-filter is simpler than adding a seek-aware reader, and this
+    is only ever called for one short window at a time, not the whole file
+    repeatedly.
     """
+    replay_path = Path(replay_path)
+    if replay_path.suffix == ".npz":
+        from utama_core.replay.columnar_reader import load_columnar_replay
+
+        return load_columnar_replay(replay_path).frames_in_range(t_start, t_end)
+
     frames = []
     for obj in _load_replay(replay_path):
         if isinstance(obj, GameFrame) and t_start <= obj.ts <= t_end:

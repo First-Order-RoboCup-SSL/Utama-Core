@@ -97,7 +97,7 @@ from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.replay.replay_writer import ReplayWriterConfig
+from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
@@ -168,7 +168,7 @@ def run_match_cell(
     if run_dir is not None:
         extra_kwargs["match_log_path"] = str(run_dir / f"{match_tag}.intentions.jsonl")
         extra_kwargs["stats_path"] = str(run_dir / f"{match_tag}.stats.json")
-        extra_kwargs["replay_writer_config"] = ReplayWriterConfig(
+        extra_kwargs["replay_writer_config"] = ColumnarReplayWriterConfig(
             replay_name=f"{run_dir.name}/{match_tag}", overwrite_existing=True
         )
 

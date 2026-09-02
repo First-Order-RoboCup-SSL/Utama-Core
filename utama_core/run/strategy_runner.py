@@ -6,7 +6,7 @@ import time
 import warnings
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, FrozenSet, List, Optional, Tuple
+from typing import TYPE_CHECKING, FrozenSet, List, Optional, Tuple, Union
 
 from rich.live import Live
 from rich.text import Text
@@ -46,6 +46,10 @@ from utama_core.global_utils.mapping_utils import (
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
 from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.replay.columnar_writer import (
+    ColumnarReplayWriter,
+    ColumnarReplayWriterConfig,
+)
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
@@ -190,7 +194,12 @@ class StrategyRunner:
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         control_scheme (str, optional): Name of the motion control scheme to use.
         opp_control_scheme (str, optional): Name of the opponent motion control scheme to use. If not set, uses same as friendly.
-        replay_writer_config (ReplayWriterConfig, optional): Configuration for the replay writer. If unset, replay is disabled.
+        replay_writer_config (ReplayWriterConfig | ColumnarReplayWriterConfig, optional): Configuration for the
+            replay writer. If unset, replay is disabled. `ReplayWriterConfig` writes the original one-pickle-
+            per-frame `.pkl` format; `ColumnarReplayWriterConfig` writes the columnar `.npz` format, ~5x smaller
+            and ~3x faster to load in bulk (see `utama_core/replay/columnar_writer.py`'s module docstring) —
+            prefer it for anything that will be swept/analyzed programmatically (tournaments, stuck-detector
+            sweeps) rather than scrubbed frame-by-frame in a player UI.
         show_live_status (bool, optional): Whether to show the live terminal status panel.
             This panel includes FPS, referee command, stage, score, time remaining,
             and optional status text. Defaults to False.
@@ -249,7 +258,7 @@ class StrategyRunner:
         opp_strategy: Optional[AbstractStrategy] = None,
         control_scheme: str = "fpp",  # This is also the default control scheme used in the motion planning tests
         opp_control_scheme: Optional[str] = None,
-        replay_writer_config: Optional[ReplayWriterConfig] = None,
+        replay_writer_config: Optional[Union[ReplayWriterConfig, ColumnarReplayWriterConfig]] = None,
         show_live_status: bool = False,  # Turn this on for simulator debugging
         print_real_fps: Optional[bool] = None,
         profiler_name: Optional[str] = None,
@@ -414,12 +423,16 @@ class StrategyRunner:
             )
             show_live_status = print_real_fps
 
-        # Replay Writer
-        self.replay_writer = (
-            ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
-            if replay_writer_config
-            else None
-        )
+        # Replay Writer — dispatch on config type since the two writers
+        # aren't interchangeable classes, just interface-compatible ones
+        # (same write_frame/close contract, see columnar_writer.py's
+        # module docstring for why the columnar format exists).
+        if isinstance(replay_writer_config, ColumnarReplayWriterConfig):
+            self.replay_writer = ColumnarReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
+        elif replay_writer_config:
+            self.replay_writer = ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
+        else:
+            self.replay_writer = None
 
         # Live terminal status panel
         self.num_frames_elapsed = 0
