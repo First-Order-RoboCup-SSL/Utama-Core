@@ -718,3 +718,29 @@ xfailed. Four independent post-fix samples (15, 30, 28, 55 matches; 148
 matches total across 11 distinct configs) now show zero new bugs — only
 legitimate contested play and the one already-known open issue. Replays
 deleted after analysis.
+
+**Full-catalog coverage completed, 2026-09-02 (final 6 configs, 15
+matches).** Ran the last 6 not-yet-swept catalog configs
+(`clear_danger`, `decoy_and_overload`, `give_and_go_solo`, `three_slot`,
+`low_block`, `high_press`) against each other — 15 matches, completing
+incremental coverage of the full 17-config catalog without ever running
+the 136-match all-at-once round-robin (attempted once, correctly
+interrupted as too slow for this kind of check). 4 raw-flagged windows,
+all classify as `held_or_contested`, 0 unclassified; one
+(`high_press_vs_low_block.pkl` t=28-33s) individually traced and confirmed
+as the same already-documented `go_to_ball` capture-geometry symptom
+(center-field loose ball, both teams' robots cycling through contact
+distance without capture). Full suite: 867 passed, 4 skipped, 2 xfailed.
+
+**Cumulative result: five independent post-fix tournament samples, 163
+matches, all 17 catalog configs exercised at least once, zero new bugs
+found beyond the one shielding fix.** The only recurring pattern across
+every sample is the already-documented, not-yet-fixed `go_to_ball`
+capture-geometry gap (chassis contact without dribbler-cage capture) —
+consistently classified, never presenting as a stuck match (always
+resolves within a few seconds once some robot's approach geometry happens
+to line up), and never a NEW finding this loop. Per the standing goal's
+"repeat until you can no longer find any stuck or anomalies or bugs"
+condition: with full-catalog coverage now reached and the fifth
+consecutive sample turning up nothing new, this loop is treated as
+converged for the current codebase state. Replays deleted after analysis.
