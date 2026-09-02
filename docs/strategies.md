@@ -1117,34 +1117,57 @@ the full account of what replaced them and why.
   (`utama_core/tests/skills/test_shielding.py`).
 
 - **Cross-tactic ball-target collision after a free-kick restart froze a
-  match for ~394s — found and fixed 2026-09-02** — found in the full-length
-  5-strategy tournament above (`clear_press_plus_vs_shadow_switch_LK.pkl`,
-  t=205.8s): a `STOP`→`FORCE_START` restart (foul: "Yellow attacker in blue
-  defense area") placed the ball at `(4.25, 1.019)`, exactly where a robot
-  already pinned to `ClearBallTactic`'s `"clear"` branch was headed, while
-  `GiveAndGoTactic`'s independent "fetch a loose ball" branch also
-  triggered on the same ball via a different picker check
-  (`_clear_press_plus_picker`'s `losing`/`attack` fallback, since the
-  clearer being pinned/busy meant it no longer counted as "already
-  handling this" from that branch's point of view). Neither tactic has any
-  awareness of the other's target, so both robots converged on the
-  identical ball and stalled at `FastPathPlanner.OBSTACLE_CLEARANCE`
-  (0.27m) apart for the remaining ~394s of the match — a genuinely new
-  bug mechanism this session (not oscillation, not a static-obstacle local
-  minimum, not shielding hysteresis — confirmed no enemy within
-  `CONTEST_RANGE`), only surfaced because full-length (600s) matches give
-  a mid-match restart coincidence enough remaining time to make a frozen
-  tail obvious; none of the 163+ prior 65s quick-tournament matches this
-  session ran ever showed it. Full root-cause and candidate-fix writeup in
-  `docs/testing_gaps.md`. Fixed by tightening
-  `_clear_press_plus_picker`/`_clear_danger_picker`: while a `"clear"`
-  robot is still pinned (busy, absent from `free_robots` this tick), every
-  other free robot now holds the `"block"` screen instead of falling
-  through to `attack`/`press`/`overload`. Regression tests:
-  `test_clear_danger_holds_block_while_a_clearer_is_still_pinned` and
-  `test_clear_press_plus_holds_block_while_a_clearer_is_still_pinned`
-  (`utama_core/tests/engine/test_all_strategy_configs.py`). Full suite:
-  869 passed, 4 skipped, 2 xfailed.
+  match for ~394s — two independent causes found and fixed 2026-09-02** —
+  found in the full-length 5-strategy tournament above
+  (`clear_press_plus_vs_shadow_switch_LK.pkl`, t=205.8s): a `STOP`→
+  `FORCE_START` restart (foul: "Yellow attacker in blue defense area")
+  placed the ball at `(4.25, 1.019)`, and two robots from different tactics
+  independently converged on the identical ball and stalled at
+  `FastPathPlanner.OBSTACLE_CLEARANCE` (0.27m) apart for the remaining
+  ~394s of the match — a genuinely new bug mechanism this session (not
+  oscillation, not a static-obstacle local minimum, not shielding
+  hysteresis — confirmed no enemy within `CONTEST_RANGE`), only surfaced
+  because full-length (600s) matches give a mid-match restart coincidence
+  enough remaining time to make a frozen tail obvious; none of the 163+
+  prior 65s quick-tournament matches this session ran ever showed it. Full
+  root-cause and candidate-fix writeup in `docs/testing_gaps.md`.
+  - **First cause (commit `0e510a0`)**: `ClearBallTactic`'s `"clear"`
+    branch stayed picker-pinned/busy while `GiveAndGoTactic`'s independent
+    "fetch a loose ball" branch also triggered on the same ball via a
+    different picker check, since the clearer being pinned/busy meant it no
+    longer counted as "already handling this" from that branch's point of
+    view. Fixed by tightening `_clear_press_plus_picker`/
+    `_clear_danger_picker`: while a `"clear"` robot is still pinned, every
+    other free robot now holds the `"block"` screen instead of falling
+    through to `attack`/`press`/`overload`. Regression tests:
+    `test_clear_danger_holds_block_while_a_clearer_is_still_pinned` and
+    `test_clear_press_plus_holds_block_while_a_clearer_is_still_pinned`
+    (`utama_core/tests/engine/test_all_strategy_configs.py`).
+  - **Second, deeper cause (commit `ae6a6f3`)**: re-running the exact fixture
+    with the first fix applied (matches are fully deterministic) still
+    froze — tracing showed the stuck robot's last real assignment was
+    `"overload"` (`DecoyOverloadTactic`), which had gone permanently
+    engine-pinned via `is_committed()` (not picker-controlled at all by the
+    time of the freeze). `DecoyOverloadTactic.is_committed()` only ever
+    released on `mem.goal_scored` — no timeout on the `"finish"` phase, so
+    a restart displacing the ball far from both the decoy and overloader
+    could pin those 2 robots for the rest of the match. Same
+    stalled-phase-with-no-timeout class `pass_and_shoot.py`'s own
+    `_PHASE_TIMEOUT_TICKS` already exists to prevent — applied the
+    identical 12s budget. Regression tests:
+    `utama_core/tests/engine/test_decoy_and_overload_tactic.py`.
+  - Both fixes are independently real and correct for their own mechanism.
+    **Neither has been cleanly confirmed via a live full-length re-run of
+    this exact fixture**: re-running it again with both fixes applied hit a
+    *third*, unrelated, already-documented freeze first — a referee
+    `HALT`↔`DIRECT_FREE_YELLOW` foul-never-clears cycle at a defense-area
+    corner (see Known open bugs' referee thrash entries), upstream of
+    where either scenario above would even occur in this deterministic
+    fixture. The unit tests are the reliable evidence each fix works in
+    isolation. Any other attack tactic with a goal-only-release
+    `is_committed()` and no phase timeout is a plausible candidate for the
+    same "finish" bug shape and is worth auditing proactively. Full suite
+    after both fixes: 872 passed, 4 skipped, 2 xfailed.
 
 ## Updating this file
 

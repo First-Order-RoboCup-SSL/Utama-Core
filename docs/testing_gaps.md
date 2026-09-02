@@ -830,8 +830,8 @@ Traced directly:
   samples this session ran earlier (163+ matches) never showed this
   pattern, consistent with it needing both a specific restart geometry and
   enough remaining match time to make the frozen tail obvious.
-- **Fixed 2026-09-02** (commit `0e510a0`), option (b) from the two
-  candidates below: `_clear_press_plus_picker` and `_clear_danger_picker`
+- **Picker-level fix, 2026-09-02** (commit `0e510a0`), option (b) from the
+  two candidates below: `_clear_press_plus_picker` and `_clear_danger_picker`
   now check `pinned_ids` for a still-pinned `"clear"` robot (busy, absent
   from `free_robots` this tick — i.e. still out fetching the ball) and, if
   found, hold every other free robot on the `"block"` screen instead of
@@ -841,12 +841,9 @@ Traced directly:
   synthetic partition-level reproductions (pinned `"clear"` robot, a
   possession read that would otherwise say "attack") rather than a replay
   of the exact restart geometry, since the picker logic itself is the unit
-  under test. Full suite green: 869 passed, 4 skipped, 2 xfailed. This only
-  closes the gap for this one strategy family's picker — candidate (a)
-  below (a general cross-tactic "ball already claimed" primitive) remains
-  undone and would still be needed if a different tactic pairing hits the
-  same collision shape through a picker that doesn't route through
-  `pinned_ids` the same way.
+  under test. Full suite green: 869 passed, 4 skipped, 2 xfailed. This is a
+  real, independently-correct fix for its own narrow scenario, but **it did
+  not fully close the gap** — see the next entry.
   Candidate fix directions considered: (a) a shared "ball already claimed"
   flag at the kernel-scheduler level so a second tactic's `go_to_ball` call
   for an already-being-fetched ball backs off or holds instead of racing to
@@ -858,3 +855,43 @@ Traced directly:
   ball — narrower, only fixes this one strategy's picker, not the
   underlying gap any other two-tactic combination could hit the same way —
   **this is the one implemented.**
+- **Second, deeper root cause found and fixed 2026-09-02** (commit
+  `ae6a6f3`): re-running the exact `clear_press_plus_vs_shadow_switch_LK`
+  fixture with the picker fix applied (matches are fully deterministic, so
+  this reproduces byte-identically up to any point neither fix touches) to
+  directly confirm the freeze no longer occurs — it still froze. Tracing
+  `.intentions.jsonl` in the new run showed the stuck robot's last real
+  tactic assignment was `"overload"` (`DecoyOverloadTactic`, `robot_ids=[1,2]`)
+  at t=158.78s, which then never appears again in the log: this robot was
+  not picker-controlled at all by the time of the freeze, but permanently
+  pinned at the *engine* level (`Strategy._choose_partition` in
+  `utama_core/engine/strategy.py` keeps any slot whose `is_committed()`
+  returns `True` outside the picker's `free_robots` set entirely — the
+  picker never even sees it again). `DecoyOverloadTactic.is_committed()`
+  (`utama_core/tactics/decoy_and_overload.py`) only ever released once
+  `mem.goal_scored` became `True` — no timeout on the `"finish"` phase at
+  all, so a restart displacing the ball far from both the decoy and
+  overloader could pin those 2 robots for the rest of the match while a
+  different tactic independently converged on the same displaced ball. This
+  is the identical stalled-phase-with-no-timeout bug class
+  `pass_and_shoot.py`'s own `_PHASE_TIMEOUT_TICKS` already exists to
+  prevent (added earlier this session) — applied the same 12s budget here:
+  `mem.finish_ticks` increments each "finish" tick, and once it exceeds
+  `_FINISH_TIMEOUT_TICKS` the tactic resets to a fresh, unassigned
+  `DecoyOverloadMem()`, releasing `is_committed()` next tick. Regression
+  tests: `utama_core/tests/engine/test_decoy_and_overload_tactic.py` (3
+  unit tests). Full suite green: 872 passed (869 + 3 new), 4 skipped, 2
+  xfailed.
+  **Still not cleanly confirmed via a live full-length re-run**: re-running
+  the same fixture again with both fixes applied hit a *third*, unrelated,
+  already-documented freeze first — a referee `HALT`<->`DIRECT_FREE_YELLOW`
+  foul-never-clears cycle at a defense-area corner (see the "Referee
+  STOP/FORCE_START thrash" project memory), upstream of where the
+  decoy/overload scenario would even occur in this deterministic fixture.
+  The unit tests are the reliable evidence this specific fix works; the
+  picker fix and this fix are each independently correct and real bugs, but
+  neither is proven to be the *complete* list of ways a mid-match restart
+  can permanently strand robots — any other attack tactic with a
+  goal-only-release `is_committed()` and no phase timeout is a plausible
+  candidate for the same bug shape, and is worth auditing proactively
+  rather than waiting for another live freeze to find the next one.
