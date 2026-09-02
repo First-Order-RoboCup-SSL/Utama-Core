@@ -5,9 +5,15 @@ from utama_core.motion_planning.src.controllers import (
     DWAController,
     FastPathPlanningController,
     PIDController,
+    TrajectorySamplingController,
 )
 
-CONTROL_SCHEME_MAP = {"pid": PIDController, "dwa": DWAController, "fpp": FastPathPlanningController}
+CONTROL_SCHEME_MAP = {
+    "pid": PIDController,
+    "dwa": DWAController,
+    "fpp": FastPathPlanningController,
+    "trajsample": TrajectorySamplingController,
+}
 
 
 def get_control_scheme(scheme_name: str) -> Type[MotionController]:
