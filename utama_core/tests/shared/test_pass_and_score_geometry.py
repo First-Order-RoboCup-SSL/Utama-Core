@@ -20,6 +20,7 @@ from utama_core.shared.pass_and_score_geometry import (
     _RELEASE_FORWARD_MAX,
     _RELEASE_LATERAL_MAX,
     ball_in_enemy_defense_area,
+    ball_is_loose,
     enemy_defense_area_hold_point,
     has_ball,
     no_shot_reposition_target,
@@ -94,6 +95,77 @@ def test_enemy_defense_area_hold_point_clamps_y_inside_box_width():
     half_width = STANDARD_FIELD_DIMS.half_defense_area_width
     hold = enemy_defense_area_hold_point(game, at_y=half_width + 5.0)
     assert hold.y < half_width + 5.0
+
+
+# `my_defense_area` for this file's `my_team_is_right=True` fixture: front-x
+# 3.5, goal-x 4.5 (box occupies x in [3.5, 4.5]), half-width 1.0 — see
+# `test_ball_is_loose_*` below.
+_MY_BOX_FRONT_X = 3.5
+
+
+def _loose_ball_game(ball_xy: tuple, enemy_xy: tuple) -> Game:
+    zv = Vector3D(0, 0, 0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={1: _robot(1, 0.0, 0.0, True)},
+        enemy_robots={0: _robot(0, enemy_xy[0], enemy_xy[1], False)},
+        ball=Ball(p=Vector3D(ball_xy[0], ball_xy[1], 0), v=zv, a=zv),
+    )
+    return Game(
+        past=GameHistory(10),
+        current=frame,
+        field=Field(
+            my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+        ),
+    )
+
+
+def test_ball_is_loose_true_when_no_enemy_nearby():
+    game = _loose_ball_game(ball_xy=(0.0, 0.0), enemy_xy=(10.0, 10.0))
+    assert bool(ball_is_loose(game)) is True
+
+
+def test_ball_is_loose_false_when_enemy_nearby_in_open_play():
+    # Ordinary open-field case: an enemy 1m from a dead ball can freely walk
+    # up and take it, so it is genuinely contested.
+    game = _loose_ball_game(ball_xy=(0.0, 0.0), enemy_xy=(1.0, 0.0))
+    assert bool(ball_is_loose(game)) is False
+
+
+def test_ball_is_loose_true_when_ball_in_own_box_and_enemy_barred_outside_it():
+    # Ball dead inside our own defense area; only our keeper may enter it
+    # (`DefenseAreaRule`), so an enemy standing just outside the front edge,
+    # even well within `_LOOSE_BALL_CONTEST_RANGE`, can never actually reach
+    # it. Must read as loose so a defensive tactic sends a retriever
+    # (`ShadowAndMarkTactic` holds it at `own_defense_area_exit_point`
+    # instead of ignoring the ball forever).
+    game = _loose_ball_game(ball_xy=(_MY_BOX_FRONT_X + 0.3, 0.0), enemy_xy=(_MY_BOX_FRONT_X - 0.3, 0.0))
+    assert bool(ball_is_loose(game)) is True
+
+
+def test_ball_is_loose_false_when_ball_in_own_box_and_enemy_also_inside():
+    # If the enemy is (illegally, or mid-transition) actually inside the box
+    # with the ball, it can genuinely reach it — still contested.
+    game = _loose_ball_game(ball_xy=(_MY_BOX_FRONT_X + 0.3, 0.0), enemy_xy=(_MY_BOX_FRONT_X + 0.2, 0.0))
+    assert bool(ball_is_loose(game)) is False
+
+
+def test_ball_is_loose_true_when_ball_just_outside_own_box_and_enemy_at_boundary():
+    # Found live 2026-09-02 (`tiki_taka_vs_zone_fluid_Rk.pkl`, ticks 540-599):
+    # ball dead ~0.03m outside `zone_fluid`'s own defense area, a `tiki_taka`
+    # attacker parked ~0.22m away right at the boundary — `ball_is_loose`
+    # used to read this as "contested" forever (enemy within
+    # `_LOOSE_BALL_CONTEST_RANGE`), so `ShadowAndMarkTactic` never assigned a
+    # retriever, and `goalkeep.py`'s `_ball_needs_retrieval` also never
+    # fired (`ball_in_own_defense_area` is strictly-inside-only) — the ball
+    # died there for the rest of the match. Reproduced at matching scale
+    # here: ball just outside the front edge, enemy at the edge itself.
+    ball_x = _MY_BOX_FRONT_X - 0.03
+    enemy_x = _MY_BOX_FRONT_X - 0.22
+    game = _loose_ball_game(ball_xy=(ball_x, 1.0), enemy_xy=(enemy_x, 1.22))
+    assert bool(ball_is_loose(game)) is True
 
 
 def _visual_game(robot_xy: tuple, robot_orientation: float, ball_xy: tuple, robot_id: int = 1) -> Game:

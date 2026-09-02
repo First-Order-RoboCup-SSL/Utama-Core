@@ -212,7 +212,7 @@ _LOOSE_BALL_CONTEST_RANGE = 1.5  # metres — matches PressAndContainTactic's ow
 
 
 def ball_is_loose(game: Game, contest_range: float = _LOOSE_BALL_CONTEST_RANGE) -> bool:
-    """True when the ball is sitting dead with no enemy nearby to contest it.
+    """True when the ball is sitting dead with no enemy nearby able to contest it.
 
     Every "defensive shape" tactic (`DefenseTactic`, `BlockShapeTactic`,
     `ShadowAndMarkTactic`) positions purely off the ball-to-goal shot angle or
@@ -227,6 +227,23 @@ def ball_is_loose(game: Game, contest_range: float = _LOOSE_BALL_CONTEST_RANGE) 
     the same range so "no one is contesting it" means the same thing across
     every defensive tactic that checks it.
 
+    An enemy within `contest_range` of the ball only counts as "contesting"
+    it if the enemy is legally allowed to actually close that distance. If
+    the ball is in/near our own defense area (only our keeper may enter it —
+    `DefenseAreaRule` fouls any other robot, friend or enemy, that does), an
+    enemy sitting just outside the boundary is already at its closest legal
+    approach and can never advance further: it reads as "1m away" forever
+    without ever being able to touch the ball. Found live 2026-09-02
+    (`tiki_taka_vs_zone_fluid_Rk.pkl`, ticks 540-599): ball dead at
+    `(-4.253, 1.030)`, ~0.03m outside `zone_fluid`'s own defense area (so
+    `ball_in_own_defense_area` never sends the keeper either — see
+    `goalkeep.py`'s `_ball_needs_retrieval`), with a `tiki_taka` attacker
+    parked ~0.22m away at the boundary, barred from entering. Neither team's
+    logic ever claimed the ball again for the rest of the match. Mirroring
+    that enemy's position against `in_own_defense_area` catches exactly this
+    "parked at the wall, can get no closer" case without needing to simulate
+    an actual path.
+
     Deliberately does not check which team's corner the ball is in, or
     distance from any particular robot — that's for the caller (typically:
     "is my own nearest assigned robot closer to the ball than
@@ -239,9 +256,25 @@ def ball_is_loose(game: Game, contest_range: float = _LOOSE_BALL_CONTEST_RANGE) 
     if ball_speed >= _LOOSE_BALL_SPEED:
         return False
     ball_pos = game.ball.p.to_2d()
+    # A small margin beyond the bare legal rectangle: a ball resting just
+    # outside the line (as in the live-found bug — 0.03m out) is still, in
+    # practice, only reachable by whichever robot is allowed inside the box,
+    # since any outfield robot approaching it must cross the boundary to
+    # actually touch it. Matches the standard "just outside the box" margin
+    # used elsewhere for this same reasoning (`clamp_outside_own_defense_area`,
+    # `own_defense_area_exit_point`).
+    ball_barred_for_enemies = in_own_defense_area(game, ball_pos, margin=2.0 * ROBOT_RADIUS + 0.05)
     for enemy in game.enemy_robots.values():
-        if enemy is not None and enemy.p.distance_to(ball_pos) <= contest_range:
-            return False
+        if enemy is None:
+            continue
+        if enemy.p.distance_to(ball_pos) > contest_range:
+            continue
+        if ball_barred_for_enemies and not in_own_defense_area(game, enemy.p):
+            # Ball is in our own defense area (only our keeper may enter —
+            # see `in_own_defense_area`'s docstring); this enemy is outside
+            # it and so cannot legally get any closer. Not a contester.
+            continue
+        return False
     return True
 
 
@@ -276,19 +309,24 @@ def enemy_goal_line(game: Game) -> tuple[float, float, float]:
     return goal_x, goal_y1, goal_y2
 
 
-def in_own_defense_area(game: Game, point: Vector2D) -> bool:
-    """True if `point` is inside our own defense area.
+def in_own_defense_area(game: Game, point: Vector2D, margin: float = 0.0) -> bool:
+    """True if `point` is inside our own defense area, optionally inflated by `margin`.
 
     Uses `field.my_defense_area` — the same geometry the CustomReferee's
     `DefenseAreaRule` derives from (`half_defense_area_depth`/`width`), so a
-    tactic deciding legality by this check agrees with the referee.
+    tactic deciding legality by this check (at the default `margin=0.0`)
+    agrees with the referee. `margin` widens the rectangle outward on both
+    the front edge and the sides — for callers reasoning about "close enough
+    to the box that an enemy parked at its edge can get no closer" rather
+    than the bare legal boundary itself (see `ball_is_loose`).
     """
     defense_area = game.field.my_defense_area
     front_x = float(defense_area[1][0])
     goal_x = game.field.my_goal_line[0][0]
     half_width = abs(float(defense_area[0][1]))
-    x_inside = (point.x - front_x) * (goal_x - front_x) >= 0.0
-    return x_inside and abs(point.y) <= half_width
+    sign = 1.0 if (goal_x - front_x) >= 0.0 else -1.0
+    x_inside = sign * (point.x - front_x) >= -margin
+    return x_inside and abs(point.y) <= half_width + margin
 
 
 def ball_in_own_defense_area(game: Game) -> bool:
