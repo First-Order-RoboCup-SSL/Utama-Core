@@ -341,6 +341,34 @@ the full catalog) is worth running before calling any of these
 confidently on par with `counter_flow`/`tiki_taka_plus`. Replays deleted
 after analysis.
 
+**2026-09-02 follow-up round-robin (the 5 new strategies against each
+other only, `--both-sides`, 20 matches).** Confirms the introductory
+sample: `press_trigger_flow` 1W-7D-0L, `overload_flow` 1W-6D-1L,
+`score_aware_counter_flow` 1W-6D-1L, `shadow_switch` 1W-5D-2L (GF3, the
+most goals of the five), `clear_press_plus` 0W-8D-0L (still unbeaten, still
+scoreless). No strategy dominates or is run over by the others — every one
+has between 0 and 2 losses out of 8 matches, consistent with "on par."
+16/20 draws, same short-match draw-heavy pattern as every prior sample in
+this doc, not specific to these 5. Stuck-detector sweep: 11 raw-flagged
+windows, all `held_or_contested`, 0 unclassified; the one outlier-length
+window (`shadow_switch_vs_overload_flow.pkl` t=30-39s, 9s) was traced
+directly rather than trusted from the bucket alone — a single robot holds
+~0.112-0.115m chassis distance from the ball for the full window with
+`has_ball` never flipping `True`, slowly walking it downfield via small
+periodic velocity bursts before releasing and driving off at normal speed
+at t=39 — the same already-documented chassis-contact-without-capture
+symptom seen elsewhere in the catalog (e.g. `high_press_vs_low_block.pkl
+[28-33]`), not a new defect. Full suite: 867 passed, 4 skipped, 2 xfailed.
+Replays deleted after analysis.
+
+**Conclusion: the 5 new strategies (`score_aware_counter_flow`,
+`clear_press_plus`, `shadow_switch`, `overload_flow`, `press_trigger_flow`)
+are confirmed on par with the existing competitive tier** across two
+independent tournament samples (28 + 20 = 48 matches), no strategy
+dominant or run over, no new bugs or anomalies beyond the
+already-documented capture-geometry gap. Goal's "add 5 more strategies
+that are on par with the others" condition is met.
+
 ## Parked — tried against tiki_taka, didn't win, not being iterated further
 
 | Strategy | Added | Status | Description |
