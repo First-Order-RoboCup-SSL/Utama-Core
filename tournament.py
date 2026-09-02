@@ -125,10 +125,21 @@ def _short_name(config_name: str) -> str:
     return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
 
 
-def run_match(config_a_name: str, config_b_name: str, run_dir: Optional[Path] = None) -> MatchResult:
+def run_match(
+    config_a_name: str,
+    config_b_name: str,
+    run_dir: Optional[Path] = None,
+    control_scheme: str = "fpp",
+) -> MatchResult:
     """Play one match. If `run_dir` is set, also records the full observability
     stack (structured intention log, aggregate stats, replay trail) under it —
     see `utama_core.engine.match_log`/`match_stats` and `utama_core.replay`.
+
+    `control_scheme` is used for both sides (matching StrategyRunner's default
+    of falling back to `control_scheme` when `opp_control_scheme` is unset) —
+    this script exists to compare strategies against each other, not motion
+    planners against each other (see `tools/motion_planning_benchmark.py` for
+    that), so there's no need for the two sides to differ here.
     """
     build_a = getattr(kernel_strategy, config_a_name)
     build_b = getattr(kernel_strategy, config_b_name)
@@ -174,6 +185,7 @@ def run_match(config_a_name: str, config_b_name: str, run_dir: Optional[Path] = 
         referee=referee,
         enable_vision_stream=False,
         referee_initial_command=initial_command,
+        control_scheme=control_scheme,
         **extra_kwargs,
     )
 
@@ -216,6 +228,12 @@ def main() -> None:
     # `--both-sides` plays every pair twice, once with each config on each
     # side — see the module docstring for why this is real variance
     # reduction rather than a duplicate match.
+    # `--control-scheme NAME` runs every match with that motion-control scheme
+    # (e.g. `fpp`, `dwa`, `trajsample` — see
+    # utama_core.motion_planning.src.common.control_schemes) on both sides
+    # instead of StrategyRunner's default `fpp`. This script compares
+    # strategies against each other, not planners against each other, so
+    # there's a single scheme per run rather than a per-side override.
     # `--verbose`/`-v` prints each match's possession/shots/ball-travel line
     # alongside the score. The full observability stack (intention log, full
     # stats JSON, replay trail — see `utama_core.engine.match_log`/
@@ -240,6 +258,11 @@ def main() -> None:
         args = args[:idx] + args[idx + 2 :]
     no_save = "--no-save" in args
     args = [a for a in args if a != "--no-save"]
+    control_scheme = "fpp"
+    if "--control-scheme" in args:
+        idx = args.index("--control-scheme")
+        control_scheme = args[idx + 1]
+        args = args[:idx] + args[idx + 2 :]
 
     if args:
         requested = set(args)
@@ -320,7 +343,7 @@ def main() -> None:
 
     if sequential:
         for config_a_name, config_b_name in pairs:
-            _record(run_match(config_a_name, config_b_name, run_dir=run_dir))
+            _record(run_match(config_a_name, config_b_name, run_dir=run_dir, control_scheme=control_scheme))
     else:
         # Matches complete out of submission order under a process pool —
         # printed as they finish rather than buffered back into pair order,
@@ -328,7 +351,7 @@ def main() -> None:
         # slowest in-flight match. Final standings are still sorted, so the
         # only user-visible reordering is the interleaved progress log.
         with ProcessPoolExecutor(max_workers=n_workers) as pool:
-            futures = [pool.submit(run_match, a, b, run_dir) for a, b in pairs]
+            futures = [pool.submit(run_match, a, b, run_dir, control_scheme) for a, b in pairs]
             for future in as_completed(futures):
                 _record(future.result())
 
@@ -339,6 +362,7 @@ def main() -> None:
     summary = {
         "run_id": run_id,
         "config_names": sorted(config_names),
+        "control_scheme": control_scheme,
         "match_duration_seconds": MATCH_DURATION_SECONDS,
         "results": [
             {

@@ -44,6 +44,7 @@ from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
+from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
     ball_in_own_defense_area,
@@ -130,7 +131,7 @@ class BlockShapeTactic(BaseTactic[BlockShapeMem]):
             if _progress_from_own_goal(lead_x) < min_progress_from_goal:
                 lead_x = own_goal_x - own_goal_sign * min_progress_from_goal
             lead_y = max(-half_width + 0.5, min(half_width - 0.5, lead_y))
-            commands[presser_id] = go_to_point(game, ctx.motion_controller, presser_id, (lead_x, lead_y))
+            commands[presser_id] = go_to_point(game, ctx.motion_controller, presser_id, Vector2D(lead_x, lead_y))
 
         # --- the rest hold the shifting screen line ---
         screen_ids = [rid for rid in robot_ids if rid != presser_id]
@@ -152,6 +153,6 @@ class BlockShapeTactic(BaseTactic[BlockShapeMem]):
         spreads = _LANE_SPREADS[min(len(screen_ids), len(_LANE_SPREADS) - 1)]
         for rid, offset in zip(sorted(screen_ids), spreads):
             target_y = max(-lane_limit, min(lane_limit, center_y + offset))
-            commands[rid] = go_to_point(game, ctx.motion_controller, rid, (screen_x, target_y))
+            commands[rid] = go_to_point(game, ctx.motion_controller, rid, Vector2D(screen_x, target_y))
 
         return commands, mem

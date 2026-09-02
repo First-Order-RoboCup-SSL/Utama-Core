@@ -150,6 +150,18 @@ def _flatten_query_trajectory(trajectory) -> tuple:
     return leg1_args, switch_t, leg2_args, trajectory.duration
 
 
+_BALL_RADIUS = 0.0215
+
+# How close `plan()`'s target must be to the ball's current position for the
+# ball to be exempted from that call's own obstacle set (see `plan()`'s
+# ball-exemption comment). Generous relative to `go_to_ball`'s own overshoot
+# distances (`_DRIBBLE_OVERSHOOT_M`/`_APPROACH_OVERSHOOT_M`, both well under
+# a robot radius) so every real ball-fetch target clears it, while still
+# excluding a target that merely happens to be somewhere else on the field
+# near where the ball currently sits.
+_BALL_TARGET_EXEMPTION_RADIUS = 0.3
+
+
 def _flatten_obstacle_rows(
     obstacles: List[TimedObstacle],
 ) -> Tuple[List[list], List[list], List[list], List[list]]:
@@ -316,6 +328,15 @@ class TrajectorySamplingPlanner:
         # (more expensive, one extra copy) `np.concatenate` of two already-
         # stacked arrays every call.
         self._shared_obstacle_rows: Tuple[List[list], List[list], List[list], List[list]] = ([], [], [], [])
+        # The ball's own CV row, cached separately from `_shared_obstacle_rows`
+        # (which excludes it) under the same key -- see `_shared_obstacles_for_tick`
+        # and `plan()`'s ball-exemption comment for why the ball can't just be
+        # another entry in the always-included shared set: a robot whose
+        # target is the ball itself (every `go_to_ball` call) needs a
+        # collision-free path THROUGH the ball's position to make contact,
+        # while every other robot still needs the ball treated as a real
+        # obstacle (e.g. routing around a ball an enemy is dribbling).
+        self._shared_ball_row: Optional[list] = None
 
     def plan(
         self,
@@ -348,6 +369,35 @@ class TrajectorySamplingPlanner:
 
         teammate_rows = _flatten_obstacle_rows(teammate_obstacles)
         shared_static, shared_traj, shared_cv, shared_enemy = self._shared_obstacle_rows
+
+        # The ball is excluded from `shared_obstacles`/`shared_cv` above (see
+        # `_shared_obstacles_for_tick`'s docstring) and only added back in
+        # here, per-call, when THIS robot's target is somewhere else on the
+        # field -- never when the target is the ball itself. `go_to_ball`
+        # (the only caller that ever targets the ball) aims for a point
+        # slightly PAST the ball's centre so the robot actually makes contact
+        # (see that module's overshoot comment); treating the ball as a
+        # normal collision obstacle in that case means every candidate
+        # trajectory collides with it before reaching the target, so the
+        # planner never returns a clean path and falls back to whichever
+        # candidate merely survives longest -- which starves the residual
+        # emergency brake into treating a completely normal approach as an
+        # imminent collision. Confirmed live: a full competitive-tier
+        # tournament under trajsample scored 0-0 in all 36 matches with
+        # `has_ball` never true once, despite robots repeatedly closing to
+        # within ~0.13m of the ball and then visibly backing off instead of
+        # completing contact.
+        ball_row = self._shared_ball_row
+        if ball_row is not None:
+            ball_x, ball_y = ball_row[0], ball_row[1]
+            target_dx, target_dy = target_pos[0] - ball_x, target_pos[1] - ball_y
+            targeting_ball = math.hypot(target_dx, target_dy) <= _BALL_TARGET_EXEMPTION_RADIUS
+            if not targeting_ball:
+                shared_cv = shared_cv + [ball_row]
+                obstacles = obstacles + [
+                    ConstantVelocityObstacle(p0=(ball_x, ball_y), v=(ball_row[2], ball_row[3]), radius=ball_row[4])
+                ]
+
         combined_rows = (
             teammate_rows[0] + shared_static,
             teammate_rows[1] + shared_traj,
@@ -720,11 +770,17 @@ class TrajectorySamplingPlanner:
         self, game: Game, field_bounds: FieldBounds, exempt_defense_area: bool
     ) -> List[TimedObstacle]:
         """The tick-invariant portion of the full per-`plan()`-call obstacle
-        set -- enemies, ball, static field/defense-area geometry -- cached
-        across the several robots planned within one tick. See `__init__`'s
-        comment on `_shared_obstacle_cache_key` for why only this portion is
-        safe to cache (the teammate portion, built separately in `plan()`,
-        must stay per-robot-per-call).
+        set -- enemies, static field/defense-area geometry -- cached across
+        the several robots planned within one tick. See `__init__`'s comment
+        on `_shared_obstacle_cache_key` for why only this portion is safe to
+        cache (the teammate portion, built separately in `plan()`, must stay
+        per-robot-per-call).
+
+        Deliberately excludes the ball: unlike every other shared obstacle,
+        whether the ball should block a given robot's path depends on that
+        robot's OWN target (see `plan()`'s ball-exemption comment), so it
+        can't be part of the always-included cached set. Cached separately as
+        `self._shared_ball_row` under the same key instead.
         """
         cache_key = (game.ts, exempt_defense_area)
         if cache_key == self._shared_obstacle_cache_key:
@@ -741,13 +797,6 @@ class TrajectorySamplingPlanner:
                     radius=robot_radius,
                     v_max=self.v_max,
                     a_max=self.a_max,
-                )
-            )
-
-        if game.ball is not None:
-            obstacles.append(
-                ConstantVelocityObstacle(
-                    p0=(game.ball.p.x, game.ball.p.y), v=(game.ball.v.x, game.ball.v.y), radius=0.0215
                 )
             )
 
@@ -771,6 +820,10 @@ class TrajectorySamplingPlanner:
         self._shared_obstacle_cache_key = cache_key
         self._shared_obstacles = obstacles
         self._shared_obstacle_rows = _flatten_obstacle_rows(obstacles)
+        if game.ball is not None:
+            self._shared_ball_row = [game.ball.p.x, game.ball.p.y, game.ball.v.x, game.ball.v.y, _BALL_RADIUS]
+        else:
+            self._shared_ball_row = None
         return obstacles
 
     def _own_robot_obstacle(self, robot, radius: float, current_ts: float):

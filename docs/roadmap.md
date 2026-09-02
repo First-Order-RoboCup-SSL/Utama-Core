@@ -703,3 +703,111 @@ the full investigation narrative for anything already fixed lives in git log
     velocity would bite hardest), so whoever roots-causes the `mirror_swap`
     stall should check whether it's the same underlying mechanism before
     treating them as two separate fixes.
+
+    **`block_shape.py` `Vector2D`/tuple type-contract bug, fixed 2026-09-02.**
+    Found while running the first real competitive-strategy tournament under
+    `control_scheme="trajsample"` (`tournament.py`, which previously had no
+    `--control-scheme` flag at all — added this session, defaults to `fpp`,
+    unaffected). `BlockShapeTactic.tick()` (`utama_core/tactics/
+    block_shape.py`, used by `counter_flow`'s and other strategies'
+    defensive screen) called `go_to_point(..., (lead_x, lead_y))` and
+    `go_to_point(..., (screen_x, target_y))` — a raw tuple where the
+    signature declares `Vector2D` — at two call sites. FPP and DWA's
+    controllers happened to tolerate this silently; `TrajectorySamplingController.
+    calculate()`'s stricter `target_pos.x`/`.y` access crashed outright
+    (`AttributeError: 'tuple' object has no attribute 'x'`), which is what
+    surfaced it. Fixed by wrapping both call sites in `Vector2D(...)`.
+    Verified: the block_shape/all_tactics test subset (44 passed) and the
+    full suite (870 passed, 4 skipped, 1 xfailed) both clean before and
+    after.
+
+    **Ball treated as an unconditional collision obstacle for the fetching
+    robot itself — found and fixed 2026-09-02, the actual reason trajsample
+    scored zero goals in every match it ever played.** After the
+    `block_shape.py` fix unblocked the tournament, all 36 matches across the
+    full competitive-tier round-robin (`counter_flow`, `tiki_taka`,
+    `zone_fluid`, `tiki_taka_plus`, `score_aware_zone_flow`,
+    `score_aware_counter_flow`, `clear_press_plus`, `shadow_switch`,
+    `overload_flow`) came back 0-0 — not merely goalless, but with
+    `ball_travel_m: 0.02` in every single match (the ball moved ~2cm total
+    across a full 65s match) and `has_ball` never `True` once, despite
+    robots repeatedly closing to within ~0.13m of the ball before visibly
+    backing away instead of completing contact. Traced via
+    `render_window()` (per `docs/STRATEGY_DEVELOPMENT.md`'s Observability
+    section) plus direct `has_ball`/distance checks on the replay frames
+    (per the standing practice of never trusting a rendered image alone for
+    root-causing a stuck/frozen state) — root cause: `_shared_obstacles_for_tick`
+    (`utama_core/motion_planning/src/trajsampling/planner.py`) added the
+    ball as an unconditional `ConstantVelocityObstacle` (radius 0.0215m) for
+    every robot's obstacle set, with no exemption for the robot whose
+    current target IS the ball. `go_to_ball` (`utama_core/skills/src/
+    go_to_ball.py`) deliberately targets a point slightly PAST the ball's
+    centre (`_DRIBBLE_OVERSHOOT_M`) so the robot's motion controller keeps
+    driving until actual physical contact — its own module comment says
+    this overshoot exists "so the DWA keeps driving until the robot makes
+    contact," an assumption that had never been checked against trajsample
+    before this session, since trajsample had never previously been run
+    through a real ball-fetching strategy (only synthetic point-to-point
+    scenarios: `mirror_swap`, the standardized benchmark suite, and this
+    session's earlier informal head-to-head kernel-strategy match — which in
+    hindsight almost certainly hit the exact same bug, unnoticed because
+    that comparison never checked `ball_travel_m`/`has_ball` directly).
+    Under trajsample, every candidate trajectory toward that overshoot point
+    necessarily collides with the ball's own collision circle before
+    reaching it, so `_first_collision` reports a collision on essentially
+    every candidate and `plan()` falls back to "whichever candidate merely
+    survives longest" instead of a clean approach — which in turn starves
+    `TrajectorySamplingController`'s residual closing-speed emergency brake
+    into treating a completely normal ball-approach as an imminent
+    collision, producing the observed approach-then-retreat pattern.
+
+    **Fixed** by excluding the ball from the always-included per-tick shared
+    obstacle cache and re-adding it back in per-`plan()`-call, per-robot,
+    only when that call's own `target_pos` is farther than
+    `_BALL_TARGET_EXEMPTION_RADIUS` (0.3m, generous relative to
+    `go_to_ball`'s own sub-robot-radius overshoot distances) from the ball's
+    current position — so a robot fetching the ball plans straight through
+    it as intended, while every other robot (including one routing near a
+    ball an enemy is actively dribbling) still treats it as a real,
+    priority-respecting obstacle. New fields `_shared_ball_row`/
+    `_BALL_RADIUS`/`_BALL_TARGET_EXEMPTION_RADIUS`; `_shared_obstacles_for_tick`'s
+    docstring and `plan()`'s own inline comment both explain the mechanism
+    for a future reader. Verified: full `motion_planning` suite unchanged
+    (73 passed, 4 xfailed, byte-identical to pre-fix) — this fix only
+    changes behavior when a target is near the ball, never touched by any
+    existing test; a smoke-tested single match went from
+    `ball_travel_m=0.02` (pre-fix) to `ball_travel_m=1.9` with `has_ball`
+    firing 3,549 times (post-fix); the full 36-match tournament re-run
+    confirmed this generalizes across every strategy pairing —
+    `ball_travel_m` ranged 1.07–15.63m (mean 5.48m) instead of a flat 0.02m,
+    possession splits became matchup-dependent instead of a fixed ~97.6%/
+    2.4% pattern, and 2 real shots were recorded (0 before).
+
+    **Still open, found while verifying the fix above — a real, separate
+    second bug, not yet root-caused.** The re-run tournament still scored
+    0-0 in all 36 matches despite the ball now genuinely moving and being
+    contested. Tracing one match directly (`counter_flow_vs_tiki_taka.pkl`,
+    the same pairing smoke-tested above): one robot (`friendly` id 1)
+    registers `has_ball=True` for 3,544 of 3,601 frames in the 60s of live
+    play — essentially the ENTIRE match, continuously, with only 7 total
+    possession transitions recorded across the whole game and 0 shots taken
+    by either side. This is not healthy give-and-go possession (which
+    should show many short holds/passes) — it looks like the ball carrier
+    permanently locks onto the ball and never transitions to a
+    shooting/passing phase at all under trajsample, which fully explains why
+    every match is scoreless even now that the ball is genuinely in play.
+    Not yet investigated: whether this is (a) a tactic-level phase-transition
+    condition (e.g. a shot-readiness or pass-decision check) tuned against
+    FPP/DWA's carrot-following motion profile that never triggers against
+    trajsample's direct-velocity output, (b) the dribble-overshoot geometry
+    itself now keeping the robot glued in permanent contact rather than ever
+    clearing the dribble sensor's threshold, or (c) something else entirely
+    — genuinely unknown, flagged rather than guessed at. Whoever picks this
+    up should start from the same `counter_flow_vs_tiki_taka` replay
+    (regenerate via `tournament.py counter_flow tiki_taka --control-scheme
+    trajsample`) and trace the carrier robot's tactic/phase state
+    (`.intentions.jsonl`) alongside its `has_ball` timeline, the same method
+    that found this. Until this is fixed, trajsample should not be treated
+    as competitively viable for real strategy play even though its
+    point-to-point motion planning (per the benchmark suite above) is
+    otherwise reasonable.
