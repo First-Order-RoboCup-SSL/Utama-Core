@@ -765,3 +765,83 @@ suite: 867 passed, 4 skipped, 2 xfailed. Replay deleted after analysis.
 **Cumulative result, updated: six independent post-fix tournament samples,
 193 matches total, zero new bugs found beyond the one shielding fix.**
 This re-run confirms rather than changes the prior convergence call.
+
+**New real bug found 2026-09-02, full-length (600s) tournament of the 5
+new strategies — cross-tactic ball-target collision after a free-kick
+restart freezes the rest of the match.** Running `full_match_tournament.py`
+against the 5 new strategies (`score_aware_counter_flow`,
+`clear_press_plus`, `shadow_switch`, `overload_flow`, `press_trigger_flow`)
+at full length (600s, not the 65s quick-tournament length) surfaced a
+window the stuck-detector had never seen the shape of before:
+`clear_press_plus_vs_shadow_switch_LK.pkl` flagged two adjacent merged
+windows spanning t=237-599s — effectively the entire second half of the
+match, ~360s, dwarfing every previously-seen window (typically 3-10s).
+Traced directly:
+
+- t=205.77s: `OutOfBoundsRule`/a defense-area-encroachment rule fires
+  `STOP` then `FORCE_START` ("Yellow attacker in blue defense area"),
+  placing the ball at exactly `(4.25, 1.019)` — just outside the enemy
+  defense box's `y` bound (`half_defense_area_width=1`) by 0.019m, so
+  `ball_in_enemy_defense_area` is `False` and the ball is fair game to
+  fetch directly.
+- At the same tick, `clear_press_plus`'s picker has robot 1 permanently
+  assigned to `"clear"` (`ClearBallTactic`, the `ordered[:1]` branch of
+  `_clear_press_plus_picker`/`_clear_danger_picker`) while robots [3,4,5]
+  thrash between `"press"`/`"attack"` a few times before settling on
+  `"attack"` (`GiveAndGoTactic`) right at the restart. Both `ClearBallTactic`
+  (robot 1) and `GiveAndGoTactic`'s carrier-fetch branch (robot 4, picked
+  from [3,4,5]) call `go_to_ball` **independently, for the same physical
+  ball, with no cross-tactic awareness of each other** — each is
+  individually correct in isolation (a genuinely loose ball after a
+  restart is exactly what both tactics exist to fetch), but nothing in the
+  kernel scheduler or either tactic checks whether another already-assigned
+  robot is also inbound for the identical ball.
+- Both robots converge from opposite sides and each stalls at almost
+  exactly `OBSTACLE_CLEARANCE` (`ROBOT_DIAMETER * 1.5 = 0.27m`) from the
+  ball — traced velocity smoothly decelerating to exactly `(0, 0)` and
+  staying there, not oscillating — because `FastPathPlanner`'s routing
+  exemption for a ball-adjacent obstacle (`planner.py`'s
+  `ball_adjacent_obstacles`/`routing_exempt`, added for the touchline/
+  defense-area retrieval case) is deliberately restricted to *static*
+  obstacles only (`routing_exempt = ball_adjacent_obstacles & static_keys`)
+  — extending it to robot obstacles was tried and reverted before (see
+  `docs/roadmap.md` item 11, "Ball-contest deadlock") because it exposed a
+  worse unarbitrated-dribbler-grind failure between two *enemy* robots.
+  Here the two robots are **teammates**, so that specific concern doesn't
+  apply, but the planner has no way to distinguish "two enemies grinding"
+  from "two teammates both sent for the same ball" — both look identical
+  to it (two robot obstacles near the target). Once both robots are
+  mutually parked at `OBSTACLE_CLEARANCE`, the ball never moves again for
+  the remaining ~394 seconds of the match (confirmed to the literal last
+  frame, t=600.00s) — no goal, no further stoppage, no recovery.
+- This is a different mechanism from every other bug found this session:
+  not a planner local-minimum on a *static* obstacle (the wall dead-end
+  fix), not an oscillation the stuck-detector's FFT check was built to
+  catch (this is dead-still, zero velocity, no repeating frequency), and
+  not the shielding hysteresis (no enemy is within `CONTEST_RANGE` of
+  either robot — confirmed directly, nearest enemy is 0.632m away). It's a
+  **tactic-coordination gap**: nothing in `KernelSchedulerStrategy` or any
+  individual tactic checks "is some other already-assigned robot also
+  converging on this exact ball" before calling `go_to_ball`.
+- Only surfaced at full match length: a 65s quick-tournament match never
+  runs long enough after a mid-match restart for this exact
+  free-kick-placement-plus-cross-tactic-assignment coincidence to occur and
+  then sit unrecovered for hundreds of seconds — the quick-tournament
+  samples this session ran earlier (163+ matches) never showed this
+  pattern, consistent with it needing both a specific restart geometry and
+  enough remaining match time to make the frozen tail obvious.
+- **Not yet fixed.** Candidate fix directions (not yet attempted, deserves
+  its own investigation rather than a rushed patch): (a) a shared
+  "ball already claimed" flag at the kernel-scheduler level so a second
+  tactic's `go_to_ball` call for an already-being-fetched ball backs off
+  or holds instead of racing to the same point — the most general fix,
+  but a new cross-tactic coordination primitive that doesn't exist
+  anywhere else in this codebase yet; (b) tighten `_clear_press_plus_picker`
+  (and `_clear_danger_picker` it inherits from) so the `"clear"` branch and
+  the `"attack"`/`"press"` branches are mutually exclusive on a genuinely
+  loose ball, not just on "deep in our own third" — narrower, but only
+  fixes this one strategy's picker, not the underlying gap any other
+  two-tactic combination could hit the same way. Regression test should
+  reproduce this exact restart geometry (ball at `(4.25, 1.019)`, two
+  robots from different tactics both targeting it) rather than a synthetic
+  simplification.
