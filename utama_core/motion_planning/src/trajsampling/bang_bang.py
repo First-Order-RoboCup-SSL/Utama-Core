@@ -65,7 +65,7 @@ class BangBang1D:
         # away-velocity, then plans normally from the point it would stop.
         if v0_signed < 0:
             t_kill = -v0_signed / a_max
-            d_kill = -(v0_signed * v0_signed) / (2 * a_max)  # positive: distance lost while killing v0
+            d_kill = (v0_signed * v0_signed) / (2 * a_max)  # positive: distance lost while killing v0
             d_eff = d + d_kill
             v0_eff = 0.0
         else:
@@ -143,16 +143,20 @@ class BangBang1D:
             d_signed = v0_signed * t + 0.5 * a * t * t
             return self.p0 + sign * d_signed, v_signed * sign
 
-        d_kill = -(v0_signed * v0_signed) / (2 * a) if v0_signed < 0 else 0.0
+        # Signed net displacement during the kill phase (negative: the robot
+        # moves backward, away from the target, while shedding v0). This is
+        # the mirror image of `compute`'s `d_kill`, which is defined as the
+        # positive magnitude of that same distance for use in `d_eff`.
+        d_kill_signed = -(v0_signed * v0_signed) / (2 * a) if v0_signed < 0 else 0.0
         v_after_kill = 0.0 if v0_signed < 0 else v0_signed
         t_rel = t - t_kill
 
         if t < self.t1:
             v_signed = v_after_kill + a * t_rel
-            d_signed = d_kill + v_after_kill * t_rel + 0.5 * a * t_rel * t_rel
+            d_signed = d_kill_signed + v_after_kill * t_rel + 0.5 * a * t_rel * t_rel
             return self.p0 + sign * d_signed, v_signed * sign
 
-        d_acc = d_kill + v_after_kill * (self.t1 - t_kill) + 0.5 * a * (self.t1 - t_kill) ** 2
+        d_acc = d_kill_signed + v_after_kill * (self.t1 - t_kill) + 0.5 * a * (self.t1 - t_kill) ** 2
         v_peak = abs(self.v_cruise)
 
         if t < self.t2:
