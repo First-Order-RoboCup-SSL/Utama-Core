@@ -895,3 +895,85 @@ Traced directly:
   goal-only-release `is_committed()` and no phase timeout is a plausible
   candidate for the same bug shape, and is worth auditing proactively
   rather than waiting for another live freeze to find the next one.
+
+**Third, distinct freeze mechanism found and fixed 2026-09-02 — a ball
+dead in the gap between two teams' movement-legality zones, claimed by
+neither.** A fresh full-length (600s) tournament of the *original* 5
+competitive strategies (`counter_flow`, `tiki_taka`, `zone_fluid`,
+`counter_press`, `tiki_taka_plus`, both fixes above applied) surfaced
+`tiki_taka_vs_zone_fluid_Rk.pkl`, a `corner_boundary`-classified window at
+t=540-599s (the stuck-detector sweep's rest-of-match tail again). Traced
+with a custom instrumented repro (a `FakeGame` built from the replay
+frame, calling `FastPathPlanner._path_to` and the relevant tactic geometry
+helpers directly, from *both* teams' perspectives):
+
+- Ball dead at `(-4.253, 1.030)`, `y` just 0.0305m outside `zone_fluid`'s
+  own defense-area boundary (`half_defense_area_width=1.0`) — so
+  `ball_in_own_defense_area(game_zf)` is `False`, and `goalkeep.py`'s
+  `_ball_needs_retrieval` (which requires the ball strictly *inside* the
+  box) never sends the keeper.
+- The `tiki_taka` attacker approaching from the other side is, from its own
+  perspective, correctly barred by `FastPathPlanner`'s
+  `_project_outside_rect`, which clamps any attack target back to the
+  boundary of the *opponent's* defense area during live play
+  (`NORMAL_START`) — correct SSL rule enforcement, not a bug (confirmed by
+  direct trace: the planner produced a 1-segment direct path, correctly
+  clamped, no oscillation — ruled out as the mechanism before looking
+  further).
+- The actual gap: `zone_fluid`'s own `ShadowAndMarkTactic`
+  (`utama_core/tactics/shadow_and_mark.py`) only assigns a ball-retriever
+  when `ball_is_loose(game)` is `True` — and `ball_is_loose`
+  (`utama_core/shared/pass_and_score_geometry.py`) treated *any* enemy
+  within `_LOOSE_BALL_CONTEST_RANGE` (1.5m) as "still contesting" the
+  ball, with no check on whether that enemy could actually reach it. The
+  `tiki_taka` attacker was parked ~0.22m from the ball, right at the
+  defense-area boundary it's legally barred from crossing — permanently
+  "close enough to count as contesting" by the old check, yet permanently
+  unable to close the last ~0.25m. Neither team's logic ever sent a robot
+  to the ball again for the rest of the match (confirmed to the literal
+  last frame).
+- This is a third, distinct mechanism from both bugs above: not a picker
+  collision, not a stale engine-level `is_committed()` pin — a legal
+  geometric boundary (the defense-area keep-out, working exactly as
+  intended) combined with an over-broad "is someone contesting this ball"
+  heuristic on the *other* team's side, creating a dead zone neither team's
+  retrieval logic was written to notice.
+- **Fixed 2026-09-02**: `ball_is_loose` now skips an in-range enemy as a
+  non-contester when the ball is at or near (within the standard
+  `2*ROBOT_RADIUS + 0.05` "just outside the box" margin used elsewhere,
+  e.g. `clamp_outside_own_defense_area`) our own defense area, and that
+  enemy is not itself inside the area (i.e. it's legally barred from
+  closing the gap). `in_own_defense_area` gained an optional `margin`
+  parameter (default `0.0`, every pre-existing call site unaffected) to
+  support this. Once `ball_is_loose` returns `True` again in this
+  scenario, `ShadowAndMarkTactic`'s existing retriever-assignment path
+  handles both ball placements correctly without further changes: it
+  already holds at `own_defense_area_exit_point` when the ball is
+  strictly inside the box, and calls `go_to_ball` directly (a normal,
+  legal fetch) when the ball is merely near it, which is exactly this
+  scenario. Regression tests:
+  `utama_core/tests/shared/test_pass_and_score_geometry.py` — 5 new tests,
+  including one at the exact traced scale (ball 0.03m outside, enemy at
+  the 0.22m boundary). Full suite green: 877 passed (872 + 5 new), 4
+  skipped, 2 xfailed.
+  **Aggregate confirmation, 2026-09-02**: a fresh full-length (600s)
+  5-strategy tournament with this fix applied (40 matches,
+  `counter_flow`/`tiki_taka`/`zone_fluid`/`counter_press`/`tiki_taka_plus`)
+  swept clean on both freeze-catching buckets: `defense_box: 0`,
+  `corner_boundary: 0`. `held_or_contested: 245` (the established benign
+  pattern) plus a single `unclassified` 3s window
+  (`tiki_taka_plus_vs_zone_fluid_LK.pkl [440-443]`), individually traced:
+  ball dead-still with the nearest robot ~2.2m away at the window's start,
+  closing steadily to 0.9m by its end — an ordinary brief gap before a
+  robot arrives, not a stall (the window is exactly the detector's 3s
+  minimum, i.e. it never grew, unlike a genuine freeze). This is the same
+  "fresh tournament + stuck-detector sweep" pattern that confirmed the
+  picker fix and the decoy/overload fix above; all three freezes found
+  this session across three independent mechanisms (picker collision,
+  stale engine-level pin, contested-ball legality gap) are now confirmed
+  fixed in aggregate. Replays deleted after analysis. This session's
+  incidental finding that `counter_flow` scored near-zero goals in one
+  40-match sample (noted when this bug's investigation began) did not
+  reproduce in this fresh sample — `counter_flow` scored and won/drew
+  normally throughout, consistent with ordinary match-to-match variance
+  rather than a regression from any fix landed this session.
