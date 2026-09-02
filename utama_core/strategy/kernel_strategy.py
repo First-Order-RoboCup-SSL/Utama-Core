@@ -1544,6 +1544,111 @@ def _clear_danger_picker(
     return {}
 
 
+# ---------------------------------------------------------------------------
+# score_aware_counter_flow (2026-09-02 addition)
+#
+# `score_aware_zone_flow` validated the scoreline-aware attack/defense split
+# shift as a free improvement grafted onto `zone_fluid`'s picker with zero
+# other changes -- but `zone_fluid` is one of the catalog's weaker bases
+# (2W-6D-5L in the 2026-08-21 backfill). This strategy applies the identical
+# mechanism (shrink the attacking commitment when ahead late, grow it when
+# behind late) to `counter_flow`'s picker instead -- the catalog's only
+# undefeated strategy, 0L across every backfill/tournament to date. Every
+# other axis is left untouched: same 3 tactics (`GiveAndGoTactic`/
+# `PressAndContainTactic`/`BlockShapeTactic`), same sticky possession-edge
+# hysteresis, same 3/2 split everywhere except the late-game scoreline
+# branch -- so any observed difference from plain `counter_flow` is
+# attributable to the new scoreline input alone, not a different base.
+# ---------------------------------------------------------------------------
+
+
+def _score_aware_counter_flow_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    applicable_tactic_ids: frozenset[str],
+) -> dict[str, frozenset[RobotId]]:
+    """`_counter_flow_picker`'s allocation, with the attacking commitment size
+    shifted late in a half by whether we're ahead or behind -- see
+    `_score_aware_zone_flow_picker` for the identical mechanism applied to a
+    different base.
+
+    Not late, tied, or score unreadable: identical to `_counter_flow_picker`
+    (3 attack/2 block when we hold the edge, 3 press/2 block when we don't).
+    Late and ahead: only 2 attack, 3 block -- protect the lead behind a
+    heavier screen. Late and behind: 4 attack, 1 block -- chase an
+    equaliser. The press branch (losing possession) is untouched by score:
+    a team already chasing the ball has nothing to protect or chase by
+    committing fewer/more pressers, only by out-scoring once it regains the
+    ball, which the attack branch already covers.
+    """
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    prev_partition = prev_partition or {}
+    currently_attacking = bool(prev_partition.get("attack"))
+    friendly_edge = _friendly_closer_to_ball(game)
+    if currently_attacking:
+        losing = friendly_edge is False
+    else:
+        losing = friendly_edge is not True
+
+    attack_ok = "attack" in applicable_tactic_ids
+    press_ok = "press" in applicable_tactic_ids
+    block_ok = "block" in applicable_tactic_ids
+
+    if losing:
+        if press_ok:
+            return _allocate_ordered(ordered, "press", 3, "block" if block_ok else None)
+        if block_ok:
+            return _allocate_ordered(ordered, "block", len(ordered))
+        if attack_ok:
+            return _allocate_ordered(ordered, "attack", len(ordered))
+        return {}
+
+    if attack_ok:
+        attackers = 3
+        if _is_late_in_half(game):
+            score_diff = _friendly_score_diff(game)
+            if score_diff is not None and score_diff > 0:
+                attackers = 2
+            elif score_diff is not None and score_diff < 0:
+                attackers = 4
+        return _allocate_ordered(ordered, "attack", attackers, "block" if block_ok else None)
+    if block_ok:
+        return _allocate_ordered(ordered, "block", len(ordered))
+    return {}
+
+
+def build_score_aware_counter_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """`counter_flow` (the catalog's only undefeated strategy) with the same
+    scoreline-aware attack-commitment shift `score_aware_zone_flow` validated
+    on a weaker base. Same three tactics/slots as `counter_flow`
+    (`GiveAndGoTactic`/`PressAndContainTactic`/`BlockShapeTactic`) and the
+    same sticky possession-edge hysteresis -- only the picker's late-game
+    attack-count decision differs. See `_score_aware_counter_flow_picker`.
+
+    Returns a `build_kernel_strategy(motion_controller)` callable suitable
+    for `AbstractStrategy`'s constructor argument of the same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = TickContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={
+                "attack": GiveAndGoTactic(),
+                "press": PressAndContainTactic(),
+                "block": BlockShapeTactic(),
+            },
+            partitioner=_score_aware_counter_flow_picker,
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
 def build_clear_danger_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """Safety-valve team: counter_flow's postures plus a danger-clearance valve.
 
@@ -1572,6 +1677,456 @@ def build_clear_danger_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
                 "block": BlockShapeTactic(),
             },
             partitioner=_clear_danger_picker,
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
+# ---------------------------------------------------------------------------
+# clear_press_plus (2026-09-02 addition)
+#
+# Stacks the catalog's two most validated single-wrinkle additions onto one
+# base instead of picking between them: `clear_danger`'s safety valve (a
+# deep-and-contested own-third clearance, the one situational gap no other
+# strategy fills) plus `tiki_taka_plus`'s final-third overload handoff (the
+# only other single-wrinkle addition with a confirmed independent win --
+# 10W-6D in its most recent tournament, clearing the field outright). The
+# two wrinkles fire in disjoint game states by construction (the valve needs
+# ball-deep-in-our-own-third-and-contested; the overload handoff needs
+# ball-in-the-final-third-and-ours), so stacking them should not create a
+# new conflict neither wrinkle's own validation run ever exercised.
+# ---------------------------------------------------------------------------
+
+
+def _clear_press_plus_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    applicable_tactic_ids: frozenset[str],
+) -> dict[str, frozenset[RobotId]]:
+    """`_clear_danger_picker`'s allocation, with `_tiki_taka_plus_picker`'s
+    final-third handoff grafted onto its attacking branch: when we hold the
+    ball and it is not deep-and-contested in our own third, the final third
+    hands off from the give-and-go trio to the 2-robot overload duet instead
+    of running give-and-go the length of the pitch. The clearance valve and
+    the losing-possession press/block branches are unchanged from
+    `_clear_danger_picker`.
+    """
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    prev_partition = prev_partition or {}
+    pinned_ids = {tid for tid, robots in prev_partition.items() if robots and not (robots & free_robots)}
+
+    clear_ok = "clear" not in pinned_ids and "clear" in applicable_tactic_ids
+    press_ok = "press" not in pinned_ids and "press" in applicable_tactic_ids
+    block_ok = "block" not in pinned_ids and "block" in applicable_tactic_ids
+    attack_ok = "attack" not in pinned_ids and "attack" in applicable_tactic_ids
+    overload_ok = "overload" not in pinned_ids and "overload" in applicable_tactic_ids
+
+    if clear_ok:
+        if len(ordered) == 1 or not block_ok:
+            return {"clear": frozenset(ordered)}
+        return {"clear": frozenset(ordered[:1]), "block": frozenset(ordered[1:])}
+
+    currently_attacking = bool(prev_partition.get("attack")) or bool(prev_partition.get("overload"))
+    friendly_edge = _friendly_closer_to_ball(game)
+    if currently_attacking:
+        losing = friendly_edge is False
+    else:
+        losing = friendly_edge is not True
+
+    if losing:
+        if press_ok:
+            return _allocate_ordered(ordered, "press", 3, "block" if block_ok else None)
+        if block_ok:
+            return {"block": frozenset(ordered)}
+        if attack_ok:
+            return {"attack": frozenset(ordered)}
+        return {}
+
+    zone = _ball_zone(game)
+    if zone == "final" and overload_ok:
+        return _allocate_ordered(ordered, "overload", 2, "block" if block_ok else None)
+    if attack_ok:
+        return _allocate_ordered(ordered, "attack", 3, "block" if block_ok else None)
+    if overload_ok:
+        return _allocate_ordered(ordered, "overload", len(ordered))
+    if block_ok:
+        return {"block": frozenset(ordered)}
+    return {}
+
+
+def build_clear_press_plus_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """`clear_danger` plus `tiki_taka_plus`'s final-third overload handoff.
+
+    Five concurrent slots -- `GiveAndGoTactic` ("attack"),
+    `DecoyOverloadTactic` ("overload"), `ClearBallTactic` ("clear"),
+    `PressAndContainTactic` ("press"), and `BlockShapeTactic` ("block") --
+    allocated by `_clear_press_plus_picker`: identical to `clear_danger`
+    except the attacking branch hands off from give-and-go to the overload
+    duet once the ball reaches the final third, the same swap
+    `tiki_taka_plus` validated on `tiki_taka`'s base.
+
+    Returns a `build_kernel_strategy(motion_controller)`
+    callable suitable for `AbstractStrategy`'s constructor argument of the
+    same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = TickContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={
+                "attack": GiveAndGoTactic(),
+                "overload": DecoyOverloadTactic(),
+                "clear": ClearBallTactic(),
+                "press": PressAndContainTactic(),
+                "block": BlockShapeTactic(),
+            },
+            partitioner=_clear_press_plus_picker,
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
+# ---------------------------------------------------------------------------
+# shadow_switch (2026-09-02 addition)
+#
+# `high_line_zone` paired `SwitchOfPlayTactic` with `BlockShapeTactic`'s zone
+# screen and stayed parked (2-7-4 in its best backfill) -- the screen denies
+# individual matchups, but the switch's carrier/pivot/runner relay still
+# needs several seconds to settle, which a genuinely contested match rarely
+# grants. `tiki_taka`'s `ShadowAndMarkTactic` defense is independently
+# proven viable (it's the top-tested strategy's own defense, 1W-8D-4L in
+# isolation but never the bottleneck -- every loss traced to the *attack*
+# side, not the shadow cover). This pairing -- switch's attack, shadow's
+# defense -- has never been tried: `high_line_zone` used switch with the
+# zone screen, `tiki_taka`/`tiki_taka_plus` used shadow with give-and-go.
+# Hypothesis: man-marking cover (proven to hold up on its own) may free the
+# switch attack to develop without the zone screen's own unproven defensive
+# contribution as a confound in either direction.
+# ---------------------------------------------------------------------------
+
+
+def _shadow_switch_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    applicable_tactic_ids: frozenset[str],
+) -> dict[str, frozenset[RobotId]]:
+    """Switch-attack, shadow-defense posture.
+
+    - The opponent has the ball: the whole team shadows/marks
+      (`ShadowAndMarkTactic`), same defensive shape `tiki_taka` already
+      validates.
+    - We have the ball: `SwitchOfPlayTactic` leads with 3 (the relay's
+      carrier/pivot/runner roles), 2 hold shadow cover behind it -- same
+      3/2 split shape as `high_line_zone`'s switch branch, defense slot
+      swapped.
+
+    Sticky possession edge, same fix `_high_line_zone_picker`/
+    `_counter_flow_picker` needed: the switch relay needs several seconds to
+    settle, which a tick-by-tick possession-edge re-read does not reliably
+    give it in a contested match. `prev_partition` ("did we hold switch last
+    tick") is the memory; require a clear possession loss to drop it.
+    """
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    prev_partition = prev_partition or {}
+    currently_attacking = bool(prev_partition.get("switch"))
+    friendly_edge = _friendly_closer_to_ball(game)
+    if currently_attacking:
+        losing = friendly_edge is False
+    else:
+        losing = friendly_edge is not True
+
+    switch_ok = "switch" in applicable_tactic_ids
+    defense_ok = "defense" in applicable_tactic_ids
+
+    if losing:
+        if defense_ok:
+            return _allocate_ordered(ordered, "defense", len(ordered))
+        if switch_ok:
+            return _allocate_ordered(ordered, "switch", len(ordered))
+        return {}
+
+    if switch_ok:
+        return _allocate_ordered(ordered, "switch", 3, "defense" if defense_ok else None)
+    if defense_ok:
+        return _allocate_ordered(ordered, "defense", len(ordered))
+    return {}
+
+
+def build_shadow_switch_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """Switch-of-play attack with man-marking cover -- a tactic pairing never
+    tried elsewhere in the catalog (`high_line_zone` paired the switch with
+    a zone screen; `tiki_taka`/`tiki_taka_plus` paired shadow-and-mark with
+    give-and-go). See the "shadow_switch" comment block above
+    `_shadow_switch_picker` for the full rationale.
+
+    Two concurrent slots -- `SwitchOfPlayTactic` ("switch") and
+    `ShadowAndMarkTactic` ("defense") -- allocated by `_shadow_switch_picker`
+    on a 3/2 split with sticky possession-edge hysteresis, matching the
+    settling time the switch relay needs.
+
+    Returns a `build_kernel_strategy(motion_controller)`
+    callable suitable for `AbstractStrategy`'s constructor argument of the
+    same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = TickContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={
+                "switch": SwitchOfPlayTactic(),
+                "defense": ShadowAndMarkTactic(),
+            },
+            partitioner=_shadow_switch_picker,
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
+# ---------------------------------------------------------------------------
+# overload_flow (2026-09-02 addition)
+#
+# Every existing possession-edge picker (including `_zone_flow_picker`,
+# which this strategy is otherwise identical to) reacts to a single tick's
+# edge read alone. `score_aware_zone_flow` proved a cheap graft onto that
+# same base is worth testing (the scoreline); this strategy grafts a
+# different, still-unused signal instead: how *long* the possession edge has
+# held, not just its current value. Rationale: `_zone_flow_picker`'s
+# give-and-go trio already builds patiently through the middle thirds --
+# committing a 4th attacker the instant the edge flips, before that
+# possession is actually secure, risks overextending into exactly the kind
+# of single-tick noise `_CLOSER_TO_BALL_MARGIN` and every sticky-edge picker
+# (`counter_flow`, `high_line_zone`, `shadow_switch`) already had to guard
+# against elsewhere. Only commit the extra body once the edge has held for a
+# real, sustained window.
+# ---------------------------------------------------------------------------
+
+# ~1.5s at the kernel's tick rate (60Hz, matching every other tick-count
+# constant in this file, e.g. `PressAndContainTactic`'s hysteresis window in
+# `docs/testing_gaps.md`'s shielding-fix entry) -- long enough to filter a
+# single contested-ball flicker, short enough that a genuine sustained
+# possession spell still gets the extra attacker well before a give-and-go
+# hop cycle completes.
+_POSSESSION_STREAK_TICKS = 90
+
+# Consecutive-possession-tick counter, keyed by nothing (a single team only
+# ever runs one `_overload_flow_picker` instance per process, unlike
+# `shielding.py`'s per-robot-id state) -- a `Partitioner` is a plain
+# function with no `mem` of its own, and `prev_partition`'s type is fixed to
+# `dict[str, frozenset[RobotId]]`, which cannot carry a tick count without
+# inventing a fake tactic id (rejected: `Strategy._validate_partition`/
+# `_slot_for` both raise `KeyError` on any key absent from the tactic
+# registry -- confirmed by reading both directly -- so a smuggled key would
+# crash on tick 1, not silently no-op). Module-level state, same pattern
+# `shielding.py`'s `_COMMITTED_ROBOTS` already establishes for picker/skill
+# memory the kernel's own plumbing has no channel for.
+_possession_streak: int = 0
+
+
+def _overload_flow_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    applicable_tactic_ids: frozenset[str],
+) -> dict[str, frozenset[RobotId]]:
+    """`_zone_flow_picker`'s allocation, with the own/mid-third give-and-go
+    attacker count growing from 3 to 4 only once the possession edge has
+    held for `_POSSESSION_STREAK_TICKS` consecutive ticks, instead of
+    reacting to the edge's current value alone.
+
+    Not late in a possession spell, losing, or in the final third:
+    identical to `_zone_flow_picker`. Final-third handoff to the overload
+    duet is unchanged (that tactic is a 2-role duet regardless of streak
+    length -- the streak only ever affects the own/mid-third give-and-go
+    count).
+    """
+    global _possession_streak
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    friendly_edge = _friendly_closer_to_ball(game)
+    losing = friendly_edge is not True
+    _possession_streak = 0 if losing else min(_possession_streak + 1, _POSSESSION_STREAK_TICKS)
+    streak = _possession_streak
+
+    defense_ok = "defense" in applicable_tactic_ids
+    givego_ok = "givego" in applicable_tactic_ids
+    overload_ok = "overload" in applicable_tactic_ids
+
+    if losing:
+        if defense_ok:
+            return _allocate_ordered(ordered, "defense", len(ordered))
+        if givego_ok:
+            return _allocate_ordered(ordered, "givego", len(ordered))
+        if overload_ok:
+            return _allocate_ordered(ordered, "overload", len(ordered))
+        return {}
+
+    zone = _ball_zone(game)
+    if zone == "final" and overload_ok:
+        return _allocate_ordered(ordered, "overload", 2, "defense" if defense_ok else None)
+    if givego_ok:
+        attackers = 4 if streak >= _POSSESSION_STREAK_TICKS else 3
+        return _allocate_ordered(ordered, "givego", attackers, "defense" if defense_ok else None)
+    if overload_ok:
+        return _allocate_ordered(ordered, "overload", len(ordered))
+    if defense_ok:
+        return _allocate_ordered(ordered, "defense", len(ordered))
+    return {}
+
+
+def build_overload_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """`zone_fluid` with a possession-*duration*-aware give-and-go attacker
+    count: 3 attackers as usual, growing to 4 only once the possession edge
+    has held for a sustained window (`_POSSESSION_STREAK_TICKS`), instead of
+    reacting to a single tick's edge read the way every other picker in the
+    catalog does. See the "overload_flow" comment block above
+    `_overload_flow_picker` for the full rationale.
+
+    Same three tactics/slots as `zone_fluid` (`GiveAndGoTactic`/
+    `DecoyOverloadTactic`/`ShadowAndMarkTactic`) -- only the picker's
+    attacker-count decision differs, so any observed difference from plain
+    `zone_fluid` is attributable to the streak requirement alone.
+
+    Returns a `build_kernel_strategy(motion_controller)` callable suitable
+    for `AbstractStrategy`'s constructor argument of the same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        # `_possession_streak` is module-level, not per-`Strategy` state (see
+        # its own docstring for why) -- a tournament worker process reuses
+        # its process across many matches (`tournament.py`'s
+        # `ProcessPoolExecutor`), so without this reset a match would start
+        # with whatever streak count the *previous* match on this worker
+        # ended at, silently giving `overload_flow` a false head start (or a
+        # false handicap) at kickoff. `_build` runs exactly once per match
+        # (`AbstractStrategy.__init__` calls it fresh every time), making
+        # this the natural per-match reset point.
+        global _possession_streak
+        _possession_streak = 0
+        ctx = TickContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={
+                "givego": GiveAndGoTactic(),
+                "overload": DecoyOverloadTactic(),
+                "defense": ShadowAndMarkTactic(),
+            },
+            partitioner=_overload_flow_picker,
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=ctx,
+        )
+
+    return _build
+
+
+# ---------------------------------------------------------------------------
+# press_trigger_flow (2026-09-02 addition)
+#
+# `counter_flow` presses with a fixed 3 robots any time pressing is
+# applicable at all, regardless of where on the pitch that press happens --
+# the same commitment whether the ball was lost at the halfway line or deep
+# in our own third. `_ball_zone` is already read by every zone-handoff
+# picker (`zone_fluid`, `tiki_taka_plus`, `high_line_zone`, ...) to change
+# the *attacking* pattern by zone, but no picker in the catalog uses it to
+# change the *press* commitment by zone -- this strategy is that missing
+# combination: counter_flow's proven engine, with the press going all-in
+# (every free robot, not just 3) specifically when the loss happens in our
+# own third, since a loose ball that close to our own goal is the one
+# situation where `clear_danger`'s own author-noted lesson ("ball control,
+# not territory, is the bottleneck") is most costly to get wrong. Everywhere
+# else (mid/final third losses, and every attacking-side branch), this is
+# byte-for-byte identical to `_counter_flow_picker`.
+# ---------------------------------------------------------------------------
+
+
+def _press_trigger_flow_picker(
+    game: Game,
+    free_robots: frozenset[RobotId],
+    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    applicable_tactic_ids: frozenset[str],
+) -> dict[str, frozenset[RobotId]]:
+    """`_counter_flow_picker`'s allocation, with an all-in press (every free
+    robot, not the usual 3+2 split) when the ball is lost specifically in
+    our own third. Mid/final-third losses and every attacking-side branch
+    are unchanged from `_counter_flow_picker` -- see that picker's
+    docstring for the shared attack/press/block rationale this one inherits
+    unmodified outside the own-third-press branch.
+    """
+    ordered = sorted(free_robots)
+    if not ordered:
+        return {}
+
+    prev_partition = prev_partition or {}
+    currently_attacking = bool(prev_partition.get("attack"))
+    friendly_edge = _friendly_closer_to_ball(game)
+    if currently_attacking:
+        losing = friendly_edge is False
+    else:
+        losing = friendly_edge is not True
+
+    attack_ok = "attack" in applicable_tactic_ids
+    press_ok = "press" in applicable_tactic_ids
+    block_ok = "block" in applicable_tactic_ids
+
+    if losing:
+        if press_ok:
+            zone = _ball_zone(game)
+            if zone == "own":
+                return _allocate_ordered(ordered, "press", len(ordered))
+            return _allocate_ordered(ordered, "press", 3, "block" if block_ok else None)
+        if block_ok:
+            return _allocate_ordered(ordered, "block", len(ordered))
+        if attack_ok:
+            return _allocate_ordered(ordered, "attack", len(ordered))
+        return {}
+
+    if attack_ok:
+        return _allocate_ordered(ordered, "attack", 3, "block" if block_ok else None)
+    if block_ok:
+        return _allocate_ordered(ordered, "block", len(ordered))
+    return {}
+
+
+def build_press_trigger_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+    """`counter_flow` with a zone-triggered all-in press: the usual 3-press/
+    2-block split everywhere, except an all-in press (every free robot) when
+    the ball is lost in our own third specifically. See the
+    "press_trigger_flow" comment block above `_press_trigger_flow_picker`
+    for the full rationale.
+
+    Same three tactics/slots as `counter_flow` (`GiveAndGoTactic`/
+    `PressAndContainTactic`/`BlockShapeTactic`) -- only the picker's
+    own-third press commitment differs, so any observed difference from
+    plain `counter_flow` is attributable to the zone-triggered press alone.
+
+    Returns a `build_kernel_strategy(motion_controller)`
+    callable suitable for `AbstractStrategy`'s constructor argument of the
+    same name.
+    """
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        ctx = TickContext(motion_controller=motion_controller)
+        return KernelSchedulerStrategy(
+            tactics={
+                "attack": GiveAndGoTactic(),
+                "press": PressAndContainTactic(),
+                "block": BlockShapeTactic(),
+            },
+            partitioner=_press_trigger_flow_picker,
             outfield_robot_ids=outfield_robot_ids,
             ctx=ctx,
         )
