@@ -86,6 +86,16 @@ worth checking for deliberately rather than trusting "it worked once."
   that gets silently undone within the same tick, if the reset-target phase's own logic
   immediately re-advances past it — check that a timeout reset actually sticks for at least
   one full tick before the tactic can re-advance.
+- **`is_committed()` is still a promise, not a suggestion — but the kernel now enforces a
+  deadline as a backstop, not a substitute.** `Strategy`'s `commitment_deadline_s`
+  constructor parameter (default `DEFAULT_COMMITMENT_DEADLINE_S` = 15s) releases a slot
+  whose tactic has stayed `is_committed()` continuously past the deadline *and* whose ball
+  hasn't moved ~5cm since the commitment began — a stall breaker, not a play-length cap, so
+  a commitment making real progress is never released just for running long. A deadline
+  release recorded in the match log (`"deadline release after Ns committed, ball moved
+  Xm"`) means your tactic has a missing release path — go fix the code path that should
+  have set `is_committed()` back to `False` — it does not mean the deadline itself should
+  be raised.
 - **Verify by tracing a real match, not by reading the phase-transition logic.** Bugs in
   this tactic were invisible from the code alone — `intercept_point()` computing a
   plausible-looking point that happened to be wrong, or a phase timeout resetting state
@@ -145,6 +155,25 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
   round-robin (e.g. `default` is excluded from the CLI sweep but reachable via `run_match`
   directly). Config names passed to `run_match` are the full factory name
   (`build_tiki_taka_kernel_strategy`), not the short catalog name (`tiki_taka`).
+- **In-match stall watchdog** (`utama_core.engine.match_stats`) — `MatchStatsAccumulator.
+  record_tick()` detects two stall shapes live, per tick, and records them as `StallEvent`s
+  in the finalized `MatchStats.stall_events` (serialized in `to_json()`/`summary.json`):
+  observations only, never fed back into gameplay.
+  - `RESTART_STALL` — a referee restart/stoppage command (anything but
+    `NORMAL_START`/`FORCE_START`) held continuously for more than 15 sim seconds without
+    auto-advancing back to live play.
+  - `COMMITTED_FROZEN` — the ball moving less than 5cm for more than 10 sim seconds during
+    live play while at least one kernel tactic slot is committed (`is_committed()`). Slot
+    commitment is passed in from `StrategyRunner._committed_tactics()`, which reuses
+    `kernel.Strategy.slot_status()` (already reachable the same way
+    `_push_bt_nodes_to_referee` reaches `_kernel_strategy`) — when that isn't available (a
+    BT-path strategy), this falls back to "ball frozen during live play" alone.
+  - Each event records its onset `sim_time`/`tick`/referee command and keeps updating one
+    `duration_s` for as long as the same stall persists, rather than one event per tick.
+  - `tournament.py` prints a "STALLS" section per run (match, kind, onset time, referee
+    command, committed tactic ids) and writes the same into `summary.json`; `--strict`
+    exits non-zero if any match in the run stalled. A heuristic backstop (possession pinned
+    100%/0% and `ball_travel_m < 1.0`) flags anything the watchdog itself might miss.
 
 ## Where things live
 

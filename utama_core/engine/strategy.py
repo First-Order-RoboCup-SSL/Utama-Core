@@ -53,6 +53,25 @@ from utama_core.tactics.goalkeeper import GoalkeeperTactic
 
 logger = logging.getLogger(__name__)
 
+# Default `commitment_deadline_s` (see `Strategy.__init__`): long enough that
+# no legitimate multi-phase tactic (a pass, a relay, a dribble-and-shoot
+# sequence) trips it under normal play, short enough that a genuinely stuck
+# commitment is a bounded hiccup rather than costing the rest of the match —
+# see the 566s frozen-match case in the design discussion this mechanism
+# responds to. Not derived from any single tactic's own timeout constants
+# (`hop_ticks`/`ticks_held`/etc.) on purpose: this is a kernel-level backstop
+# for when those per-tactic timeouts fail to fire, not a tuned replacement
+# for any one of them.
+DEFAULT_COMMITMENT_DEADLINE_S = 15.0
+
+# A commitment is only treated as "stalled" (eligible for deadline release)
+# if the ball has moved less than this since the commitment began. A
+# commitment making real progress -- passing, dribbling toward goal -- keeps
+# moving the ball well past this within the deadline window; this exists
+# purely to distinguish "stuck" from "still working," not to cap how long a
+# genuinely progressing play may run.
+_STALL_BALL_MOVEMENT_M = 0.05
+
 # A Partitioner partitions the *free* outfield pool (robots not currently
 # pinned by a committed tactic slot — see `Strategy._choose_partition`) into
 # named tactic slots every tick, given the game state, the free robot pool,
@@ -88,6 +107,15 @@ class _TacticSlot:
     mem: object = None
     assigned_robots: frozenset[RobotId] = field(default_factory=frozenset)
     committed_ticks: int = 0
+    # Ball position and sim-time recorded the tick a commitment *began*
+    # (committed_ticks went 0 -> 1) — the reference point the commitment
+    # deadline (see `Strategy.__init__`'s `commitment_deadline_s`) measures
+    # both elapsed time and ball movement against. `None` whenever the slot
+    # isn't currently mid-commitment; reset alongside `committed_ticks`
+    # everywhere that field is zeroed (release, barrier reset, slot
+    # reassignment), so it never outlives the commitment it describes.
+    commit_started_ts: Optional[float] = None
+    commit_started_ball_pos: Optional[object] = None
 
 
 class Strategy:
@@ -109,6 +137,7 @@ class Strategy:
         outfield_robot_ids: tuple[RobotId, ...],
         ctx: TickContext,
         referee_overrides: Optional[dict[RefereeCommand, RefereeActionOverride]] = None,
+        commitment_deadline_s: Optional[float] = DEFAULT_COMMITMENT_DEADLINE_S,
     ):
         if not tactics:
             raise ValueError("Strategy needs at least one registered tactic")
@@ -116,6 +145,12 @@ class Strategy:
         self._partitioner = partitioner
         self._outfield_robot_ids = frozenset(outfield_robot_ids)
         self._ctx = ctx
+        # Kernel-level stall breaker, not a play-length cap — see
+        # `_choose_partition`'s deadline check for the actual mechanism and
+        # the module-level docstring/`DEFAULT_COMMITMENT_DEADLINE_S` for the
+        # rationale. `None` disables it entirely (pre-existing unbounded-veto
+        # behaviour, design doc §3).
+        self._commitment_deadline_s = commitment_deadline_s
 
         self._slots: dict[TacticId, _TacticSlot] = {}
         self._prev_partition: Optional[dict[TacticId, frozenset[RobotId]]] = None
@@ -334,6 +369,8 @@ class Strategy:
                 slot.mem = None
                 slot.assigned_robots = frozenset()
                 slot.committed_ticks = 0
+                slot.commit_started_ts = None
+                slot.commit_started_ball_pos = None
 
         commands: dict[RobotId, RobotCommand] = {}
         for tactic_id, robot_ids in partition.items():
@@ -343,6 +380,8 @@ class Strategy:
                 slot.mem = slot.tactic.initial_mem() if robot_ids else None
                 slot.assigned_robots = robot_ids
                 slot.committed_ticks = 0
+                slot.commit_started_ts = None
+                slot.commit_started_ball_pos = None
                 # A barrier reset (see `_barrier_reset`) wipes assigned_robots
                 # unconditionally, including for slots the very next partition
                 # just reassigns right back to their pre-reset robots — that
@@ -439,12 +478,36 @@ class Strategy:
         can respect this itself; `Strategy` also validates the picker's
         return value against it afterward, since a `Partitioner` is a plain
         function and nothing stops one from ignoring its own inputs.
+
+        **Commitment deadline (kernel-level stall breaker, not a play-length
+        cap):** if `self._commitment_deadline_s` is set and a slot has been
+        continuously committed for longer than it *and* the ball has not
+        moved more than `_STALL_BALL_MOVEMENT_M` since the commitment began,
+        this method treats the slot as NOT committed for this tick's
+        partition decision — its robots go back into `free_robots` and the
+        `Partitioner` is free to reassign them, exactly as if
+        `is_committed()` had returned `False`. `Tactic.is_committed()` itself
+        is never called differently and never told about this — the
+        override happens only here, at the single point that decides what
+        the `Partitioner` is told is free, so the single-writer partition
+        invariant (design doc §5/§11) is untouched: the `Partitioner` is
+        still the only thing deciding the partition, this only changes one
+        input to it. If the ball HAS moved past the threshold, the deadline
+        clock is irrelevant this tick — a commitment making real progress is
+        never released just for running long.
         """
         pinned: dict[TacticId, frozenset[RobotId]] = {}
         for tactic_id, slot in self._slots.items():
             if not slot.assigned_robots:
                 continue
             if slot.tactic.is_committed(game, slot.mem):
+                if slot.committed_ticks == 0:
+                    # Commitment just began this tick — anchor the deadline's
+                    # reference point (elapsed time and ball position both
+                    # measured from here, not from whenever the slot first
+                    # got these robots).
+                    slot.commit_started_ts = getattr(game, "ts", 0.0)
+                    slot.commit_started_ball_pos = getattr(game, "ball", None)
                 slot.committed_ticks += 1
                 if slot.committed_ticks % 100 == 0:
                     logger.warning(
@@ -453,9 +516,14 @@ class Strategy:
                         tactic_id,
                         slot.committed_ticks,
                     )
-                pinned[tactic_id] = slot.assigned_robots
+
+                released = self._deadline_release(game, tactic_id, slot)
+                if not released:
+                    pinned[tactic_id] = slot.assigned_robots
             else:
                 slot.committed_ticks = 0
+                slot.commit_started_ts = None
+                slot.commit_started_ball_pos = None
 
         pinned_robots = frozenset().union(*pinned.values()) if pinned else frozenset()
         free_robots = self._outfield_robot_ids - pinned_robots
@@ -497,6 +565,74 @@ class Strategy:
             result[tactic_id] = robots
         return result
 
+    def _deadline_release(self, game: Game, tactic_id: TacticId, slot: _TacticSlot) -> bool:
+        """True if `slot`'s commitment should be treated as released this tick
+        under the commitment deadline (see `_choose_partition`'s docstring).
+
+        On release, resets `slot.committed_ticks`/`commit_started_ts`/
+        `commit_started_ball_pos`/`slot.mem` directly, right here —
+        deliberately not left for `tick()`'s usual "robot set changed"
+        reset. The `Partitioner` may well hand the exact same robots
+        straight back this tick (nothing else wants them); `tick()` would
+        then see `slot.assigned_robots == robot_ids` and skip its own reset
+        entirely, which would otherwise leave two things wrong: the deadline
+        clock exactly as expired as it was (re-releasing on every following
+        tick forever — a tight loop, not the intended "one release, then a
+        fresh deadline window"), and the tactic's `mem` exactly as it was
+        when the stall was detected — the very state whose `is_committed()`
+        never released on its own. Reassigning the identical robots to a
+        tactic still holding the stuck mem that caused the stall in the
+        first place would let it immediately re-declare committed off that
+        same state, defeating the release. Resetting `mem` here mirrors what
+        `tick()` already does for any other reassignment, just triggered by
+        the deadline instead of a robot-set change.
+        """
+        if self._commitment_deadline_s is None:
+            return False
+        if slot.commit_started_ts is None:
+            return False
+
+        elapsed = getattr(game, "ts", 0.0) - slot.commit_started_ts
+        if elapsed <= self._commitment_deadline_s:
+            return False
+
+        ball = getattr(game, "ball", None)
+        ball_moved_m = 0.0
+        if ball is not None and slot.commit_started_ball_pos is not None:
+            try:
+                ball_moved_m = ball.p.distance_to(slot.commit_started_ball_pos.p)
+            except AttributeError:
+                # A test/caller stub's `game.ball` doesn't expose the real
+                # `.p`/`Vector*.distance_to` shape — treat as "can't tell the
+                # ball moved," i.e. stalled, rather than silently never
+                # releasing anything. Real `Game.ball` always has this shape.
+                ball_moved_m = 0.0
+
+        if ball_moved_m > _STALL_BALL_MOVEMENT_M:
+            # Progress is being made — the deadline is a stall breaker, not a
+            # play-length cap. Do not release; do not reset the clock either,
+            # so a commitment that stalls again later is measured from its
+            # original start, not restarted with a fresh grace window.
+            return False
+
+        if self.match_log is not None:
+            self.match_log.intention(
+                tick=self._tick_count,
+                sim_time=getattr(game, "ts", 0.0),
+                tactic_id=tactic_id,
+                robot_ids=slot.assigned_robots,
+                tag=slot.tactic.tag,
+                note=(f"deadline release after {elapsed:.1f}s committed, ball moved {ball_moved_m:.3f}m"),
+            )
+
+        # Unconditional restart of the commitment clock and mem — see
+        # docstring for why this can't wait for tick()'s own change detection.
+        slot.committed_ticks = 0
+        slot.commit_started_ts = None
+        slot.commit_started_ball_pos = None
+        slot.mem = slot.tactic.initial_mem()
+        return True
+
     def _validate_partition(self, partition: dict[TacticId, frozenset[RobotId]]) -> None:
         """Enforce the single-writer invariant and reject picker bugs — but NOT
         an incomplete cover, which is a legitimate outcome, not a bug.
@@ -537,6 +673,8 @@ class Strategy:
             slot.mem = None
             slot.assigned_robots = frozenset()
             slot.committed_ticks = 0
+            slot.commit_started_ts = None
+            slot.commit_started_ball_pos = None
         self._prev_partition = None
         # Remembered so the very next tick's reassignment can tell "this is
         # the barrier's own mem/commitment wipe reasserting the same
