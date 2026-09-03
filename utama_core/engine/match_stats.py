@@ -11,6 +11,14 @@ the data source here: it's bounded by `MAX_GAME_HISTORY` (20 frames), far
 shorter than a full match, so possession/zone-time are accumulated live,
 one tick at a time, via `record_tick()` rather than derived post-hoc from a
 retained buffer.
+
+`record_tick()` also runs a small in-match stall watchdog (`StallEvent`,
+`MatchStats.stall_events`) alongside the boxscore accounting: RESTART_STALL
+(a referee restart command that never auto-advances back to live play) and
+COMMITTED_FROZEN (the ball not moving while a tactic slot stays committed).
+Both are pure observations recorded for post-match reporting (see
+`tournament.py`'s "STALLS" section) — nothing here reads back into or
+alters gameplay.
 """
 
 from __future__ import annotations
@@ -19,16 +27,57 @@ import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.custom_referee.rules.base_rule import RuleViolation
 from utama_core.entities.game.game_frame import GameFrame
+from utama_core.entities.referee.referee_command import RefereeCommand
 
 # Pitch is bucketed into thirds along x, from the recording side's own goal
 # (defensive) to the opponent's goal (attacking), independent of which
 # physical side ("left"/"right") the team is currently defending.
 _ZONES = ("defensive", "mid", "attacking")
+
+# Referee commands where play is actually live -- everything else (a
+# restart ceremony, a stoppage) is expected to hold the ball/robots still,
+# so the stall watchdog only measures "frozen ball" against these.
+_LIVE_PLAY_COMMANDS = frozenset({RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START})
+
+# RESTART_STALL: a non-live referee command (a restart/stoppage) that has
+# held continuously for longer than this many sim seconds without
+# auto-advancing back to a live command. A real kickoff/free-kick/ball-
+# placement ceremony resolves in a few seconds; this is a generous margin
+# above that, not a tight tolerance -- see docs/STRATEGY_DEVELOPMENT.md's
+# Observability section for the matches this was built to catch.
+_RESTART_STALL_SECONDS = 15.0
+# COMMITTED_FROZEN: the ball has moved less than this many metres...
+_STALL_BALL_STILL_TOL_M = 0.05
+# ...for longer than this many sim seconds during live play, while at least
+# one tactic slot is committed (or, if slot-commitment info isn't supplied,
+# simply "during live play" -- see `record_tick`'s `committed_tactics` arg).
+_COMMITTED_FROZEN_SECONDS = 10.0
+
+
+@dataclass
+class StallEvent:
+    """One detected in-match stall -- an observation for post-match review,
+    never fed back into gameplay (see `MatchStatsAccumulator._maybe_*` below,
+    which only ever read referee/ball state, never write it).
+
+    `sim_time`/`tick` are the *onset* of the stall (first tick past the
+    threshold), not every tick it persisted -- `duration_s` is updated in
+    place as the same stall continues, so one stall produces one event, not
+    one per tick.
+    """
+
+    kind: str  # "RESTART_STALL" | "COMMITTED_FROZEN"
+    sim_time: float
+    tick: int
+    referee_command: str
+    duration_s: float
+    tactic_ids: tuple = ()
+    robot_ids: tuple = ()
 
 
 @dataclass
@@ -41,6 +90,7 @@ class MatchStats:
     shots: Dict[str, int] = field(default_factory=lambda: {"friendly": 0, "enemy": 0})
     ball_travel_m: float = 0.0
     robot_motion_pct: Dict[str, float] = field(default_factory=dict)
+    stall_events: List[StallEvent] = field(default_factory=list)
 
     def to_json(self, path: Union[str, Path]) -> None:
         with open(path, "w") as f:
@@ -52,6 +102,18 @@ class MatchStats:
                     "shots": self.shots,
                     "ball_travel_m": self.ball_travel_m,
                     "robot_motion_pct": self.robot_motion_pct,
+                    "stall_events": [
+                        {
+                            "kind": e.kind,
+                            "sim_time": e.sim_time,
+                            "tick": e.tick,
+                            "referee_command": e.referee_command,
+                            "duration_s": e.duration_s,
+                            "tactic_ids": list(e.tactic_ids),
+                            "robot_ids": list(e.robot_ids),
+                        }
+                        for e in self.stall_events
+                    ],
                 },
                 f,
                 indent=2,
@@ -93,13 +155,53 @@ class MatchStatsAccumulator:
     _motion_ticks: Dict[int, int] = field(default_factory=dict)
     _measured_ticks: Dict[int, int] = field(default_factory=dict)
 
+    # --- stall watchdog state (see `_maybe_record_restart_stall`/
+    # `_maybe_record_committed_frozen` below) ---
+    _stall_events: List[StallEvent] = field(default_factory=list)
+    # Sim time the current non-live referee command started, and which
+    # command that is -- reset on every command change.
+    _restart_command: Optional[RefereeCommand] = None
+    _restart_started_at: Optional[float] = None
+    # Set once a RESTART_STALL has already been logged for the *current*
+    # restart, so a 65s stuck restart produces one event, not one per tick
+    # past the threshold.
+    _restart_stall_logged: bool = False
+    # Index into `_stall_events` of the in-progress RESTART_STALL, so its
+    # `duration_s` can keep being updated while the same restart persists.
+    _restart_stall_event_idx: Optional[int] = None
+
+    # Sim time + position the ball was last seen having moved
+    # >= _STALL_BALL_STILL_TOL_M from -- reset whenever it moves that far.
+    _ball_still_since: Optional[float] = None
+    _ball_still_anchor_xy: Optional[tuple[float, float]] = None
+    _committed_frozen_logged: bool = False
+    _committed_frozen_event_idx: Optional[int] = None
+
     def record_rule_violation(self, violation: Optional[RuleViolation]) -> None:
         if violation is None:
             return
         self._rule_event_counts[violation.rule_name] = self._rule_event_counts.get(violation.rule_name, 0) + 1
 
-    def record_tick(self, game_frame: GameFrame) -> None:
-        """Attribute possession and zone occupancy for one tick's `GameFrame`."""
+    def record_tick(
+        self,
+        game_frame: GameFrame,
+        committed_tactics: Optional[Dict[str, tuple]] = None,
+    ) -> None:
+        """Attribute possession and zone occupancy for one tick's `GameFrame`.
+
+        `committed_tactics`, if given, is the current tick's committed-slot
+        info as `{tactic_id: (robot_id, ...)}` -- cheaply available from the
+        kernel `Strategy` via `AbstractStrategy.debug_status()` (already
+        computed every tick for the referee debug GUI panel; see
+        `StrategyRunner._push_bt_nodes_to_referee`), so this accumulator
+        doesn't need to reach into kernel internals itself. When omitted
+        (`None`, the default -- e.g. a BT-path strategy, or a caller that
+        doesn't have it handy), `COMMITTED_FROZEN` falls back to "ball frozen
+        during live play", without requiring a committed slot; the resulting
+        `StallEvent.tactic_ids`/`robot_ids` are then simply empty.
+        """
+        self._maybe_record_stalls(game_frame, committed_tactics)
+
         ball = game_frame.ball
         if ball is None:
             return
@@ -207,6 +309,105 @@ class MatchStatsAccumulator:
             zone_counts = self._zone_ticks.setdefault(key, {z: 0 for z in _ZONES})
             zone_counts[zone] += 1
 
+    def _maybe_record_stalls(self, game_frame: GameFrame, committed_tactics: Optional[Dict[str, tuple]]) -> None:
+        """Update the two stall watchdogs for this tick. Pure observation --
+        reads `game_frame`/`committed_tactics`, never mutates or influences
+        gameplay (see `StallEvent`'s docstring).
+
+        Both watchdogs are "first occurrence + running duration": each
+        records its onset tick/sim_time once (`_restart_stall_logged`/
+        `_committed_frozen_logged`), then keeps updating that same
+        `StallEvent.duration_s` in place for as long as the same stall
+        persists, rather than appending a new event every tick past the
+        threshold.
+        """
+        referee = game_frame.referee
+        sim_time = game_frame.ts
+        tick = self._ticks_recorded + 1  # this tick hasn't incremented _ticks_recorded yet
+
+        # --- RESTART_STALL: a non-live referee command held too long ---
+        current_command = referee.referee_command if referee is not None else None
+        if current_command != self._restart_command:
+            self._restart_command = current_command
+            self._restart_started_at = sim_time
+            self._restart_stall_logged = False
+            self._restart_stall_event_idx = None
+
+        if current_command is not None and current_command not in _LIVE_PLAY_COMMANDS:
+            elapsed = sim_time - self._restart_started_at
+            if elapsed > _RESTART_STALL_SECONDS:
+                if not self._restart_stall_logged:
+                    self._restart_stall_logged = True
+                    self._restart_stall_event_idx = len(self._stall_events)
+                    self._stall_events.append(
+                        StallEvent(
+                            kind="RESTART_STALL",
+                            sim_time=self._restart_started_at + _RESTART_STALL_SECONDS,
+                            tick=tick,
+                            referee_command=current_command.name,
+                            duration_s=elapsed,
+                        )
+                    )
+                elif self._restart_stall_event_idx is not None:
+                    self._stall_events[self._restart_stall_event_idx].duration_s = elapsed
+
+        # --- COMMITTED_FROZEN: ball frozen during live play while committed ---
+        ball = game_frame.ball
+        is_live = current_command in _LIVE_PLAY_COMMANDS
+        if ball is None or not is_live:
+            self._ball_still_since = None
+            self._ball_still_anchor_xy = None
+            self._committed_frozen_logged = False
+            self._committed_frozen_event_idx = None
+            return
+
+        ball_xy = (ball.p.x, ball.p.y)
+        if self._ball_still_anchor_xy is None or (
+            math.hypot(ball_xy[0] - self._ball_still_anchor_xy[0], ball_xy[1] - self._ball_still_anchor_xy[1])
+            >= _STALL_BALL_STILL_TOL_M
+        ):
+            self._ball_still_since = sim_time
+            self._ball_still_anchor_xy = ball_xy
+            self._committed_frozen_logged = False
+            self._committed_frozen_event_idx = None
+            return
+
+        frozen_for = sim_time - self._ball_still_since
+        if frozen_for <= _COMMITTED_FROZEN_SECONDS:
+            return
+
+        committed_tactic_ids: tuple = ()
+        committed_robot_ids: tuple = ()
+        if committed_tactics is not None:
+            if not committed_tactics:
+                # Slot-commitment info was supplied but nothing is committed
+                # right now -- not the bug this watchdog targets (a carrier
+                # holding forever, a handshake that never completes), so
+                # don't flag it. This is the precise "at least one slot is
+                # committed" gate from the spec.
+                return
+            committed_tactic_ids = tuple(sorted(committed_tactics.keys()))
+            committed_robot_ids = tuple(sorted(rid for robots in committed_tactics.values() for rid in robots))
+        # else: committed_tactics is None -- fall back to "ball frozen during
+        # live play", per this method's docstring / `record_tick`'s.
+
+        if not self._committed_frozen_logged:
+            self._committed_frozen_logged = True
+            self._committed_frozen_event_idx = len(self._stall_events)
+            self._stall_events.append(
+                StallEvent(
+                    kind="COMMITTED_FROZEN",
+                    sim_time=self._ball_still_since + _COMMITTED_FROZEN_SECONDS,
+                    tick=tick,
+                    referee_command=current_command.name if current_command is not None else "",
+                    duration_s=frozen_for,
+                    tactic_ids=committed_tactic_ids,
+                    robot_ids=committed_robot_ids,
+                )
+            )
+        elif self._committed_frozen_event_idx is not None:
+            self._stall_events[self._committed_frozen_event_idx].duration_s = frozen_for
+
     def finalize(self) -> MatchStats:
         total = max(1, self._ticks_recorded)
         possession_pct = {side: count / total for side, count in self._possession_ticks.items()}
@@ -224,4 +425,5 @@ class MatchStatsAccumulator:
             shots=dict(self._shots),
             ball_travel_m=round(self._ball_travel_m, 2),
             robot_motion_pct=robot_motion_pct,
+            stall_events=list(self._stall_events),
         )

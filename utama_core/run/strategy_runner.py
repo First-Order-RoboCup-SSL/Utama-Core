@@ -1741,6 +1741,29 @@ class StrategyRunner:
             return
         self.referee.set_debug_status(self.my.strategy.debug_status())
 
+    def _committed_tactics(self) -> Optional[dict]:
+        """Currently-committed tactic slots as `{tactic_id: (robot_id, ...)}`,
+        for `MatchStats`'s COMMITTED_FROZEN stall watchdog (see
+        `MatchStatsAccumulator.record_tick`'s `committed_tactics` arg).
+
+        Reuses `kernel.Strategy.slot_status()` — already computed for/reachable
+        the same way `_push_bt_nodes_to_referee` reaches `_kernel_strategy`
+        post-construction — rather than adding a new plumbing path. Returns
+        `None` (watchdog falls back to "ball frozen during live play") for a
+        BT-path strategy, which has no `_kernel_strategy`.
+        """
+        kernel_strategy = getattr(self.my.strategy, "_kernel_strategy", None)
+        if kernel_strategy is None:
+            return None
+        game = self.my.strategy.game
+        if game is None:
+            return None
+        return {
+            tactic_id: tuple(info["robots"])
+            for tactic_id, info in kernel_strategy.slot_status(game).items()
+            if info["committed"] and info["robots"]
+        }
+
     def _vision_stream_roster(self) -> list[dict]:
         """Build the player roster list shown below the scoreboard."""
         game_frame = self.my.current_game_frame
@@ -1862,5 +1885,5 @@ class StrategyRunner:
 
         side.game.add_game_frame(new_game_frame)
         if not running_opp and self.match_stats is not None:
-            self.match_stats.record_tick(new_game_frame)
+            self.match_stats.record_tick(new_game_frame, committed_tactics=self._committed_tactics())
         side.strategy.step()

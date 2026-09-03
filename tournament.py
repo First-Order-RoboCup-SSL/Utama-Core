@@ -68,7 +68,7 @@ from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.custom_referee import CustomReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.replay.replay_writer import ReplayWriterConfig
+from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
@@ -169,7 +169,17 @@ def run_match(
         # replay_name is relative to REPLAY_BASE_PATH, not run_dir, since replays
         # live under a fixed replays/ root — nest it under the same tournament
         # subdirectory so the two stay next to each other on disk.
-        extra_kwargs["replay_writer_config"] = ReplayWriterConfig(
+        #
+        # Columnar (.npz) rather than pickle (.pkl): ~13 MB/match in the old
+        # format vs. a fraction of that here, and every reader a tournament
+        # run's replays are actually fed through — `load_frames_in_range`
+        # (`replay_player.py`, used by `render_window`) and
+        # `find_stuck_windows` (`stuck_detector.py`) — already dispatches on
+        # `.npz` vs `.pkl` by extension, so nothing downstream of a
+        # tournament run breaks. Only the interactive `play_replay`/
+        # `get_latest_replay_name` CLI helpers in `replay_player.py` still
+        # hardcode `.pkl`; tournament.py doesn't call either.
+        extra_kwargs["replay_writer_config"] = ColumnarReplayWriterConfig(
             replay_name=f"{run_dir.name}/{match_tag}", overwrite_existing=True
         )
 
@@ -204,8 +214,30 @@ def run_match(
         config_b=config_b_name,
         score_a=score_a,
         score_b=score_b,
-        stats=stats.__dict__ if stats is not None else None,
+        stats=_stats_to_dict(stats) if stats is not None else None,
     )
+
+
+def _stats_to_dict(stats) -> dict:
+    """`MatchStats.__dict__`, but with `stall_events` (a list of `StallEvent`
+    dataclasses) turned into plain dicts so the result round-trips through
+    `json.dump` in `summary.json` — mirrors `MatchStats.to_json`'s own
+    per-field shape rather than introducing a second serialization scheme.
+    """
+    d = dict(stats.__dict__)
+    d["stall_events"] = [
+        {
+            "kind": e.kind,
+            "sim_time": e.sim_time,
+            "tick": e.tick,
+            "referee_command": e.referee_command,
+            "duration_s": e.duration_s,
+            "tactic_ids": list(e.tactic_ids),
+            "robot_ids": list(e.robot_ids),
+        }
+        for e in stats.stall_events
+    ]
+    return d
 
 
 def main() -> None:
@@ -258,6 +290,12 @@ def main() -> None:
         args = args[:idx] + args[idx + 2 :]
     no_save = "--no-save" in args
     args = [a for a in args if a != "--no-save"]
+    # `--strict` exits non-zero when any match in this run recorded a stall
+    # event (see the STALLS section below) — for CI/pre-merge gating, so a
+    # stall regression fails the run instead of only showing up if someone
+    # reads the printed section or summary.json by hand.
+    strict = "--strict" in args
+    args = [a for a in args if a != "--strict"]
     control_scheme = "fpp"
     if "--control-scheme" in args:
         idx = args.index("--control-scheme")
@@ -359,6 +397,55 @@ def main() -> None:
     for name in sorted(config_names, key=lambda n: (-wins[n], -draws[n])):
         print(f"  {name:<40} {wins[name]}W {draws[name]}D")
 
+    # STALLS: every match that recorded a `StallEvent` (see
+    # `utama_core.engine.match_stats`'s RESTART_STALL/COMMITTED_FROZEN
+    # watchdogs), plus a heuristic backstop for anything the watchdog itself
+    # missed — possession pinned at 100%/0% with almost no ball movement is
+    # exactly the signature a stalled match showed before this watchdog
+    # existed (see this module's/`match_stats.py`'s docs). Both are printed
+    # together since they answer the same question ("did this run stall
+    # anywhere") and both go into summary.json per match either way.
+    def _match_tag_of(r: MatchResult) -> str:
+        return f"{_short_name(r.config_a)}_vs_{_short_name(r.config_b)}"
+
+    stalled_matches: list[tuple[MatchResult, list[dict]]] = []
+    backstop_matches: list[MatchResult] = []
+    for r in results:
+        if not r.stats:
+            continue
+        events = r.stats.get("stall_events") or []
+        if events:
+            stalled_matches.append((r, events))
+        poss = r.stats.get("possession_pct") or {}
+        pinned = (poss.get("friendly") == 1.0 and poss.get("enemy") == 0.0) or (
+            poss.get("friendly") == 0.0 and poss.get("enemy") == 1.0
+        )
+        if pinned and (r.stats.get("ball_travel_m") or 0.0) < 1.0:
+            backstop_matches.append(r)
+
+    stalled_match_ids = {id(r) for r, _ in stalled_matches}
+    if stalled_matches or backstop_matches:
+        print("\nSTALLS:")
+        for r, events in stalled_matches:
+            for e in events:
+                tactic_str = f" tactics={e['tactic_ids']}" if e["tactic_ids"] else ""
+                print(
+                    f"  {_match_tag_of(r):<50} {e['kind']:<17} onset t={e['sim_time']:.1f}s "
+                    f"referee={e['referee_command']}{tactic_str}"
+                )
+        for r in backstop_matches:
+            if id(r) in stalled_match_ids:
+                continue
+            poss = r.stats["possession_pct"]
+            print(
+                f"  {_match_tag_of(r):<50} {'POSSESSION_BACKSTOP':<17} "
+                f"possession {poss['friendly']:.0%}/{poss['enemy']:.0%} "
+                f"ball_travel {r.stats['ball_travel_m']:.2f}m"
+            )
+    else:
+        print("\nSTALLS: none")
+
+    backstop_match_ids = {id(r) for r in backstop_matches}
     summary = {
         "run_id": run_id,
         "config_names": sorted(config_names),
@@ -372,16 +459,25 @@ def main() -> None:
                 "score_b": r.score_b,
                 "winner": r.winner,
                 "stats": r.stats,
+                "possession_backstop": id(r) in backstop_match_ids,
             }
             for r in results
         ],
         "standings": {name: {"wins": wins[name], "draws": draws[name]} for name in config_names},
+        "stalled_match_count": len(stalled_matches),
+        "possession_backstop_match_count": len(backstop_matches),
     }
     if run_dir is not None:
         summary_path = run_dir / "summary.json"
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
         print(f"\nFull results + stats: replays/{run_id}/summary.json")
+
+    if strict and (stalled_matches or backstop_matches):
+        raise SystemExit(
+            f"--strict: {len(stalled_matches)} match(es) with stall events, "
+            f"{len(backstop_matches)} match(es) flagged by the possession backstop"
+        )
 
 
 if __name__ == "__main__":
