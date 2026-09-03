@@ -210,7 +210,27 @@ class Trajectory2D:
         dy = p1[1] - p0[1]
         dist = math.hypot(dx, dy)
         if dist < 1e-9:
-            ux, uy = 1.0, 0.0
+            # p0 == p1 (to within numerical noise): there is no well-defined
+            # p0->p1 direction to project v0 onto, and projecting onto an
+            # arbitrary fixed axis (the old behaviour) silently discarded
+            # whichever component of v0 happened to be perpendicular to it --
+            # a stationary target with real lateral v0 got a trajectory that
+            # commanded exactly zero velocity forever, never actually
+            # stopping the robot's real sideways motion. This case isn't
+            # "travel from p0 to p1" at all; it's "come to rest at p0 from
+            # whatever v0 currently is" -- use v0's own direction as the axis
+            # instead, so the full speed (not just one arbitrary component)
+            # feeds into the single BangBang1D braking profile below. Found
+            # live: `turn_on_spot`/`move` call this every tick with
+            # target_coords=robot.p (see move_utils.py), which is exactly
+            # this case -- a robot pivoting on the ball with residual lateral
+            # velocity would stall for seconds waiting for a stop that was
+            # never actually commanded.
+            speed = math.hypot(v0[0], v0[1])
+            if speed < 1e-9:
+                ux, uy = 1.0, 0.0  # not moving either -- direction is irrelevant
+            else:
+                ux, uy = v0[0] / speed, v0[1] / speed
         else:
             ux, uy = dx / dist, dy / dist
 

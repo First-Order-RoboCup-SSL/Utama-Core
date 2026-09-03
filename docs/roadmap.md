@@ -811,3 +811,59 @@ the full investigation narrative for anything already fixed lives in git log
     as competitively viable for real strategy play even though its
     point-to-point motion planning (per the benchmark suite above) is
     otherwise reasonable.
+
+    **`Trajectory2D.compute`'s degenerate zero-distance fallback, fixed
+    2026-09-03.** Found while investigating a live user report ("robot gets
+    to the ball and waits 5-10s before doing anything") against a
+    `tiki_taka` vs `tiki_taka_plus` trajsample match. `move()`/
+    `turn_on_spot()` (`utama_core/skills/src/utils/move_utils.py`) call
+    `motion_controller.calculate(target_pos=robot.p, ...)` — target equal to
+    the robot's OWN current position — every tick while orienting-in-place,
+    e.g. `GiveAndGoTactic`'s pre-kick aim step. `Trajectory2D.compute` had a
+    `dist < 1e-9` branch for exactly this case that picked a fixed, arbitrary
+    axis `(1.0, 0.0)` to project `v0` onto, rather than a real "come to rest
+    from current velocity" plan. Any residual velocity perpendicular to that
+    arbitrary axis (e.g. all of it, if the robot's actual motion was purely
+    lateral — the normal case for a robot pivoting on the ball) was silently
+    dropped: the commanded velocity for that whole trajectory came out as
+    exactly zero regardless of how fast the robot was actually still moving,
+    so the planner never actually commanded a stop, only appeared to.
+    **Fixed** by using the direction of `v0` itself as the projection axis
+    when `dist < 1e-9` (falling back to the old arbitrary `(1.0, 0.0)` only
+    when `v0` is also ~zero, where direction is moot) — this makes the
+    single-axis `BangBang1D` solve see the robot's FULL speed rather than an
+    arbitrary component of it, producing a real deceleration-to-rest profile.
+    Verified: `motion_planning` suite unchanged (73 passed, 4 xfailed,
+    byte-identical), full repo suite clean (943 passed, 4 skipped, 5 xfailed
+    — all pre-existing/documented). Direct repro check before/after:
+    `Trajectory2D.compute(p0=(1,2), v0=(0,0.8), p1=p0, ...)` previously
+    commanded `(0, 0)` velocity for the entire trajectory despite 0.8 m/s of
+    real lateral motion; now correctly ramps that velocity down to zero over
+    a real ~0.2s braking profile.
+
+    **However — re-running the exact reported match afterward did NOT
+    reproduce the "waits at the ball" symptom, and traced to something new.**
+    rsim is fully deterministic given unchanged code (three fresh
+    `tiki_taka` vs `tiki_taka_plus` trajsample re-runs were byte-identical
+    to the frame), so this is a real, distinct finding, not noise: from
+    ~21s to the 65s match end, TWO robots on the SAME team (this match:
+    enemy/`tiki_taka_plus` robots 2 and 4) simultaneously register
+    `has_ball=True`, while the ball itself barely moves (~0.07m of drift
+    total, not real carrying/dribbling) — a same-team scrum/pileup on a
+    loose ball where a second robot converges on and "claims" a ball a
+    teammate is already holding, and neither yields or actually drives play
+    forward. This looks like the real mechanism behind both the user-visible
+    long stalls and last session's "permanent ball-lock" finding above
+    (hypothesis (a)/(b)/(c) there was framed as single-robot; this suggests
+    it's actually a multi-robot allocation/contact problem instead — e.g. a
+    picker or `go_to_ball` fallback that lets a second robot target a ball
+    already legally possessed by a teammate). Not yet root-caused. Repro:
+    `pixi run python tournament.py tiki_taka tiki_taka_plus --control-scheme
+    trajsample --sequential --verbose`, then inspect
+    `replays/tournament_<ts>/tiki_taka_vs_tiki_taka_plus.pkl` frames around
+    t=21s for `enemy_robots[2]`/`enemy_robots[4]` — both within IR contact
+    range of the ball (~0.10-0.11m) at the same time, ball position nearly
+    frozen. Whoever picks this up should check which tactic(s) control both
+    robots at that point (`.intentions.jsonl`) and whether `go_to_ball`/the
+    picker has any guard against sending two robots at an already-possessed
+    ball.
