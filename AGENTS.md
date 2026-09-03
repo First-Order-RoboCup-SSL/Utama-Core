@@ -66,6 +66,12 @@ declarations) — check there before reintroducing one of them.
   re-running it and reading real output over trusting a self-report — this codebase has
   been touched by both humans and agents, and a claimed "all tests pass" is only as
   trustworthy as the last time someone actually ran it.
+- **A bug-fix commit is not done without a regression test that fails before the fix and
+  passes after.** "Full suite unchanged" is necessary but not sufficient — it proves the
+  fix broke nothing, not that the fix itself is protected. The test should pin the exact
+  boundary condition (a tolerance, a tie, a zero, a timeout) the fix introduced, not just
+  exercise the surrounding function. Prefer a pure unit test over an rsim fixture whenever
+  the logic allows it — faster, and easier to isolate the one boundary that changed.
 
 ## Where things live
 

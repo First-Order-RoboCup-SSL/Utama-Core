@@ -25,6 +25,7 @@ from utama_core.shared.pass_and_score_geometry import (
     has_ball,
     no_shot_reposition_target,
     reset_possession_state,
+    score_pass_setup,
 )
 
 _FIELD = Field(
@@ -149,6 +150,44 @@ def test_ball_is_loose_false_when_ball_in_own_box_and_enemy_also_inside():
     # If the enemy is (illegally, or mid-transition) actually inside the box
     # with the ball, it can genuinely reach it — still contested.
     game = _loose_ball_game(ball_xy=(_MY_BOX_FRONT_X + 0.3, 0.0), enemy_xy=(_MY_BOX_FRONT_X + 0.2, 0.0))
+    assert bool(ball_is_loose(game)) is False
+
+
+def _loose_ball_game_with_friendly_possession(ball_xy: tuple, enemy_xy: tuple) -> Game:
+    """Same as `_loose_ball_game`, but the lone friendly robot's `has_ball`
+    is True (`Robot` is a frozen dataclass, so this needs its own builder
+    rather than mutating `_loose_ball_game`'s result in place)."""
+    zv = Vector3D(0, 0, 0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={1: _robot(1, 0.0, 0.0, True, has_ball=True)},
+        enemy_robots={0: _robot(0, enemy_xy[0], enemy_xy[1], False)},
+        ball=Ball(p=Vector3D(ball_xy[0], ball_xy[1], 0), v=zv, a=zv),
+    )
+    return Game(
+        past=GameHistory(10),
+        current=frame,
+        field=Field(
+            my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+        ),
+    )
+
+
+def test_ball_is_loose_false_when_a_friendly_robot_already_has_the_ball():
+    """Regression for commit a59a8e5 ("Fix same-team ball scrum"): a
+    teammate already dribbling the ball is the opposite of loose, regardless
+    of ball speed or enemy distance — `ball_speed` alone can't tell
+    "abandoned, rolling to a stop" apart from "being carefully carried while
+    lining up a pass" (both are slow). Before the fix, `ball_is_loose` never
+    looked at `game.friendly_robots[...].has_ball` at all, so with no enemy
+    nearby and a near-zero ball speed (the default in `_loose_ball_game`)
+    this read True even though a friendly robot already had it — the exact
+    same-team-collision mechanism (`ShadowAndMarkTactic`'s retriever driving
+    into its own teammate's carrier) the commit fixes.
+    """
+    game = _loose_ball_game_with_friendly_possession(ball_xy=(0.0, 0.0), enemy_xy=(10.0, 10.0))
     assert bool(ball_is_loose(game)) is False
 
 
@@ -414,3 +453,128 @@ def test_no_shot_reposition_target_takes_the_preferred_direction_when_not_clampe
     )
 
     assert target.y == pytest.approx(carrier_pos.y - _NO_SHOT_STRAFE_STEP)
+
+
+# ---------------------------------------------------------------------------
+# score_pass_setup — regression tests for commit dd14f79 ("Fix dead
+# pass-scoring path and permanent ball-lock in GiveAndGoTactic").
+# ---------------------------------------------------------------------------
+
+
+def _pass_setup_game(passer_id: int, passer_xy: tuple, receiver_id: int, receiver_xy: tuple) -> Game:
+    """`my_team_is_right=True` -> enemy goal is on the left (`goal_x` < 0),
+    matching this file's `_FIELD` fixture above. No enemies at all: `_best_
+    receiver`'s real caller passes exactly the passer's own `.p` as
+    `passer_position` (see `give_and_go.py`), so `game.friendly_robots`
+    always contains an entry at distance 0.0 from `passer_position` --
+    that's the exact self-distance bug this commit fixes, reproduced here
+    directly rather than through the tactic."""
+    friendly = {
+        passer_id: _robot(passer_id, passer_xy[0], passer_xy[1], True),
+        receiver_id: _robot(receiver_id, receiver_xy[0], receiver_xy[1], True),
+    }
+    zv = Vector3D(0, 0, 0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots=friendly,
+        enemy_robots={},
+        ball=Ball(p=Vector3D(passer_xy[0], passer_xy[1], 0), v=zv, a=zv),
+    )
+    return Game(
+        past=GameHistory(10),
+        current=frame,
+        field=Field(
+            my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+        ),
+    )
+
+
+def test_score_pass_setup_not_self_rejected_by_passer_and_receiver_own_entries():
+    """The core boundary: `passer_position`/`receiver_position` are a LIVE
+    robot's own `.p` (exactly what every real caller passes -- see
+    `give_and_go.py`'s `_best_receiver`), so `game.friendly_robots` always
+    contains an entry at distance exactly 0.0 from at least the passer
+    itself. Before the fix, the clearance loop checked every friendly
+    robot's position against passer/receiver with no exclusion, so this
+    0.0-distance self-entry always tripped `< min_robot_clearance` and
+    `score_pass_setup` returned None on literally every real call --
+    making the entire highest-scoring-teammate selection dead code. With
+    only the passer and receiver themselves on the roster (no third robot in
+    the way) and a clear pass distance/lane/shot, this must now return a
+    real score, not None.
+    """
+    game = _pass_setup_game(passer_id=1, passer_xy=(0.0, 0.0), receiver_id=2, receiver_xy=(-1.0, 0.0))
+    passer_pos = game.friendly_robots[1].p
+    receiver_pos = game.friendly_robots[2].p
+
+    result = score_pass_setup(game, passer_pos, receiver_pos)
+
+    assert result is not None
+    assert result.score > 0
+
+
+def test_score_pass_setup_still_rejects_a_genuine_third_robot_in_the_clearance_zone():
+    """The fix narrows the clearance exclusion to robots within
+    `min_pass_distance` of the passer/receiver position (i.e. the
+    passer/receiver themselves) -- it must not also blind the check to a
+    real third teammate close to the passer but outside the exclusion
+    radius. With the default parameters `min_robot_clearance` (~0.44m) is
+    always smaller than `min_pass_distance` (0.7m), so this scenario can't
+    be constructed there (anything close enough to violate clearance is
+    also close enough to be excluded as "the passer itself") -- this test
+    passes an explicit smaller `min_pass_distance` to decouple the two radii
+    and exercise the two checks independently: a third robot at 0.3m from
+    the passer must survive the (now-0.2m) self-exclusion radius but still
+    trip the (0.44m) clearance check.
+    """
+    game_frame_positions = {
+        1: _robot(1, 0.0, 0.0, True),  # passer
+        2: _robot(2, -1.0, 0.0, True),  # receiver
+        3: _robot(3, 0.3, 0.0, True),  # third robot, 0.3m from passer
+    }
+    zv = Vector3D(0, 0, 0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots=game_frame_positions,
+        enemy_robots={},
+        ball=Ball(p=Vector3D(0.0, 0.0, 0), v=zv, a=zv),
+    )
+    game = Game(
+        past=GameHistory(10),
+        current=frame,
+        field=Field(
+            my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+        ),
+    )
+
+    result = score_pass_setup(game, Vector2D(0.0, 0.0), Vector2D(-1.0, 0.0), min_pass_distance=0.2)
+    assert result is None
+
+
+def test_score_pass_setup_prefers_a_longer_goal_advancing_pass_over_a_short_one():
+    """The second half of the fix: a `progress` term (net advance toward the
+    enemy goal along the attacking axis) must now weigh into the score at
+    the same O(1) scale as `shot_gap`/`pass_clearance`, so a longer pass
+    that genuinely advances the ball beats a short one that happens to have
+    marginally better incidental clearance -- before this term existed, the
+    old `-0.03 * pass_distance` penalty was too weak to matter (an 8m pass
+    cost only ~0.24) and a short pass could win on clearance alone.
+
+    Enemy goal is at x=-4.5 (`my_team_is_right=True`); a receiver much
+    closer to it must score higher than one only marginally closer, all
+    else equal (no enemies, so shot_gap/pass_clearance are identical/maxed
+    for both).
+    """
+    game = _pass_setup_game(passer_id=1, passer_xy=(0.0, 0.0), receiver_id=2, receiver_xy=(-1.0, 0.0))
+    passer_pos = Vector2D(0.0, 0.0)
+
+    short_pass = score_pass_setup(game, passer_pos, Vector2D(-1.0, 0.0))
+    long_pass = score_pass_setup(game, passer_pos, Vector2D(-3.5, 0.0))
+
+    assert short_pass is not None
+    assert long_pass is not None
+    assert long_pass.score > short_pass.score

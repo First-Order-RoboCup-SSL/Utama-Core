@@ -22,6 +22,8 @@ across individual receiver attempts, unlike `hop_ticks`).
 
 from __future__ import annotations
 
+import math
+
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.engine.context import TickContext
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -31,6 +33,7 @@ from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.tactics.give_and_go import (
+    _FIRST_TOUCH_FORCE_SHOT_TICKS,
     _MAX_FIRST_TOUCH_TICKS,
     _MAX_HOP_TICKS,
     GiveAndGoTactic,
@@ -174,3 +177,77 @@ def test_first_touch_stuck_gives_up_after_max_first_touch_ticks():
 
     assert mem.receiver_id is None
     assert mem.hop_count == 0
+
+
+def _make_open_lane_game(carrier_orientation: float) -> Game:
+    """No enemies at all (shot lane always open — `find_best_shot` never
+    returns None) and a teammate close enough to be a real ally but inside
+    `_MIN_SAFE_PASS_DISTANCE`, so `_nearest_safe_receiver` never selects it
+    (`dist < _MIN_SAFE_PASS_DISTANCE: continue`) -- `mem.receiver_id` stays
+    None forever without needing a blocked lane, isolating the
+    `first_touch_stuck`/`force_shot` interaction from any pass mechanics.
+    `carrier_orientation` lets a test aim the carrier at the enemy goal
+    directly, so once `force_shot` overrides `first_touch_stuck` the tactic
+    takes the immediate-`kick()` branch rather than `turn_on_spot`.
+    """
+    carrier_pos = Vector2D(0.0, 0.0)
+    teammate_pos = Vector2D(0.3, 0.3)  # well under _MIN_SAFE_PASS_DISTANCE (0.7m)
+    friendly = {
+        1: Robot(
+            id=1,
+            is_friendly=True,
+            has_ball=True,
+            p=carrier_pos,
+            v=Vector2D(0, 0),
+            a=Vector2D(0, 0),
+            orientation=carrier_orientation,
+        ),
+        2: Robot(
+            id=2, is_friendly=True, has_ball=False, p=teammate_pos, v=Vector2D(0, 0), a=Vector2D(0, 0), orientation=0.0
+        ),
+    }
+    ball = Ball(Vector3D(carrier_pos.x, carrier_pos.y, 0.0), Vector3D(0.0, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0))
+    frame = GameFrame(
+        ts=0.0, my_team_is_yellow=True, my_team_is_right=True, friendly_robots=friendly, enemy_robots={}, ball=ball
+    )
+    field = Field(
+        my_team_is_right=True,
+        field_dims=STANDARD_FIELD_DIMS,
+        field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+    )
+    return Game(past=GameHistory(max_history=20), current=frame, field=field)
+
+
+def test_first_touch_stuck_eventually_force_shoots_instead_of_repositioning_forever():
+    """Regression for commit dd14f79's "permanent ball-lock" fix: once
+    `mem.ticks_held` crosses `_FIRST_TOUCH_FORCE_SHOT_TICKS`, `force_shot`
+    must become True and override `first_touch_stuck` at the shot/reposition
+    branch (`if best_shot_y is None or (first_touch_stuck and not
+    force_shot):`), so the carrier takes the open shot instead of strafing
+    indefinitely. Before the fix, `force_shot` only ever checked
+    `mem.hop_count` (which never leaves 0 in this scenario, matching the
+    live bug's mechanism), so `first_touch_stuck` alone kept routing to the
+    no-open-lane reposition branch forever even with a continuously open
+    shot lane -- a carrier held a wide-open lane for 50+ seconds and never
+    shot, in the live trace this commit fixes.
+
+    `my_team_is_right=True` -> enemy goal at x=-4.5, y in [-goal_half_width,
+    goal_half_width] around 0 -- carrier at the origin facing math.pi (-x,
+    straight at the goal) is already oriented toward the shot target, so
+    once `force_shot` fires the tactic's `oriented_towards()` check passes
+    immediately and it issues `kick()` this same tick, not `turn_on_spot()`.
+    """
+    game = _make_open_lane_game(carrier_orientation=math.pi)
+    ctx = TickContext(motion_controller=_NullMotionController(), match_log=None)
+    tactic = GiveAndGoTactic()
+    mem = tactic.initial_mem()
+
+    commands = {}
+    for _ in range(_FIRST_TOUCH_FORCE_SHOT_TICKS + 5):
+        commands, mem = tactic.tick(game, ctx, (1, 2), mem)
+
+    # Sanity: this scenario never completes a hop -- hop_count-gated
+    # force_shot never fires, isolating the ticks_held-gated path.
+    assert mem.hop_count == 0
+    assert mem.ticks_held >= _FIRST_TOUCH_FORCE_SHOT_TICKS
+    assert commands[1].kick == 1
