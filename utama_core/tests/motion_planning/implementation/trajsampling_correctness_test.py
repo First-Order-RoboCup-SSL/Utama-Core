@@ -82,6 +82,14 @@ def test_bang_bang_is_position_continuous_at_endpoint_after_opposing_velocity(p0
     assert position_immediately_before_end == pytest.approx(p1, abs=1e-9)
 
 
+_BANG_BANG_FIX_BACKED_OUT = (
+    "BangBang1D fix (b26a550) backed out: with physically correct trajectories the "
+    "trajsample planner deadlocks mutually blocked robots at every kickoff. Re-apply "
+    "together with a planner blocked-start fix; see docs/roadmap.md."
+)
+
+
+@pytest.mark.xfail(strict=True, reason=_BANG_BANG_FIX_BACKED_OUT)
 def test_bang_bang_required_overshoot_produces_continuous_trajectory():
     """Regression for the required-overshoot defect: v0 points toward the
     target but its braking distance (v0^2/(2*a_max)) exceeds the remaining
@@ -133,6 +141,7 @@ def test_bang_bang_required_overshoot_produces_continuous_trajectory():
     assert end_vel == pytest.approx(0.0, abs=1e-6)
 
 
+@pytest.mark.xfail(strict=True, reason=_BANG_BANG_FIX_BACKED_OUT)
 def test_bang_bang_same_direction_overspeed_decelerates_at_a_max():
     """Regression for the same-direction-overspeed defect: v0 already points
     toward p1 and exceeds v_max. Pre-fix, `compute`'s carry-over reset
