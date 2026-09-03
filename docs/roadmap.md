@@ -312,3 +312,114 @@ the full investigation narrative for anything already fixed lives in git log
     (picker-level, `0e510a0`/`ae6a6f3`) — a recurring architecture gap
     (nothing checks "is another already-assigned robot also converging on
     this exact ball") worth a general fix if a third instance shows up.
+
+14. **Outer-loop strategy evaluation (inner loop / outer loop split).** The
+   goal is coding agents iterating strategies against the evals with minimal
+   human replay-watching. Today the 65 s `tournament.py` round-robin is a
+   stall fuzzer, not a strategy evaluator: nearly every match is a scoreless
+   draw, rsim is deterministic so re-running a matchup adds no information,
+   and a planner stall is indistinguishable from a bad strategy in the score.
+   Win-rate/Elo stays the objective, but it is too sparse and too expensive to
+   be the only signal. Design, in three tiers with three homes:
+
+   - **Inner loop = contract tier (test suite, binary, blocks merge).** Tactic
+     contracts, kernel invariants, and zero `StallEvent`s across N seeded
+     matches with `RestartFuzzingReferee` on. No metrics live here: a metric
+     has no pass threshold that stays true as strategies improve. Built so
+     far: stall watchdog + `--strict`, commitment deadline, restart fuzzer,
+     pure `Game` builder, regression tests for every recent fix. Missing:
+     `--fuzz-restarts SEED` wiring in `tournament.py`, and CI running the
+     strict seeded gate.
+   - **Outer loop, fast half = scenario bench (a benchmark like
+     `tools/motion_planning_benchmark.py`, numbers vs a committed baseline,
+     non-blocking).** A scenario is a seeded start state plus a 15-30 s
+     horizon (kickoff, direct free near the box, loose ball at midfield, 3v2
+     counter, defending a corner). `scenario_from_replay` is the harvester:
+     every restart in every replay is a candidate, so the bank grows for free
+     and can be weighted toward situations the last ladder run lost. Scored
+     by *calibrated proxy metrics* (below), always as differentials vs the
+     opponent, never absolute.
+   - **Outer loop, slow half = ladder (tournament, acceptance gate for
+     "promote to best").** Not round-robin: the candidate plays a frozen
+     reference pool of 4-5 strategies spanning naive to current best, both
+     colours, K seeds each; Elo anchored to the pool so it cannot drift. A
+     promoted candidate joins the pool and the most redundant member leaves.
+     Full 600 s matches only against the top of the pool, for final
+     acceptance.
+
+   **Metric design: derive, don't invent.** Add cheap event counters to
+   `MatchStats` (shots / on target, attacking-third entries, completed
+   passes, turnovers, possession-under-pressure seconds, restart-to-first-shot
+   time, each with the opponent counterpart), then regress goal difference on
+   the differentials over existing full-match data and keep only the ones
+   with predictive weight. The weighted sum is the proxy score, calibrated in
+   goals. Goodhart guard: whenever the bench improves but the ladder does
+   not, the proxy is being gamed — retire or reweight it. That is the only
+   place the expensive signal is spent on metric design. First step (in
+   progress 2026-09-03): offline correlation study over the three 231-match
+   65 s runs in `replays/` (`tools/metric_correlation.py`) to see which
+   proxies have any per-match or per-strategy signal before instrumenting.
+
+   **Compute discipline (determinism is an asset here):** paired comparison
+   with common seeds (candidate and baseline play identical seeds and
+   opponents, so the variance of the *difference* is small); sequential
+   stopping (run seeds in batches, stop once the paired difference is clearly
+   positive/negative/nothing); short horizons from sampled states rather
+   than long matches (a 600 s match yields ~a dozen independent situations,
+   thirty 20 s scenarios yield thirty for a tenth of the compute); one
+   `evaluate <strategy> --budget` entry point that runs contracts + bench at
+   low budget and adds the ladder at high budget, and writes
+   `docs/strategies.md` itself. Consolidating `tournament.py` /
+   `full_match_tournament.py` / `arena_tournament.py` is a prerequisite.
+
+   **Build order:** event counters in `MatchStats` → one calibration
+   tournament (full-match, competitive tier) → scenario bench with harvested
+   states → reference ladder with paired seeds. The first two are ~a day and
+   tell you whether the proxies carry any signal before the rest is built.
+   Sim-fidelity caveat: rsim's dribble physics are known-flaky, so keep a
+   short list of behaviours rsim is not trusted for and spot-check anything
+   on it in grsim before believing a bench or ladder gain that depends on it.
+
+   **First data point (2026-09-03, `tools/metric_correlation.py` over the
+   three 231-match 65 s trajsample runs):** turnovers, completed passes and
+   attacking-third entries are both valid (rho 0.65-0.73 vs points per
+   strategy) and reliable run-to-run (rho 0.79-0.86); shots are valid but
+   unreliable at 65 s; possession and robot-motion carry no signal. Caveat
+   that applies to *all* of that data: see item 15.
+
+15. **`trajsample` liveness floor: 137/231 matches deadlock in a DIRECT_FREE
+    restart, and the BangBang1D fix cannot land until the planner handles
+    blocked starts.** Two findings from 2026-09-03, both measured with the
+    new stall watchdog (`tournament.py` STALLS section, `--strict`):
+
+    - In every 65 s trajsample round-robin from that day (`replays/
+      tournament_20260903_{101521,112025,115838}`), a `DIRECT_FREE_*` restart
+      that never auto-advances for the rest of the match occurs in 121-137
+      of 231 matches (counted from the referee timeline with the watchdog's
+      15 s rule; the stuck detector's `restart_stall` class agrees to within
+      two matches). This is the "second mechanism" (stale committed
+      trajectory of an un-planned robot acting as a ghost obstacle up to
+      1.5 m off its real position) described in the uncommitted comment in
+      `trajsampling/planner.py`'s obstacle collection; the fallback-to-real-
+      state fix it describes is not applied yet. Until it is, the trajsample
+      tournament is mostly deadlocks after ~30 s, every metric in item 14's
+      study is effectively a first-30-seconds metric, and no strategy
+      comparison on trajsample is meaningful. This is the single highest-
+      value fix in the repo right now.
+    - `BangBang1D.compute` has two real defects, pinned by the seeded sweeps
+      in `tests/motion_planning/implementation/bang_bang_edge_cases_test.py`
+      (marked xfail): a required-overshoot case (braking distance exceeds
+      the gap, including p0 == p1 while moving) yields a negative phase time
+      and a trajectory discontinuous in position and velocity, and a same-
+      direction v0 > v_max case implies ~1e6 m/s² deceleration. A correct
+      fix exists in `b26a550` and was backed out in `90d068c`: with
+      physically correct trajectories, two robots parked ~0.5 m apart whose
+      every candidate collides both stop and stay stopped, so a full round-
+      robin stalled the opening kickoff in 231/231 matches (baseline 4).
+      The discontinuous trajectories were letting mutually blocked robots
+      creep through each other's paths. Re-apply `b26a550` only together
+      with a planner change for the all-candidates-collide state (e.g. a
+      short "yield" trajectory away from the nearest obstacle, or TIGERs'
+      priority-ordered yielding applied to the fallback, not just to
+      candidate rejection). Verify with `tournament.py --control-scheme
+      trajsample --strict` and expect PREPARE_KICKOFF stalls ≤ 4.
