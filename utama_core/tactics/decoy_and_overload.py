@@ -58,7 +58,7 @@ from utama_core.config.settings import CONTROL_FREQUENCY
 from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
-from utama_core.entities.data.object import TeamType
+from utama_core.entities.data.object import ObjectType, TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
@@ -80,6 +80,7 @@ _FINISH_TIMEOUT_TIME = 12.0  # seconds — same pass+shoot budget as pass_and_sh
 _FINISH_TIMEOUT_TICKS = round(_FINISH_TIMEOUT_TIME * CONTROL_FREQUENCY)
 _LURE_TOUCHLINE_MARGIN = 0.5  # metres in from the touchline — how close the decoy's lure run goes
 _OVERLOAD_STANDOFF = 0.4  # metres — how far past the marker's original shadow the overloader sits
+_LOOSE_BALL_SPEED = 0.3  # m/s — matches ball_is_loose's own threshold; see _teammate_already_has_ball
 
 
 def _nearest_marker(game: Game, decoy_id: int) -> Optional[int]:
@@ -87,6 +88,48 @@ def _nearest_marker(game: Game, decoy_id: int) -> Optional[int]:
     if not game.enemy_robots:
         return None
     return min(game.enemy_robots, key=lambda eid: game.enemy_robots[eid].p.distance_to(decoy_pos))
+
+
+def _teammate_already_has_ball(game: Game, excluding_id: int) -> bool:
+    """True when the ball already belongs to our own team's play and isn't
+    this tactic's problem to fetch: either a FRIENDLY robot other than
+    `excluding_id` currently has it, or it's moving fast enough that it's
+    almost certainly a pass in flight between two other teammates rather
+    than a genuinely abandoned ball (mirrors `ball_is_loose`'s own
+    `_LOOSE_BALL_SPEED` reasoning, but deliberately doesn't reuse that
+    function itself -- its enemy-contest-range logic answers "should a
+    DEFENSIVE tactic break formation to retrieve this," a different
+    question from "is a robot in a completely different ATTACK-tagged
+    tactic already using this ball").
+
+    `has_ball(game, mem.decoy_id)` (used elsewhere in this file) only ever
+    answers "does the decoy itself have it" -- it has no way to notice a
+    different teammate, in a different tactic slot, already holding or
+    mid-pass with it. `KernelSchedulerStrategy` can legitimately run this
+    tactic's "overload" allocation concurrently with `GiveAndGoTactic`'s
+    "attack" slot on a different robot subset (both ATTACK-tagged, both
+    eligible when we have the ball), so nothing upstream of this tactic
+    guarantees its own decoy is the only robot on the team that might go
+    fetch the ball. Found live, 2026-09-03: the decoy (nearest-to-ball of
+    this tactic's own two assigned robots, picked with no knowledge of the
+    rest of the team) drove straight at a ball a `GiveAndGoTactic` carrier
+    had already collected one tick earlier, physically colliding with it --
+    a same-team scrum, both robots then reading has_ball=True while the
+    ball itself went nowhere. The possession-only version of this check
+    still let a second scrum through mid-pass (the ball is legitimately
+    held by nobody for the handful of ticks it's in flight between a
+    passer and receiver), hence the added speed check.
+    """
+    with_ball = game.robot_with_ball
+    if (
+        with_ball is not None
+        and with_ball.team_type == TeamType.FRIENDLY
+        and with_ball.object_type == ObjectType.ROBOT
+        and with_ball.id != excluding_id
+    ):
+        return True
+    ball_speed = (game.ball.v.x**2 + game.ball.v.y**2) ** 0.5
+    return ball_speed >= _LOOSE_BALL_SPEED
 
 
 def _central_lane_y(game: Game) -> float:
@@ -232,6 +275,18 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
             # class of problem for `PassAndShootTactic`), not something
             # this tactic should silently invent a role split for.
             robot_id = robot_ids[0]
+            if _teammate_already_has_ball(game, excluding_id=robot_id):
+                # A different tactic's carrier already has it -- see
+                # `_teammate_already_has_ball`'s docstring. Hold instead of
+                # chasing a ball that's already legally possessed.
+                return {
+                    robot_id: go_to_point(
+                        game=game,
+                        motion_controller=ctx.motion_controller,
+                        robot_id=robot_id,
+                        target_coords=_support_hold_point(game, robot_id, 0),
+                    )
+                }, mem
             return {
                 robot_id: go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx)
             }, mem
@@ -255,7 +310,19 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
             )
 
         if mem.phase == "lure":
-            if not has_ball(game, mem.decoy_id):
+            if not has_ball(game, mem.decoy_id) and _teammate_already_has_ball(game, excluding_id=mem.decoy_id):
+                # A different tactic's carrier already has it -- see
+                # `_teammate_already_has_ball`'s docstring. Hold at the
+                # support point rather than driving into an already-claimed
+                # ball; the picker will re-evaluate this tactic's allocation
+                # next time it's not commitment-pinned.
+                commands[mem.decoy_id] = go_to_point(
+                    game=game,
+                    motion_controller=ctx.motion_controller,
+                    robot_id=mem.decoy_id,
+                    target_coords=_support_hold_point(game, mem.decoy_id, 0),
+                )
+            elif not has_ball(game, mem.decoy_id):
                 commands[mem.decoy_id] = go_to_ball(
                     game=game, motion_controller=ctx.motion_controller, robot_id=mem.decoy_id, ctx=ctx
                 )
@@ -296,7 +363,18 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
             if mem.marker_id is not None and mem.marker_id in game.enemy_robots:
                 marker_now_y = game.enemy_robots[mem.marker_id].p.y
                 dragged = abs(marker_now_y - mem.marker_start_y) >= _LURE_DRAG_THRESHOLD
-            if dragged or mem.lure_ticks >= _LURE_MAX_TICKS:
+            # Only advance to "finish" once the decoy has actually collected
+            # the ball -- that phase immediately treats `mem.decoy_id` as the
+            # PASSER in `_pass_exec`, which chases the ball itself
+            # (go_to_ball) the instant it doesn't already have it, with no
+            # awareness that a different tactic's carrier might already be
+            # using it (see `_teammate_already_has_ball`'s docstring for the
+            # live-found scrum this caused). A lure that timed out
+            # (`_LURE_MAX_TICKS`) without ever fetching the ball -- because a
+            # teammate elsewhere already had/was passing it -- has nothing
+            # to hand off; keep holding instead of transitioning into a
+            # phase that assumes otherwise.
+            if (dragged or mem.lure_ticks >= _LURE_MAX_TICKS) and has_ball(game, mem.decoy_id):
                 mem.phase = "finish"
 
             return commands, mem

@@ -51,6 +51,11 @@ def main() -> None:
     parser.add_argument("--print-trace", action="store_true", help="print every TraceEvent as it's written back")
     parser.add_argument("--headless", action="store_true", help="accepted for CLI-convention compatibility; unused")
     parser.add_argument(
+        "--control-scheme",
+        default="fpp",
+        help="motion control scheme for both sides, e.g. fpp, dwa, trajsample (default fpp)",
+    )
+    parser.add_argument(
         "--stats-path",
         default=None,
         help=(
@@ -85,6 +90,7 @@ def main() -> None:
         referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
         match_log_path=args.match_log,
         stats_path=args.stats_path,
+        control_scheme=args.control_scheme,
     )
 
     try:

@@ -252,6 +252,18 @@ def ball_is_loose(game: Game, contest_range: float = _LOOSE_BALL_CONTEST_RANGE) 
     """
     if game.ball is None:
         return False
+    # A teammate already dribbling the ball is the opposite of loose,
+    # regardless of how slowly they're carrying it or whether any enemy is
+    # nearby -- ball_speed alone can't tell "abandoned, rolling to a stop"
+    # apart from "being carefully carried while lining up a pass" (both are
+    # slow), and this function's own docstring only ever reasoned about
+    # enemy contest range, never about the caller's own team. Found live,
+    # 2026-09-03: `ShadowAndMarkTactic`'s retriever picked itself while its
+    # own teammate (a different tactic's carrier) was dribbling slowly to
+    # aim a pass, and drove straight into it -- a same-team scrum, both
+    # robots then reading has_ball=True while the ball itself went nowhere.
+    if any(robot.has_ball for robot in game.friendly_robots.values()):
+        return False
     ball_speed = (game.ball.v.x**2 + game.ball.v.y**2) ** 0.5
     if ball_speed >= _LOOSE_BALL_SPEED:
         return False

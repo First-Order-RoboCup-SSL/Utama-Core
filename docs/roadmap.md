@@ -867,3 +867,65 @@ the full investigation narrative for anything already fixed lives in git log
     robots at that point (`.intentions.jsonl`) and whether `go_to_ball`/the
     picker has any guard against sending two robots at an already-possessed
     ball.
+
+    **Root-caused and fixed, 2026-09-03.** Tracing the swapped-side match
+    directly (`debug_match.py --strategy build_tiki_taka_plus_kernel_strategy
+    --opponent build_tiki_taka_kernel_strategy`, so `tiki_taka_plus`'s own
+    tactic decisions are traced) found the mechanism precisely:
+    `KernelSchedulerStrategy` legitimately runs `GiveAndGoTactic` ("attack")
+    and `DecoyOverloadTactic` ("overload") concurrently on disjoint robot
+    subsets whenever we have the ball, but neither tactic has any way to
+    know the OTHER one's carrier already has it. `DecoyOverloadTactic` picks
+    its own "decoy" as whichever of its own two assigned robots is nearest
+    the ball, with zero awareness of the rest of the team, then sends it
+    straight there via `go_to_ball` the moment it doesn't already have the
+    ball itself (`has_ball(game, mem.decoy_id)`, necessarily scoped to that
+    one robot). One tick after `GiveAndGoTactic`'s carrier legitimately
+    fetched the ball, `DecoyOverloadTactic` independently initialized in the
+    same tick and sent its own decoy at the same ball, driving straight
+    into the carrier — the scrum.
+
+    **Fixed** with a new `_teammate_already_has_ball(game, excluding_id)`
+    helper in `decoy_and_overload.py`: true when `game.robot_with_ball`
+    points at a friendly robot other than the one asking, OR the ball is
+    moving faster than `_LOOSE_BALL_SPEED` (0.3 m/s, matching
+    `ball_is_loose`'s own threshold) — the second clause exists because a
+    ball mid-pass between two other teammates is legitimately held by
+    nobody for the handful of ticks it's in flight, and the first, cheaper
+    check alone let a second scrum through exactly there. Wired in at
+    every point this tactic decides to fetch the ball on its own initiative
+    (the `len(robot_ids) < 2` degenerate fallback, and the "lure" phase's
+    own `go_to_ball` branch — holding at a support point instead when a
+    teammate already has it) plus a deeper fix: the lure-to-finish phase
+    transition (`_LURE_MAX_TICKS` timeout) previously fired regardless of
+    whether the decoy had actually collected the ball, and the "finish"
+    phase immediately treats `mem.decoy_id` as the PASSER in the shared
+    `_pass_exec` helper — which has its own unconditional `go_to_ball` call
+    the instant that passer doesn't have the ball, completely bypassing the
+    guards just added. A lure that timed out without ever fetching the ball
+    (because a teammate elsewhere already had it) now simply keeps holding
+    instead of transitioning into a phase built on the assumption that it
+    already has the ball.
+
+    Also fixed in passing: `debug_match.py` had no `--control-scheme` flag
+    (unlike `tournament.py`), which blocked tracing one side's tactics
+    under trajsample directly — added, matching `tournament.py`'s own flag.
+
+    Verified: `decoy`/`overload`-scoped tests unaffected (13 passed), full
+    repo suite unchanged (943 passed, 4 skipped, 5 xfailed, all
+    pre-existing). Direct before/after on the reported match
+    (`build_tiki_taka_plus_kernel_strategy` vs `build_tiki_taka_kernel_strategy`,
+    traced via `debug_match.py`): the `go_to_ball[5]` call that used to fire
+    the instant a teammate collected the ball now only fires once that
+    teammate's pass has genuinely gone loose (ball speed measured dropping
+    from 4.8 m/s to below the 0.3 m/s threshold with no receiver catch) —
+    confirmed by direct ball-speed instrumentation, not just the absence of
+    the old symptom. Re-running the original `tiki_taka` vs `tiki_taka_plus`
+    tournament match: possession went from a stuck 15%/85% split to 70%/30%,
+    and `ball_travel_m` roughly tripled (3.5m -> 9.7m) with possession now
+    changing hands multiple times at realistic (single-digit-second) hold
+    durations instead of one 40+ second frozen scrum. Matches are still
+    scoreless — the separate "permanent ball-lock"/no-shot-transition bug
+    documented above is a distinct, still-open issue — but the specific
+    same-team-collision mechanism reported live ("gets to the ball and
+    waits 5-10s") is fixed.
