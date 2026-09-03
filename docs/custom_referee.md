@@ -517,3 +517,48 @@ referee = CustomReferee.from_profile_name("simulation", enable_gui=True, gui_por
 ```
 
 The GUI server imports `referee_gui` lazily, so there is no HTTP/GUI dependency overhead when `enable_gui=False` (the default).
+
+## Restart fuzzing (`RestartFuzzingReferee`)
+
+`utama_core/custom_referee/restart_fuzzer.py`'s `RestartFuzzingReferee(CustomReferee)` is an opt-in subclass that periodically injects extra, legal restarts (kickoff / ball-placement+free-kick / STOP-then-force-start) into an otherwise-normal match, at seeded-random sim times during live play. It exists because most referee-restart auto-advance bugs found in practice (`GameStateMachine.step()`'s five `Auto-advance` blocks in `state_machine.py`) only get exercised when a real foul or goal happens to occur naturally — rsim is deterministic, so re-running the same pairing never explores new restart geometries. Injecting additional restarts on top of natural play exercises those auto-advance paths far more often, in many more ball/robot geometries, without changing which team wins on skill.
+
+It is a thin subclass: it does not reimplement any rule-checking or state-machine logic. It calls the same public `set_command` API a human operator or scenario script would use, so an injected restart goes through exactly the same `STOP -> queued restart -> NORMAL_START` auto-advance sequence a naturally-detected foul/goal would — a stall it exposes is exactly as real as, and just as detectable as, a naturally occurring one. Because `StrategyRunner` only ever checks `isinstance(self.referee, CustomReferee)`, no runner changes are needed to use it.
+
+```python
+from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
+
+referee = RestartFuzzingReferee.from_profile_name(
+    "simulation",
+    seed=1,                 # same seed -> identical injection schedule/kinds/positions
+    interval_s=(8.0, 20.0), # sim-seconds range between injections
+    n_robots_yellow=6,
+    n_robots_blue=6,
+)
+runner = StrategyRunner(..., referee=referee)
+runner.run()
+
+for inj in referee.injections:
+    print(inj.sim_time, inj.kind, inj.team_is_yellow, inj.position)
+```
+
+### What it injects
+
+Each injection is drawn from `kinds` (defaults to all three):
+
+- `KIND_BALL_PLACEMENT_DIRECT_FREE` — `BALL_PLACEMENT_YELLOW`/`BLUE` to a randomly drawn legal position, chained to resume into `DIRECT_FREE_YELLOW`/`BLUE` once placement completes.
+- `KIND_PREPARE_KICKOFF` — `PREPARE_KICKOFF_YELLOW`/`BLUE` for a random team.
+- `KIND_FORCE_START` — `STOP` followed a couple of seconds later by `FORCE_START`, mirroring the same two-step shape a human GC operator (or `StrategyRunner`'s own STOP-after-goal fast path) uses.
+
+An injection only fires when the game is currently in ordinary live play (`NORMAL_START`/`FORCE_START` with no restart already queued) — never on top of an in-flight restart, and never in the window right after a goal before its own queued kickoff resolves.
+
+### Legality of injected positions
+
+`designated_position` for `KIND_BALL_PLACEMENT_DIRECT_FREE` is always drawn legal per the rulebook: inside the field with a field-line margin (reusing `OutOfBoundsRule`'s own 0.25 m playable-placement margin), and at least 0.2 m from both defense areas (SSL §8.4.1's "distance to the opponent defense area" margin, applied to both areas). It reuses `RefereeGeometry.distance_to_left/right_defense_area` rather than reimplementing defense-area geometry.
+
+### Observability
+
+`referee.injections` is a list of `Injection(sim_time, kind, team_is_yellow, position)` records a caller can log or assert against directly. If a `MatchLog` is attached (as `StrategyRunner` does automatically), each injection is also recorded via `MatchLog.trace(key="restart_fuzzer_injection", ...)`, so it shows up alongside a match's other trace events in the `.intentions.jsonl` file.
+
+### Follow-up
+
+`tournament.py` wiring (e.g. a `--fuzz-restarts SEED` CLI flag to run the round-robin with `RestartFuzzingReferee` instead of plain `CustomReferee`) is a follow-up owned elsewhere — this module is usable standalone today via `StrategyRunner(..., referee=RestartFuzzingReferee(...))`.
