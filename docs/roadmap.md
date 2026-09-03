@@ -387,25 +387,51 @@ the full investigation narrative for anything already fixed lives in git log
    unreliable at 65 s; possession and robot-motion carry no signal. Caveat
    that applies to *all* of that data: see item 15.
 
-15. **`trajsample` liveness floor: 137/231 matches deadlock in a DIRECT_FREE
-    restart, and the BangBang1D fix cannot land until the planner handles
-    blocked starts.** Two findings from 2026-09-03, both measured with the
-    new stall watchdog (`tournament.py` STALLS section, `--strict`):
+15. **`trajsample` liveness floor: 106/231 matches still stall (57 in a
+    DIRECT_FREE restart, 42 live-play ball holds), and the BangBang1D fix
+    cannot land until the planner handles blocked starts.** Findings from
+    2026-09-03, all measured with the stall watchdog (`tournament.py` STALLS
+    section, `--strict`), same seed, 65 s, 231 matches:
 
-    - In every 65 s trajsample round-robin from that day (`replays/
-      tournament_20260903_{101521,112025,115838}`), a `DIRECT_FREE_*` restart
-      that never auto-advances for the rest of the match occurs in 121-137
-      of 231 matches (counted from the referee timeline with the watchdog's
-      15 s rule; the stuck detector's `restart_stall` class agrees to within
-      two matches). This is the "second mechanism" (stale committed
-      trajectory of an un-planned robot acting as a ghost obstacle up to
-      1.5 m off its real position) described in the uncommitted comment in
-      `trajsampling/planner.py`'s obstacle collection; the fallback-to-real-
-      state fix it describes is not applied yet. Until it is, the trajsample
-      tournament is mostly deadlocks after ~30 s, every metric in item 14's
-      study is effectively a first-30-seconds metric, and no strategy
-      comparison on trajsample is meaningful. This is the single highest-
-      value fix in the repo right now.
+    - True HEAD baseline before `885eba4` (`bff5321`): 127 stalled matches
+      (DIRECT_FREE 90, NORMAL_START 17, STOP 11, PREPARE_KICKOFF 6,
+      BALL_PLACEMENT 2, FORCE_START 2, PREPARE_PENALTY 1), 12 decisive.
+      Three distinct DIRECT_FREE mechanisms were traced in replays: (1) a
+      stale committed trajectory of a robot moved outside `plan()` (every
+      non-kicker gets `empty_command()` in `DirectFreeOursStep`; the keeper
+      always) acting as a ghost obstacle that carries the robot's priority
+      and blocks the kicker for the rest of the match - dominant, fixed in
+      `885eba4` by gating the committed obstacle on divergence from
+      `trajectory.state_at(min(t, duration))`; (2) reuse-tolerance drift of
+      the committed target - a refresh-on-reuse fix was tried, guarded and
+      unguarded, and made the round-robin *worse* than HEAD (162 stalled,
+      127 DIRECT_FREE), so it is not applied; (3) STOP-phase keep-out
+      stalls (11 matches) that self-resolve after the 15 s stop timeout.
+      Gating (1) on elapsed time alone instead of divergence fires on every
+      routine plan completion and froze kickoffs - a robot resting on its
+      completed endpoint must keep its priority.
+    - After `885eba4`: 106 stalled (DIRECT_FREE 57, NORMAL_START 34,
+      FORCE_START 8, PREPARE_PENALTY 6, PREPARE_KICKOFF 5, BALL_PLACEMENT 4),
+      17 decisive, goals 12 -> 17, shots 29 -> 45, robot motion 0.33 -> 0.41.
+      Live-play `COMMITTED_FROZEN` rose 19 -> 42; every traced case is a
+      *tactic* ball hold, not a planner stall: a three_slot defender parked
+      with the ball 0.10 m in front of it at 31 s / 43 s regardless of
+      opponent, a low_block defender sliding along x = -3 with the ball
+      glued to its dribbler, a high_press/press_and_pass freeze at 19.8 s
+      after FORCE_START. HEAD shows the same holds; matches now reach them
+      instead of dying earlier. Those holds are the next liveness target
+      (same family as the GiveAndGo ball-lock fixed in `dd14f79`).
+    - `ball_travel_m` is not a play-quality signal: HEAD's median (12.2 m vs
+      9.2 m after the fix) is inflated by a robot dribbling in a 0.4 m circle
+      at 0.8 m/s for 50 s (low_block vs overload_flow family). Prefer the
+      item 14 counters (turnovers, completed passes, attacking-third
+      entries) and the STALLS section.
+    - The remaining 57 DIRECT_FREE stalls are untraced. Iteration is slow
+      because the gate is the full 231-match round-robin (~40 min on 15
+      workers); a stop-at-first-stall mode and a fixed 30-40 match subset
+      that reproduces each stall class would make the loop minutes, not
+      hours. `--fuzz-restarts SEED` (405693c) exercises restarts far more
+      often than natural play and is the right way to bench a restart fix.
     - `BangBang1D.compute` has two real defects, pinned by the seeded sweeps
       in `tests/motion_planning/implementation/bang_bang_edge_cases_test.py`
       (marked xfail): a required-overshoot case (braking distance exceeds
