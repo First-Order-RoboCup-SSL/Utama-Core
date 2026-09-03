@@ -473,3 +473,50 @@ def test_plan_exempts_ball_as_obstacle_when_targeting_it():
     planner.plan(game, robot_id=0, target_pos=overshoot_target, field_bounds=field.full_field_bounds)
 
     assert first_call_cv_row_count == [0]  # the ball must not appear as a CV obstacle for its own fetcher
+
+
+def _own_obstacle_after(planner, robot_xy, ts):
+    """Obstacle the planner would present for friendly robot 4, really at `robot_xy`, on tick `ts`."""
+    robot = _robot(4, robot_xy[0], robot_xy[1], True)
+    return planner._own_robot_obstacle(robot, 0.09, ts)
+
+
+def test_own_robot_obstacle_falls_back_to_real_state_once_robot_leaves_its_stale_plan():
+    """Pins the DIRECT_FREE ghost-obstacle deadlock (roadmap item 15).
+
+    Robot 4 committed a plan ending next to the ball, then stopped being
+    planned (`empty_command()` during a restart) and was later found 2m
+    away. Its committed trajectory, clamped at its endpoint, must no longer
+    be used as its obstacle: otherwise the endpoint sits on the ball as a
+    priority-carrying ghost and the lower-ranked kicker can never approach.
+    """
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    endpoint = (0.0, 1.0)
+    trajectory = Trajectory2D.compute((-2.0, 1.0), (0.0, 0.0), endpoint, planner.v_max, planner.a_max)
+    planner._commit(4, ts=0.0, trajectory=trajectory, target_pos=endpoint)
+
+    real = (-1.1, -1.4)
+    obstacle = _own_obstacle_after(planner, real, ts=trajectory.duration + 4.0)
+
+    assert isinstance(obstacle, ConstantVelocityObstacle)
+    assert obstacle.distance_at(0.0, real) == pytest.approx(-0.09)  # centred on the real position
+    assert obstacle.distance_at(0.0, endpoint) > 1.0  # the old endpoint is free again
+
+
+def test_own_robot_obstacle_keeps_priority_for_robot_resting_on_its_completed_plan():
+    """The fallback must be gated on divergence, not on elapsed time: a
+    robot that finished its plan and is sitting on the endpoint is exactly
+    where the plan says, and must keep its committed-trajectory obstacle
+    (and so its `owner_id` priority) even long after `duration` -- an
+    elapsed-time-only rule demotes every robot between plans and froze
+    kickoffs when tried.
+    """
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    endpoint = (0.0, 1.0)
+    trajectory = Trajectory2D.compute((-2.0, 1.0), (0.0, 0.0), endpoint, planner.v_max, planner.a_max)
+    planner._commit(4, ts=0.0, trajectory=trajectory, target_pos=endpoint)
+
+    for ts in (trajectory.duration * 0.5, trajectory.duration + 0.02, trajectory.duration + 4.0):
+        (ex, ey), _ = trajectory.state_at(min(ts, trajectory.duration))
+        obstacle = _own_obstacle_after(planner, (ex + 0.03, ey), ts)  # within tracking tolerance
+        assert getattr(obstacle, "owner_id", None) == 4, f"lost priority at ts={ts}"

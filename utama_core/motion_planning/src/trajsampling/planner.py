@@ -849,9 +849,27 @@ class TrajectorySamplingPlanner:
         committed = self._committed.get(robot.id)
         if committed is not None:
             committed_ts, trajectory, _target = committed
-            return _CommittedTrajectoryObstacle(
-                trajectory=trajectory, radius=radius, time_offset=current_ts - committed_ts, owner_id=robot.id
-            )
+            time_offset = current_ts - committed_ts
+            # A committed trajectory only describes this robot while the
+            # robot is actually on it. `_CommittedTrajectoryObstacle` clamps
+            # its query time to `duration`, so a plan that finished ticks ago
+            # keeps reporting its resting point forever -- fine for a robot
+            # that stopped there, wrong for one that has since been moved
+            # by something that bypasses `plan()` (e.g. `empty_command()`
+            # for every non-kicker during `DirectFreeOursStep`, after a plan
+            # that happened to end next to the ball). Confirmed live: an
+            # idle teammate's ghost sat 2.3m from its real position, on top
+            # of the ball, and priority-blocked the kicker for the rest of
+            # the match. Gate on divergence, not on elapsed time alone: a
+            # robot that simply completed its plan is still sitting on the
+            # endpoint and keeps its priority (an elapsed-time-only check
+            # fires on every routine completion and demotes healthy robots
+            # to priority-less obstacles, which froze kickoffs when tried).
+            (ex, ey), _ = trajectory.state_at(max(0.0, min(time_offset, trajectory.duration)))
+            if math.hypot(robot.p.x - ex, robot.p.y - ey) <= _TRAJECTORY_POSITION_TOLERANCE:
+                return _CommittedTrajectoryObstacle(
+                    trajectory=trajectory, radius=radius, time_offset=time_offset, owner_id=robot.id
+                )
         return ConstantVelocityObstacle(p0=(robot.p.x, robot.p.y), v=(robot.v.x, robot.v.y), radius=radius)
 
     def _commit(self, robot_id: int, ts: float, trajectory, target_pos: Tuple[float, float]) -> None:
