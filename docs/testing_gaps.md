@@ -8,972 +8,300 @@ kind of gap let that happen, plus a few adjacent gaps noticed along the way,
 so the next round of rule/rule-adjacent work doesn't rediscover the same
 thing from zero.
 
-**Update 2026-08-26**: gaps #1, #2, #3, and the Pushing-specific part of #6
-are now closed — see the "Closed" note under each. #4 (static type checking)
-and #5 (`game_frame=None` convention) remain open as tooling/design
-decisions, not test-writing tasks. #6 remains open for the two rules
-(`keeper_held_ball`, `ball_placement_interference`) that still haven't fired
-in a live tournament, even though they're now integration-tested.
-
-**Update 2026-08-26 (2)**: a full audit of the referee override/restart
-machinery (asked for before proceeding to live-tournament validation of
-`keeper_held_ball`/`ball_placement_interference`) found and fixed two
-restart-safety issues — see gap #7 and gap #8 below.
+Numbering is fixed — other docs link to these gaps by number — so new gaps
+are appended, not renumbered, regardless of narrative chronology.
 
 ## 7. `RobotStopSpeedRule` could foul a robot for obeying `RefereeOverride`'s own STOP-clearing motion
 
-`StopStep`/`_clear_to_legal_positions` (`custom_referee/actions.py`) drives
-any robot caught inside `BALL_KEEP_OUT_DISTANCE` (0.8m) at STOP-entry back
-out to a legal point via the normal motion controller, at up to `MAX_VEL`
-(2 m/s in rsim/grsim). `RobotStopSpeedRule` started its 2-second grace clock
-the moment STOP was observed, then fouled any robot exceeding 1.5 m/s. A
-robot that entered STOP already deep inside the keep-out zone (e.g.
-mid-dribble at the ball) can genuinely still be moving — driven by the
-referee's own override — past the 2s mark, so the referee could end up
-penalizing a robot for complying with its own restart command. This would
-show up in live play as a spurious `robot_stop_speed` foul with no real
-non-compliance behind it.
+`StopStep`/`_clear_to_legal_positions` drives any robot caught inside
+`BALL_KEEP_OUT_DISTANCE` (0.8m) at STOP-entry back to a legal point at up to
+`MAX_VEL`. `RobotStopSpeedRule` started its 2s grace clock the moment STOP
+was observed, then fouled any robot exceeding 1.5 m/s — so a robot that
+entered STOP already deep inside the keep-out zone could get fouled for
+complying with its own restart command.
 
-**Fixed 2026-08-26.** `RobotStopSpeedRule.check()` (`rules/robot_stop_speed_rule.py`)
-now exempts a robot from the speed check for as long as it remains inside
-`BALL_KEEP_OUT_DISTANCE` of the ball, regardless of the grace clock — once a
-robot reaches (or already was at) a legal distance, the ordinary
-grace-period/speed check applies as before. Two new tests in
-`tests/custom_referee/test_dribble_placement_stopspeed.py` cover both the
-exemption (`test_exempt_while_still_inside_keep_out_zone_past_grace_period`)
-and that the rule still fires normally once a robot is clear of the zone
-(`test_fires_once_robot_clears_keep_out_zone_and_still_speeds`).
+**Closed 2026-08-26 — `ccb172b`.** The rule now exempts a robot from the
+speed check for as long as it remains inside `BALL_KEEP_OUT_DISTANCE`,
+regardless of the grace clock. Tests:
+`tests/custom_referee/test_dribble_placement_stopspeed.py`.
 
 ## 8. HALT has no auto-advance anywhere, and no automated harness resumes it
 
-`DefenseAreaStoppageRule`'s 2nd-foul escalation (and any future rule that
-issues `HALT`) has no auto-advance path in `GameStateMachine` — by design,
-per the SSL rulebook, HALT requires a human referee/GameController to
-resume. That's correct behavior for a real match. But grepping
-`full_match_tournament.py`, `arena_tournament.py`, `tournament.py`, and
-`StrategyRunner` found no code path that ever resumes a HALT — an automated
-sim/tournament run that trips a HALT-issuing rule would freeze the match
-forever with no test failure or crash, just silent non-progress. This is
-exactly the kind of "silence looks like nothing happened" trap gap #6 warns
-about for `keeper_held_ball`/`ball_placement_interference` — except worse,
-since a wedged match wouldn't just fail to fire a rule, it would hang the
-whole run.
+`DefenseAreaStoppageRule`'s 2nd-foul escalation (and any future HALT-issuing
+rule) has no auto-advance path in `GameStateMachine` — correct per the SSL
+rulebook (a human referee/GC must resume HALT in a real match), but no
+sim/tournament harness ever resumed one either, so an automated run tripping
+HALT would freeze forever with no test failure — silent non-progress, worse
+than gap #6's "rule never fires" trap.
 
-**Fixed 2026-08-26.** `StrategyRunner._run_step` (`run/strategy_runner.py`)
-now auto-resumes HALT to `NORMAL_START` after `_SIM_HALT_AUTO_RESUME_SECONDS`
-(5.0s), but only when `self.sim_controller is not None` — i.e. only in
-simulation, never on real hardware, where an actual human/GC is expected to
-be present and this would be wrong to short-circuit. Covered by
-`tests/strategy_runner/test_referee_rsim.py::test_halt_auto_resumes_to_normal_start_in_sim`,
-which forces HALT via a real `CustomReferee`/rsim `StrategyRunner` and
-confirms the match resumes to `NORMAL_START` rather than staying frozen.
+**Closed 2026-08-26 — `ccb172b`.** `StrategyRunner._run_step` now
+auto-resumes HALT to `NORMAL_START` after 5.0s, only when
+`sim_controller is not None` (sim-only, never on real hardware). Test:
+`tests/strategy_runner/test_referee_rsim.py::test_halt_auto_resumes_to_normal_start_in_sim`.
 
 ## 1. Unit-testing a rule in isolation doesn't test the interface it's actually called through
 
 Every new rule's tests called `rule.check(frame, geometry, command)`
-directly — 3 positional args, matching `BaseRule.check()`'s signature at
-the time each agent started. Mid-session, `BaseRule.check()` grew a 4th
-parameter (`designated_position`, defaulted to `None`) to plumb the ball
-placement target through to `BallPlacementInterferenceRule`. Concrete
-subclasses in Python are never checked against their abstract base's
-signature — nothing stops a subclass `check(self, a, b, c)` from
-"implementing" a base class whose abstract method is `check(self, a, b, c,
-d=None)`. `CustomReferee.step()` calls every rule the same way:
+directly (3 args). Mid-session, `BaseRule.check()` grew a 4th parameter
+(`designated_position`); `CustomReferee.step()` always calls with 4
+positional args. Python never checks a subclass override's signature
+against its abstract base, so 7 rule files still had 3-parameter overrides
+when merged, and every one of their own unit tests kept passing — none of
+them drove the call through `CustomReferee.step()` itself, the actual
+production call path.
 
-```python
-result = rule.check(game_frame, self._geometry, self._state.command, self._state.ball_placement_target)
-```
-
-— 4 positional args, always. Seven rule files (6 pre-existing + 1 new)
-still had 3-parameter `check()` overrides when the three agents' work was
-merged. Every one of their own unit tests passed, because every one of
-those tests called `check()` with only 3 args, matching what the test
-author wrote against. Nothing in that test file ever drove the call
-through `CustomReferee.step()` itself, so nothing ever supplied a 4th
-argument and the mismatch stayed invisible until a full-suite run happened
-to exercise `CustomReferee.step()` for an unrelated reason.
-
-**The gap:** a new rule's test suite exercised the rule class directly, never
-the actual call path (`CustomReferee.step()` → `rule.check(...)`) production
-code uses. Passing in isolation said nothing about whether the rule was
-correctly wired into the system that calls it.
-
-**What would have caught it sooner:** at least one test per new rule that
-goes through `CustomReferee.from_profile_name(...).step(game_frame, t)` end
-to end, not just `SomeRule().check(...)`. Doesn't need to replace the
-focused unit tests — those are still the right tool for exercising a rule's
-actual logic/thresholds — but at least one integration-shaped test per rule
-would have caught this specific class of bug immediately, and generalizes
-to catching any future interface drift the same way.
-
-**Closed 2026-08-26.** One integration-shaped test per new §8.4 rule now
-exists, each driven through the real `CustomReferee.step()` call path:
-`Pushing` in `tests/custom_referee/test_ball_contest_deadlock.py`; the
-remaining 6 (`Crashing`, `KeeperHeldBall`, `ExcessiveDribbling`,
-`RobotStopSpeed`, `BallPlacementInterference`, `DefenseAreaStoppage`) in
-`tests/custom_referee/test_referee_rules_integration.py`. Two real (not
-bugs, just non-obvious) wiring behaviors surfaced while writing these:
-`KeeperHeldBallRule`'s foul auto-advances `STOP -> BALL_PLACEMENT_BLUE`
-within the same tick when no robot is present to keep the "all clear" gate
-pending, and `RobotStopSpeedRule`'s grace clock starts from the first
-`step()` call that observes `STOP`, not from `force_command`'s timestamp —
-both now documented in the new test file's comments.
+**Closed 2026-08-26 — `de5e69b`.** One integration-shaped test per new
+§8.4 rule now exists, driven through the real `CustomReferee.step()` call
+path: `Pushing` in `tests/custom_referee/test_ball_contest_deadlock.py`;
+the other 6 in `tests/custom_referee/test_referee_rules_integration.py`.
 
 ## 2. No test drives the foul-counter/yellow-card mechanism end-to-end
 
 `RuleViolation.offending_teams`/`counts_toward_foul_counter` and
-`TeamInfo.increment_foul_counter()` (every 3rd foul → yellow card) were
-added this session and are each unit-tested in isolation (a `RuleViolation`
-carries the right `offending_teams`; `increment_foul_counter()` returns
-`True` on the 3rd call). Nothing drives 3 real fouls through
-`GameStateMachine._handle_foul()` in sequence and asserts a yellow card
-actually lands on `TeamInfo.yellow_cards`. The wiring between "a rule
-returns a violation with `offending_teams=(True,)`" and "the state machine
-actually increments the right team's counter and awards a card on the 3rd"
-is exactly the kind of connective logic that unit tests of the two
-endpoints, individually, don't cover.
+`TeamInfo.increment_foul_counter()` were each unit-tested in isolation, but
+nothing drove 3 real fouls through `GameStateMachine._handle_foul()` in
+sequence and asserted a yellow card actually lands.
 
-**Closed 2026-08-26** by `tests/custom_referee/test_foul_counter_end_to_end.py`
-(7 tests) — drives real `RuleViolation`s through `GameStateMachine.step()`
-in sequence for both teams, confirms the 3rd/6th foul awards a 2nd card
-(not a one-shot special case), confirms `counts_toward_foul_counter=False`
-and `offending_teams=()` both correctly charge nobody, and confirms a
-non-stopping foul still applies its foul-counter side effect without
-touching `command`. Bonus finding, not a bug: non-stopping fouls never
-update `_last_transition_time`, so unlike stopping fouls they're never
-suppressed by the 0.3s transition cooldown — several non-stopping
-violations at the exact same timestamp all land.
+**Closed 2026-08-26 — `de5e69b`.**
+`tests/custom_referee/test_foul_counter_end_to_end.py` (7 tests) drives
+real `RuleViolation`s through `GameStateMachine.step()` for both teams,
+confirms the 3rd/6th foul awards a 2nd card, and confirms
+`counts_toward_foul_counter=False`/`offending_teams=()` charge nobody.
+Bonus (non-bug) finding: non-stopping fouls never update
+`_last_transition_time`, so several at the same timestamp all land, unlike
+stopping fouls (suppressed by the 0.3s transition cooldown).
 
 ## 3. No test exercises two rules firing in the same tick, or a non-stopping foul's interaction with a stopping one
 
-`CustomReferee.step()`'s scan logic is genuinely subtle: the first
-*stopping* violation (in priority order) wins and stops the scan; a
-*non-stopping* violation found earlier doesn't get suppressed by a later
-stopping one, but also can't pre-empt it — it's only applied if no stopping
-violation is found at all that tick. This logic was added specifically to
-support `CrashingRule` (`is_stopping=False`) without breaking every
-pre-existing rule (`is_stopping=True` by default). It has no dedicated test
-of its own: nothing constructs a frame where, say, a `CrashingRule`
-violation and a `PushingRule` violation are both present on the same tick
-and asserts which one actually gets applied and why. Given how easy this
-kind of scan-order logic is to get subtly wrong (and how little visual
-signal a wrong-but-plausible result gives), it's worth its own focused test
-independent of any single rule's behavior.
+`CustomReferee.step()`'s scan logic (first stopping violation in priority
+order wins and stops the scan; a non-stopping violation found earlier isn't
+suppressed by a later stopping one but also can't pre-empt it) had no
+dedicated test — added specifically to support `CrashingRule`
+(`is_stopping=False`) without breaking every pre-existing rule.
 
-**Closed 2026-08-26** by `tests/custom_referee/test_referee_scan_order.py`
-(3 tests): confirms a lone non-stopping violation (real `CrashingRule`) is
-recorded as `last_violation` without changing `referee_command`; confirms
-the first stopping rule in priority order (`GoalRule`) wins and a
-call-counting wrapper proves the next rule in order (`OutOfBoundsRule`)
-is never even consulted that tick, not just that its result is unused; and
-—since the real rule set's command-gating currently can't produce a
-non-stopping violation earlier in list order than a same-tick stopping one
-(documented in the file's module docstring: every rule sharing
-`CrashingRule`'s `NORMAL_START`/`FORCE_START` gate sits before it, every
-stopping rule after it only fires during stoppage commands Crashing never
-checks)—exercises that specific ordering directly via two minimal stub
-`BaseRule`s, proving the earlier non-stopping violation doesn't suppress or
-pre-empt the later stopping one.
+**Closed 2026-08-26 — `de5e69b`.**
+`tests/custom_referee/test_referee_scan_order.py` (3 tests): a lone
+non-stopping violation (`CrashingRule`) is recorded without changing
+`referee_command`; the first stopping rule in priority order (`GoalRule`)
+wins and a call-counting wrapper proves the next rule is never even
+consulted that tick; two minimal stub `BaseRule`s directly prove an earlier
+non-stopping violation doesn't suppress or pre-empt a later stopping one
+(the real rule set's own command-gating can't produce that ordering today).
 
 ## 4. No static type checking in CI to catch signature drift automatically
 
 CI (`.github/workflows/lint.yml`) runs Ruff only — a linter, not a type
-checker. Ruff does not flag a subclass method whose signature has drifted
-from its abstract base's (that's a type-checker's job — mypy/pyright would
-flag `BaseRule.check()`'s abstract signature vs. an override that doesn't
-accept the same parameters, at least under strict-enough settings). This
-is the tooling-level version of gap #1: even without writing a single new
-test, a type checker in CI would have caught 7 of the mismatched
-`check()` overrides on the same pull request that introduced the
-mismatch, before any test run was needed at all. Worth a follow-up
-investigation into whether adopting mypy/pyright (even permissively at
-first, given none of this codebase is currently typed to that standard) is
-worth the cost — not decided here, just flagged as the more structural fix
-underlying gap #1's specific symptom.
+checker, so it doesn't flag a subclass method whose signature has drifted
+from its abstract base's. This is the tooling-level version of gap #1: a
+type checker (mypy/pyright) would have caught all 7 mismatched `check()`
+overrides for free, before any test run was needed.
+
+**Open.** Not decided whether adopting mypy/pyright (even permissively) is
+worth the cost, given none of this codebase is currently typed to that
+standard — flagged as the more structural fix underlying gap #1's symptom.
 
 ## 5. `game_frame=None` handling isn't a consistently-applied convention
 
-`BallPlacementInterferenceRule` dereferenced `game_frame.ball` without
-checking `game_frame is None` first, breaking
-`test_custom_referee_set_command_accepts_scripted_metadata` (a scripted
-test that called `referee.step(game_frame=None, current_time=...)` to check
-state-machine command transitions without a real physics frame). Originally
-"fixed" with a `if game_frame is None: return None` guard on the rule — the
-wrong shape of fix, per a user correction: `CustomReferee.step()`'s own
-signature declares `game_frame: GameFrame`, not `Optional[GameFrame]` — no
-real caller (`StrategyRunner`) ever passes `None`, so a guard defending
-against it doesn't belong scattered across every rule. The actual bug was
-in the test, which was calling `step()` outside its real contract.
+`BallPlacementInterferenceRule` dereferenced `game_frame.ball` without a
+`None` check, breaking a test that called `referee.step(game_frame=None,
+...)` — but `CustomReferee.step()`'s own signature declares
+`game_frame: GameFrame`, not `Optional[GameFrame]`; no real caller ever
+passes `None`. The bug was in the test, not a missing guard.
 
-**Closed 2026-08-26.** Fixed at the source: the test now passes a minimal
-but real `GameFrame` (`ball=None`, empty robot dicts, real `ts`/team-colour
-fields) instead of `None` itself. `BallPlacementInterferenceRule`'s
-now-dead `game_frame is None` guard was removed — its existing `ball is
-None` check already covers the "no ball in the frame" case correctly.
-`pushing_rule.py`/`crashing_rule.py`/`robot_stop_speed_rule.py` never had
-this guard and still don't need one: no caller, test or production, has
-ever passed `game_frame=None` to `CustomReferee.step()`. Full suite: 799
-passed, 0 failed.
+**Closed 2026-08-26 — `f7e9a2a`.** Fixed at the source: the test now passes
+a minimal real `GameFrame` instead of `None`.
+`BallPlacementInterferenceRule`'s now-dead `game_frame is None` guard was
+removed rather than propagated to the other rules — none of them has ever
+needed one. Full suite: 799 passed, 0 failed.
 
 ## 6. New rules verified in isolation and via a small live tournament, not systematically fuzzed against thresholds
 
-A 3-match round-robin (`tiki_taka_plus`/`counter_press`/`high_press`, 2026-
-08-25) confirmed the new rules fire in normal 6v6 play without crashing:
-`crashing` fired 6-11 times per match (by far the most active new rule —
-expected, given normal contact play), `defense_area_stoppage` 1-3 times,
-`excessive_dribbling` twice in one match. But `pushing`,
-`keeper_held_ball`, and `ball_placement_interference` never fired in any
-of the 3 matches — their thresholds/trigger conditions are only verified
-against the small hand-constructed scenarios in each rule's unit tests,
-never against real match dynamics. This doesn't mean anything is wrong
-with them; it means they're currently the least-validated of the 7 new
-rules, and a future match/tournament run that happens to produce a
-sustained push, a long defense-area ball hold, or a ball-placement
-restart is worth checking specifically for whether those three fire
-sanely (right team, right threshold, not spuriously) rather than assuming
-silence means correctness.
+A 3-match round-robin confirmed `crashing`/`defense_area_stoppage`/
+`excessive_dribbling` fire in normal 6v6 play, but `pushing`,
+`keeper_held_ball`, and `ball_placement_interference` never fired — their
+thresholds were only verified against small hand-constructed unit-test
+scenarios, not real match dynamics.
 
-**Partially closed 2026-08-26.** `pushing` specifically is no longer just
-"unfired in one tournament + isolated unit tests" — a targeted regression
-test (`tests/custom_referee/test_ball_contest_deadlock.py`) now drives the
-*exact* traced ball-contest-deadlock geometry (two robots pinned around a
-ball, symmetric force, neither dribbler registering contact) through the
-real `CustomReferee.step()` call path and confirms both that `PushingRule`
-fires correctly and that the resulting `STOP` command actually causes
-`RefereeOverride`'s `StopStep` to drive the pinned robots apart. That's a
-real scenario, not a synthetic one — see `docs/roadmap.md` item 11. Still
-genuinely open: `keeper_held_ball` and `ball_placement_interference` have
-never fired in *any* live match/tournament run, integration-tested or not —
-a future tournament producing a long defense-area ball hold or a
-ball-placement restart is still worth checking for these two specifically.
+**`pushing`: closed 2026-08-26 — `a3f3795`.**
+`tests/custom_referee/test_ball_contest_deadlock.py` drives the exact
+traced ball-contest-deadlock geometry through the real `CustomReferee.step()`
+path and confirms both that `PushingRule` fires and that `StopStep` actually
+separates the pinned robots (see `docs/roadmap.md` item 11).
 
-**Update 2026-08-26 (3):** found the actual root cause of why
-`ball_placement_interference` specifically had never fired — see gap #9
-below, now fixed. Live-tournament validation of both rules follows in the
-next update once run.
+**`keeper_held_ball`: closed 2026-08-26.** Fired 10 times across 4 of 6
+full-length live-tournament matches (`replays/gap6_validation_20260826_124653/`)
+— fires correctly and sanely in real competitive play.
+
+**`ball_placement_interference`: open.** 0 fires across the same 6-match
+validation, despite ~200 `out_of_bounds` restarts correctly routing through
+`BALL_PLACEMENT_*` (gap #9 below is fixed and not the cause here). Traced:
+the longest continuous dwell by a non-placing robot inside the 0.5m stadium
+was 1.017s, under the 2.0s grace period every time — current strategies'
+robots pass near the stadium but don't linger long enough to foul. Not
+treated as a bug (the 2s/0.5m values are direct rulebook constants); still
+open in the sense that no live match has ever confirmed this rule firing —
+worth checking again if a future tournament produces a genuine ≥2s linger,
+or via a deliberately adversarial scenario if live-play confirmation is
+required.
 
 ## 9. `ball_placement_interference` was structurally unreachable in every rsim/grsim run
 
-`GameStateMachine`'s own design always routes a stopping restart through
-`BALL_PLACEMENT_*` first whenever `designated_position` is set on `STOP`
-(confirmed by reading `_handle_foul`/`_handle_goal`:
-`next_command`/`ball_placement_target` are set together, and
-`next_command` is always the matching `BALL_PLACEMENT_*` command whenever
-`designated_position is not None`). But `StrategyRunner._run_step` had a
-sim-only fast path — added to speed up sim time by teleporting the ball
-instead of waiting for a robot to physically carry it there — that raced
-this: on the very first `STOP` tick with a `designated_position` set, it
-teleported the ball *and* `force_command()`'d straight to `FORCE_START`,
-skipping `BALL_PLACEMENT_*`'s existence entirely, not just the slow
-physical-carry part of it. Since `STOP` is always observed strictly before
-`BALL_PLACEMENT_*` in the same restart sequence, this fast path won the
-race on *every* restart that carried a `designated_position` — which per
-the state machine's design is every one of them (goals included, via
-`ball_placement_target`). This made `BallPlacementInterferenceRule`
-structurally unreachable in any automated sim/tournament run: it is only
-ever checked while `current_command` is `BALL_PLACEMENT_*`, and that
-command was never actually observed for more than zero ticks. This
-explains gap #6's "never fired in 3 matches" as a real, fixable bug rather
-than under-sampling — no number of additional tournament matches would
-ever have made it fire.
+`GameStateMachine` always routes a stopping restart through
+`BALL_PLACEMENT_*` first whenever `designated_position` is set on `STOP`.
+But `StrategyRunner._run_step` had a sim-only fast path (added to speed up
+sim time by teleporting the ball) that, on the very first `STOP` tick with a
+`designated_position` set, teleported the ball *and* jumped straight to
+`FORCE_START`, skipping `BALL_PLACEMENT_*` entirely — on every restart that
+carries a `designated_position`, which per the state machine's design is
+every one of them. This made `ball_placement_interference` structurally
+unreachable in any automated run, explaining gap #6's "never fired" as a
+real bug rather than under-sampling. (Both `test_ball_placement_rsim.py`
+and `test_referee_rsim.py` had already independently worked around this
+exact shortcut in their own tests, without tracing it back to the rule.)
 
-The bug was hiding in plain sight: every test in
-`tests/strategy_runner/test_ball_placement_rsim.py` already worked around
-it, with an identical comment repeated 4 times — "`force_command` (not
-`set_command`) ... `set_command` inserts STOP first with
-`ball_placement_target` already populated, which trips StrategyRunner's
-'STOP + designated_position -> instant-place and skip to FORCE_START' fast
-path" — and `test_referee_rsim.py`'s Scenario 2b test had its own version:
-"Inject directly — bypass OOB detection which now routes through ball
-placement first." Both files' authors had already noticed the shortcut
-defeats real restarts and routed around it in their own tests, without
-tracing it back to why `ball_placement_interference` specifically could
-never fire.
-
-**Fixed 2026-08-26.** Gated the fast path in `strategy_runner.py` on
-`ref_data.next_command not in _BALL_PLACEMENT_COMMANDS` — it now only
-fires for STOP-preceded restarts that genuinely never go through ball
-placement (there currently are none in the `simulation` profile, but the
-guard is correct either way: it defers to whatever the state machine's own
-`next_command` actually says, rather than assuming). The teleport-instead-
-of-carry speedup itself is unchanged — the second branch (entering
-`BALL_PLACEMENT_*`) still teleports the ball to the target immediately, so
-sim time is not slowed down; what's restored is a real ~2-second window
-(`_AUTO_ADVANCE_DELAY`) where `BALL_PLACEMENT_*` is the actually-observed
-command, which is exactly what `BallPlacementInterferenceRule` needs to
-exist in order to be checked at all.
-
-New regression test:
+**Closed 2026-08-26 — `f0ff450`.** Gated the fast path on
+`ref_data.next_command not in _BALL_PLACEMENT_COMMANDS`. Regression test:
 `tests/strategy_runner/test_referee_rsim.py::test_real_out_of_bounds_restart_reaches_ball_placement`
-(Scenario 6) drives a real (rule-detected, not `force_command`-injected)
-out-of-bounds restart — ball drifts out under real velocity, one robot
-planted inside `GameStateMachine`'s 0.5m ball-clear distance so `STOP`
-genuinely persists for multiple ticks instead of auto-advancing within the
-same tick it's entered — and asserts `BALL_PLACEMENT_YELLOW`/`BLUE` is
-actually observed in `game.referee` before the restart concludes. Verified
-this test fails (times out, `BALL_PLACEMENT_*` never observed) on the
-pre-fix code and passes on the fix, confirming it's a real regression
-guard and not a tautology. Full suite: 227 passed in
-`tests/strategy_runner/`/`tests/custom_referee/` alone (1 pre-existing
-xfail, unrelated); full-repo run pending as of this writing.
-
-This does **not** fix or address the separate, still-open physical-carry
-gap noted in `test_referee_rsim.py`'s "Future work" section (robot
-carrying the ball via dribbler/IR sensor is untested end-to-end in rsim,
-and would need motion-controller/dribbler-capture work before real
-hardware deployment) — that gap is about physical robot behavior during
-ball placement, orthogonal to this one, which was purely about whether the
-referee *state machine* ever entered the `BALL_PLACEMENT_*` state at all
-in an automated run.
-
-**Update 2026-08-26 (4): live-tournament validation results for gap #6.**
-Ran 6 full-length (600s) matches across 3 competitive pairs
-(`counter_flow`/`tiki_taka`, `tiki_taka_plus`/`counter_flow`,
-`zone_fluid`/`counter_press`, both sides), full suite green beforehand
-(803 passed / 4 skipped / 2 xfailed), with the gap #9 fix active
-(`replays/gap6_validation_20260826_124653/`):
-
-- **`keeper_held_ball`: fired 10 times total**, across 4 of the 6 matches.
-  Confirms this rule fires correctly and sanely in real competitive play —
-  closing gap #6 for this rule. No further action needed here.
-- **`ball_placement_interference`: fired 0 times**, despite ~200
-  `out_of_bounds` restarts across the run (each now correctly routing
-  through `BALL_PLACEMENT_*` per the gap #9 fix) and non-placing robots
-  getting as close as 8-29mm to the ball-to-target line in 4 of 6 matches
-  (well inside the 0.5m stadium). Traced why directly: in
-  `counter_flow_vs_tiki_taka_RK.pkl`, the longest continuous dwell by a
-  non-placing robot inside the 0.5m stadium was **1.017s** — under the
-  2.0s grace period every time. This is not the gap #9 unreachability bug
-  recurring (that's fixed and verified separately via the Scenario 6
-  regression test) — it's a second, distinct, and much narrower reason:
-  current strategies' robots pass through/near the stadium zone but don't
-  *linger* there long enough to foul, most likely because
-  `RefereeOverride`'s keep-out-clearing motion (or the tactics' own
-  retreat behaviour) moves them out within about a second. Still
-  genuinely open, but now precisely characterized rather than mysterious:
-  `ball_placement_interference` is reachable and correctly implemented
-  (confirmed via `test_placement_interference_and_defense_fixes.py`'s
-  isolated unit tests and this session's Scenario 6 end-to-end test), but
-  needs either (a) more/longer tournament sampling on the chance some
-  future match produces a genuine ≥2s linger, or (b) a deliberately
-  adversarial scenario (a tactic instructed to hold position near the
-  placement line) if a live-play confirmation is required rather than a
-  synthetic one. Not treating this as a bug to fix — the 2s grace period
-  and 0.5m radius are both direct rulebook values (see the rule's
-  docstring), and "current tactics don't linger" is a fact about the
-  tactics, not evidence of a referee defect.
-
-**Side finding during this validation run, fixed but tracked in
-`docs/roadmap.md` instead of here** (not a `custom_referee` issue): the
-`counter_flow_vs_tiki_taka_RK.pkl` replay from this same run also surfaced
-a goalkeeper motion-control bug — a sustained, never-converging oscillation
-around a static target, not a referee-rule problem. See `docs/roadmap.md`'s
-"Goalkeeper overshoot (2026-08-24)" entry's 2026-08-26 update for the full
-trace/fix (`GoalkeeperTactic` now uses its own dedicated `PIDController`
-instead of the team's shared `FastPathPlanningController`).
-
-**Update 2026-08-26 (5)**: two process gaps noted while investigating the
-goalkeeper bug above, logged here rather than fixed immediately.
+(Scenario 6) — drives a real, rule-detected restart and asserts
+`BALL_PLACEMENT_*` is actually observed; confirmed to fail pre-fix, pass
+post-fix. Does **not** address the separate, still-open physical-carry gap
+(robot carrying the ball via dribbler/IR sensor, untested end-to-end in
+rsim) noted in `test_referee_rsim.py`'s "Future work" section — orthogonal,
+about physical robot behavior rather than the referee state machine.
 
 ## 10. Replay investigation defaulted to raw numeric dumps instead of a rendering tool that already existed
 
-The goalkeeper investigation used `replay_player.py`'s
-`load_frames_in_range(path, t_start, t_end)` to hand a subagent raw
-per-tick position/velocity numbers for the window in question. The real
-problem wasn't that this particular investigation happened to skip a tool —
-it's that a field-rendering tool for exactly this already existed
-(`utama_core/replay/render_window.py`'s `render_window()`/
-`render_around_event()`, matplotlib PNG of robot/ball trails over a pitch
-outline, faint-to-solid oldest-to-newest) and it *still* wasn't reached for
-by default. Handing an LLM investigator a wall of floating-point
-coordinates is both harder to interpret spatially and considerably more
-expensive in context window than one image, so the raw-dump path should
-never be the first move once a rendering option exists — but nothing said
-so explicitly, so the model default (reach for the data-shaped tool) won
-out over the better option.
+A field-rendering tool (`utama_core/replay/render_window.py`'s
+`render_window()`/`render_around_event()`) already existed but a goalkeeper
+investigation reached for `load_frames_in_range()`'s raw per-tick numbers
+instead — harder to interpret spatially and more expensive in context than
+one image, and nothing said explicitly to prefer the rendered option.
 
-**Fixed 2026-08-26.** Two things now say this explicitly, so it isn't
-lost the next time context resets:
-- `docs/STRATEGY_DEVELOPMENT.md`'s Observability section now states
-  outright to default to `render_window()`/`render_around_event()` over
-  `load_frames_in_range()` for replay investigation, reserving the latter
-  for follow-up exact-value checks once the image has localized what to
-  look at.
-- A standing memory (`feedback_replay_rendering`) records the same
-  preference so it applies across sessions, not just within this repo's
-  docs.
+**Closed 2026-08-26.** `docs/STRATEGY_DEVELOPMENT.md`'s Observability
+section now states outright to default to `render_window()`/
+`render_around_event()` over `load_frames_in_range()`, reserving the latter
+for follow-up exact-value checks. A standing memory
+(`feedback_replay_rendering`) records the same preference across sessions.
 
 ## 11. No automated detector for a "stuck" match (dead ball, oscillating robots)
 
-Both this session's live-tournament validation and the earlier gap-hunting
-sessions have relied on a human (or an agent manually skimming a replay) to
-notice when a match has gotten into a degenerate state — most visibly, the
-ball sitting motionless for an extended period while one or two robots
-oscillate near it without resolving anything (e.g. two robots endlessly
-contesting the same point, or a tactic stuck retrying a failed approach).
-This is exactly the kind of failure a `custom_referee` rule *should*
-eventually catch and restart (SSL's rulebook has multiple stall-breaking
-provisions), but right now nothing in the test suite or tournament tooling
-flags "the game state hasn't meaningfully progressed in N seconds" as a
-signal on its own — it's only caught if a human happens to be looking at
-the right replay window.
+Nothing in the test suite or tournament tooling flagged "the game state
+hasn't meaningfully progressed in N seconds" — stuck states (a frozen ball,
+robots oscillating without resolving anything) were only caught by a human
+skimming a replay. User's suggestion: an FFT-based check (ball position
+variance near 0 + a robot's position trace concentrated at one oscillation
+frequency) could flag this automatically.
 
-The user's suggestion: since a stuck point tends to show up as (a) the
-ball's position variance collapsing to ~0 over a multi-second window, and
-(b) one or more robots' positions oscillating periodically instead of
-converging or making progress, a frequency-domain check (e.g. an FFT over
-each tracked object's position trace in a sliding window) could flag "one
-object frozen + another object periodic-not-progressing" automatically,
-without needing to hand-author every specific stuck scenario as its own
-rule. This is an interesting, cheap-to-prototype signal (it's exactly the
-kind of steady-oscillation pattern the goalkeeper bug in this same session
-produced) but has not been implemented or even prototyped yet — it's an
-idea, not a validated detector.
+**Prototyped 2026-08-26** — `39257ee`: `utama_core/replay/stuck_detector.py`'s
+`find_stuck_windows()`. Per-3s sliding window: flags "ball frozen" via
+position std-dev, and per-robot "oscillating" via FFT peak-bin fraction of
+non-DC spectral energy (distinguishes real oscillation from a
+settling/decaying approach). Unit-tested with synthetic replays.
 
-**Prototyped 2026-08-26** as an offline analysis tool, not a live rule —
-`utama_core/replay/stuck_detector.py`'s `find_stuck_windows(replay_path,
-...)`. Per-3s sliding window: flags "ball frozen" when its position std-dev
-is below `ball_still_tol` (0.05m default), and separately, per friendly
-robot, takes an FFT of its x/y trace and flags "oscillating" when the
-single strongest non-DC frequency bin holds more than
-`oscillation_energy_tol` (0.8 default) of that trace's non-DC spectral
-energy — a real back-and-forth oscillation concentrates energy at one
-repeating frequency, whereas a settling/decaying approach spreads its
-(smaller) non-DC energy thinly across many bins, so a peak-fraction
-threshold tells them apart where a flat "any non-DC energy" measure did
-not (confirmed by an early prototype iteration that wrongly flagged a pure
-exponential-decay trace as oscillating — fixed by switching from summed
-non-DC energy to peak-bin fraction). Adjacent flagged windows are merged;
-merged spans under `min_duration_s` (3s default) are dropped. Unit-tested
-with synthetic replays (`utama_core/tests/replay/test_stuck_detector.py`):
-correctly flags a frozen-ball + 1Hz-oscillating-robot window, and correctly
-does *not* flag ordinary steady play or a robot settling (decaying, not
-oscillating) to a stop.
+**Validated against real data — found and fixed two genuine multi-hundred-
+second stuck states — `d6b3ff1`.**
+`zone_fluid_vs_counter_press_Lk.pkl` (566s): `PressAndContainTactic`
+positioned its presser relative to a stationary tracked enemy's own
+position rather than the ball itself; fixed to drive straight at a fully
+loose ball via `go_to_ball()` when `game.robot_with_ball is None`.
+`tiki_taka_plus_vs_counter_flow_Lk.pkl` (~335s): `GiveAndGoTactic`'s
+passer/receiver handshake had no timeout, so a passer held the ball
+indefinitely if the receiver never became ready; fixed with a 4s
+`_MAX_HOP_TICKS` timeout that falls through to the existing shoot-or-
+reposition fallback. Both have regression tests in
+`utama_core/tests/engine/test_all_tactics.py`. Known detector limitations
+(not fixed this pass): kickoff-standstill false positives, and a merged
+window's reported span isn't independently re-verified frozen throughout.
 
-**Validated against real data, with two real findings.** Ran
-`find_stuck_windows` over all 6 `replays/gap6_validation_20260826_124653/`
-matches (the corpus from the gap #6/#9 validation run). After filtering out
-the two known false-positive shapes (kickoff standstill; merged windows
-whose reported span isn't genuinely frozen throughout — verified per-window
-via `load_frames_in_range` before trusting any merge), two windows survived
-as genuine, multi-hundred-second stuck states, both root-caused and fixed:
+**(a) Kickoff/restart false-positive filtering — closed 2026-09-02 — `ce6abe3`.**
+A 2026-09-01 sweep (40-match tournament) found the raw detector's headline
+numbers uninterpretable without manual filtering: 82% of flagged windows
+were ≤10s and clustered at match/restart start. `find_stuck_windows` now
+excludes three classes before the frozen/oscillating check runs: non-live
+referee command (kickoff/restart pauses, `live_play_fraction` default 0.9),
+a robot legitimately holding/shielding the ball (`possession_fraction`
+default 0.3), and the ball resting in a defense area under the referee's
+own held-ball handling (`defense_area_fraction` default 0.5).
 
-- **`zone_fluid_vs_counter_press_Lk.pkl`, t=33s→599s (566s).** Ball frozen
-  (std ~1e-16) with an enemy `counter_press` robot parked directly on it,
-  `NORMAL_START` in effect throughout. Root cause: `PressAndContainTactic`
-  (`utama_core/tactics/press_and_contain.py`)'s presser tracks the
-  ball-nearest *enemy* and, when that enemy doesn't have the ball,
-  positions itself via `block_attacker`'s no-possession branch — a target
-  computed 70% of the way **from that enemy's own position** toward the
-  ball, not straight at the ball. In this replay, `zone_fluid` (the tracked
-  enemy's team) was itself locked in an all-defense posture by
-  `_zone_flow_picker`'s `_friendly_closer_to_ball` gate (a second, related
-  but separate finding — see below), so the tracked robot never moved, and
-  the presser's computed target never converged on the actual ball. Two
-  individually-reasonable behaviors (containment; "don't chase a ball the
-  opponent is closer to") combined into a ball nobody ever collected for
-  the rest of the match.
-  **Fixed 2026-08-26**: `PressAndContainTactic.tick()` now checks
-  `game.robot_with_ball is None` (ball fully loose, nobody on either team
-  possesses it) and drives the presser straight at the ball via
-  `go_to_ball()` in that case, instead of computing a target relative to a
-  possibly-stationary tracked enemy. Regression test:
-  `test_press_and_contain_goes_straight_for_a_fully_loose_ball`
-  (`utama_core/tests/engine/test_all_tactics.py`) — asserts `go_to_ball` is
-  called (not `block_attacker`) when the tracked enemy is stationary and
-  far from a loose ball; confirmed via `git stash` to fail (module doesn't
-  even expose `go_to_ball` pre-fix) and pass post-fix.
-  *Related, not separately fixed*: `_friendly_closer_to_ball`
-  (`utama_core/strategy/kernel_strategy.py`)'s "unknown/losing → permanent
-  all-defense" posture has no path back to attacking once the ball is
-  genuinely loose rather than actively held by the opponent — it was not
-  the proximate cause of this particular freeze (the presser fix above
-  breaks the deadlock on its own, since the loose ball now gets collected
-  regardless of which team's picker logic held it in defense), but the same
-  "conservative default never re-evaluates" shape could plausibly recur
-  elsewhere and is worth a closer look if another stuck instance surfaces
-  without a `PressAndContainTactic` presser involved.
-
-- **`tiki_taka_plus_vs_counter_flow_Lk.pkl`, t≈264s→599s (~335s).** Ball
-  frozen at an extreme field corner, one `counter_flow` robot possessing it
-  (`has_ball=True`) continuously, orientation frozen too, a second robot
-  (the presumed pass receiver) also frozen in place nearby. Root cause:
-  `GiveAndGoTactic`'s `_pass_exec` (`utama_core/tactics/_pass_and_score.py`)
-  runs a synchronized passer/receiver handshake (both must reach position +
-  orientation before either acts) with no timeout — if the receiver never
-  becomes ready for any reason, the passer holds the ball indefinitely, and
-  `GiveAndGoTactic.is_committed()` returns `True` for as long as
-  `receiver_id is not None`, so the kernel never reassigns either robot
-  either. The precise real-match geometry that stalled the receiver (an
-  extreme corner position) was not exactly reproduced in a live rsim
-  re-run — attempts with matching start positions produced different
-  (non-frozen) outcomes, since small differences in surrounding robot
-  placement change `_best_receiver`'s pick — but the mechanism (no timeout
-  on the handshake) is real and sufficient on its own regardless of the
-  exact trigger, matching this session's goalkeeper-fix precedent of
-  sidestepping a mechanism rather than fully reproducing its exact trigger.
-  **Fixed 2026-08-26**: added `_MAX_HOP_TICKS` (4s) to `GiveAndGoTactic`
-  (`utama_core/tactics/give_and_go.py`) — a new `hop_ticks` counter on
-  `GiveAndGoMem` tracks how long the current hop has been in flight, and
-  abandoning it (`receiver_id = None`) past the timeout falls through to
-  the tactic's existing shoot-or-reposition fallback (already proven to
-  make progress — it's the same path used when no pass lane exists at
-  all), restoring `is_committed() == False` so the kernel can reassign
-  again too. Regression test:
-  `test_give_and_go_abandons_a_hop_that_never_completes`
-  (`utama_core/tests/engine/test_all_tactics.py`) — locks `receiver_id`
-  directly against a receiver frame that never changes, runs
-  `_MAX_HOP_TICKS + 1` ticks, asserts the hop is abandoned and
-  `is_committed()` returns to `False`; confirmed via `git stash` to fail
-  (import error — `_MAX_HOP_TICKS` doesn't exist pre-fix) and pass
-  post-fix.
-
-**Known limitations of the detector itself, found during this validation
-run:**
-- **Kickoff standstill false-positives.** Every match's opening ~1-5s
-  window (all robots stationary pre-kickoff, ball placed and not yet
-  live) also gets flagged — technically true (ball frozen, robots not
-  making progress) but not a "stuck match" in the sense meant here, just
-  a normal pre-kickoff pause. The detector currently has no notion of
-  "referee command context," so it can't distinguish a legal pause from
-  a genuine stall on this signal alone.
-- **Merged-window span can outrun local verification.** The merge step
-  reports `ball_std` as the *max* across all merged sub-windows, but two
-  adjacent flagged 3s windows are only individually verified as
-  frozen/oscillating on their own 3s slice — a long merged span (as seen
-  above, 566s and ~335s) happened to be genuinely frozen throughout in
-  both cases (spot-checked, and independently confirmed by finding and
-  fixing a real root cause for each), but the merge logic doesn't itself
-  guarantee that; a replay where the ball freezes, moves briefly, then
-  re-freezes nearby could merge into one deceptively long reported window
-  despite not being frozen for its full reported span. Neither limitation
-  was fixed this pass — both are about the detector's own precision, not
-  about whether it's useful (it found two real bugs despite them).
-
-**Status: prototyped, validated on real data (found and fixed three genuine
-stuck-match root causes so far), still not wired into any automated check**
-(tournament run, CI, or otherwise) and still not a live in-match rule —
-deliberately, since a false-positive "stuck" call during live play would
-itself be a referee bug of the same shape as gap #9. Full test suite after
-all three fixes: 860 passed, 4 skipped, 2 xfailed — zero regressions.
-
-**Step (c) done, 2026-09-01 — result: the stuck pattern did *not* clear,
-and confirmed step (a) is now load-bearing, not optional.** Ran
-`find_stuck_windows` over all 40 replays from a fresh competitive-tier
-`full_match_tournament.py` run (`replays/tournament_20260901_193644/`,
-after landing the `robot_ids[0]` fix — see `docs/strategies.md`'s Known
-open bugs). Raw sweep: 40/40 matches flagged, 1303 total windows. That
-number is dominated by exactly the false-positive class in (a): 82% of the
-1303 windows are ≤10s, and manually checking, 30/40 matches have their
-first flagged window start within 2s of kickoff — this run never addressed
-(a), so every legal kickoff/goal-restart pause across all 40 matches got
-counted as "stuck" alongside genuine ones, making the raw 40/40 headline
-meaningless on its own. Filtering to windows starting ≥10s into the match:
-**20/40 matches still have a genuine long stuck window (34s–568s
-duration)** — comparable in scope to the pre-fix 34/40 baseline, meaning
-this run's fix (`robot_ids[0]`) did not measurably reduce the stuck-match
-rate, because most surviving instances share a *different*, still-unfixed
-root cause (traced for the worst case — see `docs/strategies.md`'s Known
-open bugs for the `GiveAndGoTactic` orientation-tolerance/PID-to-physics
-gap found there). This makes (a) no longer just a detector-precision nice-
-to-have: without it, any future confirmation run's headline numbers are
-uninterpretable without a manual filter pass like this one.
-
-Next steps, if picked up: (a) address the kickoff-standstill false positive
-(e.g. only run the detector once `RefereeCommand` has been
-`NORMAL_START`/`FORCE_START` for some minimum duration) — now the
-highest-priority item, since it blocks getting a clean number from any
-future run without manual post-filtering; (b) tighten the merge logic to
-verify frozen/oscillating status holds across the full merged span, not
-just its constituent windows; (c*) once (a) is fixed, re-run again to get
-a clean stuck-match rate now that a fourth root cause
-(`GiveAndGoTactic`'s orientation-tolerance/turn-on-spot gap, see
-`docs/strategies.md`) is also fixed; (d) revisit
-`_friendly_closer_to_ball`'s permanent-conservative-posture shape (noted
-above) if another stuck instance surfaces without a `PressAndContainTactic`
-presser involved, before considering any of this a candidate for a
-tournament-level automated check.
-
-**(a) done, 2026-09-02 — three false-positive classes added, not just the
-kickoff one.** A 1-match-per-pair competitive tournament re-run
-(`tournament_20260901_232355/`) surfaced 82 raw windows across 15 matches,
-63 surviving the existing `t_start >= 10s` kickoff filter — manually
-classifying every one of those 63 (`load_frames_in_range` + direct field
-checks, not a rendered PNG) found **zero** were genuine stuck-match bugs:
-38 were a robot legitimately holding/shielding the ball (`has_ball=True`
-for a real fraction of the window, e.g. a carrier paused mid-decision), 8
-were the ball sitting in a defense area under the referee's own held-
-ball/interference handling (already correctly resolving itself via
-`STOP`/`BALL_PLACEMENT` on a timeout — one case traced in full: "Ball held
-in blue defense area over 10s" firing right at the 10s mark, the detector
-just re-reporting what the referee had already caught), and the remaining
-17 were either the same two shapes at a lower duty-cycle or a **mid-match**
-kickoff restart (a goal or an earlier stoppage resolving into a fresh
-`PREPARE_KICKOFF_YELLOW`/`BALL_PLACEMENT_YELLOW` sequence) — the original
-`t_start >= 10s` filter only ever covered a match's *opening* kickoff, not
-a restart later in the match, which is exactly as common in a 6v6 game with
-goals and fouls.
-
-`find_stuck_windows` (`utama_core/replay/stuck_detector.py`) now excludes
-all three classes directly, before the frozen/oscillating check even runs:
-a window is skipped if the referee command isn't `NORMAL_START`/
-`FORCE_START` for at least `live_play_fraction` (default 0.9) of its
-frames (skipped entirely for replays with no referee data, e.g. unit-test
-fixtures), if any robot has `has_ball=True` for at least
-`possession_fraction` (default 0.3) of its frames, or if the ball spends at
-least `defense_area_fraction` (default 0.5) of its frames inside either
-defense box. Re-swept the same 15-match corpus: raw/genuine windows dropped
-from 82/63 to **11, across 7 matches** — each of those 11 was individually
-traced and confirmed to be ordinary multi-robot contested-loose-ball play
-(several robots converging on a 50/50 ball, one eventually winning
-possession), except one, which led to a real fix (see below). Unit tests
-(`utama_core/tests/replay/test_stuck_detector.py`) all still pass unchanged
-(fixtures carry no `referee` field, so the new checks no-op for them, by
-design — see the possession/live-play checks' docstrings).
-
-**One of the 11 remaining windows was a real bug, now fixed:**
+**One real bug found via the filtered sweep, fixed — `ce6abe3`.**
 `counter_flow_vs_tiki_taka.pkl` t=14.7-15.4s traced to
 `shielding.shielded_approach_angle`'s commit/release hysteresis
-(`utama_core/skills/src/shielding.py`) unconditionally clearing
-`_COMMITTED_ROBOTS` the instant no enemy was within `CONTEST_RANGE` —
-against a midfield loose ball, the contesting enemy routinely stepped in
-and out of that range from moment to moment, and each exit silently reset
-the hysteresis, so the *next* re-entry always restarted from
-`already_committed=False` (the tight `dist > COMMIT_RANGE` check) instead
-of honoring the wider `_RELEASE_RANGE` release check — reproducing the
-exact approach/retreat oscillation `_RELEASE_RANGE` was added to prevent
-in the first place (see `COMMIT_RANGE`'s own docstring for that original
-bug), just gated by the enemy's in/out timing instead of the robot's own
-distance wobble. See `docs/strategies.md`'s Known open bugs for the fix
-description. Full suite after both this fix and the detector changes: 867
-passed, 4 skipped, 2 xfailed — zero regressions.
+unconditionally clearing `_COMMITTED_ROBOTS` the instant no enemy was
+within `CONTEST_RANGE` — against a midfield loose ball, an enemy stepping
+in and out of that range repeatedly reset the hysteresis every time,
+reproducing the exact approach/retreat oscillation `_RELEASE_RANGE` was
+originally added to prevent, just gated by the enemy's timing instead of
+the robot's own distance wobble.
 
-Updated next steps: (b) (merge-span verification) and (d)
-(`_friendly_closer_to_ball`) are unchanged and still open. (c) is
-superseded by this pass's own from-scratch classification, which is more
-thorough than a raw re-sweep would have been.
+**Convergence: six independent post-fix tournament samples (193 matches
+total, full 17-config catalog coverage, both with and without
+`--both-sides`), zero new bugs found beyond the shielding fix** — every
+remaining flagged window classifies as `held_or_contested` (legitimate
+possession, or the already-documented `go_to_ball` chassis-contact-without-
+capture gap). Treated as converged for the codebase state at the time.
 
-**Verification re-run, 2026-09-02.** Re-ran the same 6-config, 1-match-per-
-pair competitive tournament after the shielding fix landed:
-`counter_flow_vs_tiki_taka.pkl` now flags **zero** windows (previously the
-one confirmed real bug), and the remaining 11 windows across the other 5
-matches all classify as `held_or_contested` (0 unclassified) — every one is
-either a robot legitimately holding the ball or the same still-open
-`go_to_ball` chassis-contact-without-capture symptom documented in
-`docs/strategies.md`'s Known open bugs, not a new defect. No further fixes
-made this pass; replays deleted after analysis (nothing new to keep).
+**New real bug found 2026-09-02, full-length (600s) tournament — a
+cross-tactic ball-target collision after a free-kick restart, freezing the
+rest of the match.** `clear_press_plus_vs_shadow_switch_LK.pkl` froze for
+~360s (t=237-599s) after a restart placed the ball just outside the enemy
+defense box. Three independent, layered causes, all found and fixed by
+tracing directly against frame data:
 
-**Broader verification, 2026-09-02 (`--both-sides`, 30 fresh matches).** Ran
-the same 6 configs with `tournament.py --both-sides` for genuine new
-coverage (not a repeat of an already-analyzed deterministic pairing) — 30
-matches, 21 raw-flagged windows after the existing kickoff filter, **all 21
-classify as `held_or_contested`, 0 unclassified**. Same ~0.7
-windows/match rate as the smaller run, same shape (legitimate possession or
-the known `go_to_ball` capture-geometry gap), no new bugs. Full suite: 867
-passed, 4 skipped, 2 xfailed. This is the strongest signal so far that the
-detector + fix combination has converged for the current strategy catalog:
-two independent tournament samples (15 and 30 matches) after the shielding
-fix produced zero unexplained anomalies. Replays deleted after analysis.
+- **Picker-level**: `ClearBallTactic` (robot 1, permanently `"clear"`) and
+  `GiveAndGoTactic`'s carrier-fetch branch (a different robot) both called
+  `go_to_ball` independently for the same physical ball, each individually
+  correct in isolation but with no cross-tactic awareness of each other —
+  both robots stalled at `OBSTACLE_CLEARANCE` from the ball and neither
+  ever moved again. **Fixed — `0e510a0`**: `_clear_press_plus_picker`/
+  `_clear_danger_picker` now hold every other free robot on `"block"`
+  while a `"clear"` robot is still pinned/busy, instead of letting them
+  fall through to attack/press/overload. This did not fully close the gap.
+- **Engine-level**: re-running with the picker fix still froze —
+  `DecoyOverloadTactic.is_committed()` only released on `mem.goal_scored`,
+  no phase timeout, so a restart displacing the ball far from the
+  decoy/overloader could pin those 2 robots at the *engine* level
+  (`Strategy._choose_partition` keeps any committed slot outside the
+  picker's `free_robots` entirely) for the rest of the match. **Fixed —
+  `ae6a6f3`**: a 12s `_FINISH_TIMEOUT_TICKS` budget (matching
+  `pass_and_shoot.py`'s existing `_PHASE_TIMEOUT_TICKS` pattern) resets the
+  tactic to a fresh, unassigned state past the timeout.
+- **Cross-team-boundary**: a third, distinct freeze in a fresh 5-strategy
+  tournament (`tiki_taka_vs_zone_fluid_Rk.pkl`, t=540-599s) — ball dead
+  just outside `zone_fluid`'s own defense-area boundary, so the keeper's
+  `_ball_needs_retrieval` (requires the ball strictly inside the box) never
+  triggered; a `tiki_taka` attacker was correctly barred from crossing the
+  same boundary by legal defense-area enforcement, but `ball_is_loose`
+  treated that legally-barred attacker as still "contesting" the ball, so
+  neither team's retrieval logic ever sent a robot again. **Fixed —
+  `10fc89c`**: `ball_is_loose` now skips an in-range enemy as a
+  non-contester when the ball is near our own defense area and that enemy
+  is legally barred from closing the gap (`in_own_defense_area` gained an
+  optional `margin` parameter). Once `ball_is_loose` returns `True` again,
+  `ShadowAndMarkTactic`'s existing retriever-assignment path handles both
+  ball placements correctly with no further changes.
 
-**Expanded-coverage verification, 2026-09-02 (8 configs, 28 matches).**
-Note: an attempt to run the *entire* 17-config catalog round-robin
-(`tournament.py` with no args, `C(17,2)=136` matches) was interrupted as
-too slow for this kind of iterative check — round-robin match count grows
-quadratically with catalog size, so a full-catalog sweep is not the right
-default for a "keep checking for regressions" loop. Scaled back instead to
-the existing 6 competitive configs plus the two "parked but improved"
-strategies flagged as worth another look (`overload_press`,
-`high_line_zone`) — 8 configs, 28 matches, comparable in size to the prior
-30-match run. 21 raw-flagged windows, **all classify as
-`held_or_contested`, 0 unclassified** — including two windows on the newly-
-added strategies (`high_line_zone_vs_overload_press.pkl` t=25-28s,
-`overload_press_vs_tiki_taka.pkl` t=16-19s), both individually spot-checked
-directly against frame data (not just the classifier) and confirmed to be
-ordinary loose-ball convergence ending in real possession, not a defect.
-Full suite: 867 passed, 4 skipped, 2 xfailed. Three independent post-fix
-samples (15, 30, and 28 matches, the last exercising two previously-
-unswept strategies) now show zero unexplained anomalies — the detector +
-shielding fix combination holds up under broader coverage, not just the
-original 6-config set. Replays deleted after analysis.
+All three fixes independently confirmed via regression tests
+(`test_clear_danger_holds_block_while_a_clearer_is_still_pinned`,
+`test_clear_press_plus_holds_block_while_a_clearer_is_still_pinned`,
+`test_decoy_and_overload_tactic.py`, 5 new tests in
+`test_pass_and_score_geometry.py`) and via a fresh 40-match full-length
+tournament sweeping clean on both freeze-catching buckets
+(`defense_box: 0`, `corner_boundary: 0`). Full suite green throughout
+(877 passed after the last fix, 4 skipped, 2 xfailed).
 
-**Further-expanded verification, 2026-09-02 (11 configs, 55 matches).**
-Added `press_and_pass`, `split_shape`, `switch_of_play` to the 8-config
-set (all three are baselines/experimental with real documented records,
-not untested scaffolding) — 11 configs, 55 matches, still well short of
-the full 136-match catalog round-robin. 35 raw-flagged windows, all
-classify as `held_or_contested`, 0 unclassified. Two of the longer windows
-(8-11s, vs. the typical 3-6s) were individually traced in full rather than
-trusting the classifier's duration alone:
-`switch_of_play_vs_tiki_taka.pkl` t=50-61s (11s) is a genuine multi-robot
-scrum — the ball stays within a 0.25m×0.14m box near the right sideline
-while 5-6 robots from both teams cycle through as nearest, resolving into
-real possession at the very end; `friendly1`'s `go_to_ball` approach
-flips shield/direct a few times but 5-8s apart (not the sub-second flicker
-the shielding fix addressed), consistent with ordinary re-evaluation
-against a repositioning opponent, not the fixed bug recurring.
-`switch_of_play_vs_zone_fluid.pkl` t=42-50s shows the same corner-adjacent
-approach/retreat/reapproach/capture pattern as the already-documented
-`go_to_ball` capture-geometry gap. Full suite: 867 passed, 4 skipped, 2
-xfailed. Four independent post-fix samples (15, 30, 28, 55 matches; 148
-matches total across 11 distinct configs) now show zero new bugs — only
-legitimate contested play and the one already-known open issue. Replays
-deleted after analysis.
+**Same-team ball scrum — a fourth, related mechanism, found while
+investigating the `trajsample` planner (see `docs/roadmap.md` item 13) —
+fixed.** Two robots on the same team could simultaneously register
+`has_ball=True` on a loose ball, neither yielding: `GiveAndGoTactic`'s
+carrier and `DecoyOverloadTactic`'s decoy converged on the same ball with
+no cross-tactic awareness, the same architecture gap as the picker-level
+freeze above but manifesting between two *different* tactics under a
+different control scheme. **Fixed — `a59a8e5`**: a new
+`_teammate_already_has_ball()` helper in `decoy_and_overload.py`, wired in
+at every point the tactic decides to fetch the ball on its own initiative.
+Full suite unchanged (943 passed, 4 skipped, 5 xfailed).
 
-**Full-catalog coverage completed, 2026-09-02 (final 6 configs, 15
-matches).** Ran the last 6 not-yet-swept catalog configs
-(`clear_danger`, `decoy_and_overload`, `give_and_go_solo`, `three_slot`,
-`low_block`, `high_press`) against each other — 15 matches, completing
-incremental coverage of the full 17-config catalog without ever running
-the 136-match all-at-once round-robin (attempted once, correctly
-interrupted as too slow for this kind of check). 4 raw-flagged windows,
-all classify as `held_or_contested`, 0 unclassified; one
-(`high_press_vs_low_block.pkl` t=28-33s) individually traced and confirmed
-as the same already-documented `go_to_ball` capture-geometry symptom
-(center-field loose ball, both teams' robots cycling through contact
-distance without capture). Full suite: 867 passed, 4 skipped, 2 xfailed.
-
-**Cumulative result: five independent post-fix tournament samples, 163
-matches, all 17 catalog configs exercised at least once, zero new bugs
-found beyond the one shielding fix.** The only recurring pattern across
-every sample is the already-documented, not-yet-fixed `go_to_ball`
-capture-geometry gap (chassis contact without dribbler-cage capture) —
-consistently classified, never presenting as a stuck match (always
-resolves within a few seconds once some robot's approach geometry happens
-to line up), and never a NEW finding this loop. Per the standing goal's
-"repeat until you can no longer find any stuck or anomalies or bugs"
-condition: with full-catalog coverage now reached and the fifth
-consecutive sample turning up nothing new, this loop is treated as
-converged for the current codebase state. Replays deleted after analysis.
-
-**Extra-confidence re-run, 2026-09-02 (final 6 configs, `--both-sides`, 30
-matches).** Re-ran the same last-6-config batch above with `--both-sides`
-(each pairing played with both configs on each side, doubling the sample
-rather than adding new configs) for one more independent look before
-declaring this loop done. 10 raw-flagged windows, all classify as
-`held_or_contested`, 0 unclassified. The longest
-(`three_slot_vs_low_block.pkl` t=55-64s, 9s — notably longer than the
-typical 3-6s window, so traced individually rather than trusted from the
-classifier bucket alone) is ordinary multi-robot congestion: the ball stays
-confined to a ~6cm x 24cm box the whole window, `has_ball` flips between
-three different robots (friendly1, friendly5, enemy1) roughly once a
-second, and each flip corresponds to a real, small ball-position change
-rather than one robot's target freezing while it oscillates in place — the
-same pattern already judged legitimate for
-`switch_of_play_vs_tiki_taka.pkl [50-61]` above, not a new defect. Full
-suite: 867 passed, 4 skipped, 2 xfailed. Replay deleted after analysis.
-
-**Cumulative result, updated: six independent post-fix tournament samples,
-193 matches total, zero new bugs found beyond the one shielding fix.**
-This re-run confirms rather than changes the prior convergence call.
-
-**New real bug found 2026-09-02, full-length (600s) tournament of the 5
-new strategies — cross-tactic ball-target collision after a free-kick
-restart freezes the rest of the match.** Running `full_match_tournament.py`
-against the 5 new strategies (`score_aware_counter_flow`,
-`clear_press_plus`, `shadow_switch`, `overload_flow`, `press_trigger_flow`)
-at full length (600s, not the 65s quick-tournament length) surfaced a
-window the stuck-detector had never seen the shape of before:
-`clear_press_plus_vs_shadow_switch_LK.pkl` flagged two adjacent merged
-windows spanning t=237-599s — effectively the entire second half of the
-match, ~360s, dwarfing every previously-seen window (typically 3-10s).
-Traced directly:
-
-- t=205.77s: `OutOfBoundsRule`/a defense-area-encroachment rule fires
-  `STOP` then `FORCE_START` ("Yellow attacker in blue defense area"),
-  placing the ball at exactly `(4.25, 1.019)` — just outside the enemy
-  defense box's `y` bound (`half_defense_area_width=1`) by 0.019m, so
-  `ball_in_enemy_defense_area` is `False` and the ball is fair game to
-  fetch directly.
-- At the same tick, `clear_press_plus`'s picker has robot 1 permanently
-  assigned to `"clear"` (`ClearBallTactic`, the `ordered[:1]` branch of
-  `_clear_press_plus_picker`/`_clear_danger_picker`) while robots [3,4,5]
-  thrash between `"press"`/`"attack"` a few times before settling on
-  `"attack"` (`GiveAndGoTactic`) right at the restart. Both `ClearBallTactic`
-  (robot 1) and `GiveAndGoTactic`'s carrier-fetch branch (robot 4, picked
-  from [3,4,5]) call `go_to_ball` **independently, for the same physical
-  ball, with no cross-tactic awareness of each other** — each is
-  individually correct in isolation (a genuinely loose ball after a
-  restart is exactly what both tactics exist to fetch), but nothing in the
-  kernel scheduler or either tactic checks whether another already-assigned
-  robot is also inbound for the identical ball.
-- Both robots converge from opposite sides and each stalls at almost
-  exactly `OBSTACLE_CLEARANCE` (`ROBOT_DIAMETER * 1.5 = 0.27m`) from the
-  ball — traced velocity smoothly decelerating to exactly `(0, 0)` and
-  staying there, not oscillating — because `FastPathPlanner`'s routing
-  exemption for a ball-adjacent obstacle (`planner.py`'s
-  `ball_adjacent_obstacles`/`routing_exempt`, added for the touchline/
-  defense-area retrieval case) is deliberately restricted to *static*
-  obstacles only (`routing_exempt = ball_adjacent_obstacles & static_keys`)
-  — extending it to robot obstacles was tried and reverted before (see
-  `docs/roadmap.md` item 11, "Ball-contest deadlock") because it exposed a
-  worse unarbitrated-dribbler-grind failure between two *enemy* robots.
-  Here the two robots are **teammates**, so that specific concern doesn't
-  apply, but the planner has no way to distinguish "two enemies grinding"
-  from "two teammates both sent for the same ball" — both look identical
-  to it (two robot obstacles near the target). Once both robots are
-  mutually parked at `OBSTACLE_CLEARANCE`, the ball never moves again for
-  the remaining ~394 seconds of the match (confirmed to the literal last
-  frame, t=600.00s) — no goal, no further stoppage, no recovery.
-- This is a different mechanism from every other bug found this session:
-  not a planner local-minimum on a *static* obstacle (the wall dead-end
-  fix), not an oscillation the stuck-detector's FFT check was built to
-  catch (this is dead-still, zero velocity, no repeating frequency), and
-  not the shielding hysteresis (no enemy is within `CONTEST_RANGE` of
-  either robot — confirmed directly, nearest enemy is 0.632m away). It's a
-  **tactic-coordination gap**: nothing in `KernelSchedulerStrategy` or any
-  individual tactic checks "is some other already-assigned robot also
-  converging on this exact ball" before calling `go_to_ball`.
-- Only surfaced at full match length: a 65s quick-tournament match never
-  runs long enough after a mid-match restart for this exact
-  free-kick-placement-plus-cross-tactic-assignment coincidence to occur and
-  then sit unrecovered for hundreds of seconds — the quick-tournament
-  samples this session ran earlier (163+ matches) never showed this
-  pattern, consistent with it needing both a specific restart geometry and
-  enough remaining match time to make the frozen tail obvious.
-- **Picker-level fix, 2026-09-02** (commit `0e510a0`), option (b) from the
-  two candidates below: `_clear_press_plus_picker` and `_clear_danger_picker`
-  now check `pinned_ids` for a still-pinned `"clear"` robot (busy, absent
-  from `free_robots` this tick — i.e. still out fetching the ball) and, if
-  found, hold every other free robot on the `"block"` screen instead of
-  letting them fall through to `attack`/`press`/`overload`. Two regression
-  tests added (`test_clear_danger_holds_block_while_a_clearer_is_still_pinned`,
-  `test_clear_press_plus_holds_block_while_a_clearer_is_still_pinned`) —
-  synthetic partition-level reproductions (pinned `"clear"` robot, a
-  possession read that would otherwise say "attack") rather than a replay
-  of the exact restart geometry, since the picker logic itself is the unit
-  under test. Full suite green: 869 passed, 4 skipped, 2 xfailed. This is a
-  real, independently-correct fix for its own narrow scenario, but **it did
-  not fully close the gap** — see the next entry.
-  Candidate fix directions considered: (a) a shared "ball already claimed"
-  flag at the kernel-scheduler level so a second tactic's `go_to_ball` call
-  for an already-being-fetched ball backs off or holds instead of racing to
-  the same point — the most general fix, but a new cross-tactic
-  coordination primitive that doesn't exist anywhere else in this codebase
-  yet, and not attempted; (b) tighten `_clear_press_plus_picker` (and
-  `_clear_danger_picker` it inherits from) so the `"clear"` branch and the
-  `"attack"`/`"press"` branches are mutually exclusive on a genuinely loose
-  ball — narrower, only fixes this one strategy's picker, not the
-  underlying gap any other two-tactic combination could hit the same way —
-  **this is the one implemented.**
-- **Second, deeper root cause found and fixed 2026-09-02** (commit
-  `ae6a6f3`): re-running the exact `clear_press_plus_vs_shadow_switch_LK`
-  fixture with the picker fix applied (matches are fully deterministic, so
-  this reproduces byte-identically up to any point neither fix touches) to
-  directly confirm the freeze no longer occurs — it still froze. Tracing
-  `.intentions.jsonl` in the new run showed the stuck robot's last real
-  tactic assignment was `"overload"` (`DecoyOverloadTactic`, `robot_ids=[1,2]`)
-  at t=158.78s, which then never appears again in the log: this robot was
-  not picker-controlled at all by the time of the freeze, but permanently
-  pinned at the *engine* level (`Strategy._choose_partition` in
-  `utama_core/engine/strategy.py` keeps any slot whose `is_committed()`
-  returns `True` outside the picker's `free_robots` set entirely — the
-  picker never even sees it again). `DecoyOverloadTactic.is_committed()`
-  (`utama_core/tactics/decoy_and_overload.py`) only ever released once
-  `mem.goal_scored` became `True` — no timeout on the `"finish"` phase at
-  all, so a restart displacing the ball far from both the decoy and
-  overloader could pin those 2 robots for the rest of the match while a
-  different tactic independently converged on the same displaced ball. This
-  is the identical stalled-phase-with-no-timeout bug class
-  `pass_and_shoot.py`'s own `_PHASE_TIMEOUT_TICKS` already exists to
-  prevent (added earlier this session) — applied the same 12s budget here:
-  `mem.finish_ticks` increments each "finish" tick, and once it exceeds
-  `_FINISH_TIMEOUT_TICKS` the tactic resets to a fresh, unassigned
-  `DecoyOverloadMem()`, releasing `is_committed()` next tick. Regression
-  tests: `utama_core/tests/engine/test_decoy_and_overload_tactic.py` (3
-  unit tests). Full suite green: 872 passed (869 + 3 new), 4 skipped, 2
-  xfailed.
-  **Still not cleanly confirmed via a live full-length re-run**: re-running
-  the same fixture again with both fixes applied hit a *third*, unrelated,
-  already-documented freeze first — a referee `HALT`<->`DIRECT_FREE_YELLOW`
-  foul-never-clears cycle at a defense-area corner (see the "Referee
-  STOP/FORCE_START thrash" project memory), upstream of where the
-  decoy/overload scenario would even occur in this deterministic fixture.
-  The unit tests are the reliable evidence this specific fix works; the
-  picker fix and this fix are each independently correct and real bugs, but
-  neither is proven to be the *complete* list of ways a mid-match restart
-  can permanently strand robots — any other attack tactic with a
-  goal-only-release `is_committed()` and no phase timeout is a plausible
-  candidate for the same bug shape, and is worth auditing proactively
-  rather than waiting for another live freeze to find the next one.
-
-**Third, distinct freeze mechanism found and fixed 2026-09-02 — a ball
-dead in the gap between two teams' movement-legality zones, claimed by
-neither.** A fresh full-length (600s) tournament of the *original* 5
-competitive strategies (`counter_flow`, `tiki_taka`, `zone_fluid`,
-`counter_press`, `tiki_taka_plus`, both fixes above applied) surfaced
-`tiki_taka_vs_zone_fluid_Rk.pkl`, a `corner_boundary`-classified window at
-t=540-599s (the stuck-detector sweep's rest-of-match tail again). Traced
-with a custom instrumented repro (a `FakeGame` built from the replay
-frame, calling `FastPathPlanner._path_to` and the relevant tactic geometry
-helpers directly, from *both* teams' perspectives):
-
-- Ball dead at `(-4.253, 1.030)`, `y` just 0.0305m outside `zone_fluid`'s
-  own defense-area boundary (`half_defense_area_width=1.0`) — so
-  `ball_in_own_defense_area(game_zf)` is `False`, and `goalkeep.py`'s
-  `_ball_needs_retrieval` (which requires the ball strictly *inside* the
-  box) never sends the keeper.
-- The `tiki_taka` attacker approaching from the other side is, from its own
-  perspective, correctly barred by `FastPathPlanner`'s
-  `_project_outside_rect`, which clamps any attack target back to the
-  boundary of the *opponent's* defense area during live play
-  (`NORMAL_START`) — correct SSL rule enforcement, not a bug (confirmed by
-  direct trace: the planner produced a 1-segment direct path, correctly
-  clamped, no oscillation — ruled out as the mechanism before looking
-  further).
-- The actual gap: `zone_fluid`'s own `ShadowAndMarkTactic`
-  (`utama_core/tactics/shadow_and_mark.py`) only assigns a ball-retriever
-  when `ball_is_loose(game)` is `True` — and `ball_is_loose`
-  (`utama_core/shared/pass_and_score_geometry.py`) treated *any* enemy
-  within `_LOOSE_BALL_CONTEST_RANGE` (1.5m) as "still contesting" the
-  ball, with no check on whether that enemy could actually reach it. The
-  `tiki_taka` attacker was parked ~0.22m from the ball, right at the
-  defense-area boundary it's legally barred from crossing — permanently
-  "close enough to count as contesting" by the old check, yet permanently
-  unable to close the last ~0.25m. Neither team's logic ever sent a robot
-  to the ball again for the rest of the match (confirmed to the literal
-  last frame).
-- This is a third, distinct mechanism from both bugs above: not a picker
-  collision, not a stale engine-level `is_committed()` pin — a legal
-  geometric boundary (the defense-area keep-out, working exactly as
-  intended) combined with an over-broad "is someone contesting this ball"
-  heuristic on the *other* team's side, creating a dead zone neither team's
-  retrieval logic was written to notice.
-- **Fixed 2026-09-02**: `ball_is_loose` now skips an in-range enemy as a
-  non-contester when the ball is at or near (within the standard
-  `2*ROBOT_RADIUS + 0.05` "just outside the box" margin used elsewhere,
-  e.g. `clamp_outside_own_defense_area`) our own defense area, and that
-  enemy is not itself inside the area (i.e. it's legally barred from
-  closing the gap). `in_own_defense_area` gained an optional `margin`
-  parameter (default `0.0`, every pre-existing call site unaffected) to
-  support this. Once `ball_is_loose` returns `True` again in this
-  scenario, `ShadowAndMarkTactic`'s existing retriever-assignment path
-  handles both ball placements correctly without further changes: it
-  already holds at `own_defense_area_exit_point` when the ball is
-  strictly inside the box, and calls `go_to_ball` directly (a normal,
-  legal fetch) when the ball is merely near it, which is exactly this
-  scenario. Regression tests:
-  `utama_core/tests/shared/test_pass_and_score_geometry.py` — 5 new tests,
-  including one at the exact traced scale (ball 0.03m outside, enemy at
-  the 0.22m boundary). Full suite green: 877 passed (872 + 5 new), 4
-  skipped, 2 xfailed.
-  **Aggregate confirmation, 2026-09-02**: a fresh full-length (600s)
-  5-strategy tournament with this fix applied (40 matches,
-  `counter_flow`/`tiki_taka`/`zone_fluid`/`counter_press`/`tiki_taka_plus`)
-  swept clean on both freeze-catching buckets: `defense_box: 0`,
-  `corner_boundary: 0`. `held_or_contested: 245` (the established benign
-  pattern) plus a single `unclassified` 3s window
-  (`tiki_taka_plus_vs_zone_fluid_LK.pkl [440-443]`), individually traced:
-  ball dead-still with the nearest robot ~2.2m away at the window's start,
-  closing steadily to 0.9m by its end — an ordinary brief gap before a
-  robot arrives, not a stall (the window is exactly the detector's 3s
-  minimum, i.e. it never grew, unlike a genuine freeze). This is the same
-  "fresh tournament + stuck-detector sweep" pattern that confirmed the
-  picker fix and the decoy/overload fix above; all three freezes found
-  this session across three independent mechanisms (picker collision,
-  stale engine-level pin, contested-ball legality gap) are now confirmed
-  fixed in aggregate. Replays deleted after analysis. This session's
-  incidental finding that `counter_flow` scored near-zero goals in one
-  40-match sample (noted when this bug's investigation began) did not
-  reproduce in this fresh sample — `counter_flow` scored and won/drew
-  normally throughout, consistent with ordinary match-to-match variance
-  rather than a regression from any fix landed this session.
+Performance note: `find_stuck_windows` was later sped up with a sliding
+pointer instead of a full rescan, and replay loading moved to a columnar
+(.npz) format — `56f2b6f`, `9ab33d0` — unrelated to the detector's
+correctness findings above.
