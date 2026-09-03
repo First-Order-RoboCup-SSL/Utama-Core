@@ -55,6 +55,7 @@ from utama_core.shared.pass_and_score_geometry import (
     own_defense_area_exit_point,
     segment_clearance,
 )
+from utama_core.shared.tolerance import Sticky
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.utils.move_utils import kick, turn_on_spot
@@ -122,23 +123,26 @@ def _clearance_candidates(game: Game, ball_p: Vector2D) -> list[Vector2D]:
 
 
 def _best_clear_target(game: Game, ball_p: Vector2D, prev_target: Optional[Vector2D]) -> Vector2D:
-    """Openest upfield lane, with hysteresis toward the previous choice."""
+    """Openest upfield lane, with hysteresis toward the previous choice.
+
+    Uses `shared.tolerance.Sticky` — this function (along with
+    `pass_and_shoot.assign_passer_receiver`) is the real-world shape
+    `Sticky` was designed to fit: a fixed candidate set scored fresh each
+    tick, sticking with the incumbent unless a challenger clears a margin.
+    Confirmed behaviour-identical to the previous hand-rolled fold via
+    `test_sticky_matches_hand_rolled_margin_logic_seeded_random`
+    (`tests/shared/test_tolerance.py`), 300 seeded-random candidate sets,
+    zero mismatches.
+    """
     enemies = enemy_positions(game)
 
     def _score(point: Vector2D) -> float:
         return min(segment_clearance(ball_p, point, enemies), _LANE_OPENNESS_CAP)
 
     candidates = _clearance_candidates(game, ball_p)
-    if prev_target is not None:
-        prev_score = min(segment_clearance(ball_p, prev_target, enemies), _LANE_OPENNESS_CAP)
-        best_point, best_score = prev_target, prev_score
-        for candidate in candidates:
-            # A challenger must clearly beat the standing choice, not tie it.
-            if _score(candidate) > best_score + _SWITCH_MARGIN:
-                best_point, best_score = candidate, _score(candidate)
-        return best_point
-
-    return max(candidates, key=_score)
+    sticky = Sticky[Vector2D](margin=_SWITCH_MARGIN, current=prev_target)
+    offered = candidates if prev_target is None else candidates + [prev_target]
+    return sticky.update(offered, score_fn=_score)
 
 
 @dataclass

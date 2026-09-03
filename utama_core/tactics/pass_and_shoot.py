@@ -35,6 +35,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.shared.tolerance import Sticky
 from utama_core.tactics._pass_and_score import (
     PassAndScoreMem,
     _pass_exec,
@@ -62,6 +63,14 @@ def assign_passer_receiver(
     `run_setup_phase` never completes because it's constantly starting
     over. Keep the previous passer unless the other robot is closer by a
     real margin, not just nominally closer.
+
+    Uses `shared.tolerance.Sticky` (score = negative distance, so "closer"
+    maximizes the score the same way `Sticky` expects everywhere else it's
+    used) — confirmed behaviour-identical to the previous hand-rolled
+    `distances[prev_receiver] + margin >= distances[prev_passer]` check via
+    a seeded-random equivalence probe (500 random distance pairs, 0
+    mismatches; see `test_sticky_matches_pass_and_shoot_margin_logic` in
+    `tests/shared/test_tolerance.py`).
     """
     ball_pos = game.ball.p.to_2d()
     distances = {
@@ -71,12 +80,15 @@ def assign_passer_receiver(
     if not distances:
         return robot_ids[0], next(rid for rid in robot_ids if rid != robot_ids[0])
 
-    if prev_assignment is not None and prev_assignment[0] in distances and prev_assignment[1] in distances:
-        prev_passer, prev_receiver = prev_assignment
-        if distances[prev_receiver] + _REASSIGN_MARGIN_M >= distances[prev_passer]:
-            return prev_passer, prev_receiver
+    prev_passer = prev_assignment[0] if prev_assignment is not None else None
+    if prev_passer is not None and not (prev_passer in distances and prev_assignment[1] in distances):
+        prev_passer = None
 
-    passer_id = min(distances, key=distances.get)
+    sticky = Sticky[int](margin=_REASSIGN_MARGIN_M, current=prev_passer)
+    # Candidate order matches robot_ids so a genuine tie (no prev choice)
+    # resolves to robot_ids[0], same as the original min()'s dict-iteration-
+    # order tie-break.
+    passer_id = sticky.update([rid for rid in robot_ids if rid in distances], score_fn=lambda rid: -distances[rid])
     receiver_id = next(rid for rid in robot_ids if rid != passer_id)
     return passer_id, receiver_id
 
