@@ -5,6 +5,9 @@ import math
 import numpy as np
 import pytest
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.entities.data.vector import Vector2D, Vector3D
+from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
 from utama_core.motion_planning.src.trajsampling import collision_numba as collision
 from utama_core.motion_planning.src.trajsampling.bang_bang import (
     BangBang1D,
@@ -17,6 +20,7 @@ from utama_core.motion_planning.src.trajsampling.obstacles import (
     StaticSegmentObstacle,
 )
 from utama_core.motion_planning.src.trajsampling.planner import (
+    TrajectorySamplingPlanner,
     _bangbang_to_row,
     _flatten_obstacles,
     _flatten_query_trajectory,
@@ -205,3 +209,178 @@ def test_trajectory_2d_stationary_at_target_has_zero_duration():
 
     assert trajectory.duration == 0.0
     assert trajectory.state_at(0.0) == ((1.0, -2.0), (0.0, 0.0))
+
+
+def test_trajectory_2d_degenerate_target_brakes_using_v0_direction_not_a_fixed_axis():
+    """Pins fe6a07e ("Fix Trajectory2D degenerate zero-distance fallback").
+
+    `move()`/`turn_on_spot()` call `Trajectory2D.compute(p0, v0, p1=p0, ...)`
+    every tick while orienting in place (e.g. `GiveAndGoTactic`'s pre-kick aim
+    step). The pre-fix `dist < 1e-9` branch projected `v0` onto a fixed
+    arbitrary axis `(1.0, 0.0)` instead of `v0`'s own direction, so a robot
+    moving purely laterally (v0 perpendicular to that fixed axis) had its
+    entire real speed silently dropped: `duration` came out as 0.0 and the
+    commanded velocity was exactly zero forever, never actually braking.
+    """
+    p0 = (1.0, 2.0)
+    v0 = (0.0, 0.8)  # purely lateral -- fully perpendicular to the old (1,0) axis
+    trajectory = Trajectory2D.compute(p0, v0, p0, v_max=3.0, a_max=2.0)
+
+    assert trajectory.duration > 0.0
+    _, commanded_velocity = trajectory.state_at(0.0)
+    assert math.hypot(*commanded_velocity) == pytest.approx(math.hypot(*v0))
+    # The trajectory must still come to rest exactly at p0.
+    end_position, end_velocity = trajectory.state_at(trajectory.duration)
+    assert end_position == pytest.approx(p0)
+    assert end_velocity == pytest.approx((0.0, 0.0))
+
+
+def test_first_collision_numba_grants_escape_grace_when_starting_inside_obstacle():
+    """Pins 2e53f3e ("Fix trajsample planner deadlock when a robot starts
+    inside an obstacle").
+
+    A robot can begin a plan already inside another obstacle's clearance
+    envelope (e.g. `GiveAndGoTactic`'s abandoned receiver, standing where it
+    waited to catch a pass, the instant the ball stops being exempted as its
+    own target). Pre-fix, `d < margin` fired at the very first sample
+    (`t == start_t`) for every candidate trajectory regardless of direction --
+    the robot's own starting position was "the collision" -- so a trajectory
+    heading directly AWAY from the obstacle was still rejected at t=0.
+    """
+    from utama_core.motion_planning.src.trajsampling.config import (
+        trajsamplingconfig as config,
+    )
+
+    # Ball-sized obstacle 0.05m away: closer than the combined robot+obstacle
+    # clearance radius (ROBOT_RADIUS + 0.0215 = 0.1115m), so the robot starts
+    # already penetrating it.
+    obstacle = ConstantVelocityObstacle(p0=(0.05, 0.0), v=(0.0, 0.0), radius=0.0215)
+    assert 0.05 - config.ROBOT_RADIUS - obstacle.radius < 0.0  # sanity: really penetrating at t=0
+
+    # Trajectory heads straight away from the obstacle.
+    trajectory = Trajectory2D.compute((0.0, 0.0), (0.0, 0.0), (-2.0, 0.0), v_max=2.0, a_max=2.0)
+    leg1_args, switch_t, leg2_args, duration = _flatten_query_trajectory(trajectory)
+    static_arr, traj_arr, cv_arr, enemy_arr = _flatten_obstacles([obstacle])
+
+    t_col = collision.first_collision_numba(
+        leg1_args[0],
+        leg1_args[1],
+        leg1_args[2],
+        leg1_args[3],
+        leg1_args[4],
+        switch_t,
+        leg2_args[0],
+        leg2_args[1],
+        leg2_args[2],
+        leg2_args[3],
+        leg2_args[4],
+        duration,
+        0.0,
+        config.MAX_LOOKAHEAD_TIME,
+        config.ROBOT_RADIUS,
+        config.MARGIN_V_MAX,
+        config.MARGIN_BASE,
+        config.MAX_TIME_STEP,
+        config.MIN_TIME_STEP,
+        config.STEP_DISTANCE_RATIO,
+        static_arr,
+        traj_arr,
+        cv_arr,
+        enemy_arr,
+    )
+
+    assert t_col == -1.0  # no collision reported: escaping the obstacle it started inside
+
+
+def _robot(rid: int, x: float, y: float, is_friendly: bool) -> Robot:
+    return Robot(
+        id=rid,
+        is_friendly=is_friendly,
+        has_ball=False,
+        p=Vector2D(x, y),
+        v=Vector2D(0, 0),
+        a=Vector2D(0, 0),
+        orientation=0.0,
+    )
+
+
+def _game(robot_xy: tuple, ball_xy: tuple) -> tuple:
+    zero = Vector3D(0, 0, 0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        friendly_robots={0: _robot(0, *robot_xy, True)},
+        enemy_robots={},
+        ball=Ball(p=Vector3D(ball_xy[0], ball_xy[1], 0), v=zero, a=zero),
+    )
+    field = Field(
+        my_team_is_right=False, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+    )
+    return Game(past=GameHistory(10), current=frame, field=field), field
+
+
+def test_try_reuse_tolerates_sub_millimetre_target_jitter():
+    """Pins 5183ed1 ("Fix trajsample planner target-jitter stall on
+    DIRECT_FREE restarts").
+
+    `_try_reuse` used to compare the caller's target against the committed
+    one with exact tuple equality. `DirectFreeOursStep`'s kicker-approach
+    point is recomputed every tick from the ball's live position, so
+    sub-millimetre physics-sim jitter alone counted as a "changed target" on
+    every call, forcing a full replan from t=0 forever (`elapsed` pinned at
+    0.0, the robot crawling instead of executing its committed trajectory).
+    """
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    p0 = (0.0, 0.0)
+    target = (2.0, 0.0)
+    trajectory = Trajectory2D.compute(p0, (0.0, 0.0), target, planner.v_max, planner.a_max)
+    planner._commit(0, ts=0.0, trajectory=trajectory, target_pos=target)
+
+    obstacle_arrays = _flatten_obstacles([])
+    jittered_target = (target[0] + 1e-4, target[1])  # ~0.1mm jitter, well under the 0.01m tolerance
+
+    result = planner._try_reuse(
+        robot_id=0,
+        ts=0.1,
+        p0=(0.05, 0.0),
+        target_pos=jittered_target,
+        obstacles=[],
+        obstacle_arrays=obstacle_arrays,
+    )
+
+    assert result is not None
+    assert result.elapsed == pytest.approx(0.1)  # executing the committed trajectory, not restarted from t=0
+
+
+def test_plan_exempts_ball_as_obstacle_when_targeting_it():
+    """Pins the `planner.py` half of c4ad99c ("Fix two bugs blocking
+    trajsample from playing a real match").
+
+    `go_to_ball` deliberately targets a point past the ball's own centre so
+    the robot's controller drives through to actual contact. Pre-fix, the
+    ball was added as an unconditional collision obstacle for every robot's
+    obstacle set -- including the robot whose own target IS the ball -- so
+    every candidate collided with the ball itself before reaching the
+    target and `plan()` never returned a clean approach.
+    """
+    game, field = _game(robot_xy=(-1.0, 0.0), ball_xy=(0.0, 0.0))
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+
+    # Instrument `_first_collision` to capture the CV-obstacle row count on
+    # the very first call (the direct trajectory, checked before any
+    # fallback candidate search) without altering planner behaviour.
+    first_call_cv_row_count = []
+    original_first_collision = planner._first_collision
+
+    def _traced_first_collision(trajectory, obstacle_arrays, start_t=0.0):
+        if not first_call_cv_row_count:
+            first_call_cv_row_count.append(obstacle_arrays[2].shape[0])
+        return original_first_collision(trajectory, obstacle_arrays, start_t)
+
+    planner._first_collision = _traced_first_collision
+
+    overshoot_target = (0.03, 0.0)  # just past the ball's centre, like go_to_ball's real target
+    planner.plan(game, robot_id=0, target_pos=overshoot_target, field_bounds=field.full_field_bounds)
+
+    assert first_call_cv_row_count == [0]  # the ball must not appear as a CV obstacle for its own fetcher

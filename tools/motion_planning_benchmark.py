@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import random
 import statistics
 import subprocess
 import sys
@@ -82,6 +83,31 @@ class Disturbance:
     theta: float = 0.0
 
 
+# ~1mm, deliberately generous relative to real physics-sim position jitter
+# (~1e-4m/tick) -- see `_make_jitter_trajectory`.
+_JITTER_RADIUS_M = 0.001
+
+
+def _make_jitter_trajectory(center: Point, seed: int) -> TargetTrajectory:
+    """A deterministic, per-call ~1mm-jittered target around `center` -- the
+    same shape `DirectFreeOursStep`'s kicker-approach point takes when it's
+    recomputed every tick from the ball's live (noisy) position, see 5183ed1
+    ("Fix trajsample planner target-jitter stall on DIRECT_FREE restarts").
+    A fresh `random.Random(seed)` is captured per trajectory (not shared
+    module state) so repeated benchmark runs are independently reproducible
+    regardless of call order -- matches the standardized suite's identically
+    named helper in `tests/motion_planning/standardized/test_scenarios.py`.
+    """
+    rng = random.Random(seed)
+
+    def _target(_elapsed: float) -> Point:
+        angle = rng.uniform(0.0, 2.0 * math.pi)
+        radius = rng.uniform(0.0, _JITTER_RADIUS_M)
+        return (center[0] + radius * math.cos(angle), center[1] + radius * math.sin(angle))
+
+    return _target
+
+
 @dataclass(frozen=True)
 class Scenario:
     name: str
@@ -95,10 +121,22 @@ class Scenario:
     friendly_target_trajectories: dict[int, TargetTrajectory] = field(default_factory=dict)
     enemy_target_trajectories: dict[int, TargetTrajectory] = field(default_factory=dict)
     disturbances: tuple[Disturbance, ...] = ()
+    # `None` uses the shared `COLLISION_DISTANCE` (2*ROBOT_RADIUS, real
+    # physical contact) every other scenario is judged against. Only
+    # `start_inside_obstacle` overrides this, to a value tighter than its own
+    # deliberately-scripted starting overlap -- see that scenario's comment
+    # for why a genuine physical start-overlap is the scenario itself, not a
+    # scenario failure, while a real NEW collision picked up while escaping
+    # must still fail it.
+    collision_distance_m: float | None = None
 
     @property
     def controls_enemy(self) -> bool:
         return self.enemy_targets is not None
+
+    @property
+    def effective_collision_distance_m(self) -> float:
+        return COLLISION_DISTANCE if self.collision_distance_m is None else self.collision_distance_m
 
 
 SCENARIOS = {
@@ -257,6 +295,45 @@ SCENARIOS = {
             friendly_starts=((-2.0, 0.0),),
             friendly_targets=((2.0, 0.0),),
             disturbances=(Disturbance(at_time_s=1.5, team="friendly", robot_id=0, position=(-1.0, 1.5)),),
+            timeout_s=12.0,
+            endpoint_tolerance_m=0.15,
+        ),
+        Scenario(
+            name="start_inside_obstacle",
+            description="A robot begins overlapping a stationary obstacle and must escape to a distant target.",
+            # 0.10m separation is genuinely inside physical contact
+            # (2*ROBOT_RADIUS = 0.18m); see 2e53f3e ("Fix trajsample planner
+            # deadlock when a robot starts inside an obstacle") -- the
+            # collision-avoidance margin at a stationary robot's own start
+            # (speed 0) is 0, so only a true overlap makes every candidate
+            # direction report an instant collision against the robot's own
+            # starting position regardless of where it points. Uses a
+            # scenario-local `collision_distance_m` tighter than this
+            # deliberate starting overlap (see `Scenario.collision_distance_m`)
+            # so the scripted start isn't itself flagged, while still
+            # requiring the robot to separate well past the real 0.18m
+            # contact radius to reach the 2m-distant target -- a genuine new
+            # collision picked up while escaping is still caught.
+            friendly_starts=((0.10, 0.0),),
+            friendly_targets=((2.0, 0.0),),
+            enemy_starts=((0.0, 0.0),),
+            timeout_s=10.0,
+            endpoint_tolerance_m=0.15,
+            collision_distance_m=0.05,
+        ),
+        Scenario(
+            name="jittering_target",
+            description="The target is recomputed every tick with ~1mm deterministic jitter around a fixed point.",
+            # The same pattern DirectFreeOursStep's kicker-approach point
+            # exhibits when it's re-derived from the ball's live, noisy
+            # position every tick -- see 5183ed1 ("Fix trajsample planner
+            # target-jitter stall on DIRECT_FREE restarts"). Compare this
+            # cell's `sim_time_mean_s` against the `direct` scenario's (same
+            # geometry, fixed target) to see the relative slowdown a planner
+            # that replans from t=0 on every sub-millimetre "change" incurs.
+            friendly_starts=((-3.0, 0.0),),
+            friendly_targets=((3.0, 0.0),),
+            friendly_target_trajectories={0: _make_jitter_trajectory((3.0, 0.0), seed=0)},
             timeout_s=12.0,
             endpoint_tolerance_m=0.15,
         ),
@@ -546,12 +623,13 @@ class BenchmarkManager(AbstractTestManager):
 
         new_colliding_pairs: set[tuple[RobotKey, RobotKey]] = set()
         robot_items = sorted(robots.items())
+        collision_distance = self.scenario.effective_collision_distance_m
         for index, (key_a, robot_a) in enumerate(robot_items):
             for key_b, robot_b in robot_items[index + 1 :]:
                 distance = robot_a.p.distance_to(robot_b.p)
                 if self.min_center_distance_m is None or distance < self.min_center_distance_m:
                     self.min_center_distance_m = distance
-                if distance < COLLISION_DISTANCE:
+                if distance < collision_distance:
                     new_colliding_pairs.add((key_a, key_b))
 
         self.collision_events += len(new_colliding_pairs - self.colliding_pairs)

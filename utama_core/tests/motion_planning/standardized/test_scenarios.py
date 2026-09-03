@@ -1,5 +1,8 @@
 """The same representative black-box scenarios for every motion planner."""
 
+import math
+import random
+
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
@@ -137,6 +140,111 @@ SCENARIOS = (
         endpoint_tolerance=0.15,
         timeout=12.0,
     ),
+    MotionScenario(
+        name="start_inside_obstacle",
+        # The friendly robot begins with its centre only 0.10m from a
+        # stationary enemy -- genuinely overlapping the enemy's physical
+        # footprint (2*ROBOT_RADIUS = 0.18m apart is normal contact; 0.10m
+        # is 0.08m *inside* that). This is the exact condition 2e53f3e
+        # ("Fix trajsample planner deadlock when a robot starts inside an
+        # obstacle") fixed: the collision-avoidance margin at a stationary
+        # robot's own start position (speed = 0) is 0, so only a TRUE
+        # overlap -- not merely a close approach -- makes `d < margin` fire
+        # at the very first sample, rejecting every candidate direction
+        # regardless of where it points and pinning the robot indefinitely
+        # (the live repro this fix names used the ball, radius 0.0215m, for
+        # exactly this reason: 0.088m separation was inside the 0.09+0.0215
+        # = 0.1115m combined radius). The standardized harness only has
+        # robot-sized obstacles, so this scenario uses a scenario-local,
+        # tighter `collision_distance` (5cm) purely to avoid flagging the
+        # deliberately-scripted starting overlap as a scenario failure in
+        # itself; reaching the 2m-distant target still requires the robot to
+        # genuinely separate well past the real 0.18m contact radius, so an
+        # actual escape is still required, and a real new collision picked
+        # up while doing so is still caught. Planner-agnostic: any planner
+        # must accept a start point already inside an obstacle and still
+        # make progress toward a distant target. Note: this single-static-
+        # obstacle, straight-line-escape geometry reliably passes even with
+        # 2e53f3e's fix reverted (verified directly) -- the live deadlock
+        # was a *braking*-driven near-zero-velocity crawl from an emergent
+        # multi-tick, multi-obstacle interaction (a teammate's committed
+        # trajectory, per the fix's own roadmap entry), not a hard veto this
+        # simpler shape reproduces standalone. The exact boundary condition
+        # (`first_collision_numba`'s escape grace) is pinned deterministically
+        # by a dedicated unit test instead (see trajsampling_correctness_test.py);
+        # this scenario keeps the realistic "start already overlapping" case
+        # in the black-box regression suite going forward.
+        friendly_starts=((0.10, 0.0),),
+        friendly_targets=((2.0, 0.0),),
+        enemy_starts=((0.0, 0.0),),
+        endpoint_tolerance=0.15,
+        collision_distance=0.05,
+        timeout=10.0,
+    ),
+)
+
+# Seed for `jittering_target`'s deterministic ~1mm jitter -- fixed so the
+# scenario is exactly repeatable, matching `TrajectorySamplingPlanner`'s own
+# `random.Random(0)` convention for its intermediate-target sampling.
+_JITTER_SEED = 0
+# Matches DirectFreeOursStep's kicker-approach point being recomputed from
+# the ball's live position every tick: real physics-sim position jitter is on
+# the order of 1e-4m, this uses a full 1mm (10x that) as a deliberately
+# generous stand-in that stays far below any real target change (which jumps
+# by centimetres to metres -- see planner.py's _TRAJECTORY_TARGET_TOLERANCE
+# comment) while still exercising the same "recomputed every tick" pattern.
+_JITTER_RADIUS_M = 0.001
+
+
+def _make_jitter_trajectory(center: tuple[float, float], seed: int):
+    """A deterministic, per-call ~1mm-jittered target around `center`,
+    the same shape `DirectFreeOursStep`'s kicker-approach point takes when
+    it's recomputed every tick from the ball's live (noisy) position --
+    see 5183ed1 ("Fix trajsample planner target-jitter stall on DIRECT_FREE
+    restarts"). A fresh `random.Random(seed)` is captured per trajectory
+    (not shared module state) so repeated scenario runs are independently
+    reproducible regardless of call order.
+    """
+    rng = random.Random(seed)
+
+    def _target(_elapsed: float) -> tuple[float, float]:
+        angle = rng.uniform(0.0, 2.0 * math.pi)
+        radius = rng.uniform(0.0, _JITTER_RADIUS_M)
+        return (center[0] + radius * math.cos(angle), center[1] + radius * math.sin(angle))
+
+    return _target
+
+
+_JITTER_FIXED_TARGET = (2.0, 0.0)
+
+JITTER_COMPARISON_SCENARIOS = (
+    MotionScenario(
+        name="jittering_target_fixed_baseline",
+        # Same geometry as `jittering_target` below but with a plain fixed
+        # target -- the reference completion time `jittering_target`'s
+        # upper-bound assertion is measured against.
+        friendly_starts=((-2.0, 0.0),),
+        friendly_targets=(_JITTER_FIXED_TARGET,),
+        endpoint_tolerance=0.15,
+        timeout=12.0,
+    ),
+    MotionScenario(
+        name="jittering_target",
+        # The target is recomputed every tick with ~1mm deterministic random
+        # jitter around the same fixed point as the baseline above -- the
+        # same pattern `DirectFreeOursStep`'s kicker-approach point exhibits
+        # when it's re-derived from the ball's live, noisy position every
+        # tick (5183ed1). A planner that replans from t=0 on every
+        # sub-millimetre "change" crawls instead of executing its committed
+        # trajectory; this scenario's own test asserts completion time stays
+        # close to the fixed-target baseline rather than checking a bare
+        # timeout, so it fails on *slowdown*, not just on total stall.
+        friendly_starts=((-2.0, 0.0),),
+        friendly_targets=(_JITTER_FIXED_TARGET,),
+        friendly_target_trajectories={0: _make_jitter_trajectory(_JITTER_FIXED_TARGET, _JITTER_SEED)},
+        endpoint_tolerance=0.15,
+        timeout=12.0,
+    ),
 )
 
 
@@ -183,3 +291,39 @@ def test_standardized_motion_scenario(
     assert all(error <= scenario.endpoint_tolerance for error in stationary_final_errors.values()), context
     assert metrics.samples > 0, context
     assert metrics.peak_speed > 0.0, context
+
+
+# How much slower `jittering_target` may be than `jittering_target_fixed_baseline`
+# before it counts as a real slowdown rather than ordinary run-to-run noise.
+# Deliberately a multiplicative bound on measured completion time (not a
+# magic absolute number): the actual bug this guards against (5183ed1) was
+# not a modest slowdown, it was a ~0.02 m/s crawl -- roughly two orders of
+# magnitude slower than a normal ~6s traversal of this distance -- so 1.5x
+# comfortably separates "genuinely stalling on jitter" from "a bit slower".
+_JITTER_SLOWDOWN_TOLERANCE = 1.5
+
+
+@pytest.mark.parametrize("control_scheme", CONTROL_SCHEMES)
+def test_jittering_target_completes_within_fixed_target_time_bound(headless: bool, control_scheme: str) -> None:
+    """A ~1mm-jittered target (5183ed1's DIRECT_FREE-restart pattern) must
+    not meaningfully slow down completion relative to the same geometry with
+    a plain fixed target -- see `JITTER_COMPARISON_SCENARIOS` above.
+    """
+    fixed_scenario, jitter_scenario = JITTER_COMPARISON_SCENARIOS
+
+    fixed_passed, fixed_metrics = run_scenario(fixed_scenario, control_scheme, headless=headless)
+    fixed_context = f"{fixed_scenario.name}/{control_scheme}: {fixed_metrics.summary()}"
+    assert fixed_passed, fixed_context
+    assert fixed_metrics.collision_pair is None, fixed_context
+
+    jitter_passed, jitter_metrics = run_scenario(jitter_scenario, control_scheme, headless=headless)
+    jitter_context = f"{jitter_scenario.name}/{control_scheme}: {jitter_metrics.summary()}"
+    assert jitter_passed, jitter_context
+    assert jitter_metrics.collision_pair is None, jitter_context
+
+    bound = fixed_metrics.elapsed * _JITTER_SLOWDOWN_TOLERANCE
+    assert jitter_metrics.elapsed <= bound, (
+        f"{jitter_scenario.name}/{control_scheme} took {jitter_metrics.elapsed:.2f}s, "
+        f"more than {_JITTER_SLOWDOWN_TOLERANCE}x the {fixed_scenario.name} baseline "
+        f"({fixed_metrics.elapsed:.2f}s, bound {bound:.2f}s)"
+    )
