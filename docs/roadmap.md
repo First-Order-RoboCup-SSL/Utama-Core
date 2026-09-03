@@ -314,7 +314,39 @@ the full investigation narrative for anything already fixed lives in git log
   0.18m `ball_travel_m` against 4 different opponents — same "identical
   number regardless of opponent" signature this fix's own bug had, almost
   certainly a distinct mechanism specific to that strategy's tactic
-  composition. Not yet investigated.
+  composition.
+
+  **Root-caused and fixed** (2026-09-03): not tactic-specific at all —
+  every stalled match froze immediately after a `DIRECT_FREE_*` restart
+  (e.g. following a double-touch foul), with the tactic trace going
+  completely silent for the rest of the match and `possession_pct` pinned
+  at the value it held at the restart. Traced to `DirectFreeOursStep`'s
+  kicker-approach point (`custom_referee/actions.py`), which is recomputed
+  every tick from the ball's live position — so it inherits the ball's own
+  sub-millimetre physics-sim jitter (~1e-4m/tick) even while the ball is
+  effectively at rest. `TrajectorySamplingPlanner._try_reuse` compared the
+  caller's target against the previously-committed one with exact tuple
+  equality (`committed_target != target_pos`), so this jitter registered as
+  a "changed target" on every single call, forcing a full replan from t=0
+  every tick, forever. `PlanResult.elapsed` was therefore always 0 (see
+  `TrajectorySamplingController.calculate`'s own docstring on why that's
+  wrong for anything but an instantaneous plan), so the kicker only ever
+  executed the very first instant of a fresh bang-bang acceleration ramp
+  before the next tick threw it away and restarted — confirmed live via
+  direct velocity tracing: net speed oscillating between 0 and ~0.44 m/s
+  every ~0.5s with no cumulative progress, crawling ~2.5m at an effective
+  ~0.02 m/s. Since the kicker never got within `_KICKER_READY_DIST` of the
+  ball, `state_machine.py`'s free-kick auto-advance never fired, freezing
+  the restart indefinitely. **Fixed** in `trajsampling/planner.py`:
+  `_try_reuse`'s target comparison now uses a small tolerance
+  (`_TRAJECTORY_TARGET_TOLERANCE = 0.01`m) instead of exact equality —
+  large enough to absorb the ball's tracking jitter, far tighter than any
+  real target change in this codebase (relocate/formation targets jump by
+  many cm to whole metres, never sub-cm). Verified: `motion_planning` suite
+  unchanged (73 passed, 4 xfailed); full suite unchanged. Direct
+  before/after on the reported matchup: `ball_travel_m` 0.18m -> 5.3m,
+  possession 100%/0% -> 89%/11%. `high_line_zone` vs `low_block` (never
+  affected) re-checked unaffected (still scores normally).
 
 ## Open
 

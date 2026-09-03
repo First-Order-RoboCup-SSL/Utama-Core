@@ -276,6 +276,22 @@ def _has_priority(robot_id: int, other_id: int) -> bool:
 # benefit.
 _TRAJECTORY_POSITION_TOLERANCE = 0.08
 
+# `_try_reuse` used exact tuple equality (`committed_target != target_pos`)
+# to decide whether the caller's target has genuinely moved. That's fine for
+# callers that hold a fixed waypoint, but a target derived from a live,
+# continuously-updating source -- e.g. `DirectFreeOursStep`'s kick-approach
+# point, which is offset from the ball's current position every tick -- picks
+# up the ball's own sub-millimetre physics-sim jitter (~1e-4m/tick) as a
+# "changed" target on every single call. That forced a full replan from t=0
+# every tick forever, so `elapsed` was always 0 and the robot only ever
+# executed the very first instant of a fresh bang-bang ramp before the next
+# tick discarded it -- confirmed live: a free-kick kicker with target jitter
+# this small crawled at ~0.02 m/s net for 8+ seconds, timing out an entire
+# match (see roadmap 2026-09-03 "DIRECT_FREE stall"). 0.01m absorbs that
+# jitter while staying far tighter than any real target change in this
+# codebase (relocate/formation targets jump by many cm to whole metres).
+_TRAJECTORY_TARGET_TOLERANCE = 0.01
+
 
 class TrajectorySamplingPlanner:
     def __init__(self, v_max: float, a_max: float):
@@ -549,7 +565,10 @@ class TrajectorySamplingPlanner:
             return None
         committed_ts, trajectory, committed_target = committed
 
-        if committed_target != target_pos:
+        if (
+            math.hypot(committed_target[0] - target_pos[0], committed_target[1] - target_pos[1])
+            > _TRAJECTORY_TARGET_TOLERANCE
+        ):
             return None
 
         elapsed = ts - committed_ts
