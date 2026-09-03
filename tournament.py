@@ -66,6 +66,7 @@ from typing import Optional
 
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.custom_referee import CustomReferee
+from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
@@ -130,6 +131,8 @@ def run_match(
     config_b_name: str,
     run_dir: Optional[Path] = None,
     control_scheme: str = "fpp",
+    fuzz_seed: Optional[int] = None,
+    fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
 ) -> MatchResult:
     """Play one match. If `run_dir` is set, also records the full observability
     stack (structured intention log, aggregate stats, replay trail) under it —
@@ -140,6 +143,12 @@ def run_match(
     this script exists to compare strategies against each other, not motion
     planners against each other (see `tools/motion_planning_benchmark.py` for
     that), so there's no need for the two sides to differ here.
+
+    `fuzz_seed`, if set, swaps in `RestartFuzzingReferee` (see
+    `utama_core/custom_referee/restart_fuzzer.py`) instead of plain
+    `CustomReferee`, so this match's referee injects extra seeded-random
+    legal restarts during live play — see `main()`'s `--fuzz-restarts`/
+    `--fuzz-interval` flags.
     """
     build_a = getattr(kernel_strategy, config_a_name)
     build_b = getattr(kernel_strategy, config_b_name)
@@ -147,9 +156,18 @@ def run_match(
     strategy_a = AbstractStrategy(build_kernel_strategy=build_a(OUTFIELD_ROBOT_IDS))
     strategy_b = AbstractStrategy(build_kernel_strategy=build_b(OUTFIELD_ROBOT_IDS))
 
-    referee = CustomReferee.from_profile_name(
-        "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1
-    )
+    if fuzz_seed is not None:
+        referee = RestartFuzzingReferee.from_profile_name(
+            "simulation",
+            seed=fuzz_seed,
+            interval_s=fuzz_interval_s,
+            n_robots_yellow=N_OUTFIELD + 1,
+            n_robots_blue=N_OUTFIELD + 1,
+        )
+    else:
+        referee = CustomReferee.from_profile_name(
+            "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1
+        )
     # "simulation" profile's kickoff_team defaults to "yellow", and config_a is
     # always yellow (my_team_is_yellow=True below) — so config_a always kicks
     # off. Without this, StrategyRunner defaults sim-mode matches to
@@ -276,6 +294,15 @@ def main() -> None:
     # investigations start from zero every time. `--no-save` skips all of
     # it (no run_dir created, no summary.json) for a throwaway smoke-test
     # run that doesn't need to be analyzed afterward.
+    # `--fuzz-restarts SEED` swaps in `RestartFuzzingReferee` for every match
+    # in this run (see docs/custom_referee.md's "Restart fuzzing" section /
+    # `utama_core/custom_referee/restart_fuzzer.py`), injecting extra
+    # seeded-random legal restarts during live play so referee auto-advance
+    # paths get exercised far more often than natural play alone triggers
+    # them. `--fuzz-interval LO HI` sets the sim-second gap range between
+    # injections (default 25-45s); both are recorded in summary.json
+    # (`fuzz_seed`/`fuzz_interval_s`, null when off) so a fuzzed run is
+    # reproducible from the summary alone.
     args = sys.argv[1:]
     sequential = "--sequential" in args
     args = [a for a in args if a != "--sequential"]
@@ -301,6 +328,26 @@ def main() -> None:
         idx = args.index("--control-scheme")
         control_scheme = args[idx + 1]
         args = args[:idx] + args[idx + 2 :]
+    # `--fuzz-restarts SEED` runs every match with `RestartFuzzingReferee`
+    # instead of plain `CustomReferee`, injecting extra seeded-random legal
+    # restarts during live play (see docs/custom_referee.md's "Restart
+    # fuzzing" section / restart_fuzzer.py). Same seed -> identical injection
+    # schedule (kind, team, sim time), so a run is reproducible.
+    fuzz_seed: Optional[int] = None
+    if "--fuzz-restarts" in args:
+        idx = args.index("--fuzz-restarts")
+        fuzz_seed = int(args[idx + 1])
+        args = args[:idx] + args[idx + 2 :]
+    # `--fuzz-interval LO HI` sets the (sim-second) gap range between
+    # injections when `--fuzz-restarts` is on. Default 25-45s: over a 65s
+    # match this means one or two injections, not the 8-20s range in
+    # RestartFuzzingReferee's own docstring, which is a stress-test example,
+    # not a sane default for a normal round-robin match length.
+    fuzz_interval_s: tuple[float, float] = (25.0, 45.0)
+    if "--fuzz-interval" in args:
+        idx = args.index("--fuzz-interval")
+        fuzz_interval_s = (float(args[idx + 1]), float(args[idx + 2]))
+        args = args[:idx] + args[idx + 3 :]
 
     if args:
         requested = set(args)
@@ -359,7 +406,9 @@ def main() -> None:
         return (
             f"      possession {poss['friendly']:.0%}/{poss['enemy']:.0%}  "
             f"shots {shots['friendly']}-{shots['enemy']}  "
-            f"ball_travel {s['ball_travel_m']:.1f}m"
+            f"ball_travel {s['ball_travel_m']:.1f}m  "
+            f"turnovers {s['turnovers']}  completed_passes {s['completed_passes']}  "
+            f"attacking_third_entries {s['attacking_third_entries']}"
         )
 
     def _record(result: MatchResult) -> None:
@@ -381,7 +430,16 @@ def main() -> None:
 
     if sequential:
         for config_a_name, config_b_name in pairs:
-            _record(run_match(config_a_name, config_b_name, run_dir=run_dir, control_scheme=control_scheme))
+            _record(
+                run_match(
+                    config_a_name,
+                    config_b_name,
+                    run_dir=run_dir,
+                    control_scheme=control_scheme,
+                    fuzz_seed=fuzz_seed,
+                    fuzz_interval_s=fuzz_interval_s,
+                )
+            )
     else:
         # Matches complete out of submission order under a process pool —
         # printed as they finish rather than buffered back into pair order,
@@ -389,7 +447,9 @@ def main() -> None:
         # slowest in-flight match. Final standings are still sorted, so the
         # only user-visible reordering is the interleaved progress log.
         with ProcessPoolExecutor(max_workers=n_workers) as pool:
-            futures = [pool.submit(run_match, a, b, run_dir, control_scheme) for a, b in pairs]
+            futures = [
+                pool.submit(run_match, a, b, run_dir, control_scheme, fuzz_seed, fuzz_interval_s) for a, b in pairs
+            ]
             for future in as_completed(futures):
                 _record(future.result())
 
@@ -451,6 +511,8 @@ def main() -> None:
         "config_names": sorted(config_names),
         "control_scheme": control_scheme,
         "match_duration_seconds": MATCH_DURATION_SECONDS,
+        "fuzz_seed": fuzz_seed,
+        "fuzz_interval_s": list(fuzz_interval_s) if fuzz_seed is not None else None,
         "results": [
             {
                 "config_a": r.config_a,

@@ -255,6 +255,137 @@ def test_ball_travel_skips_teleport_jumps():
     assert stats.ball_travel_m == 0.6
 
 
+# ---------------------------------------------------------------------------
+# turnovers / completed_passes / attacking_third_entries -- live equivalents
+# of tools/metric_correlation.py's offline definitions (see match_stats.py's
+# module docstring and `_update_possession_events`).
+# ---------------------------------------------------------------------------
+
+
+def _poss_frame(ball_xy, ball_v, friendly_robots, enemy_robots, my_team_is_right: bool = True) -> GameFrame:
+    ball = Ball(Vector3D(ball_xy[0], ball_xy[1], 0), Vector3D(ball_v[0], ball_v[1], 0), None)
+    return GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=my_team_is_right,
+        friendly_robots=friendly_robots,
+        enemy_robots=enemy_robots,
+        ball=ball,
+    )
+
+
+def test_zero_case_no_possession_or_entry_events():
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy = {2: _robot(2, 4.0, 0.0, False)}
+    for _ in range(5):
+        acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly, enemy))
+
+    stats = acc.finalize()
+    assert stats.turnovers == 0
+    assert stats.completed_passes == 0
+    assert stats.attacking_third_entries == 0
+
+
+def test_completed_pass_friendly_to_friendly():
+    # Robot 1 controls the ball at rest, then a different friendly robot (3)
+    # is found in control -- a same-side handoff without an intervening
+    # opposing possession is a completed pass.
+    acc = MatchStatsAccumulator()
+    friendly1 = {1: _robot(1, 0.0, 0.0, True), 3: _robot(3, 5.0, 5.0, True)}
+    friendly2 = {1: _robot(1, 5.0, 5.0, True), 3: _robot(3, 1.0, 0.0, True)}
+    enemy = {2: _robot(2, -5.0, -5.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly1, enemy))  # robot 1 controls
+    acc.record_tick(_poss_frame((1.0, 0.0), (0.0, 0.0), friendly2, enemy))  # robot 3 controls
+
+    stats = acc.finalize()
+    assert stats.completed_passes == 1
+    assert stats.turnovers == 0
+
+
+def test_turnover_friendly_to_enemy():
+    # Friendly robot 1 controls, then the ball is found controlled by an
+    # enemy robot -- possession changed sides -> a turnover.
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy1 = {2: _robot(2, 5.0, 5.0, False)}
+    enemy2 = {2: _robot(2, 1.0, 0.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly, enemy1))  # friendly controls
+    acc.record_tick(_poss_frame((1.0, 0.0), (0.0, 0.0), friendly, enemy2))  # enemy controls
+
+    stats = acc.finalize()
+    assert stats.turnovers == 1
+    assert stats.completed_passes == 0
+
+
+def test_enemy_to_enemy_handoff_not_counted_as_friendly_event():
+    # Possession moving between two enemy robots must not be tallied as a
+    # friendly completed_pass/turnover -- MatchStats is friendly-side only.
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, -5.0, -5.0, True)}
+    enemy1 = {2: _robot(2, 0.0, 0.0, False), 4: _robot(4, 5.0, 5.0, False)}
+    enemy2 = {2: _robot(2, 5.0, 5.0, False), 4: _robot(4, 1.0, 0.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly, enemy1))  # enemy robot 2 controls
+    acc.record_tick(_poss_frame((1.0, 0.0), (0.0, 0.0), friendly, enemy2))  # enemy robot 4 controls
+
+    stats = acc.finalize()
+    assert stats.turnovers == 0
+    assert stats.completed_passes == 0
+
+
+def test_pass_resolved_after_release_at_speed():
+    # Robot 1 controls, releases the ball at speed (a real pass), and it's
+    # picked up again by a different friendly robot once it slows -- must
+    # still resolve as one completed pass via the release->reacquire path.
+    acc = MatchStatsAccumulator()
+    friendly_near1 = {1: _robot(1, 0.0, 0.0, True), 3: _robot(3, 5.0, 5.0, True)}
+    friendly_mid = {1: _robot(1, -5.0, 0.0, True), 3: _robot(3, 5.0, 5.0, True)}
+    friendly_near3 = {1: _robot(1, -5.0, 0.0, True), 3: _robot(3, 1.0, 0.0, True)}
+    enemy = {2: _robot(2, -5.0, -5.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly_near1, enemy))  # robot 1 controls
+    acc.record_tick(_poss_frame((0.5, 0.0), (6.0, 0.0), friendly_mid, enemy))  # released at speed
+    acc.record_tick(_poss_frame((0.9, 0.0), (6.0, 0.0), friendly_mid, enemy))  # in flight, no one near
+    acc.record_tick(_poss_frame((1.0, 0.0), (0.0, 0.0), friendly_near3, enemy))  # robot 3 controls, slow
+
+    stats = acc.finalize()
+    assert stats.completed_passes == 1
+    assert stats.turnovers == 0
+
+
+def test_attacking_third_entry_counted_once_with_hysteresis():
+    # my_team_is_right=True -> friendly's own goal at +4.5, friendly attacks
+    # toward -x; entry threshold is x < -1.5 (half_length + 1.5m third).
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy = {2: _robot(2, 4.0, 0.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly, enemy))  # midfield, not yet entered
+    acc.record_tick(_poss_frame((-2.0, 0.0), (0.0, 0.0), friendly, enemy))  # crosses into attacking third
+    acc.record_tick(_poss_frame((-1.6, 0.0), (0.0, 0.0), friendly, enemy))  # still inside hysteresis band
+    acc.record_tick(_poss_frame((-2.5, 0.0), (0.0, 0.0), friendly, enemy))  # still in third, no re-entry
+
+    stats = acc.finalize()
+    assert stats.attacking_third_entries == 1
+
+
+def test_attacking_third_re_entry_after_full_exit():
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy = {2: _robot(2, 4.0, 0.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly, enemy))  # midfield
+    acc.record_tick(_poss_frame((-2.0, 0.0), (0.0, 0.0), friendly, enemy))  # 1st entry
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly, enemy))  # exits past hysteresis band
+    acc.record_tick(_poss_frame((-2.0, 0.0), (0.0, 0.0), friendly, enemy))  # 2nd entry
+
+    stats = acc.finalize()
+    assert stats.attacking_third_entries == 2
+
+
 def test_robot_motion_share_requires_velocity_readings():
     acc = MatchStatsAccumulator()
     moving = Robot(id=1, is_friendly=True, has_ball=False, p=Vector2D(0, 0), v=Vector2D(0.5, 0), a=None, orientation=0)

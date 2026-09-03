@@ -174,6 +174,21 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
     command, committed tactic ids) and writes the same into `summary.json`; `--strict`
     exits non-zero if any match in the run stalled. A heuristic backstop (possession pinned
     100%/0% and `ball_travel_m < 1.0`) flags anything the watchdog itself might miss.
+- **Restart fuzzing** (`utama_core.custom_referee.restart_fuzzer.RestartFuzzingReferee`) —
+  a `CustomReferee` subclass that injects extra, legal restarts (kickoff / ball-placement
+  +free-kick / STOP-then-force-start) at seeded-random sim times during otherwise-normal
+  live play, to exercise `GameStateMachine`'s auto-advance paths far more often than
+  natural fouls/goals alone would. Full description, injection kinds, and legality
+  guarantees: `docs/custom_referee.md`'s "Restart fuzzing" section. `tournament.py` exposes
+  it via `--fuzz-restarts SEED`, which builds the referee with
+  `RestartFuzzingReferee.from_profile_name` instead of `CustomReferee.from_profile_name`
+  for every match in the run; `--fuzz-interval LO HI` sets the sim-second gap between
+  injections (default `25 45` — over a 65s match this means one or two injections, not the
+  `8 20` stress-test range in the class's own docstring). Both are recorded in
+  `summary.json` as `fuzz_seed`/`fuzz_interval_s` (`null` when off), so a fuzzed run is
+  reproducible from the summary alone — same seed and interval reproduce the exact same
+  injection schedule (kind, team, sim time), by construction of the class's `seed`-driven
+  RNG.
 - **Reproducing a stall from a replay** (`utama_core.replay.scenario`/`repro_from_replay.py`)
   — once a stall's window is known (from `stuck_detector.py` or the watchdog above), reload
   just that field state into a fresh headless match instead of re-running the whole match,
