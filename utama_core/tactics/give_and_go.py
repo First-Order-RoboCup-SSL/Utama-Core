@@ -107,6 +107,22 @@ _LANE_BLOCKED_ABANDON_TICKS = round(0.5 * CONTROL_FREQUENCY)
 # first-touch situation must still be treated as though a solo shot might
 # be an illegal second touch on the ball.
 _MAX_FIRST_TOUCH_TICKS = round(8.0 * CONTROL_FREQUENCY)  # 8s — generous vs. real congested play
+# `first_touch_stuck` above is a *caution*, not a life sentence: it exists so
+# a solo shot can't be an illegal second touch on a restart kick, but
+# DoubleTouchRule's own window closes within a couple of seconds of
+# NORMAL_START in every real case (any other robot's touch, or leaving
+# NORMAL_START entirely, disarms it immediately — see double_touch_rule.py).
+# `hop_count` staying stuck at 0 for an entire possession (the same
+# already-documented gap noted above) means `first_touch_stuck` can now
+# persist far past any restart window that could possibly still be live —
+# found live (tournament stall investigation, 2026-09-03): a carrier held a
+# wide-open shot lane for 50+ seconds and strafed the whole time instead of
+# shooting, because `force_shot` only checks `hop_count`, which never moves.
+# Once stuck for this much longer, any restart-kick window has certainly
+# closed regardless of match congestion, so treat it the same as
+# `_MAX_HOPS_PER_POSSESSION` and force the shot rather than repositioning
+# forever.
+_FIRST_TOUCH_FORCE_SHOT_TICKS = round(15.0 * CONTROL_FREQUENCY)  # 15s — well past any real restart window
 _RELOCATE_MIN_SEPARATION = 0.9  # metres — a relocating support point must clear the carrier and other supports
 # Retreat standoff from our own area front edge while the ball is in our own
 # half: support robots hold this far off the box line instead of packing it.
@@ -335,7 +351,9 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
 
         others = tuple(rid for rid in robot_ids if rid != carrier_id)
 
-        force_shot = mem.hop_count >= _MAX_HOPS_PER_POSSESSION or not others
+        force_shot = (
+            mem.hop_count >= _MAX_HOPS_PER_POSSESSION or not others or mem.ticks_held >= _FIRST_TOUCH_FORCE_SHOT_TICKS
+        )
         # Never let the *first* touch of a possession be a solo shot when a
         # teammate is available, even if `_has_open_shot` says the lane is
         # clear — an unblocked lane right after a kickoff/restart is not
@@ -357,11 +375,14 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         # fresh attempt), `ticks_held` never resets while `hop_count` is
         # still 0 — see `_MAX_FIRST_TOUCH_TICKS`'s definition for why a
         # per-attempt budget alone lets this loop run forever in congested
-        # play. Never treated as a `force_shot` (that would route to
-        # `kick()` below): a stuck-since-restart first touch must still
-        # avoid a solo shot, so this instead disables further receiver
-        # search and drops straight to the no-open-lane dribble/reposition
-        # path, same as a stationary keeper leaves no lane at all.
+        # play. Not yet treated as `force_shot` at this threshold: a
+        # stuck-since-restart first touch must still avoid an immediate solo
+        # shot, so this disables further receiver search and drops to the
+        # no-open-lane dribble/reposition path first, same as a stationary
+        # keeper leaves no lane at all. `force_shot`'s own, longer
+        # `_FIRST_TOUCH_FORCE_SHOT_TICKS` threshold (see its definition)
+        # eventually overrides this and takes the open shot rather than
+        # repositioning forever — see that constant's comment for why.
         first_touch_stuck = first_touch_of_possession and mem.ticks_held >= _MAX_FIRST_TOUCH_TICKS
         if not force_shot and not first_touch_stuck and mem.receiver_id is None and first_touch_of_possession:
             # The very first touch of a possession must never be a solo shot
@@ -460,7 +481,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 },
             )
 
-        if best_shot_y is None or first_touch_stuck:
+        if best_shot_y is None or (first_touch_stuck and not force_shot):
             # No open lane at all — freezing here (the old behaviour) never
             # resolves against a stationary blocker (e.g. a keeper at the
             # goal mouth): nothing about the position changes, so the shot

@@ -561,11 +561,35 @@ def score_pass_setup(
     if pass_distance < min_pass_distance:
         return None
 
-    friendly_positions = [robot.p for robot in game.friendly_robots.values() if robot is not None]
-    for robot_pos in friendly_positions:
-        if passer_position.distance_to(robot_pos) < min_robot_clearance:
+    # Clearance against OTHER teammates only -- a robot standing at (or very
+    # near) `passer_position`/`receiver_position` itself is presumably the
+    # passer/receiver being scored, not a third robot in the way, and must
+    # be excluded rather than counted as a clearance violation. Every real
+    # caller passes a LIVE robot's own `.p` as one or both positions
+    # (`_best_receiver` passes `game.friendly_robots[carrier_id].p` and
+    # `game.friendly_robots[candidate_id].p` directly; `_nearest_safe_
+    # receiver`'s sibling callers do the same) -- `game.friendly_robots`
+    # still contains that exact same robot, so `distance_to` on the
+    # unfiltered roster was always exactly 0.0 for at least the passer
+    # itself, `< min_robot_clearance` every single time. Found live,
+    # 2026-09-03: this meant `score_pass_setup` returned None on literally
+    # every call from `_best_receiver`, which made that whole "pick the
+    # highest-scoring teammate" path pure dead code -- every hop past the
+    # first touch of a possession fell through to `_nearest_safe_receiver`
+    # (deliberately unscored, nearest-with-clear-lane only) or a forced
+    # shot, which is the actual reason passes looked short and low-value
+    # regardless of any scoring-formula weighting (see `progress` above):
+    # the formula was never being consulted at all.
+    for robot_pos in game.friendly_robots.values():
+        pos = robot_pos.p
+        if (
+            pos.distance_to(passer_position) < min_pass_distance
+            or pos.distance_to(receiver_position) < min_pass_distance
+        ):
+            continue  # this is the passer or receiver itself, not a third robot
+        if passer_position.distance_to(pos) < min_robot_clearance:
             return None
-        if receiver_position.distance_to(robot_pos) < min_robot_clearance:
+        if receiver_position.distance_to(pos) < min_robot_clearance:
             return None
 
     enemies = enemy_positions(game)
@@ -586,6 +610,24 @@ def score_pass_setup(
     pass_clearance = segment_clearance(passer_position, receiver_position, enemies)
     shot_gap = largest_gap[1] - largest_gap[0]
     distance_to_goal_ratio = abs(receiver_position.x - goal_x) / max(2.0 * abs(goal_x), 1e-6)
-    score = shot_gap + 0.3 * pass_clearance - 0.2 * distance_to_goal_ratio - 0.03 * pass_distance
+    # Metres of net progress toward the enemy goal line this pass buys,
+    # sign-corrected by which side `goal_x` is on so it's positive whenever
+    # the receiver ends up closer to goal than the passer, negative for a
+    # backward pass, ~0 for a square ball -- distinct from
+    # `distance_to_goal_ratio` above, which only ever looks at the
+    # receiver's absolute proximity to goal, not what THIS pass changed.
+    # Added because the old formula had no such term at all: `shot_gap`/
+    # `pass_clearance` (both O(1-3m), field-geometry-scale) completely
+    # dominated the old `-0.03 * pass_distance` penalty (an 8m switch cost
+    # only 0.24, less than a single extra metre of clearance), so a short
+    # pass to whichever teammate happened to be standing nearby scored
+    # about the same as a longer one that actually advanced the ball --
+    # confirmed live, 2026-09-03: user-observed matches were full of short,
+    # low-value passes under real risk/time cost with nothing to show for
+    # them. Weighted at the same O(1) scale as shot_gap/pass_clearance
+    # (unlike the old distance penalty) so a pass now has to buy either a
+    # genuinely better shot or real territory to beat a shorter/safer one.
+    progress = (receiver_position.x - passer_position.x) * (1.0 if goal_x > 0 else -1.0)
+    score = shot_gap + 0.3 * pass_clearance + 0.5 * progress - 0.2 * distance_to_goal_ratio - 0.03 * pass_distance
 
     return PassSetupScore(passer_position=passer_position, receiver_position=receiver_position, score=score)

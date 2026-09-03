@@ -198,6 +198,81 @@ the full investigation narrative for anything already fixed lives in git log
   stayed clean). `robosim_wrapper.py`'s read side also now bounds its
   non-JSON-line skip loop (10 lines) instead of looping unboundedly, so any
   future instance of this bug class fails loudly rather than hanging.
+- **`score_pass_setup` scored almost no real passes at all — passer/receiver
+  self-distance dead code + missing progress term (2026-09-03,
+  uncommitted)** — user observation: "the pass is quite short and often not
+  worthy to pass such short distance with that much risk and time." Two
+  independent bugs in `pass_and_score_geometry.py`, found via a standalone
+  synthetic-`Game` script after live-match tracing showed `_best_receiver`
+  never actually influenced any observed pass (a *separate*, already-known
+  permanent-ball-lock bug means real matches rarely survive to a second
+  hop, which blocked end-to-end verification and forced the unit-level
+  approach). (1) The `min_robot_clearance` guard loop checked every
+  friendly robot's position against `passer_position`/`receiver_position`
+  without excluding the passer/receiver's own robot entries. Every real
+  caller (`give_and_go.py`'s `_best_receiver`) passes
+  `game.friendly_robots[carrier_id].p` directly as `passer_position`, so
+  that robot's distance to itself is always exactly `0.0` — always
+  `< min_robot_clearance` (~0.44 m) — so `score_pass_setup` returned `None`
+  on *every* call from `_best_receiver`, making the entire
+  highest-scoring-teammate selection dead code; every hop past the first
+  touch of a possession silently fell through to the unscored, purely-
+  nearest `_nearest_safe_receiver` fallback. Fixed by skipping any friendly
+  robot within `min_pass_distance` of either the passer or receiver
+  position before applying the clearance check (that's the passer/receiver
+  itself, not a third robot in the way). (2) Separately, even once scoring
+  worked, the formula had no real notion of pass risk-vs-reward: `shot_gap`/
+  `pass_clearance` (O(1-3 m) scale) dominated a `-0.03 * pass_distance`
+  penalty, so an 8 m pass cost only ~0.24 more than a 0.7 m one — confirmed
+  via a manual before/after formula comparison that the clearance fix
+  *alone* would still have picked a short pass over a long one in a
+  representative case (1.56 vs 1.32) purely because the short pass
+  happened to have more clearance. Added a `0.5 * progress` term (net
+  advance toward the enemy goal along the attacking axis) to the score.
+  With both fixes together, a synthetic short-vs-long-teammate case now
+  correctly picks the long, goal-advancing pass (score 3.07 vs 1.71) where
+  it previously returned `None` for both. Verified: targeted subset
+  (`-k "pass_and_shoot or give_and_go or pass_and_score"`) 52 passed; full
+  suite 943 passed, 4 skipped, 5 xfailed — unchanged from pre-fix baseline.
+  Live-match verification was blocked at the time by the "permanent
+  ball-lock" bug below (no possession survived to a second hop); see that
+  entry for the end-to-end tournament numbers once both fixes landed
+  together.
+- **"Permanent ball-lock" root-caused and fixed (2026-09-03)** —
+  `GiveAndGoTactic`'s `first_touch_stuck` safety valve (see
+  `_MAX_FIRST_TOUCH_TICKS`'s comment) exists to stop a solo shot from being
+  an illegal second touch on a restart kick, gated on
+  `first_touch_of_possession = hop_count == 0`. Since `hop_count` never
+  legitimately leaves 0 in practice (the already-documented gap noted at
+  `_MAX_FIRST_TOUCH_TICKS`'s own definition — receiver search keeps
+  restarting without a hop ever completing), every possession is
+  permanently treated as "first touch of a restart," so once the 8s timer
+  trips, the carrier is locked into `no_shot_reposition_target` strafing
+  forever, regardless of whether a shot is actually open — `force_shot`
+  (the intended escape valve) only checks `hop_count`, which never moves
+  either. Traced live (`counter_flow` vs `tiki_taka`, trajsample): the
+  carrier held a continuously open shot lane (`give_and_go.shot_lane`
+  logging `open: true`) from t=10s to the 65s match end and never took it;
+  `carrier_has_ball` flipped `True` once at t=9.08s and never flipped back
+  for the rest of the match. **Fixed** with a second, longer timeout,
+  `_FIRST_TOUCH_FORCE_SHOT_TICKS` (15s — well past any real restart window,
+  since `DoubleTouchRule` itself disarms within a couple of seconds of
+  `NORMAL_START` ending, on any other robot's touch or the command
+  changing): once `ticks_held` crosses it, `force_shot` now also becomes
+  true and overrides `first_touch_stuck` at the shot/reposition branch, so
+  the carrier takes the open shot instead of repositioning indefinitely.
+  Verified: targeted subset 52 passed, full suite 943 passed/4 skipped/5
+  xfailed (unchanged). Direct before/after on the reported match: possession
+  went from a stuck 100%/0% to 31%/69%, `ball_travel_m` from 1.5m to 5.5m,
+  and the tactic scheduler now genuinely releases the carrier to defense
+  once the ball is lost. Full 231-match round-robin re-run (all 22 configs,
+  trajsample): **23 goals scored and 22 decisive (non-draw) results**,
+  versus 0 goals in every tournament run anywhere in this session before
+  this fix — average `ball_travel_m` per match rose to 9.9 (range 0.42-38m)
+  from a flat ~1-2m stall pattern. This also unblocks the `score_pass_setup`
+  fix above: possessions can now survive past the first hop, so
+  `_best_receiver` has a real chance to run in live matches, not just in a
+  synthetic unit test.
 
 ## Open
 
