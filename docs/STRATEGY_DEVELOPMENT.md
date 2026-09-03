@@ -174,6 +174,11 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
     command, committed tactic ids) and writes the same into `summary.json`; `--strict`
     exits non-zero if any match in the run stalled. A heuristic backstop (possession pinned
     100%/0% and `ball_travel_m < 1.0`) flags anything the watchdog itself might miss.
+- **Reproducing a stall from a replay** (`utama_core.replay.scenario`/`repro_from_replay.py`)
+  — once a stall's window is known (from `stuck_detector.py` or the watchdog above), reload
+  just that field state into a fresh headless match instead of re-running the whole match,
+  e.g. `pixi run python repro_from_replay.py replays/<run>/<match>.pkl --t 260 --duration 15
+  --trace-out /tmp/repro_trace.jsonl` (see the script's own `--help` for every flag).
 
 ## Where things live
 
