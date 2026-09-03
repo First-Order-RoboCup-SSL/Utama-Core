@@ -48,28 +48,73 @@ class BangBang1D:
         if v_max <= 0 or a_max <= 0:
             raise ValueError(f"v_max and a_max must be positive, got v_max={v_max}, a_max={a_max}")
 
-        d = p1 - p0
-        sign = 1.0 if d >= 0 else -1.0
-        # Work in a frame where the net displacement is non-negative and v0
-        # is expressed along that same direction, so the rest of this method
-        # never has to branch on which way the robot is initially moving.
-        d = abs(d)
-        v0_signed = v0 * sign
+        d_raw = p1 - p0
+        sign_toward_target = 1.0 if d_raw >= 0 else -1.0
+        d_toward_target = abs(d_raw)
+        v0_toward_target = v0 * sign_toward_target
 
-        # Time and distance to bring v0_signed to 0 under -a_max (used only
-        # to detect the "overshoot" case: robot moving hard away from the
-        # target). Symmetric bang-bang trajectories that must end at v=0
-        # don't have a closed form when v0 opposes the direction of travel
-        # by more than what a single decel-then-accel pass can absorb within
-        # the remaining distance, so that case first "wastes" the existing
-        # away-velocity, then plans normally from the point it would stop.
-        if v0_signed < 0:
-            t_kill = -v0_signed / a_max
-            d_kill = (v0_signed * v0_signed) / (2 * a_max)  # positive: distance lost while killing v0
-            d_eff = d + d_kill
-            v0_eff = 0.0
+        # Required-overshoot detection: v0 points toward the target
+        # (v0_toward_target > 0) but braking at -a_max from here travels
+        # further than the remaining gap — the robot cannot land on p1
+        # without first passing it. There is no closed-form single-pass
+        # bang-bang for that (the trajectory has to reverse direction after
+        # decelerating through the target), so it's re-expressed in the
+        # frame of the RETURN leg instead: flip `sign` to point back from
+        # the (as yet unknown) overshoot point to p1. In that flipped frame
+        # v0 becomes an opposing velocity — the exact shape the branch below
+        # already handles — and `p1` sits *behind* `p0` (`d` negative),
+        # which is fine: `d_eff` below only needs `d + d_pre >= 0` overall,
+        # not `d >= 0` on its own. Confirmed algebraically and by sweep: the
+        # remaining unmodified pipeline reduces to "decelerate past the
+        # target to v=0, then bang-bang straight back" with these inputs.
+        overshoot = False
+        if v0_toward_target > 0:
+            brake_dist = (v0_toward_target * v0_toward_target) / (2 * a_max)
+            if brake_dist > d_toward_target:
+                overshoot = True
+
+        if overshoot:
+            sign = -sign_toward_target
+            d = d_raw * sign  # negative: p1 is behind p0 in this flipped frame
+            v0_signed = v0 * sign  # negative: mirrors an opposing v0
         else:
-            t_kill = 0.0
+            sign = sign_toward_target
+            d = d_toward_target
+            v0_signed = v0_toward_target
+
+        # Pre-phase: bring v0_signed to whatever speed the normal
+        # accel/cruise/decel schedule below can start from, before that
+        # schedule's own math (which assumes a valid non-negative,
+        # <=v_max starting speed) applies.
+        #   * v0_signed < 0: decelerate through zero. Covers both a real
+        #     opposing v0 and an overshoot re-expressed above as one —
+        #     symmetric bang-bang trajectories ending at v=0 don't have a
+        #     closed form when v0 opposes the direction of travel by more
+        #     than a single decel-then-accel pass can absorb within the
+        #     remaining distance, so this phase "wastes" the existing
+        #     away-velocity first, then plans normally from the point it
+        #     would stop.
+        #   * v0_signed > v_max: same-direction overspeed that does NOT
+        #     require an overshoot (braking distance already fits within
+        #     the remaining gap) — shed the excess speed down to v_max
+        #     before cruising/decelerating normally; entering the schedule
+        #     below still above v_max would make it plan as if starting at
+        #     v_max (see the `d_to_vmax < 0` carry-over case) while
+        #     `state_at` correctly reports the true higher v0, producing an
+        #     effectively instantaneous velocity change right after t=0.
+        #   * otherwise: no pre-phase, v0_signed is already valid.
+        if v0_signed < 0:
+            t_pre = -v0_signed / a_max
+            d_pre = (v0_signed * v0_signed) / (2 * a_max)  # positive: distance covered while decelerating to 0
+            d_eff = d + d_pre
+            v0_eff = 0.0
+        elif v0_signed > v_max:
+            t_pre = (v0_signed - v_max) / a_max
+            d_pre = (v0_signed * v0_signed - v_max * v_max) / (2 * a_max)
+            d_eff = d - d_pre
+            v0_eff = v_max
+        else:
+            t_pre = 0.0
             d_eff = d
             v0_eff = v0_signed
 
@@ -81,8 +126,10 @@ class BangBang1D:
         d_decel_from_vmax = (v_max * v_max) / (2 * a_max)
 
         if d_to_vmax < 0:
-            # v0_eff already exceeds v_max (e.g. entering from a fast
-            # carry-over state) — treat as if starting exactly at v_max.
+            # v0_eff already exceeds v_max — the pre-phase above guarantees
+            # this can't happen for the same-direction case (it already
+            # shed speed down to exactly v_max), so this only remains
+            # reachable defensively; treat as if starting exactly at v_max.
             d_to_vmax = 0.0
             v0_eff = v_max
 
@@ -105,7 +152,7 @@ class BangBang1D:
             t_cruise = 0.0
             t_dec = v_peak / a_max
 
-        t1 = t_kill + t_acc
+        t1 = t_pre + t_acc
         t2 = t1 + t_cruise
         t_end = t2 + t_dec
 
@@ -133,30 +180,44 @@ class BangBang1D:
         v0_signed = self.v0 * sign
         a = self.a_max
 
-        # Phase 0: killing an initially-opposing velocity (only present when
-        # v0_signed < 0 -- see `compute`). Recompute t_kill/d_kill from the
-        # stored fields rather than storing them separately: cheap, and
-        # keeps the dataclass's field list to genuinely load-bearing values.
-        t_kill = max(0.0, -v0_signed / a) if v0_signed < 0 else 0.0
-        if t < t_kill:
-            v_signed = v0_signed + a * t
-            d_signed = v0_signed * t + 0.5 * a * t * t
+        # Pre-phase: mirrors `compute`'s pre-phase branch exactly (recomputed
+        # from the stored fields rather than stored separately: cheap, and
+        # keeps the dataclass's field list to genuinely load-bearing values).
+        #   * v0_signed < 0: decelerate through zero at +a (a real opposing
+        #     v0, or an overshoot re-expressed by `compute` with a flipped
+        #     `sign` so the excess toward-target speed looks like one).
+        #   * v0_signed > v_max: decelerate down to v_max at -a (same-
+        #     direction overspeed that doesn't require an overshoot).
+        #   * otherwise: no pre-phase.
+        if v0_signed < 0:
+            v_pre_target = 0.0
+            a_pre = a
+        elif v0_signed > self.v_max:
+            v_pre_target = self.v_max
+            a_pre = -a
+        else:
+            v_pre_target = v0_signed
+            a_pre = 0.0
+        t_pre = max(0.0, (v_pre_target - v0_signed) / a_pre) if a_pre != 0.0 else 0.0
+
+        if t < t_pre:
+            v_signed = v0_signed + a_pre * t
+            d_signed = v0_signed * t + 0.5 * a_pre * t * t
             return self.p0 + sign * d_signed, v_signed * sign
 
-        # Signed net displacement during the kill phase (negative: the robot
-        # moves backward, away from the target, while shedding v0). This is
-        # the mirror image of `compute`'s `d_kill`, which is defined as the
-        # positive magnitude of that same distance for use in `d_eff`.
-        d_kill_signed = -(v0_signed * v0_signed) / (2 * a) if v0_signed < 0 else 0.0
-        v_after_kill = 0.0 if v0_signed < 0 else v0_signed
-        t_rel = t - t_kill
+        # Signed net displacement during the pre-phase (negative when it
+        # decelerated through zero and briefly moved backward; positive when
+        # it shed same-direction overspeed while still moving forward).
+        d_pre_signed = v0_signed * t_pre + 0.5 * a_pre * t_pre * t_pre
+        v_after_pre = v_pre_target
+        t_rel = t - t_pre
 
         if t < self.t1:
-            v_signed = v_after_kill + a * t_rel
-            d_signed = d_kill_signed + v_after_kill * t_rel + 0.5 * a * t_rel * t_rel
+            v_signed = v_after_pre + a * t_rel
+            d_signed = d_pre_signed + v_after_pre * t_rel + 0.5 * a * t_rel * t_rel
             return self.p0 + sign * d_signed, v_signed * sign
 
-        d_acc = d_kill_signed + v_after_kill * (self.t1 - t_kill) + 0.5 * a * (self.t1 - t_kill) ** 2
+        d_acc = d_pre_signed + v_after_pre * (self.t1 - t_pre) + 0.5 * a * (self.t1 - t_pre) ** 2
         v_peak = abs(self.v_cruise)
 
         if t < self.t2:

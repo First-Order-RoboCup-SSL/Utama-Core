@@ -82,6 +82,86 @@ def test_bang_bang_is_position_continuous_at_endpoint_after_opposing_velocity(p0
     assert position_immediately_before_end == pytest.approx(p1, abs=1e-9)
 
 
+def test_bang_bang_required_overshoot_produces_continuous_trajectory():
+    """Regression for the required-overshoot defect: v0 points toward the
+    target but its braking distance (v0^2/(2*a_max)) exceeds the remaining
+    gap, so the robot cannot land on p1 without first passing it. Pre-fix,
+    `compute` produced a negative `t1` and `state_at` jumped discontinuously
+    in both position and velocity immediately after t=0 -- confirmed via the
+    exact values below: pre-fix, `t.t1 == -0.5297` and `state_at(0.01)` gave
+    `(2.904, -3.174)` against `state_at(0) == (2.611, -4.413)`, an implied
+    acceleration far beyond `a_max`. The fix re-expresses this case as
+    decelerate-past-target-to-v=0, then a fresh bang-bang straight back."""
+    p0, v0, p1, v_max, a_max = (
+        2.6108637010973705,
+        -4.412899566309155,
+        -1.4458847258394982,
+        4.803012201215744,
+        1.1582054489697327,
+    )
+    d = p1 - p0
+    sign = 1.0 if d >= 0 else -1.0
+    braking_distance = (v0 * sign) ** 2 / (2 * a_max)
+    assert braking_distance > abs(d)  # sanity: this really is the required-overshoot region
+
+    trajectory = BangBang1D.compute(p0, v0, p1, v_max, a_max)
+    assert trajectory.t1 >= 0.0  # pre-fix: t1 == -0.5297...
+
+    pos0, vel0 = trajectory.state_at(0.0)
+    assert pos0 == pytest.approx(p0)
+    assert vel0 == pytest.approx(v0)
+
+    # Continuity at t=0+: the very next instant must be reachable from
+    # (p0, v0) under |accel| <= a_max, not an unbounded jump.
+    dt = 1e-4
+    pos_next, vel_next = trajectory.state_at(dt)
+    implied_accel = abs(vel_next - v0) / dt
+    assert implied_accel <= a_max + 1e-6
+    # Position changes smoothly too (v0 is large, so a generous but finite
+    # bound -- not the ~30cm jump the pre-fix discontinuity produced).
+    assert abs(pos_next - pos0) <= (abs(v0) + a_max * dt) * dt + 1e-9
+
+    # |accel| <= a_max holds throughout the whole trajectory, including
+    # across the direction-reversal at the overshoot point.
+    times = np.linspace(0.0, trajectory.t_end, 2001)
+    velocities = np.array([trajectory.state_at(float(t))[1] for t in times])
+    accel = np.abs(np.diff(velocities)) / np.diff(times)
+    assert np.max(accel) <= a_max * 1.01 + 1e-6
+
+    end_pos, end_vel = trajectory.state_at(trajectory.t_end)
+    assert end_pos == pytest.approx(p1, abs=1e-6)
+    assert end_vel == pytest.approx(0.0, abs=1e-6)
+
+
+def test_bang_bang_same_direction_overspeed_decelerates_at_a_max():
+    """Regression for the same-direction-overspeed defect: v0 already points
+    toward p1 and exceeds v_max. Pre-fix, `compute`'s carry-over reset
+    silently planned the phase schedule as if starting at v_max while
+    `state_at(0)` still (correctly) reported the real, higher v0 -- an
+    effectively instantaneous velocity change immediately after t=0 (t1 was
+    exactly 0.0 for this repro). The fix decelerates from v0 down to v_max
+    at exactly a_max first."""
+    p0, v0, p1, v_max, a_max = 0.0, 5.0, 1.0, 2.0, 2.0
+    trajectory = BangBang1D.compute(p0, v0, p1, v_max, a_max)
+    assert trajectory.t1 > 0.0  # pre-fix: t1 == 0.0
+
+    pos0, vel0 = trajectory.state_at(0.0)
+    assert pos0 == pytest.approx(p0)
+    assert vel0 == pytest.approx(v0)  # velocity continuous at t=0: the real v0, not v_max
+
+    # Immediately after t=0 the robot must still be decelerating at exactly
+    # a_max (not an implied ~3,000,000 m/s^2 as pre-fix), toward p1's
+    # direction (sign=+1 here).
+    dt = 1e-4
+    _pos_next, vel_next = trajectory.state_at(dt)
+    accel = (vel_next - vel0) / dt
+    assert accel == pytest.approx(-a_max, abs=1e-2)
+
+    end_pos, end_vel = trajectory.state_at(trajectory.t_end)
+    assert end_pos == pytest.approx(p1, abs=1e-6)
+    assert end_vel == pytest.approx(0.0, abs=1e-6)
+
+
 @pytest.mark.parametrize(
     "p0,v0,p1",
     [

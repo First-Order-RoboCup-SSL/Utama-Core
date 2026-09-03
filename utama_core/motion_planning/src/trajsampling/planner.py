@@ -663,8 +663,20 @@ class TrajectorySamplingPlanner:
         enough on its own.
         """
         last = self._last_intermediate_target.get(robot_id)
-        fresh: List[Tuple[float, float]] = []
         r = config.INTERMEDIATE_TARGET_RADIUS
+        if last is not None:
+            # A cached target the robot has already reached, or overshot so
+            # that it now lies behind the robot relative to the final target,
+            # is no longer a waypoint. Keeping it makes a physically correct
+            # bang-bang brake and reverse toward a point behind the robot on
+            # every replan (the `stationary_blocker` stall seen once
+            # `BangBang1D` stopped faking its way through required overshoots).
+            lx, ly = last[0] - p0[0], last[1] - p0[1]
+            fx0, fy0 = final_target[0] - p0[0], final_target[1] - p0[1]
+            if math.hypot(lx, ly) < 0.5 * r or lx * fx0 + ly * fy0 <= 0.0:
+                last = None
+                self._last_intermediate_target.pop(robot_id, None)
+        fresh: List[Tuple[float, float]] = []
         for _ in range(config.N_INTERMEDIATE_TARGETS):
             angle = self._rng.uniform(0, 2 * math.pi)
             fresh.append((p0[0] + r * math.cos(angle), p0[1] + r * math.sin(angle)))
