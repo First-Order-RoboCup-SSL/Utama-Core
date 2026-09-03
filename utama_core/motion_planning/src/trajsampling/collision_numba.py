@@ -335,6 +335,30 @@ def first_collision_numba(
     n_cv = cv_obs.shape[0]
     n_enemy = enemy_obs.shape[0]
 
+    # A robot can start a plan already inside another (moving) obstacle's
+    # clearance envelope -- e.g. GiveAndGoTactic's abandoned-receiver robot,
+    # left standing right where it was waiting to catch a pass, replanning a
+    # fresh route the instant the ball becomes a real obstacle again. Without
+    # this, `d < margin` at the very first sample (t == start_t) fires for
+    # EVERY candidate direction regardless of where it's headed -- the
+    # robot's own starting position is the collision, not anything about the
+    # trajectory -- so the planner can never find an escape and the robot
+    # stays pinned near-zero velocity indefinitely (found live, 2026-09-03:
+    # a robot 0.088m from the ball, inside the 0.09+0.0215=0.1115m combined
+    # radius, reporting collision_time~=0 against every sampled direction).
+    # Fixed by giving each obstacle a one-time "still escaping" grace at the
+    # start of the scan: an obstacle already violating clearance at t ==
+    # start_t doesn't veto the trajectory outright until the robot has first
+    # cleared it (`d >= margin`) at some later sample -- from that point on
+    # it's checked normally, including re-triggering if the trajectory turns
+    # back into it. An obstacle that ISN'T penetrated at start_t is never
+    # granted this grace, so a normal approaching trajectory is unaffected.
+    static_escaping = np.ones(n_static, dtype=np.bool_)
+    traj_escaping = np.ones(n_traj, dtype=np.bool_)
+    cv_escaping = np.ones(n_cv, dtype=np.bool_)
+    enemy_escaping = np.ones(n_enemy, dtype=np.bool_)
+    first_sample = True
+
     while t <= duration:
         px, py, vx, vy = _query_trajectory_state(leg1, ux1, uy1, p0x1, p0y1, switch_t, leg2, ux2, uy2, p0x2, p0y2, t)
         speed = math.hypot(vx, vy)
@@ -345,7 +369,12 @@ def first_collision_numba(
 
         for i in range(n_static):
             d = _static_distance_at(static_obs[i], px, py) - robot_radius
-            if d < margin:
+            still_penetrating = d < margin
+            if first_sample:
+                static_escaping[i] = still_penetrating
+            elif static_escaping[i]:
+                static_escaping[i] = still_penetrating
+            if still_penetrating and not static_escaping[i]:
                 collided = True
                 break
             if d < closest:
@@ -353,7 +382,12 @@ def first_collision_numba(
         if not collided:
             for i in range(n_traj):
                 d = _traj_obstacle_distance_at(traj_obs[i], t, px, py) - robot_radius
-                if d < margin:
+                still_penetrating = d < margin
+                if first_sample:
+                    traj_escaping[i] = still_penetrating
+                elif traj_escaping[i]:
+                    traj_escaping[i] = still_penetrating
+                if still_penetrating and not traj_escaping[i]:
                     collided = True
                     break
                 if d < closest:
@@ -361,7 +395,12 @@ def first_collision_numba(
         if not collided:
             for i in range(n_cv):
                 d = _cv_distance_at(cv_obs[i], t, px, py) - robot_radius
-                if d < margin:
+                still_penetrating = d < margin
+                if first_sample:
+                    cv_escaping[i] = still_penetrating
+                elif cv_escaping[i]:
+                    cv_escaping[i] = still_penetrating
+                if still_penetrating and not cv_escaping[i]:
                     collided = True
                     break
                 if d < closest:
@@ -369,11 +408,18 @@ def first_collision_numba(
         if not collided:
             for i in range(n_enemy):
                 d = _enemy_distance_at(enemy_obs[i], t, px, py) - robot_radius
-                if d < margin:
+                still_penetrating = d < margin
+                if first_sample:
+                    enemy_escaping[i] = still_penetrating
+                elif enemy_escaping[i]:
+                    enemy_escaping[i] = still_penetrating
+                if still_penetrating and not enemy_escaping[i]:
                     collided = True
                     break
                 if d < closest:
                     closest = d
+
+        first_sample = False
 
         if collided:
             return t

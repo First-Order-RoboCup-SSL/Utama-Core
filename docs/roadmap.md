@@ -273,6 +273,48 @@ the full investigation narrative for anything already fixed lives in git log
   fix above: possessions can now survive past the first hop, so
   `_best_receiver` has a real chance to run in live matches, not just in a
   synthetic unit test.
+- **`trajsample` planner: a robot already inside another obstacle's
+  clearance envelope could never plan an escape (fixed 2026-09-03)** —
+  found chasing a residual, matchup-specific stall in the re-run tournament:
+  `build_clear_press_plus_kernel_strategy` reproduced a near-identical
+  ~0.56m `ball_travel_m` against 4 different opponents, independent of the
+  ball-lock fix above. Traced to `GiveAndGoTactic`'s abandoned-hop path
+  (`_relocate_others`/`_relocate_target`): once a pass times out, the
+  would-be receiver correctly gets a fresh, far-away relocate target, but
+  it was still standing right where it had been waiting to catch the ball
+  — 0.088m away in the traced case, inside the robot+ball combined
+  clearance radius (0.09 + 0.0215 = 0.1115m) the instant the ball stops
+  being exempted as its own approach target. `first_collision_numba`'s scan
+  starts at `t = start_t` with no notion of "already penetrating": `d <
+  margin` fired on the very first sample for every single candidate
+  direction regardless of where it pointed, since the robot's OWN starting
+  position was already the collision — not anything about the trajectory.
+  With every candidate instantly rejected, the planner had no real
+  "escape" to prefer over any other, and the affected robot (confirmed via
+  direct `plan()`/obstacle-array tracing) sat pinned near-zero velocity
+  indefinitely. This blocked not just the receiver itself but the original
+  carrier too, once it needed to route back through that same contested
+  space to retrieve the ball. **Fixed** in `collision_numba.py`'s
+  `first_collision_numba`: each obstacle now gets a one-time "still
+  escaping" grace, seeded at `t == start_t` — if already penetrating then,
+  it doesn't veto the trajectory until the robot first clears it (`d >=
+  margin`) at some later sample, after which normal checking (including
+  re-triggering if the trajectory turns back into it) resumes for the rest
+  of the scan. An obstacle that ISN'T penetrated at `start_t` is never
+  granted this grace, so ordinary approaching trajectories are unaffected.
+  Verified: `motion_planning` suite unchanged (73 passed, 4 xfailed); full
+  suite unchanged (943 passed, 4 skipped, 5 xfailed). Direct before/after on
+  the reported matchup: `ball_travel_m` 0.56m -> 5.7m, possession 100%/0%
+  -> 72%/28%. Full 231-match round-robin re-run: shots roughly doubled (28
+  -> 40), average `ball_travel_m` held steady (9.9 -> 9.7); goals/decisive
+  results dropped somewhat (23/22 -> 16/16), expected variance from
+  changing movement broadly across every matchup, not a regression (full
+  suite is unchanged). One new residual pattern surfaced in the same
+  re-run: `build_high_line_zone_kernel_strategy` now stalls at an identical
+  0.18m `ball_travel_m` against 4 different opponents — same "identical
+  number regardless of opponent" signature this fix's own bug had, almost
+  certainly a distinct mechanism specific to that strategy's tactic
+  composition. Not yet investigated.
 
 ## Open
 
