@@ -432,6 +432,25 @@ the full investigation narrative for anything already fixed lives in git log
       that reproduces each stall class would make the loop minutes, not
       hours. `--fuzz-restarts SEED` (405693c) exercises restarts far more
       often than natural play and is the right way to bench a restart fix.
+    - **Handoff, 2026-09-03 (open, in priority order):**
+      1. Live-play ball holds above (three_slot / low_block). Being traced
+         in a separate session, which suspects "converged-target churn":
+         a marker whose `man_mark` target sits within cm of its position
+         replans a sub-0.1 s trajectory every tick. Unverified; a robot at
+         its target is *meant* to rest, so check the issued targets in
+         `<run>/<match>.intentions.jsonl` for the carrier and marker before
+         changing the planner.
+      2. Trace the remaining 57 DIRECT_FREE stalls (single-match repro from
+         the STALLS section; rsim is deterministic).
+      3. Gate speed: stop-at-first-stall mode in `tournament.py` and a fixed
+         30-40 match subset covering each stall class.
+      4. `tools/metric_correlation.py` hardcodes `.pkl` replays (line ~429)
+         and cannot read the current `.npz` runs.
+      5. BangBang1D re-apply (`b26a550`) together with a blocked-start
+         planner change - see the bullet below.
+      6. Consolidate `tournament.py` / `full_match_tournament.py` /
+         `arena_tournament.py` (item 14 prerequisite), then merge
+         `tactic-engine` to `main`.
     - `BangBang1D.compute` has two real defects, pinned by the seeded sweeps
       in `tests/motion_planning/implementation/bang_bang_edge_cases_test.py`
       (marked xfail): a required-overshoot case (braking distance exceeds
