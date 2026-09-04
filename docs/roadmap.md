@@ -388,6 +388,36 @@ the full investigation narrative for anything already fixed lives in git log
    unreliable at 65 s; possession and robot-motion carry no signal. Caveat
    that applies to *all* of that data: see item 15.
 
+   **Opponent counterparts + possession-under-pressure + restart-to-entry
+   ported live (2026-09-04):** closed the "each with the opponent
+   counterpart" gap above. `MatchStats` previously only had friendly-side
+   `turnovers`/`completed_passes`/`attacking_third_entries` even though
+   `tools/metric_correlation.py`'s offline definitions were always computed
+   both-sided (`completed_passes_friendly`/`_enemy`, etc.) — the live
+   accumulator was the one that had fallen behind its own offline
+   counterpart, not a deliberate scope decision. Added
+   `enemy_turnovers`/`enemy_completed_passes`/`enemy_attacking_third_entries`
+   (same possession-radius state machine, now attributing both sides
+   instead of only friendly), `possession_under_pressure_s` (metric 4:
+   seconds a side's nearest-to-ball robot also has an opponent within
+   `_PRESSURE_RADIUS_M`, accumulated as real elapsed sim-seconds via
+   `game_frame.ts` deltas rather than assuming a fixed tick rate, since
+   `record_tick` doesn't see rsim's configured step rate), and
+   `restart_to_first_entry_s`/`n_restarts`/`n_restarts_with_entry` (metric
+   5: a live-play command's start clock, attributed to whichever side is
+   nearest the ball at that instant, stopped at that side's own
+   attacking-third entry — new `_maybe_start_restart_clock`, called before
+   `_maybe_record_stalls` overwrites the restart-command-transition state
+   both watchdogs share). All three match the offline tool's definitions
+   exactly (same thresholds/state machines), not new proxy designs of
+   their own. 8 new tests, 1 existing test's assertion corrected (an
+   enemy-to-enemy handoff was asserted to tally nothing; it now correctly
+   asserts `enemy_completed_passes == 1`). Full suite green (4193 passed).
+   `restart_to_first_shot` (the docstring's other named metric) was not
+   added — no offline equivalent exists in `tools/metric_correlation.py` to
+   port from (metric 5 there is entry-based, not shot-based); would need
+   its own design pass rather than a direct port.
+
 15. **`trajsample` liveness floor: 106/231 matches still stall (57 in a
     DIRECT_FREE restart, 42 live-play ball holds), and the BangBang1D fix
     cannot land until the planner handles blocked starts.** Findings from

@@ -20,15 +20,20 @@ Both are pure observations recorded for post-match reporting (see
 `tournament.py`'s "STALLS" section) — nothing here reads back into or
 alters gameplay.
 
-`turnovers`/`completed_passes`/`attacking_third_entries` (friendly-side
-counts) reproduce `tools/metric_correlation.py`'s offline definitions of the
-same names live, per tick, instead of requiring a separate offline replay
-pass — see that module's docstring (metrics 2/3) for the study that picked
-these three as correlated-with-outcome and run-to-run reliable. The only
-definitional difference: the offline tool samples replay frames at 10 Hz;
-`record_tick()` runs at rsim's full tick rate, which only makes possession-
-state and boundary-crossing transitions *more* likely to be observed, not
-less — see `_update_possession_events`'s docstring for detail.
+`turnovers`/`completed_passes`/`attacking_third_entries` (friendly-side) and
+their `enemy_*` counterparts reproduce `tools/metric_correlation.py`'s
+offline definitions of the same names live, per tick, instead of requiring a
+separate offline replay pass — see that module's docstring (metrics 2/3) for
+the study that picked these three as correlated-with-outcome and run-to-run
+reliable. The only definitional difference: the offline tool samples replay
+frames at 10 Hz; `record_tick()` runs at rsim's full tick rate, which only
+makes possession-state and boundary-crossing transitions *more* likely to be
+observed, not less — see `_update_possession_events`'s docstring for detail.
+
+`possession_under_pressure_s` and `restart_to_first_entry_s`/`n_restarts`
+(both sides) are the same live port of that module's metrics 4/5 — see
+`record_tick`'s "opponent counterparts" section and
+`_maybe_resolve_restart_to_entry` for the live equivalents.
 """
 
 from __future__ import annotations
@@ -110,6 +115,30 @@ class MatchStats:
     turnovers: int = 0
     completed_passes: int = 0
     attacking_third_entries: int = 0
+    # Opponent counterparts to the three friendly-only fields above, plus
+    # possession-under-pressure and restart-to-entry latency (metrics 4/5 in
+    # `tools/metric_correlation.py`, ported live -- see that module's
+    # docstring for the full definitions and `record_tick`'s "opponent
+    # counterparts" section below for the live equivalents). All keyed
+    # "friendly"/"enemy" like `possession_pct`/`shots`, so callers that
+    # already read those don't need a new convention.
+    enemy_turnovers: int = 0
+    enemy_completed_passes: int = 0
+    enemy_attacking_third_entries: int = 0
+    possession_under_pressure_s: Dict[str, float] = field(default_factory=lambda: {"friendly": 0.0, "enemy": 0.0})
+    # Mean seconds from a live-play restart (NORMAL_START/FORCE_START,
+    # transitioning from a non-live command) to that restart's possessing
+    # side's first entry into ITS OWN attacking third -- `None` per side if
+    # that side never had a restart resolve to an entry this match (excluded
+    # from the mean, not imputed -- see `tools/metric_correlation.py` metric
+    # 5's docstring). `n_restarts`/`n_restarts_with_entry` are match-level
+    # (both sides combined), matching the offline tool's fields of the same
+    # name.
+    restart_to_first_entry_s: Dict[str, Optional[float]] = field(
+        default_factory=lambda: {"friendly": None, "enemy": None}
+    )
+    n_restarts: int = 0
+    n_restarts_with_entry: int = 0
 
     def to_json(self, path: Union[str, Path]) -> None:
         with open(path, "w") as f:
@@ -124,6 +153,13 @@ class MatchStats:
                     "turnovers": self.turnovers,
                     "completed_passes": self.completed_passes,
                     "attacking_third_entries": self.attacking_third_entries,
+                    "enemy_turnovers": self.enemy_turnovers,
+                    "enemy_completed_passes": self.enemy_completed_passes,
+                    "enemy_attacking_third_entries": self.enemy_attacking_third_entries,
+                    "possession_under_pressure_s": self.possession_under_pressure_s,
+                    "restart_to_first_entry_s": self.restart_to_first_entry_s,
+                    "n_restarts": self.n_restarts,
+                    "n_restarts_with_entry": self.n_restarts_with_entry,
                     "stall_events": [
                         {
                             "kind": e.kind,
@@ -180,6 +216,11 @@ _PASS_RELEASE_MPS = 1.0
 # _SHOT_ATTACKING_THIRD_M) so oscillation on that line doesn't double-count
 # entries. Matches tools/metric_correlation.py's `_ENTRY_HYSTERESIS_M`.
 _ENTRY_HYSTERESIS_M = 0.3
+# possession_under_pressure_s: an opponent robot within this range of the
+# ball, while its own side possesses (nearest-robot-to-ball), counts as
+# "under pressure" this tick. Matches tools/metric_correlation.py's
+# `_PRESSURE_RADIUS_M` (metric 4).
+_PRESSURE_RADIUS_M = 0.5
 
 
 @dataclass
@@ -208,10 +249,40 @@ class MatchStatsAccumulator:
     _poss_robot_id: Optional[int] = None
     _turnovers: int = 0
     _completed_passes: int = 0
+    _enemy_turnovers: int = 0
+    _enemy_completed_passes: int = 0
 
-    # --- attacking_third_entries state (hysteresis, friendly side only) ---
-    _in_attacking_third: bool = False
+    # --- attacking_third_entries state (hysteresis, both sides -- friendly
+    # feeds `attacking_third_entries`, enemy feeds `enemy_attacking_third_entries`
+    # and both feed restart-to-entry resolution below) ---
+    _in_attacking_third: Dict[str, bool] = field(default_factory=lambda: {"friendly": False, "enemy": False})
     _attacking_third_entries: int = 0
+    _enemy_attacking_third_entries: int = 0
+
+    # --- possession_under_pressure_s state (metric 4) ---
+    # Accumulated directly in sim-seconds (consecutive `game_frame.ts`
+    # deltas), not a tick count times an assumed rate -- `record_tick` never
+    # sees rsim's configured step rate itself, and `sim_time` is already the
+    # authoritative clock the stall watchdog uses for the same reason (see
+    # `_maybe_record_stalls`'s `elapsed = sim_time - self._restart_started_at`).
+    _pressure_s: Dict[str, float] = field(default_factory=lambda: {"friendly": 0.0, "enemy": 0.0})
+    _last_tick_ts: Optional[float] = None
+
+    # --- restart_to_first_entry_s state (metric 5): a live-play command
+    # (NORMAL_START/FORCE_START) transitioning from a non-live command starts
+    # a restart clock, attributed to whichever side is nearest the ball at
+    # that instant; it resolves (and stops) at that same side's first
+    # subsequent entry into its own attacking third (`_in_attacking_third`
+    # above going True). Mirrors `tools/metric_correlation.py`'s
+    # `pending_restart`/`restarts_resolved` exactly, driven off
+    # `record_tick`'s own live-command-transition tracking
+    # (`_restart_command`, already needed by the RESTART_STALL watchdog)
+    # instead of a second referee-event pass over intentions.jsonl.
+    _pending_restart_t0: Optional[float] = None
+    _pending_restart_side: Optional[str] = None
+    _restart_entry_times: Dict[str, List[float]] = field(default_factory=lambda: {"friendly": [], "enemy": []})
+    _n_restarts: int = 0
+    _n_restarts_with_entry: int = 0
 
     # --- stall watchdog state (see `_maybe_record_restart_stall`/
     # `_maybe_record_committed_frozen` below) ---
@@ -258,16 +329,24 @@ class MatchStatsAccumulator:
         during live play", without requiring a committed slot; the resulting
         `StallEvent.tactic_ids`/`robot_ids` are then simply empty.
         """
+        ball = game_frame.ball
+        all_robots = (
+            [(rid, robot, "friendly") for rid, robot in game_frame.friendly_robots.items()]
+            + [(rid, robot, "enemy") for rid, robot in game_frame.enemy_robots.items()]
+            if ball is not None
+            else []
+        )
+        # Must run before `_maybe_record_stalls` mutates `_restart_command`
+        # to the current tick's value -- this needs to see the *previous*
+        # tick's command to detect the same transition itself (see that
+        # method's own restart-command tracking, reused here rather than
+        # duplicated: `_maybe_start_restart_clock` does its own comparison
+        # against `_restart_command` a few lines before `_maybe_record_stalls`
+        # would otherwise overwrite it).
+        self._maybe_start_restart_clock(game_frame, all_robots, ball)
         self._maybe_record_stalls(game_frame, committed_tactics)
 
-        ball = game_frame.ball
-        if ball is None:
-            return
-
-        all_robots = [(rid, robot, "friendly") for rid, robot in game_frame.friendly_robots.items()] + [
-            (rid, robot, "enemy") for rid, robot in game_frame.enemy_robots.items()
-        ]
-        if not all_robots:
+        if ball is None or not all_robots:
             return
 
         self._ticks_recorded += 1
@@ -340,6 +419,27 @@ class MatchStatsAccumulator:
         self._possession_ticks[nearest_side] += 1
         self._update_possession_events(nearest_side, nearest_id, dist_to_nearest, ball)
 
+        # possession_under_pressure_s (metric 4): the possessing side's
+        # nearest-to-ball robot also has an opponent within
+        # `_PRESSURE_RADIUS_M`. Accumulated in real sim-seconds via the
+        # elapsed `game_frame.ts` since the last recorded tick (see
+        # `_pressure_s`'s field docstring) -- same "skip an anomalous jump"
+        # guard `_ball_travel_m` uses above, since a placement/reset can
+        # otherwise make `ts` jump backward or by an outsized amount.
+        sim_ts = game_frame.ts
+        dt = 0.0
+        if self._last_tick_ts is not None:
+            candidate_dt = sim_ts - self._last_tick_ts
+            if 0.0 < candidate_dt < 1.0:
+                dt = candidate_dt
+        self._last_tick_ts = sim_ts
+        opp_side = "enemy" if nearest_side == "friendly" else "friendly"
+        opponents = [r for rid, r, s in all_robots if s == opp_side]
+        if dist_to_nearest <= _POSSESSION_RADIUS_M and opponents:
+            min_opp_dist = min(r.p.distance_to(ball.p) for r in opponents)
+            if min_opp_dist <= _PRESSURE_RADIUS_M:
+                self._pressure_s[nearest_side] += dt
+
         for rid, robot, side in all_robots:
             # Motion share: what fraction of measured ticks a robot actually moved.
             key = f"{side}_{rid}"  # robot ids collide across teams in PVP frames
@@ -369,22 +469,37 @@ class MatchStatsAccumulator:
             zone_counts = self._zone_ticks.setdefault(key, {z: 0 for z in _ZONES})
             zone_counts[zone] += 1
 
-        # attacking_third_entries (friendly side only, see MatchStats field
-        # docstring): count of the *ball* crossing from at/behind the entry
-        # threshold into friendly's attacking third, hysteresis-banded so
-        # oscillation on the boundary doesn't double-count. Matches
-        # tools/metric_correlation.py's metric 2 exactly -- same threshold
-        # (half_length + _SHOT_ATTACKING_THIRD_M), same hysteresis width.
-        friendly_attack_sign = -own_goal_sign
-        friendly_own_goal_x = own_goal_sign * half_length
-        progress = (ball.p.x - friendly_own_goal_x) * friendly_attack_sign
+        # attacking_third_entries (both sides): count of the *ball* crossing
+        # from at/behind the entry threshold into a side's attacking third,
+        # hysteresis-banded so oscillation on the boundary doesn't
+        # double-count. Matches tools/metric_correlation.py's metric 2
+        # exactly -- same threshold (half_length + _SHOT_ATTACKING_THIRD_M),
+        # same hysteresis width.
         enter_threshold = half_length + _SHOT_ATTACKING_THIRD_M
         exit_threshold = enter_threshold - _ENTRY_HYSTERESIS_M
-        if not self._in_attacking_third and progress > enter_threshold:
-            self._in_attacking_third = True
-            self._attacking_third_entries += 1
-        elif self._in_attacking_third and progress < exit_threshold:
-            self._in_attacking_third = False
+        for side in ("friendly", "enemy"):
+            attack_sign = -own_goal_sign if side == "friendly" else own_goal_sign
+            own_goal_x = own_goal_sign * half_length if side == "friendly" else -own_goal_sign * half_length
+            progress = (ball.p.x - own_goal_x) * attack_sign
+            if not self._in_attacking_third[side] and progress > enter_threshold:
+                self._in_attacking_third[side] = True
+                if side == "friendly":
+                    self._attacking_third_entries += 1
+                else:
+                    self._enemy_attacking_third_entries += 1
+                # restart_to_first_entry_s resolution (metric 5): this is
+                # exactly the "possessing side reaches its own attacking
+                # third" event `_maybe_start_restart_clock`'s pending clock
+                # is waiting for. Matches tools/metric_correlation.py's
+                # restart-resolution condition exactly (same side, same
+                # attacking-third-entry event).
+                if self._pending_restart_side == side and self._pending_restart_t0 is not None:
+                    self._restart_entry_times[side].append(game_frame.ts - self._pending_restart_t0)
+                    self._n_restarts_with_entry += 1
+                    self._pending_restart_t0 = None
+                    self._pending_restart_side = None
+            elif self._in_attacking_third[side] and progress < exit_threshold:
+                self._in_attacking_third[side] = False
 
     def _update_possession_events(self, nearest_side: str, nearest_id: int, dist_to_nearest: float, ball: Ball) -> None:
         """turnovers / completed_passes: a possession-radius state machine,
@@ -398,10 +513,14 @@ class MatchStatsAccumulator:
         as likely to be observed at 60 Hz as at 10 Hz or more so, so this is
         the closest live equivalent, not an approximation of it.
 
-        Only friendly-side completions/turnovers are tallied (`MatchStats`
-        is a single-team boxscore) -- the state machine still tracks *either*
-        side's possession, since a turnover is defined by the ball moving
-        from a friendly holder to an enemy one.
+        Both sides' completions/turnovers are tallied (`_turnovers`/
+        `_completed_passes` for friendly, `_enemy_turnovers`/
+        `_enemy_completed_passes` for enemy) -- the state machine already
+        tracks *either* side's possession (a turnover is defined by the ball
+        moving from one side's holder to the other's), so attributing both
+        outcomes is the same state, not new tracking. Matches
+        `tools/metric_correlation.py`'s offline `completed_passes`/
+        `turnovers` dicts, which are computed per-side there too.
         """
         ball_speed = math.hypot(ball.v.x, ball.v.y)
         controlled = dist_to_nearest <= _POSSESSION_RADIUS_M and ball_speed < _PASS_RELEASE_MPS
@@ -413,11 +532,15 @@ class MatchStatsAccumulator:
                 # at speed" event (e.g. a slow dribble handoff/tackle) --
                 # attribute as a same-side completed pass or a turnover
                 # exactly like a released pass would, then adopt the new
-                # holder. Only friendly's own completions/turnovers count.
+                # holder.
                 if self._poss_side == nearest_side == "friendly":
                     self._completed_passes += 1
+                elif self._poss_side == nearest_side == "enemy":
+                    self._enemy_completed_passes += 1
                 elif self._poss_side == "friendly" and nearest_side != "friendly":
                     self._turnovers += 1
+                elif self._poss_side == "enemy" and nearest_side != "enemy":
+                    self._enemy_turnovers += 1
                 self._poss_side, self._poss_robot_id = nearest_side, nearest_id
         elif self._poss_side is not None and ball_speed >= _PASS_RELEASE_MPS and dist_to_nearest > _POSSESSION_RADIUS_M:
             # Ball just left a controlled possession at speed: released. The
@@ -425,6 +548,39 @@ class MatchStatsAccumulator:
             # next time the ball is controlled again, or never if it isn't.
             if self._poss_robot_id is not None:
                 self._poss_robot_id = None
+
+    def _maybe_start_restart_clock(
+        self,
+        game_frame: GameFrame,
+        all_robots: List[tuple],
+        ball: Optional[Ball],
+    ) -> None:
+        """restart_to_first_entry_s (metric 5) clock start: a live-play
+        command (NORMAL_START/FORCE_START) just began from a non-live
+        command. Attribute the restart to whichever side is nearest the
+        ball this instant, matching `tools/metric_correlation.py`'s
+        `pending_restart` exactly (same trigger condition, same
+        nearest-robot-to-ball attribution). Resolution (stopping the clock)
+        happens in `record_tick`'s attacking-third-entries block, since that
+        is where each side's `_in_attacking_third` transition is already
+        computed.
+
+        Must run before `_maybe_record_stalls` overwrites `_restart_command`
+        for this tick -- see `record_tick`'s call-order comment.
+        """
+        referee = game_frame.referee
+        current_command = referee.referee_command if referee is not None else None
+        was_live = self._restart_command in _LIVE_PLAY_COMMANDS
+        is_live = current_command in _LIVE_PLAY_COMMANDS
+        if is_live and not was_live and current_command != self._restart_command:
+            self._n_restarts += 1
+            nearest_side = (
+                min(all_robots, key=lambda entry: entry[1].p.distance_to(ball.p))[2]
+                if all_robots and ball is not None
+                else None
+            )
+            self._pending_restart_t0 = game_frame.ts
+            self._pending_restart_side = nearest_side
 
     def _maybe_record_stalls(self, game_frame: GameFrame, committed_tactics: Optional[Dict[str, tuple]]) -> None:
         """Update the two stall watchdogs for this tick. Pure observation --
@@ -535,6 +691,10 @@ class MatchStatsAccumulator:
         robot_motion_pct: Dict[str, float] = {}
         for key, measured in self._measured_ticks.items():
             robot_motion_pct[key] = self._motion_ticks.get(key, 0) / max(1, measured)
+        restart_to_first_entry_s: Dict[str, Optional[float]] = {}
+        for side in ("friendly", "enemy"):
+            times = self._restart_entry_times[side]
+            restart_to_first_entry_s[side] = round(sum(times) / len(times), 3) if times else None
         return MatchStats(
             rule_event_counts=dict(self._rule_event_counts),
             possession_pct=possession_pct,
@@ -546,4 +706,11 @@ class MatchStatsAccumulator:
             turnovers=self._turnovers,
             completed_passes=self._completed_passes,
             attacking_third_entries=self._attacking_third_entries,
+            enemy_turnovers=self._enemy_turnovers,
+            enemy_completed_passes=self._enemy_completed_passes,
+            enemy_attacking_third_entries=self._enemy_attacking_third_entries,
+            possession_under_pressure_s={side: round(s, 3) for side, s in self._pressure_s.items()},
+            restart_to_first_entry_s=restart_to_first_entry_s,
+            n_restarts=self._n_restarts,
+            n_restarts_with_entry=self._n_restarts_with_entry,
         )

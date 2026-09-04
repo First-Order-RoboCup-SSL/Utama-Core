@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from utama_core.custom_referee.rules.base_rule import RuleViolation
 from utama_core.engine.match_stats import MatchStatsAccumulator
+from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
+from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.entities.referee.stage import Stage
 
 
 def _robot(rid: int, x: float, y: float, is_friendly: bool) -> Robot:
@@ -320,9 +325,10 @@ def test_turnover_friendly_to_enemy():
     assert stats.completed_passes == 0
 
 
-def test_enemy_to_enemy_handoff_not_counted_as_friendly_event():
+def test_enemy_to_enemy_handoff_counted_as_enemy_completed_pass_not_friendly():
     # Possession moving between two enemy robots must not be tallied as a
-    # friendly completed_pass/turnover -- MatchStats is friendly-side only.
+    # friendly completed_pass/turnover (MatchStats.turnovers/completed_passes
+    # are friendly-only) -- but must be tallied as the enemy counterpart.
     acc = MatchStatsAccumulator()
     friendly = {1: _robot(1, -5.0, -5.0, True)}
     enemy1 = {2: _robot(2, 0.0, 0.0, False), 4: _robot(4, 5.0, 5.0, False)}
@@ -334,6 +340,8 @@ def test_enemy_to_enemy_handoff_not_counted_as_friendly_event():
     stats = acc.finalize()
     assert stats.turnovers == 0
     assert stats.completed_passes == 0
+    assert stats.enemy_completed_passes == 1
+    assert stats.enemy_turnovers == 0
 
 
 def test_pass_resolved_after_release_at_speed():
@@ -405,4 +413,170 @@ def test_robot_motion_share_requires_velocity_readings():
     stats = acc.finalize()
     assert stats.robot_motion_pct["friendly_1"] == 1.0
     assert stats.robot_motion_pct["friendly_2"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Opponent counterparts / possession-under-pressure / restart-to-entry --
+# live ports of tools/metric_correlation.py's metrics 3/4/5, see roadmap
+# item 14 ("Metric design: derive, don't invent").
+# ---------------------------------------------------------------------------
+
+
+def _ts_frame(
+    ts: float,
+    ball_xy,
+    ball_v,
+    friendly_robots,
+    enemy_robots,
+    referee=None,
+    my_team_is_right: bool = True,
+) -> GameFrame:
+    ball = Ball(Vector3D(ball_xy[0], ball_xy[1], 0), Vector3D(ball_v[0], ball_v[1], 0), None)
+    return GameFrame(
+        ts=ts,
+        my_team_is_yellow=True,
+        my_team_is_right=my_team_is_right,
+        friendly_robots=friendly_robots,
+        enemy_robots=enemy_robots,
+        ball=ball,
+        referee=referee,
+    )
+
+
+def _referee(command: RefereeCommand, ts: float) -> RefereeData:
+    return RefereeData(
+        source_identifier=None,
+        time_sent=ts,
+        time_received=ts,
+        referee_command=command,
+        referee_command_timestamp=ts,
+        stage=Stage.NORMAL_FIRST_HALF,
+        stage_time_left=0.0,
+        blue_team=TeamInfo(name="blue"),
+        yellow_team=TeamInfo(name="yellow"),
+    )
+
+
+def test_friendly_turnover_to_enemy_counts_enemy_side_zero():
+    """Sanity check the friendly-turnover test above still leaves the enemy
+    counterpart at zero -- a turnover only ever increments one side."""
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy1 = {2: _robot(2, 5.0, 5.0, False)}
+    enemy2 = {2: _robot(2, 1.0, 0.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly, enemy1))
+    acc.record_tick(_poss_frame((1.0, 0.0), (0.0, 0.0), friendly, enemy2))
+
+    stats = acc.finalize()
+    assert stats.turnovers == 1
+    assert stats.enemy_turnovers == 0
+    assert stats.enemy_completed_passes == 0
+
+
+def test_enemy_turnover_to_friendly_counted_on_enemy_side():
+    # Mirror of test_turnover_friendly_to_enemy: enemy robot 2 controls, then
+    # a friendly robot is found in control -- a turnover attributed to enemy.
+    acc = MatchStatsAccumulator()
+    friendly1 = {1: _robot(1, 5.0, 5.0, True)}
+    friendly2 = {1: _robot(1, 1.0, 0.0, True)}
+    enemy = {2: _robot(2, 0.0, 0.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly1, enemy))  # enemy controls
+    acc.record_tick(_poss_frame((1.0, 0.0), (0.0, 0.0), friendly2, enemy))  # friendly controls
+
+    stats = acc.finalize()
+    assert stats.enemy_turnovers == 1
+    assert stats.enemy_completed_passes == 0
+    assert stats.turnovers == 0
+
+
+def test_enemy_attacking_third_entry_counted_independently_of_friendly():
+    # my_team_is_right=True -> enemy's own goal at -4.5, enemy attacks toward
+    # +x; enemy's entry threshold is x > 1.5 (half_length + 1.5m third).
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, -4.0, 0.0, True)}
+    enemy = {2: _robot(2, 4.0, 0.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly, enemy))  # midfield
+    acc.record_tick(_poss_frame((2.0, 0.0), (0.0, 0.0), friendly, enemy))  # enemy enters its attacking third
+
+    stats = acc.finalize()
+    assert stats.enemy_attacking_third_entries == 1
+    assert stats.attacking_third_entries == 0  # friendly never entered its own
+
+
+def test_possession_under_pressure_accumulates_seconds_while_contested():
+    # Friendly controls the ball (within possession radius, ball slow) while
+    # an enemy sits within the pressure radius -- seconds accumulate as real
+    # elapsed sim time (ts deltas), not a tick count.
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy_close = {2: _robot(2, 0.3, 0.0, False)}  # within _PRESSURE_RADIUS_M (0.5m) of the ball
+    enemy_far = {2: _robot(2, 5.0, 0.0, False)}
+
+    acc.record_tick(_ts_frame(0.0, (0.0, 0.0), (0.0, 0.0), friendly, enemy_close))
+    acc.record_tick(_ts_frame(0.5, (0.0, 0.0), (0.0, 0.0), friendly, enemy_close))
+    acc.record_tick(_ts_frame(1.0, (0.0, 0.0), (0.0, 0.0), friendly, enemy_far))  # pressure released
+
+    stats = acc.finalize()
+    # Only the 0.0->0.5s tick-to-tick gap was under pressure (the first tick
+    # has no prior ts to diff against, so contributes 0s).
+    assert stats.possession_under_pressure_s["friendly"] == pytest.approx(0.5, abs=1e-6)
+    assert stats.possession_under_pressure_s["enemy"] == 0.0
+
+
+def test_possession_under_pressure_zero_when_opponent_out_of_range():
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy_far = {2: _robot(2, 5.0, 0.0, False)}
+
+    acc.record_tick(_ts_frame(0.0, (0.0, 0.0), (0.0, 0.0), friendly, enemy_far))
+    acc.record_tick(_ts_frame(0.5, (0.0, 0.0), (0.0, 0.0), friendly, enemy_far))
+
+    stats = acc.finalize()
+    assert stats.possession_under_pressure_s == {"friendly": 0.0, "enemy": 0.0}
+
+
+def test_restart_to_first_entry_resolves_on_possessing_sides_own_entry():
+    # A live-play command starts right after a non-live one (kickoff ending)
+    # with friendly nearest the ball -- the clock is attributed to friendly
+    # and stops once friendly's own attacking-third-entry hysteresis fires.
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy = {2: _robot(2, 4.0, 0.0, False)}
+
+    acc.record_tick(_ts_frame(0.0, (0.0, 0.0), (0.0, 0.0), friendly, enemy, referee=_referee(RefereeCommand.STOP, 0.0)))
+    acc.record_tick(
+        _ts_frame(1.0, (0.0, 0.0), (0.0, 0.0), friendly, enemy, referee=_referee(RefereeCommand.NORMAL_START, 1.0))
+    )  # restart clock starts, friendly nearest the ball
+    acc.record_tick(
+        _ts_frame(3.5, (-2.0, 0.0), (0.0, 0.0), friendly, enemy, referee=_referee(RefereeCommand.NORMAL_START, 3.5))
+    )  # friendly's attacking third entry (x < -1.5) -- resolves the clock
+
+    stats = acc.finalize()
+    assert stats.n_restarts == 1
+    assert stats.n_restarts_with_entry == 1
+    assert stats.restart_to_first_entry_s["friendly"] == pytest.approx(2.5, abs=1e-6)
+    assert stats.restart_to_first_entry_s["enemy"] is None
+
+
+def test_restart_with_no_entry_excluded_from_mean():
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy = {2: _robot(2, 4.0, 0.0, False)}
+
+    acc.record_tick(_ts_frame(0.0, (0.0, 0.0), (0.0, 0.0), friendly, enemy, referee=_referee(RefereeCommand.STOP, 0.0)))
+    acc.record_tick(
+        _ts_frame(1.0, (0.0, 0.0), (0.0, 0.0), friendly, enemy, referee=_referee(RefereeCommand.NORMAL_START, 1.0))
+    )
+    # Never reaches friendly's attacking third before the match ends.
+    acc.record_tick(
+        _ts_frame(5.0, (0.0, 0.0), (0.0, 0.0), friendly, enemy, referee=_referee(RefereeCommand.NORMAL_START, 5.0))
+    )
+
+    stats = acc.finalize()
+    assert stats.n_restarts == 1
+    assert stats.n_restarts_with_entry == 0
+    assert stats.restart_to_first_entry_s["friendly"] is None
     assert "enemy_5" not in stats.robot_motion_pct  # no velocity readings (v=None) -> excluded
