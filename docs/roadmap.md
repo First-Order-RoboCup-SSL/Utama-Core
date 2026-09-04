@@ -792,3 +792,68 @@ the full investigation narrative for anything already fixed lives in git log
       priority-ordered yielding applied to the fallback, not just to
       candidate rejection). Verify with `tournament.py --control-scheme
       trajsample --strict` and expect PREPARE_KICKOFF stalls ≤ 4.
+    - **Sumatra-fidelity audit, 2026-09-04.** Requested comparison
+      tournament (`trajsample` vs `fpp`, same-day/same-catalog) was blocked
+      by repeated OOM kills on this machine (three attempts, 15/8/4 workers,
+      all killed; `free -h` clean and no visible cgroup limit after each —
+      most likely a `.wslconfig`-level VM memory cap, not a worker-count
+      problem) and is parked, not abandoned — revisit once memory is free.
+      Redirected instead to a subagent-driven line-by-line audit of
+      `trajsampling/` against TIGERs' real Sumatra source
+      (`github.com/TIGERs-Mannheim/Sumatra`, fetched via `gh api` rather
+      than trusting a secondhand paraphrase), which surfaced 7 ranked
+      findings; the top 3 were fixed and verified this session (each has a
+      regression test confirmed to fail against pre-fix code via
+      `git stash`):
+      1. **Missing acceptor leniency** (`config.py`,
+         `planner.py::_collision_leniency_accepts`). Sumatra's
+         `MovingObstacleResultAcceptor.accept` doesn't reject every
+         colliding candidate outright: a candidate already within
+         `2*ROBOT_RADIUS` of its own final destination is accepted
+         unconditionally (new early-exit in `plan()`), and — for a
+         collision against a NON-priority obstacle only, a priority
+         obstacle stays a strict unconditional reject — a collision within
+         300mm of the destination is accepted if either the collision
+         speed is under 1.5 m/s or the collision is further out than the
+         robot's own current-speed braking time. Without this, a
+         completely ordinary final approach next to a slow teammate/enemy
+         was scored down by raw survival time exactly like a genuine
+         head-on collision, pushing the planner toward `best_fallback`'s
+         "whatever survives longest" pick even when a fine direct approach
+         existed. Wired into both the direct-trajectory path and the
+         two-segment fallback loop in `plan()`.
+      2. **Escaping-grace mismatch between the collision scan and the
+         emergency-brake clearance calc** (`planner.py::_with_current_clearance`).
+         `collision_numba.py`'s per-obstacle escaping-grace state (an
+         obstacle already penetrated at `t==start_t` gets one-time grace,
+         revoked once cleared) was only honoured by the numba collision
+         scan itself; `_with_current_clearance`'s `nearest_obstacle_distance`
+         (used for the emergency-brake layer) re-minned across ALL
+         obstacles including ones still being escaped, so a robot legally
+         easing out of a stale penetration reported a large negative
+         clearance and could trip emergency braking against an obstacle
+         the collision-checker had already agreed to ignore. Fixed by
+         excluding any obstacle the robot hasn't yet cleared (gap below
+         the same dynamic margin formula used everywhere else) from the
+         nearest-obstacle candidates, falling back to the unfiltered set
+         only if every obstacle is still being escaped.
+      3. **`_try_reuse`'s priority re-check only sampled 2 instants**
+         (`planner.py::_try_reuse`). The re-check that lets a lower-priority
+         robot notice a higher-priority teammate's freshly-replanned path
+         crossing its own committed trajectory's margin only checked
+         `elapsed` and `elapsed + MIN_TIME_STEP` (next ~20ms), unlike the
+         general collision re-check just above it (`_first_collision`),
+         which already scans the whole remaining trajectory. A robot could
+         keep reusing a plan already known to walk into a priority
+         obstacle seconds later, only noticing once `elapsed` itself
+         finally caught up to that point. Widened to scan the full
+         remaining duration (capped by `MAX_LOOKAHEAD_TIME`, same cap
+         `_first_collision` uses) in `MIN_TIME_STEP` strides — a plain
+         Python loop, not numba, since `_blocked_by_priority_obstacle` is a
+         pure-Python per-instant check and this path prioritizes
+         correctness over the hot-path speed numba buys `_first_collision`.
+      - Full `motion_planning` suite green after all three
+        (1198 passed, 84 xfailed, 273 xpassed, 0 failed).
+      - Findings #4-7 from the same audit (lower-priority, not yet acted
+        on): remaining minor Sumatra-fidelity gaps not yet triaged in
+        detail — revisit if further planner hardening is warranted.

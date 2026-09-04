@@ -511,6 +511,20 @@ class TrajectorySamplingPlanner:
             result = PlanResult(trajectory=direct, has_collision=False, collision_time=None)
             return self._with_current_clearance(result, p0, obstacles)
 
+        # Already essentially at the target: Sumatra accepts ANY candidate
+        # here unconditionally (before even checking priority) -- "collision
+        # would be imminent anyway, even if we overshoot. Avoiding the
+        # collision could even make it worse." Ported as its own early-out
+        # since it applies before priority is even considered, unlike the
+        # `_collision_leniency_accepts` carve-outs below (which only ever
+        # relax a NON-priority collision).
+        if math.hypot(p0[0] - target_pos[0], p0[1] - target_pos[1]) < (
+            config.DEST_EXEMPTION_RADIUS_ROBOT_RADII * config.ROBOT_RADIUS
+        ):
+            self._commit(robot_id, game.ts, direct, target_pos)
+            result = PlanResult(trajectory=direct, has_collision=True, collision_time=collision_time)
+            return self._with_current_clearance(result, p0, obstacles)
+
         # `best_fallback` ranks candidates by how long they survive before
         # colliding, EXCEPT a candidate whose collision is against a
         # higher-priority teammate is never eligible at all -- ranked as if
@@ -521,10 +535,24 @@ class TrajectorySamplingPlanner:
         # priority is to force the LOWER-ranked robot to be the one that
         # yields -- letting it fall back to "the candidate that survives
         # longest before hitting the priority robot anyway" defeats that.
+        #
+        # A NON-priority collision, by contrast, gets the rest of Sumatra's
+        # acceptor leniency (`_collision_leniency_accepts`): accepted
+        # outright -- not merely ranked better, ACCEPTED, same as a genuinely
+        # collision-free candidate -- when it's near the destination and
+        # either slow or still within normal braking distance. Without this,
+        # every ordinary final approach near a slow-moving teammate/enemy was
+        # ranked down by raw survival time exactly like a genuine head-on
+        # collision, with the planner never actually being allowed to
+        # complete a totally normal, low-speed arrival next to another robot.
         def fallback_rank(t_col: float, blocked: bool) -> float:
             return -math.inf if blocked else t_col
 
         direct_blocked = self._blocked_by_priority_obstacle(robot_id, direct, obstacles, collision_time)
+        if not direct_blocked and self._collision_leniency_accepts(direct, collision_time, v0, target_pos):
+            self._commit(robot_id, game.ts, direct, target_pos)
+            result = PlanResult(trajectory=direct, has_collision=True, collision_time=collision_time)
+            return self._with_current_clearance(result, p0, obstacles)
         best_fallback = PlanResult(trajectory=direct, has_collision=True, collision_time=collision_time)
         best_rank = fallback_rank(collision_time, direct_blocked)
 
@@ -555,6 +583,11 @@ class TrajectorySamplingPlanner:
                     result = PlanResult(trajectory=candidate, has_collision=False, collision_time=None)
                     return self._with_current_clearance(result, p0, obstacles)
                 blocked = self._blocked_by_priority_obstacle(robot_id, candidate, obstacles, t_col)
+                if not blocked and self._collision_leniency_accepts(candidate, t_col, v0, target_pos):
+                    self._commit(robot_id, game.ts, candidate, target_pos)
+                    self._last_intermediate_target[robot_id] = candidate_target
+                    result = PlanResult(trajectory=candidate, has_collision=True, collision_time=t_col)
+                    return self._with_current_clearance(result, p0, obstacles)
                 rank = fallback_rank(t_col, blocked)
                 if rank > best_rank:
                     best_fallback = PlanResult(trajectory=candidate, has_collision=True, collision_time=t_col)
@@ -593,7 +626,27 @@ class TrajectorySamplingPlanner:
         # which is what let 0.148m of *reported* clearance correspond to
         # robots that were already inside the real 0.18m collision
         # threshold.
-        nearest_obstacle = min(obstacles, key=lambda o: o.distance_at(result.elapsed, p0))
+        #
+        # Excludes any obstacle the robot is CURRENTLY inside the dynamic
+        # margin of (same formula `_first_collision`'s numba scan uses) --
+        # mirrors that scan's own one-time "still escaping" grace (see its
+        # docstring): `plan()` already accepted this trajectory specifically
+        # because such an obstacle is being escaped, not approached, so
+        # reporting it as "the nearest danger" here would feed a small/
+        # negative distance straight into `TrajectorySamplingController`'s
+        # emergency-brake check and can clamp the robot's escape velocity
+        # down right as it's legitimately getting clear -- undercutting the
+        # numba-level grace fix via this separate distance computation,
+        # which didn't know about it. An obstacle NOT currently penetrated
+        # is unaffected -- this only ever excludes an obstacle the robot is
+        # already inside, never a genuinely approaching one.
+        _, (evx, evy) = result.trajectory.state_at(result.elapsed)
+        speed = math.hypot(evx, evy)
+        margin = (min(speed, config.MARGIN_V_MAX) / config.MARGIN_V_MAX) ** 2 * config.MARGIN_BASE
+        clear_obstacles = [o for o in obstacles if o.distance_at(result.elapsed, p0) - config.ROBOT_RADIUS >= margin]
+        candidates = clear_obstacles or obstacles
+
+        nearest_obstacle = min(candidates, key=lambda o: o.distance_at(result.elapsed, p0))
         nearest = nearest_obstacle.distance_at(result.elapsed, p0) - config.ROBOT_RADIUS
 
         # Closing speed: finite-difference the gap to THIS SAME obstacle a
@@ -665,9 +718,23 @@ class TrajectorySamplingPlanner:
         # return skips) means a lower-priority robot notices and replans
         # away from a closing higher-priority teammate as soon as any
         # margin is crossed, not only once an actual collision would occur.
-        for t in (elapsed, min(elapsed + config.MIN_TIME_STEP, trajectory.duration)):
+        #
+        # Scanned across the WHOLE remaining committed trajectory (capped by
+        # `MAX_LOOKAHEAD_TIME`, same cap `_first_collision` itself uses),
+        # not just the next `MIN_TIME_STEP` -- sampling only two instants
+        # 20ms apart missed a higher-priority teammate's path crossing this
+        # trajectory's margin anywhere later in the remaining duration; the
+        # robot would keep reusing a plan that was already known to walk
+        # into a priority obstacle a few ticks later, only noticing once
+        # `elapsed` itself finally reached that point.
+        recheck_end = min(elapsed + config.MAX_LOOKAHEAD_TIME, trajectory.duration)
+        t = elapsed
+        while True:
             if self._blocked_by_priority_obstacle(robot_id, trajectory, obstacles, t):
                 return None
+            if t >= recheck_end:
+                break
+            t = min(t + config.MIN_TIME_STEP, recheck_end)
 
         return PlanResult(trajectory=trajectory, has_collision=False, collision_time=None, elapsed=elapsed)
 
@@ -863,6 +930,58 @@ class TrajectorySamplingPlanner:
             enemy_arr,
         )
         return None if t_col < 0.0 else t_col
+
+    def _collision_leniency_accepts(
+        self,
+        trajectory,
+        collision_time: float,
+        v0: Tuple[float, float],
+        target_pos: Tuple[float, float],
+    ) -> bool:
+        """True if a NON-priority collision should be accepted outright
+        anyway -- ported from the rest of TIGERs' `MovingObstacleResultAcceptor.
+        accept` (confirmed against the real source, not just the paper: a
+        priority collision is rejected unconditionally, one line before any
+        of this runs -- see `_blocked_by_priority_obstacle`, which callers
+        must check FIRST; this method must never be asked about a
+        priority-blocked candidate). Three checks, all must pass:
+
+        1. The collision must happen near the FINAL destination (Sumatra:
+           within 300mm) -- a collision anywhere else along the path gets no
+           leniency at all, only ones near arrival.
+        2. `collisionLikely` (Sumatra: an obstacle-type-specific "is this
+           really going to happen" check, e.g. for a standing/stationary
+           obstacle) has no equivalent obstacle-type distinction in this
+           codebase's `TimedObstacle` protocol -- omitted, not silently
+           dropped: there is nothing to port here, every obstacle kind here
+           is already motion-modelled.
+        3. EITHER the collision speed is low (Sumatra: under 1.5 m/s --
+           "be a bit aggressive to non-priority obstacles", i.e. a slow graze
+           is fine) OR the collision is further out than the time it would
+           take to brake from the robot's CURRENT speed to zero (a genuine
+           head-on collision at speed still isn't excused just because it's
+           near the target).
+
+        Without this, an ordinary final approach to a target that happens to
+        sit close to a slow-moving teammate/enemy got ranked down by raw
+        survival time exactly like a genuine head-on collision -- the
+        planner had no way to ever accept a completely normal, low-speed
+        arrival next to another robot, pushing it toward `best_fallback`'s
+        "whatever survives longest" pick even when a fine approach exists.
+        """
+        collision_pos, _ = trajectory.state_at(collision_time)
+        dist_dest_to_collision = math.hypot(collision_pos[0] - target_pos[0], collision_pos[1] - target_pos[1])
+        if dist_dest_to_collision > config.COLLISION_DEST_PROXIMITY_M:
+            return False
+
+        _, (vx, vy) = trajectory.state_at(collision_time)
+        speed_on_collision = math.hypot(vx, vy)
+        if speed_on_collision < config.COLLISION_SPEED_THRESHOLD_MPS:
+            return True
+
+        current_speed = math.hypot(v0[0], v0[1])
+        brake_time = current_speed / self.a_max if self.a_max > 1e-9 else 0.0
+        return collision_time > brake_time
 
     def _blocked_by_priority_obstacle(
         self, robot_id: int, trajectory, obstacles: List[TimedObstacle], collision_time: float

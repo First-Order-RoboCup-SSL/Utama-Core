@@ -64,6 +64,18 @@ class trajsamplingconfig:
     # consider").
     MAX_LOOKAHEAD_TIME = 1.5
 
+    # Sumatra's `MovingObstacleResultAcceptor` leniency for NON-priority
+    # collisions (defValue fields in the real source, confirmed via
+    # `gh api` against TIGERs-Mannheim/Sumatra -- see
+    # `_collision_leniency_accepts`'s docstring for the full port). Only
+    # ever relaxes a candidate whose first collision is against a
+    # non-priority obstacle; a priority-holding obstacle is still an
+    # unconditional reject with no leniency at all -- see
+    # `_blocked_by_priority_obstacle`'s docstring for why that stays strict.
+    DEST_EXEMPTION_RADIUS_ROBOT_RADII = 2.0
+    COLLISION_DEST_PROXIMITY_M = 0.3
+    COLLISION_SPEED_THRESHOLD_MPS = 1.5
+
     # Emergency-brake safety layer (paper section 2.6): a committed
     # trajectory is re-validated every tick (see `_try_reuse`), but between
     # one tick's "still safe" and the next tick's "now unsafe" there may not

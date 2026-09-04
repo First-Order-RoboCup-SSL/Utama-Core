@@ -20,8 +20,10 @@ from utama_core.motion_planning.src.trajsampling.obstacles import (
     StaticSegmentObstacle,
 )
 from utama_core.motion_planning.src.trajsampling.planner import (
+    PlanResult,
     TrajectorySamplingPlanner,
     _bangbang_to_row,
+    _CommittedTrajectoryObstacle,
     _flatten_obstacles,
     _flatten_query_trajectory,
 )
@@ -442,6 +444,55 @@ def test_try_reuse_tolerates_sub_millimetre_target_jitter():
     assert result.elapsed == pytest.approx(0.1)  # executing the committed trajectory, not restarted from t=0
 
 
+def test_try_reuse_notices_a_priority_obstacle_only_encroaching_later_in_the_trajectory():
+    """Fix #3 from the item-15 Sumatra audit: `_try_reuse`'s priority
+    re-check used to sample only two instants (`elapsed`,
+    `elapsed + MIN_TIME_STEP`) rather than scanning the whole remaining
+    trajectory the way `_first_collision` itself does.
+
+    Builds a stationary higher-priority teammate positioned exactly on the
+    committed trajectory's path at t=1.0s, offset in y so the gap sits
+    between `_first_collision`'s dynamic margin at that speed (~0.089m, so
+    `_first_collision` reports no collision at all) and the fixed
+    `MARGIN_BASE` (0.2m) that `_blocked_by_priority_obstacle` checks --
+    i.e. collision-free by the harder threshold, but priority-blocked by
+    the softer one. `elapsed=0.0`, so the old two-instant check only ever
+    looked at t=0.0 and t=0.02, both still clear; the encroachment only
+    exists at t=1.0, well past `MIN_TIME_STEP` but still within
+    `MAX_LOOKAHEAD_TIME`.
+    """
+    from utama_core.motion_planning.src.trajsampling.config import (
+        trajsamplingconfig as config,
+    )
+
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    p0 = (0.0, 0.0)
+    target = (3.0, 0.0)
+    trajectory = Trajectory2D.compute(p0, (0.0, 0.0), target, planner.v_max, planner.a_max)
+    planner._commit(0, ts=0.0, trajectory=trajectory, target_pos=target)
+
+    encroach_t = 1.0
+    robot_pos, _ = trajectory.state_at(encroach_t)
+    obstacle_pos = (robot_pos[0], robot_pos[1] + 0.15 + 2 * config.ROBOT_RADIUS)
+    obstacle_trajectory = Trajectory2D.compute(obstacle_pos, (0.0, 0.0), obstacle_pos, 2.0, 2.0)
+    # owner_id=99 outranks robot_id=0 under `_has_priority` (higher id wins).
+    obstacle = _CommittedTrajectoryObstacle(
+        trajectory=obstacle_trajectory, radius=config.ROBOT_RADIUS, time_offset=0.0, owner_id=99
+    )
+    obstacle_arrays = _flatten_obstacles([obstacle])
+
+    result = planner._try_reuse(
+        robot_id=0,
+        ts=0.0,
+        p0=p0,
+        target_pos=target,
+        obstacles=[obstacle],
+        obstacle_arrays=obstacle_arrays,
+    )
+
+    assert result is None  # must trigger a fresh replan, not keep executing straight into the encroachment
+
+
 def test_plan_exempts_ball_as_obstacle_when_targeting_it():
     """Pins the `planner.py` half of c4ad99c ("Fix two bugs blocking
     trajsample from playing a real match").
@@ -593,3 +644,149 @@ def test_intermediate_targets_keeps_a_last_target_that_is_still_a_reasonable_det
     candidates = planner._intermediate_targets(robot_id=0, p0=p0, final_target=final_target)
 
     assert candidates[0] == (1.0, 1.0)
+
+
+def test_collision_leniency_accepts_a_slow_collision_near_the_destination():
+    """Ports the leniency half of TIGERs' `MovingObstacleResultAcceptor.
+    accept` (confirmed against the real Sumatra source, not just the paper):
+    a non-priority collision near the final destination, at a speed under
+    `COLLISION_SPEED_THRESHOLD_MPS`, must be accepted outright -- "be a bit
+    aggressive to non-priority obstacles." Without this, every ordinary slow
+    final approach near another robot was ranked down by raw survival time
+    exactly like a genuine head-on collision, and the planner had no way to
+    ever accept a completely normal, low-speed arrival.
+    """
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    target = (2.0, 0.0)
+    # Trajectory arriving at the target with near-zero terminal velocity --
+    # a normal bang-bang arrival, collision registered right at the end.
+    trajectory = Trajectory2D.compute((0.0, 0.0), (0.0, 0.0), target, planner.v_max, planner.a_max)
+    collision_time = trajectory.duration  # at the very end: at rest, at the destination
+
+    assert planner._collision_leniency_accepts(trajectory, collision_time, v0=(0.0, 0.0), target_pos=target)
+
+
+def test_collision_leniency_rejects_a_fast_collision_far_from_the_destination():
+    """Companion: a collision far from the final destination, or one at
+    speed with plenty of braking distance remaining, must NOT be excused --
+    only near-arrival, low-speed (or already-past-brake-time) collisions get
+    Sumatra's leniency.
+    """
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    target = (10.0, 0.0)
+    # Fast mid-path collision, nowhere near the (distant) final target.
+    trajectory = Trajectory2D.compute((0.0, 0.0), (0.0, 0.0), target, planner.v_max, planner.a_max)
+    collision_time = 0.5  # early in a long trajectory -- far from target, still near top speed
+
+    assert not planner._collision_leniency_accepts(trajectory, collision_time, v0=(0.0, 0.0), target_pos=target)
+
+
+def test_plan_accepts_direct_trajectory_through_a_slow_obstacle_parked_on_target():
+    """End-to-end: a non-priority teammate parked exactly on the target must
+    not force the planner into `best_fallback`'s survival-time ranking
+    forever -- a normal, collision-registering-at-arrival direct trajectory
+    must be accepted outright once no priority obstacle blocks it.
+
+    Robot 1 (planned robot) outranks robot 0 (stationary obstacle) per
+    `_has_priority` (higher id wins), so robot 0 is a NON-priority obstacle
+    from robot 1's perspective -- exactly the case Sumatra's leniency
+    applies to (a priority obstacle stays an unconditional reject; see
+    `_blocked_by_priority_obstacle`).
+    """
+    zero = Vector3D(0, 0, 0)
+    target = (0.0, 0.0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        friendly_robots={
+            0: _robot(0, target[0], target[1], True),  # parked on the target -- non-priority obstacle
+            1: _robot(1, -1.0, 0.0, True),  # the robot being planned -- close enough that the
+            # collision near arrival falls within MAX_LOOKAHEAD_TIME (1.5s)
+        },
+        enemy_robots={},
+        ball=Ball(p=Vector3D(5.0, 5.0, 0), v=zero, a=zero),  # far away, irrelevant to this approach
+    )
+    field = Field(
+        my_team_is_right=False, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+    )
+    game = Game(past=GameHistory(10), current=frame, field=field)
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+
+    result = planner.plan(game, robot_id=1, target_pos=target, field_bounds=field.full_field_bounds)
+
+    # Direct trajectory to the target, accepted via leniency (registers as
+    # having a collision at/near the very end, at the destination) rather
+    # than falling through to a `_two_segment_candidates` detour.
+    assert result.has_collision is True
+    assert result.trajectory.duration == pytest.approx(
+        Trajectory2D.compute((-1.0, 0.0), (0.0, 0.0), target, planner.v_max, planner.a_max).duration
+    )
+
+
+def test_with_current_clearance_excludes_an_obstacle_the_robot_is_still_escaping():
+    """Regression for the escaping-grace / clearance-report mismatch
+    (roadmap item 15): `_first_collision`'s numba scan grants a one-time
+    "still escaping" grace to any obstacle already penetrated at t == the
+    query start (see its own docstring -- built for GiveAndGoTactic's
+    abandoned-receiver robot, replanning a fresh route the instant the ball
+    becomes a real obstacle again). `_with_current_clearance` computes
+    `nearest_obstacle_distance`/`closing_speed` -- fed straight into
+    `TrajectorySamplingController`'s emergency-brake check -- via a
+    completely separate distance computation that didn't know about that
+    grace at all: it reported the still-penetrated obstacle as "the nearest
+    danger" unconditionally, which could clamp the robot's escape velocity
+    down right as it was legitimately getting clear, undercutting the
+    numba-level fix via this separate code path.
+
+    Set up: the robot's OWN position (`p0`) is already inside an obstacle's
+    dynamic margin (mirrors "plan() already accepted this trajectory because
+    the obstacle is being escaped, not approached" -- exactly what a
+    collision-free `PlanResult` from `plan()` would look like in that
+    situation). A second, genuinely-clear obstacle is also present. The
+    penetrated obstacle must NOT be reported as nearest -- the clear one
+    must win instead.
+    """
+    from utama_core.motion_planning.src.trajsampling.config import (
+        trajsamplingconfig as config,
+    )
+
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    p0 = (0.0, 0.0)
+    # Trajectory moving away from p0 at speed -- a real "escaping" motion.
+    trajectory = Trajectory2D.compute(p0, (1.0, 0.0), (2.0, 0.0), planner.v_max, planner.a_max)
+    result = PlanResult(trajectory=trajectory, has_collision=False, collision_time=None, elapsed=0.0)
+
+    # Penetrating obstacle: centred exactly on p0, well inside any margin.
+    penetrating = ConstantVelocityObstacle(p0=p0, v=(0.0, 0.0), radius=config.ROBOT_RADIUS)
+    # Genuinely clear obstacle, far away.
+    clear = ConstantVelocityObstacle(p0=(5.0, 5.0), v=(0.0, 0.0), radius=config.ROBOT_RADIUS)
+
+    updated = planner._with_current_clearance(result, p0, [penetrating, clear])
+
+    expected_clear_distance = clear.distance_at(0.0, p0) - config.ROBOT_RADIUS
+    assert updated.nearest_obstacle_distance == pytest.approx(expected_clear_distance)
+    assert updated.nearest_obstacle_distance > 1.0  # nowhere near a brake-triggering distance
+
+
+def test_with_current_clearance_still_reports_a_genuinely_approaching_obstacle():
+    """Companion: an obstacle NOT penetrated at the current position must
+    still be reported normally -- the escaping-grace exclusion above must
+    only ever exclude an obstacle the robot is already inside, never a
+    genuinely approaching one that the emergency brake still needs to see.
+    """
+    from utama_core.motion_planning.src.trajsampling.config import (
+        trajsamplingconfig as config,
+    )
+
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    p0 = (0.0, 0.0)
+    trajectory = Trajectory2D.compute(p0, (1.0, 0.0), (2.0, 0.0), planner.v_max, planner.a_max)
+    result = PlanResult(trajectory=trajectory, has_collision=False, collision_time=None, elapsed=0.0)
+
+    approaching = ConstantVelocityObstacle(p0=(0.5, 0.0), v=(0.0, 0.0), radius=config.ROBOT_RADIUS)
+
+    updated = planner._with_current_clearance(result, p0, [approaching])
+
+    expected = approaching.distance_at(0.0, p0) - config.ROBOT_RADIUS
+    assert updated.nearest_obstacle_distance == pytest.approx(expected)
