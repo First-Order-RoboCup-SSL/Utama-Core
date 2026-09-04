@@ -24,6 +24,7 @@ from utama_core.config.referee_constants import (
 )
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.shared.tolerance import Sticky
 from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
 
 
@@ -636,6 +637,24 @@ class DirectFreeOursStep:
     _KICK_READY_DISTANCE = 0.16
     _FACE_READY_ANGLE = 0.18
 
+    # Metres a challenger must be closer than the current kicker before the
+    # role actually flips — same shape/value as pass_and_shoot.py's
+    # _REASSIGN_MARGIN_M. Without this, a naive `min(..., key=distance)`
+    # recomputed fresh every tick flips the "closest" robot on ordinary
+    # rsim position noise whenever two-plus robots sit near-equidistant from
+    # the ball (observed: three robots within 2cm of each other, ~9 flips/
+    # second, 243 in 27s straight-line trace). Every flip resets the new
+    # kicker's approach from a standing start (the old kicker becomes
+    # `empty_command()` immediately), so the role never holds long enough
+    # for any robot to actually close the distance — this was the real
+    # mechanism behind the DIRECT_FREE stall traced in
+    # clear_danger_vs_clear_press_plus (roadmap item 15), not the
+    # multi-robot planner congestion first suspected from replay data alone.
+    _KICKER_REASSIGN_MARGIN_M = 0.3
+
+    def __init__(self):
+        self._kicker_sticky = Sticky[int](margin=self._KICKER_REASSIGN_MARGIN_M)
+
     @staticmethod
     def _angle_error(current: float, target: float) -> float:
         return math.atan2(math.sin(target - current), math.cos(target - current))
@@ -656,13 +675,15 @@ class DirectFreeOursStep:
         motion_controller = self.blackboard.motion_controller
         ball = game.ball
 
-        kicker_id = min(
-            game.friendly_robots,
-            key=lambda rid: game.friendly_robots[rid].p.distance_to(ball.p) if ball else float("inf"),
-        )
+        if not ball:
+            _all_stop(self.blackboard)
+            return
+
+        distances = {rid: game.friendly_robots[rid].p.distance_to(ball.p) for rid in game.friendly_robots}
+        kicker_id = self._kicker_sticky.update(list(distances), score_fn=lambda rid: -distances[rid])
 
         for robot_id in game.friendly_robots:
-            if robot_id == kicker_id and ball:
+            if robot_id == kicker_id:
                 robot = game.friendly_robots[robot_id]
                 ball_pos = Vector2D(ball.p.x, ball.p.y)
                 distance_to_ball = robot.p.distance_to(ball_pos)

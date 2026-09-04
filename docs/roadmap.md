@@ -477,6 +477,56 @@ the full investigation narrative for anything already fixed lives in git log
         making essentially no progress. Looks like a genuine multi-robot
         local-minimum/congestion case in a crowded corner, not a rules-
         exemption gap — a harder problem, not traced further this session.
+      - **Third mechanism found and fixed (2026-09-04), live-traced (not
+        replay-inferred) on `clear_danger_vs_clear_press_plus` itself**:
+        `DirectFreeOursStep.update()` (`custom_referee/actions.py`) picked
+        the kicker fresh every tick via `min(game.friendly_robots,
+        key=distance_to_ball)`, with no hysteresis. Live per-tick trace
+        (not replay data — `debug_match.py` with a temporary probe script
+        reading robot state directly) showed three robots sitting within
+        2cm of each other's distance to the ball; the "closest" identity
+        flipped on ordinary rsim position noise **243 times in 27 seconds**
+        (~9/s) and never stopped. Every flip reset the newly-chosen kicker
+        to a standing start (the old one dropped to `empty_command()`
+        immediately), so no robot ever held the role long enough to close
+        meaningful distance — this is the exact bug shape `[[Sticky/
+        hysteresis]]` (item 1) already names, and the exact fix already
+        shipped once for the same shape in `pass_and_shoot.py`'s
+        `assign_passer_receiver`. Fixed identically: `DirectFreeOursStep`
+        now holds a `shared.tolerance.Sticky[int]` (`_kicker_sticky`,
+        `margin=0.3` — same value as `pass_and_shoot._REASSIGN_MARGIN_M`)
+        across ticks, since the class is already constructed once per match
+        and reused (`RefereeOverride.__init__`, same lifetime pattern
+        `BallPlacementOursStep`'s existing `_placer_id` sticky field
+        relies on). Confirmed live: kicker switches during the restart
+        dropped from 243 to 4 (one legitimate hand-off once robot 3 was
+        genuinely closest, then held). Two new regression tests added
+        (`test_kicker_choice_is_sticky_across_near_tied_distances`,
+        `test_kicker_reassigns_when_a_robot_is_clearly_closer`).
+        **Important, does not fully resolve this match or the 56-stall
+        backlog**: with thrashing gone, robot 3 now visibly commits and
+        closes ground (min distance to ball drops from ~3.9m to ~2.6m by
+        t=56) — but then the *second* mechanism above (multi-robot
+        congestion/local-minimum) takes over: it oscillates between ~2.6m
+        and ~3.4m, retreating and re-approaching, for the rest of the 90s
+        window, never reaching the ball. `clear_danger_vs_clear_press_plus`
+        and a second spot-checked match (`three_slot_vs_tiki_taka_plus`)
+        both still record a `RESTART_STALL` at the identical onset time
+        with this fix applied — so per this session's honest-caveat
+        precedent (small-subset re-runs previously overstated a fix's
+        reach), assume this fixes some unknown subset of the 56 sharing
+        pure identity-thrashing with no congestion underneath, not the
+        backlog as a whole, until re-classified against a full round-robin.
+        The congestion/local-minimum mechanism (previous bullet) is now the
+        clean, thrashing-free target for that investigation — the noise
+        that made it hard to trace live is gone.
+      - **Related, not yet checked**: `BallPlacementOursStep`
+        (`custom_referee/actions.py`) recomputes its placer with the same
+        unguarded `min(..., key=distance)` on every tick before the ball
+        reaches `designated_position` (only the post-arrival release hold
+        uses its existing `_placer_id` field) — same shape, unconfirmed
+        whether it thrashes in practice; the 4 BALL_PLACEMENT stalls in the
+        post-`885eba4` baseline are a plausible place to check first.
       - Remaining work: re-classify all 57 (now 56) DIRECT_FREE stalls
         against the FULL round-robin's actual before/after diff (not a
         margin-based static classification, which proved unreliable), then
@@ -504,8 +554,27 @@ the full investigation narrative for anything already fixed lives in git log
          already-fixed `fpp` bug, `7a8e717`) but it only resolved 1/57 in
          the full round-robin — see the detailed writeup and the "confirm
          against the full round-robin, not a small subset" caveat above.
-         A second, harder mechanism (multi-robot congestion near a crowded
+         A second harder mechanism (multi-robot congestion near a crowded
          defended corner) is identified but not yet traced to a fix.
+         **Further progress, same day, second session**: live-traced (not
+         replay-inferred — this is what let it be found at all, the earlier
+         static/replay classification couldn't see it) a third, independent
+         mechanism on the same match: `DirectFreeOursStep`'s kicker pick had
+         no hysteresis and thrashed identity ~9x/second on ordinary rsim
+         noise whenever candidates were near-tied, so no robot ever held the
+         role long enough to progress. Fixed via `shared.tolerance.Sticky`
+         (same primitive/margin `pass_and_shoot.py` already uses for the
+         identical bug shape) — confirmed 243 -> 4 kicker switches on the
+         same restart, two regression tests added. Does **not** fully
+         resolve `clear_danger_vs_clear_press_plus` or a second spot-checked
+         match (`three_slot_vs_tiki_taka_plus`) — both still `RESTART_STALL`
+         at the same onset with this fix applied, because the congestion/
+         local-minimum mechanism above is a separate, still-open problem
+         that only becomes visible once thrashing noise is removed. Full
+         writeup with live-trace numbers under "57 DIRECT_FREE stalls,
+         first trace" above. Also flagged, unconfirmed: `BallPlacementOursStep`
+         has the same unguarded `min(..., key=distance)` shape before ball
+         arrival — worth checking against the 4 BALL_PLACEMENT stalls.
       3. ~~Gate speed: stop-at-first-stall mode in `tournament.py`~~ Done
          2026-09-04: `--stop-at-first-stall` exits as soon as any match
          records a `StallEvent` (implies `--strict`; errors loudly if

@@ -1127,6 +1127,84 @@ class TestDirectFreeOursStep:
         for v in cmd_map.values():
             assert v is not None
 
+    def test_kicker_choice_is_sticky_across_near_tied_distances(self, monkeypatch):
+        """Regression for the DIRECT_FREE congestion stall root-caused via
+        `clear_danger_vs_clear_press_plus` (roadmap item 15): three robots
+        within a couple cm of each other's distance to the ball flipped
+        which one `min(..., key=distance)` called "closest" on ordinary
+        rsim position noise, ~9 times/second, so no robot ever held the
+        kicker role long enough to make progress. `DirectFreeOursStep` must
+        reuse the same instance across ticks (it does — constructed once in
+        `RefereeOverride.__init__`) and hold its choice via `Sticky`.
+        """
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured_kicker_ids = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured_kicker_ids.append(robot_id)
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        node = referee_actions.DirectFreeOursStep()
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW)
+
+        # Robots 1/3/5 start within 2cm of each other's distance to the ball
+        # at (0, 0) — near-tied, well under the reassign margin — with tiny
+        # per-tick jitter (sub-mm) simulating rsim sensor noise, exactly the
+        # shape that made the naive `min()` flip every tick.
+        base_positions = {1: (2.00, 0.0), 3: (2.01, 0.0), 5: (2.02, 0.0)}
+        jitter = [0.0, 0.001, -0.001, 0.0015, -0.0005]
+
+        for tick, dx in enumerate(jitter):
+            robots = {rid: _robot(rid, x + dx, 0.0) for rid, (x, y) in base_positions.items()}
+            game = _make_game(friendly_robots=robots, referee=referee)
+            cmd_map = _make_cmd_map(game)
+            node.blackboard = _make_blackboard(game, cmd_map)
+            node.update()
+
+        # Every tick's kicker must be the same robot once chosen — no flip
+        # from noise alone (all candidates stay within the reassign margin).
+        assert len(set(captured_kicker_ids)) == 1, (
+            f"kicker flipped across near-tied ticks: {captured_kicker_ids} " "(expected the same robot id every tick)"
+        )
+
+    def test_kicker_reassigns_when_a_robot_is_clearly_closer(self, monkeypatch):
+        """The sticky kicker choice must still yield to a genuinely closer
+        robot — hysteresis should suppress noise-level flips, not freeze the
+        assignment forever."""
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured_kicker_ids = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured_kicker_ids.append(robot_id)
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        node = referee_actions.DirectFreeOursStep()
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW)
+
+        # Tick 1: robot 1 is closest.
+        robots = {1: _robot(1, 2.0, 0.0), 3: _robot(3, 3.0, 0.0)}
+        game = _make_game(friendly_robots=robots, referee=referee)
+        cmd_map = _make_cmd_map(game)
+        node.blackboard = _make_blackboard(game, cmd_map)
+        node.update()
+        assert captured_kicker_ids[-1] == 1
+
+        # Tick 2: robot 3 is now far closer (clears the reassign margin) but
+        # still well outside _APPROACH_READY_DISTANCE, so it takes the move()
+        # branch rather than turn_on_spot()/empty_command().
+        robots = {1: _robot(1, 2.0, 0.0), 3: _robot(3, 0.5, 0.0)}
+        game = _make_game(friendly_robots=robots, referee=referee)
+        cmd_map = _make_cmd_map(game)
+        node.blackboard = _make_blackboard(game, cmd_map)
+        node.update()
+        assert captured_kicker_ids[-1] == 3
+
 
 # ---------------------------------------------------------------------------
 # DirectFreeTheirsStep — comprehensive keep-out coverage
