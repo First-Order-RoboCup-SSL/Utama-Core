@@ -48,6 +48,7 @@ import numpy as np
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.motion_planning.src.trajsampling import collision_numba as _cn
 from utama_core.motion_planning.src.trajsampling.bang_bang import Trajectory2D
 from utama_core.motion_planning.src.trajsampling.config import (
@@ -151,6 +152,18 @@ def _flatten_query_trajectory(trajectory) -> tuple:
 
 
 _BALL_RADIUS = 0.0215
+
+# Same set `FastPathPlanner`/`DefenseAreaRule` use to decide when opponent-
+# defense-area entry is actually a foul -- entry is legal outside these
+# commands (e.g. during a DIRECT_FREE_*/BALL_PLACEMENT_* restart where the
+# ball itself has come to rest in the opponent's box and a robot must be able
+# to retrieve it). Duplicated rather than imported, matching every other
+# referee-adjacent module in this codebase already independently defining
+# this same constant rather than sharing one.
+_ACTIVE_PLAY_COMMANDS = {
+    RefereeCommand.NORMAL_START,
+    RefereeCommand.FORCE_START,
+}
 
 # How close `plan()`'s target must be to the ball's current position for the
 # ball to be exempted from that call's own obstacle set (see `plan()`'s
@@ -354,17 +367,64 @@ class TrajectorySamplingPlanner:
         # obstacle (e.g. routing around a ball an enemy is dribbling).
         self._shared_ball_row: Optional[list] = None
 
+    def _enemy_defense_area_retrieval_exempt(self, game: Game, robot_id: int) -> bool:
+        """True when `robot_id` must be allowed to actually enter the
+        opponent's defense area to retrieve the ball, rather than have every
+        target/waypoint there treated as inside a hard obstacle.
+
+        Mirrors `FastPathPlanner._enemy_defense_area_retrieval_exempt` (see
+        that docstring for the full rationale and the stall this prevents —
+        same mechanism, ported here because `plan()`'s `exempt_defense_area`
+        parameter existed but no caller ever set it, so this planner treated
+        the opponent's box as impassable even during a legitimate
+        DIRECT_FREE_OURS/BALL_PLACEMENT_OURS retrieval, unlike
+        `FastPathPlanner`, which has computed this internally all along).
+        Narrower than "any stoppage": only exempts when the ball is actually
+        resting in the rectangle right now, or (for `BALL_PLACEMENT_OURS`)
+        `robot_id` already has the ball and the referee's `designated_position`
+        sits inside it -- a formation/support target that merely happens to
+        be computed near the box during a restart is still blocked as before.
+        """
+        referee = game.referee
+        command = getattr(referee, "referee_command", None) if referee is not None else None
+        if command in _ACTIVE_PLAY_COMMANDS:
+            return False
+        ball = game.ball
+        if ball is None:
+            return False
+        corners = game.field.enemy_defense_area
+        min_x = min(c[0] for c in corners)
+        max_x = max(c[0] for c in corners)
+        min_y = min(c[1] for c in corners)
+        max_y = max(c[1] for c in corners)
+        if min_x <= ball.p.x <= max_x and min_y <= ball.p.y <= max_y:
+            return True
+        robot = game.friendly_robots.get(robot_id)
+        designated = getattr(referee, "designated_position", None) if referee is not None else None
+        if robot is not None and robot.has_ball and designated is not None:
+            dx, dy = designated
+            if min_x <= dx <= max_x and min_y <= dy <= max_y:
+                return True
+        return False
+
     def plan(
         self,
         game: Game,
         robot_id: int,
         target_pos: Tuple[float, float],
         field_bounds: FieldBounds,
-        exempt_defense_area: bool = False,
+        exempt_defense_area: Optional[bool] = None,
     ) -> PlanResult:
         robot = game.friendly_robots[robot_id]
         p0 = (robot.p.x, robot.p.y)
         v0 = (robot.v.x, robot.v.y)
+
+        # `None` (the default for every current caller -- nothing passes
+        # this explicitly) means "derive it", same as `FastPathPlanner`
+        # always does internally; an explicit True/False from a caller that
+        # knows better (e.g. a future goalkeeper exemption) still wins.
+        if exempt_defense_area is None:
+            exempt_defense_area = self._enemy_defense_area_retrieval_exempt(game, robot_id)
 
         # Teammate obstacles are rebuilt fresh every call (see
         # `_own_robot_obstacle`/`__init__`'s cache comment for why: they

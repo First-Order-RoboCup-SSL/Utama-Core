@@ -303,6 +303,13 @@ def main() -> None:
     # injections (default 25-45s); both are recorded in summary.json
     # (`fuzz_seed`/`fuzz_interval_s`, null when off) so a fuzzed run is
     # reproducible from the summary alone.
+    # `--stop-at-first-stall` exits as soon as any match records a
+    # `StallEvent`, instead of finishing all `C(n, 2)` pairs — for iterating
+    # on a stall fix without waiting ~40 minutes for the full round-robin;
+    # rsim is deterministic, so the first stall found for a given
+    # catalog/seed/control-scheme reproduces the same way every run. Implies
+    # `--strict`. In pool mode, in-flight matches still finish (their cost is
+    # already sunk) but no further matches are submitted.
     args = sys.argv[1:]
     sequential = "--sequential" in args
     args = [a for a in args if a != "--sequential"]
@@ -323,6 +330,28 @@ def main() -> None:
     # reads the printed section or summary.json by hand.
     strict = "--strict" in args
     args = [a for a in args if a != "--strict"]
+    # `--stop-at-first-stall` exits the round-robin as soon as any match
+    # records a `StallEvent`, instead of running all `C(n, 2)` pairs — for
+    # iterating on a stall fix, where the other ~230 matches add nothing
+    # once one reproduction is in hand (rsim is deterministic, so the first
+    # stall found for a given catalog/seed/control-scheme is stable across
+    # runs). Implies `--strict`, since the point of stopping early is to
+    # fail fast, not to keep going and report success. Standings/STALLS
+    # output below still reflects however many matches actually ran.
+    stop_at_first_stall = "--stop-at-first-stall" in args
+    args = [a for a in args if a != "--stop-at-first-stall"]
+    strict = strict or stop_at_first_stall
+    if stop_at_first_stall and no_save:
+        # Stall detection reads `MatchResult.stats`, which is only populated
+        # when `run_match` gets a `stats_path` — i.e. never under `--no-save`
+        # (see `run_match`'s `extra_kwargs` construction). Combined with
+        # `--no-save`, `_stalled()` would be unconditionally False for every
+        # match, so this run-forever's fast-exit would silently never fire —
+        # worse than a no-op, since it would look like a clean run. `--strict`
+        # alone has this same gap but degrades to "did nothing", which is
+        # already documented above; `--stop-at-first-stall`'s entire point is
+        # to fire, so make the misuse loud instead.
+        raise SystemExit("--stop-at-first-stall requires stats collection; drop --no-save")
     control_scheme = "fpp"
     if "--control-scheme" in args:
         idx = args.index("--control-scheme")
@@ -411,6 +440,9 @@ def main() -> None:
             f"attacking_third_entries {s['attacking_third_entries']}"
         )
 
+    def _stalled(result: MatchResult) -> bool:
+        return bool(result.stats and result.stats.get("stall_events"))
+
     def _record(result: MatchResult) -> None:
         results.append(result)
         if result.winner == "draw":
@@ -430,16 +462,19 @@ def main() -> None:
 
     if sequential:
         for config_a_name, config_b_name in pairs:
-            _record(
-                run_match(
-                    config_a_name,
-                    config_b_name,
-                    run_dir=run_dir,
-                    control_scheme=control_scheme,
-                    fuzz_seed=fuzz_seed,
-                    fuzz_interval_s=fuzz_interval_s,
-                )
+            result = run_match(
+                config_a_name,
+                config_b_name,
+                run_dir=run_dir,
+                control_scheme=control_scheme,
+                fuzz_seed=fuzz_seed,
+                fuzz_interval_s=fuzz_interval_s,
             )
+            _record(result)
+            if stop_at_first_stall and _stalled(result):
+                tag = f"{_short_name(result.config_a)}_vs_{_short_name(result.config_b)}"
+                print(f"\n--stop-at-first-stall: stopping after {tag}", flush=True)
+                break
     else:
         # Matches complete out of submission order under a process pool —
         # printed as they finish rather than buffered back into pair order,
@@ -451,7 +486,18 @@ def main() -> None:
                 pool.submit(run_match, a, b, run_dir, control_scheme, fuzz_seed, fuzz_interval_s) for a, b in pairs
             ]
             for future in as_completed(futures):
-                _record(future.result())
+                result = future.result()
+                _record(result)
+                if stop_at_first_stall and _stalled(result):
+                    tag = f"{_short_name(result.config_a)}_vs_{_short_name(result.config_b)}"
+                    print(
+                        f"\n--stop-at-first-stall: stopping after {tag} "
+                        "(in-flight matches still finish; not resubmitted)",
+                        flush=True,
+                    )
+                    for fut in futures:
+                        fut.cancel()
+                    break
 
     print("\nStandings (wins, draws):")
     for name in sorted(config_names, key=lambda n: (-wins[n], -draws[n])):

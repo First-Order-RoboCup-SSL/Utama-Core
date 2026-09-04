@@ -128,6 +128,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS  # noqa: E402
 from utama_core.config.physical_constants import ROBOT_RADIUS  # noqa: E402
+from utama_core.replay.columnar_reader import load_columnar_replay  # noqa: E402
+from utama_core.replay.entities import ReplayMetadata  # noqa: E402
 from utama_core.replay.replay_player import _load_replay  # noqa: E402
 
 # --- Sampling ---------------------------------------------------------------
@@ -153,13 +155,33 @@ _SUPPORT_RADIUS_M = 1.0  # metric 7: "teammate near the ball at shot time"
 _RESTART_LIVE_COMMANDS = {"NORMAL_START", "FORCE_START"}
 
 
-def _iter_sampled_frames(pkl_path: Path):
+def _iter_sampled_frames(replay_path: Path):
     """Yield every `_SAMPLE_STRIDE`-th `GameFrame` from a replay file, plus the
     replay metadata first. A generator, not a list, so a caller that only needs
     a running accumulation (the common case here) never holds the sampled frames
     in memory at once.
+
+    Dispatches on extension like `replay_player.load_frames_in_range` does:
+    `.npz` is the columnar format current tournament runs actually write
+    (`ColumnarReplayWriter`) — `_load_replay` only understands the older
+    one-pickle-per-frame `.pkl` format, so it can't read current runs at all.
+    `ColumnarReplay` has no separate `ReplayMetadata` object; `my_team_is_yellow`
+    is a field on it directly, which is the only piece of metadata this module
+    reads, so it's wrapped in a `ReplayMetadata` to keep `compute_frame_metrics`
+    unchanged.
     """
-    gen = _load_replay(pkl_path)
+    if replay_path.suffix == ".npz":
+        replay = load_columnar_replay(replay_path)
+        yield ReplayMetadata(
+            my_team_is_yellow=replay.my_team_is_yellow,
+            exp_friendly=len(replay.friendly_ids),
+            exp_enemy=len(replay.enemy_ids),
+        )
+        for i in range(0, replay.n_ticks, _SAMPLE_STRIDE):
+            yield replay.frame_at(i)
+        return
+
+    gen = _load_replay(replay_path)
     metadata = next(gen)
     yield metadata
     for i, frame in enumerate(gen):
@@ -188,13 +210,13 @@ class _PossessionState:
     robot_id: Optional[int] = None
 
 
-def compute_frame_metrics(pkl_path: Path, referee_events: list[dict]) -> dict:
+def compute_frame_metrics(replay_path: Path, referee_events: list[dict]) -> dict:
     """Single pass over 10 Hz-sampled frames computing every frame-derived metric
     (see module docstring, items 1-7) for both `friendly` (config_a) and `enemy`
     (config_b). Returns a flat dict of `{metric}_{side}` -> value plus a couple of
     match-level counts (`n_restarts`, `n_restarts_with_entry`).
     """
-    frames_iter = _iter_sampled_frames(pkl_path)
+    frames_iter = _iter_sampled_frames(replay_path)
     metadata = next(frames_iter)
     my_team_is_right = metadata.my_team_is_yellow  # config_a is always yellow+right together
 
@@ -426,11 +448,15 @@ def _worker(args: tuple) -> tuple[str, dict]:
     if cache_path.exists():
         with open(cache_path) as f:
             return match_tag, json.load(f)
-    pkl_path = run_dir / f"{match_tag}.pkl"
+    # Current tournament runs write `.npz` (ColumnarReplayWriter); older run
+    # directories on disk still have `.pkl` (see `_iter_sampled_frames`'s
+    # dispatch on extension) — prefer `.npz`, fall back for old runs.
+    npz_path = run_dir / f"{match_tag}.npz"
+    replay_path = npz_path if npz_path.exists() else run_dir / f"{match_tag}.pkl"
     intentions_path = run_dir / f"{match_tag}.intentions.jsonl"
     ref_events = _load_referee_events(intentions_path)
     try:
-        metrics = compute_frame_metrics(pkl_path, ref_events)
+        metrics = compute_frame_metrics(replay_path, ref_events)
     except Exception as exc:  # pragma: no cover - defensive: one bad match shouldn't kill the run
         metrics = {"_error": str(exc)}
     with open(cache_path, "w") as f:

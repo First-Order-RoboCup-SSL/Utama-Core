@@ -426,12 +426,69 @@ the full investigation narrative for anything already fixed lives in git log
       at 0.8 m/s for 50 s (low_block vs overload_flow family). Prefer the
       item 14 counters (turnovers, completed passes, attacking-third
       entries) and the STALLS section.
-    - The remaining 57 DIRECT_FREE stalls are untraced. Iteration is slow
-      because the gate is the full 231-match round-robin (~40 min on 15
-      workers); a stop-at-first-stall mode and a fixed 30-40 match subset
-      that reproduces each stall class would make the loop minutes, not
-      hours. `--fuzz-restarts SEED` (405693c) exercises restarts far more
-      often than natural play and is the right way to bench a restart fix.
+    - **57 DIRECT_FREE stalls, first trace (2026-09-04).** Root-caused one
+      real mechanism and shipped a fix, but it only resolved 1/57 in the
+      full round-robin (57 -> 56 DIRECT_FREE, 106 -> 105 total) — much
+      smaller than expected; see the important caveat below about why
+      small-subset re-runs overstated it.
+      - **Mechanism found and fixed**: `TrajectorySamplingPlanner.plan()`
+        has always taken an `exempt_defense_area` parameter mirroring
+        `FastPathPlanner`'s existing opponent-defense-area-retrieval
+        exemption (the same class of bug as the "Defense-area retrieval
+        stall" fix in Done, `7a8e717` — but that fix only ever touched
+        `fpp`). No caller ever passed it, so `trajsample` always treated the
+        opponent's box as a hard wall, including during a legitimate
+        DIRECT_FREE_OURS/BALL_PLACEMENT_OURS retrieval when the ball itself
+        rests inside it — the kicker's own approach target sits inside an
+        obstacle it can never enter. Fixed by giving
+        `TrajectorySamplingPlanner` its own `_enemy_defense_area_retrieval_exempt()`,
+        computed internally from `game` exactly like `FastPathPlanner`
+        already does, called from `plan()` whenever the caller doesn't pass
+        the parameter explicitly (nothing currently does). Confirmed via a
+        debug trace that the exemption fires correctly at runtime
+        (`exempt=True` on every `plan()` call for the affected robot/tick).
+        Fixed exactly one match in the full round-robin:
+        `high_line_zone_vs_high_press`.
+      - **Important caveat, discovered the hard way**: a match's stall
+        outcome is NOT reliably reproducible by re-running just that one
+        pair in a small subset (`tournament.py low_block tiki_taka`, say) —
+        several matches that appeared fixed in small 2-4-config smoke tests
+        (`clear_danger_vs_clear_press_plus`, `clear_press_plus_vs_counter_press`,
+        `three_slot_vs_tiki_taka_plus`, `split_shape_vs_tiki_taka`, and
+        others from a first-pass classification that guessed ~27/57 were
+        this same defense-area bug) turned out to still stall, identically,
+        when re-checked cleanly in isolation after ruling out test
+        contamination (a `git stash`/`pop` cycle run concurrently with a
+        background full-round-robin process while validating a different
+        change — do not edit/stash a file a background tournament run is
+        currently importing from worker processes). **Always confirm a
+        stall fix against the full 231-match round-robin** (or at least the
+        planned 30-40 match liveness subset, once it exists — see below),
+        not an ad hoc small-catalog re-run.
+      - **Genuinely different second mechanism, seen while re-tracing
+        `clear_danger_vs_clear_press_plus`** (the exemption fix does NOT
+        help here — confirmed firing correctly but the match still stalls
+        identically, onset t=43.8s): the kicker's direct path to the ball
+        collides with real, legitimately-positioned enemy robots defending
+        near their own goal/corner (e.g. two enemies within ~0.3-0.9m of
+        the ball's resting spot at (-4.25, 0.70)), and none of `plan()`'s
+        sampled intermediate-target candidates ever find a collision-free
+        route either — the kicker sits ~3.6m away the whole restart,
+        making essentially no progress. Looks like a genuine multi-robot
+        local-minimum/congestion case in a crowded corner, not a rules-
+        exemption gap — a harder problem, not traced further this session.
+      - Remaining work: re-classify all 57 (now 56) DIRECT_FREE stalls
+        against the FULL round-robin's actual before/after diff (not a
+        margin-based static classification, which proved unreliable), then
+        trace the congestion mechanism above as its own investigation.
+        Iteration is slow because the gate is the full 231-match round-robin
+        (~40 min on 15 workers); `--stop-at-first-stall` (done, see below)
+        helps once a run is already known to contain a stall, but a fixed
+        30-40 match subset that reproduces each stall class (still open)
+        is the real fix for iteration speed, precisely because a stall's
+        reproduction depends on the full catalog/pairing context.
+        `--fuzz-restarts SEED` (405693c) exercises restarts far more often
+        than natural play and is the right way to bench a restart fix.
     - **Handoff, 2026-09-03 (open, in priority order):**
       1. Live-play ball holds above (three_slot / low_block). Being traced
          in a separate session, which suspects "converged-target churn":
@@ -441,11 +498,37 @@ the full investigation narrative for anything already fixed lives in git log
          `<run>/<match>.intentions.jsonl` for the carrier and marker before
          changing the planner.
       2. Trace the remaining 57 DIRECT_FREE stalls (single-match repro from
-         the STALLS section; rsim is deterministic).
-      3. Gate speed: stop-at-first-stall mode in `tournament.py` and a fixed
-         30-40 match subset covering each stall class.
-      4. `tools/metric_correlation.py` hardcodes `.pkl` replays (line ~429)
-         and cannot read the current `.npz` runs.
+         the STALLS section; rsim is deterministic). Partial progress
+         2026-09-04: one mechanism found and fixed (opponent-defense-area
+         exemption never plumbed into `trajsample`, same class as the
+         already-fixed `fpp` bug, `7a8e717`) but it only resolved 1/57 in
+         the full round-robin — see the detailed writeup and the "confirm
+         against the full round-robin, not a small subset" caveat above.
+         A second, harder mechanism (multi-robot congestion near a crowded
+         defended corner) is identified but not yet traced to a fix.
+      3. ~~Gate speed: stop-at-first-stall mode in `tournament.py`~~ Done
+         2026-09-04: `--stop-at-first-stall` exits as soon as any match
+         records a `StallEvent` (implies `--strict`; errors loudly if
+         combined with `--no-save`, since stall detection needs
+         `MatchResult.stats`, which `--no-save` never populates — a silent
+         no-op would be worse than nothing there). Verified end-to-end
+         (pre-fix `trajsampling/planner.py` via a temporary `git stash`,
+         reverted immediately after — see the caveat above about not doing
+         this concurrently with a background round-robin) that it correctly
+         stops after the first stalling match and exits non-zero. The fixed
+         30-40 match subset covering each stall class is still open.
+      4. ~~`tools/metric_correlation.py` hardcodes `.pkl` replays (line ~429)
+         and cannot read the current `.npz` runs.~~ Fixed 2026-09-04:
+         `_iter_sampled_frames` now dispatches on extension like
+         `replay_player.load_frames_in_range` already did, reading `.npz` via
+         `ColumnarReplay.frame_at`/`n_ticks` and wrapping its
+         `my_team_is_yellow` field in a `ReplayMetadata` so
+         `compute_frame_metrics` needed no changes; `.pkl` still works
+         unchanged for old run directories. `_worker` prefers `.npz`, falls
+         back to `.pkl` when only that exists. Verified against both a
+         current `.npz` run (`tournament_20260903_180026`, full 231-match
+         pipeline including report generation) and an old `.pkl`-only run
+         (`tournament_20260902_220936`).
       5. BangBang1D re-apply (`b26a550`) together with a blocked-start
          planner change - see the bullet below.
       6. Consolidate `tournament.py` / `full_match_tournament.py` /
