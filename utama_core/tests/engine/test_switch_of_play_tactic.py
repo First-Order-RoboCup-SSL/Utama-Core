@@ -99,16 +99,19 @@ def test_debounced_settled_survives_oscillating_speed_around_threshold():
     stay True long enough for `_pass_exec` to start — 51 True flips over
     9.4s, longest run 0.53s. The debounced gate must still reach True within
     a bounded number of ticks once the robot is genuinely oscillating in
-    place near the target, by resetting on every False tick and requiring a
-    fresh run of `_SETTLE_DEBOUNCE_TICKS` consecutive True ticks."""
+    place near the target. Strict tick-by-tick alternation (the worst case)
+    must never accumulate enough to settle, since the leaky counter gains 1
+    on a hit and loses only 1 on a miss — alternating hit/miss nets to a
+    steady 0-1, never climbing toward `_SETTLE_DEBOUNCE_TICKS`."""
     mem = SwitchOfPlayMem()
     game_slow = _FakeGame({1: (_AT_TARGET, _SLOW)})
     game_fast = _FakeGame({1: (_AT_TARGET, _FAST)})
 
-    # Alternating fast/slow never accumulates a long enough True run.
+    # Alternating fast/slow never accumulates a long enough streak.
     for _ in range(20):
         result = _debounced_settled(game_slow, 1, _TARGET, mem)
         assert result is False
+        assert mem.settled_ticks <= 1
         result = _debounced_settled(game_fast, 1, _TARGET, mem)
         assert result is False
         assert mem.settled_ticks == 0
@@ -119,7 +122,36 @@ def test_debounced_settled_survives_oscillating_speed_around_threshold():
     assert _debounced_settled(game_slow, 1, _TARGET, mem) is True
 
 
-def test_debounced_settled_resets_on_position_leaving_tolerance():
+def test_debounced_settled_leaks_by_one_on_a_single_stray_miss():
+    """The bug this fix actually targets: a live-traced "relay" window had
+    True-run lengths of `[0.067, 0.067, 0.1, 0.067, 0.1, 0.017, ...]`s (4-6
+    ticks at 60Hz) — almost every run landing at or just under the 6-tick
+    threshold, so a single stray miss near the end of an otherwise-converged
+    streak previously wiped `settled_ticks` back to 0 and restarted the
+    entire wait. A single miss must now only cost 1 tick of progress, not
+    all of it, so a streak of 5 hits + 1 stray miss + 1 more hit settles one
+    tick later rather than needing 6 more consecutive hits from scratch."""
+    mem = SwitchOfPlayMem()
+    game_slow = _FakeGame({1: (_AT_TARGET, _SLOW)})
+    game_fast = _FakeGame({1: (_AT_TARGET, _FAST)})
+
+    for _ in range(_SETTLE_DEBOUNCE_TICKS - 1):
+        assert _debounced_settled(game_slow, 1, _TARGET, mem) is False
+    assert mem.settled_ticks == _SETTLE_DEBOUNCE_TICKS - 1
+
+    # One stray miss costs 1 tick of progress, not the whole streak.
+    assert _debounced_settled(game_fast, 1, _TARGET, mem) is False
+    assert mem.settled_ticks == _SETTLE_DEBOUNCE_TICKS - 2
+
+    # Resuming settled ticks reaches the threshold shortly after, not from scratch.
+    assert _debounced_settled(game_slow, 1, _TARGET, mem) is False
+    assert _debounced_settled(game_slow, 1, _TARGET, mem) is True
+
+
+def test_debounced_settled_resets_on_sustained_position_leaving_tolerance():
+    """A genuinely-departed robot (not just one stray miss tick) must still
+    reach 0 and require a fresh full debounce window — the leak only
+    tolerates brief flicker, not a real reposition."""
     mem = SwitchOfPlayMem()
     far = Vector2D(0.0, 0.0)
     game_at = _FakeGame({1: (_AT_TARGET, _SLOW)})
@@ -129,7 +161,8 @@ def test_debounced_settled_resets_on_position_leaving_tolerance():
         _debounced_settled(game_at, 1, _TARGET, mem)
     assert mem.settled_ticks == _SETTLE_DEBOUNCE_TICKS - 1
 
-    assert _debounced_settled(game_far, 1, _TARGET, mem) is False
+    for _ in range(_SETTLE_DEBOUNCE_TICKS):
+        _debounced_settled(game_far, 1, _TARGET, mem)
     assert mem.settled_ticks == 0
 
 

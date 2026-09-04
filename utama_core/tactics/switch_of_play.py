@@ -133,6 +133,25 @@ _ARRIVAL_POSITION_TOLERANCE = 0.15  # metres — tighter than the original 0.25 
 # lane-blocked detection (require a sustained signal, not one noisy tick);
 # applied here via `SwitchOfPlayMem.settled_ticks` at both `_settled_at` call
 # sites (pivot in "assess", runner in "relay").
+#
+# A hard reset-to-zero on any single non-settled tick (the original
+# `_debounced_settled` behaviour) turned out to still under-fire even after
+# widening `_ARRIVAL_SPEED_THRESHOLD`: live-traced (2026-09-05 zero-shots
+# investigation, `counter_press`/`shadow_switch`/`switch_of_play` — see
+# `docs/roadmap.md`) on `shadow_switch_vs_zone_fluid`, `runner_ready` flapped
+# True/False 14 times in one 6.3s "relay" window with True-run lengths
+# `[0.067, 0.067, 0.1, 0.067, 0.1, 0.017, 0.117, 0.017, 0.067, 0.083, 0.083,
+# 0.1, 0.117, 0.083]`s — almost every run landing at or just under the 6-tick
+# (0.1s) threshold, so a single stray miss tick near the end of an
+# otherwise-converged streak wiped the counter back to 0 and restarted the
+# wait. Root cause is the *hard reset*, not an insufficiently long window (a
+# 231-match tournament run traced this same tactic reaching "finish" only
+# once across an entire 65s match). Fixed by leaking the counter down by 1 on
+# a miss instead of zeroing it, so an isolated single-tick dip inside a
+# mostly-settled streak no longer discards all prior progress — the counter
+# still resets effectively-to-zero over a handful of consecutive misses
+# (never truly converging), so this doesn't mask a robot that is genuinely
+# still moving, only tolerates the residual PID chatter documented above.
 _SETTLE_DEBOUNCE_TICKS = 6  # ~0.1s at 60Hz — long enough to bridge the observed oscillation period
 
 # Grace radius for treating the ball as still "held" by the relay source
@@ -252,9 +271,9 @@ def _debounced_settled(game: Game, robot_id: int, target: Vector2D, mem: SwitchO
     (mirrors `mem.lane_blocked_ticks`'s existing consecutive-tick counter in
     this same file), so callers must use the returned `mem`."""
     if _settled_at(game, robot_id, target):
-        mem.settled_ticks += 1
+        mem.settled_ticks = min(mem.settled_ticks + 1, _SETTLE_DEBOUNCE_TICKS)
     else:
-        mem.settled_ticks = 0
+        mem.settled_ticks = max(mem.settled_ticks - 1, 0)
     return mem.settled_ticks >= _SETTLE_DEBOUNCE_TICKS
 
 
