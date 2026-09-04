@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.entities.game.game_frame import GameFrame
@@ -35,6 +36,45 @@ def _split_by_color(game_frame: GameFrame):
         return game_frame.friendly_robots.values(), game_frame.enemy_robots.values()
     else:
         return game_frame.enemy_robots.values(), game_frame.friendly_robots.values()
+
+
+def _project_outside_defense_area(
+    bx: float, by: float, geometry: RefereeGeometry, is_left: bool, keep_dist: float
+) -> tuple[float, float]:
+    """Project the ball's position clear of the given defense area rectangle
+    (plus `keep_dist`), for use as a `DIRECT_FREE_*` restart's
+    `designated_position`.
+
+    An attacker-infringement violation fires exactly because the ball is at
+    or near this same defense area (that's how the attacker got flagged) --
+    without an explicit `designated_position`, `RuleViolation` silently
+    carries over whatever restart position was last set (possibly from an
+    unrelated, much earlier restart), and `StrategyRunner`'s sim-mode
+    shortcut then teleports the ball straight back to that stale spot and
+    force-starts play immediately. If that stale spot is itself inside (or
+    right at the edge of) this defense area, the same attacker instantly
+    re-triggers this exact rule -- confirmed live: `clear_danger` vs
+    `high_press` under `fpp`, 2026-09-04, a stale out-of-bounds placement at
+    (3.74, -2.75) sat inside the defense area itself, causing 6
+    STOP/FORCE_START cycles in under 2 seconds (roadmap item 15/16). Only
+    x needs clamping (y is already legal whenever the ball itself wasn't
+    also flagged for `attacking_third`-style geometry, which this rule
+    doesn't check) -- mirrors `actions.py`'s
+    `_project_outside_opp_defense_area`, which solves the same problem for
+    the STOP-override path rather than the restart-designation path this
+    fixes.
+    """
+    half_length = geometry.half_length
+    depth = geometry.half_defense_depth
+    if is_left:
+        inner_x = -half_length + 2.0 * depth
+        safe_x = inner_x + keep_dist
+        px = bx if bx > safe_x else safe_x
+    else:
+        inner_x = half_length - 2.0 * depth
+        safe_x = inner_x - keep_dist
+        px = bx if bx < safe_x else safe_x
+    return (px, by)
 
 
 class DefenseAreaRule(BaseRule):
@@ -95,11 +135,20 @@ class DefenseAreaRule(BaseRule):
         if self._attacker_infringement:
             for r in blue_robots:
                 if in_yellow_defense(r.p.x, r.p.y):
+                    ball = game_frame.ball
+                    placement = (
+                        _project_outside_defense_area(
+                            ball.p.x, ball.p.y, geometry, not yellow_is_right, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+                        )
+                        if ball is not None
+                        else None
+                    )
                     return RuleViolation(
                         rule_name="defense_area",
                         suggested_command=RefereeCommand.STOP,
                         next_command=RefereeCommand.DIRECT_FREE_YELLOW,
                         status_message="Blue attacker in yellow defense area",
+                        designated_position=placement,
                     )
 
         # --- Blue defense area --- (mirror of the yellow branch above; see
@@ -117,11 +166,20 @@ class DefenseAreaRule(BaseRule):
         if self._attacker_infringement:
             for r in yellow_robots:
                 if in_blue_defense(r.p.x, r.p.y):
+                    ball = game_frame.ball
+                    placement = (
+                        _project_outside_defense_area(
+                            ball.p.x, ball.p.y, geometry, yellow_is_right, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+                        )
+                        if ball is not None
+                        else None
+                    )
                     return RuleViolation(
                         rule_name="defense_area",
                         suggested_command=RefereeCommand.STOP,
                         next_command=RefereeCommand.DIRECT_FREE_BLUE,
                         status_message="Yellow attacker in blue defense area",
+                        designated_position=placement,
                     )
 
         return None
