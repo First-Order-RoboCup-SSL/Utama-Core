@@ -117,6 +117,24 @@ _ARRIVAL_SPEED_THRESHOLD = 0.1  # m/s — widened from 0.05: that tight a thresh
 # `counter_press` "never scores" investigation.
 _ARRIVAL_POSITION_TOLERANCE = 0.15  # metres — tighter than the original 0.25 for the same reason
 
+# Widening `_ARRIVAL_SPEED_THRESHOLD` (above) was not sufficient on its own:
+# a robot converged on a static target still never truly settles under this
+# codebase's PID translation controller (`TwoDPID._calculate` in
+# `motion_planning/src/pid/pid.py` — proportional-only near the target, no
+# terminal deadband above its 3mm snap-to-zero), so speed keeps oscillating
+# in a small band straddling the threshold indefinitely rather than
+# converging below it. Live-traced on `shadow_switch_vs_zone_fluid`
+# (tournament run 2026-09-04): runner sat within 0.05-0.13m of its relay
+# target (well inside `_ARRIVAL_POSITION_TOLERANCE`) for the full 9.4s a
+# "relay" phase was alive, but `_settled_at`'s speed check flipped True/False
+# 51 times, the longest continuous True run only 0.53s (mean 71ms) — never
+# stable long enough for the same-tick `_pass_exec` handoff below to fire.
+# Same class of bug `_LANE_BLOCKED_ABANDON_TICKS` already exists to fix for
+# lane-blocked detection (require a sustained signal, not one noisy tick);
+# applied here via `SwitchOfPlayMem.settled_ticks` at both `_settled_at` call
+# sites (pivot in "assess", runner in "relay").
+_SETTLE_DEBOUNCE_TICKS = 6  # ~0.1s at 60Hz — long enough to bridge the observed oscillation period
+
 # Grace radius for treating the ball as still "held" by the relay source
 # robot even on a tick where has_ball(visual=True) reads False. rsim has a
 # known dribble-physics quirk where holding a ball for an extended period can
@@ -126,6 +144,21 @@ _ARRIVAL_POSITION_TOLERANCE = 0.15  # metres — tighter than the original 0.25 
 # go_to_ball, discarding its aim/hold state and restarting the leg. This is a
 # mitigation for simulator noise, not a root-cause fix — the real fix belongs
 # in rsim's dribbler physics, out of scope here.
+#
+# This radius is only a valid grace window if the source robot has actually
+# held the ball at some point already this "relay" episode — gated via
+# `SwitchOfPlayMem.source_had_ball` below. Without that gate, a source that
+# approached to just outside contact range but never actually acquired the
+# ball (has_ball never True) satisfied the bare distance check indefinitely,
+# so this branch ran forever instead of falling through to go_to_ball: the
+# robot stopped trying to acquire the ball and instead held its position
+# facing the runner (this branch's "hold" command, oriented at the runner,
+# not the ball), nudging the ball a few cm on each drift without ever
+# gaining the dribbler contact needed for has_ball to go True. Live-traced on
+# `shadow_switch_vs_zone_fluid` (tournament run 2026-09-04): source robot 3
+# sat 0.11-0.13m from the ball for 3.5+ seconds, has_ball True on only 1 of
+# 211 ticks in that window, the "hold" branch firing on every one of them —
+# the user-visible "bumps into the ball and turns away, never grabs it" bug.
 _BALL_RECOVERY_RADIUS = 0.3  # metres
 
 
@@ -210,6 +243,21 @@ def _settled_at(game: Game, robot_id: int, target: Vector2D) -> bool:
     return speed <= _ARRIVAL_SPEED_THRESHOLD
 
 
+def _debounced_settled(game: Game, robot_id: int, target: Vector2D, mem: SwitchOfPlayMem) -> bool:
+    """`_settled_at`, debounced against `_SETTLE_DEBOUNCE_TICKS` consecutive
+    ticks rather than one instantaneous read — see that constant's comment
+    for why a single-tick check flaps forever on a robot that's converged in
+    position but still has PID-driven residual velocity oscillating around
+    `_ARRIVAL_SPEED_THRESHOLD`. Mutates `mem.settled_ticks` as a side effect
+    (mirrors `mem.lane_blocked_ticks`'s existing consecutive-tick counter in
+    this same file), so callers must use the returned `mem`."""
+    if _settled_at(game, robot_id, target):
+        mem.settled_ticks += 1
+    else:
+        mem.settled_ticks = 0
+    return mem.settled_ticks >= _SETTLE_DEBOUNCE_TICKS
+
+
 def _shot_open(game: Game, robot_id: int) -> bool:
     robot_pos = game.friendly_robots[robot_id].p
     goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
@@ -230,6 +278,10 @@ class SwitchOfPlayMem:
     phase_ticks: int = 0  # ticks spent in the current phase; drives the timeout reset (guidance point 1)
     prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _pass_and_score.py
     lane_blocked_ticks: int = 0  # consecutive ticks _pass_exec reported the lane blocked; feeds early phase timeout
+    settled_ticks: int = 0  # consecutive ticks _settled_at read True; see _SETTLE_DEBOUNCE_TICKS
+    source_had_ball: bool = (
+        False  # True once has_ball(source_id) has read True this "relay" episode; see _BALL_RECOVERY_RADIUS
+    )
 
 
 class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
@@ -452,11 +504,16 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # setup positions before calling the shared pass machinery — same
             # fix here, just for the pivot only (the carrier is already
             # stationary with the ball by this point).
-            pivot_ready = two_robot_mode or _settled_at(
-                game, pivot_id, _pivot_target(game, game.friendly_robots[carrier_id].p)
+            pivot_ready = two_robot_mode or _debounced_settled(
+                game, pivot_id, _pivot_target(game, game.friendly_robots[carrier_id].p), mem
             )
             if not timed_out and has_ball(game, carrier_id, visual=True) and pivot_ready:
                 mem.phase = "relay" if two_robot_mode else "switch"
+                mem.settled_ticks = 0  # fresh debounce window for the next phase's own _debounced_settled use
+                # two_robot_mode enters "relay" directly with source_id == carrier_id,
+                # who has_ball is already confirmed True for (the `and` above) — start
+                # source_had_ball true to match, not force a fresh false->true relatch.
+                mem.source_had_ball = two_robot_mode
             return commands, mem
 
         if mem.phase == "switch":
@@ -481,6 +538,9 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
                 )
             if leg_complete:
                 mem.phase = "relay"
+                # leg_complete == receiver_has_ball (see _pass_exec), i.e. the
+                # pivot (this phase's "relay" source_id) has the ball right now.
+                mem.source_had_ball = True
             return commands, mem
 
         if mem.phase == "relay":
@@ -492,7 +552,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # the intercept point (and required facing angle) drift right
             # along with it and never settle.
             runner_target = _runner_target(game, mem.weak_side if mem.weak_side is not None else 1)
-            runner_ready = _settled_at(game, runner_id, runner_target)
+            runner_ready = _debounced_settled(game, runner_id, runner_target, mem)
             if ctx.match_log is not None:
                 ctx.match_log.trace(
                     tick=0,
@@ -523,9 +583,10 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
                 # spin that orientation around) with `intercept_pos` swinging
                 # wildly in lockstep, `dst_at_intercept` never settling.
                 source_pos = game.friendly_robots[source_id].p
-                if (
-                    has_ball(game, source_id, visual=True)
-                    or source_pos.distance_to(game.ball.p.to_2d()) <= _BALL_RECOVERY_RADIUS
+                source_has_ball_now = has_ball(game, source_id, visual=True)
+                mem.source_had_ball = mem.source_had_ball or source_has_ball_now
+                if source_has_ball_now or (
+                    mem.source_had_ball and source_pos.distance_to(game.ball.p.to_2d()) <= _BALL_RECOVERY_RADIUS
                 ):
                     runner_pos = game.friendly_robots[runner_id].p
                     commands[source_id] = move(

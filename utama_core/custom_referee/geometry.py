@@ -86,9 +86,15 @@ class RefereeGeometry:
         use as a `DIRECT_FREE_*`/free-kick restart's `designated_position`.
 
         Any rule that derives a restart position directly from the ball's
-        raw current position (rather than an already-legal point, e.g.
-        `OutOfBoundsRule`'s own boundary projection) must run it through
-        this first. Several rules exist specifically to fire *because* the
+        raw current position must run it through this first -- including a
+        rule that first projects onto the field boundary
+        (`OutOfBoundsRule`'s own boundary projection): that clamp alone is
+        not sufficient, since the boundary offset is shallower than a
+        defense area's depth and a ball going out near either goal line
+        routinely projects to a point still inside it (found live,
+        2026-09-04 -- `OutOfBoundsRule._nearest_infield_point` now chains
+        into this method instead of assuming its own clamp was enough).
+        Several rules exist specifically to fire *because* the
         ball is sitting inside a defense area (`KeeperHeldBallRule`, and
         `DefenseAreaRule`'s attacker-infringement branches) or can plausibly
         end up there (`ExcessiveDribblingRule`, `PushingRule`) -- an

@@ -15,6 +15,7 @@ from utama_core.custom_referee.rules.defense_area_rule import DefenseAreaRule
 from utama_core.custom_referee.rules.defense_area_stoppage_rule import (
     DefenseAreaStoppageRule,
 )
+from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
@@ -227,8 +228,11 @@ class TestAttackerInfringementDesignatedPosition:
     spot and force-starts play the same tick, letting the same attacker
     instantly re-trigger this exact rule -- 6 STOP/FORCE_START cycles in
     under 2 seconds in the live trace. Fixed by having `DefenseAreaRule`
-    compute its own legal `designated_position`, mirroring what
-    `OutOfBoundsRule` already does.
+    compute its own legal `designated_position`, mirroring the boundary
+    projection `OutOfBoundsRule` already did for its own case -- though
+    `OutOfBoundsRule`'s projection turned out to have the same class of gap
+    itself (see `TestOutOfBoundsDefenseAreaProjection` below), just against
+    the field boundary instead of a defense area.
     """
 
     def test_yellow_defense_infringement_projects_ball_outside_the_box(self):
@@ -275,3 +279,60 @@ class TestAttackerInfringementDesignatedPosition:
         px, py = v.designated_position
         assert px == pytest.approx(-3.25)  # -3.5 (box edge) + 0.25 (keep-out)
         assert py == pytest.approx(0.5)
+
+
+class TestOutOfBoundsDefenseAreaProjection:
+    """Regression for a `DIRECT_FREE_*` restart placed inside a defense area
+    after an out-of-bounds ball near a goal line (found live,
+    tiki_taka_plus_vs_zone_fluid, 2026-09-04): `OutOfBoundsRule`'s own
+    boundary projection (`_INFIELD_OFFSET` = 0.25m) is shallower than a
+    defense area's depth (`half_defense_depth` = 0.5m on the standard
+    field), so a ball going out near either goal line routinely projected
+    to a point still inside that defense area -- e.g. the live trace's
+    (-4.25, 0.58), squarely inside the left box. `NORMAL_START` then
+    immediately re-fired "too close to opponent defense area"/"attacker in
+    defense area", churning into a second stoppage. Fixed by chaining the
+    boundary-clamped point through `RefereeGeometry.legal_restart_position`,
+    same as every other rule that derives a restart position from the
+    ball's raw position already does.
+    """
+
+    def test_out_of_bounds_near_goal_line_does_not_place_inside_defense_area(self):
+        rule = OutOfBoundsRule()
+        # Establish last touch (friendly) with the ball in-bounds first --
+        # `check()` only assigns a free kick once a touch has been observed.
+        friendly = {0: _robot(0, -3.0, 0.5, is_friendly=True, has_ball=True)}
+        frame_touch = _frame(
+            ball=_ball(-3.0, 0.5), friendly_robots=friendly, my_team_is_right=False, my_team_is_yellow=True
+        )
+        assert rule.check(frame_touch, GEO, RefereeCommand.NORMAL_START) is None
+
+        # Ball crosses the left boundary (half_length=4.5) near the live
+        # trace's own y -- same shape as the real match (x slightly beyond
+        # -4.5, not clamped to the goal mouth).
+        frame_out = _frame(ball=_ball(-4.6, 0.576), my_team_is_right=False, my_team_is_yellow=True)
+        v = rule.check(frame_out, GEO, RefereeCommand.NORMAL_START)
+        assert v is not None
+        assert v.designated_position is not None
+        assert not GEO.is_in_left_defense_area(*v.designated_position)
+        assert not GEO.is_in_right_defense_area(*v.designated_position)
+        # Left defense area's inner edge is at -3.5 (half_length - 2*depth);
+        # the legal projection sits keep_dist (0.25m) outside it.
+        px, py = v.designated_position
+        assert px == pytest.approx(-3.25)
+        assert py == pytest.approx(0.576)
+
+    def test_out_of_bounds_far_from_any_defense_area_is_unaffected(self):
+        # A sideline out-of-bounds well clear of either box needs no
+        # defense-area projection -- only the boundary offset applies.
+        rule = OutOfBoundsRule()
+        friendly = {0: _robot(0, 0.0, 2.9, is_friendly=True, has_ball=True)}
+        frame_touch = _frame(
+            ball=_ball(0.0, 2.9), friendly_robots=friendly, my_team_is_right=False, my_team_is_yellow=True
+        )
+        assert rule.check(frame_touch, GEO, RefereeCommand.NORMAL_START) is None
+
+        frame_out = _frame(ball=_ball(0.0, 3.1), my_team_is_right=False, my_team_is_yellow=True)
+        v = rule.check(frame_out, GEO, RefereeCommand.NORMAL_START)
+        assert v is not None
+        assert v.designated_position == pytest.approx((0.0, 2.75))  # half_width (3.0) - 0.25

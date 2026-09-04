@@ -313,11 +313,46 @@ def segment_blocked(
     return segment_clearance(start, end, obstacles) <= clearance
 
 
+# Every `find_best_shot`/`_score_goal` call site picks a target y within
+# [goal_y1, goal_y2] and gates the kick on `oriented_towards`'s fixed
+# `ORIENTATION_TOLERANCE_RAD` (0.05 rad) — a robot "close enough" to that
+# target orientation still has real lateral aim slop when the kick actually
+# fires (`kick()` has no target of its own; the ball launches along the
+# robot's live orientation at that instant, see `oriented_towards`'s
+# callers), roughly `distance * tan(0.05)` for a shot taken close to
+# straight-on and growing further for a sharper approach angle. If
+# `_find_best_shot` is allowed to pick a target right at the true post edge,
+# a shot that passes the orientation-tolerance check can still fly past the
+# post and out of bounds instead of through the goal. Confirmed live
+# (tournament replay clear_press_plus_vs_high_press, t=47.8s, shot distance
+# ~2.4m at a ~50 deg approach angle): a `GiveAndGoTactic` shooter's kick
+# landed within 0.45 deg of its own `target_oren` (the aim itself was
+# accurate) but that target was ~1.7 deg outside the true goal-bottom edge,
+# and the ball flew straight out via the boundary next to the goal rather
+# than through it. Inset both posts by a fixed safety margin, calibrated
+# against that traced geometry plus headroom, so a shot in that same
+# realistic mid-range-and-angle envelope stays inside the real goal even at
+# the tolerance boundary. This is a practical mitigation for the shot
+# geometries this codebase's tactics actually produce, not a mathematical
+# guarantee for every distance/angle combination — an extreme close-range,
+# highly oblique shot (well under 1m from the line, aimed near-parallel to
+# it) can still exceed this margin, since lateral slop from a fixed angular
+# tolerance is unbounded as approach angle steepens. That case would need a
+# distance/angle-aware correction per call site, not a fixed inset; not
+# pursued here since it wasn't the mechanism observed live.
+_GOAL_POST_SAFETY_MARGIN = 0.2  # metres — covers the traced ~2.4m/~50deg case with headroom
+
+
 def enemy_goal_line(game: Game) -> tuple[float, float, float]:
     goal_line = game.field.enemy_goal_line
     goal_x = float(goal_line[0][0])
-    goal_y1 = min(float(goal_line[0][1]), float(goal_line[1][1]))
-    goal_y2 = max(float(goal_line[0][1]), float(goal_line[1][1]))
+    raw_y1 = min(float(goal_line[0][1]), float(goal_line[1][1]))
+    raw_y2 = max(float(goal_line[0][1]), float(goal_line[1][1]))
+    # Degenerate/very narrow goals (e.g. a test double field) would invert
+    # under a naive inset — clamp to the midpoint instead of crossing over.
+    mid = (raw_y1 + raw_y2) / 2.0
+    goal_y1 = min(raw_y1 + _GOAL_POST_SAFETY_MARGIN, mid)
+    goal_y2 = max(raw_y2 - _GOAL_POST_SAFETY_MARGIN, mid)
     return goal_x, goal_y1, goal_y2
 
 

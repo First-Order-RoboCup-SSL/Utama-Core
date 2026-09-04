@@ -76,6 +76,17 @@ if TYPE_CHECKING:
 _GEOMETRY_MATCH_TOLERANCE_M = 0.001  # mm-precision integers from vision → 1 mm tolerance
 _VS_KICK_THRESHOLD = 0.5  # m/s — ball speed above this triggers kick commentary
 _SIM_HALT_AUTO_RESUME_SECONDS = 5.0  # sim-only: no human GC to resume a HALT, see below
+# sim-only: a second grace window after a HALT auto-resumes into STOP,
+# before forcing NORMAL_START — gives StopStep a few ticks to actively clear
+# any robot HALT left inside a keep-out zone or the opponent's defense area
+# (HALT itself issues zero motion commands for the whole pause, correctly
+# per the rulebook, so nothing moves until this STOP window). See the HALT
+# handling block below for the full rationale. Sized for a robot starting
+# at rest deep inside a defense area (up to ~1.5m to clear, plus motion-
+# controller ramp-up) — 2.0s measured too tight in practice (a robot
+# clearing a ~1.2m encroachment sometimes still had ~0.05m left when the
+# window closed), so this carries real margin rather than the bare minimum.
+_SIM_HALT_RESUME_CLEAR_SECONDS = 4.0
 
 logging.basicConfig(
     filename="Utama.log",
@@ -281,6 +292,7 @@ class StrategyRunner:
 
         self._prev_custom_ref_command: Optional[RefereeCommand] = None
         self._halt_entered_at: Optional[float] = None
+        self._halt_resume_stop_entered_at: Optional[float] = None
         self._last_referee_data: Optional["RefereeData"] = None
         self._vs_team_names: tuple[str, str] = self._assign_team_names()
         self._vs_commentary: str = "Welcome to the match!"
@@ -1358,6 +1370,7 @@ class StrategyRunner:
                     ref_data.referee_command == RefereeCommand.STOP
                     and self._prev_custom_ref_command != RefereeCommand.STOP
                     and ref_data.next_command not in _BALL_PLACEMENT_COMMANDS
+                    and self._halt_resume_stop_entered_at is None
                 ):
                     # On transition into STOP with a designated position, teleport
                     # the ball immediately and skip straight to FORCE_START so
@@ -1378,6 +1391,21 @@ class StrategyRunner:
                     # docs/testing_gaps.md gap #6/#9). This branch must only
                     # fire for STOP-preceded restarts that do NOT go through
                     # ball placement.
+                    #
+                    # Also guarded on _halt_resume_stop_entered_at being None:
+                    # the HALT-resume block below injects its own plain STOP
+                    # (force_command(STOP, ...), no ball_placement_target) to
+                    # give StopStep a clearing window before NORMAL_START.
+                    # GameStateMachine.force_command() does not clear a stale
+                    # designated_position left over from whatever restart was
+                    # in flight before HALT interrupted it, so without this
+                    # guard this branch matched that injected STOP too and
+                    # immediately short-circuited it straight to FORCE_START —
+                    # skipping the clearing window entirely on its very first
+                    # tick, one level short of the original bug this
+                    # HALT-resume fix exists to close. Found live via
+                    # test_halt_resume_clears_robot_from_opponent_defense_area
+                    # (added alongside this fix), 2026-09-04.
                     x, y = ref_data.designated_position
                     self.sim_controller.teleport_ball(x, y)
                     self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
@@ -1419,7 +1447,38 @@ class StrategyRunner:
                         if ref_data.designated_position is not None:
                             x, y = ref_data.designated_position
                             self.sim_controller.teleport_ball(x, y)
+                        # Resume through STOP, not straight to NORMAL_START:
+                        # `HaltStep`/`is_paused` issues zero motion commands
+                        # for the whole HALT (correct — the rule is
+                        # "immediately zero velocity, no movement"), so any
+                        # robot that was inside a keep-out zone (ball,
+                        # designated position) or the opponent's defense
+                        # area when HALT began is still there. Forcing
+                        # straight to NORMAL_START used to skip `StopStep`'s
+                        # active clearing entirely, so that robot resumed
+                        # directly into live play still illegally
+                        # positioned — an immediate re-trigger of
+                        # `DefenseAreaRule` (live-play-only check) the
+                        # instant NORMAL_START began. `next_command` here has
+                        # no dedicated STOP-plain-command auto-advance in
+                        # GameStateMachine (unlike a real restart command,
+                        # NORMAL_START is not in `_NEEDS_STOP_FIRST`), so this
+                        # mirrors _SIM_HALT_AUTO_RESUME_SECONDS's own pattern:
+                        # a second short sim-only grace window, tracked the
+                        # same way, giving StopStep a chance to clear illegal
+                        # positions before NORMAL_START is force-issued.
+                        self.referee.force_command(RefereeCommand.STOP, self.my.current_game_frame.ts)
+                        self._halt_resume_stop_entered_at = self.my.current_game_frame.ts
+                elif ref_data.referee_command == RefereeCommand.STOP and self._halt_resume_stop_entered_at is not None:
+                    if (
+                        self.my.current_game_frame.ts - self._halt_resume_stop_entered_at
+                        >= _SIM_HALT_RESUME_CLEAR_SECONDS
+                    ):
                         self.referee.force_command(RefereeCommand.NORMAL_START, self.my.current_game_frame.ts)
+                        self._halt_resume_stop_entered_at = None
+                    # Otherwise still clearing — StopStep (driven by the
+                    # existing is_override_command path) actively pushes any
+                    # encroaching robot clear on every tick of this window.
                 else:
                     self._halt_entered_at = None
             self._prev_custom_ref_command = ref_data.referee_command

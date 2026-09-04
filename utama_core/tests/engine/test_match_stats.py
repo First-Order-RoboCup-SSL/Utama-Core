@@ -344,6 +344,116 @@ def test_enemy_to_enemy_handoff_counted_as_enemy_completed_pass_not_friendly():
     assert stats.enemy_turnovers == 0
 
 
+# ---------------------------------------------------------------------------
+# pass_distances_m / pass_progress_m -- pass-quality distribution added
+# 2026-09-04 (see match_stats.py's module docstring / MatchStats.pass_distances_m
+# for the GiveAndGoTactic near-pointless-pass bug this is a detection signal
+# for).
+# ---------------------------------------------------------------------------
+
+
+def test_completed_pass_records_distance_and_forward_progress():
+    # my_team_is_right=True -> friendly's own goal at +4.5, friendly attacks
+    # toward -x. Robot 1 holds at (0.0, 0.0), passes to robot 3 who receives
+    # at (-3.0, 4.0): straight-line distance = 5.0m (3-4-5 triangle);
+    # progress = (receiver.x - passer.x) * attack_sign = (-3.0 - 0.0) * -1.0
+    # = 3.0m toward the opponent goal.
+    acc = MatchStatsAccumulator()
+    friendly1 = {1: _robot(1, 0.0, 0.0, True), 3: _robot(3, 10.0, 10.0, True)}
+    friendly2 = {1: _robot(1, 10.0, 10.0, True), 3: _robot(3, -3.0, 4.0, True)}
+    enemy = {2: _robot(2, -5.0, -5.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly1, enemy))  # robot 1 controls
+    acc.record_tick(_poss_frame((-2.9, 4.0), (0.0, 0.0), friendly2, enemy))  # robot 3 controls
+
+    stats = acc.finalize()
+    assert stats.completed_passes == 1
+    assert len(stats.pass_distances_m) == 1
+    assert len(stats.pass_progress_m) == 1
+    assert stats.pass_distances_m[0] == pytest.approx(5.0, abs=1e-6)
+    assert stats.pass_progress_m[0] == pytest.approx(3.0, abs=1e-6)
+    # Enemy lists must stay empty -- this was a friendly-only handoff.
+    assert stats.enemy_pass_distances_m == []
+    assert stats.enemy_pass_progress_m == []
+
+
+def test_backward_pass_records_negative_progress():
+    # Same setup, but the receiver ends up further from the opponent goal
+    # than the passer (x increases while friendly attacks -x) -> progress
+    # must be negative even though the pass still completes.
+    acc = MatchStatsAccumulator()
+    friendly1 = {1: _robot(1, -3.0, 0.0, True), 3: _robot(3, 10.0, 10.0, True)}
+    friendly2 = {1: _robot(1, 10.0, 10.0, True), 3: _robot(3, 0.0, 0.0, True)}
+    enemy = {2: _robot(2, -5.0, -5.0, False)}
+
+    acc.record_tick(_poss_frame((-3.0, 0.0), (0.0, 0.0), friendly1, enemy))  # robot 1 controls
+    acc.record_tick(_poss_frame((0.1, 0.0), (0.0, 0.0), friendly2, enemy))  # robot 3 controls
+
+    stats = acc.finalize()
+    assert stats.completed_passes == 1
+    assert stats.pass_distances_m[0] == pytest.approx(3.0, abs=1e-6)
+    assert stats.pass_progress_m[0] == pytest.approx(-3.0, abs=1e-6)
+
+
+def test_enemy_completed_pass_populates_enemy_lists_not_friendly():
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, -5.0, -5.0, True)}
+    enemy1 = {2: _robot(2, 0.0, 0.0, False), 4: _robot(4, 10.0, 10.0, False)}
+    enemy2 = {2: _robot(2, 10.0, 10.0, False), 4: _robot(4, 2.0, 0.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly, enemy1))  # enemy robot 2 controls
+    acc.record_tick(_poss_frame((2.0, 0.0), (0.0, 0.0), friendly, enemy2))  # enemy robot 4 controls
+
+    stats = acc.finalize()
+    assert stats.enemy_completed_passes == 1
+    assert len(stats.enemy_pass_distances_m) == 1
+    assert len(stats.enemy_pass_progress_m) == 1
+    assert stats.enemy_pass_distances_m[0] == pytest.approx(2.0, abs=1e-6)
+    # my_team_is_right=True -> enemy's own goal at -4.5, enemy attacks +x ->
+    # attack_sign = own_goal_sign = 1.0 -> progress = (2.0 - 0.0) * 1.0 = 2.0.
+    assert stats.enemy_pass_progress_m[0] == pytest.approx(2.0, abs=1e-6)
+    assert stats.pass_distances_m == []
+    assert stats.pass_progress_m == []
+
+
+def test_turnover_does_not_add_a_pass_quality_entry():
+    # Mirror of test_turnover_friendly_to_enemy -- a turnover (possession
+    # crossing sides) must not be recorded in either pass list.
+    acc = MatchStatsAccumulator()
+    friendly = {1: _robot(1, 0.0, 0.0, True)}
+    enemy1 = {2: _robot(2, 5.0, 5.0, False)}
+    enemy2 = {2: _robot(2, 1.0, 0.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly, enemy1))  # friendly controls
+    acc.record_tick(_poss_frame((1.0, 0.0), (0.0, 0.0), friendly, enemy2))  # enemy controls
+
+    stats = acc.finalize()
+    assert stats.turnovers == 1
+    assert stats.pass_distances_m == []
+    assert stats.pass_progress_m == []
+    assert stats.enemy_pass_distances_m == []
+    assert stats.enemy_pass_progress_m == []
+
+
+def test_pass_quality_lists_serialize_to_json(tmp_path):
+    acc = MatchStatsAccumulator()
+    friendly1 = {1: _robot(1, 0.0, 0.0, True), 3: _robot(3, 10.0, 10.0, True)}
+    friendly2 = {1: _robot(1, 10.0, 10.0, True), 3: _robot(3, -3.0, 4.0, True)}
+    enemy = {2: _robot(2, -5.0, -5.0, False)}
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly1, enemy))
+    acc.record_tick(_poss_frame((-2.9, 4.0), (0.0, 0.0), friendly2, enemy))
+
+    out = tmp_path / "stats.json"
+    acc.finalize().to_json(out)
+
+    data = json.loads(out.read_text())
+    assert len(data["pass_distances_m"]) == 1
+    assert data["pass_distances_m"][0] == pytest.approx(5.0, abs=1e-6)
+    assert len(data["pass_progress_m"]) == 1
+    assert data["enemy_pass_distances_m"] == []
+    assert data["enemy_pass_progress_m"] == []
+
+
 def test_pass_resolved_after_release_at_speed():
     # Robot 1 controls, releases the ball at speed (a real pass), and it's
     # picked up again by a different friendly robot once it slows -- must

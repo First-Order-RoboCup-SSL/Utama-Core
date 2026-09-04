@@ -3,7 +3,8 @@
 Feeds `MatchStatsAccumulator.record_tick()` a synthetic sequence of
 `GameFrame`s (ball position/velocity, referee command, sim `ts`) and checks
 `MatchStats.stall_events` — see that module's `StallEvent`/
-`_maybe_record_stalls` for the two watchdogs under test:
+`_maybe_record_stalls`/`_maybe_record_no_progress_possession` for the three
+watchdogs under test:
 
 - RESTART_STALL: a non-live referee command (STOP/DIRECT_FREE_*/
   PREPARE_KICKOFF_*/BALL_PLACEMENT_*/...) held continuously for more than
@@ -14,6 +15,20 @@ Feeds `MatchStatsAccumulator.record_tick()` a synthetic sequence of
   (NORMAL_START/FORCE_START) while at least one tactic slot is committed
   (or, when slot-commitment info isn't supplied, during live play at all —
   the documented fallback).
+- NO_PROGRESS_POSSESSION: the same single robot stays the nearest-to-ball
+  robot, within `_NO_PROGRESS_RADIUS_M` (0.35m -- wider than the true
+  possession radius, since the failure mode is a robot repeatedly bumping
+  the ball a bit farther than true possession range and re-chasing it, not
+  one sitting exactly on top of it), for more than `_NO_PROGRESS_SECONDS`
+  (8s) of live play without that robot's side ever actually registering
+  possession (`_poss_side`/`_poss_robot_id`) of it. Unlike COMMITTED_FROZEN,
+  this does not require the ball to be still -- it's built to catch exactly
+  the case COMMITTED_FROZEN misses: a robot that keeps bumping the ball a
+  few centimetres and turning away, never latching possession, which keeps
+  the ball moving just enough each bump to dodge COMMITTED_FROZEN's 5cm
+  stillness tolerance. See `_maybe_record_no_progress_possession`'s
+  docstring for the live match (shadow_switch_vs_zone_fluid, 2026-09-04)
+  this was built and validated against.
 """
 
 from __future__ import annotations
@@ -67,6 +82,39 @@ def _run_ticks(acc: MatchStatsAccumulator, n_ticks: int, command, ball_xy=(0.0, 
     for i in range(n_ticks):
         ts = (i + 1) * TICK_DT
         acc.record_tick(_frame(ts, command, ball_xy), committed_tactics=committed_tactics)
+
+
+def _custom_frame(
+    ts: float,
+    command,
+    ball_xy=(0.0, 0.0),
+    friendly_xy=(0.0, 0.0),
+    friendly_has_ball=False,
+    enemy_xy=(4.0, 0.0),
+    enemy_has_ball=False,
+) -> GameFrame:
+    """Like `_frame`, but lets a caller position each robot independently and
+    control `has_ball` per robot -- needed for NO_PROGRESS_POSSESSION tests,
+    which must place a robot near-but-not-on the ball and simulate an actual
+    pickup (`has_ball=True`) partway through a run."""
+    friendly = {
+        1: Robot(
+            id=1, is_friendly=True, has_ball=friendly_has_ball, p=Vector2D(*friendly_xy), v=None, a=None, orientation=0
+        )
+    }
+    enemy = {
+        2: Robot(id=2, is_friendly=False, has_ball=enemy_has_ball, p=Vector2D(*enemy_xy), v=None, a=None, orientation=0)
+    }
+    ball = Ball(Vector3D(ball_xy[0], ball_xy[1], 0), Vector3D(0, 0, 0), None)
+    return GameFrame(
+        ts=ts,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots=friendly,
+        enemy_robots=enemy,
+        ball=ball,
+        referee=_referee(command, ts),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +247,178 @@ def test_ball_moving_more_than_5cm_resets_the_frozen_clock():
 
     stats = acc.finalize()
     assert [e for e in stats.stall_events if e.kind == "COMMITTED_FROZEN"] == []
+
+
+# ---------------------------------------------------------------------------
+# NO_PROGRESS_POSSESSION
+# ---------------------------------------------------------------------------
+#
+# `_maybe_record_no_progress_possession` gates "actually in control" via
+# `_poss_side`/`_poss_robot_id` (the possession-radius state machine driven
+# by `_update_possession_events`: within `_POSSESSION_RADIUS_M` (2*0.09+0.05
+# = 0.23m) with the ball slower than `_PASS_RELEASE_MPS`), NOT via
+# `Robot.has_ball` -- that field is never read by this watchdog. So "the
+# robot stays near the ball without gaining control" is modeled by keeping
+# the robot within `_NO_PROGRESS_RADIUS_M` (0.35m) but *outside*
+# `_POSSESSION_RADIUS_M` (0.23m); "an actual pickup" is modeled by bringing
+# the robot inside 0.23m so the possession state machine latches onto it,
+# which is what resets this watchdog's clock (`controlled_by_holder` in the
+# implementation).
+_NO_PROGRESS_BUMP_XY = (0.30, 0.0)  # in (0.23, 0.35): "near", never "controlling"
+_NO_PROGRESS_BUMP_XY_JITTER = (0.28, 0.02)  # a second near point, still in that band
+_NO_PROGRESS_PICKUP_XY = (0.10, 0.0)  # inside 0.23m: a real pickup
+
+
+def _run_no_progress_ticks(
+    acc: MatchStatsAccumulator,
+    n_ticks: int,
+    command,
+    start_ts: float = 0.0,
+    ball_xy=_NO_PROGRESS_BUMP_XY,
+    friendly_xy=(0.0, 0.0),
+    enemy_xy=(4.0, 0.0),
+):
+    """Feed `n_ticks` frames 1/60s apart, alternating the ball between two
+    close-together points within the no-progress band (a "ball-sized jitter"
+    -- a robot bumping the ball a few centimetres, never a stationary ball)
+    so the scenario isn't accidentally indistinguishable from a perfectly
+    frozen ball."""
+    for i in range(n_ticks):
+        ts = start_ts + (i + 1) * TICK_DT
+        xy = _NO_PROGRESS_BUMP_XY_JITTER if (i % 2 == 0) else ball_xy
+        acc.record_tick(_custom_frame(ts, command, ball_xy=xy, friendly_xy=friendly_xy, enemy_xy=enemy_xy))
+
+
+def test_robot_bumping_ball_for_9s_without_control_produces_no_progress_event():
+    acc = MatchStatsAccumulator()
+    _run_no_progress_ticks(acc, n_ticks=9 * 60, command=RefereeCommand.NORMAL_START)
+
+    stats = acc.finalize()
+    events = [e for e in stats.stall_events if e.kind == "NO_PROGRESS_POSSESSION"]
+    assert len(events) == 1
+    event = events[0]
+    assert event.referee_command == "NORMAL_START"
+    assert event.robot_ids == (1,)
+    assert event.sim_time == pytest.approx(8.0, abs=2 * TICK_DT)
+    assert event.duration_s >= 1.0  # kept updating past onset, up to ~9s - 8s
+
+
+def test_no_progress_event_produces_one_event_not_one_per_tick():
+    acc = MatchStatsAccumulator()
+    _run_no_progress_ticks(acc, n_ticks=12 * 60, command=RefereeCommand.NORMAL_START)
+
+    stats = acc.finalize()
+    events = [e for e in stats.stall_events if e.kind == "NO_PROGRESS_POSSESSION"]
+    assert len(events) == 1
+    assert events[0].duration_s >= 3.0
+
+
+def test_robot_actually_gaining_possession_cancels_no_progress():
+    """The robot bumps the ball for 5s (no control), then actually picks it
+    up (within true possession radius, ball slow) for the rest of the
+    9s+ run -- the state machine latches possession, which must reset the
+    no-progress clock so it never crosses the threshold."""
+    acc = MatchStatsAccumulator()
+    _run_no_progress_ticks(acc, n_ticks=5 * 60, command=RefereeCommand.NORMAL_START)
+    # Now actually gains control: inside _POSSESSION_RADIUS_M, ball slow
+    # (already 0 velocity in _custom_frame).
+    for i in range(6 * 60):
+        ts = 5.0 + (i + 1) * TICK_DT
+        acc.record_tick(
+            _custom_frame(ts, RefereeCommand.NORMAL_START, ball_xy=_NO_PROGRESS_PICKUP_XY, friendly_xy=(0.0, 0.0))
+        )
+
+    stats = acc.finalize()
+    assert [e for e in stats.stall_events if e.kind == "NO_PROGRESS_POSSESSION"] == []
+
+
+def test_no_progress_does_not_fire_outside_live_play():
+    acc = MatchStatsAccumulator()
+    _run_no_progress_ticks(acc, n_ticks=12 * 60, command=RefereeCommand.STOP)
+
+    stats = acc.finalize()
+    assert [e for e in stats.stall_events if e.kind == "NO_PROGRESS_POSSESSION"] == []
+
+
+def test_no_progress_gap_in_the_middle_resets_the_clock():
+    """The robot bumps the ball for 5s, the ball rolls out of
+    `_NO_PROGRESS_RADIUS_M` briefly, then comes back and the robot resumes
+    bumping it for another 5s. Total "near" time is 10s (> the 8s
+    threshold), but per the implementation (`_maybe_record_no_progress_possession`:
+    `holder != self._no_progress_holder` triggers a full reset, including
+    when the ball leaves and `holder` becomes `None`), a gap resets the
+    clock entirely -- neither 5s stretch alone crosses 8s, so this must NOT
+    produce an event."""
+    acc = MatchStatsAccumulator()
+    _run_no_progress_ticks(acc, n_ticks=5 * 60, command=RefereeCommand.NORMAL_START, start_ts=0.0)
+    # Ball rolls far away -- out of the 0.35m radius entirely.
+    _run_no_progress_ticks(acc, n_ticks=1 * 60, command=RefereeCommand.NORMAL_START, start_ts=5.0, ball_xy=(3.0, 0.0))
+    # Ball comes back within bump range; robot resumes bumping it.
+    _run_no_progress_ticks(acc, n_ticks=5 * 60, command=RefereeCommand.NORMAL_START, start_ts=6.0)
+
+    stats = acc.finalize()
+    assert [e for e in stats.stall_events if e.kind == "NO_PROGRESS_POSSESSION"] == []
+
+
+def test_no_progress_second_continuous_stretch_fires_once_it_alone_exceeds_threshold():
+    """Same gap-reset shape as above, but the second stretch alone is long
+    enough (9s > 8s threshold) to cross the threshold on its own -- confirms
+    the clock genuinely restarted at the resume point rather than merely
+    pausing, and that the watchdog still fires once that second stretch
+    alone is long enough."""
+    acc = MatchStatsAccumulator()
+    _run_no_progress_ticks(acc, n_ticks=5 * 60, command=RefereeCommand.NORMAL_START, start_ts=0.0)
+    _run_no_progress_ticks(acc, n_ticks=1 * 60, command=RefereeCommand.NORMAL_START, start_ts=5.0, ball_xy=(3.0, 0.0))
+    # Resumed stretch alone is 9s > _NO_PROGRESS_SECONDS (8s).
+    _run_no_progress_ticks(acc, n_ticks=9 * 60, command=RefereeCommand.NORMAL_START, start_ts=6.0)
+
+    stats = acc.finalize()
+    events = [e for e in stats.stall_events if e.kind == "NO_PROGRESS_POSSESSION"]
+    assert len(events) == 1
+    # Onset is 8s into the *second* stretch, i.e. at absolute sim time 6+8=14s.
+    assert events[0].sim_time == pytest.approx(14.0, abs=2 * TICK_DT)
+
+
+def test_short_stretch_near_ball_without_possession_does_not_stall():
+    acc = MatchStatsAccumulator()
+    _run_no_progress_ticks(acc, n_ticks=4 * 60, command=RefereeCommand.NORMAL_START)  # well under 8s
+
+    stats = acc.finalize()
+    assert [e for e in stats.stall_events if e.kind == "NO_PROGRESS_POSSESSION"] == []
+
+
+def test_no_progress_attributes_to_whichever_robot_is_nearest_even_across_teams():
+    """Two robots from different sides are both near the ball at different
+    times -- confirm the watchdog attributes to whichever specific robot was
+    nearest each tick, and that a change in the *nearest* identity (even
+    across teams) resets the clock rather than attributing a mixed stretch
+    to either robot."""
+    acc = MatchStatsAccumulator()
+    # First 5s: only the friendly robot is near the ball (enemy far away).
+    for i in range(5 * 60):
+        ts = (i + 1) * TICK_DT
+        xy = _NO_PROGRESS_BUMP_XY_JITTER if (i % 2 == 0) else _NO_PROGRESS_BUMP_XY
+        acc.record_tick(
+            _custom_frame(ts, RefereeCommand.NORMAL_START, ball_xy=xy, friendly_xy=(0.0, 0.0), enemy_xy=(4.0, 0.0))
+        )
+    # Next 9s: the enemy robot becomes nearest instead (friendly moves away)
+    # -- a different (side, id) identity, so the clock must restart, not
+    # accumulate onto the friendly robot's earlier 5s.
+    for i in range(9 * 60):
+        ts = 5.0 + (i + 1) * TICK_DT
+        xy = _NO_PROGRESS_BUMP_XY_JITTER if (i % 2 == 0) else _NO_PROGRESS_BUMP_XY
+        acc.record_tick(
+            _custom_frame(ts, RefereeCommand.NORMAL_START, ball_xy=xy, friendly_xy=(10.0, 10.0), enemy_xy=(0.0, 0.0))
+        )
+
+    stats = acc.finalize()
+    events = [e for e in stats.stall_events if e.kind == "NO_PROGRESS_POSSESSION"]
+    assert len(events) == 1
+    # Attributed to the enemy robot (id=2), whose stretch alone crossed 8s;
+    # the earlier friendly stretch (id=1) never reached the threshold and
+    # must not contribute to this event's robot_ids or onset time.
+    assert events[0].robot_ids == (2,)
+    assert events[0].sim_time == pytest.approx(5.0 + 8.0, abs=2 * TICK_DT)
 
 
 def test_to_json_serializes_stall_events(tmp_path):

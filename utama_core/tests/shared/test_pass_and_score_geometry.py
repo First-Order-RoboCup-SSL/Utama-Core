@@ -16,12 +16,15 @@ from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
 from utama_core.shared.pass_and_score_geometry import (
     _ACQUIRE_LATERAL_MAX,
+    _GOAL_POST_SAFETY_MARGIN,
     _NO_SHOT_STRAFE_STEP,
     _RELEASE_FORWARD_MAX,
     _RELEASE_LATERAL_MAX,
+    ORIENTATION_TOLERANCE_RAD,
     ball_in_enemy_defense_area,
     ball_is_loose,
     enemy_defense_area_hold_point,
+    enemy_goal_line,
     has_ball,
     no_shot_reposition_target,
     reset_possession_state,
@@ -66,6 +69,43 @@ def _game(ball_xy: tuple) -> Game:
             my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
         ),
     )
+
+
+def test_enemy_goal_line_insets_both_posts_by_the_safety_margin():
+    game = _game((0.0, 0.0))
+    goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
+    field = STANDARD_FIELD_DIMS
+    raw_y1, raw_y2 = -field.half_goal_width, field.half_goal_width
+    assert goal_y1 == pytest.approx(raw_y1 + _GOAL_POST_SAFETY_MARGIN)
+    assert goal_y2 == pytest.approx(raw_y2 - _GOAL_POST_SAFETY_MARGIN)
+    assert abs(goal_x) == pytest.approx(field.full_field_half_length)
+
+
+def test_a_tolerance_edge_kick_at_the_inset_post_stays_inside_the_true_goal():
+    """Regression for the clear_press_plus_vs_high_press tournament replay
+    (t=47.8s): a shooter aimed at the raw post edge and kicked while still
+    within `ORIENTATION_TOLERANCE_RAD` of that aim (`oriented_towards`
+    passed) — but the resulting kick flew past the true post and out of
+    bounds instead of through the goal, since the orientation tolerance's
+    lateral slop at that shot distance exceeded the margin between the aim
+    point and the real post. `enemy_goal_line`'s inset exists so any target
+    chosen within its [goal_y1, goal_y2] keeps that worst-case slop inside
+    the real posts — this reproduces the exact traced geometry and checks
+    the fix holds."""
+    field = STANDARD_FIELD_DIMS
+    raw_y1, raw_y2 = -field.half_goal_width, field.half_goal_width
+    goal_x = field.full_field_half_length
+    _, goal_y1, goal_y2 = enemy_goal_line(_game((0.0, 0.0)))
+
+    shooter_pos = Vector2D(3.141, 1.941)  # the traced shooter's position
+    aimed_orientation = shooter_pos.angle_to(Vector2D(goal_x, goal_y2))  # aim at the inset (safe) post edge
+    # A kick fired at the very edge of the tolerance band around that aim —
+    # the worst case `oriented_towards` still lets through.
+    kicked_orientation = aimed_orientation + ORIENTATION_TOLERANCE_RAD
+
+    # Where the ball actually crosses the goal line at that kicked angle.
+    exit_y = shooter_pos.y + math.tan(kicked_orientation) * (goal_x - shooter_pos.x)
+    assert raw_y1 - 1e-6 <= exit_y <= raw_y2 + 1e-6
 
 
 def test_ball_in_enemy_defense_area_true_when_inside_box():

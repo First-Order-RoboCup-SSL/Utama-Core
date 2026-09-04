@@ -37,7 +37,10 @@ from dataclasses import dataclass
 from typing import Optional
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
-from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
+from utama_core.config.referee_constants import (
+    BALL_KEEP_OUT_DISTANCE,
+    OPPONENT_DEFENSE_AREA_KEEP_DISTANCE,
+)
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
@@ -480,6 +483,82 @@ def test_halt_auto_resumes_to_normal_start_in_sim(headless):
 
     assert tm.halt_seen, "CustomReferee never entered HALT"
     assert tm.resumed, "StrategyRunner did not auto-resume out of HALT in simulation"
+    assert passed
+
+
+class _HaltResumeClearsDefenseAreaManager(AbstractTestManager):
+    """A robot frozen inside the OPPONENT defense area when HALT is forced
+    must be clear of it (by OPPONENT_DEFENSE_AREA_KEEP_DISTANCE) by the time
+    the sim auto-resumes to NORMAL_START.
+
+    Regression for the bug fixed in strategy_runner.py: the sim-only
+    HALT-auto-resume path used to force_command() straight from HALT to
+    NORMAL_START, skipping the intermediate STOP window entirely. HALT
+    itself correctly issues zero motion for the whole pause (SSL rule:
+    "immediately zero velocity, no movement" — see is_paused()/HaltStep), so
+    a robot parked inside the opponent's defense area when HALT began was
+    still there when it ended. Jumping straight to NORMAL_START meant that
+    robot resumed directly into live play still illegally positioned — an
+    immediate re-trigger of DefenseAreaRule (which only checks
+    NORMAL_START/FORCE_START). The fix routes the resume through a second
+    sim-only STOP window first, giving StopStep's existing
+    `_clear_to_legal_positions(clear_opp_defense_area=True, ...)` a chance
+    to actively push the robot clear before NORMAL_START is force-issued.
+    """
+
+    n_episodes = 1
+
+    def __init__(self, referee: CustomReferee, geometry: RefereeGeometry) -> None:
+        super().__init__()
+        self._referee = referee
+        self._geometry = geometry
+        self.halt_seen: bool = False
+        self.resumed: bool = False
+        self.min_clearance_at_resume: Optional[float] = None
+
+    def reset_field(self, sim_controller: AbstractSimController, game: Game):
+        sim_controller.teleport_ball(0.0, 0.0)
+        # Robot 1 planted squarely inside the enemy (right) defense area —
+        # _make_runner's my_team_is_right=False puts the opponent's area on
+        # the positive-x side (is_in_right_defense_area).
+        sim_controller.teleport_robot(game.my_team_is_yellow, 1, self._geometry.half_length - 0.05, 0.0)
+
+    def eval_status(self, game: Game) -> TestingStatus:
+        ref = game.referee
+        if ref is None:
+            return TestingStatus.IN_PROGRESS
+
+        if ref.referee_command == RefereeCommand.HALT:
+            self.halt_seen = True
+            return TestingStatus.IN_PROGRESS
+
+        if self.halt_seen and ref.referee_command == RefereeCommand.NORMAL_START:
+            robot = game.friendly_robots[1]
+            self.min_clearance_at_resume = self._geometry.distance_to_right_defense_area(robot.p.x, robot.p.y)
+            self.resumed = True
+            return TestingStatus.SUCCESS
+
+        return TestingStatus.IN_PROGRESS
+
+
+def test_halt_resume_clears_robot_from_opponent_defense_area(headless):
+    """Auto-resuming out of a sim-only HALT must not dump a robot straight
+    into live play while still standing inside the opponent's defense area."""
+    referee = CustomReferee.from_profile_name("simulation")
+    geometry = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
+    runner = _make_runner(referee)
+    tm = _HaltResumeClearsDefenseAreaManager(referee, geometry)
+
+    passed = runner.run_test(tm, episode_timeout=16.0, rsim_headless=headless)
+
+    assert tm.halt_seen, "CustomReferee never entered HALT"
+    assert tm.resumed, "StrategyRunner did not auto-resume out of HALT in simulation"
+    assert tm.min_clearance_at_resume is not None
+    assert tm.min_clearance_at_resume >= OPPONENT_DEFENSE_AREA_KEEP_DISTANCE, (
+        "Robot 1 was still inside/too close to the opponent defense area "
+        f"(clearance={tm.min_clearance_at_resume:.3f} m) when NORMAL_START fired after "
+        "the HALT auto-resume — StopStep's clearing window did not run before resume."
+    )
     assert passed
 
 

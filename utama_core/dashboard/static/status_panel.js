@@ -3,27 +3,27 @@
 // same DOM structure, same markup, so a replay looks like the live match it
 // was recorded from, not a second implementation with its own drift.
 
-// Commands that can carry a foul/violation reason worth surfacing next to
-// them — anything the referee only enters *because* a rule fired, not a
-// normal-play/restart-progression command reached on its own.
-const _REASON_COMMANDS = new Set([
-  "STOP",
-  "DIRECT_FREE_YELLOW",
-  "DIRECT_FREE_BLUE",
-  "INDIRECT_FREE_YELLOW",
-  "INDIRECT_FREE_BLUE",
-  "BALL_PLACEMENT_YELLOW",
-  "BALL_PLACEMENT_BLUE",
-]);
+// Commands that mean "play is live" — reaching one of these means whatever
+// foul/violation caused the *previous* stoppage is no longer relevant, so a
+// stale reason should stop being shown once one of these is reached.
+const _LIVE_PLAY_COMMANDS = new Set(["NORMAL_START", "FORCE_START"]);
 
 // Renders the score/command/stage header block both views share. `ids` is
 // {yellowScore, blueScore, command, stage, reason?} element ids; `state` is
 // {yellow_score, blue_score, command, stage, note?} or null (all
 // placeholders). `note` (when present, from RuleViolation.status_message —
 // see CustomReferee.step) is the human-readable reason the referee left
-// normal play, e.g. "Double touch" — only shown for commands in
-// _REASON_COMMANDS, since a note surviving on an unrelated later command
-// would misleadingly look like it caused that command too.
+// normal play, e.g. "Excessive dribbling: 1.01m > 1.0m" — it is only ever
+// attached to the *first* command of a stoppage (`STOP`, or a restart
+// command that skips STOP entirely, e.g. an out-of-bounds ball placement),
+// never to whatever restart command follows it (see replay.js's forward-fill
+// and dashboard/views/replay.py's `referee_events`). So this keeps the last
+// *non-null* note "sticky" across calls (via `_lastReason`, one per distinct
+// `ids` object so Live/Replay don't clobber each other) and shows it for
+// every command up through the restart sequence it explains, clearing only
+// once play actually resumes (_LIVE_PLAY_COMMANDS) or a fresh note arrives.
+const _lastReasonByIds = new WeakMap();
+
 function renderRefereeHeaderInto(ids, state) {
   const yellowEl = document.getElementById(ids.yellowScore);
   const blueEl = document.getElementById(ids.blueScore);
@@ -38,9 +38,16 @@ function renderRefereeHeaderInto(ids, state) {
   }
   if (stageEl) stageEl.textContent = state && state.stage ? state.stage.replace(/_/g, " ") : "—";
   if (reasonEl) {
-    const showReason = state && state.note && _REASON_COMMANDS.has(state.command);
-    reasonEl.textContent = showReason ? state.note : "";
-    reasonEl.style.display = showReason ? "" : "none";
+    if (!state) {
+      _lastReasonByIds.delete(ids);
+    } else if (state.note) {
+      _lastReasonByIds.set(ids, state.note);
+    } else if (_LIVE_PLAY_COMMANDS.has(state.command)) {
+      _lastReasonByIds.delete(ids);
+    }
+    const reason = _lastReasonByIds.get(ids);
+    reasonEl.textContent = reason || "";
+    reasonEl.style.display = reason ? "" : "none";
   }
 }
 

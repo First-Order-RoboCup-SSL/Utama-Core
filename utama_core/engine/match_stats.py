@@ -14,11 +14,19 @@ retained buffer.
 
 `record_tick()` also runs a small in-match stall watchdog (`StallEvent`,
 `MatchStats.stall_events`) alongside the boxscore accounting: RESTART_STALL
-(a referee restart command that never auto-advances back to live play) and
-COMMITTED_FROZEN (the ball not moving while a tactic slot stays committed).
-Both are pure observations recorded for post-match reporting (see
-`tournament.py`'s "STALLS" section) — nothing here reads back into or
-alters gameplay.
+(a referee restart command that never auto-advances back to live play),
+COMMITTED_FROZEN (the ball not moving while a tactic slot stays committed),
+and NO_PROGRESS_POSSESSION (one robot stays nearest-to-ball, within bump
+range, for a long stretch of live play without ever actually gaining
+control — added 2026-09-04 specifically because COMMITTED_FROZEN's
+ball-stillness gate misses this case: a robot that repeatedly bumps the
+ball a few centimetres and turns away, never latching possession, keeps
+the ball moving just enough to dodge the 0.05m stillness tolerance every
+time, so the ball genuinely never "freezes" even though nothing useful is
+happening — see `_maybe_record_no_progress_possession`'s docstring for the
+live match this was found in). All three are pure observations recorded
+for post-match reporting (see `tournament.py`'s "STALLS" section) —
+nothing here reads back into or alters gameplay.
 
 `turnovers`/`completed_passes`/`attacking_third_entries` (friendly-side) and
 their `enemy_*` counterparts reproduce `tools/metric_correlation.py`'s
@@ -34,6 +42,17 @@ observed, not less — see `_update_possession_events`'s docstring for detail.
 (both sides) are the same live port of that module's metrics 4/5 — see
 `record_tick`'s "opponent counterparts" section and
 `_maybe_resolve_restart_to_entry` for the live equivalents.
+
+`pass_distances_m`/`pass_progress_m` (friendly-side) and their `enemy_*`
+counterparts are a live boxscore counterpart to `shots`: the raw
+distance/net-goalward-progress of every pass that actually completes (same
+completion event `completed_passes` already counts), added 2026-09-04 after
+`GiveAndGoTactic` was found live to be producing many <1m near-pointless
+passes -- `completed_passes` alone can't distinguish a strategy racking up
+genuinely useful passes from one racking up short, pointless ones, so this
+gives post-match tooling that signal directly from `MatchStats` without a
+replay re-trace. See `MatchStats.pass_distances_m`'s docstring for the exact
+definitions and `_record_pass_quality` for where they're computed.
 """
 
 from __future__ import annotations
@@ -47,6 +66,7 @@ from typing import Dict, List, Optional, Union
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.custom_referee.rules.base_rule import RuleViolation
+from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
@@ -75,6 +95,21 @@ _STALL_BALL_STILL_TOL_M = 0.05
 # simply "during live play" -- see `record_tick`'s `committed_tactics` arg).
 _COMMITTED_FROZEN_SECONDS = 10.0
 
+# NO_PROGRESS_POSSESSION: a single robot stays the nearest-to-ball robot,
+# within this radius (bump/approach range -- wider than
+# `_POSSESSION_RADIUS_M` on purpose: the failure mode is a robot that keeps
+# bumping the ball a bit farther than true possession range and re-chasing
+# it, not one sitting exactly on top of it), for `_NO_PROGRESS_SECONDS`
+# without that side's possession state machine (`_poss_side`/
+# `_poss_robot_id`) ever recording it as controlling. Found live,
+# shadow_switch_vs_zone_fluid (2026-09-04): a robot repeatedly bumped the
+# ball a few centimetres and turned away, never latching -- the ball moved
+# just enough each bump to keep resetting COMMITTED_FROZEN's stillness
+# clock, so that watchdog never fired despite ~13s of the same robot
+# failing to pick up the ball.
+_NO_PROGRESS_RADIUS_M = 0.35
+_NO_PROGRESS_SECONDS = 8.0
+
 
 @dataclass
 class StallEvent:
@@ -88,7 +123,7 @@ class StallEvent:
     one per tick.
     """
 
-    kind: str  # "RESTART_STALL" | "COMMITTED_FROZEN"
+    kind: str  # "RESTART_STALL" | "COMMITTED_FROZEN" | "NO_PROGRESS_POSSESSION"
     sim_time: float
     tick: int
     referee_command: str
@@ -125,6 +160,55 @@ class MatchStats:
     enemy_turnovers: int = 0
     enemy_completed_passes: int = 0
     enemy_attacking_third_entries: int = 0
+    # Pass-quality distribution: one entry per completed pass (see
+    # `completed_passes`/`_update_possession_events` for exactly which
+    # ball-handoffs count as "a completed pass" -- these two lists are
+    # parallel to that count, in the same chronological order, so
+    # `len(pass_distances_m) == completed_passes` always). Added 2026-09-04
+    # after `GiveAndGoTactic` was found live to be producing many <1m
+    # near-pointless passes -- the root cause was fixed in tactic code
+    # elsewhere that same session, but nothing in `MatchStats` could
+    # previously have *detected* that class of bug from a completed match's
+    # boxscore alone: `completed_passes` only counts passes, it says nothing
+    # about whether they were any good. A strategy whose passes are
+    # systematically short or don't advance the ball is now flaggable
+    # post-hoc from these two lists without needing a full replay re-trace.
+    #
+    # `pass_distances_m`: straight-line metres between the passer's
+    # last-known position (while they held the ball, possibly updated by a
+    # dribble right up to release/handoff -- see `_poss_robot_position`) and
+    # the receiver's position at the tick possession is recorded as having
+    # changed hands.
+    #
+    # `pass_progress_m`: net metres of x-progress toward *this side's own*
+    # attacking goal that same pass bought, positive = toward the opponent
+    # goal, negative = backward -- same sign convention as
+    # `pass_and_score_geometry.score_pass_setup`'s `progress` (receiver.x -
+    # passer.x, signed by attack direction), but computed directly from
+    # `game_frame.my_team_is_right` here rather than by importing that
+    # module: `score_pass_setup` needs a full `Game` object (goal-line
+    # lookup) this accumulator doesn't have, and the same sign convention is
+    # already available cheaply via the `own_goal_sign`/`attack_sign` pattern
+    # this file's shots-detector block (`record_tick`, ~line 416) and
+    # attacking-third-entries block already use -- one convention for
+    # "attack direction", not two. A pass with negative progress is not
+    # necessarily bad (e.g. resetting under pressure), but a strategy where
+    # most completed passes are near-zero or negative is exactly the signal
+    # the GiveAndGoTactic bug would have shown up as here.
+    #
+    # Kept as plain per-pass lists, not pre-aggregated into a mean/median --
+    # post-match tooling (`tournament.py`, `tools/metric_correlation.py`,
+    # dashboards) can compute whatever summary statistic it wants from the
+    # raw distribution; deciding that here would throw away information
+    # (e.g. a bimodal distribution -- mostly fine passes plus a handful of
+    # pointless ones -- looks identical to "all mediocre passes" once
+    # collapsed to a single mean).
+    pass_distances_m: List[float] = field(default_factory=list)
+    pass_progress_m: List[float] = field(default_factory=list)
+    # Enemy counterparts, parallel to `enemy_completed_passes` exactly like
+    # `pass_distances_m`/`pass_progress_m` are parallel to `completed_passes`.
+    enemy_pass_distances_m: List[float] = field(default_factory=list)
+    enemy_pass_progress_m: List[float] = field(default_factory=list)
     possession_under_pressure_s: Dict[str, float] = field(default_factory=lambda: {"friendly": 0.0, "enemy": 0.0})
     # Mean seconds from a live-play restart (NORMAL_START/FORCE_START,
     # transitioning from a non-live command) to that restart's possessing
@@ -156,6 +240,10 @@ class MatchStats:
                     "enemy_turnovers": self.enemy_turnovers,
                     "enemy_completed_passes": self.enemy_completed_passes,
                     "enemy_attacking_third_entries": self.enemy_attacking_third_entries,
+                    "pass_distances_m": self.pass_distances_m,
+                    "pass_progress_m": self.pass_progress_m,
+                    "enemy_pass_distances_m": self.enemy_pass_distances_m,
+                    "enemy_pass_progress_m": self.enemy_pass_progress_m,
                     "possession_under_pressure_s": self.possession_under_pressure_s,
                     "restart_to_first_entry_s": self.restart_to_first_entry_s,
                     "n_restarts": self.n_restarts,
@@ -252,6 +340,25 @@ class MatchStatsAccumulator:
     _enemy_turnovers: int = 0
     _enemy_completed_passes: int = 0
 
+    # Position of the current/last-seen holder (`_poss_side`/`_poss_robot_id`)
+    # -- kept in step with them (updated every tick the same holder remains
+    # in control, including through a "released at speed" gap, so it reflects
+    # where they last actually were, not just where they were at the moment
+    # of first pickup, in case they dribbled before releasing/handing off).
+    # Read at the instant a completed pass is tallied (`_update_possession_events`)
+    # to compute `pass_distances_m`/`pass_progress_m` -- see those fields'
+    # docstrings on `MatchStats` for why (2026-09-04, GiveAndGoTactic
+    # near-pointless-pass bug: this is the *detection* signal for that class
+    # of bug, not a fix to tactic code, which already landed elsewhere).
+    _poss_robot_position: Optional[Vector2D] = None
+    # Parallel to completed_passes/enemy_completed_passes above: one entry
+    # per completed pass, in the same order. See `MatchStats.pass_distances_m`
+    # /`pass_progress_m` for the exact definitions.
+    _pass_distances_m: List[float] = field(default_factory=list)
+    _pass_progress_m: List[float] = field(default_factory=list)
+    _enemy_pass_distances_m: List[float] = field(default_factory=list)
+    _enemy_pass_progress_m: List[float] = field(default_factory=list)
+
     # --- attacking_third_entries state (hysteresis, both sides -- friendly
     # feeds `attacking_third_entries`, enemy feeds `enemy_attacking_third_entries`
     # and both feed restart-to-entry resolution below) ---
@@ -305,6 +412,16 @@ class MatchStatsAccumulator:
     _ball_still_anchor_xy: Optional[tuple[float, float]] = None
     _committed_frozen_logged: bool = False
     _committed_frozen_event_idx: Optional[int] = None
+
+    # --- NO_PROGRESS_POSSESSION watchdog state (see `_NO_PROGRESS_SECONDS`
+    # above) -- tracks how long the SAME (side, robot_id) has been the
+    # nearest-to-ball robot within `_NO_PROGRESS_RADIUS_M`, reset whenever
+    # that identity changes, the ball leaves the radius, play isn't live, or
+    # that robot actually gains possession (`_poss_robot_id` matches it).
+    _no_progress_since: Optional[float] = None
+    _no_progress_holder: Optional[tuple[str, int]] = None
+    _no_progress_logged: bool = False
+    _no_progress_event_idx: Optional[int] = None
 
     def record_rule_violation(self, violation: Optional[RuleViolation]) -> None:
         if violation is None:
@@ -417,7 +534,8 @@ class MatchStatsAccumulator:
         nearest_id, nearest_robot, nearest_side = min(all_robots, key=lambda entry: entry[1].p.distance_to(ball.p))
         dist_to_nearest = nearest_robot.p.distance_to(ball.p)
         self._possession_ticks[nearest_side] += 1
-        self._update_possession_events(nearest_side, nearest_id, dist_to_nearest, ball)
+        self._update_possession_events(nearest_side, nearest_id, dist_to_nearest, ball, nearest_robot.p, own_goal_sign)
+        self._maybe_record_no_progress_possession(game_frame, nearest_side, nearest_id, dist_to_nearest)
 
         # possession_under_pressure_s (metric 4): the possessing side's
         # nearest-to-ball robot also has an opponent within
@@ -501,7 +619,15 @@ class MatchStatsAccumulator:
             elif self._in_attacking_third[side] and progress < exit_threshold:
                 self._in_attacking_third[side] = False
 
-    def _update_possession_events(self, nearest_side: str, nearest_id: int, dist_to_nearest: float, ball: Ball) -> None:
+    def _update_possession_events(
+        self,
+        nearest_side: str,
+        nearest_id: int,
+        dist_to_nearest: float,
+        ball: Ball,
+        nearest_robot_position: Vector2D,
+        own_goal_sign: float,
+    ) -> None:
         """turnovers / completed_passes: a possession-radius state machine,
         reproducing `tools/metric_correlation.py`'s `compute_frame_metrics`
         metric 3 exactly (same `_POSSESSION_RADIUS_M`/`_PASS_RELEASE_MPS`
@@ -521,33 +647,93 @@ class MatchStatsAccumulator:
         outcomes is the same state, not new tracking. Matches
         `tools/metric_correlation.py`'s offline `completed_passes`/
         `turnovers` dicts, which are computed per-side there too.
+
+        `nearest_robot_position`/`own_goal_sign` are only used for the
+        pass-quality distribution (`_pass_distances_m`/`_pass_progress_m`,
+        see `MatchStats.pass_distances_m`'s docstring) -- every other branch
+        here is unchanged from before that feature was added.
         """
         ball_speed = math.hypot(ball.v.x, ball.v.y)
         controlled = dist_to_nearest <= _POSSESSION_RADIUS_M and ball_speed < _PASS_RELEASE_MPS
         if controlled:
             if self._poss_side is None:
                 self._poss_side, self._poss_robot_id = nearest_side, nearest_id
+                self._poss_robot_position = nearest_robot_position
             elif (self._poss_side, self._poss_robot_id) != (nearest_side, nearest_id):
                 # Possession changed hands without an intervening "released
                 # at speed" event (e.g. a slow dribble handoff/tackle) --
                 # attribute as a same-side completed pass or a turnover
                 # exactly like a released pass would, then adopt the new
-                # holder.
+                # holder. `previous_position` is the passer's own last-known
+                # position (kept in step with them below while they held
+                # it), captured here before it's overwritten with the new
+                # holder's -- this is the passer->receiver vector a
+                # completed pass measures distance/progress over.
+                previous_position = self._poss_robot_position
                 if self._poss_side == nearest_side == "friendly":
                     self._completed_passes += 1
+                    self._record_pass_quality(previous_position, nearest_robot_position, own_goal_sign, "friendly")
                 elif self._poss_side == nearest_side == "enemy":
                     self._enemy_completed_passes += 1
+                    self._record_pass_quality(previous_position, nearest_robot_position, own_goal_sign, "enemy")
                 elif self._poss_side == "friendly" and nearest_side != "friendly":
                     self._turnovers += 1
                 elif self._poss_side == "enemy" and nearest_side != "enemy":
                     self._enemy_turnovers += 1
                 self._poss_side, self._poss_robot_id = nearest_side, nearest_id
+                self._poss_robot_position = nearest_robot_position
+            else:
+                # Same holder, still controlled -- keep their tracked
+                # position current in case they dribble before the ball is
+                # eventually released or handed off (see this method's
+                # docstring / `_poss_robot_position`'s field docstring).
+                self._poss_robot_position = nearest_robot_position
         elif self._poss_side is not None and ball_speed >= _PASS_RELEASE_MPS and dist_to_nearest > _POSSESSION_RADIUS_M:
             # Ball just left a controlled possession at speed: released. The
             # eventual outcome (pass vs turnover vs neither) is resolved the
             # next time the ball is controlled again, or never if it isn't.
+            # `_poss_robot_position` is deliberately left as-is (the
+            # passer's last position while they held it) so that if this
+            # resolves into a completed pass later, the distance/progress is
+            # still measured from where they actually released it, not from
+            # `None`.
             if self._poss_robot_id is not None:
                 self._poss_robot_id = None
+
+    def _record_pass_quality(
+        self,
+        previous_position: Optional[Vector2D],
+        receiver_position: Vector2D,
+        own_goal_sign: float,
+        side: str,
+    ) -> None:
+        """Append one entry to `_pass_distances_m`/`_pass_progress_m` (or the
+        `enemy_*` counterparts) for a pass that was just tallied as
+        completed. `previous_position` can only be `None` if a side's very
+        first-ever possession tick was somehow read as "changed hands" from
+        a `None` robot id with `_poss_side` already set -- not reachable
+        given `_update_possession_events`'s own guards (the `None` case is
+        handled by the `self._poss_side is None` branch instead, which never
+        calls this), but guarded anyway rather than assumed impossible.
+        """
+        if previous_position is None:
+            return
+        distance_m = previous_position.distance_to(receiver_position)
+        # Same sign convention as `pass_and_score_geometry.score_pass_setup`'s
+        # `progress`: net x-progress toward the *attacking* goal, positive =
+        # forward. `own_goal_sign` is `+1` if this side's own goal is on the
+        # `+x` side, so their attack direction is `-own_goal_sign` for
+        # friendly and `+own_goal_sign` for enemy -- mirrors the
+        # `attack_sign` pattern in `record_tick`'s shots-detector and
+        # attacking-third-entries blocks (one convention, not duplicated).
+        attack_sign = -own_goal_sign if side == "friendly" else own_goal_sign
+        progress_m = (receiver_position.x - previous_position.x) * attack_sign
+        if side == "friendly":
+            self._pass_distances_m.append(distance_m)
+            self._pass_progress_m.append(progress_m)
+        else:
+            self._enemy_pass_distances_m.append(distance_m)
+            self._enemy_pass_progress_m.append(progress_m)
 
     def _maybe_start_restart_clock(
         self,
@@ -681,6 +867,70 @@ class MatchStatsAccumulator:
         elif self._committed_frozen_event_idx is not None:
             self._stall_events[self._committed_frozen_event_idx].duration_s = frozen_for
 
+    def _maybe_record_no_progress_possession(
+        self,
+        game_frame: GameFrame,
+        nearest_side: str,
+        nearest_id: int,
+        dist_to_nearest: float,
+    ) -> None:
+        """NO_PROGRESS_POSSESSION: the same robot has been the sole
+        nearest-to-ball robot, within bump range, for too long without ever
+        registering as in control -- see `_NO_PROGRESS_RADIUS_M`/
+        `_NO_PROGRESS_SECONDS`'s module-level docstring for the live match
+        this was built to catch (a robot repeatedly bumping the ball and
+        turning away, which COMMITTED_FROZEN's ball-stillness gate misses
+        since the ball keeps moving a little each bump).
+
+        Must run after `_update_possession_events` has updated
+        `_poss_side`/`_poss_robot_id` for this tick, so "has this robot
+        actually gained control yet" reflects the current tick's outcome,
+        not the previous one.
+        """
+        referee = game_frame.referee
+        current_command = referee.referee_command if referee is not None else None
+        is_live = current_command in _LIVE_PLAY_COMMANDS
+        sim_time = game_frame.ts
+
+        holder = (nearest_side, nearest_id) if is_live and dist_to_nearest <= _NO_PROGRESS_RADIUS_M else None
+        controlled_by_holder = (
+            holder is not None and self._poss_side == nearest_side and self._poss_robot_id == nearest_id
+        )
+
+        if holder is None or controlled_by_holder or holder != self._no_progress_holder:
+            self._no_progress_since = sim_time if holder is not None and not controlled_by_holder else None
+            self._no_progress_holder = None if (holder is None or controlled_by_holder) else holder
+            self._no_progress_logged = False
+            self._no_progress_event_idx = None
+            return
+
+        # Same (side, robot_id) has held nearest-to-ball, uncontrolled, since
+        # `_no_progress_since`.
+        if self._no_progress_since is None:
+            self._no_progress_since = sim_time
+            return
+
+        stuck_for = sim_time - self._no_progress_since
+        if stuck_for <= _NO_PROGRESS_SECONDS:
+            return
+
+        tick = self._ticks_recorded  # already incremented earlier this tick in record_tick
+        if not self._no_progress_logged:
+            self._no_progress_logged = True
+            self._no_progress_event_idx = len(self._stall_events)
+            self._stall_events.append(
+                StallEvent(
+                    kind="NO_PROGRESS_POSSESSION",
+                    sim_time=self._no_progress_since + _NO_PROGRESS_SECONDS,
+                    tick=tick,
+                    referee_command=current_command.name if current_command is not None else "",
+                    duration_s=stuck_for,
+                    robot_ids=(nearest_id,),
+                )
+            )
+        elif self._no_progress_event_idx is not None:
+            self._stall_events[self._no_progress_event_idx].duration_s = stuck_for
+
     def finalize(self) -> MatchStats:
         total = max(1, self._ticks_recorded)
         possession_pct = {side: count / total for side, count in self._possession_ticks.items()}
@@ -709,6 +959,10 @@ class MatchStatsAccumulator:
             enemy_turnovers=self._enemy_turnovers,
             enemy_completed_passes=self._enemy_completed_passes,
             enemy_attacking_third_entries=self._enemy_attacking_third_entries,
+            pass_distances_m=list(self._pass_distances_m),
+            pass_progress_m=list(self._pass_progress_m),
+            enemy_pass_distances_m=list(self._enemy_pass_distances_m),
+            enemy_pass_progress_m=list(self._enemy_pass_progress_m),
             possession_under_pressure_s={side: round(s, 3) for side, s in self._pressure_s.items()},
             restart_to_first_entry_s=restart_to_first_entry_s,
             n_restarts=self._n_restarts,

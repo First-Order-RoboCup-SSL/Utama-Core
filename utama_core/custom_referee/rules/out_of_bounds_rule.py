@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.custom_referee.rules.last_touch import infer_last_touch_team
@@ -99,7 +100,26 @@ class OutOfBoundsRule(BaseRule):
 
     @staticmethod
     def _nearest_infield_point(bx: float, by: float, geometry: RefereeGeometry) -> tuple[float, float]:
-        """Return the nearest point on the field boundary, offset inward."""
+        """Return the nearest point on the field boundary, offset inward, and
+        clear of both defense areas.
+
+        The boundary offset alone (`_INFIELD_OFFSET` = 0.25m) is shallower
+        than a defense area's depth (`half_defense_depth`, 0.5m on the
+        standard field) -- a ball going out near either goal line routinely
+        projects to a point still inside that defense area. Found live,
+        tiki_taka_plus_vs_zone_fluid (2026-09-04): out-of-bounds near the
+        left goal line placed a `DIRECT_FREE_YELLOW` at (-4.25, 0.58),
+        squarely inside the left defense area, which immediately fired
+        "Yellow too close to opponent defense area"/"Yellow attacker in
+        blue defense area" and churned into a second stoppage. Same failure
+        mode `RefereeGeometry.legal_restart_position`'s docstring documents
+        for every other rule that derives a restart position from the
+        ball's raw position -- this rule's own boundary projection was
+        wrongly assumed exempt (see that docstring's example), since it
+        clamps the field boundary but never the defense-area one. Run the
+        boundary-clamped point through the same shared projection every
+        other rule already uses.
+        """
         # Clamp to field bounds and shift inward.
         px = max(-geometry.half_length, min(geometry.half_length, bx))
         py = max(-geometry.half_width, min(geometry.half_width, by))
@@ -114,4 +134,4 @@ class OutOfBoundsRule(BaseRule):
             sign = 1.0 if by > 0 else -1.0
             py = sign * (geometry.half_width - _INFIELD_OFFSET)
 
-        return (px, py)
+        return geometry.legal_restart_position(px, py, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
