@@ -972,3 +972,51 @@ the full investigation narrative for anything already fixed lives in git log
         heavily-documented, hardest-to-fix cases, not a random sample) — a
         full round-robin re-run remains the honest way to get a final count
         and rule out cherry-picking.
+    - **`COMMITTED_FROZEN` live-play ball-hold, root-caused and fixed
+      (2026-09-04, same session)**: the other liveness category from the
+      handoff list above (`three_slot`/`low_block` defenders holding the
+      ball). Root cause is in `DefenseTactic.tick()`
+      (`utama_core/tactics/defense.py`), not the planner: its loose-ball
+      retriever branch sends the nearest defender to `go_to_ball`, but the
+      instant that robot's IR sensor (`has_ball`) actually goes True,
+      `ball_is_loose(game)` flips False on the very same tick (any friendly
+      `has_ball` makes it so) — so `retriever_id` resets to `None` next
+      tick and the ball-carrying robot falls straight back into
+      `defend_parameter`'s pure shot-shadow positioning, which has zero
+      ball awareness. Nothing ever told it to release or clear the ball, so
+      it just dragged the ball along its shadow path indefinitely —
+      matches the roadmap's original live description exactly ("a
+      `low_block` defender sliding along x = -3 with the ball glued to its
+      dribbler"). `ClearBallTactic` already exists as the catalog's
+      intended "kick the ball out of danger" relief valve, but `low_block`
+      never wires it in (its own docstring frames it as the deliberately
+      minimal two-Tactic baseline), and wiring it in wouldn't have helped
+      anyway since the bug is inside `DefenseTactic` itself, not a missing
+      Tactic slot. Fixed by giving `DefenseTactic` its own `carrier_id`
+      cross-tick field (`DefenseMem`): checked directly via `has_ball`
+      against every assigned robot every tick (not gated behind
+      `ball_is_loose`/`retriever_id`, which can never observe the
+      acquisition — by the time `has_ball` is True, `ball_is_loose` is
+      already False on that same tick), it keeps a robot that already has
+      the ball as the active (non-shadowing) one until it genuinely no
+      longer has it, and routes it through a new `_clear()` method — the
+      same chase-can't-happen/aim/kick sequence `ClearBallTactic` uses
+      (reusing its shared `has_ball`/`oriented_towards` helpers), aiming at
+      a single fixed upfield-and-away-from-goal target rather than
+      `ClearBallTactic`'s multi-lane scoring, matching `DefenseTactic`'s
+      existing "minimal baseline" role. Two new regression tests
+      (`test_defense_carrier_stays_assigned_after_retriever_gets_the_ball`,
+      `test_defense_carrier_releases_once_it_no_longer_has_the_ball`) pin
+      both halves of the fix — the carrier must be picked up correctly AND
+      released once the ball is actually gone, not traded for a different
+      permanent-hold bug. Full suite green (4186 passed, 0 failed).
+      Live-verified via `debug_match.py` (`high_press_vs_low_block`, one of
+      the two matches this exact `COMMITTED_FROZEN` category was originally
+      seen in): 65s window, `stall_events: []`; not yet confirmed the fix's
+      carrier path was actually exercised in that specific run (no
+      dedicated trace key was added, unlike `ClearBallTactic`'s
+      `clear_ball[id]` trace) — the confidence here rests primarily on the
+      unit tests and the direct code-level root-cause fix, not on a
+      guaranteed live repro. A full round-robin re-run would give a
+      before/after `COMMITTED_FROZEN` count, same caveat as the DIRECT_FREE
+      spot-checks above.

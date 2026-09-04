@@ -126,6 +126,64 @@ def test_ticking_twice_does_not_raise(tactic_cls, robot_ids, exp_friendly, exp_e
 # --- Tactic-specific behavior that doesn't generalize across the table ---
 
 
+def test_defense_carrier_stays_assigned_after_retriever_gets_the_ball(runner_factory):
+    """Regression test for the COMMITTED_FROZEN liveness stall (roadmap item
+    15, 2026-09-04): once a retriever actually acquires the ball,
+    `ball_is_loose` goes False next tick and `retriever_id` resets to `None`
+    — before the fix, that dropped the ball-carrying robot straight back
+    into `defend_parameter`'s pure shot-shadow positioning, which has no
+    ball awareness, so it just dragged the ball along forever. `carrier_id`
+    must instead keep tracking that robot as long as it still has the ball,
+    so `tick()` routes it through `_clear` (aim/kick) rather than
+    `defend_parameter`."""
+    import dataclasses
+
+    runner = runner_factory(exp_friendly=5, exp_enemy=2)
+    game = runner.my.game
+    tactic = DefenseTactic()
+    mem = tactic.initial_mem()
+
+    # First tick: nothing has the ball yet, ordinary shadow/retriever split.
+    commands, mem = tactic.tick(game, _ctx(runner), (1, 2), mem)
+    assert set(commands.keys()) == {1, 2}
+
+    # Simulate robot 1 having just acquired the ball (the IR sensor going
+    # True) — mirrors what a real go_to_ball approach converges to.
+    game.friendly_robots[1] = dataclasses.replace(game.friendly_robots[1], has_ball=True)
+
+    commands, mem = tactic.tick(game, _ctx(runner), (1, 2), mem)
+    assert mem.carrier_id == 1
+    assert 1 not in mem.shadow_ids
+
+    # A further tick with the ball still held must keep robot 1 as carrier
+    # (not fall back to retriever_id, which would already be None here since
+    # ball_is_loose() is False with a friendly robot possessing it).
+    commands, mem = tactic.tick(game, _ctx(runner), (1, 2), mem)
+    assert mem.carrier_id == 1
+    assert set(commands.keys()) == {1, 2}
+
+
+def test_defense_carrier_releases_once_it_no_longer_has_the_ball(runner_factory):
+    """The other half of the same fix: `carrier_id` must not stick forever
+    once the ball is actually gone (kicked away, stolen, etc.) — otherwise
+    this would trade one permanent-hold bug for another."""
+    import dataclasses
+
+    runner = runner_factory(exp_friendly=5, exp_enemy=2)
+    game = runner.my.game
+    tactic = DefenseTactic()
+    mem = tactic.initial_mem()
+    tactic.tick(game, _ctx(runner), (1, 2), mem)
+
+    game.friendly_robots[1] = dataclasses.replace(game.friendly_robots[1], has_ball=True)
+    _commands, mem = tactic.tick(game, _ctx(runner), (1, 2), mem)
+    assert mem.carrier_id == 1
+
+    game.friendly_robots[1] = dataclasses.replace(game.friendly_robots[1], has_ball=False)
+    _commands, mem = tactic.tick(game, _ctx(runner), (1, 2), mem)
+    assert mem.carrier_id is None
+
+
 def test_lead_and_support_leader_is_closest_robot_to_ball(runner_factory):
     runner = runner_factory(exp_friendly=5, exp_enemy=2)
     game = runner.my.game
