@@ -930,6 +930,20 @@ the full investigation narrative for anything already fixed lives in git log
         `COMMITTED_FROZEN` cases matching the categories already tracked
         above, not new regressions from this fix.
       - **Not yet done**: a full clean 231-match round-robin re-run to get
-        a final, confirmed stall count comparable to the 106/231 baseline
-        (in progress at session's end — see this item's next update once
-        it completes).
+        a final, confirmed stall count comparable to the 106/231 baseline.
+      - **Shipped** as `9757814`. Spot-checked afterward (2026-09-04,
+        single-match `debug_match.py` reruns, not a full round-robin) against
+        two of the three DIRECT_FREE_* stalls seen in the 15-match verification
+        subset above: `clear_danger_vs_tiki_taka` and
+        `clear_danger_vs_split_shape` both now finish their full 65s window
+        with `stall_events: []`. Both are DIRECT_FREE restarts, which this fix
+        also disables teammate priority-blocking for (the gate is keyed on
+        referee command being `NORMAL_START`/`FORCE_START`, not specifically
+        `PREPARE_KICKOFF_*`) — so at least these two instances of the
+        DIRECT_FREE "congestion/local-minimum" family tracked earlier in this
+        item were actually the same restart-mass-replan priority-blocking
+        mechanism as the kickoff regression, not a separate still-open bug.
+        Not yet a full-round-robin-confirmed count of how much of the
+        remaining DIRECT_FREE backlog this resolves — the next full run
+        should re-classify against this as the new baseline before assuming
+        the congestion mechanism is fully closed.
