@@ -33,6 +33,7 @@ the full investigation narrative for anything already fixed lives in git log
 - **"Permanent ball-lock" in `GiveAndGoTactic`** — `first_touch_stuck` safety valve never released because `hop_count` never legitimately left 0; added a longer `_FIRST_TOUCH_FORCE_SHOT_TICKS` timeout that overrides it — `dd14f79`.
 - **`trajsample` planner: robot already inside another obstacle's clearance envelope couldn't plan an escape** — `first_collision_numba` now grants a one-time "still escaping" grace to an obstacle already being penetrated at `t == start_t` — `2e53f3e`.
 - **`trajsample` planner: DIRECT_FREE restart target-jitter stall** — `_try_reuse`'s exact-tuple target comparison treated the ball's sub-mm sim jitter as a changed target, forcing a full replan every tick forever; replaced with a small tolerance (`_TRAJECTORY_TARGET_TOLERANCE`) — `5183ed1`.
+- **`custom_referee` missing-`designated_position` audit** — `DefenseAreaRule`'s restart-churn bug (`16e26af`) was one instance of a broader gap; audited every rule and fixed 5 more (`KeeperHeldBallRule`, `ExcessiveDribblingRule`, `PushingRule`, `BallSpeedRule`, `DoubleTouchRule`), extracted the shared `RefereeGeometry.legal_restart_position` helper — `2a8c03f`.
 
 ## Open
 
