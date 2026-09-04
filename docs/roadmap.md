@@ -594,18 +594,93 @@ the full investigation narrative for anything already fixed lives in git log
         framing is that it converts some early, accidental "stalls" into
         either goals or into hitting the *real*, still-open congestion bug
         further down the line.
-      - Remaining work: re-classify all 57 (now 56) DIRECT_FREE stalls
-        against the FULL round-robin's actual before/after diff (not a
-        margin-based static classification, which proved unreliable), then
-        trace the congestion mechanism above as its own investigation.
-        Iteration is slow because the gate is the full 231-match round-robin
-        (~40 min on 15 workers); `--stop-at-first-stall` (done, see below)
-        helps once a run is already known to contain a stall, but a fixed
-        30-40 match subset that reproduces each stall class (still open)
-        is the real fix for iteration speed, precisely because a stall's
-        reproduction depends on the full catalog/pairing context.
-        `--fuzz-restarts SEED` (405693c) exercises restarts far more often
-        than natural play and is the right way to bench a restart fix.
+      - **Fifth mechanism found and fixed (2026-09-04) — this IS the
+        multi-robot congestion/local-minimum mechanism from the second
+        bullet above, root-caused**: live-traced on
+        `clear_danger_vs_shadow_switch`'s DIRECT_FREE_BLUE stall.
+        `TrajectorySamplingPlanner._intermediate_targets` always retries the
+        previous tick's winning two-segment detour target (`last`) FIRST
+        (see its own docstring — this exists to stop tick-to-tick direction
+        flipping, a real and separate problem it correctly solves), and
+        `plan()` commits to the first collision-free candidate it finds
+        without ever comparing it to the freshly-sorted, actually-toward-
+        target candidates later in the list (see `plan()`'s early-out at the
+        top of its fallback loop). When the direct path is genuinely,
+        repeatedly blocked by a real obstacle, `plan()` falls through to
+        this method every tick; if `last` happens to be a stale point
+        sitting in open space *behind* the robot (chosen once, for some now-
+        irrelevant earlier situation), it stays collision-free indefinitely
+        and so keeps winning the early-out forever, never re-validated
+        against direction — only against "still collision-free." Traced
+        exact numbers: `last` was 166 degrees off the current goal
+        direction; each replan cycle committed a short first-leg burst
+        toward it (backward), then switched after 0.2-0.4s to a second leg
+        that had to kill that backward velocity before making any real
+        progress — net near-zero displacement, repeating every ~1s for the
+        rest of the restart, all while `plan()` reported `has_collision:
+        False` on every single call (a stall with a "clean" planner output
+        the whole time, which is why static/replay-only classification
+        couldn't distinguish it from a genuine local minimum). Fixed in
+        `_intermediate_targets` by dropping `last` outright (not merely de-
+        prioritizing it) whenever its angular distance from the current
+        p0->final_target direction exceeds
+        `_STALE_INTERMEDIATE_TARGET_ANGLE_RAD` (90 degrees) — a real sidestep
+        detour (angled but still broadly toward the goal) is preserved, only
+        a target that would require net backward travel is excluded, letting
+        the already-correctly-sorted fresh candidates get a real chance to
+        win. Two regression tests added
+        (`test_intermediate_targets_drops_a_stale_backward_pointing_last_target`,
+        `test_intermediate_targets_keeps_a_last_target_that_is_still_a_reasonable_detour`).
+        Verified live: the traced match now resolves with a goal scored, zero
+        stall events (previously stalled for the rest of the 65s window).
+      - **Full 231-match round-robin with the stale-intermediate-target fix
+        (2026-09-04, `tournament_20260904_083049` vs. the brake-direction-fix
+        baseline `tournament_20260904_075706`)**: stalled-match count dropped
+        118 -> 87 (68 matches newly fixed, 37 newly stalled — net -31, the
+        largest single-fix improvement this session). Spot-checked a newly-
+        stalled match (`clear_danger_vs_tiki_taka`, 0-0 baseline with no
+        stall, now `RESTART_STALL` at DIRECT_FREE_YELLOW) live: identical
+        retreat/re-approach signature — closest friendly robot oscillates
+        between ~2.3m and ~2.65m from the ball for 6+ seconds, never
+        closing — so, per this session's established pattern with the brake
+        fix, this reads as exposure to a DIFFERENT still-open instance of
+        the same general congestion class (this fix only excludes a stale
+        `last` more than 90 degrees off-axis; a fresh candidate itself
+        oscillating, or a `last` that's stale but within 90 degrees, is not
+        covered) rather than a new bug from this change. **Quality-signal
+        picture is mixed here, unlike the brake fix's clean net-positive
+        read**: shots 61 -> 69, turnovers 295 -> 329, completed passes
+        560 -> 687, attacking-third entries 203 -> 237 (all up, consistent
+        with robots making more real progress instead of idling in a
+        planner-level local minimum) — but goals AND decisive matches both
+        dropped, 21 -> 16. Not investigated further this session; worth
+        checking whether this is restart-timeout variance (65s matches, a
+        match that used to time out mid-approach might now complete the
+        restart but not have enough remaining time to convert) before
+        treating it as a real regression. Ship the fix regardless (it
+        removes a genuine, confirmed planner defect with no legitimate case
+        where retrying a >90-degree-stale cached target should ever win over
+        a fresh, correctly-sorted candidate) but flag the goals/decisive dip
+        for the next round-robin comparison rather than calling this
+        unambiguously net-positive the way the brake fix was.
+      - Remaining work: re-classify all 57 (now far fewer, exact count
+        pending a full re-run against `tournament_20260904_083049` as the
+        new baseline) DIRECT_FREE stalls against the FULL round-robin's
+        actual before/after diff (not a margin-based static classification,
+        which proved unreliable). The remaining 87 stalls are likely a mix
+        of: still-open instances of the same general congestion class not
+        covered by the 90-degree exclusion (see the goals/decisive dip
+        above), the live-play `COMMITTED_FROZEN` ball-hold family (separate
+        investigation, see the Handoff list), and BangBang1D's known defects
+        (see below). Iteration is slow because the gate is the full
+        231-match round-robin (~40 min on 15 workers); `--stop-at-first-stall`
+        (done, see below) helps once a run is already known to contain a
+        stall, but a fixed 30-40 match subset that reproduces each stall
+        class (still open) is the real fix for iteration speed, precisely
+        because a stall's reproduction depends on the full catalog/pairing
+        context. `--fuzz-restarts SEED` (405693c) exercises restarts far
+        more often than natural play and is the right way to bench a
+        restart fix.
     - **Handoff, 2026-09-03 (open, in priority order):**
       1. Live-play ball holds above (three_slot / low_block). Being traced
          in a separate session, which suspects "converged-target churn":
@@ -642,6 +717,36 @@ the full investigation narrative for anything already fixed lives in git log
          first trace" above. Also flagged, unconfirmed: `BallPlacementOursStep`
          has the same unguarded `min(..., key=distance)` shape before ball
          arrival — worth checking against the 4 BALL_PLACEMENT stalls.
+         **Third session, same day**: `BallPlacementOursStep` hardened with
+         the same `Sticky` fix, unconfirmed whether it moves any stall count
+         (see the dedicated writeup above). Separately, root-caused and fixed
+         the emergency-brake direction bug in `TrajectorySamplingController`
+         (scaling raw `robot.v` instead of the planned trajectory's
+         velocity) — net-positive on every item-14 quality signal but raised
+         the raw stall count (106 -> 118) by exposing more matches to the
+         still-open congestion mechanism, confirmed via full round-robin
+         diff. Then root-caused THAT congestion mechanism itself: a stale
+         cached two-segment detour target in
+         `TrajectorySamplingPlanner._intermediate_targets` was never
+         re-validated against direction, only against staying collision-free,
+         so a target picked once for a now-irrelevant situation (traced: 166
+         degrees off the current goal direction) kept winning forever once
+         the direct path became genuinely blocked — fixed by excluding any
+         cached target more than 90 degrees off-axis. Full round-robin:
+         stalled-match count 118 -> 87 (68 fixed, 37 newly stalled, net -31,
+         the largest single-fix win this session); shots/turnovers/passes/
+         entries all up, but goals and decisive matches both dropped
+         (21 -> 16) — flagged as unresolved, possibly restart-timeout
+         variance in the fixed 65s match window rather than a real
+         regression, not investigated further this session. A newly-stalled
+         match spot-check (`clear_danger_vs_tiki_taka`) shows the identical
+         retreat/re-approach oscillation signature, consistent with exposure
+         to a still-different instance of the same general congestion class
+         (this fix's 90-degree exclusion doesn't cover every case) rather
+         than a new bug. **Next step**: re-run the DIRECT_FREE stall count
+         against `tournament_20260904_083049` as the new baseline, and
+         investigate the goals/decisive dip before claiming this fix is
+         unambiguously net-positive the way the brake-direction fix was.
       3. ~~Gate speed: stop-at-first-stall mode in `tournament.py`~~ Done
          2026-09-04: `--stop-at-first-stall` exits as soon as any match
          records a `StallEvent` (implies `--strict`; errors loudly if
