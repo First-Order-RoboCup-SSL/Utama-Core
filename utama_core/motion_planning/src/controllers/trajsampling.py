@@ -106,15 +106,34 @@ class TrajectorySamplingController(MotionController):
                 2 * self._brake_acceleration * max(result.nearest_obstacle_distance, 0.0)
             )
             if closing_speed > 1e-6 and closing_speed > max_safe_closing_speed:
-                # Scale the robot's own velocity down by the same ratio the
-                # closing speed needs to shrink by. Not an exact decomposition
-                # of "how much of the closing speed is this robot's own
-                # contribution" (that would need the obstacle's velocity
-                # vector, not just a scalar rate) -- but it's a safe,
-                # monotonic response: it always reduces this robot's speed
-                # when the gap is closing too fast, and never increases it.
+                # Scale the PLANNED velocity (vx, vy) down by the same ratio
+                # the closing speed needs to shrink by -- not the robot's own
+                # raw `robot.v` (the bug this replaced: scaling the robot's
+                # already-current velocity ignores the trajectory entirely,
+                # so a braking tick's commanded direction was whatever the
+                # robot happened to already be drifting in, not toward the
+                # target). Since `plan()` recomputes a fresh straight line to
+                # the target from the robot's live position every time
+                # `_try_reuse` invalidates the committed one (see
+                # `_TRAJECTORY_POSITION_TOLERANCE`), a robot repeatedly
+                # steered off-plan by its own brake drifts far enough to keep
+                # re-triggering that same invalidation -- confirmed live on
+                # `clear_danger_vs_clear_press_plus`'s DIRECT_FREE stall
+                # (roadmap item 15): braking fired ~35% of ticks near a
+                # crowded obstacle, and every one of dozens of subsequent
+                # replans was triggered by a ~0.08-0.09m position deviation,
+                # right at the tolerance threshold -- the robot visibly
+                # approached and retreated from the ball in a loop for the
+                # rest of the match despite `plan()` reporting a clean,
+                # collision-free, converges-to-target trajectory on every
+                # single call. Not an exact decomposition of "how much of the
+                # closing speed is this robot's own contribution" (that would
+                # need the obstacle's velocity vector, not just a scalar
+                # rate) -- but it's a safe, monotonic response: it always
+                # reduces the planned speed when the gap is closing too fast,
+                # never increases it, and never points away from the plan.
                 brake_scale = max_safe_closing_speed / closing_speed
-                return Vector2D(robot.v.x * brake_scale, robot.v.y * brake_scale), oren
+                return Vector2D(vx * brake_scale, vy * brake_scale), oren
 
         return Vector2D(vx, vy), oren
 
