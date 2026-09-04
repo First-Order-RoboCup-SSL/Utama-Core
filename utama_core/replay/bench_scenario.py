@@ -24,6 +24,8 @@ this module (2026-09-04), not just this file's own choices:
 
 from __future__ import annotations
 
+import dataclasses
+import json
 import math
 from dataclasses import dataclass, field
 from enum import Enum
@@ -116,6 +118,84 @@ class BenchScenario:
     def to_scenario(self) -> Scenario:
         return self.scenario
 
+    def to_dict(self) -> dict:
+        """Plain-JSON representation for a persisted bank (see `save_bank`).
+
+        Field state only — no tactic `mem`, matching the module docstring's
+        policy-agnostic constraint. `source_replay` is stored as a string
+        (or None) since it's provenance metadata, not a path this process
+        needs to resolve back into a live `Path` for anything other than
+        display.
+        """
+        s = self.scenario
+        return {
+            "scenario_id": self.scenario_id,
+            "lifecycle": self.lifecycle.value,
+            "lead_in_s": self.lead_in_s,
+            "provenance": {
+                "source_run_id": self.provenance.source_run_id,
+                "evaluator_version": self.provenance.evaluator_version,
+                "trigger": self.provenance.trigger.value,
+                "family": self.provenance.family.value,
+                "anchor_tick": self.provenance.anchor_tick,
+                "source_replay": str(self.provenance.source_replay) if self.provenance.source_replay else None,
+                "perspective": self.provenance.perspective,
+            },
+            "scenario": {
+                "sim_time": s.sim_time,
+                "ball_x": s.ball_x,
+                "ball_y": s.ball_y,
+                "ball_vx": s.ball_vx,
+                "ball_vy": s.ball_vy,
+                "friendly_robots": [dataclasses.asdict(r) for r in s.friendly_robots],
+                "enemy_robots": [dataclasses.asdict(r) for r in s.enemy_robots],
+                "referee_command": s.referee_command.name if s.referee_command is not None else None,
+                "config_a_name": s.config_a_name,
+                "config_b_name": s.config_b_name,
+                "frame_ts": s.frame_ts,
+            },
+        }
+
+    @staticmethod
+    def from_dict(d: dict) -> "BenchScenario":
+        """Inverse of `to_dict`. `source_replay` round-trips to a `Path`
+        wrapping whatever string was stored (or `Path(".")` when it was
+        None, matching `Scenario.source_replay`'s non-Optional type — the
+        original replay a persisted scenario came from is provenance, not a
+        file this process needs to still exist)."""
+        sd = d["scenario"]
+        prov = d["provenance"]
+        scenario = Scenario(
+            sim_time=sd["sim_time"],
+            ball_x=sd["ball_x"],
+            ball_y=sd["ball_y"],
+            ball_vx=sd["ball_vx"],
+            ball_vy=sd["ball_vy"],
+            friendly_robots=tuple(RobotState(**r) for r in sd["friendly_robots"]),
+            enemy_robots=tuple(RobotState(**r) for r in sd["enemy_robots"]),
+            referee_command=RefereeCommand[sd["referee_command"]] if sd["referee_command"] is not None else None,
+            source_replay=Path(prov["source_replay"]) if prov["source_replay"] else Path("."),
+            config_a_name=sd.get("config_a_name"),
+            config_b_name=sd.get("config_b_name"),
+            frame_ts=sd.get("frame_ts", 0.0),
+        )
+        provenance = ScenarioProvenance(
+            source_run_id=prov["source_run_id"],
+            evaluator_version=prov["evaluator_version"],
+            trigger=ScenarioTrigger(prov["trigger"]),
+            family=ScenarioFamily(prov["family"]),
+            anchor_tick=prov["anchor_tick"],
+            source_replay=Path(prov["source_replay"]) if prov["source_replay"] else None,
+            perspective=prov["perspective"],
+        )
+        return BenchScenario(
+            scenario_id=d["scenario_id"],
+            scenario=scenario,
+            provenance=provenance,
+            lifecycle=ScenarioLifecycle(d["lifecycle"]),
+            lead_in_s=d.get("lead_in_s", 0.0),
+        )
+
 
 @dataclass(frozen=True)
 class StaticScreenResult:
@@ -180,3 +260,52 @@ def static_screen(scenario: Scenario) -> StaticScreenResult:
                 )
 
     return StaticScreenResult(ok=not violations, violations=tuple(violations))
+
+
+# Bumped whenever `BenchScenario.to_dict`'s schema changes in a way old
+# banks can't be read back with (a field renamed/removed, not just added) —
+# `load_bank` refuses to load a mismatched major version rather than
+# silently misinterpreting an old file.
+_BANK_SCHEMA_VERSION = 1
+
+
+def save_bank(scenarios: list["BenchScenario"], path: Path, *, bank_id: str) -> None:
+    """Write `scenarios` to `path` as a single JSON manifest.
+
+    Per roadmap item 14: "Immutable per bank version — adding scenarios
+    makes a new bank ID and forces a champion re-baseline." `bank_id` is
+    caller-chosen (e.g. "v1", or a date-stamped tag) and stored alongside a
+    schema version and scenario count so a stale/mismatched bank fails
+    loudly on load rather than being silently treated as compatible. This
+    function does not enforce immutability itself (nothing stops a second
+    `save_bank` call to the same path) — that discipline is a caller/process
+    convention (new scenarios -> new path/bank_id), not a file-format one.
+    """
+    payload = {
+        "bank_id": bank_id,
+        "schema_version": _BANK_SCHEMA_VERSION,
+        "n_scenarios": len(scenarios),
+        "scenarios": [s.to_dict() for s in scenarios],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2))
+
+
+def load_bank(path: Path) -> tuple[str, list["BenchScenario"]]:
+    """Inverse of `save_bank`. Returns `(bank_id, scenarios)`.
+
+    Raises `ValueError` if the file's `schema_version` doesn't match this
+    process's `_BANK_SCHEMA_VERSION` — a version bump means the dict shape
+    changed incompatibly, and guessing at a mismatched shape would produce
+    a wrong-but-not-crashing bank silently, which is exactly the failure
+    mode item 14's contamination-audit design exists to avoid.
+    """
+    payload = json.loads(path.read_text())
+    version = payload.get("schema_version")
+    if version != _BANK_SCHEMA_VERSION:
+        raise ValueError(
+            f"Bank {path} has schema_version={version}, this process expects "
+            f"{_BANK_SCHEMA_VERSION}. Re-harvest and re-save rather than loading it as-is."
+        )
+    scenarios = [BenchScenario.from_dict(d) for d in payload["scenarios"]]
+    return payload["bank_id"], scenarios

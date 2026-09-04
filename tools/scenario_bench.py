@@ -24,11 +24,19 @@ scenario against the SAME `--opponent` (paired comparison, per item 14's
 matters, not either absolute score). The report is the per-scenario and
 per-family paired outcome delta, never an absolute score.
 
-Not yet built into this tool: the ladder (slow half) and bank
-versioning/lifecycle promotion (candidate -> validated -> active) — those
-are curation decisions for whoever manages the bank, not a per-run CLI
-concern. `--dynamic-screen` runs the screen and reports verdicts but does
-not persist a lifecycle change anywhere.
+`--save-bank PATH` persists the currently-loaded scenario set (hand-authored
++ optional `--harvest-from`, after `--families` filtering) to a single JSON
+file via `bench_scenario.save_bank` — a few KB even for hundreds of
+scenarios, since a scenario is field state only, no trajectories. `--load-bank
+PATH` loads scenarios from a previously-saved bank instead of hand-authored/
+`--harvest-from` (the two are mutually exclusive as *sources*: a loaded bank
+is meant to be the frozen, already-screened set a prior save produced, not a
+starting point to silently merge fresh sources into — see item 14's
+"Immutable per bank version" note). Still not built: automatic lifecycle
+promotion (candidate -> validated -> active) or a ladder (slow half) — this
+tool can freeze *what* the bank contains, not yet *which scenarios in it are
+trustworthy enough to score*; that curation is still a manual step (e.g. run
+`--dynamic-screen`, decide by hand, then `--save-bank` only the survivors).
 
 Run from the repository root, for example:
 
@@ -42,6 +50,15 @@ Run from the repository root, for example:
     pixi run python tools/scenario_bench.py \\
         --candidate build_tiki_taka_kernel_strategy --baseline build_default_kernel_strategy \\
         --opponent build_low_block_kernel_strategy --harvest-from replays/tournament_20260905_090000
+
+    # Freeze a bank from a harvest for reuse across sessions:
+    pixi run python tools/scenario_bench.py --harvest-from replays/tournament_20260905_090000 \\
+        --save-bank utama_core/replay/banks/bank_v1.json --bank-id v1 --list-scenarios
+
+    # Score against the frozen bank later, without re-harvesting:
+    pixi run python tools/scenario_bench.py --load-bank utama_core/replay/banks/bank_v1.json \\
+        --candidate build_tiki_taka_kernel_strategy --baseline build_default_kernel_strategy \\
+        --opponent build_low_block_kernel_strategy
 """
 
 from __future__ import annotations
@@ -56,7 +73,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from utama_core.replay.bench_scenario import BenchScenario
+from utama_core.replay.bench_scenario import BenchScenario, load_bank, save_bank
 from utama_core.replay.dynamic_screen import (
     DEFAULT_SCREEN_POOL,
     ScreenVerdict,
@@ -80,19 +97,31 @@ def _git_revision() -> str | None:
 
 
 def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], dict]:
-    scenarios: list[BenchScenario] = list(all_hand_authored_scenarios())
     harvest_report: dict = {}
 
-    if args.harvest_from is not None:
-        harvested, harvest_report = harvest_run_dir(
-            args.harvest_from,
-            evaluator_version=_git_revision() or "unknown",
-        )
-        scenarios.extend(harvested)
+    if args.load_bank is not None:
+        # A persisted bank replaces the hand-authored + harvest sources
+        # entirely rather than merging with them — it's meant to be the
+        # frozen, already-screened set a prior `--save-bank` produced (see
+        # `bench_scenario.save_bank`'s "immutable per bank version" note),
+        # not a starting point to silently mix fresh sources into.
+        _bank_id, scenarios = load_bank(args.load_bank)
+    else:
+        scenarios = list(all_hand_authored_scenarios())
+        if args.harvest_from is not None:
+            harvested, harvest_report = harvest_run_dir(
+                args.harvest_from,
+                evaluator_version=_git_revision() or "unknown",
+            )
+            scenarios.extend(harvested)
 
     if args.families:
         wanted = set(args.families)
         scenarios = [s for s in scenarios if s.provenance.family.value in wanted]
+
+    if args.save_bank is not None:
+        save_bank(scenarios, args.save_bank, bank_id=args.bank_id or args.save_bank.stem)
+        print(f"Saved {len(scenarios)} scenarios to {args.save_bank} (bank_id={args.bank_id or args.save_bank.stem})")
 
     return scenarios, harvest_report
 
@@ -274,6 +303,24 @@ def parse_args() -> argparse.Namespace:
         "--dynamic-screen", action="store_true", help="run the dynamic screen instead of paired scoring"
     )
     parser.add_argument("--list-scenarios", action="store_true", help="print the loaded bank and exit")
+    parser.add_argument(
+        "--load-bank",
+        type=Path,
+        default=None,
+        help="load scenarios from a persisted bank JSON (see bench_scenario.save_bank) "
+        "instead of hand-authored/--harvest-from",
+    )
+    parser.add_argument(
+        "--save-bank",
+        type=Path,
+        default=None,
+        help="write the loaded scenario set (after --families filtering) to this path as a persisted bank JSON",
+    )
+    parser.add_argument(
+        "--bank-id",
+        default=None,
+        help="bank_id to record when using --save-bank (default: the output filename's stem)",
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("scenario_bench_results"))
     args = parser.parse_args()
 

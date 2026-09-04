@@ -9,7 +9,11 @@ forward) screening or scoring happens.
 
 from __future__ import annotations
 
+import dataclasses
+import json
 from pathlib import Path
+
+import pytest
 
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.bench_scenario import (
@@ -18,6 +22,8 @@ from utama_core.replay.bench_scenario import (
     ScenarioLifecycle,
     ScenarioProvenance,
     ScenarioTrigger,
+    load_bank,
+    save_bank,
     static_screen,
 )
 from utama_core.replay.scenario import RobotState, Scenario
@@ -99,3 +105,91 @@ def test_bench_scenario_defaults_to_candidate_lifecycle():
 
     assert bench_scenario.lifecycle is ScenarioLifecycle.CANDIDATE
     assert bench_scenario.to_scenario() is scenario
+
+
+def _sample_bench_scenario(scenario_id: str = "test_v1", **provenance_overrides) -> BenchScenario:
+    provenance_defaults = dict(
+        source_run_id="tournament_20260904_221937",
+        evaluator_version="c7d45a3",
+        trigger=ScenarioTrigger.RESTART,
+        family=ScenarioFamily.DIRECT_FREE_ATTACKING,
+        anchor_tick=42.5,
+        source_replay=Path("replays/tournament_20260904_221937/a_vs_b.npz"),
+        perspective="candidate_kicking",
+    )
+    provenance_defaults.update(provenance_overrides)
+    scenario = _valid_scenario(
+        sim_time=42.5,
+        ball_x=-4.0,
+        ball_y=0.75,
+        friendly_robots=(_rs(0, -4.2, 0.7), _rs(1, -1.0, 0.5)),
+    )
+    return BenchScenario(
+        scenario_id=scenario_id,
+        scenario=scenario,
+        provenance=ScenarioProvenance(**provenance_defaults),
+        lifecycle=ScenarioLifecycle.ACTIVE,
+        lead_in_s=1.5,
+    )
+
+
+def test_bench_scenario_to_dict_from_dict_round_trips():
+    original = _sample_bench_scenario()
+    restored = BenchScenario.from_dict(original.to_dict())
+
+    assert restored.scenario_id == original.scenario_id
+    assert restored.lifecycle == original.lifecycle
+    assert restored.lead_in_s == original.lead_in_s
+    assert restored.provenance == original.provenance
+    assert restored.scenario.sim_time == original.scenario.sim_time
+    assert restored.scenario.ball_x == original.scenario.ball_x
+    assert restored.scenario.ball_y == original.scenario.ball_y
+    assert restored.scenario.referee_command == original.scenario.referee_command
+    assert restored.scenario.friendly_robots == original.scenario.friendly_robots
+    assert restored.scenario.enemy_robots == original.scenario.enemy_robots
+    assert restored.scenario.config_a_name == original.scenario.config_a_name
+    assert restored.scenario.config_b_name == original.scenario.config_b_name
+
+
+def test_bench_scenario_to_dict_from_dict_round_trips_none_referee_command():
+    base = _sample_bench_scenario(scenario_id="no_referee")
+    original = dataclasses.replace(base, scenario=dataclasses.replace(base.scenario, referee_command=None))
+
+    restored = BenchScenario.from_dict(original.to_dict())
+
+    assert restored.scenario.referee_command is None
+
+
+def test_save_bank_and_load_bank_round_trips(tmp_path):
+    scenarios = [_sample_bench_scenario(scenario_id="s1"), _sample_bench_scenario(scenario_id="s2", anchor_tick=10.0)]
+    bank_path = tmp_path / "bank_v1.json"
+
+    save_bank(scenarios, bank_path, bank_id="v1")
+    bank_id, restored = load_bank(bank_path)
+
+    assert bank_id == "v1"
+    assert [s.scenario_id for s in restored] == ["s1", "s2"]
+    assert restored[0].provenance == scenarios[0].provenance
+    assert restored[1].provenance.anchor_tick == 10.0
+
+
+def test_load_bank_rejects_mismatched_schema_version(tmp_path):
+    scenarios = [_sample_bench_scenario()]
+    bank_path = tmp_path / "bank.json"
+    save_bank(scenarios, bank_path, bank_id="v1")
+
+    payload = json.loads(bank_path.read_text())
+    payload["schema_version"] = 999
+    bank_path.write_text(json.dumps(payload))
+
+    with pytest.raises(ValueError, match="schema_version"):
+        load_bank(bank_path)
+
+
+def test_save_bank_creates_parent_directories(tmp_path):
+    scenarios = [_sample_bench_scenario()]
+    bank_path = tmp_path / "nested" / "dir" / "bank.json"
+
+    save_bank(scenarios, bank_path, bank_id="v1")
+
+    assert bank_path.exists()

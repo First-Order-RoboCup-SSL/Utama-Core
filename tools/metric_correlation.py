@@ -154,6 +154,20 @@ _PRESSURE_RADIUS_M = 0.5  # metric 4, per the task spec
 _SUPPORT_RADIUS_M = 1.0  # metric 7: "teammate near the ball at shot time"
 _RESTART_LIVE_COMMANDS = {"NORMAL_START", "FORCE_START"}
 
+# --- Metrics 8-12 (2026-09-04 debugging-signal expansion): each mined from a
+# real, already-traced bug mechanism in docs/roadmap.md item 15, rather than
+# invented speculatively -- the point is a cheap counter that would have
+# flagged that exact mechanism automatically instead of needing a human to
+# live-trace a match. See each metric's own comment below for which bug it
+# targets.
+_NEAR_STALL_RADIUS_M = 0.5  # metric 8: same order as match_stats.py's NO_PROGRESS_POSSESSION radius (0.35), a
+# little looser here since this is meant to catch pre-watchdog *risk*, not confirmed stalls
+_NEAR_STALL_SECONDS = 2.0  # metric 8: much shorter than the live watchdog's 8s -- an early-warning signal,
+# not a replacement for it
+_THRASH_WINDOW_S = 5.0  # metric 9: matches the ~5-9s windows item 15's kicker-thrash traces were measured over
+_OSCILLATION_WINDOW_S = 3.0  # metric 10: window over which a distance-derivative sign-flip run is counted
+_OSCILLATION_MIN_AMPLITUDE_M = 0.3  # metric 10: ignore sub-30cm position noise, only count a real retreat/re-approach
+
 
 def _iter_sampled_frames(replay_path: Path):
     """Yield every `_SAMPLE_STRIDE`-th `GameFrame` from a replay file, plus the
@@ -235,6 +249,50 @@ def compute_frame_metrics(replay_path: Path, referee_events: list[dict]) -> dict
     completed_passes = {s: 0 for s in sides}
     turnovers = {s: 0 for s in sides}
 
+    # --- metric 8: near-stall risk (pre-watchdog early warning) ---
+    # Same shape as match_stats.py's NO_PROGRESS_POSSESSION watchdog (a robot
+    # stuck near the ball without ever gaining possession), but a much shorter
+    # threshold and a looser radius -- meant to fire well before the live 8s
+    # watchdog would, so it can serve as a leading risk indicator rather than a
+    # confirmed-stall count. Tracked per side (whichever side's nearest robot is
+    # the one stuck).
+    near_stall_since: dict[str, Optional[float]] = {s: None for s in sides}
+    near_stall_holder: dict[str, Optional[int]] = {s: None for s in sides}
+    near_stall_events = {s: 0 for s in sides}
+
+    # --- metric 9: kicker/nearest-robot identity thrash during a restart ---
+    # Mined directly from item 15's traced DIRECT_FREE bug: the "closest robot
+    # to the ball" identity flipped ~9x/second on ordinary position noise
+    # before the Sticky[int] fix (243 switches/27s -> 4). This counts identity
+    # switches of the nearest-to-ball robot *within a side*, while a restart
+    # command is in effect -- a regression of that exact bug class would show
+    # up here even if nothing else changes.
+    restart_active = False
+    thrash_prev_id: dict[str, Optional[int]] = {s: None for s in sides}
+    thrash_switches = {s: 0 for s in sides}
+
+    # --- metric 10: retreat/re-approach oscillation ---
+    # The "congestion/local-minimum" signature item 15 traced repeatedly: a
+    # side's nearest-robot-to-ball distance oscillates (approach, retreat,
+    # re-approach) instead of monotonically closing, for seconds at a time,
+    # while the planner reports no collision. Counts local direction reversals
+    # in each side's nearest-to-ball distance time series, ignoring reversals
+    # smaller than _OSCILLATION_MIN_AMPLITUDE_M (position noise).
+    osc_last_dist: dict[str, Optional[float]] = {s: None for s in sides}
+    osc_last_extremum: dict[str, Optional[float]] = {s: None for s in sides}
+    osc_direction: dict[str, int] = {s: 0 for s in sides}  # +1 closing, -1 opening, 0 unknown
+    osc_reversals = {s: 0 for s in sides}
+
+    # --- metric 11: ball-carrier hold duration (COMMITTED_FROZEN precursor) ---
+    # Targets the DefenseTactic ball-drag bug class: one robot keeps has_ball
+    # continuously for an abnormally long stretch. Tracks the longest
+    # continuous has_ball run per side across the match (p95 needs many
+    # matches pooled, so this reports the single max per match; part B pools
+    # across a strategy's matches for a percentile).
+    carrier_hold_since: dict[str, Optional[float]] = {s: None for s in sides}
+    carrier_hold_id: dict[str, Optional[int]] = {s: None for s in sides}
+    carrier_hold_max_s = {s: 0.0 for s in sides}
+
     # Restart-to-entry bookkeeping, split by which side was possessing at the
     # restart (so it folds into the same per-side differential framework every
     # other metric uses -- a side reaching the attacking third faster off its
@@ -271,6 +329,13 @@ def compute_frame_metrics(replay_path: Path, referee_events: list[dict]) -> dict
                 nearest_side = min(all_robots, key=lambda e: e[1].p.distance_to(ball.p))[2] if all_robots else None
                 pending_restart = {"t0": t, "side": nearest_side}
                 n_restarts += 1
+            # metric 9: "restart active" = any non-HALT/STOP referee command that
+            # isn't yet live play (the mass-replan ceremony window item 15's
+            # kicker-thrash bug was traced during -- PREPARE_*/DIRECT_FREE_*/
+            # BALL_PLACEMENT_* etc., not the live-play commands themselves, since
+            # once play is live the "nearest robot" is expected to change hands
+            # normally as the ball moves).
+            restart_active = cmd not in ("HALT", "STOP") and cmd not in _RESTART_LIVE_COMMANDS
             prev_command = cmd
             ref_idx += 1
 
@@ -289,6 +354,100 @@ def compute_frame_metrics(replay_path: Path, referee_events: list[dict]) -> dict
             min_opp_dist = min(r.p.distance_to(ball.p) for r in opponents)
             if min_opp_dist <= _PRESSURE_RADIUS_M:
                 pressure_ticks[nearest_side] += 1
+
+        # --- metric 8: near-stall risk ---
+        # A side's nearest robot sits within _NEAR_STALL_RADIUS_M of the ball,
+        # same identity, for more than _NEAR_STALL_SECONDS, without possession
+        # ever latching to it (possession.side/robot_id != this holder) -- an
+        # early-warning version of match_stats.py's NO_PROGRESS_POSSESSION
+        # watchdog (which uses a tighter radius and an 8s threshold). One event
+        # is logged per qualifying stretch (not re-logged every tick it
+        # continues), mirroring that watchdog's own "log once per stretch" shape.
+        for side in sides:
+            side_robots = [(rid, r) for rid, r, s in all_robots if s == side]
+            if not side_robots:
+                near_stall_since[side] = None
+                near_stall_holder[side] = None
+                continue
+            s_id, s_robot = min(side_robots, key=lambda e: e[1].p.distance_to(ball.p))
+            s_dist = s_robot.p.distance_to(ball.p)
+            has_control = possession.side == side and possession.robot_id == s_id
+            if s_dist <= _NEAR_STALL_RADIUS_M and not has_control:
+                if near_stall_holder[side] != s_id:
+                    near_stall_since[side] = t
+                    near_stall_holder[side] = s_id
+                elif near_stall_since[side] is not None and (t - near_stall_since[side]) > _NEAR_STALL_SECONDS:
+                    near_stall_events[side] += 1
+                    near_stall_since[side] = None  # reset so a longer stretch doesn't multi-count
+            else:
+                near_stall_since[side] = None
+                near_stall_holder[side] = None
+
+        # --- metric 9: nearest-robot identity thrash during a restart ceremony ---
+        if restart_active:
+            for side in sides:
+                side_robots = [(rid, r) for rid, r, s in all_robots if s == side]
+                if not side_robots:
+                    continue
+                s_id, _ = min(side_robots, key=lambda e: e[1].p.distance_to(ball.p))
+                if thrash_prev_id[side] is not None and thrash_prev_id[side] != s_id:
+                    thrash_switches[side] += 1
+                thrash_prev_id[side] = s_id
+        else:
+            thrash_prev_id = {s: None for s in sides}
+
+        # --- metric 10: retreat/re-approach oscillation ---
+        # A local direction reversal in a side's nearest-to-ball distance,
+        # ignoring reversals smaller than _OSCILLATION_MIN_AMPLITUDE_M so
+        # ordinary position noise (and a robot legitimately arriving and
+        # settling) doesn't count. This is a running peak/trough detector, not
+        # a windowed FFT -- cheap and matches how the bug was actually spotted
+        # in live traces (distance visibly sawtoothing instead of monotonically
+        # closing).
+        for side in sides:
+            side_robots = [(rid, r) for rid, r, s in all_robots if s == side]
+            if not side_robots:
+                continue
+            s_dist = min(r.p.distance_to(ball.p) for _, r in side_robots)
+            if osc_last_dist[side] is None:
+                osc_last_dist[side] = s_dist
+                osc_last_extremum[side] = s_dist
+            else:
+                delta = s_dist - osc_last_dist[side]
+                new_direction = 1 if delta > 0 else (-1 if delta < 0 else osc_direction[side])
+                if (
+                    osc_direction[side] != 0
+                    and new_direction != osc_direction[side]
+                    and osc_last_extremum[side] is not None
+                    and abs(s_dist - osc_last_extremum[side]) >= _OSCILLATION_MIN_AMPLITUDE_M
+                ):
+                    osc_reversals[side] += 1
+                    osc_last_extremum[side] = s_dist
+                elif osc_last_extremum[side] is None or (
+                    new_direction == osc_direction[side]
+                    and (
+                        (new_direction > 0 and s_dist > osc_last_extremum[side])
+                        or (new_direction < 0 and s_dist < osc_last_extremum[side])
+                    )
+                ):
+                    osc_last_extremum[side] = s_dist
+                osc_direction[side] = new_direction
+                osc_last_dist[side] = s_dist
+
+        # --- metric 11: ball-carrier hold duration (COMMITTED_FROZEN precursor) ---
+        for side in sides:
+            side_robots = [(rid, r) for rid, r, s in all_robots if s == side]
+            holder = next((rid for rid, r in side_robots if r.has_ball), None)
+            if holder is not None and carrier_hold_id[side] == holder:
+                held_for = t - carrier_hold_since[side]
+                if held_for > carrier_hold_max_s[side]:
+                    carrier_hold_max_s[side] = held_for
+            elif holder is not None:
+                carrier_hold_id[side] = holder
+                carrier_hold_since[side] = t
+            else:
+                carrier_hold_id[side] = None
+                carrier_hold_since[side] = None
 
         # --- metric 3: completed passes / turnovers (possession-radius state machine) ---
         ball_speed = math.hypot(ball.v.x, ball.v.y)
@@ -409,6 +568,10 @@ def compute_frame_metrics(replay_path: Path, referee_events: list[dict]) -> dict
         out[f"possession_under_pressure_s_{side}"] = pressure_ticks[side] * _DT
         out[f"mean_ball_x_towards_opponent_goal_{side}"] = ball_x_sum[side] / n_ticks
         out[f"defensive_third_time_pct_{side}"] = defensive_third_ticks[side] / n_ticks
+        out[f"near_stall_events_{side}"] = near_stall_events[side]
+        out[f"kicker_identity_thrash_{side}"] = thrash_switches[side]
+        out[f"retreat_reapproach_oscillations_{side}"] = osc_reversals[side]
+        out[f"ball_carrier_hold_max_s_{side}"] = carrier_hold_max_s[side]
     return out
 
 
@@ -548,14 +711,34 @@ _FRAME_METRICS = [
     "mean_ball_x_towards_opponent_goal",
     "defensive_third_time_pct",
     "restart_to_first_entry_s",
+    # Metrics 8-11 (2026-09-04 debugging-signal expansion, see compute_frame_metrics):
+    # each is a cheap proxy mined from a real, already-traced bug mechanism, tested
+    # here for whether it *also* carries any outcome signal, not just bug-detection value.
+    "near_stall_events",
+    "kicker_identity_thrash",
+    "retreat_reapproach_oscillations",
+    "ball_carrier_hold_max_s",
 ]
 # Metrics where a *lower* value is better for that side -- `turnovers`,
 # `defensive_third_time_pct`, and `restart_to_first_entry_s` (faster = better
 # attacking tempo off a restart). Their differentials are still computed the
 # same `own - opponent` way as every other metric; a *negative* correlation
 # with points/goal-diff is the expected "good" sign for these, same as
-# `defensive_third_time_pct` already reads in part B's table.
-_LOWER_IS_BETTER = frozenset({"turnovers", "defensive_third_time_pct", "restart_to_first_entry_s"})
+# `defensive_third_time_pct` already reads in part B's table. The 4 new
+# debugging-signal metrics are all "lower is better" too -- each one counts an
+# occurrence of a known-bad mechanism (near-stall risk, identity thrash,
+# retreat/re-approach oscillation, an abnormally long ball hold).
+_LOWER_IS_BETTER = frozenset(
+    {
+        "turnovers",
+        "defensive_third_time_pct",
+        "restart_to_first_entry_s",
+        "near_stall_events",
+        "kicker_identity_thrash",
+        "retreat_reapproach_oscillations",
+        "ball_carrier_hold_max_s",
+    }
+)
 
 ALL_METRICS = _STATS_METRICS + _FRAME_METRICS
 
@@ -967,6 +1150,27 @@ def main() -> None:
         f"`ball_travel_m` (match total) vs. `|goal diff|`: spearman rho={_fmt(rho_bt)}, p={_fmt(p_bt)}, n={n_bt}. "
         "A more-decisive match plausibly involves more end-to-end ball movement (attacks that go somewhere) "
         "rather than a stalemate, hence testing against |goal diff| rather than the signed value."
+    )
+    report_lines.append("")
+
+    # Metric 12 (2026-09-04 expansion): total fouls per match, from
+    # `rule_event_counts` (crashing/excessive_dribbling/double_touch/etc. --
+    # already computed by MatchStats, previously unused by this study). No
+    # side split in stats.json (same limitation as ball_travel_m), so also
+    # tested match-level against |goal diff| rather than as an a-b differential.
+    # Two plausible, opposite-sign hypotheses: more fouls could mean a more
+    # contested, competitive match (positive with |goal diff| is NOT expected --
+    # closer contests are lower |goal diff|), or could mean more congestion/
+    # crashing typical of a stalling match (which would show low |goal diff|
+    # too). Reported without a strong prior on sign; the data decides.
+    total_fouls = np.array(
+        [sum(r["stats"].get("rule_event_counts", {}).values()) if r["stats"] else float("nan") for r in all_rows]
+    )
+    rho_f, p_f, n_f = spearman(total_fouls, abs_gd)
+    part_a_results["total_fouls (match-level, vs |goal diff|)"] = {"rho": rho_f, "p": p_f, "n_corr": n_f}
+    report_lines.append(
+        f"`total_fouls` (sum of `rule_event_counts`, match total) vs. `|goal diff|`: "
+        f"spearman rho={_fmt(rho_f)}, p={_fmt(p_f)}, n={n_f}."
     )
     report_lines.append("")
 
