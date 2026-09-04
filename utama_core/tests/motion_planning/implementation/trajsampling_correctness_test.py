@@ -8,6 +8,7 @@ import pytest
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.motion_planning.src.trajsampling import collision_numba as collision
 from utama_core.motion_planning.src.trajsampling.bang_bang import (
     BangBang1D,
@@ -26,6 +27,7 @@ from utama_core.motion_planning.src.trajsampling.planner import (
     _CommittedTrajectoryObstacle,
     _flatten_obstacles,
     _flatten_query_trajectory,
+    _priority_blocking_enabled,
 )
 
 
@@ -447,19 +449,83 @@ def test_try_reuse_tolerates_sub_millimetre_target_jitter():
 def test_try_reuse_notices_a_priority_obstacle_only_encroaching_later_in_the_trajectory():
     """Fix #3 from the item-15 Sumatra audit: `_try_reuse`'s priority
     re-check used to sample only two instants (`elapsed`,
-    `elapsed + MIN_TIME_STEP`) rather than scanning the whole remaining
-    trajectory the way `_first_collision` itself does.
+    `elapsed + MIN_TIME_STEP`) rather than scanning ahead the way
+    `_first_collision` itself does.
+
+    Originally widened to scan the WHOLE remaining trajectory (capped by
+    `MAX_LOOKAHEAD_TIME`, 1.5s) -- reverted to a much shorter dedicated cap,
+    `_PRIORITY_RECHECK_LOOKAHEAD_TIME` (0.5s, see its docstring), after that
+    full-length scan caused a 231/231 full-catalog stall: at a kickoff/
+    formation restart every non-keeper teammate simultaneously replans a
+    multi-second approach every tick, so within a 1.5s window there is
+    almost always SOME higher-priority teammate's (itself about to be
+    replaced) trajectory crossing somewhere, permanently invalidating a
+    perfectly good plan. `_PRIORITY_RECHECK_LOOKAHEAD_TIME` still comfortably
+    covers a genuinely imminent conflict while not reaching far enough to
+    catch two mutually-unsettled robots' predictions of each other.
 
     Builds a stationary higher-priority teammate positioned exactly on the
-    committed trajectory's path at t=1.0s, offset in y so the gap sits
-    between `_first_collision`'s dynamic margin at that speed (~0.089m, so
-    `_first_collision` reports no collision at all) and the fixed
-    `MARGIN_BASE` (0.2m) that `_blocked_by_priority_obstacle` checks --
-    i.e. collision-free by the harder threshold, but priority-blocked by
-    the softer one. `elapsed=0.0`, so the old two-instant check only ever
-    looked at t=0.0 and t=0.02, both still clear; the encroachment only
-    exists at t=1.0, well past `MIN_TIME_STEP` but still within
-    `MAX_LOOKAHEAD_TIME`.
+    committed trajectory's path at t=0.3s (well within
+    `_PRIORITY_RECHECK_LOOKAHEAD_TIME`, and still well past `MIN_TIME_STEP`
+    so the OLD two-instant check would have missed it), offset in y so the
+    gap sits between `_first_collision`'s dynamic margin at that speed
+    (~0.089m, so `_first_collision` reports no collision at all) and the
+    fixed `MARGIN_BASE` (0.2m) that `_blocked_by_priority_obstacle` checks --
+    i.e. collision-free by the harder threshold, but priority-blocked by the
+    softer one.
+    """
+    from utama_core.motion_planning.src.trajsampling.config import (
+        trajsamplingconfig as config,
+    )
+
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    p0 = (0.0, 0.0)
+    target = (3.0, 0.0)
+    trajectory = Trajectory2D.compute(p0, (0.0, 0.0), target, planner.v_max, planner.a_max)
+    planner._commit(0, ts=0.0, trajectory=trajectory, target_pos=target)
+
+    encroach_t = 0.3
+    robot_pos, _ = trajectory.state_at(encroach_t)
+    obstacle_pos = (robot_pos[0], robot_pos[1] + 0.15 + 2 * config.ROBOT_RADIUS)
+    obstacle_trajectory = Trajectory2D.compute(obstacle_pos, (0.0, 0.0), obstacle_pos, 2.0, 2.0)
+    # owner_id=99 outranks robot_id=0 under `_has_priority` (higher id wins).
+    obstacle = _CommittedTrajectoryObstacle(
+        trajectory=obstacle_trajectory, radius=config.ROBOT_RADIUS, time_offset=0.0, owner_id=99
+    )
+    obstacle_arrays = _flatten_obstacles([obstacle])
+
+    result = planner._try_reuse(
+        robot_id=0,
+        ts=0.0,
+        p0=p0,
+        target_pos=target,
+        obstacles=[obstacle],
+        obstacle_arrays=obstacle_arrays,
+    )
+
+    assert result is None  # must trigger a fresh replan, not keep executing straight into the encroachment
+
+
+def test_try_reuse_does_not_invalidate_on_a_priority_conflict_beyond_the_recheck_window():
+    """Regression for the 231/231 full-catalog stall this session traced to
+    `_try_reuse`'s priority re-check (see roadmap item 15/16): when it scanned
+    the WHOLE remaining trajectory (up to the old `MAX_LOOKAHEAD_TIME`, 1.5s)
+    instead of the current, much shorter `_PRIORITY_RECHECK_LOOKAHEAD_TIME`
+    (0.5s), every `PREPARE_KICKOFF_YELLOW` restart stalled forever: all 5
+    non-keeper teammates simultaneously replan multi-second approach
+    trajectories every tick to converge on formation, so within a 1.5s window
+    there was almost always some higher-priority teammate's (itself about to
+    be replaced) trajectory crossing somewhere, permanently invalidating an
+    otherwise perfectly good, collision-clear plan.
+
+    Same construction as the sibling test above, but the obstacle only
+    encroaches at t=1.0s -- inside the OLD 1.5s window (which would wrongly
+    invalidate this reuse) but outside the current 0.5s window. A conflict
+    this far out, against an obstacle that is itself a teammate's committed
+    trajectory (likely to be replaced before t=1.0s arrives anyway), must not
+    throw away an otherwise-valid reuse -- `_first_collision`'s own
+    `MAX_LOOKAHEAD_TIME`-capped scan remains the backstop for anything
+    genuinely dangerous further out.
     """
     from utama_core.motion_planning.src.trajsampling.config import (
         trajsamplingconfig as config,
@@ -490,7 +556,110 @@ def test_try_reuse_notices_a_priority_obstacle_only_encroaching_later_in_the_tra
         obstacle_arrays=obstacle_arrays,
     )
 
-    assert result is None  # must trigger a fresh replan, not keep executing straight into the encroachment
+    assert result is not None  # the t=1.0s conflict is beyond the recheck window -- reuse must survive
+
+
+def test_try_reuse_ignores_priority_conflict_when_priority_blocking_disabled():
+    """Pins the restart-formation fix (roadmap item 15/16, session following
+    the recheck-window fix above): even after shrinking the recheck window to
+    0.5s, a real kickoff still stalled 100% of the time in a live
+    `debug_match.py` run, traced to a DIFFERENT mechanism than the recheck
+    window -- priority-blocking itself, not just how far ahead it looks.
+
+    At a `PREPARE_KICKOFF_YELLOW`/similar restart, every non-keeper teammate
+    commits a fresh multi-second approach trajectory simultaneously, every
+    tick, to converge on formation; none of them settle for more than a
+    fraction of a second. The kicker is always the lowest non-keeper robot
+    ID, so by `_has_priority`'s fixed "higher ID wins" ordering it is also
+    the LOWEST-priority outfield robot -- every other teammate's transient,
+    about-to-be-replaced path outranks it. Confirmed live: the kicker's
+    direct line to the ball was priority-blocked on nearly every tick,
+    forcing a `_two_segment_candidates` fallback through a randomly-sampled
+    intermediate waypoint each time; since that intermediate target kept
+    getting invalidated before its own switch point was ever reached, the
+    kicker executed repeated short first-leg bursts in place and
+    `PREPARE_KICKOFF_YELLOW` never auto-advanced (traced: held for the full
+    match duration in every run tested, including a 231/231 full-catalog
+    stall). Disabling priority-blocking for the restart window (via
+    `priority_enabled=False`, threaded from `_priority_blocking_enabled`)
+    resolved it in every run tested, without touching `_first_collision`,
+    `_collision_leniency_accepts`, or the emergency-brake layer, so ordinary
+    (non-priority) collision avoidance during the restart is unaffected.
+
+    Same construction as the very first priority test above (a stationary
+    higher-priority obstacle sitting on the trajectory at t=0.3s, safely
+    within `_PRIORITY_RECHECK_LOOKAHEAD_TIME`, so `priority_enabled=True`
+    would still reject the reuse) -- but passes `priority_enabled=False` and
+    asserts the reuse now survives instead.
+    """
+    from utama_core.motion_planning.src.trajsampling.config import (
+        trajsamplingconfig as config,
+    )
+
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    p0 = (0.0, 0.0)
+    target = (3.0, 0.0)
+    trajectory = Trajectory2D.compute(p0, (0.0, 0.0), target, planner.v_max, planner.a_max)
+    planner._commit(0, ts=0.0, trajectory=trajectory, target_pos=target)
+
+    encroach_t = 0.3
+    robot_pos, _ = trajectory.state_at(encroach_t)
+    obstacle_pos = (robot_pos[0], robot_pos[1] + 0.15 + 2 * config.ROBOT_RADIUS)
+    obstacle_trajectory = Trajectory2D.compute(obstacle_pos, (0.0, 0.0), obstacle_pos, 2.0, 2.0)
+    # owner_id=99 outranks robot_id=0 under `_has_priority` (higher id wins) --
+    # would block reuse if priority_enabled were True (see the sibling test).
+    obstacle = _CommittedTrajectoryObstacle(
+        trajectory=obstacle_trajectory, radius=config.ROBOT_RADIUS, time_offset=0.0, owner_id=99
+    )
+    obstacle_arrays = _flatten_obstacles([obstacle])
+
+    result = planner._try_reuse(
+        robot_id=0,
+        ts=0.0,
+        p0=p0,
+        target_pos=target,
+        obstacles=[obstacle],
+        obstacle_arrays=obstacle_arrays,
+        priority_enabled=False,
+    )
+
+    assert result is not None  # priority-blocking disabled -- the conflict must not invalidate reuse
+
+
+@pytest.mark.parametrize(
+    "referee_command,expected",
+    [
+        (RefereeCommand.NORMAL_START, True),
+        (RefereeCommand.FORCE_START, True),
+        (RefereeCommand.PREPARE_KICKOFF_YELLOW, False),
+        (RefereeCommand.PREPARE_KICKOFF_BLUE, False),
+        (RefereeCommand.PREPARE_PENALTY_YELLOW, False),
+        (RefereeCommand.DIRECT_FREE_YELLOW, False),
+        (RefereeCommand.STOP, False),
+        (RefereeCommand.HALT, False),
+        (None, True),  # no referee data at all -- default to the safer (priority-blocking-on) behaviour
+    ],
+)
+def test_priority_blocking_enabled_only_during_live_play(referee_command, expected):
+    """Live play (`NORMAL_START`/`FORCE_START`, mirroring
+    `utama_core.engine.match_stats`'s own `_LIVE_PLAY_COMMANDS`) keeps
+    teammate priority-blocking active -- that's the one-or-two-robots-moving
+    steady state the mechanism was built and validated for (mirror_swap, see
+    the module docstring). Every other command is a restart/formation phase
+    where a whole side's non-keeper robots replan simultaneously every tick
+    -- see `_priority_blocking_enabled`'s docstring for why priority-blocking
+    is actively harmful there instead.
+    """
+
+    class _StubReferee:
+        def __init__(self, command):
+            self.referee_command = command
+
+    class _StubGame:
+        def __init__(self, command):
+            self.referee = _StubReferee(command) if command is not None else None
+
+    assert _priority_blocking_enabled(_StubGame(referee_command)) is expected
 
 
 def test_plan_exempts_ball_as_obstacle_when_targeting_it():

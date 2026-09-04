@@ -858,3 +858,78 @@ the full investigation narrative for anything already fixed lives in git log
       - Findings #4-7 from the same audit (lower-priority, not yet acted
         on): remaining minor Sumatra-fidelity gaps not yet triaged in
         detail — revisit if further planner hardening is warranted.
+    - **PREPARE_KICKOFF_YELLOW regression from finding #3 above, found and
+      fixed same session (2026-09-04), traced during a 15-worker OOM
+      feasibility check** (`--max-workers 15` runs fine, memory flat at
+      3.1-3.3 GiB/7.4 GiB throughout a full 231-match round-robin — that
+      part of the check passed cleanly). The full-catalog run itself came
+      back 231/231 stalled, 100% `PREPARE_KICKOFF_YELLOW`, vs. zero
+      `PREPARE_KICKOFF_YELLOW` stalls in the prior 106/231 baseline —
+      finding #3's widened re-check (scanning the WHOLE remaining
+      trajectory up to `MAX_LOOKAHEAD_TIME`, 1.5s) was itself the
+      regression: at a kickoff every non-keeper teammate simultaneously
+      replans a multi-second approach every tick to converge on formation,
+      none settling for more than a fraction of a second, so within a 1.5s
+      window there is almost always SOME higher-priority teammate's
+      (itself about to be replaced) trajectory crossing somewhere,
+      permanently invalidating an otherwise perfectly good plan.
+      - **Fix #1**: shrunk the re-check's own window to a new, dedicated
+        `_PRIORITY_RECHECK_LOOKAHEAD_TIME = 0.5s` constant (was sharing
+        `MAX_LOOKAHEAD_TIME` with `_first_collision`'s fresh-replan scan).
+        Verified genuine improvement (BLOCKED-triggered invalidations went
+        from nearly every tick to occasional bursts) but did NOT fully
+        resolve the live stall on its own — the kicker still never
+        converged to its kickoff spot in a live `debug_match.py` run.
+      - **Fix #2, the actual root cause**: live-traced (with careful
+        per-team obstacle/target filtering — a monkeypatched-dict-keyed-
+        only-by-`robot_id` trace artifact briefly produced a misleading
+        read by conflating yellow's and blue's same-numbered robots)
+        that even with fix #1 applied, the kicker's direct line to the
+        ball was priority-blocked on nearly every tick by some teammate's
+        transient, about-to-be-replaced formation-approach path — the
+        kicker is always the lowest non-keeper robot ID, so under
+        `_has_priority`'s fixed "higher ID wins" ordering it is also the
+        LOWEST-priority outfield robot, meaning every other teammate
+        outranks it. Each block forced a `_two_segment_candidates`
+        fallback through a freshly-random intermediate waypoint (traced:
+        the switch-point location changed almost every replan, ~every
+        0.2-0.3s), so the kicker never lived long enough on one two-segment
+        plan to reach its own switch point and turn toward the real
+        target — it just executed short first-leg bursts in place forever
+        (confirmed: `has_collision=False` and correct target on every
+        single `plan()` call throughout, yet position never converged).
+        User-suggested and verified before fixing broadly: disabling
+        `_blocked_by_priority_obstacle` entirely made the kickoff resolve
+        cleanly and reproducibly — but priority-blocking is real,
+        load-bearing protection during ordinary live play (module
+        docstring: ported specifically to stop two teammates from grazing
+        each other in the mirror_swap 6v6 test after four braking-only
+        patches failed), so a global removal was rejected as too broad.
+        Scoped instead to a new `_priority_blocking_enabled(game)` gate,
+        threaded as a `priority_enabled` parameter through `plan()` ->
+        `_try_reuse`/`_blocked_by_priority_obstacle` (both call sites):
+        priority-blocking stays active during live play
+        (`NORMAL_START`/`FORCE_START`, mirroring
+        `utama_core.engine.match_stats`'s own `_LIVE_PLAY_COMMANDS`) and is
+        disabled for every other referee command (every restart/formation
+        phase, where mass simultaneous replanning makes the strictness
+        counterproductive rather than protective). Ordinary (non-priority)
+        collision avoidance — `_first_collision`,
+        `_collision_leniency_accepts`, the emergency-brake layer — is
+        untouched and still applies during restarts.
+      - **Verified**: full `motion_planning` suite green (1209 passed, +10
+        from 4 new regression tests, 84 xfailed, 273 xpassed, 0 failed).
+        `debug_match.py` on the exact match that previously stalled
+        100% of the time (`clear_danger_vs_high_press`, trajsample) now
+        shows `stall_events: []` at both 20s and the full 65s tournament
+        duration, with real gameplay (ball_travel 8.6m, 27 turnovers, 1
+        completed pass over 65s) — not just the kickoff resolving in
+        isolation. A same-day partial round-robin sample (35/231 matches
+        so far) shows zero `PREPARE_KICKOFF_*` stalls; the remaining 8
+        stalls are pre-existing `DIRECT_FREE_*`/`BALL_PLACEMENT_BLUE`/
+        `COMMITTED_FROZEN` cases matching the categories already tracked
+        above, not new regressions from this fix.
+      - **Not yet done**: a full clean 231-match round-robin re-run to get
+        a final, confirmed stall count comparable to the 106/231 baseline
+        (in progress at session's end — see this item's next update once
+        it completes).

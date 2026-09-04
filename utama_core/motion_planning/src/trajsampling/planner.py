@@ -264,6 +264,42 @@ def _has_priority(robot_id: int, other_id: int) -> bool:
     return robot_id > other_id
 
 
+# Referee commands under which the ball is live and only one or two robots
+# per side are typically replanning at once -- teammate priority-blocking
+# (`_blocked_by_priority_obstacle`) stays active here, same as its original
+# mirror_swap justification (module docstring). Every OTHER command is a
+# restart/formation phase where a whole side's non-keeper robots commit fresh
+# multi-second approach trajectories simultaneously, every tick, to converge
+# on formation -- none of them settle for more than a fraction of a second,
+# so within priority-blocking's collision margin there is almost always some
+# higher-priority teammate's (itself about to be replaced) trajectory
+# crossing somewhere. Confirmed live (roadmap item 15/16): a
+# PREPARE_KICKOFF_YELLOW restart's designated kicker -- always the lowest
+# non-keeper robot ID, so by `_has_priority`'s fixed ordering also the LOWEST
+# priority outfield robot -- had every direct-line candidate to the ball
+# blocked by some teammate's transient path on nearly every tick, forcing a
+# `_two_segment_candidates` fallback through a randomly-sampled intermediate
+# waypoint each time; since the intermediate target kept getting invalidated
+# before its own switch point was ever reached, the kicker executed
+# repeated short first-leg bursts in place and the restart never advanced
+# (traced: `PREPARE_KICKOFF_YELLOW` held for the full match duration in
+# every case, 231/231 in a full round-robin). Disabling priority-blocking
+# for this window resolved it in every run tested; ordinary (non-priority)
+# collision avoidance -- `_first_collision`, `_collision_leniency_accepts`,
+# the emergency-brake layer -- still applies unchanged, so this only removes
+# the "reject unconditionally, no braking-distance carve-out" strictness
+# priority-blocking adds, exactly where mass simultaneous formation-replans
+# make that strictness counterproductive rather than protective.
+_PRIORITY_BLOCKING_LIVE_PLAY_COMMANDS = frozenset({RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START})
+
+
+def _priority_blocking_enabled(game: Game) -> bool:
+    referee = game.referee
+    if referee is None:
+        return True
+    return referee.referee_command in _PRIORITY_BLOCKING_LIVE_PLAY_COMMANDS
+
+
 # How close (metres) the robot's actual position must stay to where a
 # committed trajectory predicts it should be, before that trajectory is
 # considered stale and a fresh one is computed. Compared against TIGERs'
@@ -304,6 +340,37 @@ _TRAJECTORY_POSITION_TOLERANCE = 0.08
 # jitter while staying far tighter than any real target change in this
 # codebase (relocate/formation targets jump by many cm to whole metres).
 _TRAJECTORY_TARGET_TOLERANCE = 0.01
+
+# How far ahead `_try_reuse`'s priority re-check (below) is allowed to
+# invalidate an already-committed, currently-collision-clear trajectory just
+# because a higher-priority teammate's OWN committed trajectory crosses its
+# margin somewhere in that window. Originally widened to the full
+# `MAX_LOOKAHEAD_TIME` (1.5s, see roadmap item 15's Sumatra-fidelity audit,
+# finding #3) so a robot would notice a priority conflict as soon as it
+# appeared anywhere in its remaining plan, not only once `elapsed` caught up
+# to it. That's correct when the crossing trajectory is settled, but at a
+# kickoff/formation restart every non-keeper teammate is SIMULTANEOUSLY
+# replanning multi-second approach trajectories every tick -- none of them
+# settle for more than a fraction of a second, so there is almost always
+# some higher-priority teammate's (itself about to be replaced) trajectory
+# crossing somewhere in a 1.5s window. Confirmed live: this made every
+# PREPARE_KICKOFF_YELLOW restart invalidate the kicker's plan on nearly
+# every tick for the rest of the match -- a 231/231 stall in a full
+# round-robin, traced back to this exact re-check via
+# `TrajectorySamplingPlanner._blocked_by_priority_obstacle` firing at
+# collision_time values throughout the full 1.5s window on almost every
+# call. A conflict predicted this far out, against a trajectory that will
+# itself likely be replaced before that time arrives, isn't a reliable
+# signal -- only a conflict close enough that the current committed
+# trajectory is likely to actually still be in effect when it happens is
+# worth invalidating a otherwise-clean plan for. `_first_collision`'s own
+# fresh-replan collision check (run on every `plan()` call regardless, via
+# `_first_collision`'s own `MAX_LOOKAHEAD_TIME` cap) remains the backstop
+# for anything further out. 0.5s is long enough to still catch a real
+# imminent crossing (SSL robots close a meaningful gap in well under a
+# second) while short enough that two mutually-replanning robots stop
+# perpetually invalidating each other.
+_PRIORITY_RECHECK_LOOKAHEAD_TIME = 0.5
 
 # `_intermediate_targets` retries the previous tick's winning detour target
 # before anything else, so a moving robot doesn't flip direction every tick
@@ -433,6 +500,7 @@ class TrajectorySamplingPlanner:
         robot = game.friendly_robots[robot_id]
         p0 = (robot.p.x, robot.p.y)
         v0 = (robot.v.x, robot.v.y)
+        priority_enabled = _priority_blocking_enabled(game)
 
         # `None` (the default for every current caller -- nothing passes
         # this explicitly) means "derive it", same as `FastPathPlanner`
@@ -500,7 +568,7 @@ class TrajectorySamplingPlanner:
         # See `_first_collision`'s docstring for why this matters.
         obstacle_arrays = _stack_rows(combined_rows)
 
-        reused = self._try_reuse(robot_id, game.ts, p0, target_pos, obstacles, obstacle_arrays)
+        reused = self._try_reuse(robot_id, game.ts, p0, target_pos, obstacles, obstacle_arrays, priority_enabled)
         if reused is not None:
             return self._with_current_clearance(reused, p0, obstacles)
 
@@ -548,7 +616,9 @@ class TrajectorySamplingPlanner:
         def fallback_rank(t_col: float, blocked: bool) -> float:
             return -math.inf if blocked else t_col
 
-        direct_blocked = self._blocked_by_priority_obstacle(robot_id, direct, obstacles, collision_time)
+        direct_blocked = self._blocked_by_priority_obstacle(
+            robot_id, direct, obstacles, collision_time, priority_enabled
+        )
         if not direct_blocked and self._collision_leniency_accepts(direct, collision_time, v0, target_pos):
             self._commit(robot_id, game.ts, direct, target_pos)
             result = PlanResult(trajectory=direct, has_collision=True, collision_time=collision_time)
@@ -582,7 +652,7 @@ class TrajectorySamplingPlanner:
                     self._last_intermediate_target[robot_id] = candidate_target
                     result = PlanResult(trajectory=candidate, has_collision=False, collision_time=None)
                     return self._with_current_clearance(result, p0, obstacles)
-                blocked = self._blocked_by_priority_obstacle(robot_id, candidate, obstacles, t_col)
+                blocked = self._blocked_by_priority_obstacle(robot_id, candidate, obstacles, t_col, priority_enabled)
                 if not blocked and self._collision_leniency_accepts(candidate, t_col, v0, target_pos):
                     self._commit(robot_id, game.ts, candidate, target_pos)
                     self._last_intermediate_target[robot_id] = candidate_target
@@ -674,6 +744,7 @@ class TrajectorySamplingPlanner:
         target_pos: Tuple[float, float],
         obstacles: List[TimedObstacle],
         obstacle_arrays: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        priority_enabled: bool = True,
     ) -> Optional[PlanResult]:
         """Keep executing the already-committed trajectory, evaluated at its
         real elapsed time, instead of silently restarting it from t=0 every
@@ -719,18 +790,20 @@ class TrajectorySamplingPlanner:
         # away from a closing higher-priority teammate as soon as any
         # margin is crossed, not only once an actual collision would occur.
         #
-        # Scanned across the WHOLE remaining committed trajectory (capped by
-        # `MAX_LOOKAHEAD_TIME`, same cap `_first_collision` itself uses),
-        # not just the next `MIN_TIME_STEP` -- sampling only two instants
-        # 20ms apart missed a higher-priority teammate's path crossing this
-        # trajectory's margin anywhere later in the remaining duration; the
-        # robot would keep reusing a plan that was already known to walk
-        # into a priority obstacle a few ticks later, only noticing once
-        # `elapsed` itself finally reached that point.
-        recheck_end = min(elapsed + config.MAX_LOOKAHEAD_TIME, trajectory.duration)
+        # Scanned across the committed trajectory's near-term remainder
+        # (capped by `_PRIORITY_RECHECK_LOOKAHEAD_TIME` -- see that
+        # constant's docstring for why this is intentionally much shorter
+        # than `_first_collision`'s `MAX_LOOKAHEAD_TIME`), not just the next
+        # `MIN_TIME_STEP` -- sampling only two instants 20ms apart missed a
+        # higher-priority teammate's path crossing this trajectory's margin
+        # later within that near-term window; the robot would keep reusing a
+        # plan that was already known to walk into a priority obstacle a few
+        # ticks later, only noticing once `elapsed` itself finally reached
+        # that point.
+        recheck_end = min(elapsed + _PRIORITY_RECHECK_LOOKAHEAD_TIME, trajectory.duration)
         t = elapsed
         while True:
-            if self._blocked_by_priority_obstacle(robot_id, trajectory, obstacles, t):
+            if self._blocked_by_priority_obstacle(robot_id, trajectory, obstacles, t, priority_enabled):
                 return None
             if t >= recheck_end:
                 break
@@ -984,7 +1057,12 @@ class TrajectorySamplingPlanner:
         return collision_time > brake_time
 
     def _blocked_by_priority_obstacle(
-        self, robot_id: int, trajectory, obstacles: List[TimedObstacle], collision_time: float
+        self,
+        robot_id: int,
+        trajectory,
+        obstacles: List[TimedObstacle],
+        collision_time: float,
+        priority_enabled: bool = True,
     ) -> bool:
         """True if, at `collision_time`, this trajectory collides with a
         teammate that outranks `robot_id` (see `_has_priority`). Ported from
@@ -996,7 +1074,14 @@ class TrajectorySamplingPlanner:
         `TrajectorySamplingController`). Checked only at the specific
         `collision_time` `_first_collision` already found, not re-scanned,
         since that's the instant that actually matters for this decision.
+
+        `priority_enabled=False` (see `_priority_blocking_enabled`) always
+        returns False here -- i.e. no candidate is ever priority-blocked --
+        for the mass-simultaneous-replan restart/formation phases where this
+        check does more harm than good; see that function's docstring.
         """
+        if not priority_enabled:
+            return False
         point, _ = trajectory.state_at(collision_time)
         for obstacle in obstacles:
             owner_id = getattr(obstacle, "owner_id", None)
