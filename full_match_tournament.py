@@ -203,7 +203,18 @@ def run_match_cell(
         a_kicks_off=a_kicks_off,
         score_a=score_a,
         score_b=score_b,
-        stats=stats.__dict__ if stats is not None else None,
+        # tournament._stats_to_dict, not a bare `stats.__dict__` -- the
+        # latter leaves `stall_events` as a list of `StallEvent` dataclass
+        # instances, which `json.dump(summary, ...)` in `main()` below can't
+        # serialize. Found live, 2026-09-05: a full 24-match run completed
+        # every match cleanly but crashed writing summary.json on the first
+        # stalled match's `StallEvent`, discarding the aggregate result
+        # entirely (the per-match .stats.json files, written earlier via
+        # MatchStats.to_json, were unaffected -- only this module's own
+        # summary aggregation used the unconverted `.__dict__`).
+        # `tournament.py` hit this exact bug first and already fixed it with
+        # `_stats_to_dict`; reuse it here instead of a second conversion.
+        stats=tournament._stats_to_dict(stats) if stats is not None else None,
     )
 
 
