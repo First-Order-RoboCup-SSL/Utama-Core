@@ -470,22 +470,71 @@ the full investigation narrative for anything already fixed lives in git log
      costs a little coverage; a wrongly-included one teaches an optimizer to
      game a bug — bank should err small and clean.
 
-   **Built this session (schema + hand-authored anchors only, no harvester
-   yet — chosen as the first slice because it has no replay/tournament
-   dependency):** `utama_core/replay/bench_scenario.py`
-   (`BenchScenario`/`ScenarioProvenance`/`ScenarioTrigger`/`ScenarioFamily`/
-   `ScenarioLifecycle` + `static_screen()`, wrapping `scenario.Scenario`
-   rather than replacing it, so hand-authored and future-harvested
-   scenarios share one downstream `apply_scenario` path) and
-   `utama_core/replay/hand_authored_scenarios.py` (4 anchors so far —
+   **Built in two passes (2026-09-04): schema/anchors first, then
+   harvester/screen/scorer/CLI — everything except an actual fresh
+   calibration run.**
+
+   *Pass 1 — schema + hand-authored anchors* (first slice, chosen because
+   it has no replay/tournament dependency): `utama_core/replay/
+   bench_scenario.py` (`BenchScenario`/`ScenarioProvenance`/
+   `ScenarioTrigger`/`ScenarioFamily`/`ScenarioLifecycle` + `static_screen()`,
+   wrapping `scenario.Scenario` rather than replacing it, so hand-authored
+   and harvested scenarios share one downstream `apply_scenario` path) and
+   `utama_core/replay/hand_authored_scenarios.py` (4 anchors —
    `kickoff_center_v1`, `direct_free_defending_near_box_v1`,
-   `direct_free_attacking_near_box_v1`, `open_play_3v2_counter_v1` — all
-   pass `static_screen` and one is round-trip-verified through a live
-   headless `apply_scenario` call). 11 new tests
-   (`test_bench_scenario.py`, `test_hand_authored_scenarios.py`). Not built:
-   the restart harvester (blocks on a fresh calibration tournament run),
-   the dynamic screen (blocks on real match data to play scenarios forward
-   against), and the scorer/report tool itself.
+   `direct_free_attacking_near_box_v1`, `open_play_3v2_counter_v1`).
+
+   *Pass 2 — the rest of the pipeline, minus the actual tournament run*:
+   - `utama_core/replay/scenario_harvester.py`: `find_restart_transitions`
+     scans a `.intentions.jsonl` sidecar for the exact transitions the
+     design calls for (`PREPARE_KICKOFF_*/PREPARE_PENALTY_* →
+     NORMAL_START`, `STOP → DIRECT_FREE_*`, `STOP → FORCE_START`, deduped
+     within 0.5s); `match_is_trustworthy` enforces the harvest gate
+     (`<match>.stats.json` must exist and report `stall_events == []`,
+     fails closed on anything missing/unparseable — the exact gate that
+     would have caught the 925-file pre-fix contaminated run this session
+     found); `harvest_run_dir` walks a completed `tournament.py` run
+     directory end to end and returns scenarios plus a
+     matches-seen/trusted/untrusted report. Not yet exercised against a
+     real tournament run — tested against synthetic `.npz` replays
+     (`ColumnarReplayWriter`) + hand-written sidecars/stats files instead.
+   - `utama_core/replay/dynamic_screen.py`: plays a scenario forward
+     champion-vs-self plus a small pool, classifies DEAD / DETERMINED /
+     NOISY / INFORMATIVE per the design's outcome-variance rule. Pool is
+     policy variation, not RNG seeds — rsim is deterministic given
+     identical inputs, so "several seeds" here means several opponent
+     pairings (see `tools/metric_correlation.py`'s same observation).
+   - `utama_core/replay/scenario_scorer.py`: `score_scenario` builds a
+     fresh headless runner (same construction `repro_from_replay.py`
+     uses), applies the scenario (ticking `lead_in_s` first for
+     event-triggered scenarios — the mem-loss lead-in fix from the design
+     pass, not yet exercised since nothing sets `lead_in_s` nonzero yet),
+     ticks `horizon_s`, and classifies a `ScenarioOutcome` (GOAL_AGAINST
+     … NEUTRAL … GOAL_FOR, ordinal) plus a foul flag from `MatchStats`
+     deltas and direct goal-line geometry checks (`RefereeGeometry`) —
+     reuses existing counters, invents no new metric.
+   - `tools/scenario_bench.py`: CLI mirroring `motion_planning_benchmark.py`'s
+     shape. `--list-scenarios` prints the loaded bank; `--dynamic-screen`
+     runs the screen and reports verdict counts; the default mode runs
+     PAIRED scoring (candidate vs opponent, baseline vs same opponent, same
+     scenario) and reports per-scenario and per-family delta as JSON +
+     Markdown. `--harvest-from RUN_DIR` adds harvested scenarios to the
+     hand-authored bank; `--families` filters. Smoke-tested end to end
+     (list, paired score, dynamic screen) against
+     `build_default_kernel_strategy` — all three paths produce sane output.
+
+   26 new tests total across both passes (`test_bench_scenario.py`,
+   `test_hand_authored_scenarios.py`, `test_scenario_harvester.py`,
+   `test_scenario_scorer.py`, `test_dynamic_screen.py`). Full suite green.
+
+   **Still not done, deliberately out of scope for this pass:** the actual
+   fresh calibration tournament run (`harvest_run_dir` is untested against
+   real match data — only synthetic fixtures), the lost-play weakness
+   subset and event-triggered open-play harvesting (both need ladder-run
+   history that doesn't exist post-fix yet), bank versioning/lifecycle
+   persistence (`ScenarioLifecycle` exists as a field but nothing
+   promotes/retires a scenario or writes a bank manifest), and the ladder
+   (slow half) entirely.
 
 15. **`trajsample` liveness floor: 106/231 matches still stall (57 in a
     DIRECT_FREE restart, 42 live-play ball holds), and the BangBang1D fix
