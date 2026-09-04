@@ -323,13 +323,20 @@ class BallPlacementOursStep:
 
     _RELEASE_DELAY_SECONDS = 0.25
 
+    # Same value/rationale as DirectFreeOursStep._KICKER_REASSIGN_MARGIN_M
+    # and pass_and_shoot.py's _REASSIGN_MARGIN_M: metres a challenger must be
+    # closer by before the placer role actually flips.
+    _PLACER_REASSIGN_MARGIN_M = 0.3
+
     def __init__(self):
         self._release_started_at: float | None = None
         self._placer_id: int | None = None
+        self._placer_sticky = Sticky[int](margin=self._PLACER_REASSIGN_MARGIN_M)
 
     def _reset_release(self) -> None:
         self._release_started_at = None
         self._placer_id = None
+        self._placer_sticky.current = None
 
     def update(self) -> None:
         game = self.blackboard.game
@@ -374,11 +381,20 @@ class BallPlacementOursStep:
 
         self._release_started_at = None
 
-        # Pick the placer: robot closest to the ball
-        placer_id = min(
-            game.friendly_robots,
-            key=lambda rid: game.friendly_robots[rid].p.distance_to(ball.p),
-        )
+        # Pick the placer: robot closest to the ball, sticky across ticks
+        # (see _PLACER_REASSIGN_MARGIN_M) -- same bug shape as
+        # DirectFreeOursStep's kicker-identity thrashing (roadmap item 15):
+        # a bare min(..., key=distance) recomputed fresh every tick flips
+        # identity on ordinary sim noise whenever two-plus robots are
+        # near-tied, resetting whoever newly "wins" to a standing start.
+        # Narrower window here than DirectFreeOursStep's (non-placer robots
+        # are actively cleared away every tick via _clear_to_legal_positions
+        # below, so a tie self-resolves within a tick or two rather than
+        # persisting for the whole restart) -- applied as hardening against
+        # the same known-bad pattern, not confirmed as the root cause of any
+        # specific stall.
+        distances = {rid: game.friendly_robots[rid].p.distance_to(ball.p) for rid in game.friendly_robots}
+        placer_id = self._placer_sticky.update(list(distances), score_fn=lambda rid: -distances[rid])
         self._placer_id = placer_id
 
         _FACE_READY_ANGLE = 0.2

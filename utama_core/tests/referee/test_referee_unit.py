@@ -373,6 +373,116 @@ class TestBallPlacementOursStep:
         assert captured[0][2] is True
         assert cmd_map[1] is not None
 
+    def test_placer_choice_is_sticky_across_near_tied_distances(self, monkeypatch):
+        """Regression for the same bug shape as `DirectFreeOursStep`'s kicker
+        thrashing (roadmap item 15): a bare `min(..., key=distance)`
+        recomputed fresh every tick flips identity on ordinary sim noise
+        whenever two-plus robots are near-tied, resetting whoever newly
+        "wins" to a standing start. `BallPlacementOursStep` must hold its
+        placer choice via `Sticky` across ticks (the instance persists
+        across ticks -- constructed once in `RefereeOverride.__init__`).
+        """
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured_placer_ids = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured_placer_ids.append(robot_id)
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        node = referee_actions.BallPlacementOursStep()
+        referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_YELLOW)
+        referee.designated_position = (5.0, 0.0)
+
+        # Robots 1/3/5 start within 2cm of each other's distance to the ball
+        # at (0, 0) -- near-tied, well under the reassign margin -- with tiny
+        # per-tick jitter (sub-mm) simulating rsim sensor noise, exactly the
+        # shape that made the naive `min()` flip every tick. None has the
+        # ball, so every tick's placer takes the move()-to-ball branch.
+        base_positions = {1: (2.00, 0.0), 3: (2.01, 0.0), 5: (2.02, 0.0)}
+        jitter = [0.0, 0.001, -0.001, 0.0015, -0.0005]
+
+        for dx in jitter:
+            robots = {rid: _robot(rid, x + dx, 0.0) for rid, (x, y) in base_positions.items()}
+            frame = GameFrame(
+                ts=0.0,
+                my_team_is_yellow=True,
+                my_team_is_right=True,
+                friendly_robots=robots,
+                enemy_robots={},
+                ball=_ball(0.0, 0.0),
+                referee=referee,
+            )
+            game = Game(
+                past=GameHistory(10),
+                current=frame,
+                field=Field(
+                    my_team_is_right=True,
+                    field_dims=STANDARD_FIELD_DIMS,
+                    field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+                ),
+            )
+            cmd_map = _make_cmd_map(game)
+            node.blackboard = _make_blackboard(game, cmd_map)
+            node.update()
+
+        # Every tick's placer must be the same robot once chosen -- no flip
+        # from noise alone (all candidates stay within the reassign margin).
+        assert len(set(captured_placer_ids)) == 1, (
+            f"placer flipped across near-tied ticks: {captured_placer_ids} " "(expected the same robot id every tick)"
+        )
+
+    def test_placer_reassigns_when_a_robot_is_clearly_closer(self, monkeypatch):
+        """The sticky placer choice must still yield to a genuinely closer
+        robot -- hysteresis should suppress noise-level flips, not freeze the
+        assignment forever."""
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured_placer_ids = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured_placer_ids.append(robot_id)
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        node = referee_actions.BallPlacementOursStep()
+        referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_YELLOW)
+        referee.designated_position = (5.0, 0.0)
+
+        def _run(robots):
+            frame = GameFrame(
+                ts=0.0,
+                my_team_is_yellow=True,
+                my_team_is_right=True,
+                friendly_robots=robots,
+                enemy_robots={},
+                ball=_ball(0.0, 0.0),
+                referee=referee,
+            )
+            game = Game(
+                past=GameHistory(10),
+                current=frame,
+                field=Field(
+                    my_team_is_right=True,
+                    field_dims=STANDARD_FIELD_DIMS,
+                    field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+                ),
+            )
+            cmd_map = _make_cmd_map(game)
+            node.blackboard = _make_blackboard(game, cmd_map)
+            node.update()
+
+        # Tick 1: robot 1 is closest.
+        _run({1: _robot(1, 2.0, 0.0), 3: _robot(3, 3.0, 0.0)})
+        assert captured_placer_ids[-1] == 1
+
+        # Tick 2: robot 3 is now far closer (clears the reassign margin).
+        _run({1: _robot(1, 2.0, 0.0), 3: _robot(3, 0.5, 0.0)})
+        assert captured_placer_ids[-1] == 3
+
     def test_robot_with_ball_moves_to_designated_position(self, monkeypatch):
         import math
 
