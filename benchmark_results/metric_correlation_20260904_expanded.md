@@ -1,6 +1,6 @@
 # Metric-correlation study: proxy metrics vs. match outcome
 
-Generated 2026-09-04 22:38 UTC by `tools/metric_correlation.py`.
+Generated 2026-09-04 22:47 UTC by `tools/metric_correlation.py`.
 
 Runs analysed: tournament_20260904_202318, tournament_20260904_221937 (462 matches total).
 
@@ -33,7 +33,9 @@ Spearman correlates each metric's `a-b` differential with `score_a - score_b` ov
 
 `ball_travel_m` (match total) vs. `|goal diff|`: spearman rho=0.348, p=0.000, n=462. A more-decisive match plausibly involves more end-to-end ball movement (attacks that go somewhere) rather than a stalemate, hence testing against |goal diff| rather than the signed value.
 
-`total_fouls` (sum of `rule_event_counts`, match total) vs. `|goal diff|`: spearman rho=0.060, p=0.198, n=462.
+`total_fouls` (match total) vs. `|goal diff|`: spearman rho=0.060, p=0.198, n=462. Mean 19.80/match, max 70, 1 matches (0.2%) with zero.
+`crashing_rate` (match total) vs. `|goal diff|`: spearman rho=0.101, p=0.030, n=462. Mean 11.40/match, max 48, 9 matches (1.9%) with zero.
+`out_of_bounds_rate` (match total) vs. `|goal diff|`: spearman rho=0.042, p=0.370, n=462. Mean 3.63/match, max 65, 235 matches (50.9%) with zero.
 
 ## B. Per-strategy: mean differential vs. points/goal-diff per match
 
@@ -70,6 +72,37 @@ Full ranking (by |rho vs points-per-match|):
 | 3 | attacking_third_entries | 0.707 | 0.000 | 0.547 | 0.008 |
 | 4 | mean_ball_x_towards_opponent_goal | 0.631 | 0.002 | 0.538 | 0.010 |
 | 5 | zone_time_pct_attacking | 0.554 | 0.007 | 0.427 | 0.048 |
+
+### B.5 Per-strategy crashing_rate / out_of_bounds_rate
+
+Match-level counts (no side split available) summed across every match a strategy played, either side, then divided by matches played. Sorted by `out_of_bounds_rate` descending -- flagged for investigation 2026-09-04 after a user spot check found a 8-10x spread across strategies (not a uniform baseline) with some individual matches hitting 40-58 events in 65s.
+
+| strategy | matches | crashing/match | out_of_bounds/match |
+|---|---:|---:|---:|
+| build_counter_press_kernel_strategy | 42 | 10.548 | 7.905 |
+| build_switch_of_play_kernel_strategy | 42 | 8.524 | 7.310 |
+| build_high_press_kernel_strategy | 42 | 12.190 | 6.524 |
+| build_three_slot_kernel_strategy | 42 | 13.762 | 6.024 |
+| build_counter_flow_kernel_strategy | 42 | 13.786 | 5.000 |
+| build_overload_press_kernel_strategy | 42 | 12.143 | 4.810 |
+| build_high_line_zone_kernel_strategy | 42 | 4.667 | 4.762 |
+| build_clear_danger_kernel_strategy | 42 | 12.786 | 4.643 |
+| build_score_aware_counter_flow_kernel_strategy | 42 | 14.119 | 3.738 |
+| build_tiki_taka_plus_kernel_strategy | 42 | 13.952 | 3.452 |
+| build_press_trigger_flow_kernel_strategy | 42 | 14.619 | 3.310 |
+| build_shadow_switch_kernel_strategy | 42 | 7.643 | 3.095 |
+| build_clear_press_plus_kernel_strategy | 42 | 12.476 | 3.048 |
+| build_press_and_pass_kernel_strategy | 42 | 16.643 | 2.810 |
+| build_decoy_and_overload_kernel_strategy | 42 | 7.929 | 2.714 |
+| build_low_block_kernel_strategy | 42 | 8.167 | 2.548 |
+| build_overload_flow_kernel_strategy | 42 | 9.381 | 2.310 |
+| build_score_aware_zone_flow_kernel_strategy | 42 | 8.952 | 1.714 |
+| build_split_shape_kernel_strategy | 42 | 13.762 | 1.286 |
+| build_zone_fluid_kernel_strategy | 42 | 9.500 | 1.262 |
+| build_give_and_go_solo_kernel_strategy | 42 | 11.167 | 0.929 |
+| build_tiki_taka_kernel_strategy | 42 | 14.143 | 0.667 |
+
+`out_of_bounds_rate` vs. points-per-match across the 22 strategies: spearman rho=0.138, p=0.540, n=22 -- does going out of bounds more actually predict worse results for that strategy, or is it orthogonal to winning (e.g. a deliberate relief-clearance pattern that costs nothing).
 
 ## C. Reliability: per-strategy metric value, run 101521 vs run 115838
 
@@ -171,4 +204,4 @@ Combined score = `|validity rho (B, vs points/match)| x |reliability rho (C, run
 
 Note `possession_pct`, `robot_motion_pct`, and `possession_under_pressure_s` land in the drop list despite `possession_pct`/`robot_motion_pct` already being free (already computed by `MatchStats` today) -- "drop" here means "don't treat as a proxy for winning / don't weight in the proxy score", not "remove from `MatchStats`"; they may still be useful for other diagnostic purposes.
 
-**Runtime:** full analysis over 462 matches took 4.2s.
+**Runtime:** full analysis over 462 matches took 0.1s.

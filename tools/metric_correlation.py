@@ -1153,25 +1153,62 @@ def main() -> None:
     )
     report_lines.append("")
 
-    # Metric 12 (2026-09-04 expansion): total fouls per match, from
-    # `rule_event_counts` (crashing/excessive_dribbling/double_touch/etc. --
-    # already computed by MatchStats, previously unused by this study). No
-    # side split in stats.json (same limitation as ball_travel_m), so also
-    # tested match-level against |goal diff| rather than as an a-b differential.
-    # Two plausible, opposite-sign hypotheses: more fouls could mean a more
-    # contested, competitive match (positive with |goal diff| is NOT expected --
-    # closer contests are lower |goal diff|), or could mean more congestion/
-    # crashing typical of a stalling match (which would show low |goal diff|
-    # too). Reported without a strong prior on sign; the data decides.
+    # Metric 12 (2026-09-04 expansion) plus a follow-up split (2026-09-04,
+    # same day): total fouls per match, and its two largest components
+    # broken out individually, from `rule_event_counts` (already computed by
+    # MatchStats, previously unused by this study). No side split in
+    # stats.json (same limitation as ball_travel_m), so all three are tested
+    # match-level against |goal diff| rather than as an a-b differential.
+    # Two plausible, opposite-sign hypotheses for total_fouls: more fouls
+    # could mean a more contested, competitive match (positive with
+    # |goal diff| is NOT expected -- closer contests are lower |goal diff|),
+    # or could mean more congestion/crashing typical of a stalling match
+    # (which would show low |goal diff| too). Reported without a strong
+    # prior on sign; the data decides.
+    #
+    # crashing_rate and out_of_bounds_rate are broken out individually
+    # because they dominate total_fouls by a wide margin (roughly 60% and
+    # 20% of it respectively in a same-day 462-match spot check) and are
+    # architecturally distinct: crashing_rule.py fires on §8.4.2's own
+    # closing-speed fault thresholds with a built-in 2s retrigger cooldown
+    # (so this is a genuine per-collision-event count, not tick-spam), while
+    # out_of_bounds is a pure ball-position check with no cooldown of its
+    # own (each firing ends the active-play window until the next restart,
+    # so it also can't tick-spam in practice). A user-observed spot check
+    # (2026-09-04) found out_of_bounds heavily right-skewed rather than
+    # uniform: 46% of matches in that check had zero out_of_bounds events,
+    # but a few pathological matches hit 40-58 in a single 65s window, and
+    # the per-strategy rate spanned an 8-10x range (switch_of_play/
+    # counter_press/high_line_zone/clear_press_plus far above tiki_taka/
+    # three_slot/decoy_and_overload) -- worth its own metric to track
+    # whether that skew is a specific strategy's aim/geometry issue (e.g. a
+    # cross-field switch-of-play pass overshooting the sideline) rather than
+    # a uniform baseline, which a single pooled total_fouls number would
+    # hide entirely.
     total_fouls = np.array(
         [sum(r["stats"].get("rule_event_counts", {}).values()) if r["stats"] else float("nan") for r in all_rows]
     )
-    rho_f, p_f, n_f = spearman(total_fouls, abs_gd)
-    part_a_results["total_fouls (match-level, vs |goal diff|)"] = {"rho": rho_f, "p": p_f, "n_corr": n_f}
-    report_lines.append(
-        f"`total_fouls` (sum of `rule_event_counts`, match total) vs. `|goal diff|`: "
-        f"spearman rho={_fmt(rho_f)}, p={_fmt(p_f)}, n={n_f}."
+    crashing_rate = np.array(
+        [r["stats"].get("rule_event_counts", {}).get("crashing", 0) if r["stats"] else float("nan") for r in all_rows]
     )
+    out_of_bounds_rate = np.array(
+        [
+            r["stats"].get("rule_event_counts", {}).get("out_of_bounds", 0) if r["stats"] else float("nan")
+            for r in all_rows
+        ]
+    )
+    for name, values in (
+        ("total_fouls", total_fouls),
+        ("crashing_rate", crashing_rate),
+        ("out_of_bounds_rate", out_of_bounds_rate),
+    ):
+        rho_v, p_v, n_v = spearman(values, abs_gd)
+        part_a_results[f"{name} (match-level, vs |goal diff|)"] = {"rho": rho_v, "p": p_v, "n_corr": n_v}
+        report_lines.append(
+            f"`{name}` (match total) vs. `|goal diff|`: spearman rho={_fmt(rho_v)}, p={_fmt(p_v)}, n={n_v}. "
+            f"Mean {float(np.nanmean(values)):.2f}/match, max {int(np.nanmax(values))}, "
+            f"{int(np.sum(values == 0))} matches ({np.sum(values == 0) / len(values) * 100:.1f}%) with zero."
+        )
     report_lines.append("")
 
     # ---- Part B: per-strategy ----
@@ -1238,6 +1275,57 @@ def main() -> None:
             f"| {i} | {m} | {_fmt(res['rho_points'])} | {_fmt(res['p_points'])} | "
             f"{_fmt(res['rho_gd'])} | {_fmt(res['p_gd'])} |"
         )
+    report_lines.append("")
+
+    # ---- Part B.5: per-strategy crashing_rate / out_of_bounds_rate ----
+    # Not folded into per_strategy_aggregates()'s differential framework
+    # (crashing_rate/out_of_bounds_rate have no side split -- see the Part A
+    # comment above), so computed directly here: for each strategy, its own
+    # rate summed across every match it played (either side), same "own +
+    # opponent, summed over role" shape a-differential metrics don't need but
+    # a match-level total does, since a match-level count isn't attributable
+    # to one side.
+    report_lines.append("### B.5 Per-strategy crashing_rate / out_of_bounds_rate")
+    report_lines.append("")
+    report_lines.append(
+        "Match-level counts (no side split available) summed across every match a strategy played, either side, "
+        "then divided by matches played. Sorted by `out_of_bounds_rate` descending -- flagged for investigation "
+        "2026-09-04 after a user spot check found a 8-10x spread across strategies (not a uniform baseline) with "
+        "some individual matches hitting 40-58 events in 65s."
+    )
+    report_lines.append("")
+    strategy_foul_totals: dict[str, dict] = {}
+    for row in all_rows:
+        rec = row["stats"].get("rule_event_counts", {}) if row["stats"] else {}
+        crashing_n = rec.get("crashing", 0)
+        oob_n = rec.get("out_of_bounds", 0)
+        for config in (row["config_a"], row["config_b"]):
+            s = strategy_foul_totals.setdefault(config, {"matches": 0, "crashing": 0, "out_of_bounds": 0})
+            s["matches"] += 1
+            s["crashing"] += crashing_n
+            s["out_of_bounds"] += oob_n
+    ranked_fouls = sorted(
+        strategy_foul_totals.items(),
+        key=lambda kv: -(kv[1]["out_of_bounds"] / kv[1]["matches"] if kv[1]["matches"] else 0),
+    )
+    report_lines.append("| strategy | matches | crashing/match | out_of_bounds/match |")
+    report_lines.append("|---|---:|---:|---:|")
+    for name, s in ranked_fouls:
+        report_lines.append(
+            f"| {name} | {s['matches']} | {_fmt(s['crashing'] / s['matches'])} | {_fmt(s['out_of_bounds'] / s['matches'])} |"
+        )
+    report_lines.append("")
+
+    strat_points = {name: agg["points_per_match"] for name, agg in per_strategy_aggregates(all_rows, []).items()}
+    oob_rates = np.array([s["out_of_bounds"] / s["matches"] for _, s in ranked_fouls])
+    points_arr = np.array([strat_points.get(name, float("nan")) for name, _ in ranked_fouls])
+    rho_oob_pts, p_oob_pts, n_oob_pts = spearman(oob_rates, points_arr)
+    report_lines.append(
+        f"`out_of_bounds_rate` vs. points-per-match across the {len(ranked_fouls)} strategies: "
+        f"spearman rho={_fmt(rho_oob_pts)}, p={_fmt(p_oob_pts)}, n={n_oob_pts} -- does going out of bounds more "
+        "actually predict worse results for that strategy, or is it orthogonal to winning (e.g. a deliberate "
+        "relief-clearance pattern that costs nothing)."
+    )
     report_lines.append("")
 
     # ---- Part C: reliability ----
