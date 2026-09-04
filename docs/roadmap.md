@@ -520,13 +520,80 @@ the full investigation narrative for anything already fixed lives in git log
         The congestion/local-minimum mechanism (previous bullet) is now the
         clean, thrashing-free target for that investigation — the noise
         that made it hard to trace live is gone.
-      - **Related, not yet checked**: `BallPlacementOursStep`
-        (`custom_referee/actions.py`) recomputes its placer with the same
-        unguarded `min(..., key=distance)` on every tick before the ball
-        reaches `designated_position` (only the post-arrival release hold
-        uses its existing `_placer_id` field) — same shape, unconfirmed
-        whether it thrashes in practice; the 4 BALL_PLACEMENT stalls in the
-        post-`885eba4` baseline are a plausible place to check first.
+      - **`BallPlacementOursStep` hardened with the same fix (2026-09-04),
+        not confirmed as a root cause**: had the identical unguarded
+        `min(..., key=distance)` shape on every tick before the ball reaches
+        `designated_position` (only the post-arrival release hold used the
+        existing `_placer_id` field). Given a `Sticky[int]` `_placer_sticky`
+        (`margin=0.3`, same value/rationale as `DirectFreeOursStep`'s
+        `_kicker_sticky`), reset alongside `_placer_id` in `_reset_release`.
+        Risk window is narrower than `DirectFreeOursStep`'s: non-placer
+        robots are actively cleared away every tick via
+        `_clear_to_legal_positions`, so a tie self-resolves within a tick or
+        two rather than persisting for a whole restart — applied as
+        hardening against the known-bad pattern, not confirmed live against
+        an actual thrashing trace (unlike the `DirectFreeOursStep` fix,
+        which had a live 243->4 trace). Two regression tests added
+        (`test_placer_choice_is_sticky_across_near_tied_distances`,
+        `test_placer_reassigns_when_a_robot_is_clearly_closer`), mirroring
+        the `DirectFreeOursStep` sticky tests. Whether this moves any of the
+        4 BALL_PLACEMENT stalls is unverified — check against the next full
+        round-robin.
+      - **Fourth mechanism found and fixed (2026-09-04):
+        `TrajectorySamplingController`'s emergency-brake layer
+        (`controllers/trajsampling.py::calculate`) scaled the robot's raw
+        current velocity (`robot.v`) instead of the planned trajectory's
+        velocity (`vx, vy` from `result.trajectory.state_at(lookahead)`)
+        when braking.** Whenever the robot's actual momentum pointed
+        anywhere other than where `plan()` said it should go (e.g. right
+        after being nudged off-course near a crowded obstacle), a braking
+        tick commanded the robot further along its OLD heading instead of
+        correcting it toward the target. Live-traced on
+        `clear_danger_vs_clear_press_plus`'s DIRECT_FREE stall: braking
+        fired on ~35% of ticks near a crowded obstacle, and dozens of
+        subsequent replans were each triggered by a ~0.08-0.09m position
+        deviation — right at `_TRAJECTORY_POSITION_TOLERANCE` — even though
+        `plan()` reported a clean, collision-free, converges-to-target
+        trajectory on every single call. Mechanism: brake drifts the robot
+        off its committed straight-line path by just enough to invalidate
+        it via `_try_reuse`'s position-tolerance check; `Trajectory2D.compute`
+        drops transverse velocity at the start of every fresh replan (the
+        already-documented item 13 limitation), so the corrective replan
+        itself launches the robot on a new heading with no continuity from
+        its actual motion — feeding a retreat-and-reapproach loop that
+        persisted for the rest of the match. Fixed by scaling `(vx, vy)`
+        instead of `robot.v`; verified live on two previously-stalling
+        matches (`clear_danger_vs_clear_press_plus` and a second spot-check),
+        both now stall-free, plus a new regression test
+        (`trajsampling_controller_test.py::test_brake_scales_planned_velocity_not_robot_raw_velocity`)
+        that fails against pre-fix code and passes against the fix.
+        `git log` confirms this line was never touched since the file's
+        original commit (`5e8844b`) — a latent bug, not a regression.
+      - **Full 231-match round-robin with the brake-direction fix
+        (2026-09-04, `tournament_20260904_075706` vs. baseline
+        `tournament_20260903_234518`)**: raw stall count went UP, 106 -> 118
+        (61 matches newly fixed, 73 newly stalled — net -12). This is not a
+        new bug from the fix: every newly-stalled match checked
+        (`clear_danger_vs_overload_flow`) shows the identical
+        retreat/re-approach oscillation signature as the mechanism above,
+        and the baseline's `summary.json` confirms it did NOT stall before
+        (0-0, no `stall_events`). With the brake no longer accidentally
+        halting robots early on their own drifted heading, more robots now
+        travel their FULL intended path far enough to reach the still-open
+        multi-robot congestion/local-minimum mechanism (second bullet,
+        above) — the fix removes one bug and, in doing so, exposes more
+        matches to the other, already-known one. Despite the higher raw
+        stall count, the fix is net-positive on every item-14 quality
+        signal: goals 17 -> 21, decisive matches 17 -> 21, shots 45 -> 61,
+        completed passes 527 -> 560; turnovers roughly flat (307 -> 295)
+        and attacking-third entries slightly down (225 -> 203, consistent
+        with more robots getting caught in congestion before completing an
+        entry). Ship the fix (it is a correctness fix for a real latent bug
+        with no legitimate case where scaling raw velocity was ever right)
+        but do not count it as DIRECT_FREE-stall progress — the honest
+        framing is that it converts some early, accidental "stalls" into
+        either goals or into hitting the *real*, still-open congestion bug
+        further down the line.
       - Remaining work: re-classify all 57 (now 56) DIRECT_FREE stalls
         against the FULL round-robin's actual before/after diff (not a
         margin-based static classification, which proved unreliable), then
