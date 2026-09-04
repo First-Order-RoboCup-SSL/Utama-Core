@@ -325,6 +325,25 @@ class TestBallSpeedRule:
         assert violation is not None
         assert violation.next_command == RefereeCommand.DIRECT_FREE_YELLOW
 
+    def test_designated_position_is_projected_clear_of_the_defense_area(self):
+        """Regression, same class of bug as DefenseAreaRule/KeeperHeldBallRule/
+        ExcessiveDribblingRule/PushingRule (roadmap item 15/16): a fast kick
+        struck from right at a defense-area edge (e.g. a keeper's clearance)
+        must not hand back a `designated_position` inside that box."""
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        friendly = {0: _robot(0, -3.6, 0.0, is_friendly=True, has_ball=True)}
+        frame = _frame(
+            ball=_ball(-3.6, 0.0, vx=7.0, vy=0.0),
+            friendly_robots=friendly,
+            my_team_is_yellow=True,
+            my_team_is_right=False,  # friendly (yellow) defends the left area
+        )
+        violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.designated_position is not None
+        assert not GEO.is_in_left_defense_area(*violation.designated_position)
+        assert not GEO.is_in_right_defense_area(*violation.designated_position)
+
     def test_scrum_kick_tie_broken_by_distance_not_colour(self):
         """Both teams in contact at the kick: the closer robot's team is the
         kicker — the old tracker always awarded this to the friendly side."""
@@ -380,6 +399,39 @@ class TestDoubleTouchRule:
         assert violation is not None
         assert violation.rule_name == "double_touch"
         assert violation.next_command == RefereeCommand.DIRECT_FREE_BLUE
+
+    def test_designated_position_is_projected_clear_of_the_defense_area(self):
+        """Regression, same class of bug as DefenseAreaRule/KeeperHeldBallRule/
+        ExcessiveDribblingRule/PushingRule/BallSpeedRule (roadmap item 15/16): a
+        double touch resolved right at a defense-area edge must not hand back
+        a `designated_position` inside that box."""
+        rule = DoubleTouchRule()
+        _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_YELLOW)
+
+        kicker = {0: _robot(0, -3.7, 0.0, is_friendly=True, has_ball=True)}
+        rule.check(
+            _frame(ball=_ball(-3.7, 0.0), friendly_robots=kicker, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+
+        released = {0: _robot(0, -3.7, 0.0, is_friendly=True, has_ball=False)}
+        rule.check(
+            _frame(ball=_ball(-3.7, 0.0), friendly_robots=released, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+
+        touched_again = {0: _robot(0, -3.7, 0.0, is_friendly=True, has_ball=True)}
+        violation = rule.check(
+            _frame(ball=_ball(-3.7, 0.0), friendly_robots=touched_again, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+        assert violation is not None
+        assert violation.designated_position is not None
+        assert not GEO.is_in_left_defense_area(*violation.designated_position)
+        assert not GEO.is_in_right_defense_area(*violation.designated_position)
 
     def test_continuous_possession_is_not_a_second_touch(self):
         """has_ball staying True (normal dribbling/carrying) must not itself
@@ -1089,8 +1141,15 @@ class TestCustomReferee:
         )
         data = referee.step(touched_again, current_time=8.3)
         assert data.referee_command == RefereeCommand.STOP
-        assert data.next_command == RefereeCommand.DIRECT_FREE_YELLOW
+        # DoubleTouchRule now supplies a designated_position (the ball's own
+        # position, projected clear of any defense area -- see
+        # RefereeGeometry.legal_restart_position), so like every other rule
+        # that does the same (OutOfBoundsRule, DefenseAreaRule, ...), the
+        # restart is queued through ball placement first rather than
+        # jumping straight to DIRECT_FREE_YELLOW.
+        assert data.next_command == RefereeCommand.BALL_PLACEMENT_YELLOW
         assert data.status_message == "Double touch"
+        assert data.designated_position == (0.0, 0.0)  # ball never moved
 
     def test_reset_restores_score_and_command_for_episode_reuse(self):
         """A fresh episode should look exactly like a newly-constructed referee,

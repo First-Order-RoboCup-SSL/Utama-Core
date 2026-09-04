@@ -80,3 +80,37 @@ class RefereeGeometry:
         dx = max(0.0, rect_min_x - x) if x < rect_min_x else 0.0
         dy = max(0.0, abs(y) - self.half_defense_width)
         return (dx * dx + dy * dy) ** 0.5
+
+    def legal_restart_position(self, x: float, y: float, keep_dist: float) -> tuple[float, float]:
+        """Project (x, y) clear of BOTH defense areas (plus `keep_dist`), for
+        use as a `DIRECT_FREE_*`/free-kick restart's `designated_position`.
+
+        Any rule that derives a restart position directly from the ball's
+        raw current position (rather than an already-legal point, e.g.
+        `OutOfBoundsRule`'s own boundary projection) must run it through
+        this first. Several rules exist specifically to fire *because* the
+        ball is sitting inside a defense area (`KeeperHeldBallRule`, and
+        `DefenseAreaRule`'s attacker-infringement branches) or can plausibly
+        end up there (`ExcessiveDribblingRule`, `PushingRule`) -- an
+        unprojected `designated_position` in that case is illegal the
+        instant it's issued. `StrategyRunner`'s sim-mode shortcut (see its
+        `_prev_custom_ref_command`-guarded STOP branch) teleports the ball
+        straight to `designated_position` and force-starts play the same
+        tick, so an illegal position there doesn't just look wrong on a
+        scoreboard -- it lets the very defender/attacker that caused the
+        violation instantly re-trigger it, deadlocking the match in a rapid
+        STOP/FORCE_START churn. Confirmed live for `DefenseAreaRule`
+        2026-09-04 (roadmap item 15/16): 6 churn cycles in under 2 seconds
+        from exactly this gap. Only x needs clamping for either defense
+        area (both are full-width rectangles spanning the goal line to
+        `2*half_defense_depth` in) -- y is already legal by construction
+        whenever a point clears the box on x alone.
+        """
+        left_inner_x = -self.half_length + 2.0 * self.half_defense_depth
+        right_inner_x = self.half_length - 2.0 * self.half_defense_depth
+        if abs(y) <= self.half_defense_width:
+            if x <= left_inner_x + keep_dist:
+                x = left_inner_x + keep_dist
+            elif x >= right_inner_x - keep_dist:
+                x = right_inner_x - keep_dist
+        return (x, y)

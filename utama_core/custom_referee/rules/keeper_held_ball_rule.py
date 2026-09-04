@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.entities.game.game_frame import GameFrame
@@ -84,7 +85,15 @@ class KeeperHeldBallRule(BaseRule):
             held_for = game_frame.ts - self._entered_at[is_yellow_area]
             if held_for > self._max_hold_seconds and violation is None:
                 # Held team is charged the foul; free kick to the other team,
-                # taken from the ball's current position.
+                # taken from the ball's current position -- but that
+                # position is, by this rule's own trigger condition, always
+                # inside the very defense area just fouled, so it must be
+                # projected clear before use (see
+                # `RefereeGeometry.legal_restart_position`'s docstring: an
+                # unprojected in-box `designated_position` is guaranteed
+                # illegal here, not just possibly so, and
+                # `StrategyRunner`'s sim-mode shortcut would teleport the
+                # ball straight back into the box and force-start on it).
                 next_cmd = RefereeCommand.DIRECT_FREE_BLUE if is_yellow_area else RefereeCommand.DIRECT_FREE_YELLOW
                 violation = RuleViolation(
                     rule_name="keeper_held_ball",
@@ -94,7 +103,7 @@ class KeeperHeldBallRule(BaseRule):
                         f"Ball held in {'yellow' if is_yellow_area else 'blue'} defense area "
                         f"over {self._max_hold_seconds:.0f}s"
                     ),
-                    designated_position=(bx, by),
+                    designated_position=geometry.legal_restart_position(bx, by, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE),
                     offending_teams=(is_yellow_area,),
                 )
                 self._entered_at[is_yellow_area] = None  # reset after issuing

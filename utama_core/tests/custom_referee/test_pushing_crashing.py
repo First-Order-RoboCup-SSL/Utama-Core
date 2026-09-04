@@ -118,6 +118,36 @@ class TestPushingRule:
         assert violation.next_command == RefereeCommand.FORCE_START
         assert violation.designated_position is not None
 
+    def test_designated_position_is_projected_clear_of_the_defense_area(self):
+        """Regression, same class of bug as KeeperHeldBallRule/
+        ExcessiveDribblingRule/DefenseAreaRule (roadmap item 15/16): a
+        shoving match plausibly happens right at a defense-area edge
+        (defenders contesting a ball near their own box), so the ball
+        position recorded at push-start must be projected clear before use
+        as a restart position -- an unprojected in-box position would let
+        `StrategyRunner`'s sim-mode shortcut teleport the ball straight
+        back into the box and force-start on it."""
+        rule = PushingRule(min_closing_speed_mps=0.05, similar_force_margin_mps=0.15, persistence_frames=3)
+        friendly = _robot(0, -3.7, 0.0, True, vx=1.0)
+        enemy = _robot(0, -3.7 + _CONTACT_X, 0.0, False, vx=-0.1)
+        frame = GameFrame(
+            ts=10.0,
+            my_team_is_yellow=True,
+            my_team_is_right=False,  # friendly (yellow) defends the left area
+            friendly_robots={friendly.id: friendly},
+            enemy_robots={enemy.id: enemy},
+            ball=Ball(p=Vector3D(-3.7, 0.0, 0.0), v=Vector3D(0, 0, 0), a=Vector3D(0, 0, 0)),
+            referee=None,
+        )
+
+        violation = None
+        for _ in range(3):
+            violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.designated_position is not None
+        assert not GEO.is_in_left_defense_area(*violation.designated_position)
+        assert not GEO.is_in_right_defense_area(*violation.designated_position)
+
     def test_non_sustained_contact_resets(self):
         rule = PushingRule(min_closing_speed_mps=0.05, similar_force_margin_mps=0.15, persistence_frames=3)
         friendly = _robot(0, 0.0, 0.0, True, vx=1.0)

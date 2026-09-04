@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.custom_referee.rules.last_touch import infer_last_touch_team
@@ -70,12 +71,20 @@ class BallSpeedRule(BaseRule):
         else:
             next_cmd = RefereeCommand.DIRECT_FREE_YELLOW
 
+        # Without an explicit designated_position, RuleViolation silently
+        # carries over whatever restart position was last recorded --
+        # possibly stale/unrelated to this kick, or illegal if it happens
+        # to sit inside a defense area (see
+        # `RefereeGeometry.legal_restart_position`'s docstring). Take the
+        # restart from the ball's own current position, projected clear.
+        placement = geometry.legal_restart_position(ball.p.x, ball.p.y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
         return RuleViolation(
             rule_name="ball_speed",
             suggested_command=RefereeCommand.STOP,
             next_command=next_cmd,
             status_message=f"Ball speed exceeded {self._max_speed:.1f} m/s",
             offending_teams=(kicking_team_is_yellow,),
+            designated_position=placement,
         )
 
     def reset(self) -> None:

@@ -85,6 +85,25 @@ class TestKeeperHeldBallRule:
         assert v.next_command == RefereeCommand.DIRECT_FREE_BLUE
         assert v.offending_teams == (True,)
 
+    def test_designated_position_is_projected_clear_of_the_defense_area(self):
+        """Regression: this rule fires exactly because the ball is sitting
+        inside a defense area (that's the whole trigger condition), so an
+        unprojected `designated_position` is guaranteed illegal every time
+        it fires -- not just possibly so, unlike most other rules with this
+        gap. `StrategyRunner`'s sim-mode shortcut teleports the ball
+        straight to `designated_position` and force-starts play the same
+        tick, so an in-box position here would let the same violation
+        instantly re-trigger (same class of bug fixed for `DefenseAreaRule`,
+        roadmap item 15/16)."""
+        rule = KeeperHeldBallRule(max_hold_seconds=10.0)
+        v = None
+        for ts in [0.0, 5.0, 10.5]:
+            v = rule.check(self._in_own_area_frame(ts), GEO, RefereeCommand.NORMAL_START)
+        assert v is not None
+        assert v.designated_position is not None
+        assert not GEO.is_in_left_defense_area(*v.designated_position)
+        assert not GEO.is_in_right_defense_area(*v.designated_position)
+
     def test_clock_resets_when_ball_leaves_area(self):
         rule = KeeperHeldBallRule(max_hold_seconds=10.0)
         rule.check(self._in_own_area_frame(0.0), GEO, RefereeCommand.NORMAL_START)
@@ -126,6 +145,25 @@ class TestExcessiveDribblingRule:
         assert v.rule_name == "excessive_dribbling"
         assert v.next_command == RefereeCommand.DIRECT_FREE_BLUE
         assert v.offending_teams == (True,)
+
+    def test_designated_position_is_projected_clear_of_the_defense_area(self):
+        """Regression, same class of bug as KeeperHeldBallRule above: a
+        dribble that ends inside/at the edge of a defense area (dribbling
+        toward goal is a completely ordinary way to draw this foul) must
+        not hand back a `designated_position` inside that box."""
+        rule = ExcessiveDribblingRule(max_dribble_meters=1.0)
+        v = None
+        for x in [-2.4, -3.0, -3.6]:  # ends at (-3.6, 0.0), 1.2m from origin, inside the left defense area
+            robot = _robot(0, x, 0.0, is_friendly=True, has_ball=True)
+            v = rule.check(
+                _frame(ball=_ball(x, 0.0), friendly_robots={0: robot}, my_team_is_right=False),
+                GEO,
+                RefereeCommand.NORMAL_START,
+            )
+        assert v is not None
+        assert v.designated_position is not None
+        assert not GEO.is_in_left_defense_area(*v.designated_position)
+        assert not GEO.is_in_right_defense_area(*v.designated_position)
 
     def test_kicking_ahead_resets_origin(self):
         """Two separate sub-1m dribbles (with an observable separation

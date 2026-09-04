@@ -20,6 +20,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.entities.game.game_frame import GameFrame
@@ -85,12 +86,19 @@ class ExcessiveDribblingRule(BaseRule):
                 if dist > self._max_dribble_meters and violation is None:
                     robot_is_yellow = is_friendly == my_team_is_yellow
                     next_cmd = RefereeCommand.DIRECT_FREE_BLUE if robot_is_yellow else RefereeCommand.DIRECT_FREE_YELLOW
+                    # A dribble ending near/inside a defense area is a
+                    # plausible way to get flagged here (dribbling toward
+                    # goal); project clear before use, same reasoning as
+                    # `KeeperHeldBallRule`/`DefenseAreaRule` (see
+                    # `RefereeGeometry.legal_restart_position`'s docstring).
                     violation = RuleViolation(
                         rule_name="excessive_dribbling",
                         suggested_command=RefereeCommand.STOP,
                         next_command=next_cmd,
                         status_message=f"Excessive dribbling: {dist:.2f}m > {self._max_dribble_meters:.1f}m",
-                        designated_position=(bx, by),
+                        designated_position=geometry.legal_restart_position(
+                            bx, by, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+                        ),
                         offending_teams=(robot_is_yellow,),
                     )
                     # Close out this streak so it doesn't refire every tick

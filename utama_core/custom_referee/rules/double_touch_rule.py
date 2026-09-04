@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.entities.game.game_frame import GameFrame
@@ -100,7 +101,7 @@ class DoubleTouchRule(BaseRule):
             if self._kicker is None:
                 self._kicker = toucher
             elif toucher == self._kicker:
-                violation = self._violation_for(toucher, game_frame)
+                violation = self._violation_for(toucher, game_frame, geometry)
                 self._armed = False
                 self._kicker = None
             else:
@@ -124,7 +125,7 @@ class DoubleTouchRule(BaseRule):
         self.reset()
         self._prev_command = None
 
-    def _violation_for(self, kicker: RobotKey, game_frame: GameFrame) -> RuleViolation:
+    def _violation_for(self, kicker: RobotKey, game_frame: GameFrame, geometry: RefereeGeometry) -> RuleViolation:
         kicker_is_friendly, _ = kicker
         my_team_is_yellow = game_frame.my_team_is_yellow
         if kicker_is_friendly:
@@ -132,9 +133,23 @@ class DoubleTouchRule(BaseRule):
         else:
             next_cmd = RefereeCommand.DIRECT_FREE_YELLOW if my_team_is_yellow else RefereeCommand.DIRECT_FREE_BLUE
 
+        # Without an explicit designated_position, RuleViolation silently
+        # carries over whatever restart position was last recorded --
+        # possibly stale/unrelated to this kick, or (per
+        # `RefereeGeometry.legal_restart_position`'s docstring) illegal if
+        # it happens to sit inside a defense area. Take the restart from
+        # the ball's own current position (this is where the double touch
+        # happened), projected clear.
+        ball = game_frame.ball
+        placement = (
+            geometry.legal_restart_position(ball.p.x, ball.p.y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+            if ball is not None
+            else None
+        )
         return RuleViolation(
             rule_name="double_touch",
             suggested_command=RefereeCommand.STOP,
             next_command=next_cmd,
             status_message="Double touch",
+            designated_position=placement,
         )

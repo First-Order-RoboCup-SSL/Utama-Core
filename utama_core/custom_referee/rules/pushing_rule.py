@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.custom_referee.rules.robot_contact import find_robot_pair_contacts
@@ -127,9 +128,19 @@ class PushingRule(BaseRule):
             # (only one violation can be reported per tick; first pair to
             # reach persistence wins, consistent with every other rule in
             # this package returning on first match).
-            ball_pos = self._push_start_ball_pos.get(key)
+            raw_ball_pos = self._push_start_ball_pos.get(key)
             self._push_counts.pop(key, None)
             self._push_start_ball_pos.pop(key, None)
+            # A shoving match plausibly happens right at a defense-area edge
+            # (defenders contesting); project clear before use as a restart
+            # position, same reasoning as `KeeperHeldBallRule`/
+            # `DefenseAreaRule` (see
+            # `RefereeGeometry.legal_restart_position`'s docstring).
+            ball_pos = (
+                geometry.legal_restart_position(raw_ball_pos[0], raw_ball_pos[1], OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+                if raw_ball_pos is not None
+                else None
+            )
 
             force_diff = friendly_closing - enemy_closing
             if abs(force_diff) <= self._similar_force_margin:
