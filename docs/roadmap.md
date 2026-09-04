@@ -947,3 +947,28 @@ the full investigation narrative for anything already fixed lives in git log
         remaining DIRECT_FREE backlog this resolves — the next full run
         should re-classify against this as the new baseline before assuming
         the congestion mechanism is fully closed.
+      - **Wider spot-check (2026-09-04, same session, 3 more single-match
+        `debug_match.py` reruns)**: extended the check to the most stubborn
+        cases from the earlier congestion investigation above —
+        `clear_danger_vs_clear_press_plus` (the one that survived THREE
+        separate prior fixes: kicker-sticky, brake-direction, stale-
+        intermediate-target, still stalling at the identical t=43.8s onset
+        every time), `three_slot_vs_tiki_taka_plus` (the second match that
+        also survived the kicker-sticky fix), and `clear_danger_vs_shadow_switch`
+        (the match the stale-intermediate-target fix was originally traced
+        and fixed on). All three now finish their full 65s window with
+        `stall_events: []` — `clear_danger_vs_shadow_switch` even converts to
+        a 1-0 finish with a real shot. 5/5 spot-checked DIRECT_FREE-family
+        matches are now clean, including the single most-resistant repro
+        case in this whole investigation. Reads as strong (not yet
+        exhaustive) evidence that restart-scoped priority-blocking was the
+        actual root cause underlying the whole congestion/local-minimum
+        family, not a coincidental fix for 2 cases — the earlier fixes
+        (kicker-sticky, brake-direction, stale-intermediate-target) were all
+        real, necessary bugs, but priority-blocking during the mass replan
+        was the mechanism that kept re-creating the same retreat/re-approach
+        deadlock underneath them. Still only single-match spot-checks (5 of
+        an original ~56-match backlog, chosen because they were the most
+        heavily-documented, hardest-to-fix cases, not a random sample) — a
+        full round-robin re-run remains the honest way to get a final count
+        and rule out cherry-picking.
