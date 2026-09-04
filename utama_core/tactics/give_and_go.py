@@ -47,6 +47,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
     ball_in_own_defense_area,
+    clamp_outside_enemy_defense_area,
     clamp_outside_own_defense_area,
     enemy_goal_line,
     enemy_positions,
@@ -564,9 +565,18 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 continue
             target = _relocate_target(game, robot_id, occupied)
             occupied.append(target)
+            # Both clamps, not just our own box: `_relocate_target`'s deeper
+            # candidates (see its own docstring) now reach within 0.5m of the
+            # enemy goal line, close enough to land inside the enemy defense
+            # area on some `dy` offsets — an outfield attacker loitering
+            # there is `attacker_infringement`, the same class of foul
+            # `_pass_exec` already guards its own receive-point target
+            # against (see `clamp_outside_enemy_defense_area`'s docstring).
+            target = clamp_outside_own_defense_area(game, target)
+            target = clamp_outside_enemy_defense_area(game, target)
             commands[robot_id] = go_to_point(
                 game=game,
                 motion_controller=ctx.motion_controller,
                 robot_id=robot_id,
-                target_coords=clamp_outside_own_defense_area(game, target),
+                target_coords=target,
             )

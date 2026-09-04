@@ -23,6 +23,7 @@ across individual receiver attempts, unlike `hop_ticks`).
 from __future__ import annotations
 
 import math
+from typing import Optional
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.engine.context import TickContext
@@ -49,6 +50,20 @@ class _NullMotionController(MotionController):
         super().__init__(mode="rsim")
 
     def calculate(self, game, robot_id, target_pos, target_oren):
+        return Vector2D(0.0, 0.0), 0.0
+
+
+class _RecordingMotionController(MotionController):
+    """Records the last `target_pos` it was asked to drive toward, so a test
+    can inspect the actual (post-clamp) target a tactic's `go_to_point` call
+    resolved to, rather than re-deriving the expected clamp by hand."""
+
+    def __init__(self):
+        super().__init__(mode="rsim")
+        self.last_target_pos: Optional[Vector2D] = None
+
+    def calculate(self, game, robot_id, target_pos, target_oren):
+        self.last_target_pos = target_pos
         return Vector2D(0.0, 0.0), 0.0
 
 
@@ -351,3 +366,27 @@ def test_relocate_target_reaches_the_attacking_third_when_field_is_open():
     target = _relocate_target(game, 2, avoid=[Vector2D(0.0, 0.0)])
     goal_x = float(game.field.enemy_goal_line[0][0])
     assert abs(target.x - goal_x) <= 1.5
+
+
+def test_relocate_others_clamps_deep_targets_outside_the_enemy_defense_area():
+    """`_relocate_target` alone (tested above) can now return a point up to
+    4m ahead of the ball, close enough to land inside the enemy defense area
+    on some `dy` offsets — an outfield attacker loitering there is
+    `attacker_infringement`. `_relocate_others` is the caller that actually
+    issues the `go_to_point` command, and (unlike `_pass_exec`'s equivalent
+    receive-point target) it only ever clamped against *our own* box before
+    this fix. With the ball already just outside the enemy box's front edge
+    (x=-3.5 here), the raw relocate target lands past that edge — the actual
+    target handed to the motion controller must come back out of the box.
+    """
+    game = _make_relocate_game(my_team_is_right=True, ball_x=-3.6)
+    ctx = TickContext(motion_controller=_RecordingMotionController(), match_log=None)
+    tactic = GiveAndGoTactic()
+
+    commands: dict = {}
+    tactic._relocate_others(game, ctx, (1, 2), carrier_id=1, commands=commands)
+
+    enemy_box_front_x = float(game.field.enemy_defense_area[1][0])  # -3.5
+    recorded_target = ctx.motion_controller.last_target_pos
+    assert recorded_target is not None
+    assert recorded_target.x >= enemy_box_front_x
