@@ -185,38 +185,74 @@ def _has_open_shot(game: Game, robot_id: int) -> bool:
 
 
 def _relocate_target(game: Game, robot_id: int, avoid: list[Vector2D]) -> Vector2D:
-    """A simple open point ahead of the current carrier, clear of `avoid`."""
+    """An open point ahead of the current carrier, clear of `avoid`, biased
+    toward genuine forward progress rather than merely "away from where this
+    robot already stands".
+
+    `dx` used to be hardcoded positive (`ball_x + dx`), silently assuming the
+    team always attacks toward `+x` — for `my_team_is_right=False` (attacking
+    `-x`), every candidate this produced sat *behind* the ball, toward this
+    team's own goal, not ahead of it. Found live investigating a real "these
+    strategies never shoot" bug (`high_press`/`overload_flow`/
+    `score_aware_zone_flow`, 2026-09-05, `docs/roadmap.md`): traced replay
+    showed `give_and_go.shot_lane.open=True` 132 times in one match, yet the
+    carrier's x-position never advanced past -1.10 toward a goal at -4.5 —
+    support runs were never actually offering forward options, so
+    `_best_receiver`/`score_pass_setup` had nothing genuinely advanced to
+    pick from even when a lane was open. `attack_sign` below (derived from
+    `enemy_goal_line`, the same source every shot/pass helper in this file
+    already trusts) fixes the direction; the widened `dx` range (previously
+    capped at 1.8m) fixes the separate depth problem — a support run that
+    never offers more than ~2m of advance can't consistently reach the shot
+    detector's attacking-third gate (`_SHOT_ATTACKING_THIRD_M`, 1.5m past the
+    *far* goal line — the final ~3m of a 9m-long field) over repeated short
+    hops.
+    """
     half_length = game.field.half_length
     half_width = game.field.half_width
     ball_x = game.ball.p.to_2d().x
     current = game.friendly_robots[robot_id].p
+    goal_x, _goal_y1, _goal_y2 = enemy_goal_line(game)
+    attack_sign = 1.0 if goal_x > 0 else -1.0
 
     # When the ball is in our own half, support points ahead of the ball
-    # (`ball_x + dx`) sit on the clamped defense-area edge, packing the
-    # whole trio onto the box line — a scrum that gets shoved across it in
-    # loose-ball scrambles (defense-area fouls). Hold a retreat line instead:
-    # well off the area front edge.
-    own_goal_sign = 1.0 if game.my_team_is_right else -1.0
+    # (`ball_x + attack_sign * dx`) sit on the clamped defense-area edge,
+    # packing the whole trio onto the box line — a scrum that gets shoved
+    # across it in loose-ball scrambles (defense-area fouls). Hold a retreat
+    # line instead: well off the area front edge.
+    own_goal_sign = -attack_sign
     own_half_edge = own_goal_sign * 0.0  # midfield in own-goal-sign coords
     area_front_x = float(game.field.my_defense_area[1][0])
     if (ball_x - own_half_edge) * own_goal_sign > 0.0:
         # Ball is in our own half: cap candidates short of the box.
         forward_cap = area_front_x - own_goal_sign * _RELOCATE_BOX_RETREAT
     else:
-        forward_cap = half_length - 0.5
+        forward_cap = attack_sign * (half_length - 0.5)
+    # `forward_cap` clamps toward whichever end is nearer the attacking goal
+    # — `min`/`max` needs to match `attack_sign` so this clamp still limits
+    # *overshoot past the cap*, not silently no-op or clamp the wrong way.
+    clamp = min if attack_sign > 0 else max
 
     candidates = [
-        Vector2D(min(ball_x + dx, forward_cap), max(-half_width + 0.6, min(half_width - 0.6, current.y + dy)))
-        for dx in (1.0, 1.8, 0.5)
+        Vector2D(
+            clamp(ball_x + attack_sign * dx, forward_cap), max(-half_width + 0.6, min(half_width - 0.6, current.y + dy))
+        )
+        for dx in (0.5, 1.0, 1.8, 2.8, 4.0)
         for dy in (-1.2, 1.2, -2.2, 2.2)
     ]
-    best, best_dist = None, -1.0
+    best, best_progress = None, None
     for point in candidates:
         if any(point.distance_to(other) < _RELOCATE_MIN_SEPARATION for other in avoid):
             continue
-        dist = point.distance_to(current)
-        if dist > best_dist:
-            best, best_dist = point, dist
+        # Prefer real progress toward the attacking goal first (so a deep,
+        # reachable run beats a short lateral shuffle); among similarly
+        # advanced options, prefer whichever is farther from this robot's
+        # current spot (the tactic's own existing tie-break, kept as-is —
+        # spreads support robots apart rather than clustering them).
+        progress = point.x * attack_sign
+        key = (progress, point.distance_to(current))
+        if best_progress is None or key > best_progress:
+            best, best_progress = point, key
     return best if best is not None else current
 
 

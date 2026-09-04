@@ -37,6 +37,7 @@ from utama_core.tactics.give_and_go import (
     _MAX_FIRST_TOUCH_TICKS,
     _MAX_HOP_TICKS,
     GiveAndGoTactic,
+    _relocate_target,
 )
 
 
@@ -251,3 +252,102 @@ def test_first_touch_stuck_eventually_force_shoots_instead_of_repositioning_fore
     assert mem.hop_count == 0
     assert mem.ticks_held >= _FIRST_TOUCH_FORCE_SHOT_TICKS
     assert commands[1].kick == 1
+
+
+# ---------------------------------------------------------------------------
+# _relocate_target: support-run direction and depth
+# ---------------------------------------------------------------------------
+#
+# Found live investigating a real "these strategies never shoot" bug
+# (high_press/overload_flow/score_aware_zone_flow, 2026-09-05,
+# docs/roadmap.md): `_relocate_target` generated candidates at
+# `ball_x + dx` with hardcoded positive `dx` -- correct for a team attacking
+# +x, but for `my_team_is_right=True` (this codebase's convention: the enemy
+# goal then sits at -x, see `Field.enemy_goal_line`) every candidate this
+# produced sat *behind* the ball, toward the team's own goal, not ahead of
+# it. Separately, `dx` was capped at 1.8m, too shallow to ever reach the
+# shot detector's attacking-third gate (the final ~3m of a 9m-long field)
+# over repeated hops. Both are fixed together: `attack_sign` is read
+# directly off `enemy_goal_line`'s actual x-sign (not off `my_team_is_right`
+# by hand), and the candidate `dx` range now reaches deep into the
+# attacking third when the field ahead is open.
+
+
+def _make_relocate_game(my_team_is_right: bool, ball_x: float = 0.0) -> Game:
+    friendly = {
+        1: Robot(
+            id=1,
+            is_friendly=True,
+            has_ball=True,
+            p=Vector2D(ball_x, 0.0),
+            v=Vector2D(0, 0),
+            a=Vector2D(0, 0),
+            orientation=0.0,
+        ),
+        2: Robot(
+            id=2,
+            is_friendly=True,
+            has_ball=False,
+            p=Vector2D(ball_x - 0.5, -1.0),
+            v=Vector2D(0, 0),
+            a=Vector2D(0, 0),
+            orientation=0.0,
+        ),
+    }
+    enemy = {
+        3: Robot(
+            id=3,
+            is_friendly=False,
+            has_ball=False,
+            p=Vector2D(3.5, 2.5),
+            v=Vector2D(0, 0),
+            a=Vector2D(0, 0),
+            orientation=0.0,
+        ),
+    }
+    ball = Ball(Vector3D(ball_x, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0))
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=my_team_is_right,
+        friendly_robots=friendly,
+        enemy_robots=enemy,
+        ball=ball,
+    )
+    field = Field(
+        my_team_is_right=my_team_is_right,
+        field_dims=STANDARD_FIELD_DIMS,
+        field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+    )
+    return Game(past=GameHistory(max_history=20), current=frame, field=field)
+
+
+def test_relocate_target_advances_toward_enemy_goal_when_attacking_negative_x():
+    """my_team_is_right=True -> enemy goal at x=-4.5 (Field.enemy_goal_line).
+    The relocation target for the uncommitted teammate must move toward
+    -x, not +x -- before the fix, the hardcoded `ball_x + dx` (dx always
+    positive) sent every candidate the wrong way for this side."""
+    game = _make_relocate_game(my_team_is_right=True, ball_x=0.0)
+    target = _relocate_target(game, 2, avoid=[Vector2D(0.0, 0.0)])
+    assert target.x < 0.0
+
+
+def test_relocate_target_advances_toward_enemy_goal_when_attacking_positive_x():
+    """Mirror of the above: my_team_is_right=False -> enemy goal at x=+4.5,
+    target must move toward +x."""
+    game = _make_relocate_game(my_team_is_right=False, ball_x=0.0)
+    target = _relocate_target(game, 2, avoid=[Vector2D(0.0, 0.0)])
+    assert target.x > 0.0
+
+
+def test_relocate_target_reaches_the_attacking_third_when_field_is_open():
+    """With no congestion forcing a short/retreated candidate, the chosen
+    support point should land in the attacking third (the shot detector's
+    own threshold: within `_SHOT_ATTACKING_THIRD_M` of the far goal line),
+    not merely somewhere closer to it than before. Previously capped at
+    ball_x +/- 1.8m, which for a centre-field ball never reaches within
+    2.7m of a goal 4.5m out."""
+    game = _make_relocate_game(my_team_is_right=True, ball_x=0.0)
+    target = _relocate_target(game, 2, avoid=[Vector2D(0.0, 0.0)])
+    goal_x = float(game.field.enemy_goal_line[0][0])
+    assert abs(target.x - goal_x) <= 1.5
