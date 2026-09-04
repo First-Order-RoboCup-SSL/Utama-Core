@@ -418,6 +418,75 @@ the full investigation narrative for anything already fixed lives in git log
    port from (metric 5 there is entry-based, not shot-based); would need
    its own design pass rather than a direct port.
 
+   **Scenario bench design + v1 schema slice (2026-09-04).** Before touching
+   `replays/` again: this session's own "clean" post-fix replay runs hadn't
+   been confirmed clean, and a 925-file "complete" run turned out to be
+   entirely pre-fix data stuck at kickoff — harvesting from `replays/`
+   without a trust gate would have poisoned the bank on day one. Design
+   settled instead of assumed:
+   - **Source, not byproduct.** Scenarios come from three tagged places, not
+     an arbitrary `replays/` scrape: calibration/ladder matches at the
+     current evaluator version (main source, pool-vs-pool not just champion
+     games), lost plays from the last ladder run (a separately tagged
+     *weakness* subset, not the whole bank), and hand-authored canonical
+     anchors that never move. Match-level gate: tagged run, current
+     evaluator version, `stall_events == 0`. Pre-fix replays are discarded,
+     not filtered.
+   - **A restart is the transition into live play**, not PREPARE (low
+     information, positioning test with a known answer):
+     `PREPARE_KICKOFF_*/PREPARE_PENALTY_* → NORMAL_START`,
+     `STOP → DIRECT_FREE_*`, `STOP → FORCE_START`. `BALL_PLACEMENT_*` is its
+     own small family. Open play is a second, `MatchStats`-event-triggered
+     harvest mode (possession change, attacking-third entry, loose ball,
+     numerical-advantage detector), scored with a wider noise floor and
+     lower composite weight since it can't get the restart family's free
+     re-partition. Every restart yields two scenarios (candidate kicking,
+     candidate defending) — restarts are asymmetric.
+   - **Mem-loss fix is a lead-in, not serialized tactic state** — the bank
+     must stay policy-agnostic (a candidate that restructures its tactic
+     layer can't consume the champion's serialized `mem`). Event-triggered
+     scenarios start 1-2s before the anchor tick so both policies get a
+     runway to reconstruct roles; this doubles as a robustness test (can't
+     recover roles in a second = brittle, same as a vision dropout).
+   - **Validity is static + dynamic.** Static: in-bounds, no overlap,
+     physically plausible speeds, both teams present — implemented now (see
+     below). Dynamic (deferred, needs real match data): play forward
+     champion-vs-champion and vs pool across seeds; classify dead (no
+     discriminative power, drop) / determined (near-zero information, drop
+     or keep one anchor) / noisy (keep only if the family's noise floor
+     absorbs it) / informative (keep). Plus a human spot-check, five per
+     family, at bank creation.
+   - **Bank v1 target shape** (not yet built): ~20 hand-authored anchors +
+     ~100 restart-triggered (both perspectives, frequency-weighted) + ~30
+     lost-play weakness + ~30 event-triggered open-play (lower-trust) ≈ 200
+     total. Immutable per bank version — adding scenarios makes a new bank
+     ID and forces a champion re-baseline. Lifecycle per scenario:
+     candidate → validated → active → retired, only `active` scores.
+     Provenance (source run, evaluator version, anchor tick, trigger,
+     family) lets a contaminated batch be retired by query. Gating plan:
+     warn-only for two weeks against real candidates before restart
+     families gate merges; open-play families stay advisory until their
+     ladder correlation is measured. Rationale: a wrongly-excluded scenario
+     costs a little coverage; a wrongly-included one teaches an optimizer to
+     game a bug — bank should err small and clean.
+
+   **Built this session (schema + hand-authored anchors only, no harvester
+   yet — chosen as the first slice because it has no replay/tournament
+   dependency):** `utama_core/replay/bench_scenario.py`
+   (`BenchScenario`/`ScenarioProvenance`/`ScenarioTrigger`/`ScenarioFamily`/
+   `ScenarioLifecycle` + `static_screen()`, wrapping `scenario.Scenario`
+   rather than replacing it, so hand-authored and future-harvested
+   scenarios share one downstream `apply_scenario` path) and
+   `utama_core/replay/hand_authored_scenarios.py` (4 anchors so far —
+   `kickoff_center_v1`, `direct_free_defending_near_box_v1`,
+   `direct_free_attacking_near_box_v1`, `open_play_3v2_counter_v1` — all
+   pass `static_screen` and one is round-trip-verified through a live
+   headless `apply_scenario` call). 11 new tests
+   (`test_bench_scenario.py`, `test_hand_authored_scenarios.py`). Not built:
+   the restart harvester (blocks on a fresh calibration tournament run),
+   the dynamic screen (blocks on real match data to play scenarios forward
+   against), and the scorer/report tool itself.
+
 15. **`trajsample` liveness floor: 106/231 matches still stall (57 in a
     DIRECT_FREE restart, 42 live-play ball holds), and the BangBang1D fix
     cannot land until the planner handles blocked starts.** Findings from
