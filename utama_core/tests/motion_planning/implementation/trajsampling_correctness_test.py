@@ -520,3 +520,76 @@ def test_own_robot_obstacle_keeps_priority_for_robot_resting_on_its_completed_pl
         (ex, ey), _ = trajectory.state_at(min(ts, trajectory.duration))
         obstacle = _own_obstacle_after(planner, (ex + 0.03, ey), ts)  # within tracking tolerance
         assert getattr(obstacle, "owner_id", None) == 4, f"lost priority at ts={ts}"
+
+
+def test_intermediate_targets_drops_a_stale_backward_pointing_last_target():
+    """Regression for the DIRECT_FREE_BLUE congestion stall live-traced on
+    `clear_danger_vs_shadow_switch` (roadmap item 15). `_intermediate_targets`
+    always retried the previous tick's winning detour target FIRST, and
+    `plan()` commits to the first collision-free candidate it finds without
+    ever comparing it against the freshly-sorted, toward-target candidates
+    later in the list. A `last` target sitting in open space behind the
+    robot stays collision-free indefinitely, so once picked (for whatever
+    now-irrelevant earlier situation) it kept winning forever: every replan
+    committed a short first-leg burst backward, then a second leg that had
+    to kill that backward velocity before making any real progress -- net
+    near-zero displacement, repeating for the rest of the restart, with
+    `has_collision=False` on every single call (traced: `last` 166 degrees
+    off the goal direction). Fixed by dropping `last` outright, not just
+    de-prioritizing it, once it's more than 90 degrees off the current
+    final-target direction.
+    """
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    p0 = (0.4, -1.6)
+    final_target = (4.37, -0.57)  # far ahead in +x, matching the traced case
+
+    # A stale winner from some earlier situation, now almost directly
+    # behind the robot relative to the current final target (~166 degrees
+    # off-axis in the traced case -- use the same shape here).
+    planner._last_intermediate_target[0] = (-2.09, -1.55)
+    stale_target = planner._last_intermediate_target[0]
+
+    candidates = planner._intermediate_targets(robot_id=0, p0=p0, final_target=final_target)
+
+    from utama_core.motion_planning.src.trajsampling.config import (
+        trajsamplingconfig as config,
+    )
+
+    # The stale target must be dropped outright, not merely reordered --
+    # config.N_INTERMEDIATE_TARGETS fresh candidates only, none of them the
+    # excluded stale point.
+    assert stale_target not in candidates
+    assert len(candidates) == config.N_INTERMEDIATE_TARGETS
+
+    # The surviving (fresh) candidates are still sorted toward the goal --
+    # the first one's angular distance must be no worse than the last's.
+    fx, fy = final_target[0] - p0[0], final_target[1] - p0[1]
+    final_angle = math.atan2(fy, fx)
+
+    def _angular_distance(t):
+        cand_angle = math.atan2(t[1] - p0[1], t[0] - p0[0])
+        diff = abs(cand_angle - final_angle)
+        return min(diff, 2 * math.pi - diff)
+
+    distances = [_angular_distance(c) for c in candidates]
+    assert distances == sorted(distances)
+
+
+def test_intermediate_targets_keeps_a_last_target_that_is_still_a_reasonable_detour():
+    """Companion to the stale-target regression above: a cached `last`
+    target that's merely angled (a genuine sidestep, not a reversal) must
+    still be tried first -- this is the actual stabilizing behaviour
+    `_intermediate_targets` exists for, and the stale-target fix must not
+    remove it for ordinary detours.
+    """
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    p0 = (0.0, 0.0)
+    final_target = (4.0, 0.0)
+
+    # 45 degrees off-axis -- a plausible sidestep around an obstacle, well
+    # under the 90-degree staleness threshold.
+    planner._last_intermediate_target[0] = (1.0, 1.0)
+
+    candidates = planner._intermediate_targets(robot_id=0, p0=p0, final_target=final_target)
+
+    assert candidates[0] == (1.0, 1.0)

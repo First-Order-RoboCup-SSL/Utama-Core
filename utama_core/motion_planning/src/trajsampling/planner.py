@@ -305,6 +305,21 @@ _TRAJECTORY_POSITION_TOLERANCE = 0.08
 # codebase (relocate/formation targets jump by many cm to whole metres).
 _TRAJECTORY_TARGET_TOLERANCE = 0.01
 
+# `_intermediate_targets` retries the previous tick's winning detour target
+# before anything else, so a moving robot doesn't flip direction every tick
+# (see that method's docstring). But nothing previously re-validated that
+# cached target's DIRECTION once the situation moved on -- only whether it
+# stayed collision-free, which a point sitting in open space behind the
+# robot can do indefinitely. 90 degrees means "still broadly a detour toward
+# the goal, just angled" survives (a real, useful sidestep), while anything
+# that would require net backward travel (>90 degrees off-axis, per the
+# traced case's 166 degrees) is treated as stale and dropped outright, not
+# merely down-ranked, so it can't keep winning the early-out ahead of the
+# freshly-sorted, actually-toward-target candidates that follow it in the
+# list -- see `_intermediate_targets`'s docstring for the live trace this
+# fixes (`clear_danger_vs_shadow_switch`'s DIRECT_FREE_BLUE stall).
+_STALE_INTERMEDIATE_TARGET_ANGLE_RAD = math.pi / 2
+
 
 class TrajectorySamplingPlanner:
     def __init__(self, v_max: float, a_max: float):
@@ -701,8 +716,11 @@ class TrajectorySamplingPlanner:
         self, robot_id: int, p0: Tuple[float, float], final_target: Tuple[float, float]
     ) -> List[Tuple[float, float]]:
         """The previous tick's winning intermediate target, tried first (and
-        alone, if it's still collision-free -- see `plan()`'s early-out),
-        followed by fresh random candidates sorted toward the final target.
+        alone, if it's still collision-free -- see `plan()`'s early-out) --
+        UNLESS it now points more than `_STALE_INTERMEDIATE_TARGET_ANGLE_RAD`
+        away from the current final-target direction, in which case it's
+        dropped rather than retried at all (see below) -- followed by fresh
+        random candidates sorted toward the final target.
 
         Randomizing which target wins every single tick -- even among
         "acceptable" candidates -- was tried first and caused a genuine
@@ -721,17 +739,30 @@ class TrajectorySamplingPlanner:
         previous target" note describes (section 2.2) -- appending it to a
         list that a better-angled random point could still out-sort was not
         enough on its own.
+
+        But "no longer valid" previously meant only "no longer collision-
+        free" -- never re-checked against direction. Live-traced on
+        `clear_danger_vs_shadow_switch`'s DIRECT_FREE_BLUE stall (roadmap
+        item 15): the direct path was genuinely, repeatedly blocked by a
+        real obstacle, so `plan()` fell through to this method every tick;
+        `last` (once set to some point behind the robot, 166 degrees off the
+        goal direction in the traced case, chosen for some now-irrelevant
+        earlier situation) stayed collision-free indefinitely in open space
+        behind the robot and so kept winning immediately via `plan()`'s
+        early-out, without ever being compared to the freshly-sorted,
+        actually-toward-target candidates later in the list. Each cycle
+        committed a short first-leg burst toward `last` (backward), then
+        switched to a second leg that had to kill that backward velocity
+        before making any real progress -- net near-zero displacement,
+        repeating every ~1s for the rest of the restart, all with
+        `has_collision=False` on every single call. Excluding a stale `last`
+        outright (not just de-prioritizing it) once it's this far off-axis
+        means the freshly-sorted candidates -- which are already sorted
+        toward the target -- get a real chance to win instead of never being
+        reached at all.
         """
         last = self._last_intermediate_target.get(robot_id)
-        fresh: List[Tuple[float, float]] = []
-        r = config.INTERMEDIATE_TARGET_RADIUS
-        for _ in range(config.N_INTERMEDIATE_TARGETS):
-            angle = self._rng.uniform(0, 2 * math.pi)
-            fresh.append((p0[0] + r * math.cos(angle), p0[1] + r * math.sin(angle)))
 
-        # Sort by angle between (p0 -> final_target) and (p0 -> candidate),
-        # smallest first -- paper section 2.2: "This favors paths pointing
-        # towards the target."
         fx, fy = final_target[0] - p0[0], final_target[1] - p0[1]
         final_angle = math.atan2(fy, fx)
 
@@ -743,6 +774,18 @@ class TrajectorySamplingPlanner:
             diff = abs(cand_angle - final_angle)
             return min(diff, 2 * math.pi - diff)
 
+        if last is not None and angular_distance(last) > _STALE_INTERMEDIATE_TARGET_ANGLE_RAD:
+            last = None
+
+        fresh: List[Tuple[float, float]] = []
+        r = config.INTERMEDIATE_TARGET_RADIUS
+        for _ in range(config.N_INTERMEDIATE_TARGETS):
+            angle = self._rng.uniform(0, 2 * math.pi)
+            fresh.append((p0[0] + r * math.cos(angle), p0[1] + r * math.sin(angle)))
+
+        # Sort by angle between (p0 -> final_target) and (p0 -> candidate),
+        # smallest first -- paper section 2.2: "This favors paths pointing
+        # towards the target."
         fresh.sort(key=angular_distance)
         return ([last] if last is not None else []) + fresh
 
