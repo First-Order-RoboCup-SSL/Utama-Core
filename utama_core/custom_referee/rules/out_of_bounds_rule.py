@@ -17,6 +17,11 @@ _ACTIVE_PLAY_COMMANDS = {
 }
 
 _INFIELD_OFFSET = 0.25  # metres inside the boundary for a playable free-kick placement
+# A corner exit is close to two boundary lines at once, not one -- the single-edge
+# offset above leaves only _INFIELD_OFFSET of clearance on EACH line simultaneously
+# (as little as 0.08m observed live, see _nearest_infield_point's docstring), which
+# is robot-body scale. Deeper offset used only when both axes are being clamped.
+_CORNER_INFIELD_OFFSET = 0.5
 
 
 class OutOfBoundsRule(BaseRule):
@@ -119,19 +124,66 @@ class OutOfBoundsRule(BaseRule):
         clamps the field boundary but never the defense-area one. Run the
         boundary-clamped point through the same shared projection every
         other rule already uses.
+
+        The two per-axis clamps below are independent by construction (one
+        only ever moves x, the other only ever moves y), which is fine when
+        the ball exits near the middle of one edge -- but a ball exiting
+        near a CORNER is close to both edges simultaneously, and each axis
+        only insets itself `_INFIELD_OFFSET` from its OWN edge, ignorant of
+        how close the other axis already sits to its own edge. The result
+        can be as little as `_INFIELD_OFFSET` from both boundary lines at
+        once (robot-body scale), not `_INFIELD_OFFSET` from the nearer one
+        with headroom on the other. Found live, 2026-09-04 (four real
+        tournament matches, e.g. `counter_flow_vs_counter_press`:
+        58 out-of-bounds events in one 65s match, every restart placed
+        0.08-0.41m from BOTH the goal line and the sideline at once): an
+        ordinary post-restart drift (0.2-0.3 m/s, far below a shot) was
+        enough to send the ball back out one of the two nearby lines,
+        re-triggering the same restart in roughly the same corner,
+        repeating for most or all of the match. Fixed the same way the
+        defense-area gap above was: when a corner is detected (both axes
+        clamped), inset BOTH axes by `_CORNER_INFIELD_OFFSET` (deeper than
+        the single-edge `_INFIELD_OFFSET`, since a corner restart needs
+        clearance on two sides at once, not one) instead of leaving
+        whichever axis wasn't the "nearer" one at its raw clamped value.
         """
+        near_x_boundary = abs(bx) > geometry.half_length
+        near_y_boundary = abs(by) > geometry.half_width
+        # Corner detection must look at the RAW exit position on the axis
+        # that wasn't clamped too, not just "was this axis itself out of
+        # bounds" -- a ball can exit purely over the sideline (by > half_width)
+        # while its x is still technically in-field but already close to the
+        # goal line (e.g. bx=4.31 with half_length=4.5): near_x_boundary is
+        # False there, yet the eventual x-clamp-free placement still sits
+        # right next to that edge. Found live, 2026-09-04: this exact shape
+        # was most of the traced counter_flow_vs_counter_press corner-loop
+        # exits (sideline-only exits with x already within a few tenths of
+        # the goal line). So "is this a corner" checks proximity to BOTH
+        # edges using the raw (bx, by), regardless of which one triggered
+        # the out-of-bounds call.
+        near_corner = (geometry.half_length - abs(bx) < _CORNER_INFIELD_OFFSET) and (
+            geometry.half_width - abs(by) < _CORNER_INFIELD_OFFSET
+        )
+        # A corner exit is close to both edges at once; give both axes the
+        # deeper corner offset so the restart isn't left hugging one line
+        # while only the other gets inset. A single-edge exit keeps the
+        # shallower offset, unchanged from before.
+        offset = _CORNER_INFIELD_OFFSET if near_corner else _INFIELD_OFFSET
+
         # Clamp to field bounds and shift inward.
         px = max(-geometry.half_length, min(geometry.half_length, bx))
         py = max(-geometry.half_width, min(geometry.half_width, by))
 
-        # If clamped on x boundary, offset inward along x.
-        if abs(bx) > geometry.half_length:
+        # If clamped on x boundary (or a corner pushed the offset deeper than
+        # the raw in-field x already sat from the goal line), offset inward
+        # along x.
+        if near_x_boundary or (near_corner and geometry.half_length - abs(bx) < offset):
             sign = 1.0 if bx > 0 else -1.0
-            px = sign * (geometry.half_length - _INFIELD_OFFSET)
+            px = sign * (geometry.half_length - offset)
 
-        # If clamped on y boundary, offset inward along y.
-        if abs(by) > geometry.half_width:
+        # Mirror for y.
+        if near_y_boundary or (near_corner and geometry.half_width - abs(by) < offset):
             sign = 1.0 if by > 0 else -1.0
-            py = sign * (geometry.half_width - _INFIELD_OFFSET)
+            py = sign * (geometry.half_width - offset)
 
         return geometry.legal_restart_position(px, py, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)

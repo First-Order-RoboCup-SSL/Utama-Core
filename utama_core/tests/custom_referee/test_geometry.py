@@ -27,7 +27,10 @@ import pytest
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.custom_referee.geometry import RefereeGeometry
-from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
+from utama_core.custom_referee.rules.out_of_bounds_rule import (
+    _CORNER_INFIELD_OFFSET,
+    OutOfBoundsRule,
+)
 
 GEO = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
 
@@ -106,3 +109,78 @@ class TestOutOfBoundsPlacementIsAlwaysLegal:
             px, py = OutOfBoundsRule._nearest_infield_point(x, y, GEO)
             assert GEO.is_in_field(px, py)
             assert not _in_either_defense_area(px, py)
+
+
+# The corner double-boundary deadlock: an exit near a corner (close to BOTH
+# the goal line and the sideline at once) used to get only _INFIELD_OFFSET
+# (0.25m) of clearance from EACH edge independently -- as little as 0.08m
+# observed live -- letting an ordinary post-restart drift send the ball back
+# out one of the two nearby lines and re-trigger the same restart, looping in
+# the corner for most or all of a match (found live 2026-09-04 across 4 real
+# tournament matches, e.g. counter_flow_vs_counter_press: 58 out-of-bounds
+# events in one 65s match). See _nearest_infield_point's own docstring for
+# the full mechanism and the fix.
+_CORNER_MARGIN_XS = [x for x in _XS if GEO.half_length - abs(x) < 1.0]  # within 1m of the goal line, either side
+_CORNER_MARGIN_YS_OOB = [y for y in _YS if abs(y) > GEO.half_width]  # any sideline-out y
+
+
+class TestOutOfBoundsCornerPlacementHasRealClearance:
+    """A corner-region out-of-bounds placement must sit at least
+    `_CORNER_INFIELD_OFFSET` from BOTH the goal line and the sideline at
+    once, not just individually legal per-axis -- the property the original
+    corner-deadlock bug violated."""
+
+    @pytest.mark.parametrize("x,y", list(itertools.product(_CORNER_MARGIN_XS, _CORNER_MARGIN_YS_OOB)))
+    def test_corner_exit_gets_real_clearance_from_both_edges(self, x: float, y: float) -> None:
+        px, py = OutOfBoundsRule._nearest_infield_point(x, y, GEO)
+        dist_goal_line = GEO.half_length - abs(px)
+        dist_sideline = GEO.half_width - abs(py)
+        # Both edges must clear the deeper corner offset whenever the RAW
+        # exit was within it of both edges -- mirrors _nearest_infield_point's
+        # own near_corner check, so this fails loudly if that detection or
+        # the offset it applies regresses.
+        raw_near_goal_line = GEO.half_length - abs(x) < _CORNER_INFIELD_OFFSET
+        raw_near_sideline = GEO.half_width - abs(y) < _CORNER_INFIELD_OFFSET
+        if raw_near_goal_line and raw_near_sideline:
+            assert (
+                dist_goal_line >= _CORNER_INFIELD_OFFSET - 1e-9
+            ), f"input=({x},{y}) -> placement=({px},{py}) only {dist_goal_line:.3f}m from goal line"
+            assert (
+                dist_sideline >= _CORNER_INFIELD_OFFSET - 1e-9
+            ), f"input=({x},{y}) -> placement=({px},{py}) only {dist_sideline:.3f}m from sideline"
+
+
+class TestOutOfBoundsCornerPlacementRealTraces:
+    """Exact ball positions traced live from the fresh tournament run that
+    exposed this bug (`replays/tournament_20260904_221937/`, current HEAD).
+    Each of these previously placed a restart 0.08-0.30m from both nearby
+    edges at once; every one must now clear `_CORNER_INFIELD_OFFSET` on
+    both axes."""
+
+    # (source match, exit x, exit y)
+    _TRACED_EXITS = [
+        ("counter_flow_vs_counter_press", 4.501422619095742, 2.9200460783266107),
+        ("counter_flow_vs_counter_press", 4.308722938798151, 3.005813148990557),
+        ("counter_flow_vs_counter_press", 4.362237866288889, 3.005589533158603),
+        ("counter_flow_vs_counter_press", 4.507241984858946, 2.69573238652152),
+        ("counter_flow_vs_counter_press", 4.501868255855371, 2.835103084601348),
+        ("counter_flow_vs_counter_press", 4.2529424410160885, 3.000305091393659),
+        ("overload_press_vs_tiki_taka_plus", -4.524, -2.590),
+        ("overload_press_vs_tiki_taka_plus", -4.505, -2.735),
+        ("clear_danger_vs_counter_press", 4.502, 2.966),
+        ("clear_danger_vs_counter_press", 4.251, 3.007),
+    ]
+
+    @pytest.mark.parametrize("source,x,y", _TRACED_EXITS)
+    def test_traced_corner_exit_now_has_real_clearance(self, source: str, x: float, y: float) -> None:
+        px, py = OutOfBoundsRule._nearest_infield_point(x, y, GEO)
+        dist_goal_line = GEO.half_length - abs(px)
+        dist_sideline = GEO.half_width - abs(py)
+        assert (
+            dist_goal_line >= _CORNER_INFIELD_OFFSET - 1e-9
+        ), f"{source}: exit=({x},{y}) -> placement=({px},{py}) only {dist_goal_line:.3f}m from goal line"
+        assert (
+            dist_sideline >= _CORNER_INFIELD_OFFSET - 1e-9
+        ), f"{source}: exit=({x},{y}) -> placement=({px},{py}) only {dist_sideline:.3f}m from sideline"
+        assert GEO.is_in_field(px, py)
+        assert not _in_either_defense_area(px, py)
