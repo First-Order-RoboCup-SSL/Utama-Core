@@ -7,7 +7,7 @@ Run:
 Replaces the pattern of hand-writing a fresh `StrategyRunner(...)` block per
 bug (`trace_relay_stall.py`, `trace_finish_detail.py`, `check_keeper.py`,
 etc. from the 2026-08-23 `counter_press` investigation were all this same
-~25 lines of setup, copy-pasted and tweaked). Reuses `tournament.py`'s own
+~25 lines of setup, copy-pasted and tweaked). Reuses `smoke_tournament.py`'s own
 match-setup constants/helpers (`N_OUTFIELD`, `OUTFIELD_ROBOT_IDS`,
 `TICKS_PER_SECOND`) rather than redefining them.
 
@@ -30,7 +30,12 @@ from __future__ import annotations
 
 import argparse
 
-from tournament import _CONFIG_NAMES, N_OUTFIELD, OUTFIELD_ROBOT_IDS, TICKS_PER_SECOND
+from smoke_tournament import (
+    _CONFIG_NAMES,
+    N_OUTFIELD,
+    OUTFIELD_ROBOT_IDS,
+    TICKS_PER_SECOND,
+)
 from utama_core.custom_referee import CustomReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_log import load_jsonl
@@ -60,7 +65,7 @@ def main() -> None:
         default=None,
         help=(
             "If set, also accumulate and write the same possession/shots/ball-travel "
-            "summary tournament.py records (utama_core.engine.match_stats.MatchStats) to "
+            "summary smoke_tournament.py records (utama_core.engine.match_stats.MatchStats) to "
             "this path. Off by default since most debugging sessions only care about the "
             "match_log/trace output, not aggregate stats."
         ),

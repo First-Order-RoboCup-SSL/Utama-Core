@@ -1,7 +1,10 @@
-"""tournament.py — Round-robin every `kernel_strategy.py` config against every other.
+"""smoke_tournament.py (formerly tournament.py) — Round-robin every
+`kernel_strategy.py` config against every other, at smoke-test speed
+(`MATCH_DURATION_SECONDS` below — short matches, not full-length; see
+`full_match_tournament.py` for the full-length/competitive-tier counterpart).
 
 Run:
-    pixi run python tournament.py
+    pixi run python smoke_tournament.py
 
 What this does
 --------------

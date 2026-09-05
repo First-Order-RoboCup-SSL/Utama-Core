@@ -48,7 +48,7 @@ import math
 from pathlib import Path
 from typing import Optional
 
-from tournament import N_OUTFIELD, OUTFIELD_ROBOT_IDS, TICKS_PER_SECOND
+from smoke_tournament import N_OUTFIELD, OUTFIELD_ROBOT_IDS, TICKS_PER_SECOND
 from utama_core.custom_referee import CustomReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_log import load_jsonl

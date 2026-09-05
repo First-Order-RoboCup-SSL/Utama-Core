@@ -2,7 +2,7 @@
 
 Durable context for building/debugging anything under `utama_core/engine/`,
 `utama_core/tactics/`, `utama_core/skills/`, `utama_core/strategy/`, or
-`tournament.py`/`docs/strategies.md` — the strategy-layer half of the repo. See the root
+`smoke_tournament.py`/`docs/strategies.md` — the strategy-layer half of the repo. See the root
 `AGENTS.md` for repo-wide facts (what the repo is, testing commands, minimalism
 discipline). That file links here; this file assumes you've read it first.
 
@@ -129,7 +129,7 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
     `go_to_ball()` (`utama_core/skills/src/go_to_ball.py`) and `GiveAndGoTactic.tick()`
     (`utama_core/tactics/give_and_go.py`) for the pattern already in place.
   - Enable per-match by passing `match_log_path=...` to `StrategyRunner`/`AbstractStrategy`,
-    or via `tournament.py run_match(..., run_dir=...)` which wires it automatically.
+    or via `smoke_tournament.py run_match(..., run_dir=...)` which wires it automatically.
   - Read back with `utama_core.engine.match_log.load_jsonl(path)` — returns a list of
     `IntentionEvent`/`TraceEvent` in tick order; filter by `isinstance`.
 - **`render_window()`** (`utama_core/replay/render_window.py`) — renders a PNG of robot/ball
@@ -149,7 +149,7 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
   strategies (e.g. `default`, `low_block`) are not meant to be competitive; don't spend
   effort making them "win." Its own "Updating this file" section explains when to add/edit
   a row.
-- **`tournament.py`** — round-robin match runner, `--max-workers N` for concurrency;
+- **`smoke_tournament.py`** — round-robin match runner, `--max-workers N` for concurrency;
   `run_match(config_a_name, config_b_name, run_dir=None)` is directly importable for a
   one-off match with full observability recorded, not just the CLI's exclusion-filtered
   round-robin (e.g. `default` is excluded from the CLI sweep but reachable via `run_match`
@@ -170,7 +170,7 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
     BT-path strategy), this falls back to "ball frozen during live play" alone.
   - Each event records its onset `sim_time`/`tick`/referee command and keeps updating one
     `duration_s` for as long as the same stall persists, rather than one event per tick.
-  - `tournament.py` prints a "STALLS" section per run (match, kind, onset time, referee
+  - `smoke_tournament.py` prints a "STALLS" section per run (match, kind, onset time, referee
     command, committed tactic ids) and writes the same into `summary.json`; `--strict`
     exits non-zero if any match in the run stalled. A heuristic backstop (possession pinned
     100%/0% and `ball_travel_m < 1.0`) flags anything the watchdog itself might miss.
@@ -179,7 +179,7 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
   +free-kick / STOP-then-force-start) at seeded-random sim times during otherwise-normal
   live play, to exercise `GameStateMachine`'s auto-advance paths far more often than
   natural fouls/goals alone would. Full description, injection kinds, and legality
-  guarantees: `docs/custom_referee.md`'s "Restart fuzzing" section. `tournament.py` exposes
+  guarantees: `docs/custom_referee.md`'s "Restart fuzzing" section. `smoke_tournament.py` exposes
   it via `--fuzz-restarts SEED`, which builds the referee with
   `RestartFuzzingReferee.from_profile_name` instead of `CustomReferee.from_profile_name`
   for every match in the run; `--fuzz-interval LO HI` sets the sim-second gap between

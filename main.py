@@ -1,3 +1,13 @@
+"""main.py — Great Exhibition Road Festival demo: solo GiveAndGoTactic on
+robot 1 (robot 0 is the pinned goalkeeper) against no opponent, over grsim,
+with the live web dashboard/referee-feedback panel attached.
+
+Run:
+    pixi run python main.py
+    # grSim must already be running (external process); open
+    # http://localhost:8080 for the dashboard/referee panel
+"""
+
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile

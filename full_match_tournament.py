@@ -91,7 +91,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-import tournament
+import smoke_tournament as tournament
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile

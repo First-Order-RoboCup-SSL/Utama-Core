@@ -30,7 +30,7 @@ and is stale — all active strategy work happens here, on top of the tactic-ker
   sits on top of and mostly doesn't need to change to write a new strategy.
 
 **Before touching `utama_core/engine/`, `utama_core/tactics/`, `utama_core/strategy/`,
-`utama_core/skills/`, or `tournament.py`/`docs/strategies.md`, read
+`utama_core/skills/`, or `smoke_tournament.py`/`docs/strategies.md`, read
 [`docs/STRATEGY_DEVELOPMENT.md`](docs/STRATEGY_DEVELOPMENT.md)** — the tactic-kernel model,
 referee-restart handling, lessons from past tactic bugs, and the observability tooling
 (`MatchLog.trace()`, `render_window()`, the strategy catalog) all live there, scoped to
