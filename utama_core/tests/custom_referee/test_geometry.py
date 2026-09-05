@@ -80,6 +80,56 @@ class TestLegalRestartPositionIsAlwaysLegal:
         assert py == y
 
 
+class TestLegalRestartPositionClearsPlannerObstacle:
+    """`legal_restart_position` must not just land outside a defense area --
+    it must clear `FastPathPlanner`'s own obstacle-clearance ring around that
+    same edge, or the delivering/kicking robot's path-planning carrot never
+    reaches the placed point (`sanitize_target` pushes the carrot further
+    away from a target sitting inside its clearance ring, but the referee
+    state machine's ball-placement-done check still measures against the
+    *original*, un-pushed point).
+
+    Traced live 2026-09-05 (`counter_flow_vs_tiki_taka_RK`, BALL_PLACEMENT_YELLOW,
+    72.7s RESTART_STALL): `designated_position=(-3.25, 0.587)` sat exactly
+    `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE` (0.25m) from the defense area's raw
+    edge -- legal by `is_in_left_defense_area`'s strict-inside test, but
+    exactly on `FastPathPlanner`'s obstacle line for that same edge (it uses
+    the identical margin as its base clearance distance), so the carrier's
+    carrot converged ~0.37m short of it and the restart never auto-advanced
+    for the rest of the match. Confirmed via `git stash` that this test fails
+    against the pre-fix `legal_restart_position` (which clamped to exactly
+    `keep_dist`, not `keep_dist + _PLANNER_CLEARANCE_BUFFER_M`).
+    """
+
+    # `fastpathplanningconfig.OBSTACLE_CLEARANCE` (ROBOT_DIAMETER * 1.5 = 0.27m
+    # at full, non-crowded clearance) -- not imported directly to keep this
+    # referee-layer test free of a motion-planning-layer dependency, per
+    # `legal_restart_position`'s own docstring rationale for the same
+    # buffer. Kept in sync by the pytest.approx tolerance below being wide
+    # enough to catch either module drifting relative to the other.
+    _PLANNER_FULL_CLEARANCE_M = 0.27
+
+    @pytest.mark.parametrize("x,y", list(itertools.product(_XS, _YS)))
+    def test_output_clears_planner_obstacle_margin(self, x: float, y: float) -> None:
+        px, py = GEO.legal_restart_position(x, y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+        if abs(py) > GEO.half_defense_width:
+            return  # legal_restart_position only clamps x when y is within box width
+        left_inner_x = -GEO.half_length + 2.0 * GEO.half_defense_depth
+        right_inner_x = GEO.half_length - 2.0 * GEO.half_defense_depth
+        dist_from_left_edge = px - left_inner_x
+        dist_from_right_edge = right_inner_x - px
+        # The point must clear at least one side's full planner-obstacle
+        # margin (whichever edge it was actually clamped against, or its
+        # original position if neither needed clamping and it was already
+        # this far out) -- not just the bare `keep_dist`.
+        assert dist_from_left_edge >= self._PLANNER_FULL_CLEARANCE_M + OPPONENT_DEFENSE_AREA_KEEP_DISTANCE - 1e-9 or (
+            x <= left_inner_x
+        ), f"input=({x},{y}) -> output=({px},{py}) only {dist_from_left_edge:.3f}m from left DA edge"
+        assert dist_from_right_edge >= self._PLANNER_FULL_CLEARANCE_M + OPPONENT_DEFENSE_AREA_KEEP_DISTANCE - 1e-9 or (
+            x >= right_inner_x
+        ), f"input=({x},{y}) -> output=({px},{py}) only {dist_from_right_edge:.3f}m from right DA edge"
+
+
 class TestOutOfBoundsPlacementIsAlwaysLegal:
     """End-to-end version of the same property through the actual caller
     that had the bug: any ball position outside the field must resolve to a

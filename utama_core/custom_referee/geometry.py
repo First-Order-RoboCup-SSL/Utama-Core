@@ -81,6 +81,29 @@ class RefereeGeometry:
         dy = max(0.0, abs(y) - self.half_defense_width)
         return (dx * dx + dy * dy) ** 0.5
 
+    # `legal_restart_position`'s clamp lands a point exactly `keep_dist` from
+    # the raw defense-area edge -- precisely on `FastPathPlanner`'s own
+    # obstacle-clearance line for that same edge (it uses the identical
+    # `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE` as its base margin). A target
+    # sitting exactly on an obstacle line gets pushed further away by
+    # `sanitize_target`'s own clearance ring before the delivering/kicking
+    # robot ever gets a target to converge on -- but the referee state
+    # machine's ball-placement-done / restart-legality checks still measure
+    # against the *original*, un-pushed `designated_position`, which the
+    # robot can now never actually reach. Traced live, 2026-09-05
+    # (counter_flow_vs_tiki_taka_RK, BALL_PLACEMENT_YELLOW, 72.7s RESTART_STALL):
+    # designated_position=(-3.25, 0.587) sat exactly on that obstacle line;
+    # the carrier's carrot converged ~0.37m short of it and never closed the
+    # last stretch. This buffer pushes the clamp result past the planner's
+    # own clearance ring (see `fastpathplanningconfig.OBSTACLE_CLEARANCE`,
+    # 0.27m at full clearance, shrinking to 0.8x = 0.216m in a crowded
+    # scene) so `sanitize_target` is a no-op on an already-legal point
+    # instead of displacing it further. Set just above the full (non-crowded)
+    # 0.27m clearance rather than the crowded 0.216m floor, so the margin
+    # holds regardless of how many robots happen to be nearby when this
+    # position is chosen.
+    _PLANNER_CLEARANCE_BUFFER_M = 0.28
+
     def legal_restart_position(self, x: float, y: float, keep_dist: float) -> tuple[float, float]:
         """Project (x, y) clear of BOTH defense areas (plus `keep_dist`), for
         use as a `DIRECT_FREE_*`/free-kick restart's `designated_position`.
@@ -114,9 +137,10 @@ class RefereeGeometry:
         """
         left_inner_x = -self.half_length + 2.0 * self.half_defense_depth
         right_inner_x = self.half_length - 2.0 * self.half_defense_depth
+        clear_dist = keep_dist + self._PLANNER_CLEARANCE_BUFFER_M
         if abs(y) <= self.half_defense_width:
-            if x <= left_inner_x + keep_dist:
-                x = left_inner_x + keep_dist
-            elif x >= right_inner_x - keep_dist:
-                x = right_inner_x - keep_dist
+            if x <= left_inner_x + clear_dist:
+                x = left_inner_x + clear_dist
+            elif x >= right_inner_x - clear_dist:
+                x = right_inner_x - clear_dist
         return (x, y)
