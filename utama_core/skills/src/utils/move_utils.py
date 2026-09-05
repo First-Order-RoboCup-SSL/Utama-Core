@@ -62,6 +62,18 @@ def turn_on_spot(
     """
     PIVOT_RADIUS = ROBOT_RADIUS + BALL_RADIUS  # distance from robot center to ball center at contact
 
+    # Below this clearance to another robot's body, the pivot's lateral push is
+    # treated as physically blocked rather than merely close. A full-length
+    # tournament traced a match where a robot ended up body-to-body with an
+    # enemy while pivoting on the ball: the pivot term always points the same
+    # way regardless of what's there, so it kept commanding a lateral push
+    # straight into the enemy every tick. Box2D's own contact resolution
+    # cancelled the resulting motion each time, and since the geometry never
+    # changed, the identical command (and identical freeze) recurred forever
+    # -- a real deadlock, not a stale-state bug. See lead_and_support.py's
+    # COMMITTED_FROZEN stall in split_shape_vs_switch_of_play_RK.
+    _PIVOT_CLEARANCE_M = 2 * ROBOT_RADIUS
+
     robot = game.friendly_robots[robot_id]
     ball = game.ball
 
@@ -79,6 +91,24 @@ def turn_on_spot(
     if in_contact:
         angular_vel = turn.angular_vel
         local_left_vel = -angular_vel * PIVOT_RADIUS
+
+        # If the lateral pivot push points at a robot already within contact
+        # distance, dropping it to a pure in-place rotation (no lateral term)
+        # still turns the robot -- imperfectly centered on the ball, but not
+        # jammed against the obstacle -- instead of commanding motion that
+        # rigid-body contact will cancel outright every tick.
+        pivot_push_global = rotate_vector(0.0, local_left_vel, -robot.orientation)
+        for enemy in game.enemy_robots.values():
+            if enemy is None:
+                continue
+            to_enemy = enemy.p - robot.p
+            distance = to_enemy.mag()
+            if distance >= _PIVOT_CLEARANCE_M or distance == 0:
+                continue
+            if to_enemy.x * pivot_push_global[0] + to_enemy.y * pivot_push_global[1] > 0:
+                local_left_vel = 0.0
+                break
+
         turn = turn._replace(local_left_vel=local_left_vel)
 
     return turn
