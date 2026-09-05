@@ -536,17 +536,19 @@ def test_goalkeep_dribbles_retrieved_ball_toward_box_exit(monkeypatch):
 
     assert result == "sentinel-dribble-out"
     # own_defense_area_exit_point sits just outside the box's front edge
-    # (x=-3.5 for the standard field stub) by a robot-diameter margin, at
-    # x≈-3.27; keeper is still ~0.7m short of it, so it must dribble there,
-    # not kick yet.
-    assert captured["target_coords"].x == pytest.approx(-3.27, abs=0.05)
+    # (x=-3.5 for the standard field stub) by `_DEFENSE_AREA_CLAMP_MARGIN`
+    # (past both `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE` and the planner's own
+    # obstacle clearance — see that constant's docstring), at x≈-2.93;
+    # keeper is still ~1m short of it, so it must dribble there, not kick
+    # yet.
+    assert captured["target_coords"].x == pytest.approx(-2.93, abs=0.05)
     assert captured["dribbling"] is True
 
 
 def test_goalkeep_kicks_once_at_box_exit_and_oriented(monkeypatch):
     """At the box exit point and facing upfield, the keeper must kick rather
     than keep dribbling — completing the clearance."""
-    exit_x = -3.27  # own_defense_area_exit_point's x for this stub — see the dribble test above
+    exit_x = -2.93  # own_defense_area_exit_point's x for this stub — see the dribble test above
     # `_ball_needs_clearing` latches on `has_ball` once retrieval starts and
     # does NOT re-check box position (see its docstring — a dribbled ball
     # tracks the keeper, so by arrival it has already crossed just outside

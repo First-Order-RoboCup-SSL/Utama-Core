@@ -12,8 +12,12 @@ import math
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
+from utama_core.motion_planning.src.fastpathplanning.config import (
+    fastpathplanningconfig,
+)
 from utama_core.shared.pass_and_score_geometry import (
     _ACQUIRE_LATERAL_MAX,
     _GOAL_POST_SAFETY_MARGIN,
@@ -23,6 +27,7 @@ from utama_core.shared.pass_and_score_geometry import (
     ORIENTATION_TOLERANCE_RAD,
     ball_in_enemy_defense_area,
     ball_is_loose,
+    clamp_outside_enemy_defense_area,
     enemy_defense_area_hold_point,
     enemy_goal_line,
     has_ball,
@@ -136,6 +141,32 @@ def test_enemy_defense_area_hold_point_clamps_y_inside_box_width():
     half_width = STANDARD_FIELD_DIMS.half_defense_area_width
     hold = enemy_defense_area_hold_point(game, at_y=half_width + 5.0)
     assert hold.y < half_width + 5.0
+
+
+def test_clamp_outside_enemy_defense_area_clears_planners_obstacle_ring():
+    """The clamped point must sit past `FastPathPlanner`'s own no-go band
+    around the box, not just past the box's raw edge.
+
+    `FastPathPlanner` draws its enemy-defense-area obstacle
+    `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE` (0.25m) outside `front_x`, and then
+    refuses to route a target's carrot within another `OBSTACLE_CLEARANCE`
+    (0.27m at full clearance) of that obstacle line. A clamp that only
+    clears `front_x` by a small margin lands inside this combined band: the
+    carrot converges on the clearance ring and the actual target -- though
+    perfectly legal -- is never reached. Traced live, 2026-09-05
+    (tiki_taka_vs_zone_fluid_RK, COMMITTED_FROZEN 10.3s+ during FORCE_START):
+    `GiveAndGoTactic`'s in-flight-pass receiver target got clamped to just
+    0.02m past the obstacle line and the receiver stalled indefinitely,
+    never completing the pass. This starts a raw point deep inside the box
+    (mirroring `intercept_point`'s output before clamping) so the assertion
+    exercises the real margin, not just an already-clear point passed
+    through unchanged.
+    """
+    game = _game((_ENEMY_BOX_FRONT_X - 0.5, 0.0))
+    clamped = clamp_outside_enemy_defense_area(game, Vector2D(_ENEMY_BOX_FRONT_X - 0.5, 0.0))
+    obstacle_line_x = _ENEMY_BOX_FRONT_X + OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+    clearance_from_obstacle_line = clamped.x - obstacle_line_x
+    assert clearance_from_obstacle_line > fastpathplanningconfig.OBSTACLE_CLEARANCE
 
 
 # `my_defense_area` for this file's `my_team_is_right=True` fixture: front-x

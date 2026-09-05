@@ -19,14 +19,45 @@ from dataclasses import dataclass
 from typing import Optional
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.motion_planning.src.fastpathplanning.config import (
+    fastpathplanningconfig,
+)
 from utama_core.skills.src.score_goal import (  # noqa: F401  (re-exported)
     _find_best_shot,
     is_goal_blocked,
 )
 
 ORIENTATION_TOLERANCE_RAD = 0.05
+
+# `clamp_outside_own_defense_area`/`clamp_outside_enemy_defense_area` (and
+# their `*_hold_point` siblings) previously defaulted to `2*ROBOT_RADIUS+0.05
+# = 0.23m` past `front_x`, the box's true edge. But `FastPathPlanner` doesn't
+# draw its obstacle segment at `front_x` -- it draws it `OPPONENT_DEFENSE_
+# AREA_KEEP_DISTANCE` (0.25m) further out (see `_enemy_defense_rect`'s
+# `margin` and `_get_obstacles`), and then refuses to route any target's
+# *carrot* closer than another `OBSTACLE_CLEARANCE` (`ROBOT_DIAMETER *
+# CLEARANCE_MULTIPLIER` = 0.27m at full clearance) to that segment. A margin
+# of 0.23m from `front_x` lands *inside* the already-offset obstacle line,
+# not past it -- the carrot converges on the clearance ring and never closes
+# the last stretch to the actual (perfectly legal) target, exactly the
+# failure `RefereeGeometry.legal_restart_position`'s `_PLANNER_CLEARANCE_
+# BUFFER_M` exists to avoid for restart positions (that fix adds its buffer
+# on top of the same `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE`-based `keep_dist`
+# call sites already pass it). Traced live, 2026-09-05
+# (tiki_taka_vs_zone_fluid_RK, COMMITTED_FROZEN, 10.3s+ during FORCE_START):
+# `GiveAndGoTactic`'s in-flight pass computed a receiver intercept point
+# that `clamp_outside_enemy_defense_area` clamped to x=-3.27 (only 0.02m
+# past the planner's obstacle segment at x=-3.25 = -3.5 + 0.25) -- the
+# receiver's carrot stuck at x=-3.0232, `at_target`'s 0.08m tolerance never
+# satisfied, so the pass handshake never completed and `GiveAndGoTactic`
+# re-picked the same unreachable receiver every 4s (`_MAX_HOP_TICKS`)
+# forever. Set past `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE + OBSTACLE_
+# CLEARANCE` (0.25 + 0.27 = 0.52m) with the same margin above that total
+# `RefereeGeometry` keeps above its own equivalent figure.
+_DEFENSE_AREA_CLAMP_MARGIN = OPPONENT_DEFENSE_AREA_KEEP_DISTANCE + fastpathplanningconfig.OBSTACLE_CLEARANCE + 0.05
 
 # `has_ball(visual=True)`'s dribbler-relative acquire/release box — see that
 # function's docstring for the derivation. Measured against rsim's own
@@ -407,7 +438,7 @@ def ball_in_enemy_defense_area(game: Game) -> bool:
     return in_enemy_defense_area(game, game.ball.p.to_2d())
 
 
-def clamp_outside_own_defense_area(game: Game, point: Vector2D, margin: float = 2.0 * ROBOT_RADIUS + 0.05) -> Vector2D:
+def clamp_outside_own_defense_area(game: Game, point: Vector2D, margin: float = _DEFENSE_AREA_CLAMP_MARGIN) -> Vector2D:
     """Clamp a target point to just outside our own defense area's front edge.
 
     The `DefenseAreaRule` fouls any outfield robot entering the area (the
@@ -428,7 +459,7 @@ def clamp_outside_own_defense_area(game: Game, point: Vector2D, margin: float = 
     return point
 
 
-def own_defense_area_exit_point(game: Game, at_y: float, margin: float = 2.0 * ROBOT_RADIUS + 0.05) -> Vector2D:
+def own_defense_area_exit_point(game: Game, at_y: float, margin: float = _DEFENSE_AREA_CLAMP_MARGIN) -> Vector2D:
     """A hold point just outside our own defense area's front edge at `at_y`.
 
     For a defender/carrier that needs to stand near a ball that is inside
@@ -446,7 +477,7 @@ def own_defense_area_exit_point(game: Game, at_y: float, margin: float = 2.0 * R
 
 
 def clamp_outside_enemy_defense_area(
-    game: Game, point: Vector2D, margin: float = 2.0 * ROBOT_RADIUS + 0.05
+    game: Game, point: Vector2D, margin: float = _DEFENSE_AREA_CLAMP_MARGIN
 ) -> Vector2D:
     """Clamp a target point to just outside the enemy's defense area front edge.
 
@@ -470,7 +501,7 @@ def clamp_outside_enemy_defense_area(
     return point
 
 
-def enemy_defense_area_hold_point(game: Game, at_y: float, margin: float = 2.0 * ROBOT_RADIUS + 0.05) -> Vector2D:
+def enemy_defense_area_hold_point(game: Game, at_y: float, margin: float = _DEFENSE_AREA_CLAMP_MARGIN) -> Vector2D:
     """A hold point just outside the enemy's defense area front edge at `at_y`.
 
     Mirror of `own_defense_area_exit_point`, for an attacker that needs to
