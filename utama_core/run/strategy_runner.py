@@ -119,6 +119,38 @@ _TELEPORT_SPIKE_SPEED_MPS = 3.0
 # (rather than the reset artifact) can't stall the re-pin loop indefinitely.
 _TELEPORT_SETTLE_MAX_EXTENSIONS = 10
 
+# sim-only: recovery for a rare native-engine hang, distinct from the
+# post-teleport velocity spike above. Traced live (tournament_20260905_083358,
+# tiki_taka_vs_zone_fluid_Lk, 189s RESTART_STALL during DIRECT_FREE_BLUE):
+# immediately after a mid-match `teleport_ball`-triggered `RSim.reset()`
+# (from a BALL_PLACEMENT_BLUE placement), every robot AND the ball froze
+# bit-for-bit (position std ~1e-13m, velocity exactly 0.0) for the rest of
+# the match — the vendored native `robosim` subprocess kept returning valid
+# JSON state each `step()` (no exception, no protocol desync), but the
+# physics itself silently stopped advancing. Application-level command
+# computation was verified correct and unrelated: the kicker's tactic, PID,
+# and rotation math all produced real, correctly-directed, nonzero commands
+# every tick throughout the stall — the freeze is entirely on the native
+# engine's side, downstream of everything this codebase controls. Not
+# reproducible live from any cold-teleported starting point (tried both
+# mid-stall and pre-foul), so it can't be root-caused or fixed at the
+# source — only detected and recovered from, the same trade-off already
+# made for `_SIM_HALT_AUTO_RESUME_SECONDS` (no human GC in a sim tournament
+# to intervene). If literally every robot and the ball report zero velocity
+# for this long during live play (`current_command` neither paused nor mid-
+# restart — those already legitimately hold everything still), force a
+# fresh `teleport_ball` to the ball's own current position: `teleport_ball`
+# always resets the *entire* frame (see `SSLBaseEnv.teleport_ball`'s
+# docstring), not just the ball, so this is the cheapest way to re-issue a
+# full-frame `RSim.reset()` and give the native engine another chance to
+# resume advancing, without changing anyone's actual position.
+_SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS = 8.0
+# Exactly 0.0, not a small tolerance: ordinary rsim noise/refiner jitter
+# never lands two consecutive ticks at bit-identical velocity, so this can
+# only fire on the genuine native-engine freeze this exists to catch, never
+# on a robot/ball that is merely moving slowly.
+_SIM_FROZEN_FIELD_VELOCITY_TOL_MPS = 0.0
+
 logging.basicConfig(
     filename="Utama.log",
     level=logging.CRITICAL,
@@ -328,6 +360,8 @@ class StrategyRunner:
         self._teleport_settle_target: Optional[Tuple[float, float]] = None
         self._teleport_settle_ticks_left: int = 0
         self._teleport_settle_extensions_left: int = 0
+        # See `_SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS`'s module docstring.
+        self._frozen_field_since: Optional[float] = None
         self._last_referee_data: Optional["RefereeData"] = None
         self._vs_team_names: tuple[str, str] = self._assign_team_names()
         self._vs_commentary: str = "Welcome to the match!"
@@ -851,6 +885,49 @@ class StrategyRunner:
         x, y = self._teleport_settle_target
         self.sim_controller.teleport_ball(x, y)
         self._teleport_settle_ticks_left = max(0, self._teleport_settle_ticks_left - 1)
+
+    def _tick_frozen_field_watchdog(self) -> None:
+        """Recover from the rare native-engine hang described in
+        `_SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS`'s module docstring.
+
+        Runs once per tick, after `_step_game` has refreshed
+        `self.my.current_game_frame` for this tick. Only meaningful in sim
+        (`Mode.HALT` has its own dedicated auto-resume timer above, and a
+        real match has no `sim_controller` to recover through — `HALT` is
+        additionally excluded on purpose, since it's the one live-play state
+        where every robot legitimately holds zero velocity by design).
+        """
+        if self.sim_controller is None or self.mode != Mode.RSIM:
+            return
+        frame = self.my.current_game_frame
+        if frame is None or frame.ball is None:
+            self._frozen_field_since = None
+            return
+        referee = getattr(frame, "referee", None)
+        current_command = getattr(referee, "referee_command", None) if referee is not None else None
+        if current_command == RefereeCommand.HALT:
+            self._frozen_field_since = None
+            return
+
+        tol = _SIM_FROZEN_FIELD_VELOCITY_TOL_MPS
+        all_still = frame.ball.v.mag() <= tol and all(
+            robot.v.mag() <= tol for robot in (*frame.friendly_robots.values(), *frame.enemy_robots.values())
+        )
+        if not all_still:
+            self._frozen_field_since = None
+            return
+
+        if self._frozen_field_since is None:
+            self._frozen_field_since = frame.ts
+        elif frame.ts - self._frozen_field_since >= _SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS:
+            self.logger.warning(
+                "Frozen-field watchdog: every robot and the ball reported exactly zero "
+                "velocity for %.1fs (native-engine hang, see _SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS) "
+                "— forcing a full-frame reset via teleport_ball to recover.",
+                frame.ts - self._frozen_field_since,
+            )
+            self.sim_controller.teleport_ball(frame.ball.p.x, frame.ball.p.y)
+            self._frozen_field_since = None
 
     def _remove_rsim_ball(self):
         """Removes the ball from the RSim environment by teleporting it off-field."""
@@ -1648,6 +1725,7 @@ class StrategyRunner:
         self.toggle_opp_first = not self.toggle_opp_first
         self._publish_vision_stream_frame()
         self._push_bt_nodes_to_referee()
+        self._tick_frozen_field_watchdog()
 
         # --- rate limiting ---
         if self.mode != Mode.RSIM:
