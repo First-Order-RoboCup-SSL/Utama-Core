@@ -1144,6 +1144,76 @@ class TestDirectFreeOursStep:
         target = kicker_entries[0][1]
         assert target.distance_to(ball_pos) < robot1_start.distance_to(ball_pos)
 
+    def test_approach_point_stays_reachable_when_ball_is_near_opponent_box(self, monkeypatch):
+        """Live-traced deadlock, 2026-09-05 (full-length tournament run
+        `counter_press_vs_switch_of_play_Rk`): the kicker's approach point
+        (computed from the ball toward the kick-target enemy, offset by
+        `_APPROACH_OFFSET`) landed inside the opponent's defense area
+        whenever the ball itself sat close to the box edge (0.035m away in
+        the traced case). Clamping that point out of the box using the same
+        `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE` (0.25m) general restart
+        positioning uses made the clamped target unreachable within
+        `_KICK_READY_DISTANCE` (0.16m) -- the kicker converged to the
+        clamped point and held there for the rest of the match, since
+        `_KICK_READY_DISTANCE` never triggered `empty_command`. The fix uses
+        a much smaller robot-radius clearance (matching `DefenseAreaRule`'s
+        actual strict-boundary foul condition, not a keep-distance) and
+        never pushes the target farther from the ball than it already was.
+
+        Reproduces the traced geometry directly: `my_team_is_right=True`
+        (opponent box on the left, x in [-4.5, -3.5]), ball at
+        (-3.465, -0.888) -- 0.035m from the box's front edge -- with an
+        enemy id=1 southeast of the ball so `_kick_target_enemy` picks the
+        same kick direction traced live.
+        """
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        ball_pos = Vector2D(-3.46505101, -0.88841382)
+        robots = {3: _robot(3, -3.50031788, -1.46884941)}
+        enemy_robots = {1: _robot(1, -2.76625651, -0.50512429)}
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots=enemy_robots,
+            ball=Ball(Vector3D(ball_pos.x, ball_pos.y, 0.0), Vector3D(0, 0, 0), Vector3D(0, 0, 0)),
+            referee=_make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW),
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeOursStep()
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert len(captured) == 1
+        target = captured[0][1]
+
+        # The target must be legally outside the opponent's defense area
+        # (front edge at x=-3.5 for this field/side)...
+        assert target.x > -3.5
+        # ...AND still within kicking range of the ball -- the deadlock this
+        # test pins was a target that satisfied the first assertion but not
+        # this one, so the kicker held at `target` forever.
+        assert target.distance_to(ball_pos) <= referee_actions.DirectFreeOursStep._KICK_READY_DISTANCE
+
     def test_kicker_moves_toward_ball(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
 

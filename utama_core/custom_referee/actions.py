@@ -653,6 +653,24 @@ class DirectFreeOursStep:
     _KICK_READY_DISTANCE = 0.16
     _FACE_READY_ANGLE = 0.18
 
+    # Robot-body clearance only, not the full OPPONENT_DEFENSE_AREA_KEEP_
+    # DISTANCE (0.25m) `StopStep`/`_clear_to_legal_positions` use for general
+    # restart positioning. `DefenseAreaRule`'s actual foul condition
+    # (`in_yellow_defense`/`in_blue_defense` in defense_area_rule.py) is a
+    # strict boundary test, not a keep-distance — and the *ball* itself can
+    # legally sit arbitrarily close to (or, awarded by other rules, right at)
+    # the box edge, since `legal_restart_position`'s own placement logic only
+    # keeps the ball OPPONENT_DEFENSE_AREA_KEEP_DISTANCE clear, not the
+    # kicker. Using the full 0.25m keep distance here computes an approach
+    # point the kicker can never close to within `_KICK_READY_DISTANCE`
+    # (0.16m) whenever the ball itself sits within 0.25m of the box —
+    # confirmed live, 2026-09-05: a full-length match's DIRECT_FREE_YELLOW
+    # kicker converged to exactly the ball-relative offset a fix like that
+    # would produce and then held there for the rest of a 600s match, unable
+    # to ever reach kicking range. Robot-radius clearance keeps the kicker's
+    # body legally outside the box while staying reachable.
+    _KICKER_DEFENSE_AREA_CLEARANCE = ROBOT_RADIUS
+
     # Metres a challenger must be closer than the current kicker before the
     # role actually flips — same shape/value as pass_and_shoot.py's
     # _REASSIGN_MARGIN_M. Without this, a naive `min(..., key=distance)`
@@ -716,6 +734,17 @@ class DirectFreeOursStep:
                     ball_pos.y - kick_dir.y * self._APPROACH_OFFSET,
                 )
                 approach = _clamp_to_field_or_ball(approach, game, ball_pos)
+                # Same ball-relative-distance-preserving guard as
+                # _clamp_to_field_or_ball above, for the opponent's defense
+                # area instead of the field boundary — the ball can sit just
+                # as close to the box edge as it can to the sideline (see
+                # _KICKER_DEFENSE_AREA_CLEARANCE's comment), and pushing the
+                # kicker's target strictly outside the box regardless of the
+                # ball's own position creates the same "target permanently
+                # farther from the ball than kick range" deadlock.
+                projected = _project_outside_opp_defense_area(game, approach, self._KICKER_DEFENSE_AREA_CLEARANCE)
+                if (projected - ball_pos).mag() <= (approach - ball_pos).mag():
+                    approach = projected
                 distance_to_approach = robot.p.distance_to(approach)
                 face_error = self._angle_error(robot.orientation, target_oren)
 
