@@ -642,6 +642,106 @@ def test_real_out_of_bounds_restart_reaches_ball_placement(headless):
 
 
 # ---------------------------------------------------------------------------
+# Scenario 2c: ball placement teleport must not launch the ball off target
+#
+# Found live in a 2026-09-05 moderate-length tournament
+# (replays/tournament_20260905_002133/counter_flow_vs_zone_fluid_LK): the
+# native rsim engine's reset (SSLWorld::replace(), called via
+# StrategyRunner's teleport-on-BALL_PLACEMENT path) correctly zeroes the
+# ball's velocity at the instant of reset, but the very next physics step
+# produced a large spurious velocity (tens of m/s in the traced replay) —
+# a contact-resolution artifact of the reset, not anything the caller
+# controls. That single spike sent the ball rolling roughly a metre away
+# from designated_position, and since
+# GameStateMachine._ball_placement_done() gates the BALL_PLACEMENT_* ->
+# next_command auto-advance purely on ball-to-target distance, the restart
+# never advanced -- RESTART_STALL for the rest of that match (215s).
+#
+# Fixed by StrategyRunner._teleport_ball_and_settle()/_TELEPORT_SETTLE_TICKS:
+# re-pinning the ball to the same target for a few ticks after any teleport,
+# absorbing the transient before it can turn into real displacement. This
+# test drives the same real OutOfBoundsRule -> STOP -> BALL_PLACEMENT_YELLOW
+# path as the test above, then keeps watching for several seconds afterward
+# to catch the ball drifting back out of _PLACEMENT_DONE_DIST the way the
+# unfixed engine did.
+# ---------------------------------------------------------------------------
+
+
+class _BallPlacementStaysOnTargetManager(AbstractTestManager):
+    """Once BALL_PLACEMENT_* is reached, the ball must stay near
+    designated_position, not drift away from a post-teleport physics spike."""
+
+    n_episodes = 1
+    # Generous margin above _PLACEMENT_DONE_DIST (0.15m) -- the traced bug
+    # drifted the ball roughly 1m off target, so this is nowhere near a tight
+    # tolerance that could flake on ordinary settling jitter.
+    _MAX_DRIFT_M = 0.35
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.ball_placement_seen: bool = False
+        self.target: Optional[tuple] = None
+        self.max_drift_m: float = 0.0
+        self._ticks_since_placement: int = 0
+        # Long enough to have caught the traced spike (which appeared one
+        # tick after the teleport and kept the ball displaced for the rest
+        # of that match) well before the episode times out.
+        self._observe_ticks = 90
+        # `eval_status`'s first tick(s) after BALL_PLACEMENT_* first appears
+        # can still be reading `game.ball` from *before* the teleport lands
+        # -- `current_game_frame` is the refined frame built once per tick,
+        # so it always trails the raw sim state StrategyRunner just teleported
+        # by up to one tick. Skip a short grace window (well under the 90-tick
+        # observation length) rather than measuring that transient as drift.
+        self._GRACE_TICKS = 5
+
+    def reset_field(self, sim_controller: AbstractSimController, game: Game) -> None:
+        sim_controller.teleport_ball(0.0, STANDARD_FIELD_DIMS.full_field_half_width - 0.1, vx=0.0, vy=3.0)
+        sim_controller.teleport_robot(game.my_team_is_yellow, 0, 0.1, STANDARD_FIELD_DIMS.full_field_half_width - 0.1)
+        for rid in (1, 2):
+            sim_controller.teleport_robot(game.my_team_is_yellow, rid, -2.0 - rid, -2.0)
+
+    def eval_status(self, game: Game) -> TestingStatus:
+        ref = game.referee
+        if ref is None:
+            return TestingStatus.IN_PROGRESS
+
+        if ref.referee_command in (RefereeCommand.BALL_PLACEMENT_YELLOW, RefereeCommand.BALL_PLACEMENT_BLUE):
+            self.ball_placement_seen = True
+            if self.target is None and ref.designated_position is not None:
+                self.target = ref.designated_position
+
+        if not self.ball_placement_seen or self.target is None:
+            return TestingStatus.IN_PROGRESS
+
+        ball = game.ball
+        if ball is not None and self._ticks_since_placement >= self._GRACE_TICKS:
+            tx, ty = self.target
+            drift = math.hypot(ball.p.x - tx, ball.p.y - ty)
+            self.max_drift_m = max(self.max_drift_m, drift)
+
+        self._ticks_since_placement += 1
+        if self._ticks_since_placement >= self._observe_ticks:
+            return TestingStatus.SUCCESS
+        return TestingStatus.IN_PROGRESS
+
+
+def test_ball_placement_teleport_does_not_launch_ball_off_target(headless):
+    referee = CustomReferee.from_profile_name("simulation")
+    referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+    runner = _make_runner(referee)
+    tm = _BallPlacementStaysOnTargetManager()
+
+    runner.run_test(tm, episode_timeout=10.0, rsim_headless=headless)
+
+    assert tm.ball_placement_seen, "Never reached BALL_PLACEMENT_* -- can't observe the teleport behaviour"
+    assert tm.max_drift_m <= tm._MAX_DRIFT_M, (
+        f"Ball drifted {tm.max_drift_m:.3f}m from designated_position {tm.target} after the placement "
+        f"teleport (limit {tm._MAX_DRIFT_M}m) -- the post-teleport velocity spike is launching it off target"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Future work: full out-of-bounds sequence integration test
 #
 # Intended scenario:

@@ -1,5 +1,6 @@
 import cProfile
 import logging
+import math
 import signal
 import threading
 import time
@@ -87,6 +88,36 @@ _SIM_HALT_AUTO_RESUME_SECONDS = 5.0  # sim-only: no human GC to resume a HALT, s
 # clearing a ~1.2m encroachment sometimes still had ~0.05m left when the
 # window closed), so this carries real margin rather than the bare minimum.
 _SIM_HALT_RESUME_CLEAR_SECONDS = 4.0
+
+# sim-only: `sim_controller.teleport_ball()` (used to instantly simulate a
+# ball placement/free-kick reposition, since robots cannot physically
+# retrieve an out-of-bounds ball in simulation) is meant to place the ball at
+# rest at the designated position. Traced live in a tournament run
+# (replays/tournament_20260905_002133/counter_flow_vs_zone_fluid_LK, 2026-09-05):
+# the underlying native reset (`SSLWorld::replace()`) does correctly zero the
+# ball's ODE body velocity at the instant of reset, but the very next physics
+# step afterward produces a large spurious velocity (tens of m/s observed) —
+# a contact-resolution artifact, not something teleport_ball's caller
+# controls. That single spike is enough to send the ball rolling metres away
+# from the placement target before it settles, so
+# `GameStateMachine._ball_placement_done()` (gated purely on ball-to-target
+# distance) never sees the ball close enough to auto-advance the restart —
+# the match then sits in BALL_PLACEMENT_*/DIRECT_FREE_* for the rest of the
+# match (RESTART_STALL in MatchStats.stall_events). Re-pinning the ball to
+# the same target for a few ticks after every teleport absorbs that one-tick
+# transient before it can accumulate into real displacement, without needing
+# a fix in the vendored native engine.
+_TELEPORT_SETTLE_TICKS = 3
+# Ball speed (m/s) above which a tick right after a placement teleport is
+# treated as the native engine's post-reset spike rather than genuine ball
+# motion — see `_TELEPORT_SETTLE_TICKS`'s docstring. A real ball at rest from
+# a teleport has ~0 speed; the traced spike was tens of m/s, so this has
+# wide margin on both sides.
+_TELEPORT_SPIKE_SPEED_MPS = 3.0
+# Cap on how many times the settle window can be extended by a detected
+# spike, so a genuinely fast in-flight ball at the moment of a teleport
+# (rather than the reset artifact) can't stall the re-pin loop indefinitely.
+_TELEPORT_SETTLE_MAX_EXTENSIONS = 10
 
 logging.basicConfig(
     filename="Utama.log",
@@ -293,6 +324,10 @@ class StrategyRunner:
         self._prev_custom_ref_command: Optional[RefereeCommand] = None
         self._halt_entered_at: Optional[float] = None
         self._halt_resume_stop_entered_at: Optional[float] = None
+        # See `_TELEPORT_SETTLE_TICKS`'s docstring at module scope.
+        self._teleport_settle_target: Optional[Tuple[float, float]] = None
+        self._teleport_settle_ticks_left: int = 0
+        self._teleport_settle_extensions_left: int = 0
         self._last_referee_data: Optional["RefereeData"] = None
         self._vs_team_names: tuple[str, str] = self._assign_team_names()
         self._vs_commentary: str = "Welcome to the match!"
@@ -764,6 +799,58 @@ class StrategyRunner:
     def _push_robot_feedback_to_referee(self) -> None:
         if isinstance(self.referee, CustomReferee):
             self.referee.set_robot_feedback_data(self._robot_feedback_snapshot)
+
+    def _teleport_ball_and_settle(self, x: float, y: float) -> None:
+        """`sim_controller.teleport_ball(x, y)`, plus arming the re-pin window
+        `_run_step` uses to counter the native engine's post-reset velocity
+        spike (see `_TELEPORT_SETTLE_TICKS`'s module docstring).
+        """
+        self.sim_controller.teleport_ball(x, y)
+        self._teleport_settle_target = (x, y)
+        self._teleport_settle_ticks_left = _TELEPORT_SETTLE_TICKS
+        self._teleport_settle_extensions_left = _TELEPORT_SETTLE_MAX_EXTENSIONS
+
+    def _tick_teleport_settle(self) -> None:
+        """One tick of the re-pin window `_teleport_ball_and_settle` arms.
+
+        Traced live in a tournament run (see `_TELEPORT_SETTLE_TICKS`'s
+        docstring): the native rsim engine's post-teleport velocity spike
+        doesn't decay with repeated resets — it simply waits for the first
+        real physics step *without* a reset immediately before it, however
+        many resets preceded it. So this doesn't just re-pin for a fixed
+        number of ticks: it keeps extending the window (bounded by
+        `_TELEPORT_SETTLE_MAX_EXTENSIONS`) for as long as the ball's most
+        recent velocity still reads as the spike, and only stops once a tick
+        is observed with the window closed AND no spike.
+
+        Reads the ball's velocity via `self.rsim_env.frame.ball` (the raw sim
+        state, refreshed every physics `step()`), not `current_game_frame` —
+        the latter is the *refined* frame `_step_game` builds once per tick,
+        so at the point this runs (after the referee block, before
+        `_step_game`) it is always one tick stale and would see last tick's
+        already-corrected velocity instead of this tick's live spike.
+        """
+        if self.sim_controller is None or self._teleport_settle_target is None:
+            return
+        raw_ball = self.rsim_env.frame.ball if self.mode == Mode.RSIM and self.rsim_env is not None else None
+        spiking = raw_ball is not None and math.hypot(raw_ball.v_x, raw_ball.v_y) >= _TELEPORT_SPIKE_SPEED_MPS
+        # The tick whose re-pin drove `_teleport_settle_ticks_left` to 0
+        # still needs one more check here — its own `step()` (this tick,
+        # further down in `_run_step`) is what actually produces or clears
+        # the spike, and that only becomes observable next tick. So don't
+        # drop `_teleport_settle_target` (and stop checking) until a tick is
+        # seen with the window closed AND (no spike OR out of extensions —
+        # a ball that never stops "spiking" must still terminate the loop
+        # eventually rather than re-pin forever).
+        if self._teleport_settle_ticks_left <= 0 and (not spiking or self._teleport_settle_extensions_left <= 0):
+            self._teleport_settle_target = None
+            return
+        if spiking and self._teleport_settle_extensions_left > 0:
+            self._teleport_settle_ticks_left += 1
+            self._teleport_settle_extensions_left -= 1
+        x, y = self._teleport_settle_target
+        self.sim_controller.teleport_ball(x, y)
+        self._teleport_settle_ticks_left = max(0, self._teleport_settle_ticks_left - 1)
 
     def _remove_rsim_ball(self):
         """Removes the ball from the RSim environment by teleporting it off-field."""
@@ -1407,7 +1494,7 @@ class StrategyRunner:
                     # test_halt_resume_clears_robot_from_opponent_defense_area
                     # (added alongside this fix), 2026-09-04.
                     x, y = ref_data.designated_position
-                    self.sim_controller.teleport_ball(x, y)
+                    self._teleport_ball_and_settle(x, y)
                     self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
                 elif (
                     ref_data.referee_command in _BALL_PLACEMENT_COMMANDS
@@ -1418,7 +1505,7 @@ class StrategyRunner:
                     # Robots cannot physically retrieve an out-of-bounds ball in
                     # simulation, so we simulate placement instantly.
                     x, y = ref_data.designated_position
-                    self.sim_controller.teleport_ball(x, y)
+                    self._teleport_ball_and_settle(x, y)
             if self.sim_controller is not None:
                 # HALT (e.g. DefenseAreaStoppageRule's 2nd-foul escalation) has
                 # no auto-advance in GameStateMachine by design — on a real
@@ -1446,7 +1533,7 @@ class StrategyRunner:
                         # counter_flow_vs_zone_fluid_LK.pkl, 2026-09-01).
                         if ref_data.designated_position is not None:
                             x, y = ref_data.designated_position
-                            self.sim_controller.teleport_ball(x, y)
+                            self._teleport_ball_and_settle(x, y)
                         # Resume through STOP, not straight to NORMAL_START:
                         # `HaltStep`/`is_paused` issues zero motion commands
                         # for the whole HALT (correct — the rule is
@@ -1482,6 +1569,16 @@ class StrategyRunner:
                 else:
                     self._halt_entered_at = None
             self._prev_custom_ref_command = ref_data.referee_command
+
+        # Counter the native rsim engine's post-teleport velocity spike (see
+        # `_TELEPORT_SETTLE_TICKS`'s module docstring). Must run here, after
+        # the referee block above (where a teleport this tick may just have
+        # fired) and before `_step_game` below (which is what actually
+        # advances rsim's physics by one step this tick) — the spike appears
+        # on the very next physics step after a teleport, which for a
+        # teleport issued this tick is later in this same `_run_step` call,
+        # not next tick.
+        self._tick_teleport_settle()
 
         if self.mode == Mode.RSIM:
             obs = self.rsim_env._frame_to_observations()
