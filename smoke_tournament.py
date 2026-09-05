@@ -3,6 +3,10 @@
 (`MATCH_DURATION_SECONDS` below — short matches, not full-length; see
 `full_match_tournament.py` for the full-length/competitive-tier counterpart).
 
+Match construction (build strategies, referee, StrategyRunner, kickoff
+ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with
+`full_match_tournament.py` — see that module's own docstring for why.
+
 Run:
     pixi run python smoke_tournament.py
 
@@ -62,71 +66,28 @@ import json
 import os
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from tournament_lib import TICKS_PER_SECOND  # noqa: F401 -- re-exported, see above
+from tournament_lib import (  # noqa: F401 -- re-exported for callers importing this module (debug_match.py, repro_from_replay.py); noqa: F401 -- re-exported, full_match_tournament.py reuses this directly
+    _CONFIG_NAMES,
+    N_OUTFIELD,
+    OUTFIELD_ROBOT_IDS,
+    MatchResult,
+    _short_name,
+    _stats_to_dict,
+)
+from tournament_lib import run_match as _lib_run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
-from utama_core.engine.abstract_strategy import AbstractStrategy
-from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
-from utama_core.run import StrategyRunner
-from utama_core.strategy import kernel_strategy
 
-N_OUTFIELD = 5  # + 1 goalkeeper per side
-OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
 # 60s of intended play, +5s for a real PREPARE_KICKOFF_YELLOW ceremony
 # (prepare_duration_seconds=3.0 in the "simulation" profile, plus the kicker's
 # walk to the centre circle — observed ~5s total; see run_match's
 # referee_initial_command) so a "60s" tournament match still gets 60s of live
 # play rather than 60s minus ceremony overhead.
 MATCH_DURATION_SECONDS = 65.0
-TICKS_PER_SECOND = 60  # matches rsim's default step rate
-
-# build_default_kernel_strategy is excluded from the auto-discovered catalog:
-# despite the name, it isn't a competitive team — it's the kernel's minimal
-# single-tactic smoke-test scaffold (see its docstring), used across the test
-# suite with as few as zero outfield robots, and the arena-strategy stats
-# investigation confirmed it plays a real match with 3 of 5 outfield robots
-# never issued a command ("zombie" robots, 0.0 motion all match). Fixing that
-# would still only produce a deliberately-minimal team, not a useful
-# comparison point. build_tiki_taka_kernel_strategy — the strongest, most
-# complete team by the same stats investigation (live-state posture,
-# possession-backed wins, no losses) — is the de facto baseline other configs
-# get judged against instead; it needs no special-casing here since it's
-# already just another entry in the catalog.
-_CONFIG_NAMES = [
-    name
-    for name in dir(kernel_strategy)
-    if name.startswith("build_")
-    and name.endswith("_kernel_strategy")
-    and callable(getattr(kernel_strategy, name))
-    and name != "build_default_kernel_strategy"
-]
-
-
-@dataclass
-class MatchResult:
-    config_a: str
-    config_b: str
-    score_a: int
-    score_b: int
-    stats: Optional[dict] = field(default=None, compare=False)
-
-    @property
-    def winner(self) -> str:
-        if self.score_a > self.score_b:
-            return self.config_a
-        if self.score_b > self.score_a:
-            return self.config_b
-        return "draw"
-
-
-def _short_name(config_name: str) -> str:
-    return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
 
 
 def run_match(
@@ -137,128 +98,21 @@ def run_match(
     fuzz_seed: Optional[int] = None,
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
 ) -> MatchResult:
-    """Play one match. If `run_dir` is set, also records the full observability
-    stack (structured intention log, aggregate stats, replay trail) under it —
-    see `utama_core.engine.match_log`/`match_stats` and `utama_core.replay`.
-
-    `control_scheme` is used for both sides (matching StrategyRunner's default
-    of falling back to `control_scheme` when `opp_control_scheme` is unset) —
-    this script exists to compare strategies against each other, not motion
-    planners against each other (see `tools/motion_planning_benchmark.py` for
-    that), so there's no need for the two sides to differ here.
-
-    `fuzz_seed`, if set, swaps in `RestartFuzzingReferee` (see
-    `utama_core/custom_referee/restart_fuzzer.py`) instead of plain
-    `CustomReferee`, so this match's referee injects extra seeded-random
-    legal restarts during live play — see `main()`'s `--fuzz-restarts`/
-    `--fuzz-interval` flags.
+    """Play one match at this module's `MATCH_DURATION_SECONDS`, config_a
+    fixed to the right side and kickoff (this module's historical, un-swept
+    convention — see `full_match_tournament.py` for the decoupled side/
+    kickoff sweep). Thin wrapper over `tournament_lib.run_match`; see its
+    docstring for what each parameter does.
     """
-    build_a = getattr(kernel_strategy, config_a_name)
-    build_b = getattr(kernel_strategy, config_b_name)
-
-    strategy_a = AbstractStrategy(build_kernel_strategy=build_a(OUTFIELD_ROBOT_IDS))
-    strategy_b = AbstractStrategy(build_kernel_strategy=build_b(OUTFIELD_ROBOT_IDS))
-
-    if fuzz_seed is not None:
-        referee = RestartFuzzingReferee.from_profile_name(
-            "simulation",
-            seed=fuzz_seed,
-            interval_s=fuzz_interval_s,
-            n_robots_yellow=N_OUTFIELD + 1,
-            n_robots_blue=N_OUTFIELD + 1,
-        )
-    else:
-        referee = CustomReferee.from_profile_name(
-            "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1
-        )
-    # "simulation" profile's kickoff_team defaults to "yellow", and config_a is
-    # always yellow (my_team_is_yellow=True below) — so config_a always kicks
-    # off. Without this, StrategyRunner defaults sim-mode matches to
-    # FORCE_START (both teams released simultaneously at a ball equidistant
-    # from mirror-symmetric formations), which — root-caused 2026-08-23, see
-    # docs/strategies.md's "Known open bugs" — lets sub-millimetre rsim
-    # physics noise decide who's "closer to the ball" and cascade into a
-    # different match. A real PREPARE_KICKOFF_YELLOW ceremony avoids that
-    # simultaneous-race condition entirely.
-    initial_command = RefereeCommand.PREPARE_KICKOFF_YELLOW
-
-    match_tag = f"{_short_name(config_a_name)}_vs_{_short_name(config_b_name)}"
-    extra_kwargs = {}
-    if run_dir is not None:
-        extra_kwargs["match_log_path"] = str(run_dir / f"{match_tag}.intentions.jsonl")
-        extra_kwargs["stats_path"] = str(run_dir / f"{match_tag}.stats.json")
-        # replay_name is relative to REPLAY_BASE_PATH, not run_dir, since replays
-        # live under a fixed replays/ root — nest it under the same tournament
-        # subdirectory so the two stay next to each other on disk.
-        #
-        # Columnar (.npz) rather than pickle (.pkl): ~13 MB/match in the old
-        # format vs. a fraction of that here, and every reader a tournament
-        # run's replays are actually fed through — `load_frames_in_range`
-        # (`replay_player.py`, used by `render_window`) and
-        # `find_stuck_windows` (`stuck_detector.py`) — already dispatches on
-        # `.npz` vs `.pkl` by extension, so nothing downstream of a
-        # tournament run breaks. Only the interactive `play_replay`/
-        # `get_latest_replay_name` CLI helpers in `replay_player.py` still
-        # hardcode `.pkl`; tournament.py doesn't call either.
-        extra_kwargs["replay_writer_config"] = ColumnarReplayWriterConfig(
-            replay_name=f"{run_dir.name}/{match_tag}", overwrite_existing=True
-        )
-
-    runner = StrategyRunner(
-        strategy=strategy_a,
-        opp_strategy=strategy_b,
-        my_team_is_yellow=True,
-        my_team_is_right=True,
-        mode="rsim",
-        exp_friendly=N_OUTFIELD + 1,
-        exp_enemy=N_OUTFIELD + 1,
-        exp_ball=True,
-        referee=referee,
-        enable_vision_stream=False,
-        referee_initial_command=initial_command,
+    return _lib_run_match(
+        config_a_name,
+        config_b_name,
+        duration_seconds=MATCH_DURATION_SECONDS,
+        run_dir=run_dir,
         control_scheme=control_scheme,
-        **extra_kwargs,
+        fuzz_seed=fuzz_seed,
+        fuzz_interval_s=fuzz_interval_s,
     )
-
-    try:
-        for _ in range(int(MATCH_DURATION_SECONDS * TICKS_PER_SECOND)):
-            runner.step_once()
-        ref_data = runner.my.game.referee
-        score_a = ref_data.yellow_team.score
-        score_b = ref_data.blue_team.score
-        stats = runner.match_stats.finalize() if runner.match_stats is not None else None
-    finally:
-        runner.close()
-
-    return MatchResult(
-        config_a=config_a_name,
-        config_b=config_b_name,
-        score_a=score_a,
-        score_b=score_b,
-        stats=_stats_to_dict(stats) if stats is not None else None,
-    )
-
-
-def _stats_to_dict(stats) -> dict:
-    """`MatchStats.__dict__`, but with `stall_events` (a list of `StallEvent`
-    dataclasses) turned into plain dicts so the result round-trips through
-    `json.dump` in `summary.json` — mirrors `MatchStats.to_json`'s own
-    per-field shape rather than introducing a second serialization scheme.
-    """
-    d = dict(stats.__dict__)
-    d["stall_events"] = [
-        {
-            "kind": e.kind,
-            "sim_time": e.sim_time,
-            "tick": e.tick,
-            "referee_command": e.referee_command,
-            "duration_s": e.duration_s,
-            "tactic_ids": list(e.tactic_ids),
-            "robot_ids": list(e.robot_ids),
-        }
-        for e in stats.stall_events
-    ]
-    return d
 
 
 def main() -> None:

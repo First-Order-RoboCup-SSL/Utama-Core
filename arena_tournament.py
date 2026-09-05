@@ -3,9 +3,13 @@
 Born as `probe_default_vs_lowblock.py`, the instrumented reproduction of the
 tournament's default_vs_lowblock 0-0 passer-tangle investigation; generalized
 into a runner for *any* two `build_*_kernel_strategy` factories, with a
-round-robin mode for the arena strategies. Same match configuration as
-`tournament.run_match` (6v6, headless rsim), but every tick dumps a JSON
-row with:
+round-robin mode for the arena strategies. Same base match configuration as
+`tournament_lib.run_match` (6v6, headless rsim) — though this module keeps
+its own `_run_match` rather than calling into `tournament_lib` directly,
+since it needs per-tick instrumentation hooks (target recorders, slot-state
+dumps) that `tournament_lib.run_match` deliberately doesn't carry, so every
+other caller pays no cost for them — but every tick here dumps a JSON row
+with:
 
   - sim time, referee command
   - ball position/velocity
@@ -58,16 +62,13 @@ import time
 from dataclasses import asdict
 from typing import Optional
 
+from tournament_lib import N_OUTFIELD, OUTFIELD_ROBOT_IDS, TICKS_PER_SECOND
 from utama_core.custom_referee import CustomReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.replay_writer import ReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
-
-N_OUTFIELD = 5
-OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
-TICKS_PER_SECOND = 60
 
 # Arena strategies for the round-robin tournament.
 _ARENA_STRATEGIES = ("tiki_taka", "counter_press", "zone_fluid")

@@ -2,10 +2,14 @@
 strategies from `docs/strategies.md` (`counter_flow`, `tiki_taka`, `zone_fluid`,
 `counter_press`), at full-match duration (two 300s halves = 600s sim time,
 matching `half_duration_seconds` in `docs/referee_integration.md`) instead of
-`tournament.py`'s default 60s smoke-test length.
+`smoke_tournament.py`'s default 60s smoke-test length.
 
-Why this exists instead of `tournament.py --both-sides`
---------------------------------------------------------
+Match construction (build strategies, referee, StrategyRunner, kickoff
+ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with
+`smoke_tournament.py` — see that module's own docstring for why.
+
+Why this exists instead of `smoke_tournament.py --both-sides`
+---------------------------------------------------------------
 Every match here is fully deterministic — same tactic code, same fixed
 formation generator, no seeded randomness in the sim itself (confirmed live:
 re-running one fixture twice byte-for-byte reproduced the same score both
@@ -56,31 +60,27 @@ left/right symmetry (traced: ~0.1-0.3mm off a true mirror after 1 tick), and
 `_friendly_closer_to_ball`'s bare `<` comparison (no tie margin) turns that
 noise into a hard, match-shaping tactical branch (attack-heavy vs
 press-heavy split) that both `counter_flow` and `tiki_taka`'s pickers commit
-to immediately and never revisit. This module now seeds a real
-`PREPARE_KICKOFF_YELLOW`/`_BLUE` (matching `kickoff_team`/`a_kicks_off`) via
-`referee_initial_command` instead, so play only starts after the normal
-`prepare_duration_seconds` wait plus the kicker actually walking to the
-centre circle — verified via direct trace to remove the tick-1 coin flip
-(the edge now agrees between mirrored sides through the whole approach
-phase). This alone does *not* fully eliminate the underlying tie — first
-ball touch is still a near-zero-distance moment either way, so the same
-sub-millimetre rsim noise can still flip `_friendly_closer_to_ball` right at
-contact. `kernel_strategy.py`'s `_CLOSER_TO_BALL_MARGIN = 0.05` (added the
-same session) is the second half of the fix — a real hysteresis margin on
-`_friendly_closer_to_ball` itself, not just the kickoff-ceremony timing —
-and together both are a real, verified improvement over a simultaneous
-release, though not a total elimination of the tie: two independent physics
-runs converging on a moving threshold can still cross a fixed margin
-boundary on different ticks even with a real (if tiny) kinematic difference
-between them. See `docs/strategies.md`'s "Known open bugs" for the full
-trace evidence on both fixes. Not yet done: re-running this module's 4-cell
-decoupled tournament with both fixes active to measure how much the
-side-dependence pattern shrinks in aggregate.
+to immediately and never revisit. This module (via `tournament_lib.run_match`)
+seeds a real `PREPARE_KICKOFF_YELLOW`/`_BLUE` (matching `a_kicks_off`)
+instead, so play only starts after the normal `prepare_duration_seconds` wait
+plus the kicker actually walking to the centre circle — verified via direct
+trace to remove the tick-1 coin flip (the edge now agrees between mirrored
+sides through the whole approach phase). This alone does *not* fully
+eliminate the underlying tie — first ball touch is still a near-zero-distance
+moment either way, so the same sub-millimetre rsim noise can still flip
+`_friendly_closer_to_ball` right at contact. `kernel_strategy.py`'s
+`_CLOSER_TO_BALL_MARGIN = 0.05` (added the same session) is the second half
+of the fix — a real hysteresis margin on `_friendly_closer_to_ball` itself,
+not just the kickoff-ceremony timing — and together both are a real, verified
+improvement over a simultaneous release, though not a total elimination of
+the tie: two independent physics runs converging on a moving threshold can
+still cross a fixed margin boundary on different ticks even with a real (if
+tiny) kinematic difference between them. See `docs/strategies.md`'s "Known
+open bugs" for the full trace evidence on both fixes.
 """
 
 from __future__ import annotations
 
-import dataclasses
 import itertools
 import json
 import os
@@ -91,17 +91,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-import smoke_tournament as tournament
+from tournament_lib import (  # noqa: F401 -- re-exported for existing callers
+    _CONFIG_NAMES,
+    N_OUTFIELD,
+    OUTFIELD_ROBOT_IDS,
+    _short_name,
+)
+from tournament_lib import run_match as _lib_run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.profiles.profile_loader import load_profile
-from utama_core.engine.abstract_strategy import AbstractStrategy
-from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
-from utama_core.run import StrategyRunner
-from utama_core.strategy import kernel_strategy
 
-tournament.MATCH_DURATION_SECONDS = 600.0  # full match: two 300s halves
+MATCH_DURATION_SECONDS = 600.0  # full match: two 300s halves
 
 COMPETITIVE = [
     "build_counter_flow_kernel_strategy",
@@ -110,9 +109,6 @@ COMPETITIVE = [
     "build_counter_press_kernel_strategy",
     "build_tiki_taka_plus_kernel_strategy",
 ]
-
-N_OUTFIELD = tournament.N_OUTFIELD
-OUTFIELD_ROBOT_IDS = tournament.OUTFIELD_ROBOT_IDS
 
 
 @dataclass
@@ -144,82 +140,34 @@ def run_match_cell(
     """Play one full-length match with side and kickoff set explicitly,
     independent of each other. `config_a` is always yellow (a fixed
     convention — colour is never varied separately, since no tactic reads it
-    and there's no rule reason to test it as its own axis).
+    and there's no rule reason to test it as its own axis). Thin wrapper over
+    `tournament_lib.run_match`; see its docstring for the match-construction
+    details (kickoff ceremony, file layout, etc).
     """
-    build_a = getattr(kernel_strategy, config_a_name)
-    build_b = getattr(kernel_strategy, config_b_name)
-
-    strategy_a = AbstractStrategy(build_kernel_strategy=build_a(OUTFIELD_ROBOT_IDS))
-    strategy_b = AbstractStrategy(build_kernel_strategy=build_b(OUTFIELD_ROBOT_IDS))
-
-    profile = load_profile("simulation")
-    kickoff_team = "yellow" if a_kicks_off else "blue"
-    profile = dataclasses.replace(profile, game=dataclasses.replace(profile.game, kickoff_team=kickoff_team))
-    referee = CustomReferee(profile, n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1)
-    initial_command = RefereeCommand.PREPARE_KICKOFF_YELLOW if a_kicks_off else RefereeCommand.PREPARE_KICKOFF_BLUE
-
     side_tag = "R" if a_is_right else "L"
     kickoff_tag = "K" if a_kicks_off else "k"
-    match_tag = (
-        f"{tournament._short_name(config_a_name)}_vs_{tournament._short_name(config_b_name)}"
-        f"_{side_tag}{kickoff_tag}"
-    )
-    extra_kwargs = {}
-    if run_dir is not None:
-        extra_kwargs["match_log_path"] = str(run_dir / f"{match_tag}.intentions.jsonl")
-        extra_kwargs["stats_path"] = str(run_dir / f"{match_tag}.stats.json")
-        extra_kwargs["replay_writer_config"] = ColumnarReplayWriterConfig(
-            replay_name=f"{run_dir.name}/{match_tag}", overwrite_existing=True
-        )
-
-    runner = StrategyRunner(
-        strategy=strategy_a,
-        opp_strategy=strategy_b,
-        my_team_is_yellow=True,
-        my_team_is_right=a_is_right,
-        mode="rsim",
-        exp_friendly=N_OUTFIELD + 1,
-        exp_enemy=N_OUTFIELD + 1,
-        exp_ball=True,
-        referee=referee,
-        enable_vision_stream=False,
-        referee_initial_command=initial_command,
-        **extra_kwargs,
-    )
-    try:
-        for _ in range(int(tournament.MATCH_DURATION_SECONDS * tournament.TICKS_PER_SECOND)):
-            runner.step_once()
-        ref_data = runner.my.game.referee
-        score_a = ref_data.yellow_team.score
-        score_b = ref_data.blue_team.score
-        stats = runner.match_stats.finalize() if runner.match_stats is not None else None
-    finally:
-        runner.close()
-
-    return CellResult(
-        config_a=config_a_name,
-        config_b=config_b_name,
+    result = _lib_run_match(
+        config_a_name,
+        config_b_name,
+        duration_seconds=MATCH_DURATION_SECONDS,
         a_is_right=a_is_right,
         a_kicks_off=a_kicks_off,
-        score_a=score_a,
-        score_b=score_b,
-        # tournament._stats_to_dict, not a bare `stats.__dict__` -- the
-        # latter leaves `stall_events` as a list of `StallEvent` dataclass
-        # instances, which `json.dump(summary, ...)` in `main()` below can't
-        # serialize. Found live, 2026-09-05: a full 24-match run completed
-        # every match cleanly but crashed writing summary.json on the first
-        # stalled match's `StallEvent`, discarding the aggregate result
-        # entirely (the per-match .stats.json files, written earlier via
-        # MatchStats.to_json, were unaffected -- only this module's own
-        # summary aggregation used the unconverted `.__dict__`).
-        # `tournament.py` hit this exact bug first and already fixed it with
-        # `_stats_to_dict`; reuse it here instead of a second conversion.
-        stats=tournament._stats_to_dict(stats) if stats is not None else None,
+        run_dir=run_dir,
+        match_tag_suffix=f"_{side_tag}{kickoff_tag}",
+    )
+    return CellResult(
+        config_a=result.config_a,
+        config_b=result.config_b,
+        a_is_right=result.a_is_right,
+        a_kicks_off=result.a_kicks_off,
+        score_a=result.score_a,
+        score_b=result.score_b,
+        stats=result.stats,
     )
 
 
 def main() -> None:
-    missing = [n for n in COMPETITIVE if n not in tournament._CONFIG_NAMES]
+    missing = [n for n in COMPETITIVE if n not in _CONFIG_NAMES]
     if missing:
         raise SystemExit(f"Missing expected competitive config(s): {missing}")
 
@@ -243,7 +191,7 @@ def main() -> None:
 
     print(f"Competitive-only decoupled round-robin: {len(COMPETITIVE)} configs, {len(base_pairs)} pairs")
     print(f"{len(cells)} cells/pair (side x kickoff) = {len(jobs)} matches")
-    print(f"6v6, {tournament.MATCH_DURATION_SECONDS:.0f}s sim time per match (full match), headless rsim")
+    print(f"6v6, {MATCH_DURATION_SECONDS:.0f}s sim time per match (full match), headless rsim")
     if no_save:
         print("--no-save: not recording replay/intention-log/stats for this run\n")
     else:
@@ -309,7 +257,7 @@ def main() -> None:
     summary = {
         "run_id": run_id,
         "config_names": sorted(COMPETITIVE),
-        "match_duration_seconds": tournament.MATCH_DURATION_SECONDS,
+        "match_duration_seconds": MATCH_DURATION_SECONDS,
         "results": [
             {
                 "config_a": r.config_a,

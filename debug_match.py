@@ -7,7 +7,7 @@ Run:
 Replaces the pattern of hand-writing a fresh `StrategyRunner(...)` block per
 bug (`trace_relay_stall.py`, `trace_finish_detail.py`, `check_keeper.py`,
 etc. from the 2026-08-23 `counter_press` investigation were all this same
-~25 lines of setup, copy-pasted and tweaked). Reuses `smoke_tournament.py`'s own
+~25 lines of setup, copy-pasted and tweaked). Reuses `tournament_lib.py`'s own
 match-setup constants/helpers (`N_OUTFIELD`, `OUTFIELD_ROBOT_IDS`,
 `TICKS_PER_SECOND`) rather than redefining them.
 
@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import argparse
 
-from smoke_tournament import (
+from tournament_lib import (
     _CONFIG_NAMES,
     N_OUTFIELD,
     OUTFIELD_ROBOT_IDS,
