@@ -323,6 +323,38 @@ class BallPlacementOursStep:
 
     _RELEASE_DELAY_SECONDS = 0.25
 
+    # How far *behind* the ball (opposite the carry direction) the robot
+    # center's target sits, so it's the dribbler -- forward of center, not
+    # the chassis origin -- that ends up on the ball. Unlike
+    # DirectFreeOursStep._APPROACH_OFFSET (ROBOT_RADIUS + 0.03, a stand-off
+    # distance that's fine for kicking since a kick only needs proximity/
+    # aim), placement needs genuine possession: rsim's real has_ball contact
+    # sensor only latches within ~0.081m forward of center (sslconfig.h's
+    # distanceCenterKicker; see pass_and_score_geometry.has_ball's
+    # docstring), so the target must bring the center essentially onto that
+    # contact point, not stop a full robot-radius short of it. Confirmed
+    # live, 2026-09-12: with the ROBOT_RADIUS+0.03 offset the placer parked
+    # at rel_fwd=0.120 (just outside real-sensor range) and has_ball never
+    # latched, freezing placement the same way driving straight to ball_pos
+    # did (rel_fwd/rel_lat both 0.000, chassis overshooting onto the ball).
+    _APPROACH_OFFSET = 0.10
+
+    # Ball speed below which placement is considered settled enough to
+    # start releasing. Without this, "close enough" (BALL_PLACEMENT_DONE_
+    # DISTANCE alone) fires while the placer is still mid-approach at full
+    # carry speed -- a robot covering the last stretch at ~1.4 m/s needs
+    # ~0.5m to brake (v^2/2*a_max), well past the 0.15m done radius, so the
+    # dribbler released there while the ball still has that speed and it
+    # coasts on unguided. Confirmed live, 2026-09-12: ball measured moving
+    # at 1.4 m/s when it first crossed the done radius, released, and
+    # coasted from 0.150m to over 0.25m past target with the placer already
+    # parked and no one re-chasing it -- froze BALL_PLACEMENT_YELLOW for the
+    # rest of the match. Comfortably below DirectFreeOursStep's collision-
+    # leniency COLLISION_SPEED_THRESHOLD_MPS (1.5 m/s, tuned for a different
+    # purpose -- deciding whether a *moving obstacle* is safe to plan
+    # through, not whether a placement has actually come to rest).
+    _SETTLED_SPEED_MPS = 0.3
+
     # Same value/rationale as DirectFreeOursStep._KICKER_REASSIGN_MARGIN_M
     # and pass_and_shoot.py's _REASSIGN_MARGIN_M: metres a challenger must be
     # closer by before the placer role actually flips.
@@ -363,7 +395,8 @@ class BallPlacementOursStep:
             _all_stop(self.blackboard)
             return
 
-        if ball.p.distance_to(target_pos) <= BALL_PLACEMENT_DONE_DISTANCE:
+        ball_settled = math.hypot(ball.v.x, ball.v.y) <= self._SETTLED_SPEED_MPS
+        if ball.p.distance_to(target_pos) <= BALL_PLACEMENT_DONE_DISTANCE and ball_settled:
             if self._release_started_at is None:
                 self._release_started_at = game.ts
 
@@ -415,8 +448,27 @@ class BallPlacementOursStep:
                         )
                 else:
                     ball_pos_for_clamp = Vector2D(ball.p.x, ball.p.y)
-                    target_for_move = _clamp_to_field_or_ball(ball_pos_for_clamp, game, ball_pos_for_clamp)
-                    oren = robot.p.angle_to(target_for_move)
+                    oren = ball_pos_for_clamp.angle_to(target_pos)
+                    # Offset behind the ball (opposite the carry direction)
+                    # so the robot's *dribbler* -- not its chassis centre --
+                    # ends up on the ball; see _APPROACH_OFFSET's docstring.
+                    # _clamp_to_field_or_ball keeps this reachable even when
+                    # the ball itself sits right at (or, briefly, just past)
+                    # the boundary -- see that helper's own docstring. A
+                    # ball resting well out of bounds isn't chased at all in
+                    # practice: strategy_runner.py teleports the ball onto
+                    # designated_position (and re-pins it there until it's
+                    # actually at rest -- see _TELEPORT_SETTLE_SPEED_MPS) at
+                    # the moment BALL_PLACEMENT_* begins, precisely because
+                    # "the robot can't physically retrieve an out-of-bounds
+                    # ball in simulation" is a known, sim-only limitation
+                    # handled at that layer, not here.
+                    approach_dir = Vector2D(math.cos(oren), math.sin(oren))
+                    approach = Vector2D(
+                        ball_pos_for_clamp.x - approach_dir.x * self._APPROACH_OFFSET,
+                        ball_pos_for_clamp.y - approach_dir.y * self._APPROACH_OFFSET,
+                    )
+                    target_for_move = _clamp_to_field_or_ball(approach, game, ball_pos_for_clamp)
                     self.blackboard.cmd_map[robot_id] = move(
                         game, motion_controller, robot_id, target_for_move, oren, dribbling=True
                     )

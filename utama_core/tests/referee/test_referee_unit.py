@@ -9,6 +9,7 @@ Tests cover:
     reuses directly for the kernel-tactic model.
 """
 
+import math
 from types import SimpleNamespace
 
 import pytest
@@ -368,10 +369,87 @@ class TestBallPlacementOursStep:
         node.update()
 
         assert captured[0][0] == 0
-        assert captured[0][1].x == game.ball.p.x
-        assert captured[0][1].y == game.ball.p.y
+        # Target sits behind the ball (opposite the carry direction toward
+        # designated_position) by _APPROACH_OFFSET, not on the ball's own
+        # position -- see BallPlacementOursStep._APPROACH_OFFSET.
+        ball_pos = Vector2D(game.ball.p.x, game.ball.p.y)
+        designated = Vector2D(*game.referee.designated_position)
+        oren = ball_pos.angle_to(designated)
+        offset = referee_actions.BallPlacementOursStep._APPROACH_OFFSET
+        assert captured[0][1].x == pytest.approx(ball_pos.x - offset * math.cos(oren))
+        assert captured[0][1].y == pytest.approx(ball_pos.y - offset * math.sin(oren))
         assert captured[0][2] is True
         assert cmd_map[1] is not None
+
+    def test_robot_without_ball_approaches_an_out_of_bounds_ball_with_offset(self, monkeypatch):
+        """Even when the ball itself rests out of bounds, the chase target
+        still applies the same behind-the-ball _APPROACH_OFFSET as the
+        in-bounds case, clamped via `_clamp_to_field_or_ball` (which never
+        clamps a point farther from the ball than it already is -- see that
+        helper's own docstring). Genuinely out-of-bounds placement targets
+        are not actually chased this way in a live sim run: strategy_runner.
+        py teleports the ball straight onto designated_position (and holds
+        it there until truly at rest -- see _TELEPORT_SETTLE_SPEED_MPS) the
+        moment BALL_PLACEMENT_* begins, precisely because a robot can't
+        physically retrieve an out-of-bounds ball in simulation. This test
+        only exercises BallPlacementOursStep's own fallback geometry for
+        whatever tick sees the ball still out of bounds (e.g. the one tick
+        before that teleport lands).
+        """
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords, dribbling))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {0: _robot(0, 4.0, 0.0)}
+        referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_YELLOW)
+        referee.designated_position = (0.9, -0.2)
+        # Ball resting past the sideline on x only (STANDARD_FIELD_DIMS'
+        # full_field_half_length is 4.5) -- a single-axis overshoot, the
+        # shape actually seen live.
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(4.78, -1.04),
+            referee=referee,
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.BallPlacementOursStep()
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert captured[0][0] == 0
+        ball_pos = Vector2D(game.ball.p.x, game.ball.p.y)
+        designated = Vector2D(*game.referee.designated_position)
+        oren = ball_pos.angle_to(designated)
+        offset = referee_actions.BallPlacementOursStep._APPROACH_OFFSET
+        approach = Vector2D(
+            ball_pos.x - offset * math.cos(oren),
+            ball_pos.y - offset * math.sin(oren),
+        )
+        expected = referee_actions._clamp_to_field_or_ball(approach, game, ball_pos)
+        assert captured[0][1].x == pytest.approx(expected.x)
+        assert captured[0][1].y == pytest.approx(expected.y)
+        assert captured[0][2] is True
 
     def test_placer_choice_is_sticky_across_near_tied_distances(self, monkeypatch):
         """Regression for the same bug shape as `DirectFreeOursStep`'s kicker
@@ -551,6 +629,123 @@ class TestBallPlacementOursStep:
         assert move_captured[0][1] == Vector2D(1.5, -0.5)
         assert move_captured[0][2] is True
 
+    def test_release_withheld_while_ball_still_moving_fast_near_target(self, monkeypatch):
+        """Regression: being within BALL_PLACEMENT_DONE_DISTANCE isn't enough
+        to start the release countdown if the ball is still coasting in fast
+        -- see BallPlacementOursStep._SETTLED_SPEED_MPS's docstring. A robot
+        carrying the ball at ~1.4 m/s can't brake to a stop within the 0.15m
+        done radius, so releasing there let the ball slide well past
+        designated_position with nothing left to re-collect it, freezing
+        BALL_PLACEMENT_YELLOW for the rest of a live match (confirmed
+        2026-09-12). While the ball is within range but still fast, the step
+        must keep driving the placer (move(), not empty_command()) rather
+        than starting the release countdown.
+        """
+        from utama_core.custom_referee import actions as referee_actions
+
+        move_captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            move_captured.append((robot_id, target_coords, dribbling))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        target = (1.5, 0.0)
+        robots = {
+            0: Robot(
+                id=0,
+                is_friendly=True,
+                has_ball=True,
+                p=Vector2D(1.4, 0.0),
+                v=Vector2D(1.4, 0.0),
+                a=Vector2D(0.0, 0.0),
+                orientation=0.0,
+            )
+        }
+        referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_YELLOW)
+        referee.designated_position = target
+        # Within BALL_PLACEMENT_DONE_DISTANCE (0.1m to go) but still moving
+        # fast (1.4 m/s) -- the old distance-only gate would start releasing
+        # here; the fix must not.
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=Ball(p=Vector3D(1.4, 0.0, 0.0), v=Vector3D(1.4, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0)),
+            referee=referee,
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.BallPlacementOursStep()
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert node._release_started_at is None
+        assert len(move_captured) >= 1
+        assert move_captured[0][0] == 0
+
+    def test_release_starts_once_ball_is_close_and_settled(self, monkeypatch):
+        """Companion to the fast-ball case above: once the ball is both
+        within BALL_PLACEMENT_DONE_DISTANCE and slow (<= _SETTLED_SPEED_MPS),
+        the release countdown must actually start."""
+        from utama_core.custom_referee import actions as referee_actions
+
+        monkeypatch.setattr(referee_actions, "move", lambda *a, **k: ("move", a[2]))
+
+        target = (1.5, 0.0)
+        robots = {
+            0: Robot(
+                id=0,
+                is_friendly=True,
+                has_ball=True,
+                p=Vector2D(1.4, 0.0),
+                v=Vector2D(0.0, 0.0),
+                a=Vector2D(0.0, 0.0),
+                orientation=0.0,
+            )
+        }
+        referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_YELLOW)
+        referee.designated_position = target
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=Ball(p=Vector3D(1.4, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0)),
+            referee=referee,
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.BallPlacementOursStep()
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert node._release_started_at == 0.0
+
     def test_non_placing_teammate_clears_from_ball(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
 
@@ -579,7 +774,12 @@ class TestBallPlacementOursStep:
         assert len(captured) == 2
         placer_move = next(item for item in captured if item[0] == 0)
         support_move = next(item for item in captured if item[0] == 1)
-        assert placer_move[1] == Vector2D(game.ball.p.x, game.ball.p.y)
+        # Placer approaches from behind the ball (opposite the carry
+        # direction toward designated_position), not straight onto the
+        # ball's own position -- see BallPlacementOursStep._APPROACH_OFFSET.
+        assert placer_move[1] == Vector2D(
+            game.ball.p.x - referee_actions.BallPlacementOursStep._APPROACH_OFFSET, game.ball.p.y
+        )
         assert support_move[1] == Vector2D(0.8, 0.0)
         assert support_move[2] is False
 

@@ -35,6 +35,20 @@ _AUTO_ADVANCE_DELAY = 2.0  # seconds — readiness must be sustained this long b
 # by the stuck-window detector, not by score (it stayed a correct 0-0, just
 # a dead one).
 _STOP_CLEAR_TIMEOUT_SECONDS = 15.0
+# Seconds BALL_PLACEMENT_* can wait on _ball_placement_done() before the
+# state machine gives up and advances anyway, marking the placement failed.
+# Mirrors _STOP_CLEAR_TIMEOUT_SECONDS's rationale exactly: without this, a
+# placement target the placer can never actually reach (e.g. genuinely
+# outside the robot-reachable area, or blocked by an opponent camped on it)
+# is an unbounded wait rather than a recoverable event, since
+# _ball_placement_done() gates purely on ball-to-target distance with no
+# other way to become true. A real GC operator/rulebook (SSL rules §5.3.3)
+# would eventually rule the placement failed and hand the restart to the
+# other team; this is the sim-tournament equivalent, done automatically.
+# Comfortably under _STOP_CLEAR_TIMEOUT_SECONDS so a placement failure is
+# never mistaken for the slower STOP-clear case, and under any watchdog's
+# own stall-detection window so this always fires first.
+_BALL_PLACEMENT_TIMEOUT_SECONDS = 10.0
 
 
 class GameStateMachine:
@@ -349,6 +363,11 @@ class GameStateMachine:
         # ----------------------------------------------------------------
         elif self._auto_advance.ball_placement_to_next and self.command in self._BALL_PLACEMENT_COMMANDS:
             ready = self.next_command is not None and game_frame is not None and self._ball_placement_done(game_frame)
+            timed_out = (
+                not ready
+                and self.next_command is not None
+                and (current_time - self.command_timestamp) >= _BALL_PLACEMENT_TIMEOUT_SECONDS
+            )
             if ready:
                 if self._advance4_ready_since == math.inf:
                     self._advance4_ready_since = current_time
@@ -359,25 +378,29 @@ class GameStateMachine:
                         self.command.name,
                         self.next_command.name,
                     )
-                    completed_command = self.next_command
-                    self.command = completed_command
-                    self.command_counter += 1
-                    self.command_timestamp = current_time
-                    if completed_command in self._DIRECT_FREE_COMMANDS:
-                        self.next_command = RefereeCommand.NORMAL_START
-                        self._advance3_ready_since = math.inf
-                    elif (
-                        completed_command in self._PREPARE_KICKOFF_COMMANDS
-                        or completed_command in self._PREPARE_PENALTY_COMMANDS
-                    ):
-                        self.next_command = RefereeCommand.NORMAL_START
-                        self._prepare_entered_time = current_time
-                        self._advance2_ready_since = math.inf
-                    else:
-                        self.next_command = None
-                    self._advance4_ready_since = math.inf
-                    self.status_message = None
-                    self._last_transition_time = current_time
+                    self._advance_past_ball_placement(current_time)
+            elif timed_out:
+                # The placer has had _BALL_PLACEMENT_TIMEOUT_SECONDS and still
+                # hasn't gotten the ball within _PLACEMENT_DONE_DIST -- e.g. a
+                # target the placer can never physically reach. Record the
+                # failure (mirrors real-GC/SSL-rulebook §5.3.3 behaviour) and
+                # advance anyway rather than waiting forever; see
+                # _BALL_PLACEMENT_TIMEOUT_SECONDS's docstring.
+                placing_team = (
+                    self.yellow_team if self.command == RefereeCommand.BALL_PLACEMENT_YELLOW else self.blue_team
+                )
+                placing_team.ball_placement_failures = (placing_team.ball_placement_failures or 0) + 1
+                placing_team.can_place_ball = False
+                logger.warning(
+                    "Ball placement timeout (%.1fs) — auto-advancing %s → %s despite an unplaced ball "
+                    "(failure #%d for %s)",
+                    _BALL_PLACEMENT_TIMEOUT_SECONDS,
+                    self.command.name,
+                    self.next_command.name,
+                    placing_team.ball_placement_failures,
+                    placing_team.name,
+                )
+                self._advance_past_ball_placement(current_time)
             else:
                 self._advance4_ready_since = math.inf
 
@@ -505,6 +528,30 @@ class GameStateMachine:
             return False
         tx, ty = self.ball_placement_target
         return math.hypot(game_frame.ball.p.x - tx, game_frame.ball.p.y - ty) <= _PLACEMENT_DONE_DIST
+
+    def _advance_past_ball_placement(self, current_time: float) -> None:
+        """Shared BALL_PLACEMENT_* → next_command transition for Auto-advance
+        4's two exits (placement genuinely completed, or timed out per
+        _BALL_PLACEMENT_TIMEOUT_SECONDS) — both hand off to whatever restart
+        was already queued in exactly the same way; only the caller's log
+        message and TeamInfo bookkeeping differ.
+        """
+        completed_command = self.next_command
+        self.command = completed_command
+        self.command_counter += 1
+        self.command_timestamp = current_time
+        if completed_command in self._DIRECT_FREE_COMMANDS:
+            self.next_command = RefereeCommand.NORMAL_START
+            self._advance3_ready_since = math.inf
+        elif completed_command in self._PREPARE_KICKOFF_COMMANDS or completed_command in self._PREPARE_PENALTY_COMMANDS:
+            self.next_command = RefereeCommand.NORMAL_START
+            self._prepare_entered_time = current_time
+            self._advance2_ready_since = math.inf
+        else:
+            self.next_command = None
+        self._advance4_ready_since = math.inf
+        self.status_message = None
+        self._last_transition_time = current_time
 
     # Commands that require robots to clear the ball before they take effect.
     # In a real match these are always preceded by STOP.

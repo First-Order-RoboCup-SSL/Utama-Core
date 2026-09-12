@@ -960,16 +960,41 @@ class TestCustomReferee:
         assert still_stop.referee_command == RefereeCommand.STOP
 
     def test_simulation_stays_in_ball_placement_after_goal_until_ball_is_placed(self):
-        """Simulation mode auto-advances into BALL_PLACEMENT and waits for the ball at centre."""
+        """Simulation mode auto-advances into BALL_PLACEMENT and waits for the
+        ball at centre — up to _BALL_PLACEMENT_TIMEOUT_SECONDS (see
+        test_simulation_ball_placement_times_out_and_advances_anyway for what
+        happens once that budget is exhausted with the ball still unplaced).
+        """
         referee = CustomReferee.from_profile_name("simulation")
         referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
 
         goal_frame = _frame(ball=_ball(5.0, 0.0), my_team_is_yellow=True, my_team_is_right=True, ts=10.0)
         referee.step(goal_frame, current_time=10.0)
 
-        data = referee.step(_frame(ball=_ball(1.0, 0.0), ts=70.0), current_time=70.0)
+        data = referee.step(_frame(ball=_ball(1.0, 0.0), ts=15.0), current_time=15.0)
         assert data.referee_command == RefereeCommand.BALL_PLACEMENT_YELLOW
         assert data.next_command == RefereeCommand.PREPARE_KICKOFF_YELLOW
+
+    def test_simulation_ball_placement_times_out_and_advances_anyway(self):
+        """A placement target the placer never reaches (e.g. genuinely
+        unreachable, or blocked) must not stall BALL_PLACEMENT_* forever --
+        state_machine.py's _BALL_PLACEMENT_TIMEOUT_SECONDS auto-advances past
+        it, mirroring what test_human_stays_in_stop_after_goal_until_operator_
+        advances documents for the human-operator equivalent, but bounded
+        rather than indefinite since there's no operator in sim to intervene.
+        """
+        referee = CustomReferee.from_profile_name("simulation")
+        referee.set_command(RefereeCommand.NORMAL_START, timestamp=0.0)
+
+        goal_frame = _frame(ball=_ball(5.0, 0.0), my_team_is_yellow=True, my_team_is_right=True, ts=10.0)
+        referee.step(goal_frame, current_time=10.0)
+
+        # Ball never gets within _PLACEMENT_DONE_DIST of the target for the
+        # full timeout window.
+        data = referee.step(_frame(ball=_ball(1.0, 0.0), ts=70.0), current_time=70.0)
+        assert data.referee_command == RefereeCommand.PREPARE_KICKOFF_YELLOW
+        assert referee._state.yellow_team.can_place_ball is False
+        assert referee._state.yellow_team.ball_placement_failures == 1
 
     def test_simulation_oob_auto_advances_to_ball_placement_then_direct_free(self):
         referee = CustomReferee.from_profile_name("simulation")

@@ -108,12 +108,27 @@ _SIM_HALT_RESUME_CLEAR_SECONDS = 4.0
 # transient before it can accumulate into real displacement, without needing
 # a fix in the vendored native engine.
 _TELEPORT_SETTLE_TICKS = 3
-# Ball speed (m/s) above which a tick right after a placement teleport is
-# treated as the native engine's post-reset spike rather than genuine ball
-# motion — see `_TELEPORT_SETTLE_TICKS`'s docstring. A real ball at rest from
-# a teleport has ~0 speed; the traced spike was tens of m/s, so this has
-# wide margin on both sides.
-_TELEPORT_SPIKE_SPEED_MPS = 3.0
+# Ball speed (m/s) below which the settle window is allowed to close --
+# i.e. the ball is considered genuinely at rest, not merely past the initial
+# reset-artifact transient. The native engine's post-teleport spike (tens of
+# m/s, see `_TELEPORT_SETTLE_TICKS`'s docstring) decays *through* a range of
+# still-real, few-m/s speeds on its way to zero, and releasing the re-pin as
+# soon as it first dips low is still enough for the ball to coast meters away
+# over the following seconds before `_ball_placement_done()`'s distance gate
+# can catch it -- a rolling SSL ball loses speed very slowly. Confirmed live,
+# 2026-09-12: a teleport spike of ~13 m/s decayed to 0.83 m/s two ticks
+# later (an earlier version of this constant released the window at any
+# speed under 3.0 m/s, right where this case landed), and the ball then
+# drifted, still slowing but never stopping, for the next ~14 seconds and
+# ~2.5m before wedging against the field boundary in a corner -- the actual
+# mechanism behind every "double-axis corner overshoot" RESTART_STALL traced
+# this session (e.g. overload_flow_vs_tiki_taka's BALL_PLACEMENT_BLUE at
+# t=24.2s), not a genuinely unreachable placement target. 0.05 m/s is
+# comfortably above rsim's steady-state numerical noise floor (~1e-3 m/s
+# once actually at rest, per _SIM_FROZEN_FIELD_VELOCITY_TOL_MPS's docstring)
+# while still well below any speed that could carry the ball a visible
+# distance before the next tick's re-pin.
+_TELEPORT_SETTLE_SPEED_MPS = 0.05
 # Cap on how many times the settle window can be extended by a detected
 # spike, so a genuinely fast in-flight ball at the moment of a teleport
 # (rather than the reset artifact) can't stall the re-pin loop indefinitely.
@@ -854,8 +869,11 @@ class StrategyRunner:
         many resets preceded it. So this doesn't just re-pin for a fixed
         number of ticks: it keeps extending the window (bounded by
         `_TELEPORT_SETTLE_MAX_EXTENSIONS`) for as long as the ball's most
-        recent velocity still reads as the spike, and only stops once a tick
-        is observed with the window closed AND no spike.
+        recent velocity still reads as unsettled, and only stops once a tick
+        is observed with the window closed AND the ball has actually settled
+        (`_TELEPORT_SETTLE_SPEED_MPS`'s docstring has the full rationale for
+        why this needs to be a strict "at rest" check, not just "no longer
+        looks like the initial reset spike").
 
         Reads the ball's velocity via `self.rsim_env.frame.ball` (the raw sim
         state, refreshed every physics `step()`), not `current_game_frame` —
@@ -867,19 +885,20 @@ class StrategyRunner:
         if self.sim_controller is None or self._teleport_settle_target is None:
             return
         raw_ball = self.rsim_env.frame.ball if self.mode == Mode.RSIM and self.rsim_env is not None else None
-        spiking = raw_ball is not None and math.hypot(raw_ball.v_x, raw_ball.v_y) >= _TELEPORT_SPIKE_SPEED_MPS
+        ball_speed = math.hypot(raw_ball.v_x, raw_ball.v_y) if raw_ball is not None else 0.0
+        settled = ball_speed <= _TELEPORT_SETTLE_SPEED_MPS
         # The tick whose re-pin drove `_teleport_settle_ticks_left` to 0
         # still needs one more check here — its own `step()` (this tick,
         # further down in `_run_step`) is what actually produces or clears
         # the spike, and that only becomes observable next tick. So don't
         # drop `_teleport_settle_target` (and stop checking) until a tick is
-        # seen with the window closed AND (no spike OR out of extensions —
-        # a ball that never stops "spiking" must still terminate the loop
+        # seen with the window closed AND (settled OR out of extensions —
+        # a ball that never actually settles must still terminate the loop
         # eventually rather than re-pin forever).
-        if self._teleport_settle_ticks_left <= 0 and (not spiking or self._teleport_settle_extensions_left <= 0):
+        if self._teleport_settle_ticks_left <= 0 and (settled or self._teleport_settle_extensions_left <= 0):
             self._teleport_settle_target = None
             return
-        if spiking and self._teleport_settle_extensions_left > 0:
+        if not settled and self._teleport_settle_extensions_left > 0:
             self._teleport_settle_ticks_left += 1
             self._teleport_settle_extensions_left -= 1
         x, y = self._teleport_settle_target

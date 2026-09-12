@@ -113,6 +113,33 @@ def test_settle_window_extends_while_spike_persists():
         assert call.args == (1.0, 2.0)
 
 
+def test_settle_window_extends_through_residual_speed_below_old_spike_threshold():
+    """A spike that decays to a still-real, sub-3.0-m/s residual speed (the
+    old, coarser threshold this test guards against regressing to) must keep
+    re-pinning rather than release the ball to coast -- this is the exact
+    mechanism traced live, 2026-09-12: a ~13 m/s teleport spike decayed to
+    0.83 m/s two ticks later, an earlier version of the settle window
+    released right there, and the ball then drifted for ~14s and ~2.5m
+    before wedging in a field corner (RESTART_STALL)."""
+    sequence = [(13.0, 0.0), (0.83, 0.0)] + [(0.0, 0.0)] * 10
+    runner = _make_bare_runner(sequence)
+    runner._teleport_ball_and_settle(1.0, 2.0)
+    runner.sim_controller.teleport_ball.reset_mock()
+
+    ticks_run = 0
+    while runner._teleport_settle_target is not None and ticks_run < 50:
+        runner._advance_ball_v()
+        runner._tick_teleport_settle()
+        ticks_run += 1
+
+    assert runner._teleport_settle_target is None, "settle window never closed"
+    # Must have re-pinned past the tick carrying the 0.83 m/s residual --
+    # releasing there (old bug) would cap calls at _TELEPORT_SETTLE_TICKS - 1.
+    assert runner.sim_controller.teleport_ball.call_count > _TELEPORT_SETTLE_TICKS
+    for call in runner.sim_controller.teleport_ball.call_args_list:
+        assert call.args == (1.0, 2.0)
+
+
 def test_settle_window_extension_is_bounded():
     """A ball that never stops "spiking" (e.g. genuinely fast in-flight at
     the moment of teleport, not a reset artifact) must not stall the re-pin
