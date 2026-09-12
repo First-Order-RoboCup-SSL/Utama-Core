@@ -1251,4 +1251,4 @@ the full investigation narrative for anything already fixed lives in git log
         deliberately left untouched this session — different code path,
         `DefenseTactic`/tactic-decision logic, not the motion planner).
         Zero PREPARE_KICKOFF_* stalls of any kind in the final run. Shipped
-        as (commit hash TBD on land).
+        as `4b701ae`.
