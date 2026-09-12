@@ -72,31 +72,41 @@ def turn_on_spot(
     # changed, the identical command (and identical freeze) recurred forever
     # -- a real deadlock, not a stale-state bug. See lead_and_support.py's
     # COMMITTED_FROZEN stall in split_shape_vs_switch_of_play_RK.
-    _PIVOT_CLEARANCE_M = 2 * ROBOT_RADIUS
+    #
+    # `2 * ROBOT_RADIUS` alone (exact body-touching distance, zero margin) was
+    # found live to still deadlock: a decoy_and_overload COMMITTED_FROZEN
+    # traced an enemy parked at 0.1982 m -- 1.8 mm outside that exact cutoff
+    # -- so the guard never fired, yet rsim's real rigid-body contact still
+    # resisted the commanded push at that range (rotation crawled at ~3 deg/s
+    # against a commanded ~190 deg/s), a genuine sustained physical deadlock,
+    # not a one-tick fluke. Extra headroom above contact distance, same style
+    # as `_pass_and_score.py`'s `_MIN_SETUP_CLEARANCE`/`block_shape.py`'s
+    # `_AREA_CLEARANCE`, so a robot sitting just outside exact contact still
+    # counts as blocking.
+    _PIVOT_CLEARANCE_M = 2 * ROBOT_RADIUS + 0.05
 
     robot = game.friendly_robots[robot_id]
     ball = game.ball
 
-    turn = move(
-        game=game,
-        motion_controller=motion_controller,
-        robot_id=robot_id,
-        target_coords=robot.p,
-        target_oren=target_oren,
-        dribbling=dribbling,
-    )
-
     # Pivot around the ball when the robot is in dribbler contact (IR or visual proximity).
     in_contact = robot.has_ball or (ball is not None and robot.p.distance_to(ball.p.to_2d()) < PIVOT_RADIUS)
-    if in_contact:
-        angular_vel = turn.angular_vel
-        local_left_vel = -angular_vel * PIVOT_RADIUS
 
-        # If the lateral pivot push points at a robot already within contact
-        # distance, dropping it to a pure in-place rotation (no lateral term)
-        # still turns the robot -- imperfectly centered on the ball, but not
-        # jammed against the obstacle -- instead of commanding motion that
-        # rigid-body contact will cancel outright every tick.
+    # If the pivot's lateral push is blocked (checked below using the
+    # in-place-hold turn's own angular_vel), steer `move()`'s target away
+    # from the blocking enemy instead of holding `robot.p` -- see the
+    # blocked branch below for why holding position doesn't actually yield a
+    # working turn.
+    move_target = robot.p
+    if in_contact:
+        held_turn = move(
+            game=game,
+            motion_controller=motion_controller,
+            robot_id=robot_id,
+            target_coords=robot.p,
+            target_oren=target_oren,
+            dribbling=dribbling,
+        )
+        local_left_vel = -held_turn.angular_vel * PIVOT_RADIUS
         pivot_push_global = rotate_vector(0.0, local_left_vel, -robot.orientation)
         for enemy in game.enemy_robots.values():
             if enemy is None:
@@ -105,10 +115,42 @@ def turn_on_spot(
             distance = to_enemy.mag()
             if distance >= _PIVOT_CLEARANCE_M or distance == 0:
                 continue
-            if to_enemy.x * pivot_push_global[0] + to_enemy.y * pivot_push_global[1] > 0:
-                local_left_vel = 0.0
-                break
+            if to_enemy.x * pivot_push_global[0] + to_enemy.y * pivot_push_global[1] <= 0:
+                continue
+            # Merely zeroing `local_left_vel` here (an earlier fix attempt)
+            # does NOT produce a working pure in-place spin: rotating around
+            # the ball at `PIVOT_RADIUS` inherently requires the chassis to
+            # sweep an arc through space, and dropping only the model's own
+            # lateral estimate leaves that physical requirement unmet --
+            # rsim's contact solver then has to supply/oppose the sweep
+            # itself, which measured live as ZERO net motion (position and
+            # orientation bit-identical tick over tick, not merely slow) for
+            # the rest of the match, not a working degraded turn. Turning off
+            # the dribbler to free the spin isn't safe either --
+            # `_apply_dribbler_release_kicks` fires a release kick the moment
+            # `dribbler` drops while moving, punting the ball away. Instead,
+            # move `move()`'s own hold-position target away from the
+            # blocking enemy (along the enemy->robot direction, out to
+            # clearance) so the motion controller actually drives the
+            # chassis clear before the pivot resumes, rather than holding
+            # `robot.p` while commanding a sweep the enemy's body prevents.
+            away = robot.p - enemy.p
+            away_dist = away.mag()
+            if away_dist > 1e-6:
+                move_target = robot.p + away * (_PIVOT_CLEARANCE_M / away_dist)
+            break
 
+    turn = move(
+        game=game,
+        motion_controller=motion_controller,
+        robot_id=robot_id,
+        target_coords=move_target,
+        target_oren=target_oren,
+        dribbling=dribbling,
+    )
+
+    if in_contact:
+        local_left_vel = -turn.angular_vel * PIVOT_RADIUS
         turn = turn._replace(local_left_vel=local_left_vel)
 
     return turn

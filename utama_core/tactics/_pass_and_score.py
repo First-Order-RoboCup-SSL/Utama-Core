@@ -247,6 +247,32 @@ def _pass_exec(
     # at all, since it hands off to this shared primitive instead.
     intercept_pos = clamp_outside_enemy_defense_area(game, intercept_pos)
 
+    # `intercept_point()` projects the receiver's own CURRENT position onto
+    # the passer's aim line -- deliberately live, so the receiver can walk
+    # into whatever line the passer is aiming down. But feeding that
+    # continuously-recomputed point straight to `move()` below creates a
+    # feedback loop while the receiver is still approaching: the receiver's
+    # own motion shifts `intercept_pos` by more than
+    # `_TRAJECTORY_TARGET_TOLERANCE` (0.01 m) on nearly every tick it's
+    # moving, which forces `TrajectorySamplingPlanner._try_reuse` to replan
+    # from scratch instead of continuing the already-committed trajectory.
+    # Root-caused via direct trace (decoy_and_overload_vs_give_and_go_solo,
+    # COMMITTED_FROZEN): of 1182 `_try_reuse` calls for the stuck receiver,
+    # 514 returned "target changed" (dwarfing the 58 genuine collisions and
+    # 118 priority-blocks combined), and the receiver's y-position sat
+    # completely flat for 11+ seconds while its x wandered back and forth
+    # weaving around enemies it could never fully clear on any single
+    # two-segment plan before the next replan discarded it. Snapping to a
+    # coarse grid — well inside `at_target`'s own 0.08 m arrival tolerance,
+    # so it never stops the receiver short of actually arriving — absorbs
+    # the receiver's own tick-to-tick drift as noise while still updating
+    # normally as real motion accumulates past one grid cell.
+    _INTERCEPT_SNAP_M = 0.05
+    intercept_pos = Vector2D(
+        round(intercept_pos.x / _INTERCEPT_SNAP_M) * _INTERCEPT_SNAP_M,
+        round(intercept_pos.y / _INTERCEPT_SNAP_M) * _INTERCEPT_SNAP_M,
+    )
+
     passer_target_oren = game.friendly_robots[passer_id].p.angle_to(intercept_pos)
     passer_aimed = oriented_towards(game, passer_id, passer_target_oren)
     # visual=True: see run_setup_phase's comment — the strict sensor can

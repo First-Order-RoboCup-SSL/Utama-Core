@@ -81,6 +81,8 @@ _FINISH_TIMEOUT_TICKS = round(_FINISH_TIMEOUT_TIME * CONTROL_FREQUENCY)
 _LURE_TOUCHLINE_MARGIN = 0.5  # metres in from the touchline — how close the decoy's lure run goes
 _OVERLOAD_STANDOFF = 0.4  # metres — how far past the marker's original shadow the overloader sits
 _LOOSE_BALL_SPEED = 0.3  # m/s — matches ball_is_loose's own threshold; see _teammate_already_has_ball
+_WAITING_ON_TEAMMATE_TIMEOUT_TIME = 6.0  # seconds — see waiting_on_teammate_ticks's comment below
+_WAITING_ON_TEAMMATE_TIMEOUT_TICKS = round(_WAITING_ON_TEAMMATE_TIMEOUT_TIME * CONTROL_FREQUENCY)
 
 
 def _nearest_marker(game: Game, decoy_id: int) -> Optional[int]:
@@ -207,6 +209,7 @@ class DecoyOverloadMem:
     marker_start_y: Optional[float] = None
     lure_ticks: int = 0
     finish_ticks: int = 0
+    waiting_on_teammate_ticks: int = 0
     goal_scored: bool = False
     prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _pass_and_score.py
 
@@ -316,6 +319,27 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
                 # support point rather than driving into an already-claimed
                 # ball; the picker will re-evaluate this tactic's allocation
                 # next time it's not commitment-pinned.
+                #
+                # But `is_committed()` pins this slot's two robots to this
+                # tactic unconditionally until a goal is scored -- holding
+                # here is *not* itself commitment-pinned away from the
+                # picker in any other sense, so a teammate's carrier that
+                # never passes (its own tactic stuck/slow, e.g.
+                # SwitchOfPlayTactic's own multi-second "assess"/"switch"
+                # phases) leaves the decoy+overloader parked motionless
+                # indefinitely with no bound. Found live
+                # (high_line_zone_vs_high_press, COMMITTED_FROZEN,
+                # t=45.1s): decoy and overloader both bit-identical in
+                # position for 10+ seconds, `has_ball` false throughout by
+                # both the strict and visual sensor -- a real deadlock
+                # between two independently-timed-out tactics, not a stale
+                # trace artifact. Release back to a fresh, uncommitted mem
+                # after a timeout, same pattern _FINISH_TIMEOUT_TICKS already
+                # uses for the finish phase, so the picker can reassign these
+                # robots elsewhere instead of leaving them stuck here.
+                mem.waiting_on_teammate_ticks += 1
+                if mem.waiting_on_teammate_ticks > _WAITING_ON_TEAMMATE_TIMEOUT_TICKS:
+                    return {}, DecoyOverloadMem()
                 commands[mem.decoy_id] = go_to_point(
                     game=game,
                     motion_controller=ctx.motion_controller,
@@ -323,10 +347,12 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
                     target_coords=_support_hold_point(game, mem.decoy_id, 0),
                 )
             elif not has_ball(game, mem.decoy_id):
+                mem.waiting_on_teammate_ticks = 0
                 commands[mem.decoy_id] = go_to_ball(
                     game=game, motion_controller=ctx.motion_controller, robot_id=mem.decoy_id, ctx=ctx
                 )
             else:
+                mem.waiting_on_teammate_ticks = 0
                 target = _lure_target(game, mem.decoy_id, mem.marker_id)
                 commands[mem.decoy_id] = go_to_point(
                     game=game,

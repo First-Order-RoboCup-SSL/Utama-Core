@@ -94,6 +94,25 @@ _WEAK_SIDE_MARGIN = 1  # enemies — the more-open side must have at least this 
 _PHASE_TIMEOUT_TICKS = 600  # ~10s at 60Hz, one full leg should never need this long
 _LANE_BLOCKED_ABANDON_TICKS = 30  # ~0.5s at 60Hz — sustained-block bar, not one noisy tick
 
+# "assess" resets `phase_ticks` to 0 on every tick it runs (see the phase
+# dispatch below), so `_PHASE_TIMEOUT_TICKS` never bounds it at all -- unlike
+# "switch"/"relay"/"finish", "assess" can run forever. In isolation that's
+# fine (it's meant to hold until the carrier is ready), but the carrier's
+# has_ball(visual=True) check below has no grace period: rsim's dribble
+# physics can eject/reacquire the ball for a single tick with no tactic-level
+# cause (same quirk _BALL_RECOVERY_RADIUS's comment documents for "relay"),
+# and a bare check sends the carrier straight into go_to_ball on that one
+# flicker, discarding its held position. Since `_pivot_target()` is a
+# function of the carrier's own *live* position, every such flicker also
+# drags the pivot's target along with the carrier's chase -- a non-convergent
+# feedback loop, not just a wasted tick. Found live
+# (high_line_zone_vs_high_press, COMMITTED_FROZEN, t=45.1s): the carrier
+# visibly walked ~1m chasing the ball over the course of "assess", the pivot
+# target sliding the same distance in lockstep, `_debounced_settled` never
+# converging because the target itself never stopped moving. Same style grace
+# period as `_pass_and_score.py`'s `_SETUP_BALL_LOSS_GRACE_TICKS`.
+_CARRIER_BALL_LOSS_GRACE_TICKS = 10  # ~0.17s at 60Hz — matches _SETUP_BALL_LOSS_GRACE_TICKS
+
 _RUNNER_DEPTH_FRACTION = 0.55  # how far up the weak flank the runner advances (fraction of half_length from centre)
 
 # A receiving robot's readiness to start a pass leg needs both position AND
@@ -234,9 +253,36 @@ def _pivot_target(game: Game, carrier_pos: Vector2D) -> Vector2D:
     _pivot_standoff = ROBOT_RADIUS + OWN_DEFENSE_AREA_STANDOFF_DISTANCE + ROBOT_RADIUS
     if game.my_team_is_right:
         back_x = min(back_x, own_box_front_x - _pivot_standoff)
+        behind_box = back_x <= own_box_front_x
     else:
         back_x = max(back_x, own_box_front_x + _pivot_standoff)
-    return Vector2D(back_x, -carrier_pos.y * 0.3)
+        behind_box = back_x >= own_box_front_x
+    back_y = -carrier_pos.y * 0.3
+
+    # The x-clamp above only guarantees this ENDPOINT sits outside the box --
+    # not the straight-line approach to it. Whenever the target's x is behind
+    # the box's own front edge (the box sits between it and the open field
+    # any approaching robot -- carrier or pivot -- starts from), a `back_y`
+    # that lands inside the box's own y-span means that straight approach
+    # cuts through the box's near edge, regardless of which side the
+    # approaching robot's CURRENT position happens to be on. Root-caused via
+    # direct trajsample trace (high_line_zone_vs_high_press, COMMITTED_FROZEN,
+    # two separate live matches): the planner rejected the direct path
+    # against that exact edge every tick (margin oscillating 0.0-0.05 m) and
+    # fell back to a fresh, near-randomly redirected two-segment detour on
+    # almost every replan, so the pivot's real path wandered in a wide
+    # non-convergent arc and never settled -- `"assess"` then waits forever
+    # for a `pivot_ready` that can't happen. Push `back_y` just past the
+    # box's own edge on whichever side it's already leaning, same standoff
+    # used for the x-clamp, whenever the target sits behind the box at all
+    # (not only when the x-clamp itself fired) -- the pivot's own current
+    # position is not known here and may be on either side.
+    if behind_box:
+        box_half_width = float(game.field.my_defense_area[1][1])
+        y_standoff = ROBOT_RADIUS + OWN_DEFENSE_AREA_STANDOFF_DISTANCE
+        if -box_half_width - y_standoff <= back_y <= box_half_width + y_standoff:
+            back_y = (box_half_width + y_standoff) if back_y >= 0 else (-box_half_width - y_standoff)
+    return Vector2D(back_x, back_y)
 
 
 def _runner_target(game: Game, weak_side: int) -> Vector2D:
@@ -301,6 +347,7 @@ class SwitchOfPlayMem:
     source_had_ball: bool = (
         False  # True once has_ball(source_id) has read True this "relay" episode; see _BALL_RECOVERY_RADIUS
     )
+    carrier_ball_loss_ticks: int = 0  # consecutive "assess" ticks has_ball(carrier, visual=True) read False
 
 
 class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
@@ -463,7 +510,13 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
         if mem.phase == "assess":
             mem.weak_side = _weak_side(game, mem.weak_side)
 
-            if not has_ball(game, carrier_id, visual=True):
+            carrier_has_ball = has_ball(game, carrier_id, visual=True)
+            if carrier_has_ball:
+                mem.carrier_ball_loss_ticks = 0
+            else:
+                mem.carrier_ball_loss_ticks += 1
+
+            if not carrier_has_ball and mem.carrier_ball_loss_ticks > _CARRIER_BALL_LOSS_GRACE_TICKS:
                 commands[carrier_id] = go_to_ball(
                     game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id, ctx=ctx
                 )

@@ -63,7 +63,7 @@ def test_turn_on_spot_pivots_around_ball_when_clear_of_obstacles():
     assert cmd.local_left_vel == pytest.approx(-1.0 * PIVOT_RADIUS)
 
 
-def test_turn_on_spot_suppresses_pivot_push_into_a_wedged_enemy():
+def test_turn_on_spot_steers_away_from_a_wedged_enemy():
     """Reproduces the traced COMMITTED_FROZEN deadlock from
     split_shape_vs_switch_of_play_RK: a robot pivoting on the ball while
     body-to-body with an enemy kept commanding a lateral push straight into
@@ -75,6 +75,19 @@ def test_turn_on_spot_suppresses_pivot_push_into_a_wedged_enemy():
     pivot compensation (-angular_vel * PIVOT_RADIUS, local-left) is negative,
     i.e. global -y for this orientation. Placing the enemy at (0, -small)
     puts it directly in that push direction and within contact distance.
+
+    Merely zeroing `local_left_vel` here (an earlier fix attempt) does not
+    produce a working turn: rotating around the ball inherently requires the
+    chassis to sweep an arc through space, and dropping only the model's own
+    lateral estimate leaves that physical requirement unmet, so rsim's
+    contact solver had to supply/oppose the sweep itself, which measured live
+    as ZERO net motion for the rest of the match. The actual fix steers
+    `move()`'s own hold-position target away from the blocking enemy instead,
+    so the motion controller (mocked here) is asked to plan from a clear
+    starting point rather than being told to hold in place while suppressing
+    its own reported command -- this test only has visibility into
+    `motion_controller.calculate`'s `target_pos` argument, not into rsim's
+    actual contact resolution.
     """
     friendly = {1: _robot(1, 0.0, 0.0, True, orientation=0.0, has_ball=True)}
     enemy = {0: _robot(0, 0.0, -0.15, False)}  # within 2*ROBOT_RADIUS, directly along the pivot push
@@ -83,8 +96,12 @@ def test_turn_on_spot_suppresses_pivot_push_into_a_wedged_enemy():
 
     cmd = turn_on_spot(game=game, motion_controller=mc, robot_id=1, target_oren=math.pi / 2)
 
-    assert cmd.local_left_vel == pytest.approx(0.0)
     assert cmd.angular_vel == pytest.approx(1.0)  # rotation itself is preserved
+    # The final move() call (whose mocked angular_vel drives local_left_vel's
+    # re-derivation) was planned from a target steered away from the enemy,
+    # not held at the robot's own (blocked) position.
+    final_call_kwargs = mc.calculate.call_args_list[-1].kwargs
+    assert final_call_kwargs["target_pos"].y > 0.0  # steered away from the enemy at y=-0.15
 
 
 def test_turn_on_spot_keeps_pivot_push_away_from_a_wedged_enemy():
