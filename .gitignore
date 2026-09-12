@@ -202,6 +202,9 @@ AutoReferee/
 ssl-game-controller/
 replays/
 renders/
+scratch/
+scenario_bench_results/
+utama_core/replay/banks/
 
 .vscode
 
