@@ -2,7 +2,7 @@
 
 This is the data flow diagram of what will be received and sent by the Team Controller:
 
-![Team Controller data flow diagram showing inputs (Vision, Referee) and outputs (Robot/Simulation control)](docs/SSL_dataflow%20diagram.jpg)
+![Team Controller data flow diagram showing inputs (Vision, Referee) and outputs (Robot/Simulation control)](docs/SSL_dataflow_diagram.jpg)
 
 From the image above, the Vision and Referee use UDP multicast addresses. More information is available on the [SSL RoboCup official page](https://ssl.robocup.org/league-software/#:~:text=Simulation%20Protocol.-,Standard%20Network%20Parameters,-Protocol)
 

@@ -206,6 +206,10 @@ scratch/
 scenario_bench_results/
 utama_core/replay/banks/
 
+# local agent-tool config dirs
+.codex/
+.agents/
+
 .vscode
 
 .ruff_cache/
