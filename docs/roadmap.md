@@ -1252,3 +1252,104 @@ the full investigation narrative for anything already fixed lives in git log
         `DefenseTactic`/tactic-decision logic, not the motion planner).
         Zero PREPARE_KICKOFF_* stalls of any kind in the final run. Shipped
         as `4b701ae`.
+
+    - **`BALL_PLACEMENT_*` "double-axis corner overshoot" `RESTART_STALL`
+      (20/231 at this point), root-caused and fixed 2026-09-12.** All 20
+      remaining `RESTART_STALL` cases after the fix above shared one onset
+      shape: a `BALL_PLACEMENT_*` restart that never advanced for the rest
+      of the match, with the ball found resting exactly at
+      `(±4.7785, ±3.2785)` — a field corner, past the boundary on both x
+      and y simultaneously.
+
+      Two false starts before the real cause, each round-robin-verified as
+      net negative and reverted rather than shipped:
+      - *Attempt 1* — `BallPlacementOursStep`'s out-of-bounds chase branch
+        was changed to drive straight at an out-of-bounds ball's exact
+        position (bypassing the normal behind-the-ball approach offset,
+        which could point even farther out of bounds than the ball
+        itself). Round-robin: 37 stalled (28 `RESTART_STALL`) vs. the 29
+        (20 `RESTART_STALL`) baseline — 2 fixed, 8 new regressions, all one
+        mechanism (see below).
+      - *Attempt 2* — added `_field_boundary_exempt()` to the trajsample
+        planner (`planner.py`), dropping the field-boundary
+        `StaticSegmentObstacle` edge(s) from a `plan()` call's obstacle set
+        when the target itself was out of bounds on that axis, mirroring
+        the existing per-call ball exemption. Verified live to work exactly
+        as designed at the obstacle-list level (for a corner target,
+        correctly dropped 2 of 4 boundary segments, and the resulting
+        `plan()` returned `has_collision=False` with a genuinely valid,
+        non-degenerate trajectory) — but the robot's real position in
+        `debug_match.py` traces still never changed tick-to-tick. Round-
+        robin: 37 stalled (27 `RESTART_STALL`) again — 2 fixed, 9 new
+        regressions, same signature. Both attempts reverted back to
+        original/pre-session behaviour once the real cause (below) was
+        found; neither was needed.
+
+      **Root cause**, found by live-tracing ball position/velocity
+      tick-by-tick across the whole pipeline rather than reasoning from the
+      planner or referee-action layers: `strategy_runner.py`'s existing
+      sim-only shortcut — teleporting the ball straight onto
+      `designated_position` the instant `BALL_PLACEMENT_*` begins, since "a
+      robot cannot physically retrieve an out-of-bounds ball in
+      simulation" — was firing correctly, but the native rsim engine
+      produces a large post-teleport velocity-spike artifact on the very
+      next physics step (a known, already-documented issue;
+      `_TELEPORT_SETTLE_TICKS`'s re-pin window exists specifically to
+      absorb it). The window's release condition, however, only checked
+      whether speed had decayed below `_TELEPORT_SPIKE_SPEED_MPS` (3.0
+      m/s) — a threshold sized to classify "is this the reset artifact"
+      (tens of m/s observed), not to mean "the ball is actually at rest".
+      Traced live: one spike decayed from ~13 m/s to 0.83 m/s two ticks
+      later, comfortably under 3.0, so the window released there — and
+      since an SSL ball rolls with very little friction, that residual
+      0.83 m/s carried it on a straight, slowly-decaying coast for ~14
+      seconds and ~2.5m until it wedged into a field corner, never once
+      reaching the placement target. `_ball_placement_done()` gates purely
+      on ball-to-target distance, so this was an unbounded wait with no
+      other way to become true — the actual mechanism behind every one of
+      the 20 stalls, not a genuinely unreachable geometry (an independent
+      Opus subagent investigation, run before this trace, had concluded
+      the corner ball was outside the chassis-plus-contact-sensor
+      reachable radius by ~0.016m and recommended clamping placement
+      targets to a wall-reachable box — a real, defensible finding for
+      *that* narrower geometric question, but not the actual cause of the
+      stall, since the ball never should have been coasting into that
+      corner in the first place).
+
+      **Fix** (`utama_core/run/strategy_runner.py`): added a new, much
+      stricter `_TELEPORT_SETTLE_SPEED_MPS = 0.05` that `_tick_teleport_
+      settle`'s release condition now actually checks (`ball_speed <=
+      0.05`), replacing the old check against the coarse spike-classifier
+      threshold; the extension loop now simply extends for as long as the
+      ball hasn't settled; `_TELEPORT_SPIKE_SPEED_MPS` removed as
+      dead. Also added a robustness backstop in
+      `utama_core/custom_referee/state_machine.py`:
+      `_BALL_PLACEMENT_TIMEOUT_SECONDS = 10.0`, mirroring the existing
+      `_STOP_CLEAR_TIMEOUT_SECONDS` pattern — Auto-advance 4 now auto-
+      advances `BALL_PLACEMENT_* → next_command` anyway if the placement
+      still hasn't succeeded after the timeout, recording
+      `ball_placement_failures`/`can_place_ball=False` on the placing team
+      (SSL rulebook §5.3.3 mirrors this: a GC operator eventually rules a
+      stuck placement failed and hands the restart to the other team) —
+      covers any other unreachable-target cause independent of the
+      teleport-settle fix, including the narrower geometric case the Opus
+      investigation surfaced. `BallPlacementOursStep`'s two genuinely-good
+      fixes from earlier in the session (behind-the-ball `_APPROACH_OFFSET
+      = 0.10` so the dribbler, not the chassis centre, reaches `has_ball`
+      contact range; `_SETTLED_SPEED_MPS = 0.3` gating the release
+      countdown on the ball actually having slowed down) were kept as-is.
+
+      **Verified**: full referee/strategy_runner/motion_planning test
+      suites green (9057 passed, 84 xfailed, 274 xpassed, 0 failed),
+      including new regression tests for both fixes
+      (`test_teleport_settle.py::test_settle_window_extends_through_
+      residual_speed_below_old_spike_threshold`,
+      `test_custom_referee.py::test_simulation_ball_placement_times_out_
+      and_advances_anyway`). Full 231-match round-robin:
+      **`RESTART_STALL` 20 → 1** (the one survivor,
+      `give_and_go_solo_vs_switch_of_play`, stalls on `PREPARE_KICKOFF_
+      BLUE` — an unrelated referee command/mechanism, not investigated
+      this session). `COMMITTED_FROZEN` (deliberately out of scope, tracked
+      separately above) 9 → 10, one new case
+      (`decoy_and_overload_vs_high_press`) — noted, not investigated.
+      Shipped as `43d41af`.
