@@ -1353,3 +1353,102 @@ the full investigation narrative for anything already fixed lives in git log
       separately above) 9 → 10, one new case
       (`decoy_and_overload_vs_high_press`) — noted, not investigated.
       Shipped as `43d41af`.
+
+    - **2026-09-12 session: 4 more `COMMITTED_FROZEN` root causes**, picked
+      up directly from the "noted, not investigated" case above. Each was
+      confirmed by live-tracing the actual match (not reasoned about from
+      the code alone), fixed, and individually re-verified stall-free before
+      moving to the next:
+
+      1. `turn_on_spot()` (`move_utils.py`): `_PIVOT_CLEARANCE_M` (exact
+         body-touching distance, zero margin) still deadlocked live — an
+         enemy parked 1.8mm outside the exact cutoff never tripped the
+         guard, yet rsim's real contact resolution still resisted the
+         commanded push at that range. Widened the clearance by 5cm (same
+         style as `_pass_and_score.py`'s `_MIN_SETUP_CLEARANCE`) and, when
+         blocked, steer `move()`'s own hold-position target away from the
+         enemy instead of zeroing `local_left_vel` — the zeroed-push
+         version measured live as literal zero net motion for the rest of
+         the match (rotating around the ball inherently requires the
+         chassis to sweep an arc; dropping only the model's own lateral
+         estimate doesn't remove that physical requirement, so rsim's
+         contact solver had to supply/oppose the sweep itself).
+      2. `_pivot_target()` (`switch_of_play.py`): the x-clamp alone only
+         guarantees the target's *endpoint* sits outside the own defense
+         area, not the straight-line approach to it — when the target's x
+         lands behind the box, a `back_y` inside the box's own y-span means
+         the approach cuts through the box's near edge regardless of which
+         side the approaching robot starts from. Push `back_y` outside the
+         box's y-span too whenever this happens.
+      3. `_pass_exec()` (`_pass_and_score.py`): `intercept_point()`
+         deliberately projects the receiver's own *live* position onto the
+         passer's aim line (so the receiver can walk into whatever line the
+         passer is aiming down) — but feeding that continuously-recomputed
+         point straight into `move()` every tick creates a feedback loop
+         while the receiver is still approaching: its own motion shifts the
+         target past `_TRAJECTORY_TARGET_TOLERANCE` (0.01m) on nearly every
+         moving tick, forcing `TrajectorySamplingPlanner._try_reuse` to
+         replan from scratch instead of continuing the committed
+         trajectory. Traced live (`decoy_and_overload_vs_give_and_go_solo`):
+         of 1182 `_try_reuse` calls, 514 returned "target changed",
+         dwarfing the 58 genuine collisions and 118 priority-blocks
+         combined. Fixed by snapping `intercept_pos` to a 5cm grid — well
+         inside `at_target`'s own 0.08m arrival tolerance, so it never stops
+         the receiver short of actually arriving.
+      4. `SwitchOfPlayTactic`'s "assess" phase (`switch_of_play.py`): the
+         carrier's `has_ball(visual=True)` check had no grace period, so a
+         single-tick sensor flicker (the same rsim dribble-physics quirk
+         `_BALL_RECOVERY_RADIUS`'s comment already documents for "relay")
+         sent the carrier straight into `go_to_ball`, discarding its held
+         position — and since `_pivot_target()` is a function of the
+         carrier's own live position, every such flicker dragged the
+         pivot's target along with the carrier's chase, a second instance
+         of the same feedback-loop shape as (3). Traced live
+         (`high_line_zone_vs_high_press`): the carrier visibly walked ~1m
+         chasing the ball over the course of "assess", the pivot target
+         sliding the same distance in lockstep, `_debounced_settled` never
+         converging because the target itself never stopped moving. Fixed
+         with a 10-tick grace period, same pattern as
+         `_pass_and_score.py`'s `_SETUP_BALL_LOSS_GRACE_TICKS`.
+
+      Also hardened `DecoyOverloadTactic`'s "lure" phase with a 6s timeout
+      on waiting for a teammate's carrier to pass (releases the slot back
+      to the picker instead of holding indefinitely) — a reasonable
+      safety net in the same spirit as `_FINISH_TIMEOUT_TICKS`, though it
+      turned out not to be the dominant mechanism in the case that
+      surfaced it.
+
+      **Verified**: each fix individually confirmed stall-free on its
+      target match before moving on; the 13 stalls from the round-robin
+      that followed fixes 1-2 were all individually confirmed resolved by
+      fix 3 (10 batch-verified, 3 stragglers verified individually). Full
+      test suite green (11791 passed, 0 failed) — one test
+      (`test_move_utils.py::test_turn_on_spot_suppresses_pivot_push_into_a_
+      wedged_enemy`) asserted the old zeroed-push behaviour and was updated
+      to assert the new steer-away behaviour instead. Full 231-match
+      round-robin `COMMITTED_FROZEN` trend across the session: 11
+      (baseline) → 13 (after fixes 1-2, most newly-reachable since matches
+      now run further before freezing) → 10 (after fix 3) → **8 matches, 9
+      stall events** (after fix 4) — net progress, not yet zero.
+
+      **Residual, not fixed this session**: the remaining stalls
+      (`clear_press_plus_vs_overload_press`,
+      `decoy_and_overload_vs_high_line_zone` ×2,
+      `decoy_and_overload_vs_overload_flow`, `high_line_zone_vs_split_shape`,
+      `overload_press_vs_three_slot`, `press_and_pass_vs_shadow_switch`,
+      `three_slot_vs_tiki_taka_plus`) were traced one representative case
+      in depth (`decoy_and_overload_vs_overload_flow`): the passer's
+      orientation settles and `intercept_pos` stabilizes normally, but the
+      receiver — boxed in by two closely-spaced enemies — never converges
+      on it; its commanded velocity oscillates in sign rather than
+      committing to one route, matching this codebase's own documented
+      "two-segment candidate instability" bug class (`4b701ae`) rather than
+      a tactic-logic bug. It is bounded: `DecoyOverloadTactic`'s existing
+      12s `_FINISH_TIMEOUT_TICKS` self-resolves it (confirmed live —
+      `committed_robot_ids` clears ~12s after "finish" phase starts), just
+      slower than the stall watchdog's own threshold. A real fix belongs in
+      `TrajectorySamplingPlanner`'s two-segment candidate selection, not
+      tactic code — separate, larger work, not attempted this session. Also
+      one new `RESTART_STALL` (`score_aware_zone_flow_vs_switch_of_play`,
+      `DIRECT_FREE_YELLOW`) appeared, a different category untouched this
+      session. Shipped as `70cb5c6`.
