@@ -1168,3 +1168,87 @@ the full investigation narrative for anything already fixed lives in git log
       guaranteed live repro. A full round-robin re-run would give a
       before/after `COMMITTED_FROZEN` count, same caveat as the DIRECT_FREE
       spot-checks above.
+    - **Two-segment-candidate instability, root-caused and fixed
+      (2026-09-12)**: full round-robin re-run (231 matches, same seed/
+      duration as every count above) confirmed 79 stalled (mostly
+      RESTART_STALL) — the priority-blocking fix above closed most of the
+      DIRECT_FREE backlog but left a distinct, still-open mechanism in
+      `_intermediate_targets`'s "retry the previous winning detour" logic.
+      Two separate bugs found and fixed in the same investigation:
+      - **Bug 1 — stale absolute-point staleness check.** `last` was stored
+        as an absolute point, re-checked each call by computing ITS bearing
+        from the CURRENT `p0` against the current final-target direction.
+        A robot near the 1m sampling ring's own centre can have that
+        bearing swing 50-90+ degrees from a `p0` shift of only a few tens
+        of centimetres, with no real change in the underlying situation.
+        Live-traced on `clear_danger_vs_overload_flow`'s DIRECT_FREE_YELLOW
+        stall: `last` measured 84.1 degrees off-axis (kept) one replan,
+        then 92.1 degrees (dropped) the very next tick, purely from `p0`
+        drift — every drop threw away a perfectly good detour and forced a
+        fresh random draw, which itself went stale the same way a few
+        replans later, so the robot never stayed on one detour long enough
+        to clear the blocking obstacle (net displacement near zero for the
+        rest of the match, same shape as the earlier stale-backward-target
+        bug, just via direction churn instead of one frozen bad choice).
+        Fixed by storing `last` as a unit DIRECTION from the robot instead
+        of an absolute point, re-anchored onto a fresh
+        `INTERMEDIATE_TARGET_RADIUS` ring around each call's CURRENT `p0`
+        rather than reused as a stale coordinate — the staleness check is
+        then invariant to `p0` drift alone; only a real change in which way
+        progress lies moves it past the threshold.
+      - **Bug 2 — side-flip oscillation once `last` itself fails.** Fixing
+        bug 1 exposed a second, previously-masked instability: when a
+        single near-stationary teammate sat almost exactly astride the
+        direct path, `last`'s own switch-time search would occasionally
+        fail (a few tens of millimetres of drift is enough to flip a
+        borderline-clear detour to borderline-blocked), and the unbiased
+        fresh-random fallback was exactly as likely to flip the detour to
+        the OPPOSITE side of the same obstacle as to retry the same side —
+        live-traced on a PREPARE_KICKOFF_YELLOW regression this fix itself
+        introduced in `clear_danger_vs_overload_flow` (caught via a
+        `git stash` before/after comparison, not by the round-robin): 18
+        side-flips over 16s, net zero progress. Fixed by trying
+        `_N_NEAR_LAST_JITTER` (3) same-side jittered variants of `last`'s
+        own direction (±11°, ±22°, ±33°) before falling through to fully
+        unbiased fresh draws — cut the same match's flip count to 2 over
+        16s and resolved the regression.
+      - **Bug 2b — moving-blocker variant jitter alone couldn't fix.**
+        Spot-checking beyond the original repro found `counter_press_vs_
+        {overload_flow,score_aware_zone_flow,zone_fluid}` all stalling at
+        an identical PREPARE_KICKOFF_BLUE tick (confirmed via `git stash`:
+        also a new regression from bug 2's fix, not pre-existing). Root
+        cause: this case involves TWO other teammates simultaneously moving
+        into their own nearby formation spots (not one near-stationary
+        blocker) — the blocking geometry itself sweeps across the jitter's
+        ±33° window faster than the search can track it, so the fallback
+        still eventually hits the same unbiased-random side-flip as bug 2,
+        just on a longer timescale. The actual fix was unrelated to
+        widening the jitter search: `_collision_leniency_accepts`'s
+        destination-proximity gate (leniency only applies within 300mm of
+        the final target) had no restart-phase awareness, so a slow,
+        transient graze against a still-moving teammate ~0.9m from the
+        kicker's own destination was rejected outright regardless of how
+        safe it actually was — inconsistent with priority-blocking already
+        being unconditionally disabled for this whole referee-command
+        family precisely because mass-simultaneous restart replans
+        routinely cross paths transiently and harmlessly. Fixed by skipping
+        the destination-proximity gate entirely when `priority_enabled` is
+        already False (restart/formation phase) — the speed/braking-
+        distance check (check 3) is unchanged, so a genuine fast head-on
+        collision is never excused merely for happening during a restart.
+      - **Verified**: full `motion_planning` suite green (1211 passed, +2
+        new regression tests — same-side jitter candidate-list shape,
+        leniency accepted/rejected under `priority_enabled=False` — 84
+        xfailed, 273 xpassed, 0 failed). Two full 231-match round-robin
+        re-runs: after bug 1+2 alone, 78/231 stalled (down from the 106/231
+        original baseline, roughly flat vs. the mid-session 79/231 figure —
+        net improvement, no material regression); after bug 2b's fix, a
+        second full re-run came back at **27/231 stalled** — RESTART_STALL
+        9 (down from 61), NO_PROGRESS_POSSESSION 2 (both `counter_press_vs_
+        {press_trigger_flow,score_aware_counter_flow}`, confirmed pre-
+        existing via `git stash`, not new), COMMITTED_FROZEN 16 (the
+        pre-existing live-play tactic-freeze category tracked above,
+        deliberately left untouched this session — different code path,
+        `DefenseTactic`/tactic-decision logic, not the motion planner).
+        Zero PREPARE_KICKOFF_* stalls of any kind in the final run. Shipped
+        as (commit hash TBD on land).

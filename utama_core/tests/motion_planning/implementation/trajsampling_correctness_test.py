@@ -28,6 +28,7 @@ from utama_core.motion_planning.src.trajsampling.planner import (
     _flatten_obstacles,
     _flatten_query_trajectory,
     _priority_blocking_enabled,
+    _unit_direction,
 )
 
 
@@ -765,9 +766,11 @@ def test_intermediate_targets_drops_a_stale_backward_pointing_last_target():
 
     # A stale winner from some earlier situation, now almost directly
     # behind the robot relative to the current final target (~166 degrees
-    # off-axis in the traced case -- use the same shape here).
-    planner._last_intermediate_target[0] = (-2.09, -1.55)
-    stale_target = planner._last_intermediate_target[0]
+    # off-axis in the traced case -- use the same shape here). Stored as a
+    # direction (see `_intermediate_targets`'s docstring), so re-anchoring
+    # onto THIS `p0` reproduces the same absolute point the traced case saw.
+    stale_target = (-2.09, -1.55)
+    planner._last_intermediate_direction[0] = _unit_direction(p0, stale_target)
 
     candidates = planner._intermediate_targets(robot_id=0, p0=p0, final_target=final_target)
 
@@ -775,11 +778,16 @@ def test_intermediate_targets_drops_a_stale_backward_pointing_last_target():
         trajsamplingconfig as config,
     )
 
-    # The stale target must be dropped outright, not merely reordered --
-    # config.N_INTERMEDIATE_TARGETS fresh candidates only, none of them the
-    # excluded stale point.
-    assert stale_target not in candidates
+    # The stale direction must be dropped outright, not merely reordered --
+    # config.N_INTERMEDIATE_TARGETS fresh candidates only; a kept `last`
+    # would show up as an (N+1)-th candidate re-anchored onto `p0` at
+    # `INTERMEDIATE_TARGET_RADIUS` along the stale direction.
     assert len(candidates) == config.N_INTERMEDIATE_TARGETS
+    reanchored_stale = (
+        p0[0] + config.INTERMEDIATE_TARGET_RADIUS * _unit_direction(p0, stale_target)[0],
+        p0[1] + config.INTERMEDIATE_TARGET_RADIUS * _unit_direction(p0, stale_target)[1],
+    )
+    assert reanchored_stale not in candidates
 
     # The surviving (fresh) candidates are still sorted toward the goal --
     # the first one's angular distance must be no worse than the last's.
@@ -807,12 +815,129 @@ def test_intermediate_targets_keeps_a_last_target_that_is_still_a_reasonable_det
     final_target = (4.0, 0.0)
 
     # 45 degrees off-axis -- a plausible sidestep around an obstacle, well
-    # under the 90-degree staleness threshold.
-    planner._last_intermediate_target[0] = (1.0, 1.0)
+    # under the 90-degree staleness threshold. Stored as a direction and
+    # re-anchored onto `p0` at `INTERMEDIATE_TARGET_RADIUS` when tried (see
+    # `_intermediate_targets`'s docstring) -- (1.0, 1.0) normalizes to
+    # exactly 45 degrees, so this still lands at the same bearing.
+    planner._last_intermediate_direction[0] = _unit_direction((0.0, 0.0), (1.0, 1.0))
 
     candidates = planner._intermediate_targets(robot_id=0, p0=p0, final_target=final_target)
 
-    assert candidates[0] == (1.0, 1.0)
+    from utama_core.motion_planning.src.trajsampling.config import (
+        trajsamplingconfig as config,
+    )
+
+    r = config.INTERMEDIATE_TARGET_RADIUS
+    expected_first = (r * math.cos(math.pi / 4), r * math.sin(math.pi / 4))
+    assert candidates[0] == pytest.approx(expected_first)
+
+
+def test_intermediate_targets_inserts_same_side_jitter_around_a_kept_last_target():
+    """Regression for the PREPARE_KICKOFF_YELLOW side-flip stall live-traced
+    on `clear_danger_vs_overload_flow` (roadmap item 15/16): when `last`
+    itself is re-tried and turns out to still be blocked (a narrow, near-
+    static obstacle collision that doesn't clear from one tick to the next),
+    falling straight through to `config.N_INTERMEDIATE_TARGETS` fully
+    unbiased random candidates let the detour flip to the OPPOSITE side of
+    the same obstacle purely by the luck of the draw -- confirmed live: 18
+    side-flips over 16s with no net progress. Trying `_N_NEAR_LAST_JITTER`
+    same-side jittered variants of `last`'s own direction FIRST (before the
+    unbiased fresh draws) gives the search a real chance to stay on the same
+    side. This test only checks the candidate LIST shape (jitter entries
+    present, right after `last`, before the fresh draws) -- the actual
+    side-flip-suppression behaviour is exercised end-to-end by the live
+    round-robin, not unit-testable without a real collision scenario.
+    """
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    p0 = (0.0, 0.0)
+    final_target = (4.0, 0.0)
+
+    last_dir = _unit_direction((0.0, 0.0), (1.0, 1.0))  # 45 degrees off-axis, kept (not stale)
+    planner._last_intermediate_direction[0] = last_dir
+
+    candidates = planner._intermediate_targets(robot_id=0, p0=p0, final_target=final_target)
+
+    from utama_core.motion_planning.src.trajsampling.config import (
+        trajsamplingconfig as config,
+    )
+    from utama_core.motion_planning.src.trajsampling.planner import (
+        _N_NEAR_LAST_JITTER,
+        _NEAR_LAST_JITTER_STEP_RAD,
+    )
+
+    r = config.INTERMEDIATE_TARGET_RADIUS
+    # candidates[0] is `last` itself; the next 2*_N_NEAR_LAST_JITTER entries
+    # are the same-side jittered variants, alternating +/- steps; the
+    # remaining config.N_INTERMEDIATE_TARGETS are the fresh unbiased draws.
+    assert len(candidates) == 1 + 2 * _N_NEAR_LAST_JITTER + config.N_INTERMEDIATE_TARGETS
+    last_angle = math.atan2(last_dir[1], last_dir[0])
+    jitter_candidates = candidates[1 : 1 + 2 * _N_NEAR_LAST_JITTER]
+    jitter_angles = {round(math.atan2(t[1] - p0[1], t[0] - p0[0]), 6) for t in jitter_candidates}
+    expected_angles = {
+        round(last_angle + sign * i * _NEAR_LAST_JITTER_STEP_RAD, 6)
+        for i in range(1, _N_NEAR_LAST_JITTER + 1)
+        for sign in (1, -1)
+    }
+    assert jitter_angles == expected_angles
+    for t in jitter_candidates:
+        assert math.hypot(t[0] - p0[0], t[1] - p0[1]) == pytest.approx(r)
+
+
+def test_collision_leniency_accepts_a_far_collision_when_priority_blocking_disabled():
+    """Regression for the PREPARE_KICKOFF_BLUE stall live-traced on
+    `counter_press_vs_overload_flow` (roadmap item 15/16): during a restart
+    (`priority_enabled=False`, mass-simultaneous replans, see
+    `_priority_blocking_enabled`), a slow non-priority graze against a
+    teammate who is itself still moving to its own formation spot was
+    rejected outright just for happening far from the kicker's own
+    destination -- the destination-proximity gate has no reason to apply
+    once priority-blocking itself is already disabled for this same
+    referee-command family. Check 3 (speed/braking-distance) still applies
+    unchanged -- a fast collision with real braking distance left is still
+    rejected even with priority disabled.
+    """
+    from utama_core.motion_planning.src.trajsampling.config import (
+        trajsamplingconfig as config,
+    )
+
+    planner = TrajectorySamplingPlanner(v_max=2.0, a_max=2.0)
+    target = (10.0, 0.0)
+    trajectory = Trajectory2D.compute((0.0, 0.0), (0.0, 0.0), target, planner.v_max, planner.a_max)
+    collision_time = 0.5  # far from the distant target -- same shape as the "rejects" test above
+    v0 = (0.0, 0.0)  # starting from rest -> brake_time is 0, so check 3 passes trivially either way
+
+    collision_pos, _ = trajectory.state_at(collision_time)
+    assert math.hypot(collision_pos[0] - target[0], collision_pos[1] - target[1]) > config.COLLISION_DEST_PROXIMITY_M
+
+    # Rejected when priority-blocking is enabled (the live-play default) --
+    # far from the destination, check 1 alone rejects regardless of check 3.
+    assert not planner._collision_leniency_accepts(
+        trajectory, collision_time, v0=v0, target_pos=target, priority_enabled=True
+    )
+    # With priority-blocking disabled, the SAME far-from-destination
+    # collision must be accepted instead -- check 1 (destination proximity)
+    # is skipped entirely, and check 3 passes trivially from a standing
+    # start (brake_time == 0 < collision_time), isolating the carve-out
+    # this fix adds from check 3, which is unchanged.
+    assert planner._collision_leniency_accepts(
+        trajectory, collision_time, v0=v0, target_pos=target, priority_enabled=False
+    )
+
+    # Check 3 itself is unchanged: a fast-on-collision trajectory (above
+    # `COLLISION_SPEED_THRESHOLD_MPS`, so check 2 doesn't short-circuit to
+    # True) with a robot already moving fast enough that `brake_time`
+    # exceeds `collision_time` is still rejected even with priority-blocking
+    # disabled -- the carve-out only skips check 1, never check 3's genuine
+    # head-on-at-speed rejection.
+    fast_collision_time = 0.9
+    _, (fvx, fvy) = trajectory.state_at(fast_collision_time)
+    assert math.hypot(fvx, fvy) >= config.COLLISION_SPEED_THRESHOLD_MPS  # sanity: past check 2's speed gate
+    fast_v0 = (planner.v_max, 0.0)
+    brake_time = planner.v_max / planner.a_max
+    assert fast_collision_time < brake_time  # sanity: this IS the still-braking case
+    assert not planner._collision_leniency_accepts(
+        trajectory, fast_collision_time, v0=fast_v0, target_pos=target, priority_enabled=False
+    )
 
 
 def test_collision_leniency_accepts_a_slow_collision_near_the_destination():

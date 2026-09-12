@@ -140,4 +140,4 @@ class TrajectorySamplingController(MotionController):
     def reset(self, robot_id):
         self.pid_oren.reset(robot_id)
         self.planner._committed.pop(robot_id, None)
-        self.planner._last_intermediate_target.pop(robot_id, None)
+        self.planner._last_intermediate_direction.pop(robot_id, None)

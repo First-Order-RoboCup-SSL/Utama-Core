@@ -175,6 +175,20 @@ _ACTIVE_PLAY_COMMANDS = {
 _BALL_TARGET_EXEMPTION_RADIUS = 0.3
 
 
+def _unit_direction(p0: Tuple[float, float], point: Tuple[float, float]) -> Tuple[float, float]:
+    """Unit vector from `p0` toward `point` -- see `_intermediate_targets`'s
+    docstring for why the winning candidate is remembered as a direction
+    rather than the absolute point, and re-anchored onto a fresh
+    `INTERMEDIATE_TARGET_RADIUS` ring around next call's `p0` instead of
+    reused as a stale coordinate.
+    """
+    dx, dy = point[0] - p0[0], point[1] - p0[1]
+    dist = math.hypot(dx, dy)
+    if dist < 1e-9:
+        return (1.0, 0.0)
+    return (dx / dist, dy / dist)
+
+
 def _flatten_obstacle_rows(
     obstacles: List[TimedObstacle],
 ) -> Tuple[List[list], List[list], List[list], List[list]]:
@@ -387,6 +401,20 @@ _PRIORITY_RECHECK_LOOKAHEAD_TIME = 0.5
 # fixes (`clear_danger_vs_shadow_switch`'s DIRECT_FREE_BLUE stall).
 _STALE_INTERMEDIATE_TARGET_ANGLE_RAD = math.pi / 2
 
+# How many same-side jittered variants of the previous winning detour
+# direction to try (on each side, so this many * 2 total) before falling
+# through to fully unbiased fresh random candidates -- see
+# `_intermediate_targets`'s docstring for why `last` itself failing at one
+# exact angle doesn't mean nearby angles around the same side of the same
+# obstacle are equally blocked.
+_N_NEAR_LAST_JITTER = 3
+
+# Angular step (radians) between successive near-`last` jittered variants.
+# ~11 degrees per step, 3 steps each side -> +-33 degrees of coverage around
+# `last`'s own direction, comfortably inside `_STALE_INTERMEDIATE_TARGET_ANGLE_RAD`
+# so a jittered variant is never itself stale merely for being tried.
+_NEAR_LAST_JITTER_STEP_RAD = math.radians(11)
+
 
 class TrajectorySamplingPlanner:
     def __init__(self, v_max: float, a_max: float):
@@ -408,8 +436,12 @@ class TrajectorySamplingPlanner:
         # Per-robot last accepted intermediate target, tried first among
         # candidates on the next full replan to bias reselection toward
         # stability (paper section 2.2: "the target from the previous
-        # iteration is also added to the intermediate targets").
-        self._last_intermediate_target: dict[int, Tuple[float, float]] = {}
+        # iteration is also added to the intermediate targets"). Stored as a
+        # unit DIRECTION from the robot, not the absolute point chosen -- see
+        # `_intermediate_targets`'s docstring for why an absolute point's
+        # bearing from a moved `p0` is not the same question as "is this
+        # still roughly the right way to go."
+        self._last_intermediate_direction: dict[int, Tuple[float, float]] = {}
         self._rng = random.Random(0)
         # Caches the tick-invariant portion of the obstacle set --
         # enemies, ball, and static field/defense-area geometry -- across
@@ -619,7 +651,9 @@ class TrajectorySamplingPlanner:
         direct_blocked = self._blocked_by_priority_obstacle(
             robot_id, direct, obstacles, collision_time, priority_enabled
         )
-        if not direct_blocked and self._collision_leniency_accepts(direct, collision_time, v0, target_pos):
+        if not direct_blocked and self._collision_leniency_accepts(
+            direct, collision_time, v0, target_pos, priority_enabled
+        ):
             self._commit(robot_id, game.ts, direct, target_pos)
             result = PlanResult(trajectory=direct, has_collision=True, collision_time=collision_time)
             return self._with_current_clearance(result, p0, obstacles)
@@ -649,13 +683,13 @@ class TrajectorySamplingPlanner:
                 t_col = self._first_collision(candidate, obstacle_arrays)
                 if t_col is None:
                     self._commit(robot_id, game.ts, candidate, target_pos)
-                    self._last_intermediate_target[robot_id] = candidate_target
+                    self._last_intermediate_direction[robot_id] = _unit_direction(p0, candidate_target)
                     result = PlanResult(trajectory=candidate, has_collision=False, collision_time=None)
                     return self._with_current_clearance(result, p0, obstacles)
                 blocked = self._blocked_by_priority_obstacle(robot_id, candidate, obstacles, t_col, priority_enabled)
-                if not blocked and self._collision_leniency_accepts(candidate, t_col, v0, target_pos):
+                if not blocked and self._collision_leniency_accepts(candidate, t_col, v0, target_pos, priority_enabled):
                     self._commit(robot_id, game.ts, candidate, target_pos)
-                    self._last_intermediate_target[robot_id] = candidate_target
+                    self._last_intermediate_direction[robot_id] = _unit_direction(p0, candidate_target)
                     result = PlanResult(trajectory=candidate, has_collision=True, collision_time=t_col)
                     return self._with_current_clearance(result, p0, obstacles)
                 rank = fallback_rank(t_col, blocked)
@@ -900,25 +934,92 @@ class TrajectorySamplingPlanner:
         means the freshly-sorted candidates -- which are already sorted
         toward the target -- get a real chance to win instead of never being
         reached at all.
+
+        `last` is stored (and re-checked here) as a DIRECTION from the robot,
+        not the absolute point once picked -- re-anchored onto a fresh
+        `INTERMEDIATE_TARGET_RADIUS` ring around THIS call's `p0` before
+        being tried, never reused as a stale absolute coordinate. Live-traced
+        on a still-open DIRECT_FREE_YELLOW stall (`clear_danger_vs_
+        overload_flow`, same restart-congestion family as the bug above,
+        found chasing the roadmap's remaining 66/231 RESTART_STALL backlog):
+        with the direct path permanently blocked, `plan()` falls through to
+        this method every ~0.5s (`_try_reuse`'s own position-drift tolerance
+        forces a full replan that often -- expected and, on its own,
+        harmless, confirmed common during completely ordinary play too), and
+        the *previous* version of this method computed each candidate's
+        bearing (including `last`'s) freshly from THIS call's `p0` against an
+        absolute point chosen relative to a PRIOR `p0`. A robot near the
+        1m-radius ring's own centre can have that bearing swing by 50-90+
+        degrees from a `p0` shift of only a few tens of centimetres -- traced
+        live: `last` measured 84.1 degrees off-axis (kept) one replan, then
+        92.1 degrees (dropped) the very next, purely from `p0` drift, not
+        because the previously-chosen direction had actually become a worse
+        choice. Every drop threw away a perfectly good detour and forced a
+        fresh random draw, which itself went stale by the same mechanism a
+        few replans later -- the robot never stayed on one detour long
+        enough to clear the blocking obstacle, net displacement over many
+        seconds averaging to near zero exactly like the backward-`last` bug
+        above, just via direction churn instead of a single frozen bad
+        choice. Storing the direction instead of the point makes the
+        staleness check invariant to this drift: the SAME chosen direction
+        re-projected onto a fresh ring around a slightly-moved `p0` still
+        measures the same bearing relative to the (also freshly recomputed)
+        final-target direction, since both rotate together with `p0`'s
+        small displacement -- only a REAL change in which way progress lies
+        (the direct path clearing, or a new obstacle appearing) moves
+        `angular_distance` past the threshold now, not `p0` motion alone.
         """
-        last = self._last_intermediate_target.get(robot_id)
+        last_dir = self._last_intermediate_direction.get(robot_id)
 
         fx, fy = final_target[0] - p0[0], final_target[1] - p0[1]
         final_angle = math.atan2(fy, fx)
+
+        def angular_distance_of_angle(cand_angle: float) -> float:
+            diff = abs(cand_angle - final_angle)
+            return min(diff, 2 * math.pi - diff)
+
+        r = config.INTERMEDIATE_TARGET_RADIUS
+
+        last = None
+        near_last: List[Tuple[float, float]] = []
+        if last_dir is not None:
+            last_angle = math.atan2(last_dir[1], last_dir[0])
+            if angular_distance_of_angle(last_angle) <= _STALE_INTERMEDIATE_TARGET_ANGLE_RAD:
+                last = (p0[0] + r * last_dir[0], p0[1] + r * last_dir[1])
+                # `last` is an exact re-anchor of last tick's winning
+                # direction, so when a narrow, near-static obstacle (a
+                # stationary teammate almost exactly astride the direct
+                # line, say) blocks it at THIS tick's `p0`, it typically
+                # blocks it again at the next few ticks' barely-different
+                # `p0` too -- the geometry that caused the collision hasn't
+                # materially changed. Trying small same-direction-family
+                # perturbations before falling through to unbiased fresh
+                # draws gives the search a real chance to find a nearby
+                # angle that clears the same obstacle from the same side,
+                # rather than a single point-blocked retry immediately
+                # ceding to a fully random draw that's equally likely to
+                # flip to the opposite side of the obstacle. Live-traced on
+                # `clear_danger_vs_overload_flow`'s PREPARE_KICKOFF_YELLOW
+                # stall: without this, the kicker's detour flipped sides
+                # ~18 times over 16s and never converged (`last` itself
+                # exhausted every switch-time variant and failed collision
+                # each time it was blocked, immediately falling through to
+                # 5 fully unbiased random angles with no side preference at
+                # all) despite `last`'s general direction remaining a
+                # perfectly viable way around the same, non-moving robot.
+                for i in range(1, _N_NEAR_LAST_JITTER + 1):
+                    for sign in (1, -1):
+                        jitter_angle = last_angle + sign * i * _NEAR_LAST_JITTER_STEP_RAD
+                        near_last.append((p0[0] + r * math.cos(jitter_angle), p0[1] + r * math.sin(jitter_angle)))
 
         def angular_distance(t: Tuple[float, float]) -> float:
             cx, cy = t[0] - p0[0], t[1] - p0[1]
             if abs(cx) < 1e-9 and abs(cy) < 1e-9:
                 return math.pi
             cand_angle = math.atan2(cy, cx)
-            diff = abs(cand_angle - final_angle)
-            return min(diff, 2 * math.pi - diff)
-
-        if last is not None and angular_distance(last) > _STALE_INTERMEDIATE_TARGET_ANGLE_RAD:
-            last = None
+            return angular_distance_of_angle(cand_angle)
 
         fresh: List[Tuple[float, float]] = []
-        r = config.INTERMEDIATE_TARGET_RADIUS
         for _ in range(config.N_INTERMEDIATE_TARGETS):
             angle = self._rng.uniform(0, 2 * math.pi)
             fresh.append((p0[0] + r * math.cos(angle), p0[1] + r * math.sin(angle)))
@@ -927,7 +1028,7 @@ class TrajectorySamplingPlanner:
         # smallest first -- paper section 2.2: "This favors paths pointing
         # towards the target."
         fresh.sort(key=angular_distance)
-        return ([last] if last is not None else []) + fresh
+        return ([last] if last is not None else []) + near_last + fresh
 
     def _first_collision(
         self,
@@ -1010,6 +1111,7 @@ class TrajectorySamplingPlanner:
         collision_time: float,
         v0: Tuple[float, float],
         target_pos: Tuple[float, float],
+        priority_enabled: bool = True,
     ) -> bool:
         """True if a NON-priority collision should be accepted outright
         anyway -- ported from the rest of TIGERs' `MovingObstacleResultAcceptor.
@@ -1021,7 +1123,15 @@ class TrajectorySamplingPlanner:
 
         1. The collision must happen near the FINAL destination (Sumatra:
            within 300mm) -- a collision anywhere else along the path gets no
-           leniency at all, only ones near arrival.
+           leniency at all, only ones near arrival. UNLESS `priority_enabled`
+           is already False (restart/formation phase -- see
+           `_priority_blocking_enabled`), in which case this check is skipped
+           entirely: every teammate is simultaneously replanning to its own
+           formation spot in this phase, so an ordinary transient graze can
+           happen anywhere along the path, not just near arrival, and is
+           exactly as safe there as one near the destination would be --
+           see this method's docstring update below for the live trace this
+           fixes.
         2. `collisionLikely` (Sumatra: an obstacle-type-specific "is this
            really going to happen" check, e.g. for a standing/stationary
            obstacle) has no equivalent obstacle-type distinction in this
@@ -1041,11 +1151,31 @@ class TrajectorySamplingPlanner:
         planner had no way to ever accept a completely normal, low-speed
         arrival next to another robot, pushing it toward `best_fallback`'s
         "whatever survives longest" pick even when a fine approach exists.
+
+        The `priority_enabled` carve-out on check 1 fixes a second, harder
+        instability in the same restart-congestion family as
+        `_intermediate_targets`'s stale-direction/side-flip bugs: live-traced
+        on `counter_press_vs_overload_flow`'s PREPARE_KICKOFF_BLUE stall
+        (roadmap item 15/16), where the blocking teammate was itself still
+        actively moving to ITS OWN formation spot (not one near-stationary
+        robot, the earlier-fixed case) -- the collision was ~0.9m from the
+        kicker's destination, so leniency never applied at all regardless of
+        how slow or brief the graze was, and every direct/two-segment
+        candidate was rejected outright every tick. With priority-blocking
+        already disabled for this whole referee-command family precisely
+        because mass-simultaneous replans routinely cross paths transiently
+        and harmlessly (see `_PRIORITY_BLOCKING_LIVE_PLAY_COMMANDS`'s
+        docstring), rejecting a slow, non-priority graze just because it
+        isn't near arrival re-introduces the same false strictness in a
+        different check -- check 3 (speed/braking-distance) still applies
+        unchanged, so a genuine fast head-on collision is never excused
+        merely for happening during a restart.
         """
-        collision_pos, _ = trajectory.state_at(collision_time)
-        dist_dest_to_collision = math.hypot(collision_pos[0] - target_pos[0], collision_pos[1] - target_pos[1])
-        if dist_dest_to_collision > config.COLLISION_DEST_PROXIMITY_M:
-            return False
+        if priority_enabled:
+            collision_pos, _ = trajectory.state_at(collision_time)
+            dist_dest_to_collision = math.hypot(collision_pos[0] - target_pos[0], collision_pos[1] - target_pos[1])
+            if dist_dest_to_collision > config.COLLISION_DEST_PROXIMITY_M:
+                return False
 
         _, (vx, vy) = trajectory.state_at(collision_time)
         speed_on_collision = math.hypot(vx, vy)
