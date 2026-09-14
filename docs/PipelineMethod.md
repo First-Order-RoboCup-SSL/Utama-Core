@@ -4,7 +4,9 @@
 ### Problem: 
 - When ingesting new data, we may want to combine this new data with our previous knowledge eg, Kalman filter. Currently this requires writing many new functions in the GameFrame object making it bloated.
 - Interface for accessing past, current and future (predictions) is not uniform
-- Uncertainty on strategies which we aim to address with the Behaviour Tree
+- Uncertainty on strategies which we originally aimed to address with a Behaviour Tree;
+  the strategy layer has since been rewritten kernel-native and no longer uses one
+  (see `docs/STRATEGY_DEVELOPMENT.md`)
   
 ### System diagram
 ![Dataflow Diagram](../assets/images/pipeline_new.drawio.png)
@@ -31,11 +33,11 @@ Concurrency - deque is thread safe
 - GameFrame is immutable
 - Separation of receivers (network) and refiners allow easier testing 
 - Formalisation of Past, Present, Future games
-- Strategies use GameTimeline which allows access to known parameters (robot positions etc),
--  Future game exposes predictions, which are customisable via the Predictions interface.
-   -  Allows multiple methods of prediction for the same property, eg velocity from previous velocity, or previous positions
--  GameHistory stores historical records, but is hidden from public interface of strategy
-   -  Motive: You use the past to predict things, so you should write a predictor
-   -  Predictors have access to the past data to make predictions
+- `GameHistory` (`utama_core/entities/game/game_history.py`) stores historical records
+
+> The `GameTimeline` / `Predictions` interface described in earlier drafts of this
+> design (uniform past/present/future access with pluggable per-property predictors)
+> was never built. `GameHistory` and the `Refiner` pipeline above shipped; predictions
+> are currently handled ad hoc per call site, not through a shared predictor interface.
 
 

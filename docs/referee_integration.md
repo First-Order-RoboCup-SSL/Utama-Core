@@ -1,5 +1,15 @@
 # Referee Integration Design
 
+> **Historical / archived.** This document describes the original py_trees behaviour-tree
+> referee integration, which no longer exists — the strategy layer was rewritten
+> kernel-native and the BT scaffolding was deleted (see `docs/roadmap.md` and
+> `docs/STRATEGY_DEVELOPMENT.md`). For the current referee mechanism, see
+> `docs/custom_referee.md` and `utama_core/engine/referee_override.py`.
+>
+> Kept for the record: §3's priority-tree diagram is the pre-rewrite baseline that
+> `referee_override.py` and its tests cite when explaining why the current plain-class
+> `RefereeOverride`/`*Step` mechanism is shaped the way it is.
+
 This document captures the design decisions for integrating the SSL Game Controller referee
 into Utama's behaviour tree architecture.
 
