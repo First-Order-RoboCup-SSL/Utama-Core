@@ -1,0 +1,71 @@
+<svg viewBox="0 0 700 520" xmlns="http://www.w3.org/2000/svg" font-family="Inter, system-ui, sans-serif">
+  <rect x="0" y="0" width="700" height="520" fill="#e8f5f3"/>
+  <text x="28" y="38" font-size="17" font-weight="700" fill="#1b1e26">how a play gets decided</text>
+
+  <rect x="30" y="80" width="140" height="60" rx="6" fill="#ffffff" stroke="#20242c" stroke-width="2"/>
+  <text x="100" y="105" font-size="14" font-weight="600" text-anchor="middle" fill="#1b1e26">Strategy</text>
+  <text x="100" y="123" font-size="11" text-anchor="middle" fill="#5a6270">multi-agent coordination</text>
+
+  <line x1="170" y1="110" x2="212" y2="110" stroke="#20242c" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <rect x="215" y="80" width="150" height="60" rx="6" fill="#ffffff" stroke="#20242c" stroke-width="2"/>
+  <text x="290" y="105" font-size="14" font-weight="600" text-anchor="middle" fill="#1b1e26">Tactic Engine</text>
+  <text x="290" y="123" font-size="11" text-anchor="middle" fill="#5a6270">assigns roles / robots</text>
+
+  <line x1="365" y1="110" x2="407" y2="110" stroke="#20242c" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <rect x="410" y="80" width="150" height="60" rx="6" fill="#ffffff" stroke="#20242c" stroke-width="2"/>
+  <text x="485" y="105" font-size="14" font-weight="600" text-anchor="middle" fill="#1b1e26">Motion Planner</text>
+  <text x="485" y="123" font-size="11" text-anchor="middle" fill="#5a6270">trajectory optimization</text>
+
+  <line x1="560" y1="110" x2="600" y2="110" stroke="#20242c" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <g>
+    <circle cx="628" cy="98" r="13" fill="#0f9c90"/>
+    <circle cx="650" cy="118" r="13" fill="#0f9c90"/>
+    <circle cx="628" cy="138" r="13" fill="#0f9c90"/>
+    <text x="637" y="168" font-size="11" font-weight="600" text-anchor="middle" fill="#1b1e26">Robots</text>
+  </g>
+
+  <path d="M 637 150 L 637 210 L 290 210 L 290 232" fill="none" stroke="#5a6270" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow-soft)"/>
+  <text x="470" y="203" font-size="11" fill="#5a6270" text-anchor="middle">every tick logged</text>
+
+  <rect x="40" y="235" width="620" height="230" rx="8" fill="#ffffff" stroke="#20242c" stroke-width="2"/>
+  <text x="60" y="264" font-size="14" font-weight="700" fill="#1b1e26">Agent-Directed Engineering</text>
+
+  <rect x="65" y="285" width="150" height="70" rx="6" fill="#f4faf9" stroke="#0f9c90" stroke-width="1.75"/>
+  <text x="140" y="312" font-size="12.5" font-weight="600" text-anchor="middle" fill="#1b1e26">Diagnose</text>
+  <text x="140" y="330" font-size="10.5" text-anchor="middle" fill="#5a6270">root-cause a stall</text>
+  <text x="140" y="344" font-size="10.5" text-anchor="middle" fill="#5a6270">from a live trace</text>
+
+  <line x1="215" y1="320" x2="252" y2="320" stroke="#20242c" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="255" y="285" width="150" height="70" rx="6" fill="#f4faf9" stroke="#0f9c90" stroke-width="1.75"/>
+  <text x="330" y="312" font-size="12.5" font-weight="600" text-anchor="middle" fill="#1b1e26">Direct the agent</text>
+  <text x="330" y="330" font-size="10.5" text-anchor="middle" fill="#5a6270">steer the fix,</text>
+  <text x="330" y="344" font-size="10.5" text-anchor="middle" fill="#5a6270">review every change</text>
+
+  <line x1="405" y1="320" x2="442" y2="320" stroke="#20242c" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="445" y="285" width="150" height="70" rx="6" fill="#f4faf9" stroke="#0f9c90" stroke-width="1.75"/>
+  <text x="520" y="308" font-size="12.5" font-weight="600" text-anchor="middle" fill="#1b1e26">Verify at scale</text>
+  <text x="520" y="326" font-size="10.5" text-anchor="middle" fill="#5a6270">231-match</text>
+  <text x="520" y="340" font-size="10.5" text-anchor="middle" fill="#5a6270">regression round-robin</text>
+
+  <path d="M 520 355 L 520 400 L 140 400 L 140 355" fill="none" stroke="#c9862f" stroke-width="2" marker-end="url(#arrow-warm)"/>
+  <text x="330" y="420" font-size="11" fill="#c9862f" text-anchor="middle" font-weight="600">ship only what survives regression</text>
+
+  <text x="60" y="452" font-size="11.5" fill="#5a6270">this year: 4 tactic-engine deadlocks fixed end-to-end this way</text>
+
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#20242c"/>
+    </marker>
+    <marker id="arrow-soft" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#5a6270"/>
+    </marker>
+    <marker id="arrow-warm" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#c9862f"/>
+    </marker>
+  </defs>
+</svg>

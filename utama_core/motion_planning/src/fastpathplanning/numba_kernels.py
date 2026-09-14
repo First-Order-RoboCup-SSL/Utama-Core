@@ -7,8 +7,8 @@ candidate -- confirmed via cProfile on a real 65s match to be the largest
 single cost in FastPathPlanner (`collides`: 8.3s cumtime/190917 calls,
 `_find_subgoal`: 4.5s cumtime/248714 calls).
 
-IMPORTANT lesson (measured directly, see `/home/isaac/.claude/jobs/d50ccf8c/
-tmp/numba_fpp_bench.py`): decorating one tiny leaf function (e.g. a single
+IMPORTANT lesson (measured directly via a standalone microbenchmark):
+decorating one tiny leaf function (e.g. a single
 `distance_point_to_segment` call) with `@njit` and calling it from a Python
 `for` loop does NOT reliably pay off -- the Python<->native call-boundary
 cost is paid on every iteration, and for FPP's segment-distance math

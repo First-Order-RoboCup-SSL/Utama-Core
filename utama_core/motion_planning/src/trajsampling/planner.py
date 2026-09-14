@@ -1051,8 +1051,7 @@ class TrajectorySamplingPlanner:
         Delegates the actual timestep x obstacle scan to
         `collision_numba.first_collision_numba`, a native port of what used
         to be this method's own loop. Profiling (see `planner.py`'s module
-        docstring and `/home/isaac/.claude/jobs/d50ccf8c/tmp/profile_real_
-        match.log`) found this loop -- ~18 adaptive timesteps x ~20
+        docstring) found this loop -- ~18 adaptive timesteps x ~20
         obstacles per call, tens of thousands of calls per match -- was the
         dominant cost of the whole planner, ~2.4x slower than
         FastPathPlanner in a real match. A microbenchmark

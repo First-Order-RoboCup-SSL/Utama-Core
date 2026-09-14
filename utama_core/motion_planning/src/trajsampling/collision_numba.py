@@ -1,11 +1,11 @@
 """Numba-jitted core of `TrajectorySamplingPlanner._first_collision`.
 
-Profiling (see session notes referenced from `planner.py`) showed
+Profiling (see `planner.py`'s module docstring) showed
 `_first_collision`'s scan loop -- ~18 adaptive timesteps x ~20 obstacles per
 call, tens of thousands of calls per match -- as the dominant cost of the
 trajectory-sampling planner, responsible for it running ~2.4x slower than
-FastPathPlanner in a real match. Two things were verified before writing this
-module (see `/home/isaac/.claude/jobs/d50ccf8c/tmp/numba_bench*.py`):
+FastPathPlanner in a real match. Two things were verified via standalone
+microbenchmarks before writing this module:
 
 1. Decorating tiny leaf functions (e.g. a lone `state_at`) with `@njit` and
    calling them one at a time from a Python loop is a REGRESSION (~0.73x --
