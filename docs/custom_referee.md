@@ -1,6 +1,6 @@
 # Custom Referee
 
-The `CustomReferee` is an in-process, mode-agnostic referee that operates on `GameFrame` objects and produces `RefereeData` — read each tick via `game.referee` by `kernel.RefereeOverride` (see `kernel/referee_override.py`) to interrupt tactics during restarts. It requires no network connection, no AutoReferee process, and no simulator-specific code. It works identically across RSim, grSim, and Real modes.
+The `CustomReferee` is an in-process, mode-agnostic referee that operates on `GameFrame` objects and produces `RefereeData` — read each tick via `game.referee` by `RefereeOverride` (see `utama_core/engine/referee_override.py`) to interrupt tactics during restarts. It requires no network connection, no AutoReferee process, and no simulator-specific code. It works identically across RSim, grSim, and Real modes.
 
 ---
 

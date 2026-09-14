@@ -108,6 +108,7 @@ import math
 import multiprocessing as mp
 import os
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -1060,7 +1061,7 @@ def main() -> None:
         default=Path(
             os.environ.get(
                 "METRIC_CORRELATION_SCRATCH",
-                "/tmp/claude-1000/-home-isaac-dev-ssl-Utama-Core/e62d8c55-0354-4b4c-b858-bd14471c3261/scratchpad",
+                str(Path(tempfile.gettempdir()) / "metric_correlation_scratch"),
             )
         ),
     )

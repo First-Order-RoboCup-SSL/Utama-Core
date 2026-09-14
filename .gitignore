@@ -209,6 +209,7 @@ utama_core/replay/banks/
 # local agent-tool config dirs
 .codex/
 .agents/
+.claude/
 
 .vscode
 

@@ -198,7 +198,7 @@ rather than a hypothetical one.
 
 ## 10. ✅ Settled — `StrategyRunner` integration via an `AbstractStrategy` adapter
 
-**Decision:** `utama_core/kernel/kernel_strategy.py` adds `KernelStrategy(AbstractStrategy)`,
+**Decision:** `utama_core/strategy/kernel_strategy.py` adds `KernelStrategy(AbstractStrategy)`,
 which satisfies `AbstractStrategy`'s contract (`create_behaviour_tree`, `assert_exp_robots`,
 `assert_exp_goals`, `get_min_bounding_req`, `load_game`, `step`) but overrides `step()` to
 tick a `kernel.Strategy` (for the outfield pool) plus the pinned goalkeeper tactic directly,
@@ -392,7 +392,7 @@ functions) since those are fundamental building blocks, not tactical decisions.
   (a marker can switch targets tick-to-tick); acceptable since marking carries no
   phase/commitment state to disrupt, revisit only if mark-flapping proves to be a real
   observed problem.
-- **`build_split_shape_kernel_strategy`** (`utama_core/kernel/kernel_strategy.py`) wires
+- **`build_split_shape_kernel_strategy`** (`utama_core/strategy/kernel_strategy.py`) wires
   both into a `Strategy` (§11) with `_possession_split_picker`, usable as a
   `KernelStrategy`'s `build_kernel_strategy` argument exactly like the existing
   `build_default_kernel_strategy` single-tactic factory.
