@@ -427,16 +427,20 @@ This list reflects actual code state, not the old discussion.
   robot reports possession — acknowledged in the code as a fallback, not
   guaranteed accurate when the true touch happened right at the boundary.
   Documented here as a known limitation, not scheduled to be fixed.
-- **`CustomReferee.set_bt_data` / `StrategyRunner`'s call site are stale
-  names**, left over from the deleted behaviour-tree scaffolding —
-  `set_bt_data`'s docstring still says "Called by StrategyRunner after each
-  behaviour tree tick," but the actual call
-  (`strategy_runner.py:1607`) is `self.referee.set_bt_data(self.my.strategy.debug_status())`
-  — `debug_status()` is the kernel-native per-robot tactic/committed status,
-  nothing BT-related. Functionally correct, just misnamed; a rename
-  (`set_bt_data` → `set_debug_status`, `_bt_nodes_per_robot` →
-  `_debug_status_per_robot`) would need to touch `custom_referee.py`,
-  `gui.py`, and the one `strategy_runner.py` call site.
+- **Leftover `bt_nodes` naming inside `CustomReferee`** (narrowed 2026-09-15).
+  The public half of this gap is already fixed: the method is
+  `set_debug_status` (`custom_referee.py:288`), its docstring says "Called by
+  StrategyRunner every tick with `AbstractStrategy.debug_status()`", and the
+  call site is `strategy_runner.py:1995`. What remains is internal to
+  `custom_referee.py`: the field `_bt_nodes_per_robot` (lines 191, 271, 293),
+  `set_debug_status`'s parameter `bt_nodes_per_robot`, and a `bt_nodes` mention
+  in `attach_dashboard_notifier`'s docstring (line 216) — all behaviour-tree
+  vocabulary for what is now kernel-native per-robot tactic/committed status.
+  Functionally correct, just misnamed. Renaming to `_debug_status_per_robot` is
+  confined to this one file (nothing outside it references the field, and
+  `_dashboard_notifier` is invoked positionally), so it is safe whenever someone
+  wants it. Earlier drafts of this bullet also named `gui.py` as a call site;
+  that file no longer exists (replaced by the unified dashboard, `c3c389e`).
 
 Previously flagged and now confirmed resolved by reading the code directly:
 auto-advance after goals and after kickoff/free-kick timeouts (all 5

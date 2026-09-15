@@ -61,7 +61,7 @@ Option C (line-segment clearance) remains deferred.
 
 ---
 
-## 6. `GoalRule` only fires during NORMAL_START and FORCE_START
+## 6. ✅ `GoalRule` only fires during NORMAL_START and FORCE_START — resolved, no change needed
 
 **File:** `utama_core/custom_referee/rules/goal_rule.py`
 
