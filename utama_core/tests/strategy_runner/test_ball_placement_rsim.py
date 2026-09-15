@@ -2,7 +2,7 @@
 
 These tests verify that `kernel.referee_override.RefereeOverride` (via
 `strategy/referee/actions.py`'s `BallPlacementOursStep`, dispatched
-unconditionally by `kernel.Strategy.tick()`) satisfies the core requirements
+unconditionally by `Strategy.tick()`) satisfies the core requirements
 of automatic ball placement:
 
   1. **Approach** — after BALL_PLACEMENT_YELLOW is issued, the placer robot
@@ -91,7 +91,7 @@ def _make_runner(referee: CustomReferee) -> StrategyRunner:
     """Build a 2v2 StrategyRunner on the Exhibition Road field.
 
     Ball placement (`BALL_PLACEMENT_YELLOW`/`BLUE`) is handled unconditionally
-    by `kernel.Strategy.tick()`'s `RefereeOverride` for every kernel strategy
+    by `Strategy.tick()`'s `RefereeOverride` for every kernel strategy
     — the outfield tactic roster is irrelevant while an override command is
     active, so a minimal default kernel strategy reproduces the old
     `BallPlacementStrategy`'s behaviour (which was itself just an idle vehicle

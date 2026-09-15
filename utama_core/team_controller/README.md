@@ -22,7 +22,7 @@ This folder contains all the files which perform the initial processing of data 
   - Updates internal data structures with the latest referee commands, stage, team information, and designated ball placement positions.
   - Provides methods to retrieve the latest referee data, command, stage, and other relevant information.
 - **Vision Data**
-  - The `VisionDataReceiver` class is responsible for receiving and managing vision data for robots and the ball in a multi-robot game environment. It interfaces with a network manager to receive packets containing positional data for the ball and robots on both teams. The class updates internal data structures accordingly. Here is an [example usage](src/tests/vision_receiver_test.py).
+  - The `VisionDataReceiver` class is responsible for receiving and managing vision data for robots and the ball in a multi-robot game environment. It interfaces with a network manager to receive packets containing positional data for the ball and robots on both teams. The class updates internal data structures accordingly. Here is an [example usage](../tests/receivers/vision_receiver_unit_test.py) (and an [integration test](../tests/receivers/vision_receiver_integration_test.py)).
   - **Data Types**:
     - `Ball`: A named tuple representing the ball's position with fields `x`, `y`, and `z`.
     - `Robot`: A named tuple representing a robot's position with fields `x`, `y`, and `orientation`.

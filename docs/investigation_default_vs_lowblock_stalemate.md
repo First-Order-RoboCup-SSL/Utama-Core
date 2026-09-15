@@ -37,7 +37,7 @@ simultaneously have no escape mechanism.
 ## Reproduction
 
 ```
-pixi run python arena_tournament.py                # 60 s, dumps per-tick JSONL to /tmp/opencode/
+pixi run python arena_tournament.py                # 60 s, dumps per-tick JSONL to $TMPDIR/utama_arena_tournament/
 pixi run python tournament.py default low_block
 ```
 

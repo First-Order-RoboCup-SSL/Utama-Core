@@ -1,7 +1,7 @@
 """WanderingTactic — base kernel tactic for referee visualisation.
 
 Each robot cycles through its own list of waypoints on the field indefinitely.
-When a referee command fires, `kernel.Strategy.tick()`'s `RefereeOverride`
+When a referee command fires, `Strategy.tick()`'s `RefereeOverride`
 intercepts before this tactic runs, so you can clearly see robots interrupted
 and repositioned by the referee.
 """

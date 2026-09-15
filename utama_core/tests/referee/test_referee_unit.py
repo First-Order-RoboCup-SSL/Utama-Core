@@ -5,7 +5,7 @@ Tests cover:
   - RefereeRefiner.refine injects data into GameFrame; deduplication logic
   - Game.referee property proxies correctly from CurrentGameFrame
   - strategy/referee/actions.py Step classes (Halt/Stop/BallPlacement/Kickoff/
-    Penalty/DirectFree) — the geometry/positioning logic `kernel.RefereeOverride`
+    Penalty/DirectFree) — the geometry/positioning logic `RefereeOverride`
     reuses directly for the kernel-tactic model.
 """
 

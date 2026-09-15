@@ -47,9 +47,9 @@ start with a proper kickoff ceremony, which breaks the center-circle passer
 tangle for matchups that otherwise wedge); defaults to FORCE_START (the
 StrategyRunner sim default that the tournament uses).
 
-Output: /tmp/opencode/arena_tournament.jsonl (one row per tick); the last
-match's rows also land in /tmp/opencode/probe_default_vs_lowblock.jsonl when
-the first token is a back-compat positional form. Replays (my + opp
+Output: `<tmpdir>/utama_arena_tournament/arena_tournament.jsonl` (one row per
+tick), where `<tmpdir>` is the platform temp dir; override the directory with
+`UTAMA_ARENA_SCRATCH`. Replays (my + opp
 perspective) and match log / stats are also written via the standard
 StrategyRunner machinery; a compact boxscore is printed at the end.
 """
@@ -57,9 +57,12 @@ StrategyRunner machinery; a compact boxscore is printed at the end.
 from __future__ import annotations
 
 import json
+import os
 import sys
+import tempfile
 import time
 from dataclasses import asdict
+from pathlib import Path
 from typing import Optional
 
 from tournament_lib import N_OUTFIELD, OUTFIELD_ROBOT_IDS, TICKS_PER_SECOND
@@ -73,9 +76,16 @@ from utama_core.strategy import kernel_strategy
 # Arena strategies for the round-robin tournament.
 _ARENA_STRATEGIES = ("tiki_taka", "counter_press", "zone_fluid")
 
-OUT_PATH = "/tmp/opencode/arena_tournament.jsonl"
-STATS_PATH = "/tmp/opencode/probe_stats.json"
-MATCHLOG_PATH = "/tmp/opencode/probe_matchlog.jsonl"
+# Scratch dir for this script's per-tick dump, stats and match log. Defaults
+# under the platform temp dir so the script runs on any machine; override with
+# UTAMA_ARENA_SCRATCH. Created on import — `open(OUT_PATH, "w")` below has no
+# other chance to make it.
+_SCRATCH_DIR = Path(os.environ.get("UTAMA_ARENA_SCRATCH") or Path(tempfile.gettempdir()) / "utama_arena_tournament")
+_SCRATCH_DIR.mkdir(parents=True, exist_ok=True)
+
+OUT_PATH = str(_SCRATCH_DIR / "arena_tournament.jsonl")
+STATS_PATH = str(_SCRATCH_DIR / "probe_stats.json")
+MATCHLOG_PATH = str(_SCRATCH_DIR / "probe_matchlog.jsonl")
 
 
 def _parse_args(argv: list[str]):

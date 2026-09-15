@@ -63,7 +63,7 @@ from utama_core.tests.common.abstract_test_manager import (
 )
 
 # ---------------------------------------------------------------------------
-# Minimal idle strategy — RefereeOverride (kernel.Strategy.tick()) handles all
+# Minimal idle strategy — RefereeOverride (Strategy.tick()) handles all
 # motion during override commands; only test_out_of_bounds_restart_spot_...
 # needs a real tactic below, since it isn't exercising the override layer.
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ PREPARE_KICKOFF_COMMANDS = {
 
 def _idle_strategy() -> AbstractStrategy:
     """Kernel strategy with an empty outfield pool — does nothing; the referee
-    override layer (`kernel.Strategy.tick()`'s `RefereeOverride`) handles all
+    override layer (`Strategy.tick()`'s `RefereeOverride`) handles all
     motion during override commands regardless of the tactic roster."""
     return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()), exp_ball=True)
 

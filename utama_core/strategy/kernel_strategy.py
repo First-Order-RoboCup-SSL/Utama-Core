@@ -1,4 +1,4 @@
-"""Kernel `Strategy` factories — `build_kernel_strategy(motion_controller) -> kernel.Strategy`
+"""Kernel `Strategy` factories — `build_kernel_strategy(motion_controller) -> Strategy`
 callables suitable for `AbstractStrategy`'s constructor argument of the same name.
 
 See `utama_core.engine.abstract_strategy.AbstractStrategy` for the class that
@@ -36,7 +36,7 @@ def build_default_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     "splitting policy" deferral, this deliberately does not invent an
     allocation policy ahead of a second concrete tactic that would need one.
     Callers with more than one outfield tactic should build their own
-    `kernel.Strategy` with a real `Picker` instead of using this helper.
+    `Strategy` with a real `Picker` instead of using this helper.
 
     Returns a `build_kernel_strategy(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the

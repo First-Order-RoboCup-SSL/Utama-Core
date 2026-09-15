@@ -63,7 +63,7 @@ def test_kernel_strategy_outfield_tactic_gets_ticked(kernel_runner):
 
 def test_kernel_strategy_is_built_by_load_motion_controller_alone():
     """Direct unit-level check (no rsim, no full runner) that `AbstractStrategy`
-    doesn't need `load_game` at all to build its `kernel.Strategy` — only
+    doesn't need `load_game` at all to build its `Strategy` — only
     `load_motion_controller`, called with a bare stand-in object."""
     strategy = AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy((1, 2)))
     assert strategy._kernel_strategy is None

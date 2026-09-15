@@ -1999,7 +1999,7 @@ class StrategyRunner:
         for `MatchStats`'s COMMITTED_FROZEN stall watchdog (see
         `MatchStatsAccumulator.record_tick`'s `committed_tactics` arg).
 
-        Reuses `kernel.Strategy.slot_status()` — already computed for/reachable
+        Reuses `Strategy.slot_status()` — already computed for/reachable
         the same way `_push_bt_nodes_to_referee` reaches `_kernel_strategy`
         post-construction — rather than adding a new plumbing path. Returns
         `None` (watchdog falls back to "ball frozen during live play") for a

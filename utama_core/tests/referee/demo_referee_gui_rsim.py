@@ -11,7 +11,7 @@ What it does:
     calls referee.step() on every tick and handles ball teleports on STOP
     automatically — no patching required.
   - WanderingTactic is used as the base strategy so robots visibly move and
-    you can watch kernel.RefereeOverride interrupt them when you issue
+    you can watch RefereeOverride interrupt them when you issue
     commands from the dashboard (Halt, Kickoff Yellow, etc.).
 
 Operator workflow:

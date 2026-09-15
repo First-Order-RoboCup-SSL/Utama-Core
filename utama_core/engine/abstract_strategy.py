@@ -3,7 +3,7 @@
 `StrategyRunner` drives a strategy through a fixed contract: `load_rsim_env`,
 `load_robot_controller`, `load_motion_controller`, `load_game`, `assert_exp_robots`,
 `assert_exp_goals`, and once per tick, `step()`. A concrete `AbstractStrategy` wraps a
-`kernel.Strategy` (see `utama_core.engine.strategy`): `step()` ticks that `Strategy` directly
+`Strategy` (see `utama_core.engine.strategy`): `step()` ticks that `Strategy` directly
 every frame.
 
 Robot 0 is always the goalkeeper. It is a permanently pinned slot inside the kernel
@@ -57,7 +57,7 @@ class AbstractStrategy:
 
     Args:
         build_kernel_strategy: called once, from `load_motion_controller`, as
-            `build_kernel_strategy(motion_controller) -> kernel.Strategy`.
+            `build_kernel_strategy(motion_controller) -> Strategy`.
             Deferred to a factory (rather than passed pre-built) only because
             `AbstractStrategy.__init__` itself runs before `StrategyRunner` has
             injected anything — `Strategy.__init__` never reads `game`, only

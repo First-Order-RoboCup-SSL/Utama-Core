@@ -5,7 +5,7 @@ Run with:
 
 What it does:
   - Starts a 3v3 RSim with WanderingTactic as the base strategy.
-  - `kernel.Strategy.tick()`'s `RefereeOverride` intercepts referee commands
+  - `Strategy.tick()`'s `RefereeOverride` intercepts referee commands
     and overrides robot behaviour accordingly.
   - A scripted referee cycles through all referee commands every few seconds so
     you can watch how robots respond visually in the RSim window.
