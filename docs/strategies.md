@@ -429,6 +429,20 @@ comparison, not the earlier 65s-only conclusion above.
 
 ## Known open bugs
 
+> **Most entries in this section are fixed, not open.** The section is kept
+> append-only and the heading name is unchanged because code comments and other
+> docs cite "Known open bugs" by name. Each entry states its own status in its
+> first line — check that before assuming something is still broken. The
+> genuinely-open ones, as of 2026-09-15, are:
+>
+> - `go_to_ball`'s "approach with dribbler back facing the ball" angle is a
+>   silent no-op (root-caused 2026-09-02, still not fixed).
+> - `counter_press` still scores in no match — the residual turn-budget-vs-
+>   window-duration mismatch, a design tension rather than a patchable bug.
+> - `default` vs `low_block` still draws 0-0 (partial improvement only).
+> - `default` hands 5 robots to a 2-robot tactic (robots 3-5 idle all match).
+> - `low_block`'s `PassAndShootTactic` gets stuck in "setup" for whole matches.
+
 - **`PressAndContainTactic`/`GiveAndGoTactic` picked the wrong robot for
   press/carrier roles via a sorted-tuple indexing bug — a third, distinct
   bug generation in these same two tactics (found and fixed 2026-09-01,

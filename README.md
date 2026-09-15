@@ -150,7 +150,7 @@ If you see UDP packets, everything is working.
 
 ![Dataflow Diagram](/assets/images/pipeline_new.drawio.png)
 
-The system design diagram is attached here for reference. For more information on the design, see [here](/docs/PipelineMethod.md).
+The system design diagram is attached here for reference. For more information on the design, see [here](/docs/pipeline_method.md).
 
 ## Milestones
 

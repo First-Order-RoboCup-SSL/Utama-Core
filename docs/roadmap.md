@@ -536,10 +536,20 @@ the full investigation narrative for anything already fixed lives in git log
    promotes/retires a scenario or writes a bank manifest), and the ladder
    (slow half) entirely.
 
-15. **`trajsample` liveness floor: 106/231 matches still stall (57 in a
-    DIRECT_FREE restart, 42 live-play ball holds), and the BangBang1D fix
-    cannot land until the planner handles blocked starts.** Findings from
-    2026-09-03, all measured with the stall watchdog (`tournament.py` STALLS
+15. **`trajsample` liveness floor: stalls down from 106/231 to 27/231, not
+    yet zero; the BangBang1D fix cannot land until the planner handles
+    blocked starts.** Current position (read this before trusting any count
+    below): the last *full* 231-match total was **27/231 stalled** after
+    `4b701ae` (RESTART_STALL 9, COMMITTED_FROZEN 16, NO_PROGRESS_POSSESSION
+    2). Two families were reduced after that run without a fresh full
+    re-run — the 20 `BALL_PLACEMENT_*` corner-overshoot `RESTART_STALL`
+    cases were fixed 2026-09-12, and the live-play `COMMITTED_FROZEN`
+    ball-hold family was taken to **8 matches / 9 stall events** (`70cb5c6`).
+    So there is no single confirmed total newer than 27/231; the residual
+    mechanism is documented at the end of this item. Everything below is the
+    dated investigation trail that got here, oldest first — the 106/231 and
+    127-stalled figures in it are historical baselines, not current state.
+    All counts measured with the stall watchdog (`tournament.py` STALLS
     section, `--strict`), same seed, 65 s, 231 matches:
 
     - True HEAD baseline before `885eba4` (`bff5321`): 127 stalled matches
