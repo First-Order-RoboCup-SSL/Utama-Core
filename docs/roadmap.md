@@ -108,10 +108,59 @@ the full investigation narrative for anything already fixed lives in git log
      tactics need some translation layer (match summaries, failure
      characterizations, maybe rendered trajectory snapshots).
 
-9. **Repo root cleanup — still pending.** 9 `demo_*.py` scripts plus `main.py`
-   sit loose in the repo root, no `demos/`/`scripts/` directory. Worth
-   deciding whether the survivors (post broken-demo triage) move into a
-   proper subdirectory.
+9. **Repo root cleanup — decided 2026-09-15: not moving the scripts.** The repo
+   root holds 17 `.py` files: 6 `demo_*.py`, the tournament/analysis set
+   (`arena_tournament`, `full_match_tournament`, `smoke_tournament`,
+   `tournament_lib`, `debug_match`, `repro_from_replay`, `elo`, `plot_elo`,
+   `dashboard_server`), plus `main.py` and `conftest.py`. A tracked `tools/`
+   directory already exists (`metric_correlation.py`,
+   `motion_planning_benchmark.py`, `scenario_bench.py`), so the destination
+   convention is settled — earlier drafts of this item said there was none, and
+   undercounted the loose files as "9 `demo_*.py` plus `main.py`".
+
+   Audited the move and it isn't worth it: ~45 inbound citations across docs,
+   code comments and tests would need rewriting (`full_match_tournament.py`
+   alone is cited from 15 files), each one a place a stale path can survive —
+   the exact defect class `fb4c508`/`604ad70`/`9c855e7` spent three commits
+   removing. Against that, the gain is a shorter `ls`. Per `AGENTS.md`'s
+   minimalism discipline, not a change this repo needs. Hard constraints found
+   while checking, worth knowing before anyone reopens this:
+
+   - `conftest.py` cannot move: it is the root pytest conftest defining
+     `--level`/`--headless`, and is the only one in the repo.
+   - `main.py` is pinned by two `pixi.toml` tasks (`python -m main`, including a
+     `[target.linux-64.tasks]` duplicate).
+   - `tournament_lib` is imported by name from five files
+     (`arena_tournament.py`, `debug_match.py`, `full_match_tournament.py`,
+     `repro_from_replay.py`, `smoke_tournament.py`), and `smoke_tournament.py`
+     re-exports its symbols onward for `debug_match.py`/`repro_from_replay.py`
+     (see the `noqa: F401` comments at `smoke_tournament.py:73-82`) — so moving
+     either file breaks importers transitively, not just directly.
+     `smoke_tournament` itself is imported by
+     `tests/engine/test_tournament_cli_args.py`.
+   - A script run as `python tools/x.py` gets `sys.path[0] = <repo>/tools`, not
+     the repo root, so `import tournament_lib` fails outright (verified). The
+     three existing `tools/` scripts each carry a `REPO_ROOT` +
+     `sys.path.insert(0, ...)` prologue to work around it
+     (`scenario_bench.py:73`, `metric_correlation.py:127`,
+     `motion_planning_benchmark.py:34`) — any moved script needs the same.
+
+   The 6 `demo_*.py` files are the only cleanly movable group (no importers;
+   `dashboard_server.py`, `demo_dribbler_test.py`, `demo_exhibition_road.py` and
+   `demo_referee_feedback_gui.py` have no inbound references at all) — but all
+   are legitimate documented demos with working run instructions, not dead code,
+   and moving 6 of 17 files leaves root barely tidier while adding a second
+   convention beside `tools/`. Two unrelated smells found in the same sweep,
+   neither chased:
+
+   - `start_test_env.sh` has zero inbound citations anywhere and launches grsim +
+     game-controller + `AutoReferee/`, a directory that is gitignored and
+     untracked. Either a stale relic or a live real-hardware script — needs
+     someone with the hardware to say which.
+   - `Utama.log` is written to a hardcoded relative path
+     (`strategy_runner.py:170`, `filename="Utama.log"`), so it lands in whatever
+     directory the process was started from. Gitignored via `*.log`, so
+     harmless, but it is root clutter by design rather than accident.
 
 10. **Known open bug: FastPathPlanning convergence stall
     (`test_mirror_swap`).** `tests/motion_planning/multiple_robots_test.py::
