@@ -201,7 +201,7 @@ rather than a hypothetical one.
 **Decision:** `utama_core/strategy/kernel_strategy.py` adds `KernelStrategy(AbstractStrategy)`,
 which satisfies `AbstractStrategy`'s contract (`create_behaviour_tree`, `assert_exp_robots`,
 `assert_exp_goals`, `get_min_bounding_req`, `load_game`, `step`) but overrides `step()` to
-tick a `kernel.Strategy` (for the outfield pool) plus the pinned goalkeeper tactic directly,
+tick a `Strategy` (for the outfield pool) plus the pinned goalkeeper tactic directly,
 bypassing py_trees entirely for command computation. `StrategyRunner` drives it exactly like
 any other `AbstractStrategy` — no changes to `StrategyRunner` itself were needed.
 
@@ -218,13 +218,13 @@ but `KernelStrategy` doesn't have one at construction time — `StrategyRunner` 
 via `load_motion_controller()` onto the blackboard. Confirmed from `StrategyRunner.__init__`'s
 call order that `_load_robot_controllers()` (which calls `load_motion_controller`) always runs
 before `_load_game()`. **Originally** (this section, when first written) `KernelStrategy`
-deferred building its `kernel.Strategy` until `load_game()` — under the mistaken assumption
-that `kernel.Strategy.__init__` needed `game`. It doesn't: `Strategy.__init__` only stores
+deferred building its `Strategy` until `load_game()` — under the mistaken assumption
+that `Strategy.__init__` needed `game`. It doesn't: `Strategy.__init__` only stores
 `tactics`, `partitioner`, `outfield_robot_ids`, and `ctx` — `game` is only ever read later, by
 `tick(game)`. Corrected (see git history around this doc's later revisions): `KernelStrategy`
-now overrides `load_motion_controller()` itself and builds the `kernel.Strategy` there, as soon
+now overrides `load_motion_controller()` itself and builds the `Strategy` there, as soon
 as the motion controller is available — `build_kernel_strategy`'s signature is
-`(motion_controller) -> kernel.Strategy`, no `game` or `rsim_env` parameter at all. This was
+`(motion_controller) -> Strategy`, no `game` or `rsim_env` parameter at all. This was
 caught by a direct question ("is there no way to init motion_controller earlier?") rather than
 independently — worth noting since it's exactly the kind of unverified claim this doc otherwise
 tries to avoid; the original version had never actually checked what `Strategy.__init__` reads.
@@ -246,7 +246,7 @@ single-tactic pool (`pass_and_shoot`) with a picker that has nothing to actually
 between. This is not a stand-in allocation policy — it is the direct consequence of §7's
 deferral: no second concrete outfield tactic exists yet to force a real splitting/allocation
 decision, so none was invented. Callers needing more than one outfield tactic should construct
-their own `kernel.Strategy` with a real `Picker` rather than use this helper.
+their own `Strategy` with a real `Picker` rather than use this helper.
 
 ---
 

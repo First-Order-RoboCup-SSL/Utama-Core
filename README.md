@@ -21,6 +21,13 @@ First Order Robotics core software stack for [RoboCup SSL](https://ssl.robocup.o
 1. In order to go into the `pixi` venv, run `pixi shell`. You can also run any of the tasks in the `pixi.toml` without first being in a pixi shell. See [Pixi Tasks](#pixi-tasks).
 1. Finally, run `pixi run precommit-install`. This will ensure that linting is done before you commit.
 
+**Note on `CLAUDE.md`**: it is a symlink to `AGENTS.md`, which is the single source of agent
+context (`AGENTS.md` is the cross-vendor default; Claude Code reads `CLAUDE.md`). Edit
+`AGENTS.md` — never the symlink. Linux, macOS and WSL check this out correctly with no setup.
+On *native* Windows, git only materialises symlinks with Developer Mode or Administrator
+privileges enabled; without them `CLAUDE.md` arrives as a 9-byte text file, fixable with
+`git config --global core.symlinks true && git checkout -- CLAUDE.md`.
+
 **Note**
 - if you are using the run button and it is selecting the wrong env (robosim) you will need to manually change the interpreter in VS Code using `Ctrl + Shift + P` -> `Select Interpreter`.
 - if you want to perform a one-off run (ad-hoc) use `pixi run python -m path.to.your_file`, where you replace the `/` with `.` and remove the trailing `.py`.

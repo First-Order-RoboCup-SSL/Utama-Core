@@ -15,10 +15,12 @@ vocabulary "kernel strategy" is unchanged, only the infra directory's name is.
 
 ## The tactic-kernel model
 
-The strategy layer is not a behaviour tree. A team's play is a `kernel.Strategy`: a
-scheduler that partitions outfield robots across concurrently-running `Tactic`s every
-tick, re-deciding that partition fresh each tick via a `Partitioner` function. Robot 0
-(goalkeeper) is pinned outside the scheduler and never scheduled.
+The strategy layer is not a behaviour tree. A team's play is a `Strategy`
+(`utama_core/engine/strategy.py`): a scheduler that partitions outfield robots across
+concurrently-running `Tactic`s every tick, re-deciding that partition fresh each tick via a
+`Partitioner` function. The goalkeeper — robot 0 by default, set via
+`Strategy.set_goalkeeper()` and passed as `AbstractStrategy`'s `goalkeeper_id` — is pinned
+outside the scheduler and never scheduled.
 
 - **`Tactic`** (`utama_core/engine/tactic.py`) — a plain object: `tick(game, ctx,
   robot_ids, mem) -> (commands, mem)`, plus optional `applicable()`/`is_committed()`/
@@ -31,8 +33,8 @@ tick, re-deciding that partition fresh each tick via a `Partitioner` function. R
   no committed `Tactic` currently holds) across tactic slots this tick. No bid/fitness
   scoring system.
 - **`AbstractStrategy`** (`utama_core/engine/abstract_strategy.py`) — the base class
-  `StrategyRunner` actually drives; wraps a `kernel.Strategy` built via a
-  `build_kernel_strategy(motion_controller) -> kernel.Strategy` factory (see
+  `StrategyRunner` actually drives; wraps a `Strategy` built via a
+  `build_kernel_strategy(motion_controller) -> Strategy` factory (see
   `utama_core/strategy/kernel_strategy.py` for the existing factory functions).
 
 **Single-writer partition invariant:** exactly one place (the scheduler) decides the
@@ -50,7 +52,7 @@ the kernel's shape, not just this summary.
 
 `CustomReferee` (`utama_core/custom_referee/`) is an in-process, mode-agnostic referee —
 works identically across rsim/grsim/real, no network dependency. During a restart
-(kickoff/ball-placement/free-kick/penalty), `kernel.RefereeOverride`
+(kickoff/ball-placement/free-kick/penalty), `RefereeOverride`
 (`utama_core/engine/referee_override.py`) takes over every outfield robot's command
 directly — this happens *before* any `Tactic` ticks, not as a `Tactic` itself. It reuses
 the restart-positioning `*Step` classes in `utama_core/custom_referee/actions.py` rather
@@ -165,7 +167,7 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
   - `COMMITTED_FROZEN` — the ball moving less than 5cm for more than 10 sim seconds during
     live play while at least one kernel tactic slot is committed (`is_committed()`). Slot
     commitment is passed in from `StrategyRunner._committed_tactics()`, which reuses
-    `kernel.Strategy.slot_status()` (already reachable the same way
+    `Strategy.slot_status()` (already reachable the same way
     `_push_bt_nodes_to_referee` reaches `_kernel_strategy`) — when that isn't available (a
     BT-path strategy), this falls back to "ball frozen during live play" alone.
   - Each event records its onset `sim_time`/`tick`/referee command and keeps updating one
@@ -197,17 +199,12 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
 
 ## Where things live
 
+The repo-wide list — every `docs/` file and the test surface — lives in the root
+[`AGENTS.md`](../AGENTS.md)'s own "Where things live" section; it is not repeated here. Only
+the two entries specific to strategy-layer work:
+
 - `utama_core/engine/` — scheduler/protocol infra (`Strategy`, `Tactic`, `TickContext`,
   `MatchLog`, `AbstractStrategy`, referee-override plumbing). Rarely touched to add a new
   strategy; touched to add a new kernel-level primitive.
 - `utama_core/strategy/kernel_strategy.py` — every `build_*_kernel_strategy` factory. This
   is where day-to-day strategy-dev edits land.
-- `docs/tactic_model_design_decisions.md` — kernel/Tactic/Partitioner design rationale.
-- `docs/custom_referee.md` — `CustomReferee` architecture/usage; its "Known gaps" section
-  tracks genuinely open items (don't assume something is missing without checking there
-  first — it may already be resolved and the surrounding doc just stale).
-- `docs/custom_referee_design_decisions.md` — referee rule-by-rule design decisions.
-- `docs/strategies.md` — strategy catalog: status, description, and real round-robin
-  results per `build_*_kernel_strategy` factory. See Observability above.
-- `utama_core/tests/engine/` and `utama_core/tests/strategy_runner/` — the real
-  tactic-kernel test surface.

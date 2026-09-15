@@ -348,7 +348,7 @@ CustomReferee.step(game_frame, t)
     → RefereeRefiner.refine(game_frame, referee_data)
     → game_frame.referee = RefereeData
     → game.referee (via Game.referee property)
-    → kernel.RefereeOverride reads game.referee.referee_command,
+    → RefereeOverride reads game.referee.referee_command,
       intercepts AbstractStrategy.step() during restarts
 ```
 
@@ -476,7 +476,7 @@ pixi run python demo_referee_gui_rsim.py
 
 - Creates a `CustomReferee` with `enable_gui=True`, which starts an HTTP server on a background daemon thread.
 - Passes the referee to `StrategyRunner` via `referee=`. `StrategyRunner` calls `referee.step()` on every tick and handles ball teleports on `STOP` automatically.
-- Uses `WanderingStrategy` (`tests/referee/wandering_strategy.py`, a kernel-native `AbstractStrategy`) so robots visibly move; `kernel.RefereeOverride` interrupts them when you issue commands from the GUI.
+- Uses `WanderingStrategy` (`tests/referee/wandering_strategy.py`, a kernel-native `AbstractStrategy`) so robots visibly move; `RefereeOverride` interrupts them when you issue commands from the GUI.
 
 ### Operator workflow
 
