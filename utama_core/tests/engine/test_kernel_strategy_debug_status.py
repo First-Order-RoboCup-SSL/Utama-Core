@@ -1,5 +1,5 @@
 """Tests for `AbstractStrategy.debug_status()` / `Strategy.slot_status()` — the
-Tactic model's replacement for `_push_bt_nodes_to_referee`'s BT-node walk,
+Tactic model's replacement for `_push_debug_status_to_referee`'s BT-node walk,
 used to show "what is this robot's tactic doing right now" in the referee
 GUI when there is no behaviour tree to walk.
 """

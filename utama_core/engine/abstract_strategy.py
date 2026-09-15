@@ -233,7 +233,7 @@ class AbstractStrategy:
 
         Reports which tactic slot each robot currently belongs to and whether
         that slot is `is_committed()` (the actual "why won't this reassign"
-        signal in this model) — used by `StrategyRunner._push_bt_nodes_to_referee`
+        signal in this model) — used by `StrategyRunner._push_debug_status_to_referee`
         for the debug GUI panel.
         """
         game = self.game

@@ -427,20 +427,17 @@ This list reflects actual code state, not the old discussion.
   robot reports possession — acknowledged in the code as a fallback, not
   guaranteed accurate when the true touch happened right at the boundary.
   Documented here as a known limitation, not scheduled to be fixed.
-- **Leftover `bt_nodes` naming inside `CustomReferee`** (narrowed 2026-09-15).
-  The public half of this gap is already fixed: the method is
-  `set_debug_status` (`custom_referee.py:288`), its docstring says "Called by
-  StrategyRunner every tick with `AbstractStrategy.debug_status()`", and the
-  call site is `strategy_runner.py:1995`. What remains is internal to
-  `custom_referee.py`: the field `_bt_nodes_per_robot` (lines 191, 271, 293),
-  `set_debug_status`'s parameter `bt_nodes_per_robot`, and a `bt_nodes` mention
-  in `attach_dashboard_notifier`'s docstring (line 216) — all behaviour-tree
-  vocabulary for what is now kernel-native per-robot tactic/committed status.
-  Functionally correct, just misnamed. Renaming to `_debug_status_per_robot` is
-  confined to this one file (nothing outside it references the field, and
-  `_dashboard_notifier` is invoked positionally), so it is safe whenever someone
-  wants it. Earlier drafts of this bullet also named `gui.py` as a call site;
-  that file no longer exists (replaced by the unified dashboard, `c3c389e`).
+- ~~**Leftover `bt_nodes` naming inside `CustomReferee`.**~~ **Fixed
+  2026-09-15.** The last behaviour-tree vocabulary in this path is gone:
+  `CustomReferee._debug_status_per_robot` (was `_bt_nodes_per_robot`),
+  `set_debug_status`'s parameter, `attach_dashboard_notifier`'s docstring, and
+  `StrategyRunner._push_debug_status_to_referee` (was
+  `_push_bt_nodes_to_referee`) all now name what they actually carry —
+  kernel-native per-robot tactic/committed status. The public method
+  `set_debug_status` and its `strategy_runner.py` call site had already been
+  renamed earlier; the dashboard side never used BT vocabulary at all
+  (`views/referee.py`'s `notify`/`_serialise_state` take `tactic_status`, and
+  the notifier is invoked positionally), so nothing outside these files changed.
 
 Previously flagged and now confirmed resolved by reading the code directly:
 auto-advance after goals and after kickoff/free-kick timeouts (all 5

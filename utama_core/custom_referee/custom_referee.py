@@ -188,7 +188,7 @@ class CustomReferee:
             auto_advance=profile.game.auto_advance,
         )
         self._dashboard_notifier: Optional[callable] = None
-        self._bt_nodes_per_robot: dict[int, list[str]] = {}
+        self._debug_status_per_robot: dict[int, list[str]] = {}
         self._robot_feedback_data: list[dict] = []
         self._match_log = None
         self._match_log_tick = 0
@@ -213,7 +213,7 @@ class CustomReferee:
         return cls(profile, n_robots_yellow=n_robots_yellow, n_robots_blue=n_robots_blue)
 
     def attach_dashboard_notifier(self, notifier: callable) -> None:
-        """Set the callback invoked with (ref_data, game_frame, bt_nodes, robot_feedback)
+        """Set the callback invoked with (ref_data, game_frame, debug_status, robot_feedback)
         on every `step()`. Set by `dashboard.views.referee.attach()`; not meant
         to be called directly by strategy code.
         """
@@ -268,7 +268,7 @@ class CustomReferee:
             for rule in self._rules:
                 rule.reset()
         if self._dashboard_notifier is not None:
-            self._dashboard_notifier(result, game_frame, self._bt_nodes_per_robot, self._robot_feedback_data)
+            self._dashboard_notifier(result, game_frame, self._debug_status_per_robot, self._robot_feedback_data)
 
         self._match_log_tick += 1
         if self._match_log is not None and result != self._last_logged_ref_data:
@@ -285,12 +285,12 @@ class CustomReferee:
             )
         return result
 
-    def set_debug_status(self, bt_nodes_per_robot: dict[int, list[str]]) -> None:
+    def set_debug_status(self, debug_status_per_robot: dict[int, list[str]]) -> None:
         """Set per-robot tactic debug status for GUI display.
 
         Called by StrategyRunner every tick with `AbstractStrategy.debug_status()`.
         """
-        self._bt_nodes_per_robot = bt_nodes_per_robot
+        self._debug_status_per_robot = debug_status_per_robot
 
     def set_robot_feedback_data(self, robot_feedback_data: list[dict]) -> None:
         """Set raw robot-controller feedback rows for GUI display.

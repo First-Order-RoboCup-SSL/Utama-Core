@@ -439,7 +439,7 @@ class MatchStatsAccumulator:
         info as `{tactic_id: (robot_id, ...)}` -- cheaply available from the
         kernel `Strategy` via `AbstractStrategy.debug_status()` (already
         computed every tick for the referee debug GUI panel; see
-        `StrategyRunner._push_bt_nodes_to_referee`), so this accumulator
+        `StrategyRunner._push_debug_status_to_referee`), so this accumulator
         doesn't need to reach into kernel internals itself. When omitted
         (`None`, the default -- e.g. a BT-path strategy, or a caller that
         doesn't have it handy), `COMMITTED_FROZEN` falls back to "ball frozen

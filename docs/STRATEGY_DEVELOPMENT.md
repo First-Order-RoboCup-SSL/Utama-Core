@@ -168,7 +168,7 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
     live play while at least one kernel tactic slot is committed (`is_committed()`). Slot
     commitment is passed in from `StrategyRunner._committed_tactics()`, which reuses
     `Strategy.slot_status()` (already reachable the same way
-    `_push_bt_nodes_to_referee` reaches `_kernel_strategy`) — when that isn't available (a
+    `_push_debug_status_to_referee` reaches `_kernel_strategy`) — when that isn't available (a
     BT-path strategy), this falls back to "ball frozen during live play" alone.
   - Each event records its onset `sim_time`/`tick`/referee command and keeps updating one
     `duration_s` for as long as the same stall persists, rather than one event per tick.

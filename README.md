@@ -5,7 +5,7 @@ First Order Robotics core software stack for [RoboCup SSL](https://ssl.robocup.o
 ## Table of Contents
 - [Setup Utama](#setup-utama)
 - [Repository Guide](#repository-guide)
-- [Setup grSim](#setup-autoreferee)
+- [Setup grSim](#setup-grsim)
 - [Setup AutoReferee](#setup-autoreferee)
 - [Setup SSL Vision for Real Testing](#setup-ssl-vision-for-real-testing)
 - [Field Guide](#field-guide)
@@ -125,6 +125,12 @@ git merge main
 ```
 
 4. Get the latest [compiled game controller](https://github.com/RoboCup-SSL/ssl-game-controller/releases/) and rename it to `ssl_game_controller`. Save it in `/ssl-game-controller` directory.
+
+### Starting the external test environment
+
+Once grSim, the GameController and AutoReferee are all set up per the steps above, `./start_test_env.sh` launches all three together and tears them down on Ctrl+C. It starts nothing from this repo — run your own strategy separately once they are up — and it reminds you to open the GameController's web UI at http://localhost:8081/#/match (that port is the GameController's own; this repo's dashboard is :8080). See the comment block at the top of the script for what each process is for and its known rough edges.
+
+You only need this when you specifically want the *official* GameController/AutoReferee in the loop. For everyday work the in-process [`CustomReferee`](docs/custom_referee.md) replaces both, needs no external process, and behaves identically across RSim, grSim and real modes.
 
 ## Setup SSL Vision for Real Testing
 

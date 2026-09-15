@@ -1743,7 +1743,7 @@ class StrategyRunner:
                 )
         self.toggle_opp_first = not self.toggle_opp_first
         self._publish_vision_stream_frame()
-        self._push_bt_nodes_to_referee()
+        self._push_debug_status_to_referee()
         self._tick_frozen_field_watchdog()
 
         # --- rate limiting ---
@@ -1983,7 +1983,7 @@ class StrategyRunner:
 
         return annotations
 
-    def _push_bt_nodes_to_referee(self) -> None:
+    def _push_debug_status_to_referee(self) -> None:
         """Push per-robot debug status to CustomReferee for GUI display.
 
         Every strategy is kernel-based now and exposes
@@ -2000,7 +2000,7 @@ class StrategyRunner:
         `MatchStatsAccumulator.record_tick`'s `committed_tactics` arg).
 
         Reuses `Strategy.slot_status()` — already computed for/reachable
-        the same way `_push_bt_nodes_to_referee` reaches `_kernel_strategy`
+        the same way `_push_debug_status_to_referee` reaches `_kernel_strategy`
         post-construction — rather than adding a new plumbing path. Returns
         `None` (watchdog falls back to "ball frozen during live play") for a
         BT-path strategy, which has no `_kernel_strategy`.
