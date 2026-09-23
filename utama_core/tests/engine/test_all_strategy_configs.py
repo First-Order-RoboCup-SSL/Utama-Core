@@ -136,7 +136,7 @@ def test_fixed_ratio_picker_high_press_split():
         game=None,
         free_robots=frozenset({1, 2, 3, 4, 5}),
         prev_partition=None,
-        applicable_tactic_ids=frozenset({"attack", "defense"}),
+        available_tactic_ids=frozenset({"attack", "defense"}),
     )
     assert len(partition["attack"]) == 4
     assert len(partition["defense"]) == 1
@@ -152,7 +152,7 @@ def test_fixed_ratio_picker_low_block_split_respects_min_attack_floor():
         game=None,
         free_robots=frozenset({1, 2, 3, 4, 5}),
         prev_partition=None,
-        applicable_tactic_ids=frozenset({"attack", "defense"}),
+        available_tactic_ids=frozenset({"attack", "defense"}),
     )
     assert len(partition["attack"]) == 2
     assert len(partition["defense"]) == 3
@@ -163,7 +163,7 @@ def test_three_way_picker_splits_all_three_slots_when_all_applicable():
         game=None,
         free_robots=frozenset({1, 2, 3, 4, 5}),
         prev_partition=None,
-        applicable_tactic_ids=frozenset({"press", "mark", "attack"}),
+        available_tactic_ids=frozenset({"press", "mark", "attack"}),
     )
     assert len(partition["press"]) == 1
     assert len(partition["mark"]) == 2
@@ -176,7 +176,7 @@ def test_three_way_picker_falls_back_to_attack_when_press_and_mark_inapplicable(
         game=None,
         free_robots=frozenset({1, 2, 3}),
         prev_partition=None,
-        applicable_tactic_ids=frozenset({"attack"}),
+        available_tactic_ids=frozenset({"attack"}),
     )
     assert partition == {"attack": frozenset({1, 2, 3})}
 
@@ -269,7 +269,7 @@ def test_tiki_taka_press_inapplicable_covers_with_defense():
 
 def test_tiki_taka_attack_pinned_folds_share_into_defense():
     # Give-and-go committed mid-hop: its robots are pinned (not in the free
-    # pool) and "attack" never appears in applicable_tactic_ids — everyone
+    # pool) and "attack" never appears in available_tactic_ids — everyone
     # free must still land in a legal slot.
     partition = _tiki_taka_picker(
         _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=-3.0),
@@ -459,7 +459,7 @@ def test_clear_danger_holds_block_while_a_clearer_is_still_pinned():
         _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=0.0),  # we're closer: would be "attack" otherwise
         free,
         prev,
-        _CLEAR_ALL,
+        _CLEAR_ALL - {"clear"},  # what Strategy passes: a pinned slot is never available
     )
     assert partition == {"block": free}
 
@@ -473,6 +473,6 @@ def test_clear_press_plus_holds_block_while_a_clearer_is_still_pinned():
         _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=0.0),
         free,
         prev,
-        _CLEAR_ALL | {"overload"},
+        (_CLEAR_ALL | {"overload"}) - {"clear"},  # pinned "clear" is never available
     )
     assert partition == {"block": free}

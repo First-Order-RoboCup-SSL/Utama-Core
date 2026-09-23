@@ -59,15 +59,13 @@ def _possession_split_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """Whichever side is closer to the ball decides posture; the split is fixed once decided.
 
-    Ignores `applicable_tactic_ids`: neither `LeadAndSupportTactic` nor
-    `ShadowAndMarkTactic` overrides `applicable()` (both default to always
-    applicable), so there is nothing for this picker to react to. Accepted
-    only because every `Partitioner` must match the shared signature — see
-    `_press_and_pass_split_picker` for a picker that actually uses it.
+    Neither `LeadAndSupportTactic` nor `ShadowAndMarkTactic` overrides
+    `applicable()`, so a slot is missing from `available_tactic_ids` only
+    while it's pinned by a commitment — its share then goes to the other slot.
 
     Deliberately the simplest rule that gives the split-shape scheduler
     something real to react to, not a scored/tunable allocator (see the
@@ -81,32 +79,18 @@ def _possession_split_picker(
     `Partitioner`'s return value as "I am claiming this tactic id right now,"
     and a present-but-empty entry for a tactic committed and pinned
     elsewhere would collide with that pin.
-
-    Never re-proposes a tactic id that is currently pinned by a commitment.
-    With exactly two ids and a binary split, this picker cannot tell from
-    `free_robots` alone whether "attack" is absent because it's pinned
-    elsewhere (holding robots outside the free pool) or because this picker
-    itself chose to leave it empty last tick — but `prev_partition` (the full
-    previous partition `Strategy` always passes in, including pinned
-    entries) does distinguish the two: if "attack" held a non-empty set last
-    tick and none of the free pool overlaps that set, "attack" must still be
-    pinned with it, and this picker must leave "attack" out entirely rather
-    than propose a *second*, conflicting claim on the same tactic id.
     """
     ordered = sorted(free_robots)
     if not ordered:
         return {}
 
-    prev_partition = prev_partition or {}
-    pinned_ids = {tid for tid, robots in prev_partition.items() if robots and not (robots & free_robots)}
-
     _friendly_closest, friendly_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.FRIENDLY)
     _enemy_closest, enemy_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
     friendly_has_ball_edge = friendly_dist < enemy_dist
 
-    if "attack" in pinned_ids:
-        return {"defense": frozenset(ordered)}
-    if "defense" in pinned_ids:
+    if "attack" not in available_tactic_ids:
+        return {"defense": frozenset(ordered)} if "defense" in available_tactic_ids else {}
+    if "defense" not in available_tactic_ids:
         return {"attack": frozenset(ordered)}
 
     attack_count = (len(ordered) + 1) // 2 + 1 if friendly_has_ball_edge else len(ordered) // 2 - 1
@@ -149,12 +133,12 @@ def _press_and_pass_split_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """Same possession-edge split as `_possession_split_picker`, but must also
     respect `PressAndContainTactic.applicable()` — see design doc §15.
 
-    `Strategy` passes `applicable_tactic_ids` precisely so a picker doesn't
+    `Strategy` passes `available_tactic_ids` precisely so a picker doesn't
     have to reconstruct a tactic just to ask it a question the kernel
     already knows the answer to. When pressing isn't applicable (no enemy
     near the ball), there is nothing to defend against, so every free robot
@@ -166,18 +150,14 @@ def _press_and_pass_split_picker(
     if not ordered:
         return {}
 
-    prev_partition = prev_partition or {}
-    pinned_ids = {tid for tid, robots in prev_partition.items() if robots and not (robots & free_robots)}
-
-    pressing_applicable = "defense" not in pinned_ids and "defense" in applicable_tactic_ids
-    if not pressing_applicable:
-        return {} if "attack" in pinned_ids else {"attack": frozenset(ordered)}
+    if "defense" not in available_tactic_ids:
+        return {"attack": frozenset(ordered)} if "attack" in available_tactic_ids else {}
 
     _friendly_closest, friendly_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.FRIENDLY)
     _enemy_closest, enemy_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
     friendly_has_ball_edge = friendly_dist < enemy_dist
 
-    if "attack" in pinned_ids:
+    if "attack" not in available_tactic_ids:
         return {"defense": frozenset(ordered)}
 
     attack_count = (len(ordered) + 1) // 2 + 1 if friendly_has_ball_edge else len(ordered) // 2 - 1
@@ -223,7 +203,7 @@ def _fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float,
     free pool by a constant fraction — the simplest possible allocation rule,
     useful as a deliberately non-reactive baseline/contrast to the
     possession-edge pickers above. Still respects commitment pinning and
-    `applicable_tactic_ids` exactly like every other `Partitioner`; "fixed"
+    `available_tactic_ids` exactly like every other `Partitioner`; "fixed"
     only describes the *ratio* decision, not an exemption from the kernel's
     invariants.
 
@@ -242,27 +222,20 @@ def _fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float,
         game: Game,
         free_robots: frozenset[RobotId],
         prev_partition: Optional[dict[str, frozenset[RobotId]]],
-        applicable_tactic_ids: frozenset[str],
+        available_tactic_ids: frozenset[str],
     ) -> dict[str, frozenset[RobotId]]:
         del game
         ordered = sorted(free_robots)
         if not ordered:
             return {}
 
-        prev_partition = prev_partition or {}
-        pinned_ids = {tid for tid, robots in prev_partition.items() if robots and not (robots & free_robots)}
+        attack_ok = attack_id in available_tactic_ids
+        defense_ok = defense_id in available_tactic_ids
 
-        attack_ok = attack_id not in pinned_ids and attack_id in applicable_tactic_ids
-        defense_ok = defense_id not in pinned_ids and defense_id in applicable_tactic_ids
-
-        if attack_id in pinned_ids:
-            return {defense_id: frozenset(ordered)} if defense_ok else {}
-        if defense_id in pinned_ids:
-            return {attack_id: frozenset(ordered)} if attack_ok else {}
-        if not defense_ok:
-            return {attack_id: frozenset(ordered)} if attack_ok else {}
         if not attack_ok:
-            return {defense_id: frozenset(ordered)}
+            return {defense_id: frozenset(ordered)} if defense_ok else {}
+        if not defense_ok:
+            return {attack_id: frozenset(ordered)}
 
         attack_count = max(0, min(len(ordered), round(len(ordered) * attack_fraction)))
         if 0 < attack_count < min_attack:
@@ -336,7 +309,7 @@ def _three_way_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """Splits the free pool three ways — first exercise of `Strategy` running
     more than two concurrent slots (nothing in `Strategy`/`_validate_partition`
@@ -351,12 +324,9 @@ def _three_way_picker(
     if not ordered:
         return {}
 
-    prev_partition = prev_partition or {}
-    pinned_ids = {tid for tid, robots in prev_partition.items() if robots and not (robots & free_robots)}
-
-    press_ok = "press" not in pinned_ids and "press" in applicable_tactic_ids
-    mark_ok = "mark" not in pinned_ids and "mark" in applicable_tactic_ids
-    attack_ok = "attack" not in pinned_ids and "attack" in applicable_tactic_ids
+    press_ok = "press" in available_tactic_ids
+    mark_ok = "mark" in available_tactic_ids
+    attack_ok = "attack" in available_tactic_ids
 
     remaining = list(ordered)
     partition: dict[str, frozenset[RobotId]] = {}
@@ -615,7 +585,7 @@ def _tiki_taka_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """Tiki-taka posture: possession attack with give-and-go, press on loss,
     shadow-and-mark cover in both postures.
@@ -626,7 +596,7 @@ def _tiki_taka_picker(
       and 2 shadowers — the press denies the immediate play while the shadow
       pair keeps the shot line honest behind it.
     - A slot that is unavailable (inapplicable — PressAndContain only, or
-      commitment-pinned so it never appears in `applicable_tactic_ids`) has
+      commitment-pinned so it never appears in `available_tactic_ids`) has
       its share folded into the other non-pinned attacker/defender slot, so
       every free robot always lands somewhere.
     """
@@ -637,9 +607,9 @@ def _tiki_taka_picker(
     friendly_edge = _friendly_closer_to_ball(game)
     losing = friendly_edge is not True  # enemy closer, or unknown -> conservative
 
-    press_ok = "press" in applicable_tactic_ids
-    attack_ok = "attack" in applicable_tactic_ids
-    defense_ok = "defense" in applicable_tactic_ids
+    press_ok = "press" in available_tactic_ids
+    attack_ok = "attack" in available_tactic_ids
+    defense_ok = "defense" in available_tactic_ids
 
     if losing and press_ok:
         # Press with the ball-side group, shadow with the rest; if there is
@@ -667,7 +637,7 @@ def _counter_press_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """Counter-press posture: all-out pressure when we lose it, low block when
     there is nothing to press, four-up on the switch when we regain it.
@@ -688,9 +658,9 @@ def _counter_press_picker(
     friendly_edge = _friendly_closer_to_ball(game)
     losing = friendly_edge is not True
 
-    press_ok = "press" in applicable_tactic_ids
-    attack_ok = "attack" in applicable_tactic_ids
-    block_ok = "block" in applicable_tactic_ids
+    press_ok = "press" in available_tactic_ids
+    attack_ok = "attack" in available_tactic_ids
+    block_ok = "block" in available_tactic_ids
 
     if losing:
         if press_ok:
@@ -711,7 +681,7 @@ def _zone_flow_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """Zone-flow posture: the attacking *pattern* changes with ball zone, the
     defense stays man-shaped throughout.
@@ -731,9 +701,9 @@ def _zone_flow_picker(
     friendly_edge = _friendly_closer_to_ball(game)
     losing = friendly_edge is not True
 
-    defense_ok = "defense" in applicable_tactic_ids
-    givego_ok = "givego" in applicable_tactic_ids
-    overload_ok = "overload" in applicable_tactic_ids
+    defense_ok = "defense" in available_tactic_ids
+    givego_ok = "givego" in available_tactic_ids
+    overload_ok = "overload" in available_tactic_ids
 
     if losing:
         if defense_ok:
@@ -833,7 +803,7 @@ def _tiki_taka_plus_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """Tiki-taka posture with a final-third finishing wrinkle: possession
     attack with give-and-go in the own/middle thirds, a decoy/overload duet
@@ -858,10 +828,10 @@ def _tiki_taka_plus_picker(
     friendly_edge = _friendly_closer_to_ball(game)
     losing = friendly_edge is not True  # enemy closer, or unknown -> conservative
 
-    press_ok = "press" in applicable_tactic_ids
-    attack_ok = "attack" in applicable_tactic_ids
-    defense_ok = "defense" in applicable_tactic_ids
-    overload_ok = "overload" in applicable_tactic_ids
+    press_ok = "press" in available_tactic_ids
+    attack_ok = "attack" in available_tactic_ids
+    defense_ok = "defense" in available_tactic_ids
+    overload_ok = "overload" in available_tactic_ids
 
     if losing and press_ok:
         if defense_ok:
@@ -1042,7 +1012,7 @@ def _score_aware_zone_flow_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """`_zone_flow_picker`'s allocation, with the attack/defense split size
     shifted late in a half by whether we're ahead or behind.
@@ -1062,9 +1032,9 @@ def _score_aware_zone_flow_picker(
     friendly_edge = _friendly_closer_to_ball(game)
     losing_possession = friendly_edge is not True
 
-    defense_ok = "defense" in applicable_tactic_ids
-    givego_ok = "givego" in applicable_tactic_ids
-    overload_ok = "overload" in applicable_tactic_ids
+    defense_ok = "defense" in available_tactic_ids
+    givego_ok = "givego" in available_tactic_ids
+    overload_ok = "overload" in available_tactic_ids
 
     if losing_possession:
         if defense_ok:
@@ -1153,7 +1123,7 @@ def _overload_press_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """Overload-and-strike posture: outnumber tiki_taka's 2-robot shadow line
     when we have the ball, hit immediately on a turnover before its press
@@ -1164,7 +1134,7 @@ def _overload_press_picker(
       overload draws cover across) — more attackers than tiki_taka's defense
       slot ever man-marks, since that slot never grows past 2 and only
       shadows. 1 robot holds `BlockShapeTactic` as counter insurance.
-    - The opponent has the ball: everyone (or as many as `applicable_tactic_ids`
+    - The opponent has the ball: everyone (or as many as `available_tactic_ids`
       allows) goes straight to `LeadAndSupportTactic` — a direct,
       no-setup-phase counter — rather than a organized press, to strike in
       the transition window before tiki_taka's own 3-press forms. Falls back
@@ -1180,10 +1150,10 @@ def _overload_press_picker(
     friendly_edge = _friendly_closer_to_ball(game)
     losing = friendly_edge is not True
 
-    overload_ok = "overload" in applicable_tactic_ids
-    switch_ok = "switch" in applicable_tactic_ids
-    block_ok = "block" in applicable_tactic_ids
-    counter_ok = "counter" in applicable_tactic_ids
+    overload_ok = "overload" in available_tactic_ids
+    switch_ok = "switch" in available_tactic_ids
+    block_ok = "block" in available_tactic_ids
+    counter_ok = "counter" in available_tactic_ids
 
     if losing:
         if counter_ok:
@@ -1241,7 +1211,7 @@ def _high_line_zone_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """High-line zone posture: deny tiki_taka's give-and-go trio the 1v1s it
     wants with a zone screen instead of man-marking, switch the ball to the
@@ -1269,9 +1239,9 @@ def _high_line_zone_picker(
     if not ordered:
         return {}
 
-    block_ok = "block" in applicable_tactic_ids
-    switch_ok = "switch" in applicable_tactic_ids
-    overload_ok = "overload" in applicable_tactic_ids
+    block_ok = "block" in available_tactic_ids
+    switch_ok = "switch" in available_tactic_ids
+    overload_ok = "overload" in available_tactic_ids
 
     # Sticky possession edge: a plain `_friendly_closer_to_ball` re-read every
     # tick flips constantly in a genuinely contested 50/50 (measured: switch
@@ -1318,7 +1288,7 @@ def _counter_flow_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """Counter-flow posture: fight tiki_taka on its own strongest ground —
     beat its give-and-go attack with our own give-and-go, contest its press
@@ -1377,9 +1347,9 @@ def _counter_flow_picker(
     else:
         losing = friendly_edge is not True
 
-    attack_ok = "attack" in applicable_tactic_ids
-    press_ok = "press" in applicable_tactic_ids
-    block_ok = "block" in applicable_tactic_ids
+    attack_ok = "attack" in available_tactic_ids
+    press_ok = "press" in available_tactic_ids
+    block_ok = "block" in available_tactic_ids
 
     if losing:
         if press_ok:
@@ -1471,7 +1441,7 @@ def _clear_danger_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """Safety-valve posture: counter_flow's proven attack/press/block postures,
     plus a danger valve — when the ball is deep in our own third AND contested
@@ -1505,12 +1475,10 @@ def _clear_danger_picker(
         return {}
 
     prev_partition = prev_partition or {}
-    pinned_ids = {tid for tid, robots in prev_partition.items() if robots and not (robots & free_robots)}
-
-    clear_ok = "clear" not in pinned_ids and "clear" in applicable_tactic_ids
-    press_ok = "press" not in pinned_ids and "press" in applicable_tactic_ids
-    block_ok = "block" not in pinned_ids and "block" in applicable_tactic_ids
-    attack_ok = "attack" not in pinned_ids and "attack" in applicable_tactic_ids
+    clear_ok = "clear" in available_tactic_ids
+    press_ok = "press" in available_tactic_ids
+    block_ok = "block" in available_tactic_ids
+    attack_ok = "attack" in available_tactic_ids
 
     if clear_ok:
         # The valve takes exactly 1 robot (the tactic picks its own clearer as
@@ -1530,7 +1498,11 @@ def _clear_danger_picker(
     # (different tactics, no shared awareness) stall at
     # `FastPathPlanner.OBSTACLE_CLEARANCE` apart forever. Hold everyone else
     # on the screen instead while a clearer is still out.
-    clearer_pinned = "clear" in pinned_ids
+    # Needs "pinned" specifically, not just "absent from `available_tactic_ids`":
+    # "clear" is usually absent because `ClearBallTactic.applicable()` (a real
+    # danger gate) is False, and holding everyone on the screen then would be
+    # wrong. Robots it held last tick that are none of them free now = pinned.
+    clearer_pinned = bool(prev_partition.get("clear")) and not (prev_partition["clear"] & free_robots)
     if clearer_pinned and block_ok:
         return {"block": frozenset(ordered)}
 
@@ -1579,7 +1551,7 @@ def _score_aware_counter_flow_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """`_counter_flow_picker`'s allocation, with the attacking commitment size
     shifted late in a half by whether we're ahead or behind -- see
@@ -1607,9 +1579,9 @@ def _score_aware_counter_flow_picker(
     else:
         losing = friendly_edge is not True
 
-    attack_ok = "attack" in applicable_tactic_ids
-    press_ok = "press" in applicable_tactic_ids
-    block_ok = "block" in applicable_tactic_ids
+    attack_ok = "attack" in available_tactic_ids
+    press_ok = "press" in available_tactic_ids
+    block_ok = "block" in available_tactic_ids
 
     if losing:
         if press_ok:
@@ -1717,7 +1689,7 @@ def _clear_press_plus_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """`_clear_danger_picker`'s allocation, with `_tiki_taka_plus_picker`'s
     final-third handoff grafted onto its attacking branch: when we hold the
@@ -1732,13 +1704,11 @@ def _clear_press_plus_picker(
         return {}
 
     prev_partition = prev_partition or {}
-    pinned_ids = {tid for tid, robots in prev_partition.items() if robots and not (robots & free_robots)}
-
-    clear_ok = "clear" not in pinned_ids and "clear" in applicable_tactic_ids
-    press_ok = "press" not in pinned_ids and "press" in applicable_tactic_ids
-    block_ok = "block" not in pinned_ids and "block" in applicable_tactic_ids
-    attack_ok = "attack" not in pinned_ids and "attack" in applicable_tactic_ids
-    overload_ok = "overload" not in pinned_ids and "overload" in applicable_tactic_ids
+    clear_ok = "clear" in available_tactic_ids
+    press_ok = "press" in available_tactic_ids
+    block_ok = "block" in available_tactic_ids
+    attack_ok = "attack" in available_tactic_ids
+    overload_ok = "overload" in available_tactic_ids
 
     if clear_ok:
         if len(ordered) == 1 or not block_ok:
@@ -1762,7 +1732,11 @@ def _clear_press_plus_picker(
     # instead of also committing to attack/press, the same "hold shape,
     # don't also chase it" stance `clear_ok`'s own block share already takes
     # for its teammates.
-    clearer_pinned = "clear" in pinned_ids
+    # Needs "pinned" specifically, not just "absent from `available_tactic_ids`":
+    # "clear" is usually absent because `ClearBallTactic.applicable()` (a real
+    # danger gate) is False, and holding everyone on the screen then would be
+    # wrong. Robots it held last tick that are none of them free now = pinned.
+    clearer_pinned = bool(prev_partition.get("clear")) and not (prev_partition["clear"] & free_robots)
     if clearer_pinned and block_ok:
         return {"block": frozenset(ordered)}
 
@@ -1851,7 +1825,7 @@ def _shadow_switch_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """Switch-attack, shadow-defense posture.
 
@@ -1881,8 +1855,8 @@ def _shadow_switch_picker(
     else:
         losing = friendly_edge is not True
 
-    switch_ok = "switch" in applicable_tactic_ids
-    defense_ok = "defense" in applicable_tactic_ids
+    switch_ok = "switch" in available_tactic_ids
+    defense_ok = "defense" in available_tactic_ids
 
     if losing:
         if defense_ok:
@@ -1974,7 +1948,7 @@ def _overload_flow_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """`_zone_flow_picker`'s allocation, with the own/mid-third give-and-go
     attacker count growing from 3 to 4 only once the possession edge has
@@ -1997,9 +1971,9 @@ def _overload_flow_picker(
     _possession_streak = 0 if losing else min(_possession_streak + 1, _POSSESSION_STREAK_TICKS)
     streak = _possession_streak
 
-    defense_ok = "defense" in applicable_tactic_ids
-    givego_ok = "givego" in applicable_tactic_ids
-    overload_ok = "overload" in applicable_tactic_ids
+    defense_ok = "defense" in available_tactic_ids
+    givego_ok = "givego" in available_tactic_ids
+    overload_ok = "overload" in available_tactic_ids
 
     if losing:
         if defense_ok:
@@ -2091,7 +2065,7 @@ def _press_trigger_flow_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
-    applicable_tactic_ids: frozenset[str],
+    available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
     """`_counter_flow_picker`'s allocation, with an all-in press (every free
     robot, not the usual 3+2 split) when the ball is lost specifically in
@@ -2112,9 +2086,9 @@ def _press_trigger_flow_picker(
     else:
         losing = friendly_edge is not True
 
-    attack_ok = "attack" in applicable_tactic_ids
-    press_ok = "press" in applicable_tactic_ids
-    block_ok = "block" in applicable_tactic_ids
+    attack_ok = "attack" in available_tactic_ids
+    press_ok = "press" in available_tactic_ids
+    block_ok = "block" in available_tactic_ids
 
     if losing:
         if press_ok:

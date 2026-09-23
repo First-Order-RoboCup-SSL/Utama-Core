@@ -31,7 +31,9 @@ outside the scheduler and never scheduled.
   owning a disjoint slice of the outfield pool.
 - **`Partitioner`** — a plain function deciding how to split the *free* robot pool (robots
   no committed `Tactic` currently holds) across tactic slots this tick. No bid/fitness
-  scoring system.
+  scoring system. It receives `available_tactic_ids` — tactic ids that are neither pinned
+  by a commitment nor `applicable() == False` — and may only assign robots to those; it
+  never needs to reconstruct which slots are pinned from `prev_partition` itself.
 - **`AbstractStrategy`** (`utama_core/engine/abstract_strategy.py`) — the base class
   `StrategyRunner` actually drives; wraps a `Strategy` built via a
   `build_kernel_strategy(motion_controller) -> Strategy` factory (see

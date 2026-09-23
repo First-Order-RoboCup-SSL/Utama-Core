@@ -76,13 +76,15 @@ _STALL_BALL_MOVEMENT_M = 0.05
 # pinned by a committed tactic slot — see `Strategy._choose_partition`) into
 # named tactic slots every tick, given the game state, the free robot pool,
 # the previous full partition (None on the first tick or right after a
-# barrier reset), and the set of tactic ids currently applicable() (design
-# doc §15) — a tactic id absent from this set must not be given any robots
-# this tick, whether because it isn't registered or because its applicable()
-# just returned False. Every free robot must end up in at most one slot (no
-# robot given to two slots at once — `Strategy._validate_partition` raises if
-# so) and no slot may be given a robot outside `free_robot_ids` or a
-# non-empty slot for a tactic id outside `applicable_tactic_ids`. A free
+# barrier reset), and `available_tactic_ids`: the registered tactic ids that
+# are not pinned by a commitment and whose applicable() is True (design doc
+# §15). A tactic id absent from this set must not be given any robots this
+# tick — and a Partitioner never needs to work out *why* one is absent
+# (pinned elsewhere vs. inapplicable) to stay legal; `Strategy` has already
+# folded both into this one set. Every free robot must end up in at most one
+# slot (no robot given to two slots at once — `Strategy._validate_partition`
+# raises if so) and no slot may be given a robot outside `free_robot_ids` or a
+# non-empty slot for a tactic id outside `available_tactic_ids`. A free
 # robot need NOT appear in the returned partition at all — a Partitioner has
 # no obligation to invent an applicable tactic for a robot nothing currently
 # wants; an uncovered robot simply isn't ticked by any tactic that tick (see
@@ -245,10 +247,10 @@ class Strategy:
         original `Strategy`, which never consulted the picker while the
         active tactic was committed).
 
-        Does not filter by `applicable_tactic_ids` itself — it can't
+        Does not filter by `available_tactic_ids` itself — it can't
         distinguish "the wrapped picker named an unregistered tactic" (a
         bug, must raise `KeyError` same as ever) from "it named a
-        registered but currently inapplicable one" (`applicable_tactic_ids`
+        registered but currently inapplicable one" (`available_tactic_ids`
         alone can't tell those apart, since it's already a subset of
         registered ids by construction). `Strategy._choose_partition`'s own
         validation already raises the right error for both cases, so this
@@ -259,7 +261,7 @@ class Strategy:
             game: Game,
             free_robots: frozenset[RobotId],
             prev_partition: Optional[dict[TacticId, frozenset[RobotId]]],
-            applicable_tactic_ids: frozenset[TacticId],
+            available_tactic_ids: frozenset[TacticId],
         ) -> dict[TacticId, frozenset[RobotId]]:
             if not free_robots:
                 return {}
@@ -478,8 +480,9 @@ class Strategy:
         out of the picker's candidate set entirely when `applicable(game)`
         is False (design doc §15) — a precondition on being assigned at all,
         checked only for non-committed tactics, never overriding a
-        commitment. `applicable_tactic_ids` is passed to the picker so it
-        can respect this itself; `Strategy` also validates the picker's
+        commitment. `available_tactic_ids` (applicable, and not pinned by a
+        commitment) is passed to the picker so it can respect both itself
+        without re-deriving pinning from `prev_partition`; `Strategy` also validates the picker's
         return value against it afterward, since a `Partitioner` is a plain
         function and nothing stops one from ignoring its own inputs.
 
@@ -546,13 +549,13 @@ class Strategy:
                 value=sorted(pinned_robots),
             )
 
-        applicable_tactic_ids = {
+        available_tactic_ids = {
             tactic_id
             for tactic_id, tactic in self._tactics.items()
             if tactic_id not in pinned and tactic.applicable(game)
         }
 
-        free_partition = self._partitioner(game, free_robots, self._prev_partition, frozenset(applicable_tactic_ids))
+        free_partition = self._partitioner(game, free_robots, self._prev_partition, frozenset(available_tactic_ids))
 
         result = dict(pinned)
         for tactic_id, robots in free_partition.items():
@@ -561,7 +564,7 @@ class Strategy:
                     f"picker assigned robots to tactic {tactic_id!r}, which is currently committed "
                     "and must not be reassigned"
                 )
-            if robots and tactic_id in self._tactics and tactic_id not in applicable_tactic_ids:
+            if robots and tactic_id in self._tactics and tactic_id not in available_tactic_ids:
                 raise ValueError(
                     f"picker assigned robots to tactic {tactic_id!r}, which is not currently "
                     "applicable() — a Partitioner must not propose robots for an inapplicable tactic"

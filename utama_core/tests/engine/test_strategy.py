@@ -272,7 +272,7 @@ def test_requires_at_least_one_tactic():
 # --- genuine concurrent multi-tactic partition shape (raw Partitioner) ---
 
 
-def _even_split_picker(game, free_robots, prev_partition, applicable_tactic_ids):
+def _even_split_picker(game, free_robots, prev_partition, available_tactic_ids):
     """Splits the free pool in half between 'a' and 'b', by sorted id."""
     ordered = sorted(free_robots)
     half = len(ordered) // 2
@@ -295,7 +295,7 @@ def test_two_tactics_run_concurrently_each_tick():
 def test_mem_resets_only_for_the_tactic_whose_robots_changed():
     tactic_a, tactic_b = RecordingTactic(), RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"a": frozenset({1, 2}), "b": frozenset({3})}
 
     strategy = Strategy(
@@ -319,7 +319,7 @@ def test_committed_group_keeps_its_robots_while_other_group_still_reassigns():
 
     calls = []
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         calls.append(free_robots)
         return {"b": free_robots}
 
@@ -352,7 +352,7 @@ def test_picker_assigning_to_a_committed_tactic_raises():
     committed_tactic = RecordingTactic(committed=True)
     other_tactic = RecordingTactic(committed=False)
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"a": free_robots}  # illegal: "a" is committed and pinned
 
     strategy = Strategy(
@@ -376,7 +376,7 @@ def test_partition_may_leave_a_free_robot_unassigned():
     `Strategy._validate_partition`'s docstring."""
     tactic_a, tactic_b = RecordingTactic(), RecordingTactic()
 
-    def missing_robot_picker(game, free_robots, prev, applicable_tactic_ids):
+    def missing_robot_picker(game, free_robots, prev, available_tactic_ids):
         ordered = sorted(free_robots)
         return {"a": frozenset(ordered[:-1]), "b": frozenset()}  # drops the last robot
 
@@ -394,7 +394,7 @@ def test_partition_may_leave_a_free_robot_unassigned():
 def test_partition_rejects_a_robot_outside_the_outfield_pool():
     tactic_a = RecordingTactic()
 
-    def rogue_robot_picker(game, free_robots, prev, applicable_tactic_ids):
+    def rogue_robot_picker(game, free_robots, prev, available_tactic_ids):
         return {"a": free_robots | {99}}  # invents a robot id outside the pool
 
     strategy = Strategy(
@@ -410,7 +410,7 @@ def test_partition_rejects_a_robot_outside_the_outfield_pool():
 def test_overlapping_partition_raises():
     tactic_a, tactic_b = RecordingTactic(), RecordingTactic()
 
-    def overlapping_picker(game, free_robots, prev, applicable_tactic_ids):
+    def overlapping_picker(game, free_robots, prev, available_tactic_ids):
         return {"a": free_robots, "b": free_robots}  # same robots in both tactics
 
     strategy = Strategy(
@@ -429,7 +429,7 @@ def test_barrier_reset_clears_all_tactics_and_unpins_commitments():
 
     calls = []
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         calls.append(free_robots)
         return {"b": free_robots}
 
@@ -465,7 +465,7 @@ def test_inapplicable_tactic_is_never_proposed_robots():
     tactic_a = RecordingTactic(applicable=False)
     tactic_b = RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"a": free_robots}
 
     strategy = Strategy(
@@ -486,7 +486,7 @@ def test_inapplicable_tactic_with_no_robots_proposed_does_not_raise():
     tactic_a = RecordingTactic(applicable=False)
     tactic_b = RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"b": free_robots}  # never names "a"
 
     strategy = Strategy(
@@ -508,7 +508,7 @@ def test_committed_tactic_is_never_asked_applicable():
     committed_tactic = RecordingTactic(committed=True, applicable=False)
     other_tactic = RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"b": free_robots}
 
     strategy = Strategy(
@@ -526,6 +526,37 @@ def test_committed_tactic_is_never_asked_applicable():
     assert strategy.active_partition.get("a") == frozenset({1, 2})
 
 
+def test_committed_tactic_id_is_withheld_from_partitioner_until_released():
+    """The contract every `Partitioner` relies on instead of re-deriving it from
+    `prev_partition`: a committed slot's tactic id is absent from
+    `available_tactic_ids` (so "not available" already covers "pinned"), and
+    reappears the tick its commitment ends.
+    """
+    tactic_a = RecordingTactic(committed=True)
+    tactic_b = RecordingTactic()
+    seen: list[frozenset[str]] = []
+
+    def picker(game, free_robots, prev, available_tactic_ids):
+        seen.append(available_tactic_ids)
+        return {"b": free_robots}
+
+    strategy = Strategy(
+        tactics={"a": tactic_a, "b": tactic_b},
+        partitioner=picker,
+        outfield_robot_ids=(1, 2, 3),
+        ctx=_ctx(),
+    )
+    strategy._slot_for("a").assigned_robots = frozenset({1})
+    strategy._slot_for("a").mem = tactic_a.initial_mem()
+
+    strategy.tick(_FakeGame())
+    assert seen[-1] == frozenset({"b"})
+
+    tactic_a._committed = False
+    strategy.tick(_FakeGame())
+    assert seen[-1] == frozenset({"a", "b"})
+
+
 def test_tactic_becomes_reassignable_once_commitment_and_applicability_both_allow():
     """Once a commitment ends, applicable() is asked for the first time and
     the tactic is evicted immediately if it says False — no special-casing
@@ -534,7 +565,7 @@ def test_tactic_becomes_reassignable_once_commitment_and_applicability_both_allo
     tactic_a = RecordingTactic(committed=True, applicable=False)
     tactic_b = RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"b": free_robots}
 
     strategy = Strategy(
@@ -563,7 +594,7 @@ def test_pause_freezes_without_resetting_any_tactic():
     docstring for why."""
     tactic_a = RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"a": free_robots}
 
     strategy = Strategy(

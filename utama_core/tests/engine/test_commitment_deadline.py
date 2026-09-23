@@ -88,7 +88,7 @@ def _ctx() -> TickContext:
     return TickContext(motion_controller=None)
 
 
-def _always_a_picker(game, free_robots, prev_partition, applicable_tactic_ids):
+def _always_a_picker(game, free_robots, prev_partition, available_tactic_ids):
     """Always wants to hand the entire free pool to 'a' — the same tactic
     that (before a deadline release) is already pinned there, so a release
     is visible as "the picker got a chance to act on free_robots={1, 2}",
