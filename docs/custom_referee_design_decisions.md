@@ -1,102 +1,33 @@
-# Custom Referee — Open Design Decisions
+# Custom Referee — Design Decisions
 
-These are deferred design decisions identified during the code audit against the SSL rulebook.
-Each item describes the current behaviour, the relevant rule, and the options to choose from.
+Decisions from the audit of `CustomReferee` against the SSL rulebook. Numbers are stable.
 
-Items marked **✅ Resolved** have been implemented and are kept here for reference.
+## Resolved
 
----
+1. **`human` profile keeps `STOP` after goals** (2026-03-31) — every auto-advance is off in
+   `human`, so an operator advances each stoppage. `simulation` auto-progresses.
+2. **`PrepareKickoffTheirsStep` enforces own half** (2026-03-13) — after radial clearance, each
+   robot's x is clamped to our half.
+3. **Unknown last touch no longer defaults to yellow** — `infer_last_touch_team`
+   (`rules/last_touch.py`) attributes colour-blind, and `OutOfBoundsRule` leaves the restart
+   unresolved rather than favouring a colour.
+4. **`KeepOutRule`'s violation count doesn't carry over** — `CustomReferee.step()` calls
+   `rule.reset()` on every command transition.
+5. **`BallPlacementTheirsStep` actively clears** (2026-03-13) — robots within 0.55m of the ball
+   are pushed radially outward, as in `DirectFreeTheirsStep`. Line-segment clearance (ball to
+   target) is deferred.
+6. **`GoalRule` only fires in live play** — no change needed: the ball isn't in play during a
+   stoppage, so a goal then doesn't count.
+7. **Penalty positioning, partial** (2026-03-13) — non-kickers go to the touch line
+   (y = ±3.0m) behind the mark. Fully off-field placement is deferred until the simulator
+   supports it. Penalties stay disabled in the built-in profiles.
 
-## 1. ✅ Human profile keeps operator-controlled STOP after goals — resolved
+## Open
 
-**Resolution (2026-03-31):** The built-in `human` profile now disables all auto-advance
-transitions. After a goal or foul, the referee remains in the current stoppage until the
-operator explicitly advances the game stage. The `simulation` profile remains the
-auto-progressing built-in profile for simulator, testing, and RL workflows.
-
----
-
-## 2. ✅ `PrepareKickoffTheirsStep` doesn't enforce own-half requirement — resolved
-
-**Resolution (2026-03-13):** Implemented Option B. After radial clearance, each robot's x
-coordinate is clamped to our own half (`max(0, x)` when right, `min(0, x)` when left).
-
----
-
-## 3. `OutOfBoundsRule` unknown last-touch defaults to yellow
-
-**File:** `utama_core/custom_referee/rules/out_of_bounds_rule.py`
-
-**Current behaviour:**
-When the ball goes out and no robot was detected touching it (`_last_touch_was_friendly = None`),
-the rule awards `DIRECT_FREE_YELLOW`.
-
-**Relevant rule (SSL):** The last-touching team loses possession (other team gets free kick).
-If truly unknown, the standard is a coin flip or alternating possession — not a fixed team.
-
-**Options:**
-- **A (current, keep):** Default to yellow. Simple, predictable, slightly unfair.
-- **B (alternate):** Track which team was awarded the last unknown-touch free kick and
-  alternate. Fairer over many occurrences.
-- **C (favor defending team):** Award to the team in whose half the ball went out. Rough
-  approximation of "attacker kicked it out".
-
-**Recommendation:** Option A is fine for a simplified system. Option C is easy to implement
-and slightly more realistic if desired.
-
----
-
-## 4. ✅ `KeepOutRule` violation count resets on command change — resolved
-
-**Resolution:** `CustomReferee.step()` calls `rule.reset()` on every command transition,
-which clears `_violation_count`. No carry-over occurs.
-
----
-
-## 5. ✅ `BallPlacementTheirsStep` has no active clearance — resolved
-
-**Resolution (2026-03-13):** Implemented Option B. Robots within `_BALL_KEEP_DIST` (0.55 m)
-of the ball are now pushed radially outward, matching the pattern used in `DirectFreeTheirsStep`.
-Option C (line-segment clearance) remains deferred.
-
----
-
-## 6. ✅ `GoalRule` only fires during NORMAL_START and FORCE_START — resolved, no change needed
-
-**File:** `utama_core/custom_referee/rules/goal_rule.py`
-
-**Current behaviour:**
-Goal detection is disabled during all stoppages (STOP, PREPARE_KICKOFF, etc.).
-
-**Edge case:** If the ball rolls into a goal during a stoppage (e.g., a robot accidentally
-nudges it during STOP clearance), no goal is detected.
-
-**Relevant rule:** In SSL, the game is stopped during stoppages so the ball isn't "in play"
-and a goal during a stoppage doesn't count. This is correct behaviour.
-
-**Status:** No change needed. Documented here for clarity.
-
----
-
-## 7. ✅ Penalty kick rules are incomplete — partially resolved
-
-**Resolution (2026-03-13):** Implemented Option B. Non-kicker robots (both teams) are now
-placed at `y = ±3.0 m` (touch-line boundary) rather than spread across the field.
-The x-coordinate (`behind_line_x`) is unchanged — robots remain behind the penalty mark.
-Full off-field placement (Option C) is deferred until the simulator supports it.
-Penalty kicks remain disabled in all built-in profiles.
-
----
-
-## 8. `TeamInfo` should be a frozen dataclass
-
-**File:** `utama_core/entities/game/team_info.py`
-
-**Current behaviour:**
-`TeamInfo` is a mutable class. `GameStateMachine._generate_referee_data()` passes `self.blue_team` / `self.yellow_team` directly into `RefereeData`. `RefereeRefiner` stores these `RefereeData` objects in `_referee_records`. Because all stored records reference the same `TeamInfo` objects, a subsequent `increment_score()` call mutates the score retroactively across all historical records — which can cause `RefereeData.__eq__` to falsely consider a new record equal to the previous one, silently dropping it from `_referee_records`.
-
-**Workaround (applied 2026-04-07):** `_generate_referee_data()` now calls `copy.copy(self.blue_team)` / `copy.copy(self.yellow_team)` to snapshot team state at the time of record creation. This fixes the aliasing issue for the `CustomReferee` path without touching `TeamInfo` or the network referee path.
-
-**Long-term fix:** Convert `TeamInfo` to `@dataclass(frozen=True)`. Replace all in-place mutations (`increment_score()`, `parse_referee_packet()`, etc.) with `dataclasses.replace()` calls. This eliminates the aliasing hazard at the type level across the whole codebase, and gives `TeamInfo` a correct `__eq__` for free. The network referee path (`RefereeMessageReceiver` → `parse_referee_packet()`) will need updating too.
-
-**Why deferred:** The refactor touches the network referee path which is out of scope for the referee integration PR.
+8. **`TeamInfo` should be a frozen dataclass.** It is mutable, and `RefereeRefiner` stores
+   `RefereeData` records that referenced the live objects, so a later `increment_score()`
+   rewrote history and made `__eq__` drop new records. Workaround (2026-04-07):
+   `GameStateMachine._generate_referee_data()` snapshots with `copy.copy`. Long-term: make it
+   `@dataclass(frozen=True)` and replace mutations (`increment_score()`,
+   `parse_referee_packet()`, ...) with `dataclasses.replace()`, including the network referee
+   path. Deferred because it touches that path.
