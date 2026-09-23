@@ -1,4 +1,4 @@
-"""Tests for `smoke_tournament.py`'s (formerly `tournament.py`) hand-rolled
+"""Tests for `smoke_tournament.py`'s hand-rolled
 `--fuzz-restarts`/`--fuzz-interval` CLI parsing (see `docs/STRATEGY_DEVELOPMENT.md`).
 `smoke_tournament.py` has no `--help` and no `argparse` — flags are parsed by
 scanning `sys.argv` directly inside `main()` — so these tests monkeypatch

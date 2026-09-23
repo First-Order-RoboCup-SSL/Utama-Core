@@ -2,16 +2,8 @@
 
 Covers `get_min_bounding_req`'s two accepted shapes (`FieldBounds`,
 `SpaceRequirements`) and the validation `assert_field_requirements` performs
-against the actual field bounds. This logic is unchanged from the pre-kernel
-`AbstractStrategy` — only the strategy stand-in construction changed (plain
-`game`/`motion_controller` attributes now, no blackboard).
-
-The other half of this file's original coverage — `_ResetStrategyOnRefereeStoppage`
-/ `_REFEREE_STOPPAGE_COMMANDS` reset-guard tests — tested BT-only machinery
-that no longer exists. Its functional equivalent (barrier-reset behavior) is
-already covered by `utama_core/tests/engine/test_strategy.py`'s
-`test_barrier_reset_clears_mem_and_overrides_commitment` and
-`test_barrier_reset_clears_all_tactics_and_unpins_commitments`.
+against the actual field bounds. Barrier-reset behaviour is covered in
+`utama_core/tests/engine/test_strategy.py`.
 """
 
 import pytest

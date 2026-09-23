@@ -25,7 +25,7 @@ the ball moving just enough to dodge the 0.05m stillness tolerance every
 time, so the ball genuinely never "freezes" even though nothing useful is
 happening — see `_maybe_record_no_progress_possession`'s docstring for the
 live match this was found in). All three are pure observations recorded
-for post-match reporting (see `tournament.py`'s "STALLS" section) —
+for post-match reporting (see `smoke_tournament.py`'s "STALLS" section) —
 nothing here reads back into or alters gameplay.
 
 `turnovers`/`completed_passes`/`attacking_third_entries` (friendly-side) and
@@ -197,7 +197,7 @@ class MatchStats:
     # the GiveAndGoTactic bug would have shown up as here.
     #
     # Kept as plain per-pass lists, not pre-aggregated into a mean/median --
-    # post-match tooling (`tournament.py`, `tools/metric_correlation.py`,
+    # post-match tooling (`smoke_tournament.py`, `tools/metric_correlation.py`,
     # dashboards) can compute whatever summary statistic it wants from the
     # raw distribution; deciding that here would throw away information
     # (e.g. a bimodal distribution -- mostly fine passes plus a handful of
@@ -441,7 +441,7 @@ class MatchStatsAccumulator:
         computed every tick for the referee debug GUI panel; see
         `StrategyRunner._push_debug_status_to_referee`), so this accumulator
         doesn't need to reach into kernel internals itself. When omitted
-        (`None`, the default -- e.g. a BT-path strategy, or a caller that
+        (`None`, the default -- e.g. a strategy without `_kernel_strategy`, or a caller that
         doesn't have it handy), `COMMITTED_FROZEN` falls back to "ball frozen
         during live play", without requiring a committed slot; the resulting
         `StallEvent.tactic_ids`/`robot_ids` are then simply empty.

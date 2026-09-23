@@ -12,7 +12,7 @@ force, no team is at fault") as a legitimate no-fault physical state that a
 with `FORCE_START` at the ball's position, same as the rulebook prescribes.
 `PushingRule` (`rules/pushing_rule.py`) was built for exactly this. Its own
 unit tests (`test_pushing_crashing.py`) confirm the rule *fires* correctly
-in isolation, but per `docs/testing_gaps.md` gap #1/#6, nothing before this
+in isolation, but per `docs/testing_gaps.md` gap #1, nothing before this
 file actually drove that firing through `CustomReferee.step()` — the real
 call path production code uses — nor confirmed the resulting `STOP` command
 actually causes the pinned pair to be physically separated by

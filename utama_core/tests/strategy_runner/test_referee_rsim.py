@@ -575,7 +575,7 @@ def test_halt_resume_clears_robot_from_opponent_defense_area(headless):
 # since STOP is observed strictly before BALL_PLACEMENT_* is. That made
 # BallPlacementInterferenceRule structurally unreachable in every rsim/grsim
 # run, which is exactly why it had never fired in any tournament (see
-# docs/testing_gaps.md gap #6/#9) — not under-sampling, a real bug. Every
+# docs/testing_gaps.md gap #9) — not under-sampling, a real bug. Every
 # test in test_ball_placement_rsim.py already worked around this by injecting
 # BALL_PLACEMENT_YELLOW directly via force_command() instead of going through
 # set_command()/a real restart (see those tests' own comments).

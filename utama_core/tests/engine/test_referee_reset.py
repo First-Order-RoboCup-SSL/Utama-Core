@@ -64,18 +64,12 @@ def test_every_referee_command_is_routed_somewhere():
     the live-play fallthrough (`NORMAL_START`/`FORCE_START`, where tactics
     tick normally).
 
-    This is a regression test for a real, previously-shipped gap: three
-    separate comments elsewhere in this codebase (`abstract_strategy.py`,
-    `strategy.py`, `referee_override.py`) asserted `is_paused` already
-    covered `TIMEOUT_YELLOW`/`TIMEOUT_BLUE` — it never did, so a timeout left
-    tactics ticking and issuing ordinary motion commands straight through it,
-    unlike the old BT path (which dispatched TIMEOUT to `StopStep`, per
-    `docs/referee_integration.md`'s tree diagram). Nothing caught this because
-    the BT tree's exhaustiveness was structural (a Selector over the full
-    command set); the kernel path's two hand-maintained frozensets
-    (`_PAUSE_COMMANDS`, `_OVERRIDE_COMMANDS`) have no such guarantee and can
+    Regression test for a real, previously-shipped gap: `TIMEOUT_YELLOW`/
+    `TIMEOUT_BLUE` were in neither set, so a timeout left tactics ticking and
+    issuing ordinary motion commands straight through it. The two
+    hand-maintained frozensets (`_PAUSE_COMMANDS`, `_OVERRIDE_COMMANDS`) can
     silently drift out of sync with `RefereeCommand` as it changes — this
-    test is the mechanical check that replaces "nobody happened to notice."
+    test is the mechanical check against that.
     """
     for command in RefereeCommand:
         if command in _DEPRECATED_UNHANDLED_COMMANDS:

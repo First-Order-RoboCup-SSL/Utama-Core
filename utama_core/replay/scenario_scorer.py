@@ -38,7 +38,7 @@ from utama_core.replay.scenario import apply_scenario
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
-TICKS_PER_SECOND = 60  # matches tournament.py/rsim's default step rate
+TICKS_PER_SECOND = 60  # matches smoke_tournament.py/rsim's default step rate
 N_OUTFIELD = 5
 OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
 

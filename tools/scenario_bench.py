@@ -16,7 +16,7 @@ Bank sources, in the order this tool can use them today:
     from a tagged, trustworthy tournament run (`.stats.json` with zero
     `stall_events`, see `utama_core.replay.scenario_harvester`'s module
     docstring for why this gate exists). NOT run by this tool — point it at
-    an already-completed `tournament.py` run directory.
+    an already-completed `smoke_tournament.py` run directory.
 
 For each scenario, both `--candidate` and `--baseline` play the SAME
 scenario against the SAME `--opponent` (paired comparison, per item 14's
@@ -296,7 +296,7 @@ def parse_args() -> argparse.Namespace:
         "--harvest-from",
         type=Path,
         default=None,
-        help="a completed tournament.py run dir to harvest restart scenarios from",
+        help="a completed smoke_tournament.py run dir to harvest restart scenarios from",
     )
     parser.add_argument("--families", nargs="+", default=None, help="restrict to these ScenarioFamily values")
     parser.add_argument(

@@ -1,7 +1,8 @@
 """Full-length, side/kickoff-decoupled round-robin among the `competitive`-tier
 strategies from `docs/strategies.md` (`counter_flow`, `tiki_taka`, `zone_fluid`,
 `counter_press`), at full-match duration (two 300s halves = 600s sim time,
-matching `half_duration_seconds` in `docs/referee_integration.md`) instead of
+matching `half_duration_seconds` in
+`utama_core/custom_referee/profiles/simulation.yaml`) instead of
 `smoke_tournament.py`'s default 60s smoke-test length.
 
 Match construction (build strategies, referee, StrategyRunner, kickoff

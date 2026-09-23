@@ -297,7 +297,7 @@ class StrategyRunner:
         match_log_path (Optional[str], optional): If set, writes a structured JSONL trace of
             `my`'s kernel-tactic assignment decisions (see `utama_core.engine.match_log.MatchLog`)
             to this path on `close()`. Only applies when `strategy` is a kernel-tactic
-            `AbstractStrategy` (i.e. exposes `_kernel_strategy`); ignored for BT-path strategies.
+            `AbstractStrategy` (i.e. exposes `_kernel_strategy`); ignored otherwise (e.g. test doubles).
             Defaults to None, which disables the trace.
         stats_path (Optional[str], optional): If set, writes a single JSON summary of `my`'s
             match (rule-event counts, possession %, per-robot zone-time %; see
@@ -1220,8 +1220,8 @@ class StrategyRunner:
             # threading `match_log` through every `build_*_kernel_strategy`
             # factory's signature — those only accept `motion_controller`
             # today, and none of them need to know this trace exists. A
-            # BT-path `AbstractStrategy` simply has no `_kernel_strategy`
-            # attribute, so this is a no-op for it.
+            # strategy without `_kernel_strategy` (e.g. a test double) makes
+            # this a no-op.
             kernel_strategy = getattr(self.my.strategy, "_kernel_strategy", None)
             if kernel_strategy is not None:
                 kernel_strategy.match_log = self.match_log
@@ -1571,7 +1571,7 @@ class StrategyRunner:
                     # BALL_PLACEMENT_*. That made BallPlacementInterferenceRule
                     # structurally unreachable in every rsim/grsim run, which is
                     # why it had never fired in any tournament (see
-                    # docs/testing_gaps.md gap #6/#9). This branch must only
+                    # docs/testing_gaps.md gap #9). This branch must only
                     # fire for STOP-preceded restarts that do NOT go through
                     # ball placement.
                     #
@@ -2003,7 +2003,7 @@ class StrategyRunner:
         the same way `_push_debug_status_to_referee` reaches `_kernel_strategy`
         post-construction — rather than adding a new plumbing path. Returns
         `None` (watchdog falls back to "ball frozen during live play") for a
-        BT-path strategy, which has no `_kernel_strategy`.
+        strategy without `_kernel_strategy`.
         """
         kernel_strategy = getattr(self.my.strategy, "_kernel_strategy", None)
         if kernel_strategy is None:

@@ -206,11 +206,10 @@ def test_stop_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_run
 
 def test_timeout_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_runner):
     """TIMEOUT_YELLOW/BLUE is also an override command, routed to `StopStep`
-    exactly like STOP (see `referee_override.py`'s module docstring) — the
-    old BT path dispatched it the same way (`docs/referee_integration.md`'s
-    tree diagram), but the kernel port had never wired it into either
-    `is_paused` or `is_override_command` at all, so a timeout left tactics
-    ticking and issuing ordinary motion commands straight through it."""
+    exactly like STOP (see `referee_override.py`'s module docstring). It was
+    once wired into neither `is_paused` nor `is_override_command`, so a
+    timeout left tactics ticking and issuing ordinary motion commands
+    straight through it."""
     game = split_shape_runner.my.game
     split_shape_runner.step_once()
 
@@ -251,13 +250,8 @@ def test_goalkeeper_stops_during_halt(split_shape_runner):
 
 # ---------------------------------------------------------------------------
 # Penalty and direct-free routing — RefereeOverride._step_for's "ours"/"theirs"
-# dispatch for these four command families had zero test coverage until now:
-# the only place it was ever exercised was the BT path's
-# TestDispatcherRouting (utama_core/tests/referee/test_referee_unit.py),
-# deleted alongside strategy/referee/tree.py since it tested the BT
-# dispatcher classes directly, not the kernel's _step_for. Ball placement and
-# kickoff (both directions) are covered above; these four fill the gap for
-# penalty and direct-free.
+# dispatch for these four command families. Ball placement and kickoff (both
+# directions) are covered above.
 # ---------------------------------------------------------------------------
 
 

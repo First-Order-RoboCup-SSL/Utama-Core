@@ -284,7 +284,7 @@ def test_invalid_interval_raises():
 # ---------------------------------------------------------------------------
 
 
-_N_OUTFIELD = 5  # + 1 goalkeeper per side, mirrors tournament.py's N_OUTFIELD
+_N_OUTFIELD = 5  # + 1 goalkeeper per side, mirrors tournament_lib's N_OUTFIELD
 _OUTFIELD_ROBOT_IDS = tuple(range(1, _N_OUTFIELD + 1))
 
 
@@ -295,7 +295,7 @@ def test_rsim_short_match_produces_injections_observed_in_command_history(headle
     injection reached the real state machine and StrategyRunner's loop, not
     just `RestartFuzzingReferee`'s own bookkeeping).
 
-    Both sides need a real driven `Strategy` (not `tournament.py`'s
+    Both sides need a real driven `Strategy` (not `smoke_tournament.py`'s
     `run_match`'s empty-outfield idle strategy pattern from
     `test_referee_rsim.py`): `RefereeOverride` only ever drives *friendly*
     robots for whichever `Strategy` it's attached to (see
@@ -306,7 +306,7 @@ def test_rsim_short_match_produces_injections_observed_in_command_history(headle
     (`_free_kick_ready`, `_kicker_in_centre_circle`, `_all_robots_clear`) can
     never be satisfied and the match would stall on every other injection
     just from lacking a second mover — not a real bug in the fuzzer or the
-    referee. Mirrors `tournament.py run_match`'s own construction shape.
+    referee. Mirrors `tournament_lib.run_match`'s own construction shape.
     """
     referee = RestartFuzzingReferee.from_profile_name(
         "simulation", seed=1, interval_s=(3.0, 5.0), n_robots_yellow=6, n_robots_blue=6

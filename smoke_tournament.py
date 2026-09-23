@@ -119,7 +119,7 @@ def main() -> None:
     # Optional CLI args: config names (with or without the `build_`/
     # `_kernel_strategy` wrapping) to run instead of the full auto-discovered
     # catalog — useful for a quick check of one or two configs without
-    # waiting on every pair, e.g. `python tournament.py default
+    # waiting on every pair, e.g. `python smoke_tournament.py default
     # low_block`. `--sequential` forces the old one-process-at-a-time loop
     # (useful for debugging a specific match without pool noise); otherwise
     # matches run in a process pool since each `run_match` call is fully

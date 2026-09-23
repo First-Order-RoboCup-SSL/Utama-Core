@@ -8,8 +8,7 @@ frame. Loading the pickle format means reconstructing ~36,000 `GameFrame`s
 (each nesting ~12 `Robot` + a `Ball` + a `RefereeData`) just to immediately
 throw the objects away and pull out a handful of floats. Profiling a real
 600s replay showed this reconstruction cost dominates load time (84% of it
-in `pickle.load` alone) — see `docs/testing_gaps.md`'s replay-loading
-entries. Storing the same data as flat numpy arrays from the start removes
+in `pickle.load` alone). Storing the same data as flat numpy arrays from the start removes
 that reconstruction cost entirely for bulk/vectorized consumers.
 
 Design:
@@ -29,9 +28,8 @@ Design:
 - Flushing periodically (every `checkpoint_every_s` seconds of match time)
   means a mid-match crash still leaves a valid, loadable (if truncated)
   replay — mirroring the durability the old pickle-per-frame format got
-  for free from flushing every dump, which mattered for this session's
-  own robosim-crash debugging (`docs/testing_gaps.md`'s "Referee
-  FORCE_START Thrash" entry). Each flush rebuilds arrays from every tick
+  for free from flushing every dump, which matters when debugging a
+  robosim crash. Each flush rebuilds arrays from every tick
   buffered so far (not just the newest ones) — this is the one op that's
   O(n_ticks) instead of O(1) per tick, deliberately paid only a few times
   per match rather than continuously.

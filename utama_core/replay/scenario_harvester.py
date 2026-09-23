@@ -10,7 +10,7 @@ asymmetric.
 
 Match-level trust gate, per that same design pass: a match's replay is only
 harvested from when its `<match_tag>.stats.json` (written by
-`tournament.py run_match`'s `stats_path`, see `MatchStats.to_json`) exists
+`tournament_lib.run_match`'s `stats_path`, see `MatchStats.to_json`) exists
 and reports `stall_events == []`. A match with no stats file, or any stall
 event, contributes nothing — this is the gate that would have caught the
 925-file pre-fix contaminated replay run this session found (every one of
@@ -263,7 +263,7 @@ def harvest_run_dir(
     candidate_is_yellow: bool = True,
 ) -> tuple[list[BenchScenario], dict[str, int]]:
     """Harvest restart-triggered scenarios from every trustworthy match in
-    `run_dir` (a completed `tournament.py` run directory).
+    `run_dir` (a completed `smoke_tournament.py` run directory).
 
     Returns `(scenarios, report)` where `report` is a small summary dict
     (`matches_seen`, `matches_trusted`, `matches_untrusted`,

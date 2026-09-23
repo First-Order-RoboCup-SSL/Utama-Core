@@ -5,7 +5,7 @@ Run:
 
 What this does
 ---------------
-Three plots from the same pair of files elo.py/tournament.py already
+Three plots from the same pair of files elo.py/smoke_tournament.py already
 produce — no new data collection, purely a visualization layer:
 
 1. Elo rating vs. match index, one line per config.
