@@ -33,13 +33,18 @@ resolved, replace it with a one-line pointer under "Done".
 
 ## Open
 
-1. **Current stall count** — pending re-measurement (full strict 231-match smoke round-robin,
-   default `fpp` and `trajsample`). Every older figure in git history predates later fixes.
-   Known residual families: `COMMITTED_FROZEN` receiver boxed in by two enemies (a
-   two-segment-candidate instability in `TrajectorySamplingPlanner`, bounded by
-   `DecoyOverloadTactic`'s 12s finish timeout — `70cb5c6`), one `PREPARE_KICKOFF_BLUE`
-   restart stall, one `DIRECT_FREE_YELLOW` restart stall. Confirm any stall fix against the
-   full round-robin — small-subset re-runs have repeatedly overstated fixes.
+1. **Current stall count (2026-09-23, `fpp`, `cb6460a`): 8/231 matches** in the full strict
+   65s smoke round-robin (`replays/tournament_20260923_211717/`), plus 2 flagged by the
+   possession backstop (`overload_flow`/`score_aware_zone_flow` vs `split_shape`: 100%
+   possession, 0.57m ball travel); 41/231 decisive. Families:
+   - 4 `COMMITTED_FROZEN`, all in the `overload` slot (`DecoyOverloadTactic`, 3 of them
+     `high_line_zone`, onset t=56s). Under `trajsample` this family was traced to a receiver
+     boxed in by two enemies (`70cb5c6`); that it also shows under `fpp` suggests the tactic,
+     not only the planner. Unverified.
+   - 4 `RESTART_STALL` at `DIRECT_FREE_*` (`give_and_go_solo`/`high_line_zone`,
+     `high_line_zone`/`split_shape`, `split_shape`/`switch_of_play`, `three_slot`/`zone_fluid`).
+   `trajsample` not re-measured. Confirm any stall fix against the full round-robin —
+   small-subset re-runs have repeatedly overstated fixes.
 
 2. **Outer-loop strategy evaluation.** Goal: agents iterate strategies against evals without
    humans watching replays. Win rate/Elo is the objective but too sparse and too expensive to
