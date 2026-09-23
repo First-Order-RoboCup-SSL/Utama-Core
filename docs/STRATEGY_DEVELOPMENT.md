@@ -144,6 +144,13 @@ before adding an `os.environ`-gated `print()` you'll have to remember to add and
   number table is slower and less reliable than looking at a picture). Reach for
   `load_frames_in_range` only after the image has localized what to look at and you need an
   exact numeric value (a precise distance, a threshold check) — not as the first move.
+- **`render_clip()`** (`utama_core/replay/render_clip.py`) — the video counterpart, for
+  humans rather than agents: an MP4 of a replay window in the dashboard's visual style, with
+  a ball-following camera (`camera="follow"`, default) or the static full pitch
+  (`camera="full"`). rsim's restart ball teleports are never shown: during ball placement
+  the ball stays drawn where it went out until the restart is called, then cuts to the
+  placement spot; elsewhere it's hidden through the slide. Needs `ffmpeg` on PATH.
+  `demo_clips/README.md` records the exact command behind each committed clip.
 - **`docs/strategies.md`** — the strategy catalog: every `build_*_kernel_strategy` factory,
   its status (`baseline`/`competitive`/`parked`/`experimental`), and real round-robin
   results. Check here before treating an old strategy's win/loss record as current, and
