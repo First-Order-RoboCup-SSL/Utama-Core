@@ -223,10 +223,28 @@ def test_pause_command_freezes_without_resetting_mem():
     assert commands == {}  # no commands issued while paused
     assert tactic.mem_creations == 1  # mem NOT reset by a plain pause
 
-    # Resume with FORCE_START coming from HALT (not from a barrier command):
-    # should NOT be treated as a barrier reset.
-    strategy.tick(_FakeGame(RefereeCommand.FORCE_START))
+    # Resuming with NORMAL_START keeps the pre-pause state...
+    strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
     assert tactic.mem_creations == 1
+
+
+def test_force_start_after_a_pause_clears_mem_and_commitment():
+    """FORCE_START out of a pause is a barrier: the ball may have been moved (rsim teleports
+    it on STOP -> FORCE_START), so a committed tactic must not resume its old action."""
+    tactic = RecordingTactic(committed=True)
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+
+    strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
+    strategy.tick(_FakeGame(RefereeCommand.HALT))
+    assert tactic.mem_creations == 1  # the pause itself still preserves mem
+
+    strategy.tick(_FakeGame(RefereeCommand.FORCE_START))
+    assert tactic.mem_creations == 2
 
 
 def test_unregistered_picker_choice_raises():
@@ -561,7 +579,7 @@ def test_pause_freezes_without_resetting_any_tactic():
     assert commands == {}
     assert tactic_a.mem_creations == 1
 
-    strategy.tick(_FakeGame(RefereeCommand.FORCE_START))
+    strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
     assert tactic_a.mem_creations == 1
 
 

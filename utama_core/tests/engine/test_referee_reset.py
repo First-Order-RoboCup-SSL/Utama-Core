@@ -29,10 +29,16 @@ def test_resuming_from_a_barrier_command_is_still_a_barrier():
     assert classify_transition(RefereeCommand.BALL_PLACEMENT_BLUE, RefereeCommand.FORCE_START) is ResetTier.BARRIER
 
 
-def test_resuming_from_a_pause_is_not_a_barrier():
-    """STOP -> FORCE_START with no restart command in between must not reset mem."""
-    assert classify_transition(RefereeCommand.STOP, RefereeCommand.FORCE_START) is ResetTier.NONE
+def test_resuming_from_a_pause_with_normal_start_is_not_a_barrier():
     assert classify_transition(RefereeCommand.HALT, RefereeCommand.NORMAL_START) is ResetTier.NONE
+    assert classify_transition(RefereeCommand.STOP, RefereeCommand.NORMAL_START) is ResetTier.NONE
+
+
+def test_force_start_out_of_a_pause_is_a_barrier():
+    """FORCE_START restarts with the ball wherever it now is (rsim may have teleported it
+    during the stop), so pre-pause commitments must not survive it."""
+    assert classify_transition(RefereeCommand.STOP, RefereeCommand.FORCE_START) is ResetTier.BARRIER
+    assert classify_transition(RefereeCommand.HALT, RefereeCommand.FORCE_START) is ResetTier.BARRIER
 
 
 def test_entering_a_pause_command_is_a_pause_not_a_barrier():
