@@ -137,6 +137,7 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
                 "sim_time": e.sim_time,
                 "tactic_id": e.tactic_id,
                 "robot_ids": list(e.robot_ids),
+                "tag": e.tag.value,
                 "note": e.note,
             }
             for e in intention_events

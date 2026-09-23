@@ -274,14 +274,18 @@ class Strategy:
         return {tid: slot.assigned_robots for tid, slot in self._slots.items() if slot.assigned_robots}
 
     def slot_status(self, game: Game) -> dict[TacticId, dict]:
-        """Per-active-slot debug info: robots held and whether it's currently committed.
+        """Per-active-slot debug info: robots held, whether it's currently committed, and its tactic's tag.
 
         Read-only reporting, not used by `tick()` itself — for callers that
         want to display "what is this robot's tactic doing right now"
         without reaching into `_slots` directly (e.g. a GUI debug panel).
         """
         return {
-            tid: {"robots": slot.assigned_robots, "committed": slot.tactic.is_committed(game, slot.mem)}
+            tid: {
+                "robots": slot.assigned_robots,
+                "committed": slot.tactic.is_committed(game, slot.mem),
+                "tag": slot.tactic.tag,
+            }
             for tid, slot in self._slots.items()
             if slot.assigned_robots
         }

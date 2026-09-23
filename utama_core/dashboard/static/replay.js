@@ -35,6 +35,7 @@
   let refereeIdx = 0;
   let traceIdx = 0;
   let slotRobots = {}; // tactic_id -> currently-assigned robot_ids
+  let slotTags = {}; // tactic_id -> its TacticTag value, from the same events
   let lastIndex = 0;
   let refereeState = null; // last-seen referee event, or null if none yet
   let traceValues = {}; // key -> last-seen value, e.g. "shadow_and_mark.marks" -> {marker_id: opponent_id}
@@ -48,7 +49,7 @@
     const status = {};
     for (const tacticId in slotRobots) {
       for (const robotId of slotRobots[tacticId]) {
-        status[String(robotId)] = [tacticId];
+        status[String(robotId)] = slotTags[tacticId] ? [tacticId, slotTags[tacticId]] : [tacticId];
       }
     }
     return status;
@@ -67,6 +68,7 @@
     while (tacticIdx < tacticEvents.length && tacticEvents[tacticIdx].sim_time <= ts) {
       const e = tacticEvents[tacticIdx];
       slotRobots[e.tactic_id] = e.robot_ids;
+      if (e.tag) slotTags[e.tactic_id] = e.tag;
       tacticIdx++;
     }
     while (refereeIdx < refereeEvents.length && refereeEvents[refereeIdx].sim_time <= ts) {
@@ -168,9 +170,11 @@
     const frame = frames[index];
     advanceEventCursors(frame.ts);
     frame.overlays = overlaysEnabled ? traceValues : null;
+    const tacticStatus = tacticStatusFromSlots();
+    frame.tactic_tags = tacticTagsFromStatus(tacticStatus);
     if (fieldView) fieldView.draw(frame);
     renderRobotStatusInto("replay-status-entries", frame, { hideFeedback: true });
-    renderTacticStatusInto("replay-tactic-entries", tacticStatusFromSlots(), {
+    renderTacticStatusInto("replay-tactic-entries", tacticStatus, {
       emptyLabel: "no tactic data at this frame",
     });
     renderRefereeHeaderInto(REPLAY_HEADER_IDS, refereeState);

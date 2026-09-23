@@ -44,6 +44,7 @@
 
     renderRobotStatusInto("ref-status-entries", d);
     renderTacticStatusInto("ref-tactic-entries", d.tactic_status);
+    d.tactic_tags = tacticTagsFromStatus(d.tactic_status);
     if (fieldView) fieldView.draw(d);
   }
 

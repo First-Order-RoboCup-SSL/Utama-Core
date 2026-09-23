@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from utama_core.engine.abstract_strategy import AbstractStrategy
+from utama_core.engine.tactic import TacticTag
 from utama_core.strategy.kernel_strategy import build_split_shape_kernel_strategy
 
 
@@ -38,7 +39,7 @@ def test_debug_status_covers_goalkeeper_and_all_outfield_robots(split_shape_runn
     assert status[0] == ["goalkeeper"]
     for robot_id in (1, 2, 3, 4, 5):
         assert robot_id in status
-        assert len(status[robot_id]) == 1
+        assert len(status[robot_id]) == 2  # [label, tag]
 
 
 def test_debug_status_labels_match_active_partition(split_shape_runner):
@@ -61,3 +62,17 @@ def test_slot_status_reports_committed_flag(split_shape_runner):
     for tactic_id, info in status.items():
         assert isinstance(info["committed"], bool)
         assert info["robots"]
+
+
+def test_debug_status_tag_is_the_assigned_tactics_own_tag(split_shape_runner):
+    # The dashboard colours each robot by this second element, so it must be the tag the
+    # tactic currently holding the robot declares, not a per-robot or per-strategy guess.
+    split_shape_runner.step_once()
+    strategy = split_shape_runner.my.strategy
+    game = split_shape_runner.my.game
+    status = strategy.debug_status()
+
+    for tactic_id, info in strategy._kernel_strategy.slot_status(game).items():
+        assert isinstance(info["tag"], TacticTag)
+        for robot_id in info["robots"]:
+            assert status[robot_id][1] == info["tag"].value

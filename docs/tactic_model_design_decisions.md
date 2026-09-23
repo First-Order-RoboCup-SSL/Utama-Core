@@ -759,6 +759,12 @@ build the generic helper — once a real `Strategy` config needs to allocate acr
 one same-tagged Tactic at a time (e.g. two different DEFENSE-tagged Tactics competing for the
 same defensive slot), which has not happened yet.
 
+**Update (2026-09-23): tag is now consumed for display only.** The dashboard's Live and
+Replay views ring each friendly robot in its current tactic's tag colour (with a legend),
+fed by `Strategy.slot_status()`'s `tag` → `AbstractStrategy.debug_status()`'s
+`[label, tag]` rows (Live) and the `tag` already in each `IntentionEvent` (Replay). Allocation
+is unchanged: no `Partitioner` or scheduler code reads tag.
+
 ## 17. Six example `Strategy` configs in `kernel_strategy.py`, and what each demonstrates
 
 Per §16's decision (one hand-written `Partitioner` per config, not a shared general-purpose
