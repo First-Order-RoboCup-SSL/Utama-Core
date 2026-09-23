@@ -23,12 +23,11 @@ function, for callers with only one tactic kind active at a time who would
 otherwise have to write a trivial one-group `Partitioner` themselves.
 
 Referee restarts (kickoff/ball-placement/free-kick/penalty) are handled
-before any tactic ticks at all, not by a tactic: `kernel.referee_override`
-reuses the BT path's existing `actions.py` Step classes (keep-out-distance
+before any tactic ticks at all, not by a tactic: `engine.referee_override`
+reuses the `custom_referee/actions.py` Step classes (keep-out-distance
 geometry, formation positions) to take over every outfield robot's command
-for the duration of the restart, the same way `build_referee_override_tree`
-does for the BT path. See `_OVERRIDE_COMMANDS` there and `referee_reset.py`
-for how this fits with the barrier-reset/pause tiers.
+for the duration of the restart. See `_OVERRIDE_COMMANDS` there and
+`referee_reset.py` for how this fits with the barrier-reset/pause tiers.
 """
 
 from __future__ import annotations
@@ -323,8 +322,7 @@ class Strategy:
                 # or STOP/TIMEOUT_* (see `referee_override.py`'s module
                 # docstring for why both are in this set too, ahead of the
                 # `is_paused` check below rather than behind it): legal
-                # positioning takes over every outfield robot for this tick,
-                # same as the BT path's RefereeOverride Selector. Slots
+                # positioning takes over every outfield robot for this tick. Slots
                 # already had their mem/commitments cleared by the barrier
                 # reset on the transition in; tactics simply don't tick while
                 # this is active, so there is nothing further to reconcile

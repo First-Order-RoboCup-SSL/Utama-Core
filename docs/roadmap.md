@@ -122,6 +122,13 @@ resolved, replace it with a one-line pointer under "Done".
 10. **More tactics from real football vocabulary** (formations, set plays, pressing schemes)
     rather than variations on existing ones.
 
+10a. **rsim matches are not fully run-to-run deterministic.** Found 2026-09-23: in a
+    56-match `--fuzz-restarts 1` run, 4 `press_and_pass` matches gave different results on
+    identical code, and a re-run flipped 3 of them back. Paired-seed evaluation (item 2) and
+    `--stop-at-first-stall` both assume determinism. Unexplored; first suspects are
+    `PYTHONHASHSEED` (set/dict iteration order) and wall-clock-dependent code under machine
+    load (load average was ~30).
+
 11. **Deferred, revisit only when forced** (minimalism):
     - Shared `Sticky`/hysteresis helper beyond `shared/tolerance.py` — existing instances
       differ in shape.

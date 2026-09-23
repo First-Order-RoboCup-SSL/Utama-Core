@@ -1,219 +1,101 @@
 # Strategy development
 
-Durable context for building/debugging anything under `utama_core/engine/`,
-`utama_core/tactics/`, `utama_core/skills/`, `utama_core/strategy/`, or
-`smoke_tournament.py`/`docs/strategies.md` — the strategy-layer half of the repo. See the root
-`AGENTS.md` for repo-wide facts (what the repo is, testing commands, minimalism
-discipline). That file links here; this file assumes you've read it first.
+Context for work under `utama_core/engine/`, `utama_core/tactics/`, `utama_core/skills/`,
+`utama_core/strategy/`, or `smoke_tournament.py`/`docs/strategies.md`. Assumes you've read the
+root `AGENTS.md`. Design rationale and rejected alternatives: `docs/tactic_model_design_decisions.md`
+— read it before proposing a change to the kernel's shape.
 
-`engine/` (infra: `Strategy`, `Tactic`, `TickContext`, `MatchLog`, `AbstractStrategy`,
-referee-override plumbing) and `strategy/` (the actual `build_*_kernel_strategy` factories
-— `tiki_taka`, `counter_flow`, etc.) used to both be named `kernel/`, which was confusing:
-"kernel strategy" is the model's own vocabulary (baked into every factory/class name below),
-so a directory also named `kernel` collided with it. `engine/` removes that collision — the
-vocabulary "kernel strategy" is unchanged, only the infra directory's name is.
+`engine/` is the scheduler/protocol infra; `strategy/kernel_strategy.py` holds the
+`build_*_kernel_strategy` factories, where day-to-day strategy edits land. (`engine/` was
+renamed from `kernel/` so it can't be confused with "kernel strategy", the model's own term.)
 
 ## The tactic-kernel model
 
-The strategy layer is not a behaviour tree. A team's play is a `Strategy`
-(`utama_core/engine/strategy.py`): a scheduler that partitions outfield robots across
-concurrently-running `Tactic`s every tick, re-deciding that partition fresh each tick via a
-`Partitioner` function. The goalkeeper — robot 0 by default, set via
-`Strategy.set_goalkeeper()` and passed as `AbstractStrategy`'s `goalkeeper_id` — is pinned
-outside the scheduler and never scheduled.
+A team's play is a `Strategy` (`engine/strategy.py`): a scheduler that re-partitions the
+outfield robots across concurrently-running `Tactic`s every tick. The goalkeeper (robot 0 by
+default, `Strategy.set_goalkeeper()`) is pinned outside the scheduler.
 
-- **`Tactic`** (`utama_core/engine/tactic.py`) — a plain object: `tick(game, ctx,
-  robot_ids, mem) -> (commands, mem)`, plus optional `applicable()`/`is_committed()`/
-  `suggest_next()` hooks with sane defaults. No py_trees, no blackboard, no state-machine
-  base class — `mem` is a plain dataclass the kernel only ever replaces wholesale or
-  threads through unchanged.
-- **`Strategy`** (`utama_core/engine/strategy.py`) — runs N≥1 `Tactic`s concurrently, each
-  owning a disjoint slice of the outfield pool.
-- **`Partitioner`** — a plain function deciding how to split the *free* robot pool (robots
-  no committed `Tactic` currently holds) across tactic slots this tick. No bid/fitness
-  scoring system. It receives `available_tactic_ids` — tactic ids that are neither pinned
-  by a commitment nor `applicable() == False` — and may only assign robots to those; it
-  never needs to reconstruct which slots are pinned from `prev_partition` itself.
-- **`AbstractStrategy`** (`utama_core/engine/abstract_strategy.py`) — the base class
-  `StrategyRunner` actually drives; wraps a `Strategy` built via a
-  `build_kernel_strategy(motion_controller) -> Strategy` factory (see
-  `utama_core/strategy/kernel_strategy.py` for the existing factory functions).
+- **`Tactic`** (`engine/tactic.py`) — a plain object: `tick(game, ctx, robot_ids, mem) ->
+  (commands, mem)`, a required `tag` (ATTACK/DEFENSE/MIXED — used only for dashboard
+  colouring), and optional `applicable()`/`is_committed()`/`suggest_next()`. `mem` is a plain
+  dataclass; no blackboard, no state-machine base class.
+- **`Partitioner`** — a plain function that splits the *free* robots (those no committed slot
+  holds) across tactic slots. It receives `available_tactic_ids` (applicable and not pinned by
+  a commitment) and may only assign robots to those. No bid/fitness scoring.
+- **`AbstractStrategy`** (`engine/abstract_strategy.py`) — what `StrategyRunner` drives; wraps
+  a `Strategy` built by a factory.
 
-**Single-writer partition invariant:** exactly one place (the scheduler) decides the
-*entire* partition once per tick, before any `Tactic` runs. By the time a `Tactic.tick()`
-is called, its robot set for that tick is final — there is no window where two `Tactic`s
-could contend for the same robot. This is what makes concurrent `Tactic`s safe without
-locks or explicit synchronization; do not reintroduce a code path that lets a `Tactic`
-claim or release robots outside the `Partitioner`'s decision.
-
-Full rationale, rejected alternatives, and the "why" behind every one of these choices
-lives in `docs/tactic_model_design_decisions.md` — read it before proposing a change to
-the kernel's shape, not just this summary.
+**Invariants:**
+- *Single writer:* the partition is decided once per tick, before any `Tactic` runs, so two
+  tactics can never contend for a robot. Don't add a path that lets a `Tactic` claim or release
+  robots outside the `Partitioner`.
+- *Commitment:* while `is_committed()` is True the slot's robots can't be reassigned. Backstop:
+  `commitment_deadline_s` (default 15s) releases a slot committed that long with the ball moved
+  <5cm, and logs it. A deadline release means your tactic lacks a release path — fix the
+  tactic, don't raise the deadline.
+- *Resets* (`engine/referee_reset.py`): entering a restart (kickoff, penalty, free kick, ball
+  placement, goal), resuming from one, or `FORCE_START` straight out of `STOP`/`HALT` is a
+  barrier — every slot's `mem` and commitment clears. `STOP`/`HALT` alone only pause; a pause
+  resumed by `NORMAL_START` keeps state.
 
 ## Referee handling
 
-`CustomReferee` (`utama_core/custom_referee/`) is an in-process, mode-agnostic referee —
-works identically across rsim/grsim/real, no network dependency. During a restart
-(kickoff/ball-placement/free-kick/penalty), `RefereeOverride`
-(`utama_core/engine/referee_override.py`) takes over every outfield robot's command
-directly — this happens *before* any `Tactic` ticks, not as a `Tactic` itself. It reuses
-the restart-positioning `*Step` classes in `utama_core/custom_referee/actions.py` rather
-than reimplementing keep-out-distance geometry. Design rationale and the full rule-by-rule
-audit against the SSL rulebook: `docs/custom_referee.md` and
-`docs/custom_referee_design_decisions.md`.
+`CustomReferee` (`utama_core/custom_referee/`) runs in-process and identically across
+rsim/grsim/real. During a restart, `RefereeOverride` (`engine/referee_override.py`) takes over
+every outfield robot *before* any `Tactic` ticks, reusing the `*Step` classes in
+`custom_referee/actions.py`. Strategies can override a restart formation via
+`Strategy(referee_overrides=...)`. See `docs/custom_referee.md`.
 
 ## Writing a Tactic
 
-Lessons from building `SwitchOfPlayTactic` (`utama_core/tactics/switch_of_play.py`), a
-multi-phase relay tactic that took two full debugging rounds to get right. The bugs below
-weren't one-offs — the same *shape* of bug recurred twice in the same file, so they're
-worth checking for deliberately rather than trusting "it worked once."
+Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of_play.py`):
 
-- **`go_to_point()` always faces the ball — it has no orientation parameter.** If a robot
-  needs to hold a specific orientation while stationary (e.g. facing a pass target, not
-  the ball), use `move()` directly with an explicit `target_oren`. This bit the same
-  tactic twice: once in an early phase (carrier holding the ball before passing) and again,
-  independently, one phase later (a different robot's own hold-and-wait branch) — a fix in
-  one call site does not imply the pattern is fixed everywhere it appears. Grep every
-  `go_to_point(` call in a new tactic and check whether the robot's orientation while
-  stationary actually matters there.
-- **`intercept_point()` (`shared/pass_and_score_geometry.py`) projects the receive point
-  along the *passer's current orientation*,** not toward anything about the receiver's
-  actual position. A passer facing the wrong way (see above) silently sends the receiver
-  toward a nonsense point — this fails quietly (the receiver just never arrives) rather
-  than erroring, so it reads as a vague "stall" until traced.
-- **`is_committed()` returning `True` is a promise, not a suggestion.** It blocks the
-  kernel scheduler from ever reassigning that tactic slot's robots — by design, not a bug
-  (see "Single-writer partition invariant" above). Every code path that sets it `True` for
-  a phase transition needs a matching path back to `False`, covering both the success case
-  *and* every failure/timeout case. A timeout-driven phase reset is easy to write in a way
-  that gets silently undone within the same tick, if the reset-target phase's own logic
-  immediately re-advances past it — check that a timeout reset actually sticks for at least
-  one full tick before the tactic can re-advance.
-- **`is_committed()` is still a promise, not a suggestion — but the kernel now enforces a
-  deadline as a backstop, not a substitute.** `Strategy`'s `commitment_deadline_s`
-  constructor parameter (default `DEFAULT_COMMITMENT_DEADLINE_S` = 15s) releases a slot
-  whose tactic has stayed `is_committed()` continuously past the deadline *and* whose ball
-  hasn't moved ~5cm since the commitment began — a stall breaker, not a play-length cap, so
-  a commitment making real progress is never released just for running long. A deadline
-  release recorded in the match log (`"deadline release after Ns committed, ball moved
-  Xm"`) means your tactic has a missing release path — go fix the code path that should
-  have set `is_committed()` back to `False` — it does not mean the deadline itself should
-  be raised.
-- **Verify by tracing a real match, not by reading the phase-transition logic.** Bugs in
-  this tactic were invisible from the code alone — `intercept_point()` computing a
-  plausible-looking point that happened to be wrong, or a phase timeout resetting state
-  that then got immediately overwritten — and only showed up as `src_oren`/`intercept_pos`
-  oscillating tick-to-tick in an actual traced match. Use `ctx.match_log.trace(...)` (see
-  Observability below) to record the key variable per tick and read it back — not a
-  hand-added `print()` you have to remember to revert — before concluding a phase is stuck
-  for some subtler reason than it looks.
-- **A tactic can trip referee rules that have nothing to do with its own logic.** Positions
-  computed correctly by one tactic can still walk a robot through another tactic's
-  keep-out zone (e.g. `SwitchOfPlayTactic`'s relay play putting an attacker inside its own
-  defense area, tripping the same `DefenseAreaRule` foul that a broken `DefenseTactic` also
-  trips). When a match stalls on a referee foul, check *which* robot and *which* rule
-  before assuming the fix belongs in the tactic that seems most related.
+- **`go_to_point()` always faces the ball.** If orientation matters while stationary (facing a
+  pass target), use `move()` with `target_oren`. Check every `go_to_point(` call site — fixing
+  one doesn't fix the pattern.
+- **`intercept_point()` (`shared/pass_and_score_geometry.py`) projects along the passer's
+  current orientation,** not toward the receiver. A mis-facing passer sends the receiver to a
+  nonsense point; it fails quietly and looks like a vague stall.
+- **Every path that sets `is_committed()` True needs a path back to False** — success, failure
+  and timeout. Check a timeout reset actually sticks for a full tick rather than being
+  re-advanced past in the same tick.
+- **Verify by tracing a real match** (`ctx.match_log.trace`, below), not by reading the phase
+  logic.
+- **A tactic can trip referee rules unrelated to its logic** (e.g. a relay walking an attacker
+  into its own defense area). On a foul stall, check which robot and which rule first.
 
-## Observability — don't hand-roll a debug print, these already exist
+## Observability — use these before adding a debug print
 
-Answering "why did this match go the way it did" has dedicated tooling; reach for it
-before adding an `os.environ`-gated `print()` you'll have to remember to add and revert.
+- **`MatchLog`** (`engine/match_log.py`) — one JSONL per match. `Strategy` records an
+  intention row per slot-assignment *change*; call `ctx.match_log.trace(tick, sim_time, key,
+  value)` yourself from a `Tactic` or skill (guard with `if ctx.match_log is not None:`; it's
+  `None` on tournament/CI runs, so traces can stay in). Examples: `skills/src/go_to_ball.py`,
+  `tactics/give_and_go.py`. Enable with `match_log_path=` or `tournament_lib.run_match(...,
+  run_dir=...)`; read back with `load_jsonl(path)`.
+- **`render_window()` / `render_around_event()`** (`replay/render_window.py`) — PNG of
+  robot/ball trails over a window, optionally anchored on a `MatchLog` event. **Default to this
+  over `load_frames_in_range()`**: a coordinate dump is expensive in context and easy to misread
+  spatially. Use raw frames only for an exact number once the picture has localized the issue.
+- **`render_clip()`** (`replay/render_clip.py`) — MP4 of a window for humans, ball-following
+  or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
+  committed clips: `demo_clips/README.md`.
+- **`docs/strategies.md`** — every factory's status and the latest results. `baseline`
+  strategies aren't meant to win; don't tune them to.
+- **`smoke_tournament.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
+  `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
+  `--no-save`). For one match with full observability, call `tournament_lib.run_match` with
+  full factory names (`build_tiki_taka_kernel_strategy`).
+- **Stall watchdog** (`engine/match_stats.py`) — records `StallEvent`s, never affects play:
+  `RESTART_STALL` (a restart/stoppage command held >15s) and `COMMITTED_FROZEN` (ball moved
+  <5cm for >10s in live play while a slot is committed). The tournament prints a STALLS
+  section, writes it to `summary.json`, and `--strict` exits non-zero on any stall; a
+  possession-pinned backstop flags what the watchdog misses.
+- **Restart fuzzing** (`custom_referee/restart_fuzzer.py`) — injects legal restarts at
+  seeded-random times to exercise auto-advance paths; same seed and interval reproduce the
+  schedule. Details: `docs/custom_referee.md`.
+- **`repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless
+  match with tracing on, instead of re-running the whole match (`--help` for flags).
 
-- **`MatchLog`** (`utama_core/engine/match_log.py`) — one JSONL trace per match, two event
-  kinds sharing the same file/reader:
-  - `intention(...)` — auto-recorded by `Strategy` itself, one row per tactic-slot
-    assignment *change* (not per tick), so a robot holding the same tactic for seconds is
-    one line, not thousands. You don't call this directly.
-  - `trace(tick, sim_time, key, value)` — call this yourself, from inside any `Tactic.tick()`
-    or any skill that receives `ctx`, via `ctx.match_log.trace(...)`. Record any
-    JSON-serializable scalar/string per tick (a branch taken, `has_ball`, a computed angle).
-    Guard with `if ctx.match_log is not None:` — it's `None` (a no-op) on every
-    tournament/CI run, so leaving trace calls in permanently costs nothing. See
-    `go_to_ball()` (`utama_core/skills/src/go_to_ball.py`) and `GiveAndGoTactic.tick()`
-    (`utama_core/tactics/give_and_go.py`) for the pattern already in place.
-  - Enable per-match by passing `match_log_path=...` to `StrategyRunner`/`AbstractStrategy`,
-    or via `smoke_tournament.py run_match(..., run_dir=...)` which wires it automatically.
-  - Read back with `utama_core.engine.match_log.load_jsonl(path)` — returns a list of
-    `IntentionEvent`/`TraceEvent` in tick order; filter by `isinstance`.
-- **`render_window()`** (`utama_core/replay/render_window.py`) — renders a PNG of robot/ball
-  trails over a time window from a replay `.pkl`, for the one thing text traces are bad at
-  (spatial motion). `render_around_event()` anchors the window on a `MatchLog` event index
-  directly, instead of guessing a raw timestamp.
-  **Default to this over `replay_player.load_frames_in_range()` when investigating a replay
-  window** — a wall of per-tick floating-point coordinates is expensive to hold in context
-  and easy to misread spatially (an LLM reconstructing "who's moving which way" from a
-  number table is slower and less reliable than looking at a picture). Reach for
-  `load_frames_in_range` only after the image has localized what to look at and you need an
-  exact numeric value (a precise distance, a threshold check) — not as the first move.
-- **`render_clip()`** (`utama_core/replay/render_clip.py`) — the video counterpart, for
-  humans rather than agents: an MP4 of a replay window in the dashboard's visual style, with
-  a ball-following camera (`camera="follow"`, default) or the static full pitch
-  (`camera="full"`). rsim's restart ball teleports are never shown: during ball placement
-  the ball stays drawn where it went out until the restart is called, then cuts to the
-  placement spot; elsewhere it's hidden through the slide. Needs `ffmpeg` on PATH.
-  `demo_clips/README.md` records the exact command behind each committed clip.
-- **`docs/strategies.md`** — the strategy catalog: every `build_*_kernel_strategy` factory,
-  its status (`baseline`/`competitive`/`parked`/`experimental`), and real round-robin
-  results. Check here before treating an old strategy's win/loss record as current, and
-  before assuming a strategy is worth using as a comparison target — `baseline`-status
-  strategies (e.g. `default`, `low_block`) are not meant to be competitive; don't spend
-  effort making them "win." Its own "Updating this file" section explains when to add/edit
-  a row.
-- **`smoke_tournament.py`** — round-robin match runner, `--max-workers N` for concurrency;
-  `run_match(config_a_name, config_b_name, run_dir=None)` is directly importable for a
-  one-off match with full observability recorded, not just the CLI's exclusion-filtered
-  round-robin (e.g. `default` is excluded from the CLI sweep but reachable via `run_match`
-  directly). Config names passed to `run_match` are the full factory name
-  (`build_tiki_taka_kernel_strategy`), not the short catalog name (`tiki_taka`).
-- **In-match stall watchdog** (`utama_core.engine.match_stats`) — `MatchStatsAccumulator.
-  record_tick()` detects two stall shapes live, per tick, and records them as `StallEvent`s
-  in the finalized `MatchStats.stall_events` (serialized in `to_json()`/`summary.json`):
-  observations only, never fed back into gameplay.
-  - `RESTART_STALL` — a referee restart/stoppage command (anything but
-    `NORMAL_START`/`FORCE_START`) held continuously for more than 15 sim seconds without
-    auto-advancing back to live play.
-  - `COMMITTED_FROZEN` — the ball moving less than 5cm for more than 10 sim seconds during
-    live play while at least one kernel tactic slot is committed (`is_committed()`). Slot
-    commitment is passed in from `StrategyRunner._committed_tactics()`, which reuses
-    `Strategy.slot_status()` (already reachable the same way
-    `_push_debug_status_to_referee` reaches `_kernel_strategy`) — when that isn't available (a
-    BT-path strategy), this falls back to "ball frozen during live play" alone.
-  - Each event records its onset `sim_time`/`tick`/referee command and keeps updating one
-    `duration_s` for as long as the same stall persists, rather than one event per tick.
-  - `smoke_tournament.py` prints a "STALLS" section per run (match, kind, onset time, referee
-    command, committed tactic ids) and writes the same into `summary.json`; `--strict`
-    exits non-zero if any match in the run stalled. A heuristic backstop (possession pinned
-    100%/0% and `ball_travel_m < 1.0`) flags anything the watchdog itself might miss.
-- **Restart fuzzing** (`utama_core.custom_referee.restart_fuzzer.RestartFuzzingReferee`) —
-  a `CustomReferee` subclass that injects extra, legal restarts (kickoff / ball-placement
-  +free-kick / STOP-then-force-start) at seeded-random sim times during otherwise-normal
-  live play, to exercise `GameStateMachine`'s auto-advance paths far more often than
-  natural fouls/goals alone would. Full description, injection kinds, and legality
-  guarantees: `docs/custom_referee.md`'s "Restart fuzzing" section. `smoke_tournament.py` exposes
-  it via `--fuzz-restarts SEED`, which builds the referee with
-  `RestartFuzzingReferee.from_profile_name` instead of `CustomReferee.from_profile_name`
-  for every match in the run; `--fuzz-interval LO HI` sets the sim-second gap between
-  injections (default `25 45` — over a 65s match this means one or two injections, not the
-  `8 20` stress-test range in the class's own docstring). Both are recorded in
-  `summary.json` as `fuzz_seed`/`fuzz_interval_s` (`null` when off), so a fuzzed run is
-  reproducible from the summary alone — same seed and interval reproduce the exact same
-  injection schedule (kind, team, sim time), by construction of the class's `seed`-driven
-  RNG.
-- **Reproducing a stall from a replay** (`utama_core.replay.scenario`/`repro_from_replay.py`)
-  — once a stall's window is known (from `stuck_detector.py` or the watchdog above), reload
-  just that field state into a fresh headless match instead of re-running the whole match,
-  e.g. `pixi run python repro_from_replay.py replays/<run>/<match>.pkl --t 260 --duration 15
-  --trace-out /tmp/repro_trace.jsonl` (see the script's own `--help` for every flag).
-
-## Where things live
-
-The repo-wide list — every `docs/` file and the test surface — lives in the root
-[`AGENTS.md`](../AGENTS.md)'s own "Where things live" section; it is not repeated here. Only
-the two entries specific to strategy-layer work:
-
-- `utama_core/engine/` — scheduler/protocol infra (`Strategy`, `Tactic`, `TickContext`,
-  `MatchLog`, `AbstractStrategy`, referee-override plumbing). Rarely touched to add a new
-  strategy; touched to add a new kernel-level primitive.
-- `utama_core/strategy/kernel_strategy.py` — every `build_*_kernel_strategy` factory. This
-  is where day-to-day strategy-dev edits land.
+**Determinism caveat:** rsim matches are *mostly* reproducible, but some (seen with
+`press_and_pass`) differ run to run on identical code; cause not yet known. Before attributing a
+result difference to a code change, re-run the baseline.
