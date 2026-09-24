@@ -436,7 +436,7 @@ def main() -> None:
         "stalled_match_count": len(stalled_matches),
         "possession_backstop_match_count": len(backstop_matches),
     }
-    real_losses_by_match: Optional[dict[str, int]] = None
+    real_losses_by_match: Optional[dict[str, dict[str, int]]] = None
     if run_dir is not None:
         summary_path = run_dir / "summary.json"
         with open(summary_path, "w") as f:
@@ -449,10 +449,11 @@ def main() -> None:
             summary["ball_losses"] = turnover_breakdown.breakdown(losses)
             (run_dir / "ball_losses.md").write_text(turnover_breakdown.report(run_id, losses, summary))
             _print_ball_losses(summary["ball_losses"], run_id)
-            real_losses_by_match = {r["match"]: turnover_breakdown.real_loss_count(r) for r in losses}
+            real_losses_by_match = {r["match"]: turnover_breakdown.real_loss_kinds(r) for r in losses}
 
     summary["strategies"] = strategy_table(summary["results"], real_losses_by_match)
     _print_strategy_table(summary["strategies"])
+    _print_loss_kinds(summary["strategies"])
     summary["fouls"] = foul_table(summary["results"])
     _print_foul_table(summary["fouls"])
     if run_dir is not None:
@@ -486,11 +487,14 @@ def _run_metadata() -> dict:
     }
 
 
-def strategy_table(results: list[dict], real_losses_by_match: Optional[dict[str, int]] = None) -> dict[str, dict]:
+def strategy_table(
+    results: list[dict], real_losses_by_match: Optional[dict[str, dict[str, int]]] = None
+) -> dict[str, dict]:
     """Per-strategy totals over `summary.json`-shaped `results`. Match stats are from
     config_a's side, so config_b reads the `enemy_*` counterparts. Real ball losses are only
     measured for config_a (the side with an intentions log), so they are totalled over the
-    matches a strategy played as config_a (`matches_as_a`). `stalled` counts matches that
+    matches a strategy played as config_a (`matches_as_a`), in total and by kind
+    (`turnover_breakdown.TURNOVER_KINDS` and `RESTART_KINDS`). `stalled` counts matches that
     recorded a stall event or tripped the possession backstop: their result is still in
     W-D-L, flagged rather than dropped, since a stall can be the strategy's own fault."""
     table: dict[str, dict] = {}
@@ -515,6 +519,7 @@ def strategy_table(results: list[dict], real_losses_by_match: Optional[dict[str,
                     "stalled": 0,
                     "matches_as_a": 0,
                     "real_losses_as_a": 0,
+                    "real_loss_kinds_as_a": {},
                 },
             )
             prefix = "" if is_a else "enemy_"
@@ -530,7 +535,10 @@ def strategy_table(results: list[dict], real_losses_by_match: Optional[dict[str,
             row["stalled"] += bool(stats.get("stall_events") or r.get("possession_backstop"))
             if is_a and real_losses_by_match is not None and tag in real_losses_by_match:
                 row["matches_as_a"] += 1
-                row["real_losses_as_a"] += real_losses_by_match[tag]
+                kinds = real_losses_by_match[tag]
+                row["real_losses_as_a"] += sum(kinds.values())
+                for kind, n in kinds.items():
+                    row["real_loss_kinds_as_a"][kind] = row["real_loss_kinds_as_a"].get(kind, 0) + n
     return table
 
 
@@ -574,6 +582,32 @@ def _print_strategy_table(table: dict[str, dict]) -> None:
             f"  {_short_name(name):<32} {t['wins']:>3}-{t['draws']}-{t['losses']:<3} {t['goals_for'] / n:>5.2f} "
             f"{t['goals_against'] / n:>5.2f} {t['shots'] / n:>6.2f} {t['completed_passes'] / n:>7.1f} "
             f"{t['attacking_third_entries'] / n:>8.1f} {t['fouls'] / n:>6.1f} {losses:>7} {t['stalled']:>8}"
+        )
+
+
+def _print_loss_kinds(table: dict[str, dict]) -> None:
+    """Real ball losses per match as config_a, by kind: where each strategy gives the ball away."""
+    rows = {name: t for name, t in table.items() if t["matches_as_a"]}
+    if not rows:
+        return
+    totals: dict[str, int] = {}
+    for t in rows.values():
+        for kind, n in t["real_loss_kinds_as_a"].items():
+            totals[kind] = totals.get(kind, 0) + n
+    kinds = sorted(totals, key=lambda k: -totals[k])
+    short = {
+        "shot_saved_or_blocked": "shot_saved",
+        "ball_out_after_kick": "out_kick",
+        "ball_out_other": "out_other",
+        "pass_intercepted": "intercepted",
+        "loose_ball_lost": "loose_lost",
+    }
+    print("\nLOSS KINDS (real ball losses per match as config_a, by kind; see ball_losses.md):")
+    print(f"  {'strategy':<32} " + " ".join(f"{short.get(k, k)[:11]:>11}" for k in kinds))
+    for name, t in sorted(rows.items(), key=lambda kv: -kv[1]["real_losses_as_a"] / kv[1]["matches_as_a"]):
+        n = t["matches_as_a"]
+        print(
+            f"  {_short_name(name):<32} " + " ".join(f"{t['real_loss_kinds_as_a'].get(k, 0) / n:>11.2f}" for k in kinds)
         )
 
 

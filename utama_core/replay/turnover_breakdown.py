@@ -340,9 +340,12 @@ def _is_real(turnover: dict) -> bool:
     return turnover["kind"] != "during_stoppage" and not (regained is not None and regained <= _FLICKER_S)
 
 
-def real_loss_count(result: dict) -> int:
-    """Real ball losses in one `analyse_match` result (see `_is_real`), restarts included."""
-    return sum(_is_real(t) for t in result["turnovers"]) + len(result["restarts"])
+def real_loss_kinds(result: dict) -> dict[str, int]:
+    """Real ball losses in one `analyse_match` result (see `_is_real`) by kind, restarts
+    given away included (kind `foul` / `ball_out_*`)."""
+    kinds = collections.Counter(t["kind"] for t in result["turnovers"] if _is_real(t))
+    kinds.update(x["kind"] for x in result["restarts"])
+    return dict(kinds)
 
 
 def breakdown(results: list[dict]) -> dict:

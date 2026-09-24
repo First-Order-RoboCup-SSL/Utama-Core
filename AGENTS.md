@@ -84,6 +84,10 @@ declarations) — check there before reintroducing one of them.
 - `docs/custom_referee_design_decisions.md` — referee rule-by-rule design decisions.
 - `docs/roadmap.md` — running list of larger, not-yet-scheduled workstreams; check before
   assuming a doc's claim about "not yet built" is still accurate — these drift.
+- `docs/STRATEGY_DEVELOPMENT.md#reading-a-tournament-run` — every signal a tournament run
+  already records (loss kinds per strategy, pass receptions, fouls by robot and tactic, stall
+  diagnoses) and where it lives in `summary.json`. Check there before adding a metric; they
+  are diagnostics, not objectives.
 - `docs/strategies.md` — strategy catalog: status, description, and real round-robin
   results per `build_*_kernel_strategy` factory.
 - `utama_core/tests/engine/` and `utama_core/tests/strategy_runner/` — the real

@@ -85,21 +85,9 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
   `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
   `--no-save`). For one match with full observability, call `tournament_lib.run_match` with
   full factory names (`build_tiki_taka_kernel_strategy`).
-- **Ball losses** (`replay/turnover_breakdown.py`) — after every saved tournament run, a
-  BALL LOSSES section and `summary.json["ball_losses"]`: real losses (raw `MatchStats.turnovers`
-  minus nearest-robot flicker and stoppage handovers), by kind, by foul rule, and by the tactic
-  that had the ball; full tables in `ball_losses.md` in the run folder. It also follows every
-  friendly pass to `received` / `missed_reception` (came within reach of a teammate, no contact)
-  / `intercepted` / `off_target`, with the catch rate by how far the receiver faced off the
-  incoming ball (`ball_losses["receptions"]`; the facing is usually the reason). The same run also prints
-  a STRATEGIES table (per-match goals, shots, passes, entries, fouls committed, real losses,
-  and `stalled`: matches with a stall event, kept in W-D-L but flagged) and
-  records `summary.json["run"]` (git commit, dirty flag, argv) — compare runs only at a clean
-  commit. A FOULS table (`summary.json["fouls"]`) attributes every foul, both sides, to the
-  strategy and tactic class of the offending robot (`MatchStats.fouls`; `*` marks rules that
-  only name a team, attributed to that side's robot nearest the ball). Start here when a
-  strategy keeps giving the ball away. `python -m utama_core.replay.turnover_breakdown <run_dir>`
-  re-runs it on an older run.
+- **Ball losses** (`replay/turnover_breakdown.py`) — runs after every saved tournament and
+  writes `ball_losses.md`; see [Reading a tournament run](#reading-a-tournament-run).
+  `python -m utama_core.replay.turnover_breakdown <run_dir>` re-runs it on an older run.
 - **Stall watchdog** (`engine/match_stats.py`) — records `StallEvent`s, never affects play:
   `RESTART_STALL` (a restart/stoppage command held >15s) and `COMMITTED_FROZEN` (ball moved
   <5cm for >10s in live play while a slot is committed). Each `RESTART_STALL` carries a one-line
@@ -115,3 +103,28 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 **Determinism caveat:** rsim matches are *mostly* reproducible, but some (seen with
 `press_and_pass`) differ run to run on identical code; cause not yet known. Before attributing a
 result difference to a code change, re-run the baseline.
+
+## Reading a tournament run
+
+Every saved `smoke_tournament.py` run prints these sections and writes the same data to
+`replays/<run>/summary.json`. Look here before adding a new metric: it probably exists.
+
+| Printed section | `summary.json` key | What it tells you | Caveat |
+|---|---|---|---|
+| Standings, STRATEGIES | `strategies` | per strategy: W-D-L, goals, shots, passes, entries, fouls, real losses, `stalled` | a stalled match stays in W-D-L, flagged |
+| LOSS KINDS | `strategies[*].real_loss_kinds_as_a` | where each strategy gives the ball away: tackled, kicked out, shot saved, intercepted, loose ball lost, foul (`turnover_breakdown.TURNOVER_KINDS` and `RESTART_KINDS`) | config_a matches only (the side with an intentions log) |
+| BALL LOSSES | `ball_losses` | the same kinds over the run, fouls by rule, losses by the tactic holding the ball; full tables in `ball_losses.md` | raw `MatchStats.turnovers` is ~40% two robots on one ball flipping "nearest": use real losses |
+| `passes:` line | `ball_losses.receptions` | every pass to `received` / `missed_reception` (reached a teammate, no contact) / `intercepted` / `off_target`; catch rate by receiver facing | config_a only |
+| FOULS | `fouls` | every foul, both sides, by rule, then strategy/tactic of the offending robot | `*` rules name only a team: attributed to its robot nearest the ball |
+| STALLS | `stalled_match_count`, per-match `stats.stall_events` | `RESTART_STALL` with a one-line diagnosis, `COMMITTED_FROZEN` with the committed tactics | a stall may be the strategy, the planner, the referee or the sim |
+| — | `run` | git commit, dirty flag, argv | compare runs only at clean commits |
+
+These are diagnostics, not objectives. Fewer losses is not better on its own: a strategy that
+never passes or shoots loses the ball least. Rank strategies by results (goals, W-D-L), and use
+the rest to explain why one wins or loses, and which shared primitive (reception, carrying, the
+planner, the referee) is failing every strategy at once.
+
+For a targeted A/B of one change (a tactic, the planner) without an hour-long round-robin, use
+`tools/scenario_bench.py`: restart moments harvested from a run, played 20s from jittered
+starts, candidate vs baseline (another config, or `--against-results` from another commit),
+reported per family with a standard error.
