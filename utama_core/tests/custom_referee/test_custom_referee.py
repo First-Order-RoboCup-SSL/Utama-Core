@@ -482,6 +482,51 @@ class TestDoubleTouchRule:
         )
         assert violation2 is None
 
+    @pytest.mark.parametrize(("enemy_distance", "expect_foul"), [(0.12, False), (0.13, True)])
+    def test_contact_without_has_ball_closes_the_window(self, enemy_distance, expect_foul):
+        """A deflection or a receive that never engages the dribbler is still a
+        touch: another robot within robot + ball radius + 1cm (0.1215m) of the
+        ball closes the window, so the kicker's next touch is legal. 63 of 68
+        friendly double-touch fouls in the 2026-09-23 round-robin were this.
+        Farther away (0.13m) is not contact, and the re-touch still fouls."""
+        rule = DoubleTouchRule()
+        _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_YELLOW)
+
+        def step(kicker_has_ball: bool, ball_x: float, enemy_x: float):
+            return rule.check(
+                _frame(
+                    ball=_ball(ball_x, 0.0),
+                    friendly_robots={0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=kicker_has_ball)},
+                    enemy_robots={5: _robot(5, enemy_x, 0.0, is_friendly=False, has_ball=False)},
+                    my_team_is_yellow=True,
+                ),
+                GEO,
+                RefereeCommand.NORMAL_START,
+            )
+
+        assert step(True, 0.08, 3.0) is None  # kick
+        assert step(False, 2.0, 2.0 + enemy_distance) is None  # ball brushes past an enemy
+        violation = step(True, 0.08, 3.0)  # kicker touches it again
+        assert (violation is not None) is expect_foul
+
+    def test_defending_team_touching_first_leaves_no_kicker(self):
+        """Blue's free kick taken without blue's dribbler registering it: our
+        robot's first touch must not make it "the kicker" of blue's restart."""
+        rule = DoubleTouchRule()
+        _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_BLUE)
+
+        for has_ball in (True, False, True):
+            violation = rule.check(
+                _frame(
+                    ball=_ball(0.08, 0.0),
+                    friendly_robots={0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=has_ball)},
+                    my_team_is_yellow=True,
+                ),
+                GEO,
+                RefereeCommand.NORMAL_START,
+            )
+            assert violation is None
+
     def test_ordinary_open_play_without_a_preceding_restart_is_never_armed(self):
         """NORMAL_START reached other than via a restart command (e.g. after a
         kickoff timeout auto-advances straight through, or mid-match with no

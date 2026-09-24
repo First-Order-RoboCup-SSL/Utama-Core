@@ -10,8 +10,10 @@ must not be flagged.
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
@@ -29,6 +31,22 @@ _RESTART_COMMANDS = frozenset(
         RefereeCommand.PREPARE_PENALTY_BLUE,
     }
 )
+
+_YELLOW_RESTARTS = frozenset(
+    {
+        RefereeCommand.DIRECT_FREE_YELLOW,
+        RefereeCommand.PREPARE_KICKOFF_YELLOW,
+        RefereeCommand.PREPARE_PENALTY_YELLOW,
+    }
+)
+
+# A robot whose centre is this close to the ball's is touching it (1cm over
+# robot + ball radius, for vision noise). `has_ball` alone only sees dribbler
+# contact, so a deflection or a receive that never engaged the dribbler did not
+# close the window, and the kicker's next touch was called a double touch: 63
+# of 68 friendly double-touch fouls in the 2026-09-23 round-robin had another
+# robot within 0.101-0.114m of the ball first.
+_TOUCH_DISTANCE_M = ROBOT_RADIUS + BALL_RADIUS + 0.01
 
 # (is_friendly, robot_id) identifies a robot uniquely across both teams.
 RobotKey = tuple[bool, int]
@@ -62,6 +80,7 @@ class DoubleTouchRule(BaseRule):
         self._prev_command: Optional[RefereeCommand] = None
         self._armed = False
         self._kicker: Optional[RobotKey] = None
+        self._kicking_team_is_yellow: Optional[bool] = None
         self._had_ball_last_frame: set[RobotKey] = set()
 
     def check(
@@ -74,6 +93,7 @@ class DoubleTouchRule(BaseRule):
         if current_command == RefereeCommand.NORMAL_START and self._prev_command in _RESTART_COMMANDS:
             self._armed = True
             self._kicker = None
+            self._kicking_team_is_yellow = self._prev_command in _YELLOW_RESTARTS
             self._had_ball_last_frame = set()
         elif current_command != RefereeCommand.NORMAL_START:
             self._armed = False
@@ -96,9 +116,22 @@ class DoubleTouchRule(BaseRule):
         fresh_touches = touching_now - self._had_ball_last_frame
         self._had_ball_last_frame = touching_now
 
+        if self._kicker is not None and self._other_robot_touching(game_frame):
+            # Any other robot's contact, dribbler or not, ends the window.
+            self._armed = False
+            self._kicker = None
+            return None
+
         violation: Optional[RuleViolation] = None
         for toucher in fresh_touches:
             if self._kicker is None:
+                is_friendly, _ = toucher
+                if is_friendly != (game_frame.my_team_is_yellow == self._kicking_team_is_yellow):
+                    # The defending team touched it first: the kick was taken
+                    # (without the kicker's dribbler registering it), so the ball
+                    # is in play and there is no kicker left to double-touch.
+                    self._armed = False
+                    break
                 self._kicker = toucher
             elif toucher == self._kicker:
                 violation = self._violation_for(toucher, game_frame, geometry)
@@ -110,6 +143,18 @@ class DoubleTouchRule(BaseRule):
                 self._kicker = None
 
         return violation
+
+    def _other_robot_touching(self, game_frame: GameFrame) -> bool:
+        ball = game_frame.ball
+        if ball is None:
+            return False
+        for is_friendly, robots in ((True, game_frame.friendly_robots), (False, game_frame.enemy_robots)):
+            for robot in robots.values():
+                if (is_friendly, robot.id) == self._kicker:
+                    continue
+                if math.hypot(robot.p.x - ball.p.x, robot.p.y - ball.p.y) <= _TOUCH_DISTANCE_M:
+                    return True
+        return False
 
     def reset(self) -> None:
         # Deliberately does NOT clear _prev_command — reset() fires on every
