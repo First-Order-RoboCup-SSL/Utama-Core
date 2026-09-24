@@ -1,9 +1,10 @@
-"""Offline breakdown of *how* the friendly team loses the ball, over a tournament run's replays.
+"""Breakdown of *how* the friendly team loses the ball, over a tournament run's replays.
 
-Run from the repository root:
+`smoke_tournament.py` runs this after every saved run: headline numbers go into
+`summary.json` under `ball_losses`, the full report into `ball_losses.md` beside it. For an
+existing run:
 
-    pixi run python tools/turnover_breakdown.py replays/tournament_<id> \\
-        --out benchmark_results/turnover_breakdown_<id>.md
+    pixi run python -m utama_core.replay.turnover_breakdown replays/tournament_<id> --out report.md
 
 Why: across a round-robin, turnovers outnumber completed passes more than 2:1 and play
 rarely reaches the attacking third, but `MatchStats` only counts turnovers. This says which
@@ -31,20 +32,14 @@ import collections
 import json
 import math
 import re
-import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from utama_core.config.field_params import STANDARD_FIELD_DIMS  # noqa: E402
-from utama_core.engine.match_stats import (  # noqa: E402
-    _POSSESSION_RADIUS_M,
-    MatchStatsAccumulator,
-)
-from utama_core.entities.referee.referee_command import RefereeCommand  # noqa: E402
-from utama_core.replay.replay_player import load_frames_in_range  # noqa: E402
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.engine.match_stats import _POSSESSION_RADIUS_M, MatchStatsAccumulator
+from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.replay.replay_player import load_frames_in_range
 
 _LIVE = {RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START}
 # Restarts that hand the ball to blue (the enemy). Kickoffs are excluded: blue kicks off
@@ -234,8 +229,42 @@ def _table(rows: list[list], header: list[str]) -> str:
     return "\n".join(out)
 
 
-def report(run_dir: Path, results: list[dict]) -> str:
-    summary = json.loads((run_dir / "summary.json").read_text())
+def analyse_run(run_dir: Path, workers: int = 8) -> list[dict]:
+    """`analyse_match` over every replay in a tournament run directory."""
+    paths = sorted(str(p) for p in Path(run_dir).glob("*.npz"))
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(analyse_match, paths))
+
+
+def _is_real(turnover: dict) -> bool:
+    """Not a stoppage handover (already counted as the foul/ball-out restart) and not won back
+    within `_FLICKER_S` (two robots on one ball; the nearest robot flips)."""
+    regained = turnover["regained_after_s"]
+    return turnover["kind"] != "during_stoppage" and not (regained is not None and regained <= _FLICKER_S)
+
+
+def breakdown(results: list[dict]) -> dict:
+    """Headline numbers for `summary.json`: real losses, and how, by which rule, by which tactic."""
+    n = len(results)
+    real = [t for r in results for t in r["turnovers"] if _is_real(t)]
+    rss = [x for r in results for x in r["restarts"]]
+    losses = real + rss
+
+    def counts(key: str, items: list[dict]) -> dict[str, int]:
+        return dict(collections.Counter(x[key] for x in items).most_common())
+
+    return {
+        "matches": n,
+        "raw_turnovers": sum(len(r["turnovers"]) for r in results),
+        "real_losses": len(losses),
+        "real_losses_per_match": round(len(losses) / n, 2) if n else 0.0,
+        "by_kind": counts("kind", losses),
+        "fouls_by_rule": counts("rule", [x for x in rss if x["kind"] == "foul"]),
+        "by_tactic": counts("tactic", losses),
+    }
+
+
+def report(run_name: str, results: list[dict], summary: dict) -> str:
     recorded = {f"{r['config_a']}_vs_{r['config_b']}": r["stats"].get("turnovers") for r in summary["results"]}
 
     def short(name: str) -> str:
@@ -260,7 +289,7 @@ def report(run_dir: Path, results: list[dict]) -> str:
     )
 
     lines = [
-        f"# Turnover breakdown — `{run_dir.name}`",
+        f"# Turnover breakdown — `{run_name}`",
         "",
         f"{n} matches, friendly = `config_a` (yellow). {len(tos)} turnovers + {len(rss)} restarts given "
         f"away = **{total} ball losses** ({total / n:.1f}/match), against {passes} completed passes "
@@ -308,12 +337,7 @@ def report(run_dir: Path, results: list[dict]) -> str:
             ],
         )
     )
-    real = [
-        t
-        for t in tos
-        if t["kind"] != "during_stoppage"
-        and not (t["regained_after_s"] is not None and t["regained_after_s"] <= _FLICKER_S)
-    ]
+    real = [t for t in tos if _is_real(t)]
     lines += [
         "",
         f"**Real losses: {len(real) + len(rss)}** ({(len(real) + len(rss)) / n:.1f}/match) — excluding "
@@ -360,13 +384,10 @@ def main() -> None:
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--workers", type=int, default=8)
-    parser.add_argument("--limit", type=int, default=None, help="only the first N matches (quick check)")
     args = parser.parse_args()
 
-    paths = sorted(str(p) for p in args.run_dir.glob("*.npz"))[: args.limit]
-    with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        results = list(pool.map(analyse_match, paths))
-    md = report(args.run_dir, results)
+    results = analyse_run(args.run_dir, args.workers)
+    md = report(args.run_dir.name, results, json.loads((args.run_dir / "summary.json").read_text()))
     if args.out:
         args.out.write_text(md)
         print(f"wrote {args.out}")

@@ -85,6 +85,12 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
   `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
   `--no-save`). For one match with full observability, call `tournament_lib.run_match` with
   full factory names (`build_tiki_taka_kernel_strategy`).
+- **Ball losses** (`replay/turnover_breakdown.py`) — after every saved tournament run, a
+  BALL LOSSES section and `summary.json["ball_losses"]`: real losses (raw `MatchStats.turnovers`
+  minus nearest-robot flicker and stoppage handovers), by kind, by foul rule, and by the tactic
+  that had the ball; full tables in `ball_losses.md` in the run folder. Start here when a
+  strategy keeps giving the ball away. `python -m utama_core.replay.turnover_breakdown <run_dir>`
+  re-runs it on an older run.
 - **Stall watchdog** (`engine/match_stats.py`) — records `StallEvent`s, never affects play:
   `RESTART_STALL` (a restart/stoppage command held >15s) and `COMMITTED_FROZEN` (ball moved
   <5cm for >10s in live play while a slot is committed). The tournament prints a STALLS

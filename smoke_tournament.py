@@ -81,6 +81,7 @@ from tournament_lib import (  # noqa: F401 -- re-exported for callers importing 
 )
 from tournament_lib import run_match as _lib_run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
+from utama_core.replay import turnover_breakdown
 
 # 60s of intended play, +5s for a real PREPARE_KICKOFF_YELLOW ceremony
 # (prepare_duration_seconds=3.0 in the "simulation" profile, plus the kicker's
@@ -436,6 +437,15 @@ def main() -> None:
         summary_path = run_dir / "summary.json"
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
+        # BALL LOSSES: how the friendly side (config_a) gave the ball away, by kind, foul rule
+        # and tactic — `MatchStats.turnovers` alone is mostly two robots on one ball flipping
+        # "nearest robot". Replays the saved matches, so it runs after summary.json is on disk.
+        losses = turnover_breakdown.analyse_run(run_dir, workers=max_workers_override or os.cpu_count() or 8)
+        summary["ball_losses"] = turnover_breakdown.breakdown(losses)
+        (run_dir / "ball_losses.md").write_text(turnover_breakdown.report(run_id, losses, summary))
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=2)
+        _print_ball_losses(summary["ball_losses"], run_id)
         print(f"\nFull results + stats: replays/{run_id}/summary.json")
 
     if strict and (stalled_matches or backstop_matches):
@@ -443,6 +453,20 @@ def main() -> None:
             f"--strict: {len(stalled_matches)} match(es) with stall events, "
             f"{len(backstop_matches)} match(es) flagged by the possession backstop"
         )
+
+
+def _print_ball_losses(b: dict, run_id: str) -> None:
+    def top(counts: dict[str, int], k: int = 5) -> str:
+        return ", ".join(f"{name} {c}" for name, c in list(counts.items())[:k]) or "none"
+
+    print(
+        f"\nBALL LOSSES (config_a side): {b['real_losses']} real ({b['real_losses_per_match']}/match; "
+        f"{b['raw_turnovers']} raw MatchStats turnovers)"
+    )
+    print(f"  by kind:   {top(b['by_kind'])}")
+    print(f"  fouls:     {top(b['fouls_by_rule'])}")
+    print(f"  by tactic: {top(b['by_tactic'])}")
+    print(f"  full breakdown: replays/{run_id}/ball_losses.md")
 
 
 if __name__ == "__main__":
