@@ -98,8 +98,9 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
   re-runs it on an older run.
 - **Stall watchdog** (`engine/match_stats.py`) — records `StallEvent`s, never affects play:
   `RESTART_STALL` (a restart/stoppage command held >15s) and `COMMITTED_FROZEN` (ball moved
-  <5cm for >10s in live play while a slot is committed). The tournament prints a STALLS
-  section, writes it to `summary.json`, and `--strict` exits non-zero on any stall; a
+  <5cm for >10s in live play while a slot is committed). Each `RESTART_STALL` carries a one-line
+  `diagnosis` (ball in goal / past a line, taker not closing on the ball, taker at the ball but
+  not kicking). The tournament prints a STALLS section, writes it to `summary.json`, and `--strict` exits non-zero on any stall; a
   possession-pinned backstop flags what the watchdog misses.
 - **Restart fuzzing** (`custom_referee/restart_fuzzer.py`) — injects legal restarts at
   seeded-random times to exercise auto-advance paths; same seed and interval reproduce the

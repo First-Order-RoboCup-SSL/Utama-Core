@@ -93,6 +93,7 @@ def _stats_to_dict(stats) -> dict:
             "duration_s": e.duration_s,
             "tactic_ids": list(e.tactic_ids),
             "robot_ids": list(e.robot_ids),
+            "diagnosis": e.diagnosis,
         }
         for e in stats.stall_events
     ]

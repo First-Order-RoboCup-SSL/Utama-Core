@@ -130,6 +130,47 @@ class StallEvent:
     duration_s: float
     tactic_ids: tuple = ()
     robot_ids: tuple = ()
+    # RESTART_STALL only: why the restart can't be taken, from the onset frame (see
+    # `_diagnose_restart`), e.g. "ball in goal" or "taker not closing: 1.55m -> 1.55m".
+    diagnosis: str = ""
+
+
+# Taker within this of the ball counts as "at the ball" for `_diagnose_restart`.
+_TAKER_AT_BALL_M = 0.25
+
+
+def _restart_taker_distance(game_frame: GameFrame, command: RefereeCommand) -> Optional[float]:
+    """Distance from the ball to the nearest robot of the team taking `command`
+    (DIRECT_FREE_BLUE -> blue, ...), or None for a command with no taker (STOP, HALT)."""
+    ball = game_frame.ball
+    name = command.name
+    if ball is None or not (name.endswith("_YELLOW") or name.endswith("_BLUE")):
+        return None
+    taker_is_friendly = name.endswith("_YELLOW") == game_frame.my_team_is_yellow
+    robots = game_frame.friendly_robots if taker_is_friendly else game_frame.enemy_robots
+    if not robots:
+        return None
+    return min(math.hypot(r.p.x - ball.p.x, r.p.y - ball.p.y) for r in robots.values())
+
+
+def _diagnose_restart(game_frame: GameFrame, command: RefereeCommand, taker_start_m: Optional[float]) -> str:
+    """One line on why a restart is stuck, for the tournament STALLS section."""
+    ball = game_frame.ball
+    if ball is None:
+        return "no ball"
+    dims = STANDARD_FIELD_DIMS
+    if abs(ball.p.x) > dims.full_field_half_length:
+        where = "in goal" if abs(ball.p.y) < dims.half_goal_width else "past goal line"
+        return f"ball {where} at ({ball.p.x:.2f}, {ball.p.y:.2f}), unreachable"
+    if abs(ball.p.y) > dims.full_field_half_width:
+        return f"ball past touchline at ({ball.p.x:.2f}, {ball.p.y:.2f})"
+    now_m = _restart_taker_distance(game_frame, command)
+    if now_m is None:
+        return f"no taker for {command.name}"
+    if now_m <= _TAKER_AT_BALL_M:
+        return f"taker at ball ({now_m:.2f}m) but restart not taken"
+    start = f"{taker_start_m:.2f}m -> " if taker_start_m is not None else ""
+    return f"taker not closing: {start}{now_m:.2f}m from ball at ({ball.p.x:.2f}, {ball.p.y:.2f})"
 
 
 @dataclass
@@ -307,6 +348,7 @@ class MatchStats:
                             "duration_s": e.duration_s,
                             "tactic_ids": list(e.tactic_ids),
                             "robot_ids": list(e.robot_ids),
+                            "diagnosis": e.diagnosis,
                         }
                         for e in self.stall_events
                     ],
@@ -450,6 +492,7 @@ class MatchStatsAccumulator:
     # command that is -- reset on every command change.
     _restart_command: Optional[RefereeCommand] = None
     _restart_started_at: Optional[float] = None
+    _restart_taker_start_m: Optional[float] = None
     # Set once a RESTART_STALL has already been logged for the *current*
     # restart, so a 65s stuck restart produces one event, not one per tick
     # past the threshold.
@@ -885,6 +928,9 @@ class MatchStatsAccumulator:
         if current_command != self._restart_command:
             self._restart_command = current_command
             self._restart_started_at = sim_time
+            self._restart_taker_start_m = (
+                _restart_taker_distance(game_frame, current_command) if current_command is not None else None
+            )
             self._restart_stall_logged = False
             self._restart_stall_event_idx = None
 
@@ -901,6 +947,7 @@ class MatchStatsAccumulator:
                             tick=tick,
                             referee_command=current_command.name,
                             duration_s=elapsed,
+                            diagnosis=_diagnose_restart(game_frame, current_command, self._restart_taker_start_m),
                         )
                     )
                 elif self._restart_stall_event_idx is not None:

@@ -394,9 +394,10 @@ def main() -> None:
         for r, events in stalled_matches:
             for e in events:
                 tactic_str = f" tactics={e['tactic_ids']}" if e["tactic_ids"] else ""
+                diagnosis = f" -- {e['diagnosis']}" if e.get("diagnosis") else ""
                 print(
                     f"  {_match_tag_of(r):<50} {e['kind']:<17} onset t={e['sim_time']:.1f}s "
-                    f"referee={e['referee_command']}{tactic_str}"
+                    f"referee={e['referee_command']}{tactic_str}{diagnosis}"
                 )
         for r in backstop_matches:
             if id(r) in stalled_match_ids:
