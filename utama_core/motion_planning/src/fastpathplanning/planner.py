@@ -914,6 +914,13 @@ class FastPathPlanner:
     def smooth_path(
         self, trajectory, target, robot_position, obstacles: List, clearance: Optional[float] = None
     ) -> np.ndarray:
+        # A first subgoal sitting exactly on the robot (the detour recursion can
+        # produce one) has no direction to normalise: dividing by its zero length
+        # returned a NaN carrot. Skip such segments. Found by
+        # fastpathplanner_corner_test.py (a robot beside two blockers at the
+        # enemy box corner).
+        while len(trajectory) > 1 and math.hypot(*(trajectory[0][1] - robot_position)) == 0.0:
+            trajectory = trajectory[1:]
         if len(trajectory) == 1:
             return target
 
