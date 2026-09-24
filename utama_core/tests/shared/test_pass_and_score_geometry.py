@@ -662,7 +662,8 @@ def test_carry_origin_starts_at_pickup_and_clears_when_the_ball_is_dropped():
     )
 
     robot = SimpleNamespace(has_ball=True)
-    game = SimpleNamespace(friendly_robots={1: robot}, ball=SimpleNamespace(p=Vector3D(1.0, 0.0, 0.0)))
+    zero = Vector3D(0.0, 0.0, 0.0)
+    game = SimpleNamespace(friendly_robots={1: robot}, ball=SimpleNamespace(p=Vector3D(1.0, 0.0, 0.0), v=zero))
 
     origin = carry_origin(game, 1, None)
     assert (origin.x, origin.y) == (1.0, 0.0)
@@ -675,3 +676,21 @@ def test_carry_origin_starts_at_pickup_and_clears_when_the_ball_is_dropped():
     robot.has_ball = False
     assert carry_origin(game, 1, origin) is None
     assert not carry_exhausted(game, None)
+
+
+def test_carry_exhausted_counts_the_distance_needed_to_stop():
+    """At 1.6m/s the carrier needs 1.6^2 / (2*2.5) = 0.51m to stop with the ball
+    still on the dribbler, so 0.5m carried is already spent; at rest it is not.
+    Traced live: DecoyOverload's lure handed over at ~0.6m and ~1.4m/s and still
+    fouled at 1.01m while braking and turning to shoot."""
+    from types import SimpleNamespace
+
+    from utama_core.entities.data.vector import Vector2D, Vector3D
+    from utama_core.shared.pass_and_score_geometry import carry_exhausted
+
+    origin = Vector2D(0.0, 0.0)
+    moving = SimpleNamespace(ball=SimpleNamespace(p=Vector3D(0.5, 0.0, 0.0), v=Vector3D(1.6, 0.0, 0.0)))
+    at_rest = SimpleNamespace(ball=SimpleNamespace(p=Vector3D(0.5, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0)))
+
+    assert carry_exhausted(moving, origin)
+    assert not carry_exhausted(at_rest, origin)

@@ -197,6 +197,10 @@ def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: 
 # `ExcessiveDribblingRule` fouls a carry of more than 1.0m; the margin covers
 # the ball swinging round the dribbler while the carrier turns to kick.
 CARRY_LIMIT_M = 0.8
+# Braking deceleration for the stopping-distance term in `carry_exhausted`.
+# Measured, not `MAX_ACCELERATION` (4.0): a DecoyOverload carrier in rsim
+# braked 1.45 -> 0.6m/s in 0.3s (~2.9m/s^2) with the ball on the dribbler.
+_CARRY_BRAKE_DECEL_MPS2 = 2.5
 
 
 def carry_origin(game: Game, robot_id: int, prev_origin: Optional[Vector2D]) -> Optional[Vector2D]:
@@ -211,9 +215,16 @@ def carry_origin(game: Game, robot_id: int, prev_origin: Optional[Vector2D]) -> 
 
 
 def carry_exhausted(game: Game, origin: Optional[Vector2D]) -> bool:
-    """True once the ball is `CARRY_LIMIT_M` from `origin` (see `carry_origin`):
-    carrying further risks an excessive-dribbling foul, so release the ball."""
-    return origin is not None and game.ball is not None and game.ball.p.to_2d().distance_to(origin) >= CARRY_LIMIT_M
+    """True once the ball, plus the distance the carrier needs to stop, reaches
+    `CARRY_LIMIT_M` from `origin` (see `carry_origin`): carrying further risks an
+    excessive-dribbling foul, so release the ball. Without the stopping distance a
+    fast carry (DecoyOverload's lure, ~1.4m/s) braked another ~0.4m with the ball
+    still on the dribbler and fouled at 1.01m anyway."""
+    if origin is None or game.ball is None:
+        return False
+    speed = math.hypot(game.ball.v.x, game.ball.v.y)
+    stopping = speed**2 / (2 * _CARRY_BRAKE_DECEL_MPS2)
+    return game.ball.p.to_2d().distance_to(origin) + stopping >= CARRY_LIMIT_M
 
 
 def at_target(game: Game, robot_id: int, target: Vector2D, tolerance: float = 0.08) -> bool:
