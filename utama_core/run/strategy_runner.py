@@ -15,7 +15,12 @@ from rich.text import Text
 from utama_core.config.enums import Mode, mode_str_to_enum
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.formations import FormationType, get_formations
-from utama_core.config.physical_constants import MAX_ROBOT_ID, MAX_ROBOTS
+from utama_core.config.physical_constants import (
+    BALL_RADIUS,
+    MAX_ROBOT_ID,
+    MAX_ROBOTS,
+    ROBOT_RADIUS,
+)
 from utama_core.config.settings import (
     FPS_PRINT_INTERVAL,
     MAX_CAMERAS,
@@ -133,6 +138,17 @@ _TELEPORT_SETTLE_SPEED_MPS = 0.05
 # spike, so a genuinely fast in-flight ball at the moment of a teleport
 # (rather than the reset artifact) can't stall the re-pin loop indefinitely.
 _TELEPORT_SETTLE_MAX_EXTENSIONS = 10
+# sim-only: a BALL_PLACEMENT_* teleport is held back while any robot stands
+# within this distance of the placement target. Teleporting the ball into a
+# robot's body gets it shoved out by contact resolution faster than the
+# settle re-pin can hold it: traced in
+# tournament_20260924_082230/give_and_go_solo_vs_high_line_zone (t=37.1),
+# where the ball landed 0.07m from a blue robot, was pushed off at ~1.5m/s
+# and rolled into the goal net behind the line -- unreachable without
+# entering the defense area, so DIRECT_FREE_YELLOW stalled for the rest of
+# the match. The non-placing team clears the placement area during
+# BALL_PLACEMENT_*, so the teleport fires as soon as the spot is free.
+_PLACEMENT_TELEPORT_CLEARANCE_M = ROBOT_RADIUS + BALL_RADIUS + 0.02
 
 # sim-only: recovery for a rare native-engine hang, distinct from the
 # post-teleport velocity spike above. Traced live (tournament_20260905_083358,
@@ -375,6 +391,8 @@ class StrategyRunner:
         self._teleport_settle_target: Optional[Tuple[float, float]] = None
         self._teleport_settle_ticks_left: int = 0
         self._teleport_settle_extensions_left: int = 0
+        # See `_PLACEMENT_TELEPORT_CLEARANCE_M`'s docstring at module scope.
+        self._pending_placement_teleport: Optional[Tuple[float, float]] = None
         # See `_SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS`'s module docstring.
         self._frozen_field_since: Optional[float] = None
         self._last_referee_data: Optional["RefereeData"] = None
@@ -858,6 +876,19 @@ class StrategyRunner:
         self._teleport_settle_target = (x, y)
         self._teleport_settle_ticks_left = _TELEPORT_SETTLE_TICKS
         self._teleport_settle_extensions_left = _TELEPORT_SETTLE_MAX_EXTENSIONS
+
+    def _tick_pending_placement_teleport(self) -> None:
+        """Fire the pending BALL_PLACEMENT_* teleport once no robot is within
+        `_PLACEMENT_TELEPORT_CLEARANCE_M` of the target (see its docstring)."""
+        if self._pending_placement_teleport is None:
+            return
+        x, y = self._pending_placement_teleport
+        frame = self.my.current_game_frame
+        robots = (*frame.friendly_robots.values(), *frame.enemy_robots.values())
+        if any(math.hypot(r.p.x - x, r.p.y - y) < _PLACEMENT_TELEPORT_CLEARANCE_M for r in robots):
+            return
+        self._pending_placement_teleport = None
+        self._teleport_ball_and_settle(x, y)
 
     def _tick_teleport_settle(self) -> None:
         """One tick of the re-pin window `_teleport_ball_and_settle` arms.
@@ -1601,9 +1632,12 @@ class StrategyRunner:
                     # On transition into BALL_PLACEMENT, teleport the ball to the
                     # designated position and let the state machine auto-advance.
                     # Robots cannot physically retrieve an out-of-bounds ball in
-                    # simulation, so we simulate placement instantly.
-                    x, y = ref_data.designated_position
-                    self._teleport_ball_and_settle(x, y)
+                    # simulation, so we simulate placement instantly -- as soon
+                    # as no robot stands on the target (`_tick_pending_placement_teleport`).
+                    self._pending_placement_teleport = ref_data.designated_position
+            if ref_data.referee_command not in _BALL_PLACEMENT_COMMANDS:
+                self._pending_placement_teleport = None
+            self._tick_pending_placement_teleport()
             if self.sim_controller is not None:
                 # HALT (e.g. DefenseAreaStoppageRule's 2nd-foul escalation) has
                 # no auto-advance in GameStateMachine by design — on a real
