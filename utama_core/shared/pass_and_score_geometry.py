@@ -214,15 +214,19 @@ def carry_origin(game: Game, robot_id: int, prev_origin: Optional[Vector2D]) -> 
     return prev_origin if prev_origin is not None else game.ball.p.to_2d()
 
 
-def carry_exhausted(game: Game, origin: Optional[Vector2D]) -> bool:
-    """True once the ball, plus the distance the carrier needs to stop, reaches
-    `CARRY_LIMIT_M` from `origin` (see `carry_origin`): carrying further risks an
-    excessive-dribbling foul, so release the ball. Without the stopping distance a
-    fast carry (DecoyOverload's lure, ~1.4m/s) braked another ~0.4m with the ball
-    still on the dribbler and fouled at 1.01m anyway."""
+def carry_exhausted(game: Game, origin: Optional[Vector2D], stops_after: bool = False) -> bool:
+    """True once the ball reaches `CARRY_LIMIT_M` from `origin` (see `carry_origin`):
+    carrying further risks an excessive-dribbling foul, so release the ball.
+
+    `stops_after`: the carrier brakes to a halt with the ball still on the dribbler
+    once this fires (DecoyOverload's lure), so count the stopping distance too --
+    without it a ~1.4m/s lure braked another ~0.4m and fouled at 1.01m anyway. Leave
+    False for a carrier that kicks while moving (GiveAndGo): counting it there ended
+    carries ~0.5m early and cost give_and_go_solo half its goals in an A/B
+    (tournament_20260924_092119 bisect)."""
     if origin is None or game.ball is None:
         return False
-    speed = math.hypot(game.ball.v.x, game.ball.v.y)
+    speed = math.hypot(game.ball.v.x, game.ball.v.y) if stops_after else 0.0
     stopping = speed**2 / (2 * _CARRY_BRAKE_DECEL_MPS2)
     return game.ball.p.to_2d().distance_to(origin) + stopping >= CARRY_LIMIT_M
 

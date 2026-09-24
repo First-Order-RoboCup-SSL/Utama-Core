@@ -407,7 +407,7 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
             # without a carry cap it ran past 1.0m (41 excessive-dribbling
             # fouls in the 2026-09-23 round-robin, many straight off kickoff).
             mem.carry_origin = carry_origin(game, mem.decoy_id, mem.carry_origin)
-            carried_enough = carry_exhausted(game, mem.carry_origin)
+            carried_enough = carry_exhausted(game, mem.carry_origin, stops_after=True)
             if (dragged or carried_enough or mem.lure_ticks >= _LURE_MAX_TICKS) and has_ball(game, mem.decoy_id):
                 mem.phase = "finish"
 
