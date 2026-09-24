@@ -110,3 +110,51 @@ class TestFindSubgoalDeadEnd:
         )
         assert result is not None
         assert np.array_equal(result, obstacle_pos)
+
+
+class TestSubgoalOutsideEnemyDefenseArea:
+    """A detour subgoal must not land inside the inflated enemy defense area.
+
+    Found live (high_line_zone_vs_split_shape, tournament_20260924_082230): a
+    DIRECT_FREE_BLUE kicker just outside the box face, heading for a ball
+    past the box corner with another robot standing in the gap at that
+    corner, got a first subgoal deep inside the box -- the clearance scan
+    only tests distance to the box's edge segments. `_path_to`'s step 7
+    projected that carrot back onto the edge beside the robot, which
+    jittered there until the RESTART_STALL.
+    """
+
+    _RECT = (3.25, 4.75, -1.25, 1.25)  # standard-field box inflated by 0.25m keep distance
+
+    def _obstacles(self):
+        min_x, max_x, min_y, max_y = self._RECT
+        corners = [(min_x, max_y), (max_x, max_y), (max_x, min_y), (min_x, min_y)]
+        box = [(np.array(corners[i]), np.array(corners[(i + 1) % 4])) for i in range(4)]
+        blocker = (np.array([2.88, -1.51]), np.array([2.88, -1.51]))
+        keeper = (np.array([4.40, -0.39]), np.array([4.40, -0.39]))
+        return [blocker, keeper, *box]
+
+    def test_no_waypoint_inside_the_box(self):
+        planner = _planner()
+        robot = np.array([3.12, -0.7])
+        target = np.array([4.37, -1.795])
+
+        class _Bounds:
+            top_left = (-STANDARD_FIELD_DIMS.full_field_half_length, STANDARD_FIELD_DIMS.full_field_half_width)
+            bottom_right = (STANDARD_FIELD_DIMS.full_field_half_length, -STANDARD_FIELD_DIMS.full_field_half_width)
+
+        trajectory, _ = planner.check_segment(
+            (robot, target),
+            self._obstacles(),
+            0,
+            target,
+            _Bounds,
+            robot_id=1,
+            forbidden_rect=self._RECT,
+        )
+
+        min_x, max_x, min_y, max_y = self._RECT
+        inside = [
+            tuple(np.round(p, 2)) for seg in trajectory for p in seg if min_x < p[0] < max_x and min_y < p[1] < max_y
+        ]
+        assert inside == []

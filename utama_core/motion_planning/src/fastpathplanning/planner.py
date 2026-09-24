@@ -449,6 +449,7 @@ class FastPathPlanner:
         subgoal_distance: float,
         origin_obstacle: Optional[Tuple[np.ndarray, np.ndarray]] = None,
         blocked_by_origin: bool = False,
+        forbidden_rect: Optional[Tuple[float, float, float, float]] = None,
     ) -> Optional[np.ndarray]:
         """`origin_obstacle`: the actual obstacle segment `check_segment` is
         trying to route around (as opposed to `obstacle_pos`, just the
@@ -459,6 +460,20 @@ class FastPathPlanner:
         thing I'm trying to get around" (a real dead end) apart from "blocked
         by something else, just haven't found a clear spot yet" (this search
         wandering through a crowded obstacle field, not fundamentally stuck).
+
+        `forbidden_rect`: `(min_x, max_x, min_y, max_y)` a subgoal may not
+        land inside (the inflated enemy defense area, or None when
+        `_path_to` exempts it). The clearance scan below only tests distance
+        to its edge *segments*, so a point deep in its interior -- farther
+        than `clearance` from all four edges -- otherwise passes as free. A
+        robot just outside the box with its route around the corner blocked
+        by another robot got exactly that: a subgoal inside the box, whose
+        carrot step 7 of `_path_to` then projects back onto the edge beside
+        the robot, pinning it there (DIRECT_FREE_BLUE kicker in
+        high_line_zone_vs_split_shape, tournament_20260924_082230: 12s
+        jittering at the box face until the RESTART_STALL). Treated as still
+        blocked by the obstacle being routed around, so a side that never
+        clears the box is a dead end (None), not an on-edge fallback.
         """
 
         # Failsafe to prevent infinite loops if completely trapped. Handing
@@ -528,6 +543,23 @@ class FastPathPlanner:
         # same FIRST-hit-in-scan-order index the original Python loop would
         # have returned (not the closest), since `_find_subgoal` recurses on
         # the first collision found, not the nearest one.
+        if forbidden_rect is not None:
+            min_x, max_x, min_y, max_y = forbidden_rect
+            if min_x < sub_x < max_x and min_y < sub_y < max_y:
+                return self._find_subgoal(
+                    robot_pos,
+                    target,
+                    obstacle_pos,
+                    obstacles,
+                    subgoal_direction,
+                    multiple + 1,
+                    clearance,
+                    subgoal_distance,
+                    origin_obstacle=origin_obstacle,
+                    blocked_by_origin=True,
+                    forbidden_rect=forbidden_rect,
+                )
+
         ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
         hit_idx = scan_find_subgoal_nb(sub_x, sub_y, clearance, ox0, oy0, ox1, oy1)
         if hit_idx >= 0:
@@ -546,6 +578,7 @@ class FastPathPlanner:
                 subgoal_distance,
                 origin_obstacle=origin_obstacle,
                 blocked_by_origin=is_origin,
+                forbidden_rect=forbidden_rect,
             )
         return subgoal
 
@@ -681,6 +714,7 @@ class FastPathPlanner:
         robot_id: Optional[int] = None,
         clearance: Optional[float] = None,
         subgoal_distance: Optional[float] = None,
+        forbidden_rect: Optional[Tuple[float, float, float, float]] = None,
     ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float]:
         """
         Recursively checks a segment for collisions and generates subgoals with
@@ -691,7 +725,8 @@ class FastPathPlanner:
         down through every recursive call so a single planning call is
         internally consistent. Default to `self.OBSTACLE_CLEARANCE`/
         `self.SUBGOAL_DISTANCE` for the same internal/test call sites that
-        default `robot_id`.
+        default `robot_id`. `forbidden_rect`: passed through to
+        `_find_subgoal` (see its docstring).
 
         `robot_id`: keys `self._last_detour_side`'s per-tick memory of which
         side (`subgoal_direction`) this robot detoured around a given
@@ -752,6 +787,7 @@ class FastPathPlanner:
             clearance,
             subgoal_distance,
             origin_obstacle=obstacle_segment,
+            forbidden_rect=forbidden_rect,
         )
         subgoal_right = self._find_subgoal(
             segment[0],
@@ -763,6 +799,7 @@ class FastPathPlanner:
             clearance,
             subgoal_distance,
             origin_obstacle=obstacle_segment,
+            forbidden_rect=forbidden_rect,
         )
 
         # `_find_subgoal` returns None for a genuine dead-end (see above) --
@@ -820,6 +857,7 @@ class FastPathPlanner:
             robot_id,
             clearance,
             subgoal_distance,
+            forbidden_rect,
         )
         seg2, len2 = self.check_segment(
             (best_subgoal, segment[1]),
@@ -830,6 +868,7 @@ class FastPathPlanner:
             robot_id,
             clearance,
             subgoal_distance,
+            forbidden_rect,
         )
 
         return seg1 + seg2, len1 + len2
@@ -1192,6 +1231,11 @@ class FastPathPlanner:
                 robot_id,
                 clearance,
                 subgoal_distance,
+                (
+                    None
+                    if defense_area_retrieval_exempt
+                    else self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+                ),
             )
             self._last_trajectory[robot_id] = (our_pos.copy(), safe_target.copy(), final_trajectory)
 
