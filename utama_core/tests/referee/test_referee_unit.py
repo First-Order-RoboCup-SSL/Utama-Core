@@ -1078,9 +1078,11 @@ class TestVariableFieldScaling:
 
         monkeypatch.setattr(referee_actions, "move", fake_move)
 
+        # Support robot starts in its own half: from the other half its first target is
+        # a detour waypoint round the centre circle (see TestDetourAroundCircle).
         robots = {
             0: _robot(0, 0.0, 0.0),
-            1: _robot(1, 1.0, 0.0),
+            1: _robot(1, -1.0, 1.0),
         }
         custom_bounds = FieldBounds(top_left=(-6.0, 4.0), bottom_right=(6.0, -4.0))
         referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_YELLOW)
@@ -1201,7 +1203,9 @@ class TestPrepareKickoffTheirsStep:
 
         monkeypatch.setattr(referee_actions, "move", fake_move)
 
-        robots = {i: _robot(i, float(i), 0.0) for i in range(3)}
+        # Robots start in their own half, clear of the ball: from the other half the first
+        # target is a detour waypoint round the centre circle (see TestDetourAroundCircle).
+        robots = {i: _robot(i, -1.0 - i, 1.0) for i in range(3)}
         referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_YELLOW)
         # my_team_is_right=False → own half is negative-x side.
         # yellow_team.goalkeeper=2 (see _make_referee_data's default): robot 2
@@ -1695,3 +1699,30 @@ class TestDirectFreeTheirsStep:
         assert set(cmd_map.keys()) == set(robots.keys())
         for v in cmd_map.values():
             assert v is not None
+
+
+class TestDetourAroundCircle:
+    """`_detour_around_circle`: robots crossing the ball's keep-out circle go round it."""
+
+    def _detour(self, start, target):
+        from utama_core.custom_referee.actions import _detour_around_circle
+
+        return _detour_around_circle(Vector2D(*start), Vector2D(*target), Vector2D(0.0, 0.0), 0.8)
+
+    def test_clear_line_keeps_the_target(self):
+        assert self._detour((-1.0, 1.0), (1.0, 1.0)) == Vector2D(1.0, 1.0)
+
+    def test_line_through_the_circle_goes_round_on_the_targets_side(self):
+        w = self._detour((-0.9, -0.05), (0.8, 0.4))
+        assert w.mag() > 0.8  # outside the circle
+        assert w.y > 0.0  # round the side the target is on
+        assert w.x > -0.9  # and making progress toward it
+
+    def test_leg_to_the_waypoint_stays_outside_from_the_edge(self):
+        """From a robot parked on the edge, the straight leg to the waypoint must not cut
+        back inside, or the push-out and the detour fight and the robot parks there."""
+        start = Vector2D(-0.8, 0.0)
+        w = self._detour((start.x, start.y), (0.8, 0.0))
+        for k in range(11):
+            p = start + (w - start) * (k / 10)
+            assert p.mag() >= 0.8 - 1e-9

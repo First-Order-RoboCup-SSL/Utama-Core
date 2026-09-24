@@ -184,6 +184,41 @@ def _project_outside_opp_defense_area(game, point: Vector2D, keep_dist: float) -
     return Vector2D(safe_x, point.y)
 
 
+# A detour waypoint sits on a circle this much wider than the keep-out one, at least
+# `_DETOUR_MIN_TURN_RAD` further round from the robot. The straight leg to it from a robot
+# on the keep-out edge stays outside while 1.1 * cos(turn) >= 1, i.e. turn <= 24.6deg.
+_DETOUR_RADIUS_FACTOR = 1.1
+_DETOUR_MIN_TURN_RAD = math.radians(20.0)
+
+
+def _detour_around_circle(start: Vector2D, target: Vector2D, center: Vector2D, radius: float) -> Vector2D:
+    """`target`, or a waypoint round the circle if the straight line from `start` to
+    `target` passes through it: the tangent point (or `_DETOUR_MIN_TURN_RAD` further
+    round, once the robot is on the circle), on the side the target lies. Called every
+    tick, so the robot heads for the real target as soon as that line is clear.
+
+    Found on tournament_20260924_124033: after a goal the conceding team is still in
+    the scorer's half (STOP only clears robots near the ball). At PREPARE_KICKOFF its
+    robots drove straight at their own-half spots through the centre circle, and
+    `keep_out` voided 47 of 54 kickoffs after goals into a FORCE_START scramble."""
+    seg = target - start
+    length_sq = seg.dot(seg)
+    if length_sq == 0.0:
+        return target
+    t = min(1.0, max(0.0, (center - start).dot(seg) / length_sq))
+    if (start + seg * t - center).mag() >= radius:
+        return target
+    rel_start, rel_target = start - center, target - center
+    dist = rel_start.mag()
+    if dist == 0.0:
+        return target  # on the centre itself: the caller's push-out handles it
+    wide = radius * _DETOUR_RADIUS_FACTOR
+    turn = max(math.acos(min(1.0, wide / dist)), _DETOUR_MIN_TURN_RAD)
+    cross = rel_start.x * rel_target.y - rel_start.y * rel_target.x
+    angle = math.atan2(rel_start.y, rel_start.x) + (turn if cross >= 0.0 else -turn)
+    return Vector2D(center.x + wide * math.cos(angle), center.y + wide * math.sin(angle))
+
+
 def _clear_to_legal_positions(
     blackboard,
     *,
@@ -249,6 +284,7 @@ def _clear_to_legal_positions(
         currently_encroaching = (ball_center is not None and (ball_center - robot_pos).mag() < ball_keep_dist) or (
             designated_center is not None and (designated_center - robot_pos).mag() < designated_keep_dist
         )
+        intended = intended_targets.get(robot_id) if intended_targets is not None else None
 
         if not currently_encroaching and intended_targets is not None and robot_id in intended_targets:
             target = intended_targets[robot_id]
@@ -263,6 +299,15 @@ def _clear_to_legal_positions(
             target = _project_outside_circle(target, designated_center, designated_keep_dist, designated_fallback)
         if clear_opp_defense_area:
             target = _project_outside_opp_defense_area(game, target, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+
+        if ball_center is not None and not currently_encroaching:
+            target = _detour_around_circle(robot_pos, target, ball_center, ball_keep_dist)
+        elif ball_center is not None and intended is not None:
+            # Out to the edge and on round toward the formation spot in one go. Pushed out
+            # alone, a robot stops a hair inside the edge, stays "encroaching", and its target
+            # stays its own position: robots parked on the circle in the wrong half at kickoff.
+            spot = _project_outside_circle(intended, ball_center, ball_keep_dist, ball_fallback)
+            target = _detour_around_circle(target, spot, ball_center, ball_keep_dist)
 
         target = _clamp_to_field(target, game)
 
