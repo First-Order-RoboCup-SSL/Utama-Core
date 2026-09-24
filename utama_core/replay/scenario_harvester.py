@@ -52,6 +52,11 @@ _PENALTY_PREV_COMMANDS = frozenset({RefereeCommand.PREPARE_PENALTY_YELLOW, Refer
 _KICKOFF_PREV_COMMANDS = frozenset({RefereeCommand.PREPARE_KICKOFF_YELLOW, RefereeCommand.PREPARE_KICKOFF_BLUE})
 _DIRECT_FREE_COMMANDS = frozenset({RefereeCommand.DIRECT_FREE_YELLOW, RefereeCommand.DIRECT_FREE_BLUE})
 _LIVE_PLAY_COMMANDS = frozenset({RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START})
+# A free kick follows STOP, or ball placement when the ball had to be moved first
+# (`CustomReferee`'s usual sequence after the ball goes out).
+_DIRECT_FREE_PREV_COMMANDS = frozenset(
+    {RefereeCommand.STOP, RefereeCommand.BALL_PLACEMENT_YELLOW, RefereeCommand.BALL_PLACEMENT_BLUE}
+)
 
 # A restart ceremony resolving in under this many sim seconds after the
 # previous transition is treated as noise (e.g. two sidecar rows for the
@@ -108,7 +113,7 @@ def find_restart_transitions(sidecar_path: Path) -> list[RestartTransition]:
     """Scan a `.intentions.jsonl` sidecar for transitions into live play or
     into a DIRECT_FREE command, in the order the design calls out:
     `PREPARE_KICKOFF_*/PREPARE_PENALTY_* -> NORMAL_START`,
-    `STOP -> DIRECT_FREE_*`, `STOP -> FORCE_START`.
+    `STOP/BALL_PLACEMENT_* -> DIRECT_FREE_*`, `STOP -> FORCE_START`.
 
     Returns transitions in ascending `sim_time` order. A transition whose
     `sim_time` is within `_MIN_RESTART_GAP_S` of the previous one found is
@@ -132,7 +137,7 @@ def find_restart_transitions(sidecar_path: Path) -> list[RestartTransition]:
         is_restart_into_live = (
             command in _KICKOFF_COMMANDS and prev_command in (_KICKOFF_PREV_COMMANDS | _PENALTY_PREV_COMMANDS)
         ) or (command == RefereeCommand.FORCE_START and prev_command == RefereeCommand.STOP)
-        is_restart_into_direct_free = command in _DIRECT_FREE_COMMANDS and prev_command == RefereeCommand.STOP
+        is_restart_into_direct_free = command in _DIRECT_FREE_COMMANDS and prev_command in _DIRECT_FREE_PREV_COMMANDS
 
         if (is_restart_into_live or is_restart_into_direct_free) and (ts - last_transition_ts) >= _MIN_RESTART_GAP_S:
             transitions.append(
@@ -217,7 +222,11 @@ def harvest_replay(
     transitions = find_restart_transitions(sidecar_path)
     scenarios: list[BenchScenario] = []
 
-    for transition in transitions:
+    for index, transition in enumerate(transitions):
+        # The opening kickoff is the same situation in every match (both teams in their
+        # kickoff formation): harvested from a whole run it swamps the bank.
+        if index == 0 and _family_for(transition) == ScenarioFamily.KICKOFF:
+            continue
         try:
             scenario = scenario_from_replay(replay_path, transition.sim_time)
         except ValueError:
@@ -253,7 +262,9 @@ def harvest_replay(
 
 
 def _replay_files_in(run_dir: Path) -> list[Path]:
-    return sorted({*run_dir.glob("*.npz"), *run_dir.glob("*.pkl")})
+    # `<match>.sparse_referee.pkl` sits next to each replay; it is not a replay itself.
+    pkls = [p for p in run_dir.glob("*.pkl") if not p.name.endswith(".sparse_referee.pkl")]
+    return sorted({*run_dir.glob("*.npz"), *pkls})
 
 
 def harvest_run_dir(

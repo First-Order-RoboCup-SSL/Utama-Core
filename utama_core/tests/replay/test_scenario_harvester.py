@@ -177,6 +177,9 @@ def test_harvest_replay_extracts_scenario_at_transition(tmp_path):
         replay_path,
         [
             {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},
+            {"event": "referee", "sim_time": 0.5, "command": "NORMAL_START"},  # opening kickoff: skipped
+            {"event": "referee", "sim_time": 1.0, "command": "STOP"},
+            {"event": "referee", "sim_time": 2.0, "command": "PREPARE_KICKOFF_BLUE"},
             {"event": "referee", "sim_time": 3.0, "command": "NORMAL_START"},
         ],
     )
@@ -197,8 +200,8 @@ def test_harvest_run_dir_skips_untrusted_matches(tmp_path):
     _write_sidecar(
         trusted_replay,
         [
-            {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},
-            {"event": "referee", "sim_time": 2.0, "command": "NORMAL_START"},
+            {"event": "referee", "sim_time": 0.0, "command": "STOP"},
+            {"event": "referee", "sim_time": 2.0, "command": "FORCE_START"},
         ],
     )
     _write_stats(trusted_replay, [])
@@ -207,8 +210,8 @@ def test_harvest_run_dir_skips_untrusted_matches(tmp_path):
     _write_sidecar(
         untrusted_replay,
         [
-            {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},
-            {"event": "referee", "sim_time": 2.0, "command": "NORMAL_START"},
+            {"event": "referee", "sim_time": 0.0, "command": "STOP"},
+            {"event": "referee", "sim_time": 2.0, "command": "FORCE_START"},
         ],
     )
     _write_stats(untrusted_replay, [{"kind": "RESTART_STALL"}])
@@ -217,11 +220,14 @@ def test_harvest_run_dir_skips_untrusted_matches(tmp_path):
     _write_sidecar(
         no_stats_replay,
         [
-            {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},
-            {"event": "referee", "sim_time": 2.0, "command": "NORMAL_START"},
+            {"event": "referee", "sim_time": 0.0, "command": "STOP"},
+            {"event": "referee", "sim_time": 2.0, "command": "FORCE_START"},
         ],
     )
     # Deliberately no .stats.json written for this one.
+
+    # each match's referee log is not a replay of its own
+    (tmp_path / "another_match.sparse_referee.pkl").write_bytes(b"")
 
     scenarios, report = harvest_run_dir(tmp_path, evaluator_version="abc123")
 
@@ -230,3 +236,38 @@ def test_harvest_run_dir_skips_untrusted_matches(tmp_path):
     assert report["matches_untrusted"] == 2
     assert len(scenarios) == 1
     assert scenarios[0].provenance.source_replay == trusted_replay
+
+
+def test_finds_free_kick_after_ball_placement(tmp_path):
+    """`CustomReferee` places the ball before most free kicks; only STOP -> DIRECT_FREE
+    was matched, so a whole round-robin yielded 14 free kicks."""
+    sidecar = tmp_path / "match.intentions.jsonl"
+    sidecar.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in [
+                {"event": "referee", "sim_time": 10.0, "command": "STOP"},
+                {"event": "referee", "sim_time": 11.0, "command": "BALL_PLACEMENT_YELLOW"},
+                {"event": "referee", "sim_time": 15.0, "command": "DIRECT_FREE_YELLOW"},
+            ]
+        )
+    )
+    transitions = find_restart_transitions(sidecar)
+    assert [t.command for t in transitions] == [RefereeCommand.DIRECT_FREE_YELLOW]
+
+
+def test_harvest_replay_skips_the_opening_kickoff(tmp_path):
+    """Every match opens with the same kickoff; from a 231-match run it was 222 of 317
+    harvested scenarios. A kickoff after a goal is kept."""
+    replay_path = _write_replay(tmp_path, "m", [0.0, 1.0, 2.0, 3.0, 4.0])
+    _write_sidecar(
+        replay_path,
+        [
+            {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},
+            {"event": "referee", "sim_time": 1.0, "command": "NORMAL_START"},
+            {"event": "referee", "sim_time": 2.0, "command": "PREPARE_KICKOFF_BLUE"},
+            {"event": "referee", "sim_time": 3.0, "command": "NORMAL_START"},
+        ],
+    )
+    scenarios = harvest_replay(replay_path, source_run_id="r", evaluator_version="abc")
+    assert [s.provenance.anchor_tick for s in scenarios] == [3.0]
