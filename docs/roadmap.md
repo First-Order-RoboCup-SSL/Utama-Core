@@ -65,7 +65,12 @@ resolved, replace it with a one-line pointer under "Done".
      seeded start state + 15-30s horizon, scored as paired differentials by calibrated proxy
      metrics. **Built (v1):** `bench_scenario.py`, 4 hand-authored anchors,
      `scenario_harvester.py` (restart transitions, trust gate `stall_events == []`),
-     `dynamic_screen.py`, `scenario_scorer.py`, `tools/scenario_bench.py`. **Not built:**
+     `dynamic_screen.py`, `scenario_scorer.py`, `tools/scenario_bench.py`. 2026-09-24: TURNOVER
+     counts real losses only (raw turnovers are mostly nearest-robot flicker), stalls are a
+     flag; `--repeats K` jittered starts give the seed noise rsim's determinism hid (the
+     screen's default pool was the champion itself, so every live scenario came out
+     DETERMINED); `--against-results` compares against an earlier run's JSON, for A/B
+     across commits. **Not built:**
      harvesting from a real post-fix calibration run (only synthetic fixtures so far), the
      lost-play weakness subset, event-triggered open-play harvesting, bank versioning/lifecycle.
    - *Outer loop, slow half (ladder, acceptance gate):* candidate vs a frozen reference pool

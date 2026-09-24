@@ -12,7 +12,12 @@ Per-scenario outcome is a fixed ordinal scale, from the CANDIDATE's
 perspective, per the design pass in item 14:
     goal_for > shot_on_target > entry_retained > neutral >
     turnover > shot_conceded > goal_against
-plus an independent `foul` flag. `score_scenario` returns the raw
+plus independent `foul` and `stalled` flags (a stall is reported, never ranked:
+it can be the strategy's fault or the planner's/referee's). TURNOVER counts real
+ball losses only, the same rule as `turnover_breakdown`: the opponent kept the
+ball for more than `_FLICKER_S` (raw `MatchStats.turnovers` is mostly two robots
+on one ball flipping "nearest"), or a restart was given to the opponent while we
+had the ball. `score_scenario` returns the raw
 `MatchStats` for both the candidate-as-friendly run so a caller (the bench
 CLI) can compute paired differentials against a baseline strategy on the
 same scenario+seed, not just look at one run in isolation — a single run's
@@ -35,6 +40,7 @@ from utama_core.engine.match_stats import MatchStats
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.bench_scenario import BenchScenario
 from utama_core.replay.scenario import apply_scenario
+from utama_core.replay.turnover_breakdown import _ENEMY_RESTARTS, _FLICKER_S, _LIVE
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
@@ -66,6 +72,7 @@ class ScenarioScoreResult:
     ticks_run: int
     stats: MatchStats
     error: Optional[str] = None
+    stalled: bool = False
 
 
 def _resolve_config_name(name: str) -> str:
@@ -105,7 +112,35 @@ def _build_runner(candidate_config: str, opponent_config: str, *, stats_path: st
     )
 
 
-def _classify_outcome(before: MatchStats, after: MatchStats, own_goal: bool, conceded_goal: bool) -> ScenarioOutcome:
+class _RealLossWatch:
+    """Counts the candidate's real ball losses tick by tick (see module docstring).
+    Friendly is always yellow here, so the opponent's restarts are the BLUE ones."""
+
+    def __init__(self) -> None:
+        self.losses = 0
+        self._pending_since: Optional[float] = None  # a live turnover not yet confirmed
+        self._turnovers = 0
+        self._cmd = None
+        self._we_had_it = False
+
+    def step(self, t: float, cmd, turnovers: int, poss_side: Optional[str]) -> None:
+        if cmd in _LIVE and turnovers > self._turnovers and self._pending_since is None:
+            self._pending_since = t
+        if self._pending_since is not None:
+            if poss_side == "friendly":
+                self._pending_since = None  # won back within the flicker window
+            elif t - self._pending_since > _FLICKER_S:
+                self.losses += 1
+                self._pending_since = None
+        if cmd in _ENEMY_RESTARTS and self._cmd not in _ENEMY_RESTARTS and self._we_had_it:
+            self.losses += 1
+            self._pending_since = None  # the turnover that led here is this same loss
+        self._turnovers, self._cmd, self._we_had_it = turnovers, cmd, poss_side == "friendly"
+
+
+def _classify_outcome(
+    before: MatchStats, after: MatchStats, own_goal: bool, conceded_goal: bool, real_losses: int = 0
+) -> ScenarioOutcome:
     """Diff two `MatchStats` snapshots (candidate is always "friendly" —
     `apply_scenario`/`_build_runner` always construct the candidate as
     `runner.my`/yellow/right) into one ordinal `ScenarioOutcome`.
@@ -127,9 +162,8 @@ def _classify_outcome(before: MatchStats, after: MatchStats, own_goal: bool, con
     if d_shots_enemy > 0:
         return ScenarioOutcome.SHOT_CONCEDED
 
-    d_turnovers = after.turnovers - before.turnovers
     d_entries = after.attacking_third_entries - before.attacking_third_entries
-    if d_turnovers > 0:
+    if real_losses > 0:
         return ScenarioOutcome.TURNOVER
     if d_entries > 0:
         return ScenarioOutcome.ENTRY_RETAINED
@@ -195,12 +229,17 @@ def score_scenario(
 
         own_goal = False
         conceded_goal = False
+        acc = runner.match_stats
+        loss_watch = _RealLossWatch()
         horizon_ticks = int(horizon_s * TICKS_PER_SECOND)
         ticks_run = 0
         for _ in range(horizon_ticks):
             runner.step_once()
             ticks_run += 1
             frame = runner.my.current_game_frame
+            if acc is not None:
+                cmd = frame.referee.referee_command if frame.referee else None
+                loss_watch.step(ticks_run / TICKS_PER_SECOND, cmd, acc._turnovers, acc._poss_side)
             if frame.ball is not None:
                 bx, by = frame.ball.p.x, frame.ball.p.y
                 # Friendly is always right-defending (my_team_is_right=True),
@@ -215,7 +254,7 @@ def score_scenario(
 
         after = runner.match_stats.finalize() if runner.match_stats is not None else before
         foul = sum(after.rule_event_counts.values()) > sum(before.rule_event_counts.values())
-        outcome = _classify_outcome(before, after, own_goal, conceded_goal)
+        outcome = _classify_outcome(before, after, own_goal, conceded_goal, loss_watch.losses)
 
         return ScenarioScoreResult(
             scenario_id=bench_scenario.scenario_id,
@@ -224,6 +263,7 @@ def score_scenario(
             horizon_s=horizon_s,
             ticks_run=ticks_run,
             stats=after,
+            stalled=len(after.stall_events) > len(before.stall_events),
         )
     finally:
         runner.close()

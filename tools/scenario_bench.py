@@ -24,6 +24,22 @@ scenario against the SAME `--opponent` (paired comparison, per item 14's
 matters, not either absolute score). The report is the per-scenario and
 per-family paired outcome delta, never an absolute score.
 
+rsim is deterministic, so each scenario is played from `--repeats` starts
+(`bench_scenario.jittered`: robots away from the ball nudged a few cm; seed 0
+is the scenario as authored), and both sides get the same starts. The report
+gives the candidate's own spread across starts (seed noise) and the standard
+error of the mean delta across scenarios.
+
+The baseline is either a `--baseline` config run in this process, or
+`--against-results FILE`: the candidate outcomes of an earlier run's JSON. The
+second is how to A/B a code change (shared tactics, planner): run the bench at
+commit A, then at commit B with `--against-results` pointing at A's JSON. The
+opponent, horizon and repeats must match. With neither, it only records the
+candidate's outcomes, e.g. to serve as a later run's `--against-results`.
+
+Scenario outcomes count real ball losses and flag stalls; see
+`utama_core.replay.scenario_scorer`.
+
 `--save-bank PATH` persists the currently-loaded scenario set (hand-authored
 + optional `--harvest-from`, after `--families` filtering) to a single JSON
 file via `bench_scenario.save_bank` — a few KB even for hundreds of
@@ -55,6 +71,13 @@ Run from the repository root, for example:
     pixi run python tools/scenario_bench.py --harvest-from replays/tournament_20260905_090000 \\
         --save-bank utama_core/replay/banks/bank_v1.json --bank-id v1 --list-scenarios
 
+    # A/B a code change: record at commit A, compare at commit B.
+    pixi run python tools/scenario_bench.py --load-bank bank_v1.json \\
+        --candidate build_tiki_taka_kernel_strategy --opponent build_low_block_kernel_strategy
+    pixi run python tools/scenario_bench.py --load-bank bank_v1.json \\
+        --candidate build_tiki_taka_kernel_strategy --opponent build_low_block_kernel_strategy \\
+        --against-results scenario_bench_results/scenario_bench_<commit A>.json
+
     # Score against the frozen bank later, without re-harvesting:
     pixi run python tools/scenario_bench.py --load-bank utama_core/replay/banks/bank_v1.json \\
         --candidate build_tiki_taka_kernel_strategy --baseline build_default_kernel_strategy \\
@@ -65,15 +88,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import statistics
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from utama_core.replay.bench_scenario import BenchScenario, load_bank, save_bank
+from utama_core.replay.bench_scenario import (
+    BenchScenario,
+    jittered,
+    load_bank,
+    save_bank,
+)
 from utama_core.replay.dynamic_screen import (
     DEFAULT_SCREEN_POOL,
     ScreenVerdict,
@@ -81,7 +112,7 @@ from utama_core.replay.dynamic_screen import (
 )
 from utama_core.replay.hand_authored_scenarios import all_hand_authored_scenarios
 from utama_core.replay.scenario_harvester import harvest_run_dir
-from utama_core.replay.scenario_scorer import ScenarioOutcome, score_scenario
+from utama_core.replay.scenario_scorer import score_scenario
 
 SCHEMA_VERSION = 1
 
@@ -126,7 +157,7 @@ def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], dict]:
     return scenarios, harvest_report
 
 
-def _run_dynamic_screen(scenarios: list[BenchScenario], *, horizon_s: float) -> list[dict]:
+def _run_dynamic_screen(scenarios: list[BenchScenario], *, horizon_s: float, repeats: int) -> list[dict]:
     results = []
     for bench_scenario in scenarios:
         result = screen_scenario(
@@ -134,6 +165,7 @@ def _run_dynamic_screen(scenarios: list[BenchScenario], *, horizon_s: float) -> 
             champion_config="build_default_kernel_strategy",
             pool_configs=DEFAULT_SCREEN_POOL,
             horizon_s=horizon_s,
+            repeats=repeats,
         )
         results.append(
             {
@@ -141,50 +173,86 @@ def _run_dynamic_screen(scenarios: list[BenchScenario], *, horizon_s: float) -> 
                 "verdict": result.verdict.value,
                 "outcomes": list(result.outcomes),
                 "outcome_stdev": result.outcome_stdev,
+                "seed_stdev": result.seed_stdev,
+                "policy_stdev": result.policy_stdev,
             }
         )
     return results
 
 
-def _score_paired(
+def _runs(bench_scenario: BenchScenario, config: str, opponent: str, horizon_s: float, repeats: int) -> dict:
+    """`config` vs `opponent` from `repeats` jittered starts (seed 0 = as authored)."""
+    results = [
+        score_scenario(
+            jittered(bench_scenario, seed), candidate_config=config, opponent_config=opponent, horizon_s=horizon_s
+        )
+        for seed in range(repeats)
+    ]
+    return {
+        "outcomes": [int(r.outcome) for r in results],
+        "fouls": sum(r.foul for r in results),
+        "stalls": sum(r.stalled for r in results),
+        "errors": [r.error for r in results if r.error],
+    }
+
+
+def _load_against(path: Path, *, opponent: str, horizon_s: float, repeats: int) -> tuple[dict[str, list[int]], dict]:
+    """Baseline outcomes from an earlier run's JSON (typically another commit), keyed by
+    scenario id. Refuses a file scored against a different opponent/horizon/repeats:
+    those outcomes are not comparable."""
+    payload = json.loads(path.read_text())
+    for key, want in (("opponent", opponent), ("horizon_s", horizon_s), ("repeats", repeats)):
+        if payload.get(key) != want:
+            raise SystemExit(f"--against-results {path}: {key} is {payload.get(key)!r}, this run uses {want!r}")
+    outcomes = {row["scenario_id"]: row["candidate_outcomes"] for row in payload["results"]}
+    source = {"path": str(path), "git_revision": payload.get("git_revision"), "candidate": payload.get("candidate")}
+    return outcomes, source
+
+
+def _score(
     scenarios: list[BenchScenario],
     *,
     candidate: str,
-    baseline: str,
     opponent: str,
     horizon_s: float,
+    repeats: int,
+    baseline: Optional[str] = None,
+    against: Optional[dict[str, list[int]]] = None,
 ) -> list[dict]:
+    """Candidate outcomes per scenario, paired with the baseline's on the same jittered
+    starts: a `baseline` config run here, or `against` outcomes from an earlier run."""
     rows = []
     total = len(scenarios)
     for index, bench_scenario in enumerate(scenarios, start=1):
-        print(f"[{index}/{total}] {bench_scenario.scenario_id} ({bench_scenario.provenance.family.value})", flush=True)
-
-        candidate_result = score_scenario(
-            bench_scenario, candidate_config=candidate, opponent_config=opponent, horizon_s=horizon_s
-        )
-        baseline_result = score_scenario(
-            bench_scenario, candidate_config=baseline, opponent_config=opponent, horizon_s=horizon_s
-        )
-
-        delta = int(candidate_result.outcome) - int(baseline_result.outcome)
+        sid = bench_scenario.scenario_id
+        print(f"[{index}/{total}] {sid} ({bench_scenario.provenance.family.value})", flush=True)
+        cand = _runs(bench_scenario, candidate, opponent, horizon_s, repeats)
+        base = _runs(bench_scenario, baseline, opponent, horizon_s, repeats) if baseline else None
+        base_outcomes = base["outcomes"] if base else (against or {}).get(sid)
+        delta = None
+        if base_outcomes is not None:
+            delta = statistics.fmean(cand["outcomes"]) - statistics.fmean(base_outcomes)
         print(
-            f"  candidate={candidate_result.outcome.name} baseline={baseline_result.outcome.name} delta={delta:+d}",
+            f"  candidate={cand['outcomes']} baseline={base_outcomes}"
+            + (f" delta={delta:+.2f}" if delta is not None else "")
+            + (f" stalls={cand['stalls']}" if cand["stalls"] else ""),
             flush=True,
         )
-
         rows.append(
             {
-                "scenario_id": bench_scenario.scenario_id,
+                "scenario_id": sid,
                 "family": bench_scenario.provenance.family.value,
                 "trigger": bench_scenario.provenance.trigger.value,
                 "perspective": bench_scenario.provenance.perspective,
-                "candidate_outcome": candidate_result.outcome.name,
-                "baseline_outcome": baseline_result.outcome.name,
+                "candidate_outcomes": cand["outcomes"],
+                "baseline_outcomes": base_outcomes,
                 "delta": delta,
-                "candidate_foul": candidate_result.foul,
-                "baseline_foul": baseline_result.foul,
-                "candidate_error": candidate_result.error,
-                "baseline_error": baseline_result.error,
+                "candidate_fouls": cand["fouls"],
+                "candidate_stalls": cand["stalls"],
+                "baseline_fouls": base["fouls"] if base else None,
+                "baseline_stalls": base["stalls"] if base else None,
+                "candidate_errors": cand["errors"],
+                "baseline_errors": base["errors"] if base else [],
             }
         )
     return rows
@@ -197,70 +265,91 @@ def _aggregate_by_family(rows: list[dict]) -> list[dict]:
 
     aggregates = []
     for family, family_rows in grouped.items():
-        deltas = [r["delta"] for r in family_rows]
+        deltas = [r["delta"] for r in family_rows if r["delta"] is not None]
         n = len(deltas)
-        mean_delta = sum(deltas) / n if n else 0.0
-        wins = sum(1 for d in deltas if d > 0)
-        losses = sum(1 for d in deltas if d < 0)
-        ties = n - wins - losses
         aggregates.append(
             {
                 "family": family,
-                "n_scenarios": n,
-                "mean_delta": mean_delta,
-                "wins": wins,
-                "losses": losses,
-                "ties": ties,
+                "n_scenarios": len(family_rows),
+                "n_paired": n,
+                "mean_delta": statistics.fmean(deltas) if n else None,
+                # standard error of the mean delta across scenarios: a mean delta within
+                # about two of these of zero is not a difference
+                "stderr": statistics.stdev(deltas) / math.sqrt(n) if n > 1 else None,
+                "wins": sum(1 for d in deltas if d > 0),
+                "losses": sum(1 for d in deltas if d < 0),
+                "ties": sum(1 for d in deltas if d == 0),
+                # mean over scenarios of the candidate's outcome stdev across jittered starts
+                "seed_noise": statistics.fmean(statistics.pstdev(r["candidate_outcomes"]) for r in family_rows),
+                "candidate_stalls": sum(r["candidate_stalls"] for r in family_rows),
             }
         )
     return sorted(aggregates, key=lambda a: a["family"])
 
 
+def _fmt(x: Optional[float], spec: str = "+.2f") -> str:
+    return "-" if x is None else format(x, spec)
+
+
 def _markdown_report(payload: dict) -> str:
+    baseline = payload["baseline"] or (
+        f"results of `{payload['against']['candidate']}` at `{payload['against']['git_revision']}` "
+        f"({payload['against']['path']})"
+        if payload.get("against")
+        else None
+    )
     lines = [
         "# Scenario bench report",
         "",
         f"Generated: {payload['generated_at_utc']}  ",
         f"Git revision: `{payload['git_revision'] or 'unknown'}`  ",
         f"Candidate: `{payload['candidate']}`  ",
-        f"Baseline: `{payload['baseline']}`  ",
+        f"Baseline: {baseline or 'none'}  ",
         f"Opponent: `{payload['opponent']}`  ",
-        f"Horizon: {payload['horizon_s']}s  ",
+        f"Horizon: {payload['horizon_s']}s, {payload.get('repeats', 1)} jittered starts per scenario  ",
         f"Scenarios scored: {payload['n_scenarios']}",
         "",
-        "Delta is `candidate_outcome - baseline_outcome` on the ordinal scale "
-        "(GOAL_AGAINST=-3 ... NEUTRAL=0 ... GOAL_FOR=+3), same scenario and opponent for both. "
-        "Positive mean delta = candidate did better than baseline on that family. "
+        "Delta is mean candidate outcome minus mean baseline outcome over the same jittered starts, "
+        "on the ordinal scale (GOAL_AGAINST=-3 ... NEUTRAL=0 ... GOAL_FOR=+3), same opponent. "
+        "`stderr` is across scenarios; `seed noise` is the candidate's own spread across starts. "
+        "Stalls are counted, not ranked. "
         "This is a proxy signal, not an acceptance gate — see roadmap item 14's Goodhart guard.",
         "",
         "## By family",
         "",
-        "| Family | N | Mean delta | Wins | Losses | Ties |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| Family | N | Mean delta | Stderr | Wins | Losses | Ties | Seed noise | Stalls |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for agg in payload["aggregates"]:
         lines.append(
-            f"| {agg['family']} | {agg['n_scenarios']} | {agg['mean_delta']:+.2f} | "
-            f"{agg['wins']} | {agg['losses']} | {agg['ties']} |"
+            f"| {agg['family']} | {agg['n_scenarios']} | {_fmt(agg['mean_delta'])} | {_fmt(agg['stderr'], '.2f')} | "
+            f"{agg['wins']} | {agg['losses']} | {agg['ties']} | {agg['seed_noise']:.2f} | {agg['candidate_stalls']} |"
         )
 
     lines.extend(
-        ["", "## Per-scenario", "", "| Scenario | Family | Candidate | Baseline | Delta |", "|---|---|---|---|---:|"]
+        [
+            "",
+            "## Per-scenario",
+            "",
+            "| Scenario | Family | Candidate | Baseline | Delta | Stalls |",
+            "|---|---|---|---|---:|---:|",
+        ]
     )
     for row in payload["results"]:
         lines.append(
-            f"| {row['scenario_id']} | {row['family']} | {row['candidate_outcome']} | "
-            f"{row['baseline_outcome']} | {row['delta']:+d} |"
+            f"| {row['scenario_id']} | {row['family']} | {row['candidate_outcomes']} | "
+            f"{row['baseline_outcomes'] if row['baseline_outcomes'] is not None else '-'} | {_fmt(row['delta'])} | "
+            f"{row['candidate_stalls']} |"
         )
 
-    errors = [r for r in payload["results"] if r["candidate_error"] or r["baseline_error"]]
+    errors = [r for r in payload["results"] if r["candidate_errors"] or r["baseline_errors"]]
     lines.extend(["", "## Errors", ""])
     if not errors:
         lines.append("None.")
     else:
         for row in errors:
             lines.append(
-                f"- `{row['scenario_id']}`: candidate={row['candidate_error']} baseline={row['baseline_error']}"
+                f"- `{row['scenario_id']}`: candidate={row['candidate_errors']} baseline={row['baseline_errors']}"
             )
 
     if payload.get("harvest_report"):
@@ -277,10 +366,19 @@ def _markdown_report(payload: dict) -> str:
         )
 
     if payload.get("dynamic_screen"):
-        lines.extend(["", "## Dynamic screen", "", "| Scenario | Verdict | Outcomes | Stdev |", "|---|---|---|---:|"])
+        lines.extend(
+            [
+                "",
+                "## Dynamic screen",
+                "",
+                "| Scenario | Verdict | Outcomes | Stdev | Seed stdev | Policy stdev |",
+                "|---|---|---|---:|---:|---:|",
+            ]
+        )
         for row in payload["dynamic_screen"]:
             lines.append(
-                f"| {row['scenario_id']} | {row['verdict']} | {row['outcomes']} | {row['outcome_stdev']:.2f} |"
+                f"| {row['scenario_id']} | {row['verdict']} | {row['outcomes']} | {row['outcome_stdev']:.2f} | "
+                f"{row['seed_stdev']:.2f} | {row['policy_stdev']:.2f} |"
             )
 
     return "\n".join(lines)
@@ -289,7 +387,20 @@ def _markdown_report(payload: dict) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--candidate", help="candidate strategy config, e.g. build_tiki_taka_kernel_strategy")
-    parser.add_argument("--baseline", help="baseline strategy config to diff against")
+    parser.add_argument("--baseline", help="baseline strategy config to diff against, run in this process")
+    parser.add_argument(
+        "--against-results",
+        type=Path,
+        default=None,
+        help="diff against the candidate outcomes in an earlier run's JSON instead of a --baseline config "
+        "(A/B across commits: run once at each commit, pass the first run's JSON to the second)",
+    )
+    parser.add_argument(
+        "--repeats",
+        type=int,
+        default=3,
+        help="jittered starts per scenario (seed 0 = as authored; default 3)",
+    )
     parser.add_argument("--opponent", help="opponent strategy config both candidate and baseline play against")
     parser.add_argument("--horizon", type=float, default=20.0, help="sim seconds ticked per scenario (default 20)")
     parser.add_argument(
@@ -325,9 +436,11 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
 
     if not args.list_scenarios and not args.dynamic_screen:
-        missing = [name for name in ("candidate", "baseline", "opponent") if getattr(args, name) is None]
+        missing = [name for name in ("candidate", "opponent") if getattr(args, name) is None]
         if missing:
             parser.error(f"--{', --'.join(missing)} required unless --list-scenarios or --dynamic-screen")
+        if args.baseline and args.against_results:
+            parser.error("--baseline and --against-results are alternatives")
 
     return args
 
@@ -355,7 +468,7 @@ def main() -> int:
     timestamp = generated_at.strftime("%Y%m%d_%H%M%S")
 
     if args.dynamic_screen:
-        screen_results = _run_dynamic_screen(scenarios, horizon_s=args.horizon)
+        screen_results = _run_dynamic_screen(scenarios, horizon_s=args.horizon, repeats=args.repeats)
         dead = sum(1 for r in screen_results if r["verdict"] == ScreenVerdict.DEAD.value)
         determined = sum(1 for r in screen_results if r["verdict"] == ScreenVerdict.DETERMINED.value)
         noisy = sum(1 for r in screen_results if r["verdict"] == ScreenVerdict.NOISY.value)
@@ -370,6 +483,7 @@ def main() -> int:
             "baseline": None,
             "opponent": None,
             "horizon_s": args.horizon,
+            "repeats": args.repeats,
             "n_scenarios": len(scenarios),
             "aggregates": [],
             "results": [],
@@ -383,8 +497,19 @@ def main() -> int:
         print(f"\nWrote {json_path}\nWrote {md_path}")
         return 0
 
-    rows = _score_paired(
-        scenarios, candidate=args.candidate, baseline=args.baseline, opponent=args.opponent, horizon_s=args.horizon
+    against, against_source = None, None
+    if args.against_results:
+        against, against_source = _load_against(
+            args.against_results, opponent=args.opponent, horizon_s=args.horizon, repeats=args.repeats
+        )
+    rows = _score(
+        scenarios,
+        candidate=args.candidate,
+        opponent=args.opponent,
+        horizon_s=args.horizon,
+        repeats=args.repeats,
+        baseline=args.baseline,
+        against=against,
     )
     aggregates = _aggregate_by_family(rows)
 
@@ -394,8 +519,10 @@ def main() -> int:
         "git_revision": _git_revision(),
         "candidate": args.candidate,
         "baseline": args.baseline,
+        "against": against_source,
         "opponent": args.opponent,
         "horizon_s": args.horizon,
+        "repeats": args.repeats,
         "n_scenarios": len(scenarios),
         "aggregates": aggregates,
         "results": rows,
@@ -408,8 +535,10 @@ def main() -> int:
     md_path.write_text(_markdown_report(payload))
 
     print(f"\nWrote {json_path}\nWrote {md_path}")
-    overall_mean = sum(r["delta"] for r in rows) / len(rows) if rows else 0.0
-    print(f"Overall mean delta: {overall_mean:+.2f} over {len(rows)} scenarios")
+    deltas = [r["delta"] for r in rows if r["delta"] is not None]
+    if deltas:
+        stderr = statistics.stdev(deltas) / math.sqrt(len(deltas)) if len(deltas) > 1 else float("nan")
+        print(f"Overall mean delta: {statistics.fmean(deltas):+.2f} (stderr {stderr:.2f}) over {len(deltas)} scenarios")
     return 0
 
 

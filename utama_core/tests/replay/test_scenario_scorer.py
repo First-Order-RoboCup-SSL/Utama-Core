@@ -8,8 +8,18 @@ by using short horizons and the cheapest available kernel strategy.
 
 from __future__ import annotations
 
+import dataclasses
+
+from utama_core.engine.match_stats import MatchStats
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.hand_authored_scenarios import all_hand_authored_scenarios
-from utama_core.replay.scenario_scorer import ScenarioOutcome, score_scenario
+from utama_core.replay.scenario_scorer import (
+    _FLICKER_S,
+    ScenarioOutcome,
+    _classify_outcome,
+    _RealLossWatch,
+    score_scenario,
+)
 
 
 def _kickoff_scenario():
@@ -44,3 +54,44 @@ def test_score_scenario_reports_error_on_bad_config():
 
     assert result.error is not None
     assert result.ticks_run == 0
+
+
+def _watch(ticks) -> int:
+    """ticks: (t, command, friendly turnovers so far, possession side)"""
+    watch = _RealLossWatch()
+    for t, cmd, turnovers, side in ticks:
+        watch.step(t, cmd, turnovers, side)
+    return watch.losses
+
+
+_LIVE_CMD = RefereeCommand.NORMAL_START
+
+
+def test_a_turnover_won_back_within_the_flicker_window_is_not_a_loss():
+    """Raw `MatchStats.turnovers` counts two robots on one ball flipping "nearest"; the
+    bench used to score every such flip as TURNOVER. Only an opponent holding the ball
+    for more than `_FLICKER_S` is a loss."""
+    flicker = [
+        (0.0, _LIVE_CMD, 0, "friendly"),
+        (0.5, _LIVE_CMD, 1, "enemy"),
+        (0.5 + _FLICKER_S, _LIVE_CMD, 1, "friendly"),
+    ]
+    assert _watch(flicker) == 0
+    kept = [(0.0, _LIVE_CMD, 0, "friendly"), (0.5, _LIVE_CMD, 1, "enemy"), (0.51 + _FLICKER_S, _LIVE_CMD, 1, "enemy")]
+    assert _watch(kept) == 1
+
+
+def test_a_restart_to_the_opponent_is_a_loss_only_if_we_had_the_ball():
+    blue_free_kick = RefereeCommand.DIRECT_FREE_BLUE
+    assert _watch([(0.0, _LIVE_CMD, 0, "friendly"), (0.1, blue_free_kick, 0, "friendly")]) == 1
+    assert _watch([(0.0, _LIVE_CMD, 0, "enemy"), (0.1, blue_free_kick, 0, "enemy")]) == 0
+    # a turnover while play is stopped is a restart handover, not a loss
+    stop = RefereeCommand.STOP
+    assert _watch([(0.0, stop, 0, "friendly"), (0.5, stop, 1, "enemy"), (2.0, stop, 1, "enemy")]) == 0
+
+
+def test_raw_turnovers_without_a_real_loss_do_not_score_turnover():
+    before = MatchStats({}, {}, {})
+    after = dataclasses.replace(before, turnovers=4, attacking_third_entries=1)
+    assert _classify_outcome(before, after, False, False, real_losses=0) == ScenarioOutcome.ENTRY_RETAINED
+    assert _classify_outcome(before, after, False, False, real_losses=1) == ScenarioOutcome.TURNOVER

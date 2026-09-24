@@ -15,13 +15,10 @@ few policies across a few seeds, then classify:
       keep only if the family's noise floor can absorb it.
     - INFORMATIVE: outcome varies more with policy than with seed — keep.
 
-rsim is deterministic per the same seed/inputs (see `tools/
-metric_correlation.py`'s note that re-running a matchup adds no
-information under a fixed seed) — so "several seeds" here means several
-*policy pairings*, not RNG seeds in the traditional sense: this module
-varies the opponent config across a small pool to get outcome spread,
-since `score_scenario` itself has no RNG knob. If a future controller
-gains actual stochasticity, this is the module to add a seed parameter to.
+rsim is deterministic given identical inputs, so a "seed" here is a
+`bench_scenario.jittered` start: the same scenario with the robots away from
+the ball nudged a few centimetres. Seed spread is the spread within one
+opponent across seeds; policy spread is the spread of the per-opponent means.
 """
 
 from __future__ import annotations
@@ -31,14 +28,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Sequence
 
-from utama_core.replay.bench_scenario import BenchScenario
+from utama_core.replay.bench_scenario import BenchScenario, jittered
 from utama_core.replay.scenario_scorer import ScenarioOutcome, score_scenario
 
 # Default pool of policies to play a candidate scenario forward against for
 # the dynamic screen — deliberately small and diverse (not the full
 # tournament catalog), matching item 14's "champion vs self, and two or
 # three pool members" guidance.
-DEFAULT_SCREEN_POOL = ("build_default_kernel_strategy",)
+DEFAULT_SCREEN_POOL = ("build_low_block_kernel_strategy", "build_high_press_kernel_strategy")
 
 
 class ScreenVerdict(Enum):
@@ -52,9 +49,11 @@ class ScreenVerdict(Enum):
 class DynamicScreenResult:
     scenario_id: str
     verdict: ScreenVerdict
-    outcomes: tuple[int, ...]  # ScenarioOutcome values, one per (champion, pool_member) run
+    outcomes: tuple[int, ...]  # ScenarioOutcome values, one per (opponent, seed) run, opponent-major
     outcome_stdev: float
     any_decisive_event: bool  # True if any run had a non-NEUTRAL outcome or a foul
+    seed_stdev: float = 0.0  # mean over opponents of the stdev across seeds
+    policy_stdev: float = 0.0  # stdev of the per-opponent mean outcomes
 
 
 # A run is "decisive" if the outcome differs from NEUTRAL or a foul fired —
@@ -65,11 +64,6 @@ _NEUTRAL = int(ScenarioOutcome.NEUTRAL)
 # as DETERMINED — every run landed on essentially the same result.
 _DETERMINED_STDEV = 0.01
 
-# Outcome stdev at or above this counts as NOISY — the family's noise floor
-# decision is deferred to the bank curator (see module docstring); this
-# threshold only decides whether NOISY is reported at all.
-_NOISY_STDEV = 1.5
-
 
 def screen_scenario(
     bench_scenario: BenchScenario,
@@ -77,37 +71,41 @@ def screen_scenario(
     champion_config: str,
     pool_configs: Sequence[str] = DEFAULT_SCREEN_POOL,
     horizon_s: float = 20.0,
+    repeats: int = 3,
 ) -> DynamicScreenResult:
-    """Play `bench_scenario` forward with the champion against itself and
-    against each of `pool_configs`, classify the outcome spread.
-
-    Champion-vs-self is always included first (needed to measure the
-    family's own noise floor per item 14) — `pool_configs` defaults to a
-    single additional pairing so this stays cheap; a bank-curation pass
-    building the full v1 bank would pass a larger pool.
-    """
-    opponents = (champion_config, *pool_configs)
-    outcomes: list[int] = []
+    """Play `bench_scenario` forward with the champion against itself and each
+    of `pool_configs` (duplicates dropped), `repeats` jittered starts each, and
+    classify the outcome spread. NOISY when the seed spread is at least the
+    policy spread: the outcome says more about the start than about who played."""
+    opponents = tuple(dict.fromkeys((champion_config, *pool_configs)))
+    per_opponent: list[list[int]] = []
     any_decisive = False
 
     for opponent_config in opponents:
-        result = score_scenario(
-            bench_scenario,
-            candidate_config=champion_config,
-            opponent_config=opponent_config,
-            horizon_s=horizon_s,
-        )
-        outcomes.append(int(result.outcome))
-        if result.outcome != ScenarioOutcome.NEUTRAL or result.foul:
-            any_decisive = True
+        runs = []
+        for seed in range(repeats):
+            result = score_scenario(
+                jittered(bench_scenario, seed),
+                candidate_config=champion_config,
+                opponent_config=opponent_config,
+                horizon_s=horizon_s,
+            )
+            runs.append(int(result.outcome))
+            if result.outcome != ScenarioOutcome.NEUTRAL or result.foul:
+                any_decisive = True
+        per_opponent.append(runs)
 
+    outcomes = [o for runs in per_opponent for o in runs]
     stdev = statistics.pstdev(outcomes) if len(outcomes) > 1 else 0.0
+    seed_stdev = statistics.fmean(statistics.pstdev(runs) if len(runs) > 1 else 0.0 for runs in per_opponent)
+    means = [statistics.fmean(runs) for runs in per_opponent]
+    policy_stdev = statistics.pstdev(means) if len(means) > 1 else 0.0
 
     if not any_decisive:
         verdict = ScreenVerdict.DEAD
     elif stdev <= _DETERMINED_STDEV:
         verdict = ScreenVerdict.DETERMINED
-    elif stdev >= _NOISY_STDEV:
+    elif seed_stdev >= policy_stdev:
         verdict = ScreenVerdict.NOISY
     else:
         verdict = ScreenVerdict.INFORMATIVE
@@ -118,4 +116,6 @@ def screen_scenario(
         outcomes=tuple(outcomes),
         outcome_stdev=stdev,
         any_decisive_event=any_decisive,
+        seed_stdev=seed_stdev,
+        policy_stdev=policy_stdev,
     )

@@ -17,11 +17,13 @@ import pytest
 
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.bench_scenario import (
+    _JITTER_POS_M,
     BenchScenario,
     ScenarioFamily,
     ScenarioLifecycle,
     ScenarioProvenance,
     ScenarioTrigger,
+    jittered,
     load_bank,
     save_bank,
     static_screen,
@@ -193,3 +195,33 @@ def test_save_bank_creates_parent_directories(tmp_path):
     save_bank(scenarios, bank_path, bank_id="v1")
 
     assert bank_path.exists()
+
+
+def test_jittered_is_reproducible_small_and_keeps_the_robot_on_the_ball():
+    """rsim is deterministic, so repeats need different starts. Seed 0 is the scenario
+    as authored; other seeds nudge robots away from the ball by at most
+    `_JITTER_POS_M` per axis, the same way every time; the robot on the ball stays put."""
+    on_ball = _rs(2, 0.09, 0.0)
+    bs = BenchScenario(
+        scenario_id="x",
+        scenario=_valid_scenario(friendly_robots=(_rs(0, -4.0, 0.0), _rs(1, -1.0, 0.5), on_ball)),
+        provenance=ScenarioProvenance(
+            source_run_id="hand_authored",
+            evaluator_version="abc123",
+            trigger=ScenarioTrigger.HAND_AUTHORED,
+            family=ScenarioFamily.KICKOFF,
+        ),
+    )
+
+    assert jittered(bs, 0) is bs
+    a, b = jittered(bs, 1), jittered(bs, 1)
+    assert a == b
+    assert a != jittered(bs, 2)
+    assert static_screen(a.scenario).ok
+    assert a.scenario.friendly_robots[2] == on_ball
+    for old, new in zip(
+        bs.scenario.friendly_robots[:2] + bs.scenario.enemy_robots,
+        a.scenario.friendly_robots[:2] + a.scenario.enemy_robots,
+    ):
+        assert (new.x, new.y) != (old.x, old.y)
+        assert abs(new.x - old.x) <= _JITTER_POS_M and abs(new.y - old.y) <= _JITTER_POS_M

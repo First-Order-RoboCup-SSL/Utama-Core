@@ -27,6 +27,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import random
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -260,6 +261,46 @@ def static_screen(scenario: Scenario) -> StaticScreenResult:
                 )
 
     return StaticScreenResult(ok=not violations, violations=tuple(violations))
+
+
+# rsim is deterministic, so one run per scenario is one sample and says nothing
+# about noise. `jittered` gives each repeat of a scenario a slightly different
+# start: robots moved up to this far, and turned up to this much.
+_JITTER_POS_M = 0.05
+_JITTER_OREN_RAD = 0.1
+# Robots this close to the ball keep their exact pose: their relation to the ball
+# (on the dribbler, lined up to take a restart) is what the scenario is about.
+_JITTER_KEEP_NEAR_BALL_M = 0.3
+
+
+def jittered(bench_scenario: "BenchScenario", seed: int) -> "BenchScenario":
+    """`bench_scenario` with every robot not near the ball nudged by a small random
+    offset, reproducible from (`scenario_id`, `seed`). Seed 0 is the scenario as
+    authored. A draw that fails `static_screen` (an overlap) is redrawn."""
+    if seed == 0:
+        return bench_scenario
+    rng = random.Random(f"{bench_scenario.scenario_id}:{seed}")
+    sc = bench_scenario.scenario
+
+    def nudge(r: RobotState) -> RobotState:
+        if math.hypot(r.x - sc.ball_x, r.y - sc.ball_y) < _JITTER_KEEP_NEAR_BALL_M:
+            return r
+        return dataclasses.replace(
+            r,
+            x=r.x + rng.uniform(-_JITTER_POS_M, _JITTER_POS_M),
+            y=r.y + rng.uniform(-_JITTER_POS_M, _JITTER_POS_M),
+            orientation=r.orientation + rng.uniform(-_JITTER_OREN_RAD, _JITTER_OREN_RAD),
+        )
+
+    for _ in range(20):
+        candidate = dataclasses.replace(
+            sc,
+            friendly_robots=tuple(nudge(r) for r in sc.friendly_robots),
+            enemy_robots=tuple(nudge(r) for r in sc.enemy_robots),
+        )
+        if static_screen(candidate).ok:
+            return dataclasses.replace(bench_scenario, scenario=candidate)
+    return bench_scenario
 
 
 # Bumped whenever `BenchScenario.to_dict`'s schema changes in a way old
