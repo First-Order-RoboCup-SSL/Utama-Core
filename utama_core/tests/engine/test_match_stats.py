@@ -690,3 +690,33 @@ def test_restart_with_no_entry_excluded_from_mean():
     assert stats.n_restarts_with_entry == 0
     assert stats.restart_to_first_entry_s["friendly"] is None
     assert "enemy_5" not in stats.robot_motion_pct  # no velocity readings (v=None) -> excluded
+
+
+def test_fouls_by_side_uses_offending_teams_or_the_restart_colour():
+    """We are yellow. `offending_teams` wins where a rule sets it; rules that
+    don't (out of bounds, double touch, ...) are charged to the side that did
+    *not* get the restart; a goal is nobody's foul."""
+    acc = MatchStatsAccumulator()
+
+    def v(rule, next_command=None, offending_teams=()):
+        return RuleViolation(
+            rule_name=rule,
+            suggested_command=RefereeCommand.STOP,
+            next_command=next_command,
+            status_message="",
+            offending_teams=offending_teams,
+        )
+
+    acc.record_rule_violation(v("excessive_dribbling", RefereeCommand.DIRECT_FREE_BLUE, (True,)), True)
+    acc.record_rule_violation(v("double_touch", RefereeCommand.DIRECT_FREE_BLUE), True)  # blue's restart -> ours
+    acc.record_rule_violation(v("out_of_bounds", RefereeCommand.BALL_PLACEMENT_YELLOW), True)  # theirs
+    acc.record_rule_violation(v("crashing", RefereeCommand.FORCE_START, (True, False)), True)  # both
+    acc.record_rule_violation(v("goal", RefereeCommand.PREPARE_KICKOFF_BLUE), True)  # nobody's
+    acc.record_rule_violation(v("double_touch", RefereeCommand.DIRECT_FREE_BLUE))  # side unknown: tally only
+
+    stats = acc.finalize()
+    assert stats.fouls_by_side == {
+        "friendly": {"excessive_dribbling": 1, "double_touch": 1, "crashing": 1},
+        "enemy": {"out_of_bounds": 1, "crashing": 1},
+    }
+    assert stats.rule_event_counts["double_touch"] == 2

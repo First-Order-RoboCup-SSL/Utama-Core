@@ -243,6 +243,11 @@ def _is_real(turnover: dict) -> bool:
     return turnover["kind"] != "during_stoppage" and not (regained is not None and regained <= _FLICKER_S)
 
 
+def real_loss_count(result: dict) -> int:
+    """Real ball losses in one `analyse_match` result (see `_is_real`), restarts included."""
+    return sum(_is_real(t) for t in result["turnovers"]) + len(result["restarts"])
+
+
 def breakdown(results: list[dict]) -> dict:
     """Headline numbers for `summary.json`: real losses, and how, by which rule, by which tactic."""
     n = len(results)
@@ -265,7 +270,7 @@ def breakdown(results: list[dict]) -> dict:
 
 
 def report(run_name: str, results: list[dict], summary: dict) -> str:
-    recorded = {f"{r['config_a']}_vs_{r['config_b']}": r["stats"].get("turnovers") for r in summary["results"]}
+    recorded = {f"{r['config_a']}_vs_{r['config_b']}": (r["stats"] or {}).get("turnovers") for r in summary["results"]}
 
     def short(name: str) -> str:
         return name.removeprefix("build_").removesuffix("_kernel_strategy")
@@ -283,7 +288,7 @@ def report(run_name: str, results: list[dict], summary: dict) -> str:
     total = len(tos) + len(rss)
     analysed = {r["match"] for r in results}
     passes = sum(
-        r["stats"].get("completed_passes", 0)
+        (r["stats"] or {}).get("completed_passes", 0)
         for r in summary["results"]
         if f"{short(r['config_a'])}_vs_{short(r['config_b'])}" in analysed
     )

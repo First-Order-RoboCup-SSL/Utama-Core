@@ -132,6 +132,21 @@ class StallEvent:
     robot_ids: tuple = ()
 
 
+def _offending_sides(violation: RuleViolation, my_team_is_yellow: bool) -> tuple[str, ...]:
+    """ "friendly"/"enemy" for each team that committed `violation`. Uses `offending_teams`
+    where the rule sets it; several rules (out of bounds, double touch, defense area, keep-out)
+    don't, so otherwise the side awarded the restart (`next_command`'s colour) is the
+    non-offender. A goal is nobody's foul."""
+    teams = violation.offending_teams
+    if not teams and violation.rule_name != "goal" and violation.next_command is not None:
+        name = violation.next_command.name
+        if name.endswith("_YELLOW"):
+            teams = (False,)
+        elif name.endswith("_BLUE"):
+            teams = (True,)
+    return tuple("friendly" if is_yellow == my_team_is_yellow else "enemy" for is_yellow in teams)
+
+
 @dataclass
 class MatchStats:
     rule_event_counts: Dict[str, int]
@@ -223,6 +238,8 @@ class MatchStats:
     )
     n_restarts: int = 0
     n_restarts_with_entry: int = 0
+    # `rule_event_counts` split by the side that committed it; see `_offending_sides`.
+    fouls_by_side: Dict[str, Dict[str, int]] = field(default_factory=lambda: {"friendly": {}, "enemy": {}})
 
     def to_json(self, path: Union[str, Path]) -> None:
         with open(path, "w") as f:
@@ -248,6 +265,7 @@ class MatchStats:
                     "restart_to_first_entry_s": self.restart_to_first_entry_s,
                     "n_restarts": self.n_restarts,
                     "n_restarts_with_entry": self.n_restarts_with_entry,
+                    "fouls_by_side": self.fouls_by_side,
                     "stall_events": [
                         {
                             "kind": e.kind,
@@ -316,6 +334,7 @@ class MatchStatsAccumulator:
     """Accumulates per-tick possession/zone data and rule-violation counts; call `finalize()` once."""
 
     _rule_event_counts: Dict[str, int] = field(default_factory=dict)
+    _fouls_by_side: Dict[str, Dict[str, int]] = field(default_factory=lambda: {"friendly": {}, "enemy": {}})
     _possession_ticks: Dict[str, int] = field(default_factory=lambda: {"friendly": 0, "enemy": 0})
     _zone_ticks: Dict[int, Dict[str, int]] = field(default_factory=dict)
     _ticks_recorded: int = 0
@@ -423,10 +442,16 @@ class MatchStatsAccumulator:
     _no_progress_logged: bool = False
     _no_progress_event_idx: Optional[int] = None
 
-    def record_rule_violation(self, violation: Optional[RuleViolation]) -> None:
+    def record_rule_violation(
+        self, violation: Optional[RuleViolation], my_team_is_yellow: Optional[bool] = None
+    ) -> None:
         if violation is None:
             return
         self._rule_event_counts[violation.rule_name] = self._rule_event_counts.get(violation.rule_name, 0) + 1
+        if my_team_is_yellow is not None:
+            for side in _offending_sides(violation, my_team_is_yellow):
+                counts = self._fouls_by_side[side]
+                counts[violation.rule_name] = counts.get(violation.rule_name, 0) + 1
 
     def record_tick(
         self,
@@ -967,4 +992,5 @@ class MatchStatsAccumulator:
             restart_to_first_entry_s=restart_to_first_entry_s,
             n_restarts=self._n_restarts,
             n_restarts_with_entry=self._n_restarts_with_entry,
+            fouls_by_side={side: dict(c) for side, c in self._fouls_by_side.items()},
         )

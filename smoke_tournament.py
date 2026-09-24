@@ -64,6 +64,7 @@ from __future__ import annotations
 import itertools
 import json
 import os
+import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -412,6 +413,7 @@ def main() -> None:
     backstop_match_ids = {id(r) for r in backstop_matches}
     summary = {
         "run_id": run_id,
+        "run": _run_metadata(),
         "config_names": sorted(config_names),
         "control_scheme": control_scheme,
         "match_duration_seconds": MATCH_DURATION_SECONDS,
@@ -433,6 +435,7 @@ def main() -> None:
         "stalled_match_count": len(stalled_matches),
         "possession_backstop_match_count": len(backstop_matches),
     }
+    real_losses_by_match: Optional[dict[str, int]] = None
     if run_dir is not None:
         summary_path = run_dir / "summary.json"
         with open(summary_path, "w") as f:
@@ -441,17 +444,101 @@ def main() -> None:
         # and tactic — `MatchStats.turnovers` alone is mostly two robots on one ball flipping
         # "nearest robot". Replays the saved matches, so it runs after summary.json is on disk.
         losses = turnover_breakdown.analyse_run(run_dir, workers=max_workers_override or os.cpu_count() or 8)
-        summary["ball_losses"] = turnover_breakdown.breakdown(losses)
-        (run_dir / "ball_losses.md").write_text(turnover_breakdown.report(run_id, losses, summary))
+        if losses:  # no replays saved (e.g. every match crashed): nothing to break down
+            summary["ball_losses"] = turnover_breakdown.breakdown(losses)
+            (run_dir / "ball_losses.md").write_text(turnover_breakdown.report(run_id, losses, summary))
+            _print_ball_losses(summary["ball_losses"], run_id)
+            real_losses_by_match = {r["match"]: turnover_breakdown.real_loss_count(r) for r in losses}
+
+    summary["strategies"] = strategy_table(summary["results"], real_losses_by_match)
+    _print_strategy_table(summary["strategies"])
+    if run_dir is not None:
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
-        _print_ball_losses(summary["ball_losses"], run_id)
         print(f"\nFull results + stats: replays/{run_id}/summary.json")
 
     if strict and (stalled_matches or backstop_matches):
         raise SystemExit(
             f"--strict: {len(stalled_matches)} match(es) with stall events, "
             f"{len(backstop_matches)} match(es) flagged by the possession backstop"
+        )
+
+
+def _run_metadata() -> dict:
+    """What produced this run: enough to reproduce it or line it up against another."""
+
+    def git(*args: str) -> Optional[str]:
+        try:
+            out = subprocess.run(["git", *args], capture_output=True, text=True, check=True, cwd=Path(__file__).parent)
+        except (OSError, subprocess.CalledProcessError):
+            return None
+        return out.stdout.strip()
+
+    status = git("status", "--porcelain", "--untracked-files=no")
+    return {
+        "git_commit": git("rev-parse", "HEAD"),
+        "git_dirty": bool(status) if status is not None else None,
+        "argv": sys.argv[1:],
+        "started_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+
+
+def strategy_table(results: list[dict], real_losses_by_match: Optional[dict[str, int]] = None) -> dict[str, dict]:
+    """Per-strategy totals over `summary.json`-shaped `results`. Match stats are from
+    config_a's side, so config_b reads the `enemy_*` counterparts. Real ball losses are only
+    measured for config_a (the side with an intentions log), so they are totalled over the
+    matches a strategy played as config_a (`matches_as_a`)."""
+    table: dict[str, dict] = {}
+    for r in results:
+        stats = r.get("stats") or {}
+        fouls = stats.get("fouls_by_side") or {}
+        tag = f"{_short_name(r['config_a'])}_vs_{_short_name(r['config_b'])}"
+        for name, own, is_a in ((r["config_a"], "friendly", True), (r["config_b"], "enemy", False)):
+            row = table.setdefault(
+                name,
+                {
+                    "matches": 0,
+                    "wins": 0,
+                    "draws": 0,
+                    "losses": 0,
+                    "goals_for": 0,
+                    "goals_against": 0,
+                    "shots": 0,
+                    "completed_passes": 0,
+                    "attacking_third_entries": 0,
+                    "fouls": 0,
+                    "matches_as_a": 0,
+                    "real_losses_as_a": 0,
+                },
+            )
+            prefix = "" if is_a else "enemy_"
+            gf, ga = (r["score_a"], r["score_b"]) if is_a else (r["score_b"], r["score_a"])
+            row["matches"] += 1
+            row["wins" if gf > ga else "draws" if gf == ga else "losses"] += 1
+            row["goals_for"] += gf
+            row["goals_against"] += ga
+            row["shots"] += (stats.get("shots") or {}).get(own, 0)
+            row["completed_passes"] += stats.get(f"{prefix}completed_passes", 0)
+            row["attacking_third_entries"] += stats.get(f"{prefix}attacking_third_entries", 0)
+            row["fouls"] += sum((fouls.get(own) or {}).values())
+            if is_a and real_losses_by_match is not None and tag in real_losses_by_match:
+                row["matches_as_a"] += 1
+                row["real_losses_as_a"] += real_losses_by_match[tag]
+    return table
+
+
+def _print_strategy_table(table: dict[str, dict]) -> None:
+    print("\nSTRATEGIES (per match; losses = real ball losses, as config_a only):")
+    print(
+        f"  {'strategy':<32} {'W-D-L':>9} {'GF':>5} {'GA':>5} {'shots':>6} {'passes':>7} {'entries':>8} {'fouls':>6} {'losses':>7}"
+    )
+    for name, t in sorted(table.items(), key=lambda kv: (-kv[1]["wins"], -kv[1]["draws"])):
+        n = max(1, t["matches"])
+        losses = f"{t['real_losses_as_a'] / t['matches_as_a']:.1f}" if t["matches_as_a"] else "-"
+        print(
+            f"  {_short_name(name):<32} {t['wins']:>3}-{t['draws']}-{t['losses']:<3} {t['goals_for'] / n:>5.2f} "
+            f"{t['goals_against'] / n:>5.2f} {t['shots'] / n:>6.2f} {t['completed_passes'] / n:>7.1f} "
+            f"{t['attacking_third_entries'] / n:>8.1f} {t['fouls'] / n:>6.1f} {losses:>7}"
         )
 
 

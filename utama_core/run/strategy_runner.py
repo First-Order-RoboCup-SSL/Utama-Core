@@ -1542,7 +1542,9 @@ class StrategyRunner:
         if isinstance(self.referee, CustomReferee):
             ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
             if self.match_stats is not None:
-                self.match_stats.record_rule_violation(self.referee.last_violation)
+                self.match_stats.record_rule_violation(
+                    self.referee.last_violation, self.my.current_game_frame.my_team_is_yellow
+                )
             self.ref_buffer.append(ref_data)
             _BALL_PLACEMENT_COMMANDS = (
                 RefereeCommand.BALL_PLACEMENT_YELLOW,
