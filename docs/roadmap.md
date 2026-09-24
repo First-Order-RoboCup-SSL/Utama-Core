@@ -135,6 +135,26 @@ resolved, replace it with a one-line pointer under "Done".
     `PYTHONHASHSEED` (set/dict iteration order) and wall-clock-dependent code under machine
     load (load average was ~30).
 
+10b. **Ball-holding contract for every `Tactic`.** Most fouls fixed on 2026-09-24
+    (`ShadowAndMark`, `PressAndContain`, `DecoyAndOverload` lure, keeper) were one pattern: a
+    tactic written for its main job with no branch for "my robot now has the ball", so it held
+    or carried until `ExcessiveDribbling`/`KeeperHeldBall` fired or both teams froze on the
+    ball. Idea: one parametrized test over all tactics that puts the ball on each assigned
+    robot in a few standard spots and checks the tactic releases it. Decisions still open:
+    - *Depth:* single-tick check (first command is kick/pass, turn-to-kick, or a tracked
+      carry) vs a short kinematic rollout that proves release before the carry limit and the
+      keeper hold time. Leaning single-tick first; rollout only if something slips past.
+    - *What counts as a valid response per tactic:* pass vs clear vs carry, and who decides
+      (the tactic, or a shared default like `skills/src/kick_upfield.py`).
+    - *Where the guarantee lives:* per-tactic branches (current approach), or an engine-level
+      safety net that takes over a robot holding the ball too long — the latter is a new
+      kernel concept, so it needs a concrete case the per-tactic approach can't handle.
+    - *Setup for role-based tactics* (passer/receiver, committed slots): which robot gets the
+      ball, and in which phase.
+    - *Rule constants:* tactics currently copy limits (`CARRY_LIMIT_M = 0.8`) instead of
+      importing them from the referee rules; decide whether to share one source.
+    Expect each failing tactic to be a real fix with its own regression test.
+
 11. **Deferred, revisit only when forced** (minimalism):
     - Shared `Sticky`/hysteresis helper beyond `shared/tolerance.py` — existing instances
       differ in shape.
