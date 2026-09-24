@@ -43,11 +43,13 @@ from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
     ball_in_own_defense_area,
     ball_is_loose,
+    has_ball,
     own_defense_area_exit_point,
 )
 from utama_core.skills.src.defend_parameter import defend_parameter
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
+from utama_core.skills.src.kick_upfield import kick_upfield
 
 _LOOSE_BALL_CLAIM_RANGE = 1.5  # metres — matches ball_is_loose's own contest range
 
@@ -143,7 +145,13 @@ class ShadowAndMarkTactic(BaseTactic[ShadowAndMarkMem]):
 
         commands: dict[RobotId, RobotCommand] = {}
         for robot_id in shadow_ids:
-            if robot_id == retriever_id:
+            if has_ball(game, robot_id):
+                # `defend_parameter` holds both shadows on a line just outside our
+                # box with dribblers on, so a ball on that line got pinned between
+                # them, carried until `ExcessiveDribblingRule` fired (14 fouls in the
+                # 2026-09-24 round-robin). Whoever has it on the dribbler clears it.
+                commands[robot_id] = kick_upfield(game, ctx.motion_controller, robot_id)
+            elif robot_id == retriever_id:
                 if ball_in_own_defense_area(game):
                     commands[robot_id] = go_to_point(
                         game=game,
