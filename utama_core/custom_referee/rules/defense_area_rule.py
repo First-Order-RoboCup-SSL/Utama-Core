@@ -108,6 +108,7 @@ class DefenseAreaRule(BaseRule):
                         next_command=RefereeCommand.DIRECT_FREE_YELLOW,
                         status_message="Blue attacker in yellow defense area",
                         designated_position=placement,
+                        offending_robots=((False, r.id),),
                     )
 
         # --- Blue defense area --- (mirror of the yellow branch above; see
@@ -137,6 +138,7 @@ class DefenseAreaRule(BaseRule):
                         next_command=RefereeCommand.DIRECT_FREE_BLUE,
                         status_message="Yellow attacker in blue defense area",
                         designated_position=placement,
+                        offending_robots=((True, r.id),),
                     )
 
         return None

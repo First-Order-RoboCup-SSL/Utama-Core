@@ -171,7 +171,7 @@ class DoubleTouchRule(BaseRule):
         self._prev_command = None
 
     def _violation_for(self, kicker: RobotKey, game_frame: GameFrame, geometry: RefereeGeometry) -> RuleViolation:
-        kicker_is_friendly, _ = kicker
+        kicker_is_friendly, kicker_id = kicker
         my_team_is_yellow = game_frame.my_team_is_yellow
         if kicker_is_friendly:
             next_cmd = RefereeCommand.DIRECT_FREE_BLUE if my_team_is_yellow else RefereeCommand.DIRECT_FREE_YELLOW
@@ -197,4 +197,5 @@ class DoubleTouchRule(BaseRule):
             next_command=next_cmd,
             status_message="Double touch",
             designated_position=placement,
+            offending_robots=((kicker_is_friendly == my_team_is_yellow, kicker_id),),
         )

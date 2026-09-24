@@ -1,4 +1,4 @@
-from smoke_tournament import strategy_table
+from smoke_tournament import foul_table, strategy_table
 
 
 def _result(a: str, b: str, score_a: int, score_b: int) -> dict:
@@ -43,3 +43,32 @@ def test_strategy_table_reads_each_side_from_its_own_perspective():
 def test_strategy_table_without_replays_leaves_real_losses_empty():
     table = strategy_table([_result("x", "y", 1, 1)])
     assert table["build_x_kernel_strategy"]["matches_as_a"] == 0
+
+
+def test_foul_table_attributes_each_side_to_its_own_strategy():
+    """`side` is relative to config_a: an "enemy" foul belongs to config_b."""
+
+    def foul(rule, side, tactic, inferred=False):
+        return {"rule": rule, "side": side, "tactic": tactic, "inferred": inferred}
+
+    results = [
+        {
+            "config_a": "build_alpha_kernel_strategy",
+            "config_b": "build_beta_kernel_strategy",
+            "stats": {
+                "fouls": [
+                    foul("excessive_dribbling", "friendly", "lure"),
+                    foul("excessive_dribbling", "enemy", "mark"),
+                    foul("excessive_dribbling", "enemy", "mark"),
+                    foul("keeper_held_ball", "enemy", "goalkeeper", inferred=True),
+                ]
+            },
+        },
+        {"config_a": "build_beta_kernel_strategy", "config_b": "build_alpha_kernel_strategy", "stats": None},
+    ]
+
+    table = foul_table(results)
+
+    assert table["excessive_dribbling"] == {"total": 3, "inferred": 0, "by_tactic": {"beta/mark": 2, "alpha/lure": 1}}
+    assert table["keeper_held_ball"] == {"total": 1, "inferred": 1, "by_tactic": {"beta/goalkeeper": 1}}
+    assert list(table) == ["excessive_dribbling", "keeper_held_ball"]

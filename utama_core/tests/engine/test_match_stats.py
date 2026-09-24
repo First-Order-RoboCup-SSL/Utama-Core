@@ -720,3 +720,40 @@ def test_fouls_by_side_uses_offending_teams_or_the_restart_colour():
         "enemy": {"out_of_bounds": 1, "crashing": 1},
     }
     assert stats.rule_event_counts["double_touch"] == 2
+
+
+def test_foul_log_names_the_robot_and_its_tactic():
+    """We are yellow. A rule that names its robot is logged as-is; one that only knows
+    a team (keeper held ball) falls back to that side's robot nearest the ball."""
+    acc = MatchStatsAccumulator()
+    frame = _frame(
+        {0: _robot(0, 4.0, 0.0, True), 3: _robot(3, 1.0, 0.5, True)},
+        {2: _robot(2, 1.2, 0.5, False), 4: _robot(4, -2.0, 0.0, False)},
+        ball_xy=(1.1, 0.5),
+    )
+    tactics = {"friendly": {0: "goalkeeper", 3: "press"}, "enemy": {2: "attack", 4: "defend"}}
+    dribble = RuleViolation(
+        rule_name="excessive_dribbling",
+        suggested_command=RefereeCommand.STOP,
+        next_command=RefereeCommand.DIRECT_FREE_YELLOW,
+        status_message="",
+        offending_teams=(False,),
+        offending_robots=((False, 2),),
+    )
+    held = RuleViolation(
+        rule_name="keeper_held_ball",
+        suggested_command=RefereeCommand.STOP,
+        next_command=RefereeCommand.DIRECT_FREE_BLUE,
+        status_message="",
+        offending_teams=(True,),
+    )
+
+    acc.record_rule_violation(dribble, True, game_frame=frame, robot_tactics=tactics)
+    acc.record_rule_violation(held, True, game_frame=frame, robot_tactics=tactics)
+    acc.record_rule_violation(held, True)  # no frame: counted, not logged
+
+    fouls = [(f.rule, f.side, f.robot_id, f.tactic, f.inferred) for f in acc.finalize().fouls]
+    assert fouls == [
+        ("excessive_dribbling", "enemy", 2, "attack", False),
+        ("keeper_held_ball", "friendly", 3, "press", True),
+    ]

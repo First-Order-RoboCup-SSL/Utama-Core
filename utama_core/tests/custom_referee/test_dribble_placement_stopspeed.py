@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.excessive_dribbling_rule import (
@@ -145,6 +147,20 @@ class TestExcessiveDribblingRule:
         assert v.rule_name == "excessive_dribbling"
         assert v.next_command == RefereeCommand.DIRECT_FREE_BLUE
         assert v.offending_teams == (True,)
+
+    @pytest.mark.parametrize("we_are_yellow", [True, False])
+    def test_violation_names_the_dribbling_robot_by_colour(self, we_are_yellow):
+        """`offending_robots` feeds the MatchStats foul log: (is_yellow, id), not (is_friendly, id)."""
+        rule = ExcessiveDribblingRule(max_dribble_meters=1.0)
+        v = None
+        for x in [0.0, 0.5, 1.2]:
+            robot = _robot(3, x, 0.0, is_friendly=True, has_ball=True)
+            v = rule.check(
+                _frame(ball=_ball(x, 0.0), friendly_robots={3: robot}, my_team_is_yellow=we_are_yellow),
+                GEO,
+                RefereeCommand.NORMAL_START,
+            )
+        assert v.offending_robots == ((we_are_yellow, 3),)
 
     def test_designated_position_is_projected_clear_of_the_defense_area(self):
         """Regression, same class of bug as KeeperHeldBallRule above: a

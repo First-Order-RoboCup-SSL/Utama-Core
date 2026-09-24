@@ -96,6 +96,7 @@ def _stats_to_dict(stats) -> dict:
         }
         for e in stats.stall_events
     ]
+    d["fouls"] = [e.to_dict() for e in stats.fouls]
     return d
 
 

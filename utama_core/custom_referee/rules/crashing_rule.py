@@ -142,6 +142,10 @@ class CrashingRule(BaseRule):
                     next_command=None,
                     status_message="Crashing — matched closing speed, both teams at fault",
                     offending_teams=(True, False),
+                    offending_robots=(
+                        (my_team_is_yellow, contact.friendly.id),
+                        (not my_team_is_yellow, contact.enemy.id),
+                    ),
                     is_stopping=False,
                 )
             else:
@@ -153,6 +157,9 @@ class CrashingRule(BaseRule):
                     next_command=None,
                     status_message="Crashing foul",
                     offending_teams=(faster_is_yellow,),
+                    offending_robots=(
+                        (faster_is_yellow, contact.friendly.id if faster_is_friendly else contact.enemy.id),
+                    ),
                     is_stopping=False,
                 )
 

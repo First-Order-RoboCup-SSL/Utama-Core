@@ -1573,8 +1573,12 @@ class StrategyRunner:
         if isinstance(self.referee, CustomReferee):
             ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
             if self.match_stats is not None:
+                violation = self.referee.last_violation
                 self.match_stats.record_rule_violation(
-                    self.referee.last_violation, self.my.current_game_frame.my_team_is_yellow
+                    violation,
+                    self.my.current_game_frame.my_team_is_yellow,
+                    game_frame=self.my.current_game_frame if violation is not None else None,
+                    robot_tactics=self._robot_tactics() if violation is not None else None,
                 )
             self.ref_buffer.append(ref_data)
             _BALL_PLACEMENT_COMMANDS = (
@@ -2029,6 +2033,35 @@ class StrategyRunner:
         if not isinstance(self.referee, CustomReferee):
             return
         self.referee.set_debug_status(self.my.strategy.debug_status())
+
+    def _robot_tactics(self) -> dict[str, dict[int, str]]:
+        """`{"friendly"|"enemy": {robot_id: tactic}}` for `MatchStats`' foul log: the
+        tactic class of the slot holding each robot in live play, "goalkeeper" for the pinned keeper, and
+        "restart override" for outfield robots while `RefereeOverride` drives them.
+        Reads the command from before this tick's referee step (when the foul happened).
+        A side without a kernel strategy is omitted."""
+        live = self._prev_custom_ref_command in (RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START)
+        frame = self.my.current_game_frame
+        out: dict[str, dict[int, str]] = {}
+        for side_name, side, robots in (
+            ("friendly", self.my, frame.friendly_robots),
+            ("enemy", self.opp, frame.enemy_robots),
+        ):
+            kernel_strategy = getattr(getattr(side, "strategy", None), "_kernel_strategy", None)
+            if kernel_strategy is None:
+                continue
+            tactics = {rid: "restart override" for rid in robots}
+            if live:
+                tactics = {}
+                for tactic_id, robot_ids in kernel_strategy.active_partition.items():
+                    name = type(kernel_strategy._tactics[tactic_id]).__name__
+                    for rid in robot_ids:
+                        tactics[rid] = name
+            keeper_id = getattr(kernel_strategy, "_pinned_robot_id", None)
+            if keeper_id is not None:
+                tactics[keeper_id] = "goalkeeper"
+            out[side_name] = tactics
+        return out
 
     def _committed_tactics(self) -> Optional[dict]:
         """Currently-committed tactic slots as `{tactic_id: (robot_id, ...)}`,

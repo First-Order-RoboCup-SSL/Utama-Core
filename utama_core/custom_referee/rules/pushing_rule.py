@@ -165,6 +165,9 @@ class PushingRule(BaseRule):
                     status_message="Pushing foul",
                     designated_position=ball_pos,
                     offending_teams=(pusher_is_yellow,),
+                    offending_robots=(
+                        (pusher_is_yellow, contact.friendly.id if friendly_is_pusher else contact.enemy.id),
+                    ),
                 )
             break
 

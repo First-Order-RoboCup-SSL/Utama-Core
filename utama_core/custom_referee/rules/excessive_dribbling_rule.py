@@ -100,6 +100,7 @@ class ExcessiveDribblingRule(BaseRule):
                             bx, by, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
                         ),
                         offending_teams=(robot_is_yellow,),
+                        offending_robots=((robot_is_yellow, robot.id),),
                     )
                     # Close out this streak so it doesn't refire every tick
                     # while the robot continues carrying the ball past the

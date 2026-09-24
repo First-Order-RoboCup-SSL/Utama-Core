@@ -452,6 +452,8 @@ def main() -> None:
 
     summary["strategies"] = strategy_table(summary["results"], real_losses_by_match)
     _print_strategy_table(summary["strategies"])
+    summary["fouls"] = foul_table(summary["results"])
+    _print_foul_table(summary["fouls"])
     if run_dir is not None:
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
@@ -525,6 +527,34 @@ def strategy_table(results: list[dict], real_losses_by_match: Optional[dict[str,
                 row["matches_as_a"] += 1
                 row["real_losses_as_a"] += real_losses_by_match[tag]
     return table
+
+
+def foul_table(results: list[dict]) -> dict[str, dict]:
+    """Every logged foul (`MatchStats.fouls`, both sides) by rule, then by
+    "strategy/tactic" of the offending robot. `inferred` counts fouls whose rule only
+    named a team, attributed to that side's robot nearest the ball."""
+    table: dict[str, dict] = {}
+    for r in results:
+        for foul in (r.get("stats") or {}).get("fouls") or []:
+            strategy = _short_name(r["config_a"] if foul["side"] == "friendly" else r["config_b"])
+            row = table.setdefault(foul["rule"], {"total": 0, "inferred": 0, "by_tactic": {}})
+            row["total"] += 1
+            row["inferred"] += bool(foul["inferred"])
+            key = f"{strategy}/{foul['tactic'] or 'unknown'}"
+            row["by_tactic"][key] = row["by_tactic"].get(key, 0) + 1
+    for row in table.values():
+        row["by_tactic"] = dict(sorted(row["by_tactic"].items(), key=lambda kv: -kv[1]))
+    return dict(sorted(table.items(), key=lambda kv: -kv[1]["total"]))
+
+
+def _print_foul_table(table: dict[str, dict]) -> None:
+    if not table:
+        return
+    print("\nFOULS (both sides; top strategy/tactic of the offending robot; * = rule named only a team):")
+    for rule, row in table.items():
+        top = ", ".join(f"{k} {c}" for k, c in list(row["by_tactic"].items())[:4])
+        star = "*" if row["inferred"] else ""
+        print(f"  {rule + star:<30} {row['total']:>5}  {top}")
 
 
 def _print_strategy_table(table: dict[str, dict]) -> None:

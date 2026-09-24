@@ -132,6 +132,36 @@ class StallEvent:
     robot_ids: tuple = ()
 
 
+@dataclass
+class FoulEvent:
+    """One foul, for post-match attribution (which robot, which tactic, where).
+
+    `robot_id` is the robot the rule itself named (`RuleViolation.offending_robots`) or,
+    when the rule only knows a team (`inferred=True`), that side's robot nearest the
+    ball. `tactic` is the slot holding the robot at that moment ("goalkeeper", "restart
+    override" outside live play), or None when the caller can't see that side's strategy.
+    """
+
+    rule: str
+    sim_time: float
+    side: str  # "friendly" | "enemy"
+    robot_id: Optional[int]
+    tactic: Optional[str]
+    inferred: bool
+    ball_xy: Optional[tuple[float, float]]
+
+    def to_dict(self) -> dict:
+        return {
+            "rule": self.rule,
+            "sim_time": round(self.sim_time, 3),
+            "side": self.side,
+            "robot_id": self.robot_id,
+            "tactic": self.tactic,
+            "inferred": self.inferred,
+            "ball_xy": [round(v, 3) for v in self.ball_xy] if self.ball_xy is not None else None,
+        }
+
+
 def _offending_sides(violation: RuleViolation, my_team_is_yellow: bool) -> tuple[str, ...]:
     """ "friendly"/"enemy" for each team that committed `violation`. Uses `offending_teams`
     where the rule sets it; several rules (out of bounds, double touch, defense area, keep-out)
@@ -240,6 +270,7 @@ class MatchStats:
     n_restarts_with_entry: int = 0
     # `rule_event_counts` split by the side that committed it; see `_offending_sides`.
     fouls_by_side: Dict[str, Dict[str, int]] = field(default_factory=lambda: {"friendly": {}, "enemy": {}})
+    fouls: List[FoulEvent] = field(default_factory=list)
 
     def to_json(self, path: Union[str, Path]) -> None:
         with open(path, "w") as f:
@@ -266,6 +297,7 @@ class MatchStats:
                     "n_restarts": self.n_restarts,
                     "n_restarts_with_entry": self.n_restarts_with_entry,
                     "fouls_by_side": self.fouls_by_side,
+                    "fouls": [e.to_dict() for e in self.fouls],
                     "stall_events": [
                         {
                             "kind": e.kind,
@@ -335,6 +367,7 @@ class MatchStatsAccumulator:
 
     _rule_event_counts: Dict[str, int] = field(default_factory=dict)
     _fouls_by_side: Dict[str, Dict[str, int]] = field(default_factory=lambda: {"friendly": {}, "enemy": {}})
+    _fouls: List[FoulEvent] = field(default_factory=list)
     _possession_ticks: Dict[str, int] = field(default_factory=lambda: {"friendly": 0, "enemy": 0})
     _zone_ticks: Dict[int, Dict[str, int]] = field(default_factory=dict)
     _ticks_recorded: int = 0
@@ -443,15 +476,53 @@ class MatchStatsAccumulator:
     _no_progress_event_idx: Optional[int] = None
 
     def record_rule_violation(
-        self, violation: Optional[RuleViolation], my_team_is_yellow: Optional[bool] = None
+        self,
+        violation: Optional[RuleViolation],
+        my_team_is_yellow: Optional[bool] = None,
+        game_frame: Optional[GameFrame] = None,
+        robot_tactics: Optional[Dict[str, Dict[int, str]]] = None,
     ) -> None:
+        """`game_frame`/`robot_tactics` (`{"friendly"|"enemy": {robot_id: tactic}}`) are
+        optional; with them each foul is also logged as a `FoulEvent`."""
         if violation is None:
             return
         self._rule_event_counts[violation.rule_name] = self._rule_event_counts.get(violation.rule_name, 0) + 1
-        if my_team_is_yellow is not None:
-            for side in _offending_sides(violation, my_team_is_yellow):
-                counts = self._fouls_by_side[side]
-                counts[violation.rule_name] = counts.get(violation.rule_name, 0) + 1
+        if my_team_is_yellow is None:
+            return
+        for side in _offending_sides(violation, my_team_is_yellow):
+            counts = self._fouls_by_side[side]
+            counts[violation.rule_name] = counts.get(violation.rule_name, 0) + 1
+            if game_frame is not None:
+                self._log_foul(violation, side, my_team_is_yellow, game_frame, robot_tactics or {})
+
+    def _log_foul(
+        self,
+        violation: RuleViolation,
+        side: str,
+        my_team_is_yellow: bool,
+        game_frame: GameFrame,
+        robot_tactics: Dict[str, Dict[int, str]],
+    ) -> None:
+        side_is_yellow = (side == "friendly") == my_team_is_yellow
+        robot_ids = [rid for is_yellow, rid in violation.offending_robots if is_yellow == side_is_yellow]
+        ball = game_frame.ball
+        inferred = not robot_ids
+        if inferred:
+            robots = game_frame.friendly_robots if side == "friendly" else game_frame.enemy_robots
+            if ball is not None and robots:
+                robot_ids = [min(robots.values(), key=lambda r: math.hypot(r.p.x - ball.p.x, r.p.y - ball.p.y)).id]
+        for rid in robot_ids or [None]:
+            self._fouls.append(
+                FoulEvent(
+                    rule=violation.rule_name,
+                    sim_time=game_frame.ts,
+                    side=side,
+                    robot_id=rid,
+                    tactic=robot_tactics.get(side, {}).get(rid) if rid is not None else None,
+                    inferred=inferred,
+                    ball_xy=(ball.p.x, ball.p.y) if ball is not None else None,
+                )
+            )
 
     def record_tick(
         self,
@@ -993,4 +1064,5 @@ class MatchStatsAccumulator:
             n_restarts=self._n_restarts,
             n_restarts_with_entry=self._n_restarts_with_entry,
             fouls_by_side={side: dict(c) for side, c in self._fouls_by_side.items()},
+            fouls=list(self._fouls),
         )

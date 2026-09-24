@@ -40,6 +40,11 @@ class RuleViolation:
     required by the dataclass shape but is ignored by `_apply_violation`
     when `is_stopping` is False (pass the rule's own `current_command`
     through unused, or any placeholder — it is never read in that path).
+
+    `offending_robots`: `(is_yellow, robot_id)` for each robot the rule
+    itself identified as the offender. Reporting only (`MatchStats` foul
+    log); rules that only see a team or an area (keeper held ball, ball
+    speed, out of bounds, keep-out) leave it empty.
     """
 
     rule_name: str
@@ -48,6 +53,7 @@ class RuleViolation:
     status_message: str
     designated_position: Optional[tuple[float, float]] = None
     offending_teams: tuple[bool, ...] = ()
+    offending_robots: tuple[tuple[bool, int], ...] = ()
     counts_toward_foul_counter: bool = True
     is_stopping: bool = True
 
