@@ -70,7 +70,13 @@ resolved, replace it with a one-line pointer under "Done".
      flag; `--repeats K` jittered starts give the seed noise rsim's determinism hid (the
      screen's default pool was the champion itself, so every live scenario came out
      DETERMINED); `--against-results` compares against an earlier run's JSON, for A/B
-     across commits. **Not built:**
+     across commits. **Bank v1** (31 scenarios; local only, `utama_core/replay/banks/` is gitignored, so
+     rebuild with `--harvest-from` + `--dynamic-screen` + `--save-bank`): harvested
+     from `tournament_20260924_124033` (692 restart scenarios from 222 stall-free matches), a
+     stratified 72 screened (3 opponents x 3 jittered starts, 20s): 14 informative, 17 noisy
+     (kept), 22 determined, 19 dead (dropped; 16 of the 20 FORCE_START restarts were dead).
+     Seed noise and policy spread are about the same size (~0.1-0.25 ordinal units), so a
+     real difference needs many scenarios; read the stderr. **Not built:**
      harvesting from a real post-fix calibration run (only synthetic fixtures so far), the
      lost-play weakness subset, event-triggered open-play harvesting, bank versioning/lifecycle.
    - *Outer loop, slow half (ladder, acceptance gate):* candidate vs a frozen reference pool
