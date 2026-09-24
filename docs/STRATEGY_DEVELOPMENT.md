@@ -91,7 +91,9 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
   that had the ball; full tables in `ball_losses.md` in the run folder. The same run also prints
   a STRATEGIES table (per-match goals, shots, passes, entries, fouls committed, real losses) and
   records `summary.json["run"]` (git commit, dirty flag, argv) — compare runs only at a clean
-  commit. Start here when a
+  commit. A FOULS table (`summary.json["fouls"]`) attributes every foul, both sides, to the
+  strategy and tactic class of the offending robot (`MatchStats.fouls`; `*` marks rules that
+  only name a team, attributed to that side's robot nearest the ball). Start here when a
   strategy keeps giving the ball away. `python -m utama_core.replay.turnover_breakdown <run_dir>`
   re-runs it on an older run.
 - **Stall watchdog** (`engine/match_stats.py`) — records `StallEvent`s, never affects play:

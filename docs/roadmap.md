@@ -43,9 +43,13 @@ resolved, replace it with a one-line pointer under "Done".
      not only the planner. Unverified.
    - 4 `RESTART_STALL` at `DIRECT_FREE_*` (`give_and_go_solo`/`high_line_zone`,
      `high_line_zone`/`split_shape`, `split_shape`/`switch_of_play`, `three_slot`/`zone_fluid`).
-     Two causes fixed 2026-09-24 (single-match verified, not yet re-measured in a round-robin):
-     FPP detour subgoals inside the enemy box (`e168f45`) and the placement teleport landing
-     on a robot (`dd00ae1`).
+     Two causes fixed 2026-09-24: FPP detour subgoals inside the enemy box (`e168f45`) and the
+     placement teleport landing on a robot (`dd00ae1`).
+   - **Re-measured 2026-09-24 (`tournament_20260924_092119`, `09751b0`): 12/231.** 7
+     `RESTART_STALL` at `DIRECT_FREE_BLUE`, all one geometry: ball placed in our corner after
+     our keeper pushed it out, blue's kicker starting 0.19m from one of our robots parked at
+     the inflated box corner — inside FPP's 0.27m clearance, so no detour resolves (stalls with
+     or without `e168f45`). 5 `COMMITTED_FROZEN`, 4 in the `overload` slot. Not yet fixed.
    `trajsample` not re-measured. Confirm any stall fix against the full round-robin —
    small-subset re-runs have repeatedly overstated fixes.
 
