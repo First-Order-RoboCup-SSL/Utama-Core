@@ -28,18 +28,14 @@ from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.shared.pass_and_score_geometry import (
-    ball_in_own_defense_area,
-    has_ball,
-    oriented_towards,
-)
+from utama_core.shared.pass_and_score_geometry import ball_in_own_defense_area, has_ball
 from utama_core.skills.src.go_to_point import go_to_point
+from utama_core.skills.src.kick_upfield import kick_upfield
 from utama_core.skills.src.utils.defense_utils import (
     clamp_y,
     intersection_with_x_line,
     single_defender_stop_y,
 )
-from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
 
 # TODO: instead of checking number of friendly, should check roles
 
@@ -125,41 +121,19 @@ def goalkeep(
         )
 
     if _ball_needs_clearing(game, robot_id):
-        # Turn on the spot and kick square upfield (away from our own goal,
-        # along the field's long axis) — a minimal clearance. Not
-        # `ClearBallTactic`'s lane-scored clearance: that tactic is an
-        # outfield-robot slot with room to evaluate candidate landing lanes;
-        # the keeper's only job here is "don't leave the ball sitting dead in
-        # the box," so the simplest kick that gets it out and moving is
-        # enough. Kick from where the ball was picked up: dribbling it out to
-        # the box's front edge first carried it 1.0m from the goal line, an
-        # excessive-dribbling foul every time (34 in the 2026-09-23 round-robin).
-        keeper = game.friendly_robots[robot_id]
-        upfield_sign = -1.0 if game.my_team_is_right else 1.0
-        clear_target = Vector2D(keeper.p.x + upfield_sign * 2.0, keeper.p.y)
-        target_oren = keeper.p.angle_to(clear_target)
-        if oriented_towards(game, robot_id, target_oren):
-            if has_ball(game, robot_id):
-                return kick()
-            # Visually holding but the ball isn't on the kicker (`has_ball` without
-            # `visual` is the contact sensor): a kick here does nothing, and a keeper
-            # repeating it let the ball sit in the box until `KeeperHeldBallRule` fired.
-            # Close the last few cm onto the ball first.
-            return move(
-                game=game,
-                motion_controller=motion_controller,
-                robot_id=robot_id,
-                target_coords=game.ball.p.to_2d(),
-                target_oren=target_oren,
-                dribbling=True,
-            )
-        return turn_on_spot(
-            game=game,
-            motion_controller=motion_controller,
-            robot_id=robot_id,
-            target_oren=target_oren,
-            dribbling=True,
-        )
+        # Turn on the spot and kick square upfield (`kick_upfield`) from where
+        # the ball was picked up: dribbling it out to the box's front edge
+        # first carried it 1.0m from the goal line, an excessive-dribbling foul
+        # every time (34 in the 2026-09-23 round-robin).
+        if not has_ball(game, robot_id):
+            # Visually holding but the contact sensor (`has_ball` without `visual`)
+            # says the ball isn't on the dribbler: it is off to one side of the
+            # keeper's front. Kicking does nothing, and closing in while keeping
+            # the upfield heading only shoves the ball sideways — both let the ball
+            # creep in the box until `KeeperHeldBallRule` fired (5-6 per round-robin).
+            # Face the ball and take it onto the dribbler first, as retrieval does.
+            return go_to_point(game, motion_controller, robot_id, game.ball.p.to_2d(), dribbling=True)
+        return kick_upfield(game, motion_controller, robot_id)
 
     edge_offset = BALL_RADIUS + ROBOT_RADIUS
     goal_x = game.field.my_goal_line[0][0]

@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 import utama_core.skills.src.goalkeep as gk
+import utama_core.skills.src.kick_upfield as ku
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.skills.src.utils.defense_utils import (
@@ -532,7 +533,7 @@ def test_goalkeep_clears_retrieved_ball_without_dribbling_it_out(monkeypatch):
         captured["target_oren"] = target_oren
         return "sentinel-turn"
 
-    monkeypatch.setattr(gk, "turn_on_spot", fake_turn_on_spot)
+    monkeypatch.setattr(ku, "turn_on_spot", fake_turn_on_spot)
 
     result = gk.goalkeep(game, motion_controller=object(), robot_id=0)
 
@@ -555,35 +556,40 @@ def test_goalkeep_kicks_held_ball_once_oriented_upfield(monkeypatch):
         ball=SimpleNamespace(p=Vector3D(exit_x, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0)),
     )
 
-    monkeypatch.setattr(gk, "kick", lambda: "sentinel-kick")
+    monkeypatch.setattr(ku, "kick", lambda: "sentinel-kick")
 
     result = gk.goalkeep(game, motion_controller=object(), robot_id=0)
 
     assert result == "sentinel-kick"
 
 
-def test_goalkeep_closes_onto_ball_instead_of_kicking_air(monkeypatch):
-    """Visually holding (ball ~0.1m ahead) and facing upfield, but the contact
-    sensor (`has_ball`) says the ball isn't on the kicker: `kick()` would do
-    nothing, and repeating it left the ball in the box until
-    `KeeperHeldBallRule` fired (4 fouls in the 2026-09-23 re-run). Drive onto
-    the ball instead."""
+def test_goalkeep_takes_off_axis_ball_onto_dribbler_before_turning(monkeypatch):
+    """Visually holding (ball 0.11m away, 25 degrees off the keeper's heading)
+    but the contact sensor (`has_ball`) is off: kicking does nothing, and
+    closing in on the ball while holding the upfield heading only shoves it
+    sideways — the ball crept in the box until `KeeperHeldBallRule` fired
+    (5-6 per round-robin, traced in clear_danger_vs_press_and_pass t=52-62s).
+    The keeper must go onto the ball facing it (`go_to_point`), not kick,
+    turn or keep its heading."""
+    keeper_p = Vector2D(-4.2, 0.3)
+    ball_p = Vector2D(keeper_p.x + 0.11 * math.cos(math.radians(25)), keeper_p.y + 0.11 * math.sin(math.radians(25)))
     game = SimpleNamespace(
         my_team_is_right=False,
         field=_std_field(False),
-        friendly_robots={0: SimpleNamespace(p=Vector2D(-4.2, 0.3), orientation=0.0, has_ball=False)},
-        ball=SimpleNamespace(p=Vector3D(-4.1, 0.3, 0.0), v=Vector3D(0.0, 0.0, 0.0)),
+        friendly_robots={0: SimpleNamespace(p=keeper_p, orientation=0.0, has_ball=False)},
+        ball=SimpleNamespace(p=Vector3D(ball_p.x, ball_p.y, 0.0), v=Vector3D(0.0, 0.0, 0.0)),
     )
     captured = {}
 
-    def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+    def fake_go_to_point(game, motion_controller, robot_id, target_coords, dribbling=False):
         captured["target_coords"] = target_coords
-        return "sentinel-close-in"
+        return "sentinel-onto-ball"
 
-    monkeypatch.setattr(gk, "move", fake_move)
-    monkeypatch.setattr(gk, "kick", lambda: "sentinel-kick")
+    monkeypatch.setattr(gk, "go_to_point", fake_go_to_point)
+    monkeypatch.setattr(ku, "kick", lambda: "sentinel-kick")
+    monkeypatch.setattr(ku, "turn_on_spot", lambda **kw: "sentinel-turn")
 
     result = gk.goalkeep(game, motion_controller=object(), robot_id=0)
 
-    assert result == "sentinel-close-in"
-    assert captured["target_coords"].x == pytest.approx(-4.1)
+    assert result == "sentinel-onto-ball"
+    assert (captured["target_coords"].x, captured["target_coords"].y) == pytest.approx((ball_p.x, ball_p.y))
