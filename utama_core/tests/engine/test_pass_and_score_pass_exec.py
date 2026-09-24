@@ -13,6 +13,7 @@ default clearance).
 from __future__ import annotations
 
 import dataclasses
+import math
 
 import pytest
 
@@ -108,3 +109,30 @@ def test_lane_blocked_false_with_a_clear_lane(runner):
     _commands, _pass_complete, lane_blocked = _pass_exec(game, _ctx(runner), passer_id=1, receiver_id=2)
 
     assert lane_blocked is False
+
+
+def test_passer_aims_at_a_receiver_in_place_not_at_the_receive_point(runner):
+    """A receiver within `at_target`'s 0.08 m of the receive point stops moving, so a
+    pass aimed at the receive point reaches it off-centre: here 0.06 m to the side at
+    0.55 m, about 6 degrees, which strikes the side of the dribbler and deflects
+    (receptions from 10 to 20 degrees off caught 7% in tournament_20260924_092119).
+    The passer faces the receive point exactly and must still turn onto the receiver."""
+    game = runner.my.game
+    friendly = dict(game.current.friendly_robots)
+    enemy = dict(game.current.enemy_robots)
+
+    friendly[1] = dataclasses.replace(friendly[1], has_ball=True, p=Vector2D(0.0, 0.0), orientation=0.0)
+    # The receive point is (0.6, 0) (0.5 m minimum along the passer's heading, snapped);
+    # the receiver is 0.078 m from it, so it counts as in place.
+    friendly[2] = dataclasses.replace(friendly[2], has_ball=False, p=Vector2D(0.55, 0.06), orientation=math.pi)
+    enemy_ids = list(enemy.keys())[:2]
+    enemy[enemy_ids[0]] = dataclasses.replace(enemy[enemy_ids[0]], p=Vector2D(1.0, 3.0))
+    enemy[enemy_ids[1]] = dataclasses.replace(enemy[enemy_ids[1]], p=Vector2D(1.0, -3.0))
+
+    _with_frame(game, friendly, enemy, ball_xy=(0.09, 0.0))
+    game = runner.my.game
+
+    commands, _pass_complete, _lane_blocked = _pass_exec(game, _ctx(runner), passer_id=1, receiver_id=2)
+
+    assert not commands[1].kick
+    assert commands[1].angular_vel > 0.0  # turning left, toward the receiver at +y

@@ -273,7 +273,14 @@ def _pass_exec(
         round(intercept_pos.y / _INTERCEPT_SNAP_M) * _INTERCEPT_SNAP_M,
     )
 
-    passer_target_oren = game.friendly_robots[passer_id].p.angle_to(intercept_pos)
+    # Once the receiver is in place, aim at the receiver itself, not the receive point
+    # it only has to be within 0.08m of: at a 0.45m pass that offset is a 10 degree
+    # miss, the ball strikes the side of the dribbler and deflects. Receivers facing
+    # within 10 degrees of the incoming ball caught 95% of passes that reached them,
+    # 10-20 degrees 7% (tournament_20260924_092119, turnover_breakdown receptions).
+    receiver_pos = game.friendly_robots[receiver_id].p
+    aim_point = receiver_pos if at_target(game, receiver_id, intercept_pos) else intercept_pos
+    passer_target_oren = game.friendly_robots[passer_id].p.angle_to(aim_point)
     passer_aimed = oriented_towards(game, passer_id, passer_target_oren)
     # visual=True: see run_setup_phase's comment — the strict sensor can
     # stay False while the robot is visually on the ball, which would
