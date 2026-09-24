@@ -88,8 +88,12 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 - **Ball losses** (`replay/turnover_breakdown.py`) — after every saved tournament run, a
   BALL LOSSES section and `summary.json["ball_losses"]`: real losses (raw `MatchStats.turnovers`
   minus nearest-robot flicker and stoppage handovers), by kind, by foul rule, and by the tactic
-  that had the ball; full tables in `ball_losses.md` in the run folder. The same run also prints
-  a STRATEGIES table (per-match goals, shots, passes, entries, fouls committed, real losses) and
+  that had the ball; full tables in `ball_losses.md` in the run folder. It also follows every
+  friendly pass to `received` / `missed_reception` (came within reach of a teammate, no contact)
+  / `intercepted` / `off_target`, with the catch rate by how far the receiver faced off the
+  incoming ball (`ball_losses["receptions"]`; the facing is usually the reason). The same run also prints
+  a STRATEGIES table (per-match goals, shots, passes, entries, fouls committed, real losses,
+  and `stalled`: matches with a stall event, kept in W-D-L but flagged) and
   records `summary.json["run"]` (git commit, dirty flag, argv) — compare runs only at a clean
   commit. A FOULS table (`summary.json["fouls"]`) attributes every foul, both sides, to the
   strategy and tactic class of the offending robot (`MatchStats.fouls`; `*` marks rules that

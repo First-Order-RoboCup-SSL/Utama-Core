@@ -21,6 +21,11 @@ Two kinds of loss are reported:
    restart went to the opponent: ball out of bounds, or a foul. The state machine never
    counts these as turnovers.
 
+It also follows every friendly pass to its outcome (`PASS_OUTCOMES`): received on a
+teammate's dribbler, or missed although the ball came within reach of a teammate, with the
+ball speed, receiver speed and receiver facing at the closest point — the three usual reasons
+a reception fails.
+
 Friendly is always `config_a` (yellow): `tournament_lib.run_match` writes the intentions log,
 used for tactic attribution, for that side only.
 """
@@ -37,6 +42,7 @@ from pathlib import Path
 from typing import Optional
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.engine.match_stats import _POSSESSION_RADIUS_M, MatchStatsAccumulator
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.replay_player import load_frames_in_range
@@ -57,6 +63,21 @@ _JUST_RESTARTED_S = 3.0
 # A turnover we win back this fast is almost always the nearest-robot flipping between two
 # robots pressed on the same ball, not a real loss of possession.
 _FLICKER_S = 1.0
+
+# A friendly release at least this fast, not goalward, in live play, is followed as a pass.
+_PASS_MIN_MPS = 1.5
+# The ball passing this close to a teammate's centre was within reach of its dribbler.
+_REACH_M = ROBOT_RADIUS + BALL_RADIUS + 0.08
+_PASS_WINDOW_S = 3.0
+
+_FACING_BUCKETS = [("<10deg", 0.0, 10.0), ("10-20deg", 10.0, 20.0), ("20-45deg", 20.0, 45.0), (">=45deg", 45.0, 181.0)]
+
+PASS_OUTCOMES = {
+    "received": "a teammate got dribbler contact",
+    "missed_reception": "came within reach of a teammate, no contact, then lost/out/loose",
+    "intercepted": "an opponent took it before it came within reach of a teammate",
+    "off_target": "never came within reach of a teammate; went out or rolled loose",
+}
 
 TURNOVER_KINDS = {
     "pass_intercepted": "released at speed, not goalward; opponent controlled it next",
@@ -115,6 +136,65 @@ class _TacticTimeline:
         return "unassigned"
 
 
+def _facing_off_deg(robot, ball) -> Optional[float]:
+    """Degrees between where `robot` faces and the direction the ball is coming from
+    (against its velocity): 0 = squarely facing the incoming ball. None if it isn't moving."""
+    if math.hypot(ball.v.x, ball.v.y) < 0.2:
+        return None
+    incoming = math.atan2(-ball.v.y, -ball.v.x)
+    diff = incoming - robot.orientation
+    return abs(math.degrees(math.atan2(math.sin(diff), math.cos(diff))))
+
+
+class _PassTracker:
+    """Follows one friendly pass from release to outcome (see `PASS_OUTCOMES`)."""
+
+    def __init__(self, t: float, passer: int, tactic: str, release_xy: tuple[float, float]):
+        self.t, self.passer, self.tactic, self.release_xy = t, passer, tactic, release_xy
+        self.closest: Optional[dict] = None  # nearest approach to any teammate
+
+    def step(self, frame, live: bool, enemy_has_it: bool) -> Optional[dict]:
+        """Update with one frame; the finished pass record once resolved, else None."""
+        ball = frame.ball
+        if ball is None or not live:
+            return self._done("stopped")
+        for rid, robot in frame.friendly_robots.items():
+            if rid == self.passer:
+                continue
+            d = math.hypot(robot.p.x - ball.p.x, robot.p.y - ball.p.y)
+            if self.closest is None or d < self.closest["distance_m"]:
+                v = robot.v
+                self.closest = {
+                    "receiver": rid,
+                    "distance_m": d,
+                    "ball_speed": math.hypot(ball.v.x, ball.v.y),
+                    "receiver_speed": math.hypot(v.x, v.y) if v is not None else None,
+                    "facing_off_deg": _facing_off_deg(robot, ball),
+                    "pass_length_m": math.hypot(robot.p.x - self.release_xy[0], robot.p.y - self.release_xy[1]),
+                }
+        if any(r.has_ball for rid, r in frame.friendly_robots.items() if rid != self.passer):
+            return self._done("received")
+        if frame.friendly_robots.get(self.passer) is not None and frame.friendly_robots[self.passer].has_ball:
+            return self._done("passer_kept")
+        if enemy_has_it:
+            return self._done("lost")
+        if frame.ts - self.t > _PASS_WINDOW_S:
+            return self._done("loose")
+        return None
+
+    def _done(self, how: str) -> Optional[dict]:
+        if how == "passer_kept":
+            return {"outcome": None}
+        reached = self.closest is not None and self.closest["distance_m"] <= _REACH_M
+        if how == "received":
+            outcome = "received"
+        elif reached:
+            outcome = "missed_reception"
+        else:
+            outcome = "intercepted" if how == "lost" else "off_target"
+        return {"outcome": outcome, "t": self.t, "tactic": self.tactic, **(self.closest or {})}
+
+
 def analyse_match(npz_path: str) -> dict:
     """Classify every friendly ball loss in one replay. Returns plain dicts (picklable)."""
     path = Path(npz_path)
@@ -125,6 +205,8 @@ def analyse_match(npz_path: str) -> dict:
 
     turnovers: list[dict] = []
     restarts: list[dict] = []
+    passes: list[dict] = []
+    in_flight: Optional[_PassTracker] = None
     release: Optional[dict] = None  # our last speed release of the ball
     live_since = -math.inf
     prev_cmd = None
@@ -187,6 +269,13 @@ def analyse_match(npz_path: str) -> dict:
         prev_side, prev_robot = acc._poss_side, acc._poss_robot_id
         prev_turnovers = acc._turnovers
         acc.record_tick(frame)
+        if in_flight is not None:
+            enemy_has_it = acc._poss_side == "enemy" or any(r.has_ball for r in frame.enemy_robots.values())
+            finished = in_flight.step(frame, cmd in _LIVE, enemy_has_it)
+            if finished is not None:
+                if finished["outcome"] is not None:
+                    passes.append(finished)
+                in_flight = None
         if acc._poss_side == "friendly":
             for t in unresolved:
                 t["regained_after_s"] = frame.ts - t["t"]
@@ -201,6 +290,8 @@ def analyse_match(npz_path: str) -> dict:
                 "tactic": who(prev_robot, frame.ts, cmd),
                 "just_restarted": frame.ts - live_since <= _JUST_RESTARTED_S,
             }
+            if cmd in _LIVE and not release["goalward"] and math.hypot(v.x, v.y) >= _PASS_MIN_MPS:
+                in_flight = _PassTracker(frame.ts, prev_robot, release["tactic"], (frame.ball.p.x, frame.ball.p.y))
 
         if acc._turnovers > prev_turnovers:
             if cmd not in _LIVE:
@@ -220,7 +311,13 @@ def analyse_match(npz_path: str) -> dict:
 
         prev_cmd = cmd
 
-    return {"match": stem, "turnovers": turnovers, "restarts": restarts, "acc_turnovers": acc._turnovers}
+    return {
+        "match": stem,
+        "turnovers": turnovers,
+        "restarts": restarts,
+        "passes": passes,
+        "acc_turnovers": acc._turnovers,
+    }
 
 
 def _table(rows: list[list], header: list[str]) -> str:
@@ -266,6 +363,55 @@ def breakdown(results: list[dict]) -> dict:
         "by_kind": counts("kind", losses),
         "fouls_by_rule": counts("rule", [x for x in rss if x["kind"] == "foul"]),
         "by_tactic": counts("tactic", losses),
+        "receptions": receptions(results),
+    }
+
+
+def _median(values: list[float]) -> Optional[float]:
+    values = sorted(v for v in values if v is not None)
+    if not values:
+        return None
+    mid = len(values) // 2
+    return round(values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2, 2)
+
+
+def receptions(results: list[dict]) -> dict:
+    """Pass outcomes over a run, and for missed receptions the conditions at the closest
+    approach: ball too fast, receiver still moving, or receiver not facing the ball."""
+    passes = [p for r in results for p in r.get("passes", [])]
+    by_tactic_outcome: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    for p in passes:
+        by_tactic_outcome[p["tactic"]][p["outcome"]] += 1
+    missed = [p for p in passes if p["outcome"] == "missed_reception"]
+    reachable = [p for p in passes if p["outcome"] in ("received", "missed_reception")]
+    by_facing: dict[str, list[int]] = {}
+    for label, lo, hi in _FACING_BUCKETS:
+        bucket = [p for p in reachable if p.get("facing_off_deg") is not None and lo <= p["facing_off_deg"] < hi]
+        by_facing[label] = [sum(1 for p in bucket if p["outcome"] == "received"), len(bucket)]
+
+    def share(pred) -> Optional[float]:
+        return round(sum(1 for p in missed if pred(p)) / len(missed), 2) if missed else None
+
+    return {
+        "passes": len(passes),
+        "by_outcome": dict(collections.Counter(p["outcome"] for p in passes).most_common()),
+        "by_tactic": {t: dict(c) for t, c in sorted(by_tactic_outcome.items(), key=lambda kv: -sum(kv[1].values()))},
+        "catch_rate": (
+            round(sum(1 for p in reachable if p["outcome"] == "received") / len(reachable), 2) if reachable else None
+        ),
+        # [received, reachable] by how far the receiver faced off the incoming ball
+        "received_by_facing": by_facing,
+        "missed": {
+            "count": len(missed),
+            "median_ball_speed": _median([p["ball_speed"] for p in missed]),
+            "median_receiver_speed": _median([p["receiver_speed"] for p in missed]),
+            "median_facing_off_deg": _median([p["facing_off_deg"] for p in missed]),
+            "share_ball_over_3mps": share(lambda p: p["ball_speed"] > 3.0),
+            "share_receiver_moving": share(lambda p: (p["receiver_speed"] or 0.0) > 0.5),
+            "median_miss_distance_m": _median([p["distance_m"] for p in missed]),
+            "share_facing_off_over_30deg": share(lambda p: (p["facing_off_deg"] or 0.0) > 30.0),
+            "by_tactic": dict(collections.Counter(p["tactic"] for p in missed).most_common()),
+        },
     }
 
 
@@ -381,7 +527,47 @@ def report(run_name: str, results: list[dict], summary: dict) -> str:
         "`unassigned` = no tactic slot held the robot at that moment.",
         "",
     ]
+    lines += _receptions_report(receptions(results))
     return "\n".join(lines)
+
+
+def _receptions_report(rec: dict) -> list[str]:
+    if not rec["passes"]:
+        return []
+    m = rec["missed"]
+    outcomes = list(PASS_OUTCOMES)
+    return [
+        "## Pass receptions",
+        "",
+        f"{rec['passes']} friendly passes followed from release (live play, not goalward, "
+        f">= {_PASS_MIN_MPS} m/s). Of those that came within reach of a teammate, "
+        f"**{rec['catch_rate'] or 0:.0%} were received**.",
+        "",
+        _table(
+            [[f"`{k}`", rec["by_outcome"].get(k, 0), PASS_OUTCOMES[k]] for k in outcomes], ["outcome", "n", "meaning"]
+        ),
+        "",
+        _table(
+            [[f"`{t}`"] + [c.get(k, 0) for k in outcomes] for t, c in rec["by_tactic"].items()],
+            ["passing tactic"] + [f"`{k}`" for k in outcomes],
+        ),
+        "",
+        "Received / reachable, by how far the receiver faced off the incoming ball at the closest point:",
+        "",
+        _table(
+            [
+                [label, f"{got}/{n}", f"{got / n:.0%}" if n else "-"]
+                for label, (got, n) in rec["received_by_facing"].items()
+            ],
+            ["facing off", "received", "rate"],
+        ),
+        "",
+        f"Missed receptions ({m['count']}), at the closest approach: median ball speed {m['median_ball_speed']} m/s "
+        f"({m['share_ball_over_3mps']} over 3 m/s), median receiver speed {m['median_receiver_speed']} m/s "
+        f"({m['share_receiver_moving']} moving over 0.5 m/s), median facing off {m['median_facing_off_deg']} deg "
+        f"({m['share_facing_off_over_30deg']} over 30 deg), median miss distance {m['median_miss_distance_m']} m.",
+        "",
+    ]
 
 
 def main() -> None:

@@ -490,7 +490,9 @@ def strategy_table(results: list[dict], real_losses_by_match: Optional[dict[str,
     """Per-strategy totals over `summary.json`-shaped `results`. Match stats are from
     config_a's side, so config_b reads the `enemy_*` counterparts. Real ball losses are only
     measured for config_a (the side with an intentions log), so they are totalled over the
-    matches a strategy played as config_a (`matches_as_a`)."""
+    matches a strategy played as config_a (`matches_as_a`). `stalled` counts matches that
+    recorded a stall event or tripped the possession backstop: their result is still in
+    W-D-L, flagged rather than dropped, since a stall can be the strategy's own fault."""
     table: dict[str, dict] = {}
     for r in results:
         stats = r.get("stats") or {}
@@ -510,6 +512,7 @@ def strategy_table(results: list[dict], real_losses_by_match: Optional[dict[str,
                     "completed_passes": 0,
                     "attacking_third_entries": 0,
                     "fouls": 0,
+                    "stalled": 0,
                     "matches_as_a": 0,
                     "real_losses_as_a": 0,
                 },
@@ -524,6 +527,7 @@ def strategy_table(results: list[dict], real_losses_by_match: Optional[dict[str,
             row["completed_passes"] += stats.get(f"{prefix}completed_passes", 0)
             row["attacking_third_entries"] += stats.get(f"{prefix}attacking_third_entries", 0)
             row["fouls"] += sum((fouls.get(own) or {}).values())
+            row["stalled"] += bool(stats.get("stall_events") or r.get("possession_backstop"))
             if is_a and real_losses_by_match is not None and tag in real_losses_by_match:
                 row["matches_as_a"] += 1
                 row["real_losses_as_a"] += real_losses_by_match[tag]
@@ -561,7 +565,7 @@ def _print_foul_table(table: dict[str, dict]) -> None:
 def _print_strategy_table(table: dict[str, dict]) -> None:
     print("\nSTRATEGIES (per match; losses = real ball losses, as config_a only):")
     print(
-        f"  {'strategy':<32} {'W-D-L':>9} {'GF':>5} {'GA':>5} {'shots':>6} {'passes':>7} {'entries':>8} {'fouls':>6} {'losses':>7}"
+        f"  {'strategy':<32} {'W-D-L':>9} {'GF':>5} {'GA':>5} {'shots':>6} {'passes':>7} {'entries':>8} {'fouls':>6} {'losses':>7} {'stalled':>8}"
     )
     for name, t in sorted(table.items(), key=lambda kv: (-kv[1]["wins"], -kv[1]["draws"])):
         n = max(1, t["matches"])
@@ -569,7 +573,7 @@ def _print_strategy_table(table: dict[str, dict]) -> None:
         print(
             f"  {_short_name(name):<32} {t['wins']:>3}-{t['draws']}-{t['losses']:<3} {t['goals_for'] / n:>5.2f} "
             f"{t['goals_against'] / n:>5.2f} {t['shots'] / n:>6.2f} {t['completed_passes'] / n:>7.1f} "
-            f"{t['attacking_third_entries'] / n:>8.1f} {t['fouls'] / n:>6.1f} {losses:>7}"
+            f"{t['attacking_third_entries'] / n:>8.1f} {t['fouls'] / n:>6.1f} {losses:>7} {t['stalled']:>8}"
         )
 
 
@@ -584,6 +588,12 @@ def _print_ball_losses(b: dict, run_id: str) -> None:
     print(f"  by kind:   {top(b['by_kind'])}")
     print(f"  fouls:     {top(b['fouls_by_rule'])}")
     print(f"  by tactic: {top(b['by_tactic'])}")
+    rec = b.get("receptions")
+    if rec and rec["passes"]:
+        print(
+            f"  passes:    {top(rec['by_outcome'])}; {rec['catch_rate'] or 0:.0%} of reachable caught, "
+            f"missed median facing off {rec['missed']['median_facing_off_deg']} deg"
+        )
     print(f"  full breakdown: replays/{run_id}/ball_losses.md")
 
 

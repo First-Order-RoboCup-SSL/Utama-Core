@@ -40,6 +40,22 @@ def test_strategy_table_reads_each_side_from_its_own_perspective():
     assert (y["matches_as_a"], y["real_losses_as_a"]) == (1, 6)
 
 
+def test_strategy_table_counts_stalled_matches_for_both_sides():
+    """A stalled match stays in W-D-L and is counted as `stalled` for both strategies;
+    so is one only the possession backstop caught."""
+    stalled = _result("x", "y", 1, 0)
+    stalled["stats"]["stall_events"] = [{"kind": "RESTART_STALL"}]
+    backstop = _result("x", "z", 0, 0)
+    backstop["possession_backstop"] = True
+
+    table = strategy_table([stalled, backstop, _result("y", "z", 2, 0)])
+
+    assert table["build_x_kernel_strategy"]["stalled"] == 2
+    assert table["build_x_kernel_strategy"]["wins"] == 1
+    assert table["build_y_kernel_strategy"]["stalled"] == 1
+    assert table["build_z_kernel_strategy"]["stalled"] == 1
+
+
 def test_strategy_table_without_replays_leaves_real_losses_empty():
     table = strategy_table([_result("x", "y", 1, 1)])
     assert table["build_x_kernel_strategy"]["matches_as_a"] == 0
