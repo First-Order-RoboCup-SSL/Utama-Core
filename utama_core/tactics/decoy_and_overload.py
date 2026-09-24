@@ -62,6 +62,8 @@ from utama_core.entities.data.object import ObjectType, TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
+    carry_exhausted,
+    carry_origin,
     clamp_outside_enemy_defense_area,
     enemy_goal_line,
     enemy_positions,
@@ -212,6 +214,7 @@ class DecoyOverloadMem:
     waiting_on_teammate_ticks: int = 0
     goal_scored: bool = False
     prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _pass_and_score.py
+    carry_origin: Optional[Vector2D] = None  # see shared carry_origin; the lure ends before an excessive-dribbling foul
 
 
 def _support_hold_point(game: Game, robot_id: int, index: int) -> Vector2D:
@@ -400,7 +403,12 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
             # teammate elsewhere already had/was passing it -- has nothing
             # to hand off; keep holding instead of transitioning into a
             # phase that assumes otherwise.
-            if (dragged or mem.lure_ticks >= _LURE_MAX_TICKS) and has_ball(game, mem.decoy_id):
+            # The lure dribbles toward the touchline until the marker follows;
+            # without a carry cap it ran past 1.0m (41 excessive-dribbling
+            # fouls in the 2026-09-23 round-robin, many straight off kickoff).
+            mem.carry_origin = carry_origin(game, mem.decoy_id, mem.carry_origin)
+            carried_enough = carry_exhausted(game, mem.carry_origin)
+            if (dragged or carried_enough or mem.lure_ticks >= _LURE_MAX_TICKS) and has_ball(game, mem.decoy_id):
                 mem.phase = "finish"
 
             return commands, mem

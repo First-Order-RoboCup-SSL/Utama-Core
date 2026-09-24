@@ -47,6 +47,8 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
     ball_in_own_defense_area,
+    carry_exhausted,
+    carry_origin,
     clamp_outside_enemy_defense_area,
     clamp_outside_own_defense_area,
     enemy_goal_line,
@@ -265,6 +267,7 @@ class GiveAndGoMem:
     ticks_held: int = 0  # ticks since the current carrier was assigned; feeds suggest_next's timeout below
     hop_ticks: int = 0  # ticks since receiver_id was locked for the current hop; feeds _MAX_HOP_TICKS below
     lane_blocked_ticks: int = 0  # consecutive ticks _pass_exec reported the lane blocked; feeds early hop abandon
+    carry_origin: Optional[Vector2D] = None  # see shared carry_origin; caps the no-lane strafe
 
 
 class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
@@ -347,6 +350,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         carrier_id = mem.carrier_id
         commands: dict[RobotId, RobotCommand] = {}
         carrier_has_ball = has_ball(game, carrier_id)
+        mem.carry_origin = carry_origin(game, carrier_id, mem.carry_origin)
 
         if ctx.match_log is not None:
             ctx.match_log.trace_if_changed(
@@ -495,6 +499,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 self._relocate_others(game, ctx, robot_ids, carrier_id, commands, also_exclude=mem.receiver_id)
                 if pass_complete:
                     mem.carrier_id, mem.receiver_id = mem.receiver_id, None
+                    mem.carry_origin = None
                     mem.hop_count += 1
                     mem.hop_ticks = 0
                     mem.lane_blocked_ticks = 0
@@ -518,7 +523,14 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 },
             )
 
-        if best_shot_y is None or (first_touch_stuck and not force_shot):
+        # The strafe below carries the ball sideways with no end of its own;
+        # past 1.0m that is an excessive-dribbling foul (51 in the 2026-09-23
+        # round-robin). Once the carry is spent, shoot at the goal centre
+        # instead: a blocked shot keeps the ball live, a foul hands it over.
+        carry_spent = carry_exhausted(game, mem.carry_origin)
+        if carry_spent and best_shot_y is None:
+            best_shot_y = (goal_y1 + goal_y2) / 2.0
+        if not carry_spent and (best_shot_y is None or (first_touch_stuck and not force_shot)):
             # No open lane at all — freezing here (the old behaviour) never
             # resolves against a stationary blocker (e.g. a keeper at the
             # goal mouth): nothing about the position changes, so the shot

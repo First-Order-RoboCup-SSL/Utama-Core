@@ -194,6 +194,28 @@ def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: 
     return result
 
 
+# `ExcessiveDribblingRule` fouls a carry of more than 1.0m; the margin covers
+# the ball swinging round the dribbler while the carrier turns to kick.
+CARRY_LIMIT_M = 0.8
+
+
+def carry_origin(game: Game, robot_id: int, prev_origin: Optional[Vector2D]) -> Optional[Vector2D]:
+    """Where `robot_id`'s current dribble began: the ball position when
+    `robot.has_ball` last went True, the same signal and point
+    `ExcessiveDribblingRule` measures from. None while not holding the ball.
+    Call once per tick with the previous return value."""
+    robot = game.friendly_robots.get(robot_id)
+    if robot is None or not robot.has_ball or game.ball is None:
+        return None
+    return prev_origin if prev_origin is not None else game.ball.p.to_2d()
+
+
+def carry_exhausted(game: Game, origin: Optional[Vector2D]) -> bool:
+    """True once the ball is `CARRY_LIMIT_M` from `origin` (see `carry_origin`):
+    carrying further risks an excessive-dribbling foul, so release the ball."""
+    return origin is not None and game.ball is not None and game.ball.p.to_2d().distance_to(origin) >= CARRY_LIMIT_M
+
+
 def at_target(game: Game, robot_id: int, target: Vector2D, tolerance: float = 0.08) -> bool:
     robot = game.friendly_robots[robot_id]
     return robot.p.distance_to(target) <= tolerance

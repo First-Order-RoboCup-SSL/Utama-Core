@@ -25,6 +25,10 @@ alongside it.
 
 from __future__ import annotations
 
+import math
+
+import pytest
+
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.engine.context import TickContext
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -195,3 +199,58 @@ class _NullMotionController(MotionController):
 
     def calculate(self, game, robot_id, target_pos, target_oren):
         return Vector2D(0.0, 0.0), 0.0
+
+
+# ---------------------------------------------------------------------------
+# Lure carry cap
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("carried", "expected_phase"), [(0.79, "lure"), (0.80, "finish")])
+def test_lure_ends_once_the_decoy_has_carried_the_ball_0_8m(carried, expected_phase):
+    """The lure dribbles toward the touchline until the marker follows. With no
+    marker dragged and the lure timeout far off, the only thing that can end
+    it is the carry cap: at `CARRY_LIMIT_M` (0.8m) from where the dribble
+    began, hand over to "finish" (shoot/pass) before `ExcessiveDribblingRule`'s
+    1.0m. Without the cap the decoy carried on past 1.0m — 41 fouls in the
+    2026-09-23 round-robin."""
+    ball_pos = Vector2D(-0.09, 0.0)  # at the decoy's dribbler, which faces -x
+    friendly = {
+        1: Robot(
+            id=1,
+            is_friendly=True,
+            has_ball=True,
+            p=Vector2D(0.0, 0.0),
+            v=Vector2D(0, 0),
+            a=Vector2D(0, 0),
+            orientation=math.pi,
+        ),
+        3: _robot(3, -1.5, 1.5, True),
+    }
+    zv = Vector3D(0, 0, 0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots=friendly,
+        enemy_robots={},
+        ball=Ball(p=Vector3D(ball_pos.x, ball_pos.y, 0.0), v=zv, a=zv),
+    )
+    field = Field(
+        my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+    )
+    game = Game(past=GameHistory(max_history=20), current=frame, field=field)
+    mem = DecoyOverloadMem(
+        decoy_id=1,
+        overloader_id=3,
+        marker_id=None,
+        marker_start_y=0.0,
+        phase="lure",
+        carry_origin=Vector2D(ball_pos.x + carried, ball_pos.y),
+    )
+
+    _commands, new_mem = DecoyOverloadTactic().tick(
+        game, TickContext(motion_controller=_NullMotionController()), (1, 3), mem
+    )
+
+    assert new_mem.phase == expected_phase

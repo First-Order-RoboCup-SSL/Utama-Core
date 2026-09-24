@@ -649,3 +649,29 @@ def test_score_pass_setup_prefers_a_longer_goal_advancing_pass_over_a_short_one(
     assert short_pass is not None
     assert long_pass is not None
     assert long_pass.score > short_pass.score
+
+
+def test_carry_origin_starts_at_pickup_and_clears_when_the_ball_is_dropped():
+    from types import SimpleNamespace
+
+    from utama_core.entities.data.vector import Vector3D
+    from utama_core.shared.pass_and_score_geometry import (
+        CARRY_LIMIT_M,
+        carry_exhausted,
+        carry_origin,
+    )
+
+    robot = SimpleNamespace(has_ball=True)
+    game = SimpleNamespace(friendly_robots={1: robot}, ball=SimpleNamespace(p=Vector3D(1.0, 0.0, 0.0)))
+
+    origin = carry_origin(game, 1, None)
+    assert (origin.x, origin.y) == (1.0, 0.0)
+    game.ball.p = Vector3D(1.0, CARRY_LIMIT_M - 0.01, 0.0)
+    assert carry_origin(game, 1, origin) is origin  # held: origin stays where the dribble began
+    assert not carry_exhausted(game, origin)
+    game.ball.p = Vector3D(1.0, CARRY_LIMIT_M, 0.0)
+    assert carry_exhausted(game, origin)
+
+    robot.has_ball = False
+    assert carry_origin(game, 1, origin) is None
+    assert not carry_exhausted(game, None)

@@ -25,6 +25,8 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+import pytest
+
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.engine.context import TickContext
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -33,6 +35,7 @@ from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.shared.pass_and_score_geometry import find_best_shot
 from utama_core.tactics.give_and_go import (
     _FIRST_TOUCH_FORCE_SHOT_TICKS,
     _MAX_FIRST_TOUCH_TICKS,
@@ -390,3 +393,63 @@ def test_relocate_others_clamps_deep_targets_outside_the_enemy_defense_area():
     recorded_target = ctx.motion_controller.last_target_pos
     assert recorded_target is not None
     assert recorded_target.x >= enemy_box_front_x
+
+
+# ---------------------------------------------------------------------------
+# No-lane strafe carry cap
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("carried", "expect_kick"), [(0.79, False), (0.80, True)])
+def test_no_lane_strafe_shoots_once_the_carry_reaches_0_8m(carried, expect_kick):
+    """With every shot lane walled off, the carrier strafes sideways looking
+    for one (`no_shot_reposition_target`). That strafe had no end of its own
+    and carried the ball past `ExcessiveDribblingRule`'s 1.0m — 51 fouls in
+    the 2026-09-23 round-robin. At `CARRY_LIMIT_M` (0.8m) from where the
+    dribble began, it must shoot at the goal centre instead (already facing
+    it here, so `kick()` this tick)."""
+    carrier_pos = Vector2D(-3.0, 0.0)
+    friendly = {
+        1: Robot(
+            id=1,
+            is_friendly=True,
+            has_ball=True,
+            p=carrier_pos,
+            v=Vector2D(0, 0),
+            a=Vector2D(0, 0),
+            orientation=math.pi,  # my_team_is_right -> enemy goal at -x
+        ),
+    }
+    # A wall across the goal mouth: find_best_shot finds no lane.
+    enemy = {
+        i: Robot(
+            id=i,
+            is_friendly=False,
+            has_ball=False,
+            p=Vector2D(-3.3, -0.48 + 0.12 * i),
+            v=Vector2D(0, 0),
+            a=Vector2D(0, 0),
+            orientation=0.0,
+        )
+        for i in range(9)
+    }
+    assert find_best_shot(carrier_pos, list(enemy.values()), -4.5, -0.5, 0.5)[0] is None
+    ball_pos = Vector2D(carrier_pos.x - 0.09, 0.0)
+    ball = Ball(Vector3D(ball_pos.x, ball_pos.y, 0.0), Vector3D(0.0, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0))
+    frame = GameFrame(
+        ts=0.0, my_team_is_yellow=True, my_team_is_right=True, friendly_robots=friendly, enemy_robots=enemy, ball=ball
+    )
+    field = Field(
+        my_team_is_right=True,
+        field_dims=STANDARD_FIELD_DIMS,
+        field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+    )
+    game = Game(past=GameHistory(max_history=20), current=frame, field=field)
+    tactic = GiveAndGoTactic()
+    mem = tactic.initial_mem()
+    mem.carrier_id = 1
+    mem.carry_origin = Vector2D(ball_pos.x, ball_pos.y + carried)
+
+    commands, _ = tactic.tick(game, TickContext(motion_controller=_NullMotionController(), match_log=None), (1,), mem)
+
+    assert (commands[1].kick == 1) is expect_kick

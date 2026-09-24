@@ -1,3 +1,4 @@
+import math
 from types import SimpleNamespace
 
 import numpy as np
@@ -512,47 +513,39 @@ def test_goalkeep_ignores_fast_ball_in_box_treats_as_shot(monkeypatch):
     assert captured["target"].x == pytest.approx(_LEFT_KEEPER_X)
 
 
-def test_goalkeep_dribbles_retrieved_ball_toward_box_exit(monkeypatch):
-    """Once the keeper has picked up a ball inside the box, it must dribble
-    toward the box exit point (`own_defense_area_exit_point`), not sit still
-    or fall back to a goal-line target that would drag the ball toward our
-    own goal — see `_ball_needs_clearing`."""
+def test_goalkeep_clears_retrieved_ball_without_dribbling_it_out(monkeypatch):
+    """A keeper holding the ball near its goal line must turn and kick from
+    where it is, not dribble to the box's front edge first: that carry is
+    ~1.0m from the goal line, and `ExcessiveDribblingRule` fouls anything
+    over 1.0m (34 fouls in the 2026-09-23 round-robin, every one of them this
+    exact carry). Facing its own goal (pi) here, so it must turn on the spot
+    toward upfield (+x for a left-side team)."""
     game = SimpleNamespace(
         my_team_is_right=False,
         field=_std_field(False),
-        friendly_robots={0: SimpleNamespace(p=Vector2D(-4.0, 0.3), orientation=0.0, has_ball=True)},
-        ball=SimpleNamespace(p=Vector3D(-4.0, 0.3, 0.0), v=Vector3D(0.0, 0.0, 0.0)),
+        friendly_robots={0: SimpleNamespace(p=Vector2D(-4.2, 0.3), orientation=math.pi, has_ball=True)},
+        ball=SimpleNamespace(p=Vector3D(-4.29, 0.3, 0.0), v=Vector3D(0.0, 0.0, 0.0)),
     )
     captured = {}
 
-    def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
-        captured["target_coords"] = target_coords
-        captured["dribbling"] = dribbling
-        return "sentinel-dribble-out"
+    def fake_turn_on_spot(game, motion_controller, robot_id, target_oren, dribbling=False):
+        captured["target_oren"] = target_oren
+        return "sentinel-turn"
 
-    monkeypatch.setattr(gk, "move", fake_move)
+    monkeypatch.setattr(gk, "turn_on_spot", fake_turn_on_spot)
 
     result = gk.goalkeep(game, motion_controller=object(), robot_id=0)
 
-    assert result == "sentinel-dribble-out"
-    # own_defense_area_exit_point sits just outside the box's front edge
-    # (x=-3.5 for the standard field stub) by `_DEFENSE_AREA_CLAMP_MARGIN`
-    # (past both `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE` and the planner's own
-    # obstacle clearance — see that constant's docstring), at x≈-2.93;
-    # keeper is still ~1m short of it, so it must dribble there, not kick
-    # yet.
-    assert captured["target_coords"].x == pytest.approx(-2.93, abs=0.05)
-    assert captured["dribbling"] is True
+    assert result == "sentinel-turn"
+    assert captured["target_oren"] == pytest.approx(0.0)
 
 
-def test_goalkeep_kicks_once_at_box_exit_and_oriented(monkeypatch):
-    """At the box exit point and facing upfield, the keeper must kick rather
-    than keep dribbling — completing the clearance."""
-    exit_x = -2.93  # own_defense_area_exit_point's x for this stub — see the dribble test above
-    # `_ball_needs_clearing` latches on `has_ball` once retrieval starts and
-    # does NOT re-check box position (see its docstring — a dribbled ball
-    # tracks the keeper, so by arrival it has already crossed just outside
-    # the box). Keeper (and the ball, glued to it) sit at the exit point.
+def test_goalkeep_kicks_held_ball_once_oriented_upfield(monkeypatch):
+    """Holding the ball and facing upfield, the keeper must kick — completing
+    the clearance. `_ball_needs_clearing` latches on `has_ball` and does NOT
+    re-check box position (see its docstring), so this holds just outside
+    the box too."""
+    exit_x = -2.93
     game = SimpleNamespace(
         my_team_is_right=False,
         field=_std_field(False),
@@ -567,3 +560,30 @@ def test_goalkeep_kicks_once_at_box_exit_and_oriented(monkeypatch):
     result = gk.goalkeep(game, motion_controller=object(), robot_id=0)
 
     assert result == "sentinel-kick"
+
+
+def test_goalkeep_closes_onto_ball_instead_of_kicking_air(monkeypatch):
+    """Visually holding (ball ~0.1m ahead) and facing upfield, but the contact
+    sensor (`has_ball`) says the ball isn't on the kicker: `kick()` would do
+    nothing, and repeating it left the ball in the box until
+    `KeeperHeldBallRule` fired (4 fouls in the 2026-09-23 re-run). Drive onto
+    the ball instead."""
+    game = SimpleNamespace(
+        my_team_is_right=False,
+        field=_std_field(False),
+        friendly_robots={0: SimpleNamespace(p=Vector2D(-4.2, 0.3), orientation=0.0, has_ball=False)},
+        ball=SimpleNamespace(p=Vector3D(-4.1, 0.3, 0.0), v=Vector3D(0.0, 0.0, 0.0)),
+    )
+    captured = {}
+
+    def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+        captured["target_coords"] = target_coords
+        return "sentinel-close-in"
+
+    monkeypatch.setattr(gk, "move", fake_move)
+    monkeypatch.setattr(gk, "kick", lambda: "sentinel-kick")
+
+    result = gk.goalkeep(game, motion_controller=object(), robot_id=0)
+
+    assert result == "sentinel-close-in"
+    assert captured["target_coords"].x == pytest.approx(-4.1)
