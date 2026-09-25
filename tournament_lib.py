@@ -28,7 +28,7 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
@@ -136,6 +136,9 @@ def run_match(
     control_scheme: str = "fpp",
     fuzz_seed: Optional[int] = None,
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
+    factory_a: Optional[Callable] = None,
+    factory_b: Optional[Callable] = None,
+    render: bool = False,
 ) -> MatchResult:
     """Play one match between two kernel-strategy factories.
 
@@ -173,9 +176,15 @@ def run_match(
     `utama_core/custom_referee/restart_fuzzer.py`) instead of plain
     `CustomReferee`, so this match's referee injects extra seeded-random
     legal restarts during live play.
+
+    `factory_a`/`factory_b`, if set, replace the `kernel_strategy` lookup for
+    that side — any `outfield_robot_ids -> build_kernel_strategy` callable
+    (e.g. `build_openjev_kernel_strategy` with its options bound), which lets
+    teams outside the auto-discovered catalog play; the config names are then
+    only used as labels. `render` opens the live rsim window while stepping.
     """
-    build_a = getattr(kernel_strategy, config_a_name)
-    build_b = getattr(kernel_strategy, config_b_name)
+    build_a = factory_a or getattr(kernel_strategy, config_a_name)
+    build_b = factory_b or getattr(kernel_strategy, config_b_name)
 
     strategy_a = AbstractStrategy(build_kernel_strategy=build_a(OUTFIELD_ROBOT_IDS))
     strategy_b = AbstractStrategy(build_kernel_strategy=build_b(OUTFIELD_ROBOT_IDS))
@@ -238,6 +247,8 @@ def run_match(
         **extra_kwargs,
     )
 
+    if render and runner.rsim_env is not None:
+        runner.rsim_env.render_mode = "human"  # live pygame window, same switch StrategyRunner.run() flips
     try:
         for _ in range(int(duration_seconds * TICKS_PER_SECOND)):
             runner.step_once()
