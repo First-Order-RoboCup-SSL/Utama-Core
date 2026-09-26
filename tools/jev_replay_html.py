@@ -193,13 +193,16 @@ function render(i){
     return `<span class="chip" style="background:var(--t-${t2})">#${id} ${t2}</span>`; }).join('');
   $('scrub').value = i;
 }
-let i = 0, playing = false, last = 0;
-function loop(now){ if (!playing) return; const dt = (now - last) / 1000; last = now;
-  const target = D.ts[i] + dt * +$('speed').value; while (i < N - 1 && D.ts[i + 1] <= target) i++;
+// The playhead time must accumulate across display frames: a replay frame (33 ms at stride 2) outlasts a
+// 60/120 Hz refresh, so re-deriving it from ts[i] every tick never reaches the next frame and playback stalls.
+function advance(ts, i, pt, dt){ pt += dt; while (i < ts.length - 1 && ts[i + 1] <= pt) i++; return [i, pt]; }
+let i = 0, pt = D.ts[0], playing = false, last = 0;
+function loop(now){ if (!playing) return; const dt = Math.max(0, now - last) / 1000; last = now;
+  [i, pt] = advance(D.ts, i, pt, dt * +$('speed').value);
   render(i); if (i >= N - 1){ playing = false; $('play').textContent = 'Play'; } else requestAnimationFrame(loop); }
 $('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play';
-  if (playing){ if (i >= N - 1) i = 0; last = performance.now(); requestAnimationFrame(loop); } };
-$('scrub').oninput = e => { i = +e.target.value; render(i); };
+  if (playing){ if (i >= N - 1) i = 0; pt = D.ts[i]; last = performance.now(); requestAnimationFrame(loop); } };
+$('scrub').oninput = e => { i = +e.target.value; pt = D.ts[i]; render(i); };
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => render(i));
 render(0);
 </script></body></html>
