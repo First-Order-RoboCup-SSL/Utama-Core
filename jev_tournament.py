@@ -64,6 +64,13 @@ def resolve_opponents(names: list[str]) -> list[str]:
     return full
 
 
+def _live_note(built: list[OpenJevPartitioner]) -> str:
+    if not built:
+        return ""
+    s = built[0].summary()
+    return f"dec={s['decisions']} fb={s['fallback']} {s['mean_latency_ms']}ms"
+
+
 def play(
     opponent: str,
     cell: tuple[str, bool, bool],
@@ -96,6 +103,8 @@ def play(
             match_tag_suffix=suffix,
             factory_a=factory,
             render=render,
+            progress=True,
+            progress_note=lambda: _live_note(built),
         )
     finally:
         for p in built:
@@ -179,9 +188,11 @@ def main() -> None:
     )
 
     results = []
+    n_total = len(opponents) * len(CELLS[args.cells])
     for opponent in opponents:
         for cell in CELLS[args.cells]:
             tag = f"openjev_vs_{_short_name(opponent)}{cell[0]}"
+            print(f"[{len(results) + 1}/{n_total}] {tag}")
             done = run_dir / f"{tag}.result.json"
             if done.exists():
                 r = json.loads(done.read_text())

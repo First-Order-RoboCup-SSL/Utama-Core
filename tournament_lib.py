@@ -30,6 +30,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
@@ -139,6 +141,8 @@ def run_match(
     factory_a: Optional[Callable] = None,
     factory_b: Optional[Callable] = None,
     render: bool = False,
+    progress: bool = False,
+    progress_note: Optional[Callable[[], str]] = None,
 ) -> MatchResult:
     """Play one match between two kernel-strategy factories.
 
@@ -182,6 +186,10 @@ def run_match(
     (e.g. `build_openjev_kernel_strategy` with its options bound), which lets
     teams outside the auto-discovered catalog play; the config names are then
     only used as labels. `render` opens the live rsim window while stepping.
+
+    `progress` shows a live bar (sim time, score, ETA) while stepping, with
+    `progress_note()`'s text appended if given; off by default so concurrent
+    tournament workers don't fight over the terminal.
     """
     build_a = factory_a or getattr(kernel_strategy, config_a_name)
     build_b = factory_b or getattr(kernel_strategy, config_b_name)
@@ -250,8 +258,29 @@ def run_match(
     if render and runner.rsim_env is not None:
         runner.rsim_env.render_mode = "human"  # live pygame window, same switch StrategyRunner.run() flips
     try:
-        for _ in range(int(duration_seconds * TICKS_PER_SECOND)):
-            runner.step_once()
+        n_ticks = int(duration_seconds * TICKS_PER_SECOND)
+        if progress:
+            with Progress(
+                TextColumn("{task.description}"),
+                BarColumn(bar_width=20),
+                TextColumn("{task.completed:.0f}/{task.total:.0f}s"),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+                TextColumn("{task.fields[info]}"),
+            ) as bar:
+                label = f"{_short_name(config_a_name)} vs {_short_name(config_b_name)}"
+                task = bar.add_task(label, total=duration_seconds, info="")
+                for tick in range(1, n_ticks + 1):
+                    runner.step_once()
+                    if tick % TICKS_PER_SECOND == 0 or tick == n_ticks:
+                        ref = runner.my.game.referee
+                        info = f"{ref.yellow_team.score}-{ref.blue_team.score}" if ref is not None else ""
+                        if progress_note is not None:
+                            info = f"{info}  {progress_note()}"
+                        bar.update(task, completed=tick / TICKS_PER_SECOND, info=info)
+        else:
+            for _ in range(n_ticks):
+                runner.step_once()
         ref_data = runner.my.game.referee
         score_a = ref_data.yellow_team.score
         score_b = ref_data.blue_team.score
