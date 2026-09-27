@@ -22,11 +22,13 @@ from utama_core.shared.pass_and_score_geometry import (
     _ACQUIRE_LATERAL_MAX,
     _GOAL_POST_SAFETY_MARGIN,
     _NO_SHOT_STRAFE_STEP,
+    _PASS_ROLLING_MPS,
     _RELEASE_FORWARD_MAX,
     _RELEASE_LATERAL_MAX,
     ORIENTATION_TOLERANCE_RAD,
     ball_in_enemy_defense_area,
     ball_is_loose,
+    ball_line_receive_point,
     clamp_outside_enemy_defense_area,
     enemy_defense_area_hold_point,
     enemy_goal_line,
@@ -698,3 +700,37 @@ def test_carry_exhausted_counts_the_distance_needed_to_stop():
     # its carry isn't cut short by speed: counting it cost give_and_go_solo half
     # its goals in an A/B.
     assert not carry_exhausted(moving, origin)
+
+
+def _rolling_game(receiver_xy: tuple, ball_xy: tuple, ball_v: tuple) -> Game:
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={2: _robot(2, receiver_xy[0], receiver_xy[1], True)},
+        enemy_robots={},
+        ball=Ball(p=Vector3D(ball_xy[0], ball_xy[1], 0), v=Vector3D(ball_v[0], ball_v[1], 0), a=Vector3D(0, 0, 0)),
+    )
+    return Game(past=GameHistory(10), current=frame, field=_FIELD)
+
+
+def test_ball_line_receive_point_is_the_receiver_projected_onto_the_balls_path():
+    spot = ball_line_receive_point(_rolling_game((1.5, 0.07), (0.4, 0.0), (3.0, 0.0)), 2)
+    assert spot.x == pytest.approx(1.5)
+    assert spot.y == pytest.approx(0.0)
+
+
+def test_ball_line_receive_point_follows_a_diagonal_path():
+    spot = ball_line_receive_point(_rolling_game((1.0, 0.0), (0.0, 0.0), (1.0, 1.0)), 2)
+    assert spot.x == pytest.approx(0.5)
+    assert spot.y == pytest.approx(0.5)
+
+
+def test_ball_line_receive_point_none_just_below_rolling_speed():
+    assert ball_line_receive_point(_rolling_game((1.5, 0.0), (0.4, 0.0), (_PASS_ROLLING_MPS - 0.01, 0.0)), 2) is None
+    assert ball_line_receive_point(_rolling_game((1.5, 0.0), (0.4, 0.0), (_PASS_ROLLING_MPS, 0.0)), 2) is not None
+
+
+def test_ball_line_receive_point_none_once_the_ball_has_passed_the_receiver():
+    assert ball_line_receive_point(_rolling_game((1.5, 0.0), (1.5, 0.1), (0.0, 3.0)), 2) is None
+    assert ball_line_receive_point(_rolling_game((1.5, 0.0), (2.0, 0.0), (3.0, 0.0)), 2) is None

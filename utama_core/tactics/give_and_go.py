@@ -47,6 +47,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
     ball_in_own_defense_area,
+    ball_line_receive_point,
     carry_exhausted,
     carry_origin,
     clamp_outside_enemy_defense_area,
@@ -357,7 +358,15 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 tick=0, sim_time=getattr(game, "ts", 0.0), key="give_and_go.carrier_has_ball", value=carrier_has_ball
             )
 
-        if not carrier_has_ball:
+        # Just after the kick the carrier no longer has the ball, but the pass is
+        # still ours: keep the receiver on it (see `_pass_exec`) rather than
+        # relocating it with the others while the ball rolls at it.
+        pass_rolling = (
+            mem.receiver_id is not None
+            and mem.receiver_id in robot_ids
+            and ball_line_receive_point(game, mem.receiver_id) is not None
+        )
+        if not carrier_has_ball and not pass_rolling:
             if ball_in_own_defense_area(game):
                 # The ball is inside our own box — an outfield robot may not
                 # enter it (DefenseAreaRule: the keeper owns the area). Hold

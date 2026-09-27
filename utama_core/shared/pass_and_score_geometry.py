@@ -271,6 +271,25 @@ def intercept_point(
     return intercept_position, intercept_orientation
 
 
+_PASS_ROLLING_MPS = 0.5
+
+
+def ball_line_receive_point(game: Game, receiver_id: int) -> Optional[Vector2D]:
+    """Where `receiver_id` meets a ball already rolling towards it: its own position
+    projected onto the ball's actual path. None while the ball is slower than
+    `_PASS_ROLLING_MPS` or moving away from the receiver."""
+    ball = game.ball
+    velocity = Vector2D(ball.v.x, ball.v.y)
+    speed = velocity.mag()
+    if speed < _PASS_ROLLING_MPS:
+        return None
+    ball_pos = ball.p.to_2d()
+    along = (game.friendly_robots[receiver_id].p - ball_pos).dot(velocity) / speed
+    if along <= 0.0:
+        return None
+    return ball_pos + velocity * (along / speed)
+
+
 def enemy_positions(game: Game) -> list[Vector2D]:
     return [enemy.p for enemy in game.enemy_robots.values() if enemy is not None]
 

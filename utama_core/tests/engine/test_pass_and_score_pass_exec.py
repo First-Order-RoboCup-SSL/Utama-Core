@@ -50,9 +50,11 @@ def _ctx(runner) -> TickContext:
     return TickContext(motion_controller=motion_controller)
 
 
-def _with_frame(game, friendly, enemy, ball_xy):
+def _with_frame(game, friendly, enemy, ball_xy, ball_v=(0.0, 0.0)):
     frame = game.current
-    ball = Ball(p=Vector3D(ball_xy[0], ball_xy[1], 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0))
+    ball = Ball(
+        p=Vector3D(ball_xy[0], ball_xy[1], 0.0), v=Vector3D(ball_v[0], ball_v[1], 0.0), a=Vector3D(0.0, 0.0, 0.0)
+    )
     new_frame = GameFrame(
         ts=frame.ts,
         my_team_is_yellow=frame.my_team_is_yellow,
@@ -136,3 +138,29 @@ def test_passer_aims_at_a_receiver_in_place_not_at_the_receive_point(runner):
 
     assert not commands[1].kick
     assert commands[1].angular_vel > 0.0  # turning left, toward the receiver at +y
+
+
+def test_receiver_steps_onto_a_rolling_pass_it_would_meet_off_centre(runner):
+    """Once the pass is rolling, the receiver must meet it on the ball's actual path.
+    Here it stands 0.07 m beside that path, inside `at_target`'s 0.08 m of the receive
+    point, so it used to stop and take the ball on the side of the dribbler: well-faced
+    misses met the ball a median 0.08 m off-centre, catches 0.025 m, and passes of
+    1.2-2.5 m were caught 45% of the time (tournament_20260924_124033)."""
+    game = runner.my.game
+    friendly = dict(game.current.friendly_robots)
+    enemy = dict(game.current.enemy_robots)
+
+    friendly[1] = dataclasses.replace(friendly[1], has_ball=False, p=Vector2D(0.0, 0.0), orientation=0.0)
+    friendly[2] = dataclasses.replace(friendly[2], has_ball=False, p=Vector2D(1.5, 0.07), orientation=math.pi)
+    enemy_ids = list(enemy.keys())[:2]
+    enemy[enemy_ids[0]] = dataclasses.replace(enemy[enemy_ids[0]], p=Vector2D(1.0, 3.0))
+    enemy[enemy_ids[1]] = dataclasses.replace(enemy[enemy_ids[1]], p=Vector2D(1.0, -3.0))
+
+    _with_frame(game, friendly, enemy, ball_xy=(0.4, 0.0), ball_v=(3.0, 0.0))
+    game = runner.my.game
+
+    commands, _pass_complete, _lane_blocked = _pass_exec(game, _ctx(runner), passer_id=1, receiver_id=2)
+
+    # Facing -x, the robot's left is -y: towards the ball's path.
+    assert commands[2].local_left_vel > 0.05
+    assert commands[2].dribble

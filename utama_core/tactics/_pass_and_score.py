@@ -25,6 +25,7 @@ from utama_core.entities.game import Game
 from utama_core.shared.field_scaling import scale_point_from_standard_field
 from utama_core.shared.pass_and_score_geometry import (
     at_target,
+    ball_line_receive_point,
     clamp_outside_enemy_defense_area,
     clamp_outside_own_defense_area,
     clamp_to_field,
@@ -333,7 +334,21 @@ def _pass_exec(
     receiver_facing_pass = oriented_towards(game, receiver_id, intercept_oren)
     receiver_ready = receiver_at_intercept and receiver_facing_pass
 
-    if not receiver_at_intercept:
+    # Once the pass is rolling, meet it on its actual path: the receive point above
+    # follows the passer's heading, not the ball, and `at_target`'s 0.08 m lets the
+    # receiver stop beside the path. Well-faced misses met the ball a median 0.08 m
+    # off-centre, catches 0.025 m (tournament_20260924_124033).
+    rolling_spot = ball_line_receive_point(game, receiver_id)
+    if rolling_spot is not None:
+        commands[receiver_id] = move(
+            game=game,
+            motion_controller=ctx.motion_controller,
+            robot_id=receiver_id,
+            target_coords=clamp_outside_enemy_defense_area(game, clamp_outside_own_defense_area(game, rolling_spot)),
+            target_oren=intercept_oren,
+            dribbling=True,
+        )
+    elif not receiver_at_intercept:
         commands[receiver_id] = move(
             game=game,
             motion_controller=ctx.motion_controller,

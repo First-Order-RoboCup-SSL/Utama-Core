@@ -66,6 +66,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
     at_target,
+    ball_line_receive_point,
     enemy_goal_line,
     enemy_positions,
     find_best_shot,
@@ -624,7 +625,11 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # the intercept point (and required facing angle) drift right
             # along with it and never settle.
             runner_target = _runner_target(game, mem.weak_side if mem.weak_side is not None else 1)
-            runner_ready = _debounced_settled(game, runner_id, runner_target, mem)
+            # A pass already rolling at the runner is met on its path (see `_pass_exec`),
+            # which moves the runner off its spot; don't send it back there mid-pass.
+            runner_ready = ball_line_receive_point(game, runner_id) is not None or _debounced_settled(
+                game, runner_id, runner_target, mem
+            )
             if ctx.match_log is not None:
                 ctx.match_log.trace(
                     tick=0,

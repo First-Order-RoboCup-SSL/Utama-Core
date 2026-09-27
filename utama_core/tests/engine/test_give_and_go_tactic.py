@@ -40,6 +40,7 @@ from utama_core.tactics.give_and_go import (
     _FIRST_TOUCH_FORCE_SHOT_TICKS,
     _MAX_FIRST_TOUCH_TICKS,
     _MAX_HOP_TICKS,
+    GiveAndGoMem,
     GiveAndGoTactic,
     _relocate_target,
 )
@@ -453,3 +454,61 @@ def test_no_lane_strafe_shoots_once_the_carry_reaches_0_8m(carried, expect_kick)
     commands, _ = tactic.tick(game, TickContext(motion_controller=_NullMotionController(), match_log=None), (1,), mem)
 
     assert (commands[1].kick == 1) is expect_kick
+
+
+# ---------------------------------------------------------------------------
+# Pass in flight
+# ---------------------------------------------------------------------------
+
+
+class _PerRobotMotionController(MotionController):
+    def __init__(self):
+        super().__init__(mode="rsim")
+        self.targets: dict = {}
+
+    def calculate(self, game, robot_id, target_pos, target_oren):
+        self.targets[robot_id] = target_pos
+        return Vector2D(0.0, 0.0), 0.0
+
+
+def test_receiver_keeps_meeting_the_pass_once_the_carrier_has_released_it():
+    """Right after the kick the carrier no longer has the ball, and that branch used to
+    send every other robot, receiver included, to a support spot while the ball rolled
+    at it. The receiver must stay on the pass and step onto the ball's path
+    (tournament_20260927_220824: receivers drifted from 0.02 to 0.10 m off the path)."""
+    game = _make_game(carrier_pos=Vector2D(0.0, 0.0), teammate_pos=Vector2D(1.5, 0.07), enemy_pos=Vector2D(1.0, 3.0))
+    frame = game.current
+    friendly = dict(frame.friendly_robots)
+    friendly[1] = Robot(
+        id=1,
+        is_friendly=True,
+        has_ball=False,
+        p=Vector2D(0.0, 0.0),
+        v=Vector2D(0, 0),
+        a=Vector2D(0, 0),
+        orientation=0.0,
+    )
+    rolling = Ball(Vector3D(0.4, 0.0, 0.0), Vector3D(3.0, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0))
+    game = Game(
+        past=GameHistory(max_history=20),
+        current=GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=friendly,
+            enemy_robots=frame.enemy_robots,
+            ball=rolling,
+        ),
+        field=game.field,
+    )
+    ctx = TickContext(motion_controller=_PerRobotMotionController(), match_log=None)
+    tactic = GiveAndGoTactic()
+    mem = GiveAndGoMem(carrier_id=1, receiver_id=2)
+
+    commands, mem = tactic.tick(game, ctx, (1, 2), mem)
+
+    target = ctx.motion_controller.targets[2]
+    assert target.x == pytest.approx(1.5)
+    assert target.y == pytest.approx(0.0, abs=1e-6)
+    assert commands[2].dribble
+    assert mem.receiver_id == 2
