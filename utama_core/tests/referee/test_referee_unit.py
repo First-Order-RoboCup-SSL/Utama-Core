@@ -1418,6 +1418,53 @@ class TestDirectFreeOursStep:
         # this one, so the kicker held at `target` forever.
         assert target.distance_to(ball_pos) <= referee_actions.DirectFreeOursStep._KICK_READY_DISTANCE
 
+    def test_kicker_goes_round_the_ball_to_an_approach_point_on_its_far_side(self, monkeypatch):
+        """The approach point is behind the ball from the kick direction; a kicker coming
+        from the other side drove straight through the ball to reach it and pushed a free
+        kick placed 0.25 m inside the goal line back onto the line, where the first touch
+        put it out: 90 of 478 free kicks, tournament_20260927_223257."""
+        from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        ball_pos = Vector2D(4.25, 2.43)
+        kicker_pos = Vector2D(3.7, 2.43)
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots={3: _robot(3, kicker_pos.x, kicker_pos.y)},
+            enemy_robots={1: _robot(1, 0.0, 2.43)},  # kick straight back up the field, -x
+            ball=_ball(ball_pos.x, ball_pos.y),
+            referee=_make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW),
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+        node = referee_actions.DirectFreeOursStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+
+        node.update()
+
+        target = captured[0][1]
+        seg = target - kicker_pos
+        t = max(0.0, min(1.0, (ball_pos - kicker_pos).dot(seg) / seg.dot(seg)))
+        closest = (kicker_pos + seg * t).distance_to(ball_pos)
+        assert closest >= ROBOT_RADIUS + BALL_RADIUS
+
     def test_kicker_moves_toward_ball(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
 

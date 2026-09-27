@@ -11,7 +11,7 @@ game.my_team_is_right so no construction-time team colour is needed.
 
 import math
 
-from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.referee_constants import (
     BALL_KEEP_OUT_DISTANCE,
     BALL_PLACEMENT_DONE_DISTANCE,
@@ -846,7 +846,11 @@ class DirectFreeOursStep:
                 face_error = self._angle_error(robot.orientation, target_oren)
 
                 if distance_to_approach > self._APPROACH_READY_DISTANCE:
-                    self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, approach, target_oren)
+                    # Round the ball, not through it, to an approach point on its far side:
+                    # driving through pushed free kicks placed 0.25 m inside the line back
+                    # onto it (tournament_20260927_223257).
+                    waypoint = _detour_around_circle(robot.p, approach, ball_pos, ROBOT_RADIUS + BALL_RADIUS)
+                    self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, waypoint, target_oren)
                 elif abs(face_error) > self._FACE_READY_ANGLE:
                     self.blackboard.cmd_map[robot_id] = turn_on_spot(
                         game, motion_controller, robot_id, target_oren, dribbling=False
