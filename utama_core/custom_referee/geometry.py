@@ -133,12 +133,16 @@ class RefereeGeometry:
         from exactly this gap. Only x needs clamping for either defense
         area (both are full-width rectangles spanning the goal line to
         `2*half_defense_depth` in) -- y is already legal by construction
-        whenever a point clears the box on x alone.
+        whenever a point clears the box on x alone. A point just past the box's
+        side edge is within `clear_dist` of it too, so it is pushed out on x
+        like one level with the box: a free kick left at the box corner
+        (-4.25, -1.00) kept the kicker outside the planner's ring for the rest
+        of the match (tournament_20260927_223257).
         """
         left_inner_x = -self.half_length + 2.0 * self.half_defense_depth
         right_inner_x = self.half_length - 2.0 * self.half_defense_depth
         clear_dist = keep_dist + self._PLANNER_CLEARANCE_BUFFER_M
-        if abs(y) <= self.half_defense_width:
+        if abs(y) <= self.half_defense_width + clear_dist:
             if x <= left_inner_x + clear_dist:
                 x = left_inner_x + clear_dist
             elif x >= right_inner_x - clear_dist:
