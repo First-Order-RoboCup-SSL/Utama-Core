@@ -249,7 +249,9 @@ class TestAttackerInfringementDesignatedPosition:
         assert v.next_command == RefereeCommand.DIRECT_FREE_YELLOW
         assert v.designated_position is not None
         px, py = v.designated_position
-        assert px == pytest.approx(2.97)  # 3.5 (box edge) - 0.25 (keep-out) - 0.28 (planner-clearance buffer)
+        assert px == pytest.approx(
+            2.85
+        )  # 3.5 (box edge) - 0.25 (keep-out) - 0.28 (planner-clearance buffer) - 0.12 (kicker approach)
         assert py == pytest.approx(-0.3)  # y unchanged -- only x needed clamping here
 
     def test_designated_position_untouched_when_ball_already_outside_the_box(self):
@@ -277,7 +279,9 @@ class TestAttackerInfringementDesignatedPosition:
         assert v.next_command == RefereeCommand.DIRECT_FREE_BLUE
         assert v.designated_position is not None
         px, py = v.designated_position
-        assert px == pytest.approx(-2.97)  # -3.5 (box edge) + 0.25 (keep-out) + 0.28 (planner-clearance buffer)
+        assert px == pytest.approx(
+            -2.85
+        )  # -3.5 (box edge) + 0.25 (keep-out) + 0.28 (planner-clearance buffer) + 0.12 (kicker approach)
         assert py == pytest.approx(0.5)
 
 
@@ -320,7 +324,7 @@ class TestOutOfBoundsDefenseAreaProjection:
         # the legal projection sits keep_dist (0.25m) plus the planner-clearance
         # buffer (0.28m) outside it -- see `legal_restart_position`'s docstring.
         px, py = v.designated_position
-        assert px == pytest.approx(-2.97)
+        assert px == pytest.approx(-2.85)
         assert py == pytest.approx(0.576)
 
     def test_out_of_bounds_far_from_any_defense_area_is_unaffected(self):

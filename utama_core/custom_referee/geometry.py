@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from utama_core.config.field_params import FieldBounds, FieldDimensions
+from utama_core.config.physical_constants import ROBOT_RADIUS
 
 
 @dataclass(frozen=True)
@@ -103,6 +104,11 @@ class RefereeGeometry:
     # holds regardless of how many robots happen to be nearby when this
     # position is chosen.
     _PLANNER_CLEARANCE_BUFFER_M = 0.28
+    # The free-kick taker stands this far behind the ball (`DirectFreeOursStep.
+    # _APPROACH_OFFSET`), towards the box whenever the kick points away from it, so
+    # that spot has to clear the planner's ring too: a kick 0.54 m from the side edge
+    # held its taker 1.3 m away (tournament_20260927_230330).
+    _KICKER_APPROACH_M = ROBOT_RADIUS + 0.03
 
     def legal_restart_position(self, x: float, y: float, keep_dist: float) -> tuple[float, float]:
         """Project (x, y) clear of BOTH defense areas (plus `keep_dist`), for
@@ -141,7 +147,7 @@ class RefereeGeometry:
         """
         left_inner_x = -self.half_length + 2.0 * self.half_defense_depth
         right_inner_x = self.half_length - 2.0 * self.half_defense_depth
-        clear_dist = keep_dist + self._PLANNER_CLEARANCE_BUFFER_M
+        clear_dist = keep_dist + self._PLANNER_CLEARANCE_BUFFER_M + self._KICKER_APPROACH_M
         if abs(y) <= self.half_defense_width + clear_dist:
             if x <= left_inner_x + clear_dist:
                 x = left_inner_x + clear_dist

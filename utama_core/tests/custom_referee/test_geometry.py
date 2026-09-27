@@ -254,3 +254,22 @@ def test_a_restart_beside_the_box_side_edge_clears_the_planner_margin(x: float, 
         + TestLegalRestartPositionClearsPlannerObstacle._PLANNER_FULL_CLEARANCE_M
         - 1e-9
     )
+
+
+@pytest.mark.parametrize("x,y", [(-4.25, -1.54), (4.25, 1.6), (-3.1, 1.2)])
+def test_a_restart_near_the_box_leaves_room_for_the_kickers_approach(x: float, y: float) -> None:
+    """The kicker stands `DirectFreeOursStep._APPROACH_OFFSET` behind the ball, which is
+    towards the box whenever the kick points away from it; that spot has to clear the
+    planner's ring too. A free kick at (-4.25, -1.54), 0.54 m from the side edge, held
+    its kicker 1.3 m away for 20 s (tournament_20260927_230330)."""
+    from utama_core.custom_referee.actions import DirectFreeOursStep
+
+    px, py = GEO.legal_restart_position(x, y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+    inner_x = GEO.half_length - 2.0 * GEO.half_defense_depth
+    clearance = max(inner_x - abs(px), abs(py) - GEO.half_defense_width)
+    need = (
+        OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+        + TestLegalRestartPositionClearsPlannerObstacle._PLANNER_FULL_CLEARANCE_M
+        + DirectFreeOursStep._APPROACH_OFFSET
+    )
+    assert clearance >= need - 1e-9

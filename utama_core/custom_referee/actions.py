@@ -22,6 +22,7 @@ from utama_core.config.referee_constants import (
     PENALTY_LINE_Y_STEP_RATIO,
     PENALTY_MARK_HALF_FIELD_RATIO,
 )
+from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.shared.tolerance import Sticky
@@ -745,7 +746,7 @@ class DirectFreeOursStep:
     """
 
     # How close the robot center should get behind the ball before turning/kicking.
-    _APPROACH_OFFSET = ROBOT_RADIUS + 0.03
+    _APPROACH_OFFSET = RefereeGeometry._KICKER_APPROACH_M
     _APPROACH_READY_DISTANCE = 0.04
     _KICK_READY_DISTANCE = 0.16
     _FACE_READY_ANGLE = 0.18
