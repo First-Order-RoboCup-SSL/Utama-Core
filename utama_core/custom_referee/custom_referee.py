@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import List, Optional
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
@@ -36,6 +37,10 @@ from utama_core.custom_referee.state_machine import GameStateMachine
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
+
+# SSL rulebook §7: no goal if the scoring team committed a non-stopping foul
+# in the last two seconds before the ball entered the goal.
+_GOAL_AFTER_FOUL_SECONDS = 2.0
 
 
 def _build_active_rules(rules_cfg) -> List[BaseRule]:
@@ -203,6 +208,8 @@ class CustomReferee:
         self._match_log = None
         self._match_log_tick = 0
         self._last_logged_ref_data: Optional[RefereeData] = None
+        # Last non-stopping foul per team (True = yellow), for §7's goal validity.
+        self._non_stopping_foul_at: dict[bool, float] = {}
         # The `RuleViolation` (if any) detected on the most recent `step()`
         # call — independent of whether the state machine actually applied
         # it (it may be suppressed by a transition cooldown). Exposed so
@@ -264,9 +271,13 @@ class CustomReferee:
             if result.is_stopping:
                 violation = result
                 break
+            for is_yellow in result.offending_teams:
+                self._non_stopping_foul_at[is_yellow] = game_frame.ts
             if non_stopping_violation is None:
                 non_stopping_violation = result
         violation = violation or non_stopping_violation
+        if violation is not None and violation.rule_name == "goal":
+            violation = self._disallowed_goal(violation, game_frame) or violation
         self.last_violation = violation
 
         previous_command = self._state.command
@@ -294,6 +305,22 @@ class CustomReferee:
                 note=violation.status_message if violation is not None else None,
             )
         return result
+
+    def _disallowed_goal(self, goal: RuleViolation, game_frame: GameFrame) -> Optional[RuleViolation]:
+        """The goal kick that replaces `goal` when the scoring team fouled within
+        `_GOAL_AFTER_FOUL_SECONDS` of it, else None."""
+        scorer_is_yellow = goal.next_command == RefereeCommand.PREPARE_KICKOFF_BLUE
+        fouled_at = self._non_stopping_foul_at.get(scorer_is_yellow)
+        if fouled_at is None or game_frame.ts - fouled_at > _GOAL_AFTER_FOUL_SECONDS:
+            return None
+        ball = game_frame.ball
+        return RuleViolation(
+            rule_name="invalid_goal",
+            suggested_command=RefereeCommand.STOP,
+            next_command=RefereeCommand.DIRECT_FREE_BLUE if scorer_is_yellow else RefereeCommand.DIRECT_FREE_YELLOW,
+            status_message=f"{goal.status_message} disallowed: foul in the last {_GOAL_AFTER_FOUL_SECONDS:.0f} s",
+            designated_position=self._geometry.goal_kick_position(math.copysign(1.0, ball.p.x), ball.p.y),
+        )
 
     def set_debug_status(self, debug_status_per_robot: dict[int, list[str]]) -> None:
         """Set per-robot tactic debug status for GUI display.
@@ -376,6 +403,7 @@ class CustomReferee:
         self._state.reset()
         for rule in self._rules:
             rule.reset_for_new_episode()
+        self._non_stopping_foul_at = {}
 
     # ------------------------------------------------------------------
     # Properties (read-only access for callers that need to inspect state)

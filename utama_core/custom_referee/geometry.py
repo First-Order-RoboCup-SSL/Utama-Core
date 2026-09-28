@@ -1,5 +1,6 @@
 """RefereeGeometry: configurable field dimensions for the CustomReferee."""
 
+import math
 from dataclasses import dataclass
 
 from utama_core.config.field_params import FieldBounds, FieldDimensions
@@ -110,6 +111,12 @@ class RefereeGeometry:
     # that spot has to clear the planner's ring too: a kick 0.54 m from the side edge
     # held its taker 1.3 m away (tournament_20260927_230330).
     _KICKER_APPROACH_M = ROBOT_RADIUS + 0.03
+
+    def goal_kick_position(self, goal_x_sign: float, ball_y: float) -> tuple[float, float]:
+        """SSL rulebook §6.2.1: a goal kick is placed "0.2 meters from the closest
+        touch line and 1 meter from the goal line", in front of the goal on the
+        `goal_x_sign` side and on the touch line nearer `ball_y`."""
+        return (goal_x_sign * (self.half_length - 1.0), math.copysign(self.half_width - 0.2, ball_y))
 
     def legal_restart_position(self, x: float, y: float, keep_dist: float) -> tuple[float, float]:
         """Project (x, y) clear of BOTH defense areas (plus `keep_dist`), for

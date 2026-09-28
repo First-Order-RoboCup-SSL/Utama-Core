@@ -8,7 +8,6 @@ team" -- §6.2.1 places a goal kick "0.2 meters from the closest touch line and
 
 from __future__ import annotations
 
-import math
 from typing import Optional
 
 from utama_core.custom_referee.geometry import RefereeGeometry
@@ -20,9 +19,6 @@ _ACTIVE_PLAY_COMMANDS = {
     RefereeCommand.NORMAL_START,
     RefereeCommand.FORCE_START,
 }
-
-_GOAL_KICK_FROM_GOAL_LINE_M = 1.0
-_GOAL_KICK_FROM_TOUCH_LINE_M = 0.2
 
 
 class PenaltyTimeLimitRule(BaseRule):
@@ -73,12 +69,8 @@ class PenaltyTimeLimitRule(BaseRule):
     ) -> tuple[float, float]:
         # The defending goal is the one the kicking team attacks.
         kicking_is_right = game_frame.my_team_is_right == (game_frame.my_team_is_yellow == kicking_is_yellow)
-        goal_sign = -1.0 if kicking_is_right else 1.0
         ball_y = game_frame.ball.p.y if game_frame.ball is not None else 0.0
-        return (
-            goal_sign * (geometry.half_length - _GOAL_KICK_FROM_GOAL_LINE_M),
-            math.copysign(geometry.half_width - _GOAL_KICK_FROM_TOUCH_LINE_M, ball_y),
-        )
+        return geometry.goal_kick_position(-1.0 if kicking_is_right else 1.0, ball_y)
 
     def reset(self) -> None:
         # Keeps _prev_command and the running penalty: reset() fires on every
