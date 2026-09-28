@@ -50,6 +50,9 @@ rules:
   no_progress:
     enabled: true
     max_seconds: 10.0
+  penalty_time_limit:
+    enabled: true
+    max_seconds: 10.0
 game:
   half_duration_seconds: 300.0
   kickoff_team: "yellow"

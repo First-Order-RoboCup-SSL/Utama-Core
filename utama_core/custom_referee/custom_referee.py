@@ -29,6 +29,7 @@ from utama_core.custom_referee.rules.keep_out_rule import KeepOutRule
 from utama_core.custom_referee.rules.keeper_held_ball_rule import KeeperHeldBallRule
 from utama_core.custom_referee.rules.no_progress_rule import NoProgressRule
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
+from utama_core.custom_referee.rules.penalty_time_limit_rule import PenaltyTimeLimitRule
 from utama_core.custom_referee.rules.pushing_rule import PushingRule
 from utama_core.custom_referee.rules.robot_stop_speed_rule import RobotStopSpeedRule
 from utama_core.custom_referee.state_machine import GameStateMachine
@@ -142,6 +143,9 @@ def _build_active_rules(rules_cfg) -> List[BaseRule]:
                 grace_seconds=rules_cfg.ball_placement_interference.grace_seconds,
             )
         )
+
+    if rules_cfg.penalty_time_limit.enabled:
+        active.append(PenaltyTimeLimitRule(max_seconds=rules_cfg.penalty_time_limit.max_seconds))
 
     # NoProgressRule last: a genuine stopping foul on the same tick decides the
     # restart instead of a forced start.

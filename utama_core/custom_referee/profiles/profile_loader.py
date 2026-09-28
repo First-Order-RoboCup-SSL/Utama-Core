@@ -124,6 +124,14 @@ class NoProgressConfig:
 
 
 @dataclass
+class PenaltyTimeLimitConfig:
+    """SSL rulebook §5.3.5: a penalty still in play after 10 s is stopped."""
+
+    enabled: bool = True
+    max_seconds: float = 10.0
+
+
+@dataclass
 class RulesConfig:
     goal_detection: GoalDetectionConfig = field(default_factory=GoalDetectionConfig)
     out_of_bounds: OutOfBoundsConfig = field(default_factory=OutOfBoundsConfig)
@@ -141,6 +149,7 @@ class RulesConfig:
         default_factory=BallPlacementInterferenceConfig
     )
     no_progress: NoProgressConfig = field(default_factory=NoProgressConfig)
+    penalty_time_limit: PenaltyTimeLimitConfig = field(default_factory=PenaltyTimeLimitConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +266,7 @@ _ALL_RULE_NAMES = frozenset(
         "defense_area_stoppage",
         "ball_placement_interference",
         "no_progress",
+        "penalty_time_limit",
     }
 )
 
@@ -366,6 +376,12 @@ def _parse_profile(data: dict) -> RefereeProfile:
         max_seconds=np_d.get("max_seconds", 10.0),
     )
 
+    ptl = rules_d.get("penalty_time_limit", {})
+    ptl_cfg = PenaltyTimeLimitConfig(
+        enabled=ptl.get("enabled", True),
+        max_seconds=ptl.get("max_seconds", 10.0),
+    )
+
     rules = RulesConfig(
         goal_detection=goal_cfg,
         out_of_bounds=oob_cfg,
@@ -381,6 +397,7 @@ def _parse_profile(data: dict) -> RefereeProfile:
         defense_area_stoppage=das_cfg,
         ball_placement_interference=bpi_cfg,
         no_progress=np_cfg,
+        penalty_time_limit=ptl_cfg,
     )
 
     game_d = data.get("game", {})
