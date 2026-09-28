@@ -50,6 +50,9 @@ _STOP_CLEAR_TIMEOUT_SECONDS = 15.0
 # never mistaken for the slower STOP-clear case, and under any watchdog's
 # own stall-detection window so this always fires first.
 _BALL_PLACEMENT_TIMEOUT_SECONDS = 10.0
+# SSL rulebook §5.4: the ball is in play 10 s (Division B) after a free kick
+# even if nobody kicked it. A Defender Too Close foul (§8.4.3) restarts the clock.
+_FREE_KICK_TIMEOUT_SECONDS = 10.0
 
 
 class GameStateMachine:
@@ -162,6 +165,8 @@ class GameStateMachine:
         self._advance2_ready_since: float = math.inf  # PREPARE_* → NORMAL_START
         self._advance3_ready_since: float = math.inf  # DIRECT_FREE_* → NORMAL_START
         self._advance4_ready_since: float = math.inf  # BALL_PLACEMENT_* → next_command
+        # Last Defender Too Close foul; restarts the free kick's clock.
+        self._defender_too_close_at: float = -math.inf
 
         # Cooldown: don't process a new violation within this window.
         self._last_transition_time: float = -math.inf
@@ -341,7 +346,17 @@ class GameStateMachine:
         # ----------------------------------------------------------------
         elif self._auto_advance.direct_free_to_normal and self.command in self._DIRECT_FREE_COMMANDS:
             ready = game_frame is not None and self._free_kick_ready(self.command, game_frame)
-            if ready:
+            kick_clock_start = max(self.command_timestamp, self._defender_too_close_at)
+            if current_time - kick_clock_start >= _FREE_KICK_TIMEOUT_SECONDS:
+                logger.info("Free kick not taken in time — auto-advancing %s → FORCE_START", self.command.name)
+                self.command = RefereeCommand.FORCE_START
+                self.command_counter += 1
+                self.command_timestamp = current_time
+                self.next_command = None
+                self.status_message = None
+                self._advance3_ready_since = math.inf
+                self._last_transition_time = current_time
+            elif ready:
                 if self._advance3_ready_since == math.inf:
                     self._advance3_ready_since = current_time
                     logger.debug("Advance 3 countdown started (%s)", self.command.name)
@@ -794,6 +809,8 @@ class GameStateMachine:
             # command_counter bump reads as a real transition to every
             # other piece of code that watches it, e.g. rule.reset()).
             logger.info("Non-stopping foul detected: %s", violation.rule_name)
+            if violation.rule_name == "keep_out":
+                self._defender_too_close_at = current_time
             return
 
         self.command = violation.suggested_command
