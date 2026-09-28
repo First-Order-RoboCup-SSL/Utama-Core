@@ -26,7 +26,10 @@ import math
 
 import pytest
 
-from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
+from utama_core.config.referee_constants import (
+    BALL_KEEP_OUT_DISTANCE,
+    PENALTY_BEHIND_MARK_DISTANCE,
+)
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
@@ -290,7 +293,7 @@ def test_their_penalty_clears_our_robots_from_the_penalty_area(split_shape_runne
     assert dist_keeper_to_goal < 0.3, f"goalkeeper did not reach our goal line: dist={dist_keeper_to_goal:.3f}m"
 
     non_keeper = game.friendly_robots[1]
-    dist_to_line = abs(non_keeper.p.x - penalty_mark_x)
+    dist_to_line = abs(non_keeper.p.x - (penalty_mark_x - PENALTY_BEHIND_MARK_DISTANCE))
     assert dist_to_line < 0.5, f"robot 1 did not reach the behind-the-line formation: dist_x={dist_to_line:.3f}m"
 
 

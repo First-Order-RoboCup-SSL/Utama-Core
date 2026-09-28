@@ -85,6 +85,7 @@ def _make_game_frame(
     referee=None,
     my_team_is_yellow: bool = True,
     my_team_is_right: bool = True,
+    ball: Ball | None = None,
 ) -> GameFrame:
     if friendly_robots is None:
         friendly_robots = {0: _robot(0)}
@@ -94,7 +95,7 @@ def _make_game_frame(
         my_team_is_right=my_team_is_right,
         friendly_robots=friendly_robots,
         enemy_robots={},
-        ball=_ball(),
+        ball=ball or _ball(),
         referee=referee,
     )
 
@@ -105,8 +106,9 @@ def _make_game(
     my_team_is_yellow: bool = True,
     my_team_is_right: bool = True,
     field_bounds: FieldBounds = STANDARD_FIELD_DIMS.full_field_bounds,
+    ball: Ball | None = None,
 ) -> Game:
-    frame = _make_game_frame(friendly_robots, referee, my_team_is_yellow, my_team_is_right)
+    frame = _make_game_frame(friendly_robots, referee, my_team_is_yellow, my_team_is_right, ball)
     history = GameHistory(10)
     return Game(
         past=history,
@@ -1008,7 +1010,13 @@ class TestPenaltyPositioning:
         }
         referee = _make_referee_data(command=RefereeCommand.PREPARE_PENALTY_BLUE)
         referee.yellow_team.goalkeeper = 1
-        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            ball=_ball(2.25, 0.0),
+        )
         cmd_map = _make_cmd_map(game)
         node = referee_actions.PreparePenaltyTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
@@ -1019,6 +1027,67 @@ class TestPenaltyPositioning:
 
         assert keeper_target.x == pytest.approx(4.5)
         assert all(target.x > 0.0 for target in support_targets)
+
+    def test_prepare_penalty_theirs_support_robots_stand_outside_the_keep_out_circle(self, monkeypatch):
+        # decoy_and_overload_vs_low_block (2026-09-28): the line 0.4 m behind the
+        # mark put a defender 0.44 m from the ball, KeepOutRule (0.5 m) fired
+        # 1 s into every PREPARE_PENALTY, and the penalty was never taken.
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {rid: _robot(rid, 0.5 * rid, 0.0) for rid in range(6)}
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_PENALTY_BLUE)
+        referee.yellow_team.goalkeeper = 0
+        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
+        node = referee_actions.PreparePenaltyTheirsStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+
+        node.update()
+        mark = Vector2D(2.25, 0.0)
+        support_targets = [target for robot_id, target in captured if robot_id != 0]
+        assert len(support_targets) == 5
+        assert min((target - mark).mag() for target in support_targets) >= 1.0
+
+    def test_prepare_penalty_theirs_goal_side_defender_walks_round_the_ball(self, monkeypatch):
+        # decoy_and_overload_vs_low_block (2026-09-28): a defender starting between
+        # the mark and its own goal drove straight through the ball to the line
+        # behind it, 0.30 m from the ball for 0.5 s -- keep-out voided the penalty.
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = {}
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured[robot_id] = target_coords
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        mark = Vector2D(2.25, 0.0)
+        robots = {0: _robot(0, 4.4, 0.0), 1: _robot(1, 3.1, 0.05)}
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_PENALTY_BLUE)
+        referee.yellow_team.goalkeeper = 0
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            ball=_ball(mark.x, mark.y),
+        )
+        node = referee_actions.PreparePenaltyTheirsStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+
+        node.update()
+        start, target = Vector2D(3.1, 0.05), captured[1]
+        seg = target - start
+        t = min(1.0, max(0.0, (mark - start).dot(seg) / seg.dot(seg)))
+        assert (start + seg * t - mark).mag() >= 0.5
 
 
 class TestVariableFieldScaling:

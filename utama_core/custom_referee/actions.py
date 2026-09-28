@@ -717,6 +717,7 @@ class PreparePenaltyTheirsStep:
         robot_ids = sorted(game.friendly_robots.keys())
         behind_idx = 0
         behind_y_step = PENALTY_LINE_Y_STEP_RATIO * _field_half_width(game)
+        intended = {}
 
         for robot_id in robot_ids:
             if robot_id == keeper_id:
@@ -727,9 +728,17 @@ class PreparePenaltyTheirsStep:
                 )
             else:
                 offset = (behind_idx - (len(robot_ids) - 1) / 2.0) * behind_y_step
-                pos = Vector2D(behind_line_x, offset)
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, pos, 0.0)
+                intended[robot_id] = Vector2D(behind_line_x, offset)
                 behind_idx += 1
+
+        # The line is on the far side of the ball from our goal, so a defender
+        # starting goal-side must go round the ball, not through the keep-out circle.
+        _clear_to_legal_positions(
+            self.blackboard,
+            ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            exempt_robot_ids={keeper_id},
+            intended_targets=intended,
+        )
 
 
 # ---------------------------------------------------------------------------
