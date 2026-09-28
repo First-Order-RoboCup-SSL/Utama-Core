@@ -135,10 +135,11 @@ def test_their_kickoff_clears_our_robots_outside_center_circle(split_shape_runne
 def test_override_ends_and_tactics_resume_on_normal_start(split_shape_runner):
     """Once NORMAL_START arrives after a restart, tactics tick again (mem was
     reset by the barrier transition on the way in) instead of the override
-    continuing to hold every robot in place forever."""
+    continuing to hold every robot in place forever. Our own kick-off: after
+    the opponent's, the hold lasts until their kicker moves the ball (5.4)."""
     strategy = split_shape_runner.my.strategy
 
-    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_KICKOFF_BLUE)
+    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_KICKOFF_YELLOW)
     for _ in range(50):
         split_shape_runner.step_once()
 

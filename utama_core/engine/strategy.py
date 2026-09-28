@@ -33,6 +33,7 @@ for the duration of the restart. See `_OVERRIDE_COMMANDS` there and
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -62,6 +63,19 @@ logger = logging.getLogger(__name__)
 # for when those per-tactic timeouts fail to fire, not a tuned replacement
 # for any one of them.
 DEFAULT_COMMITMENT_DEADLINE_S = 15.0
+
+# Rulebook 5.4: a kick-off, free kick or penalty is in play once its ball has moved this far.
+_BALL_IN_PLAY_M = 0.05
+_TWO_STAGE_RESTARTS = frozenset(
+    {
+        RefereeCommand.PREPARE_KICKOFF_YELLOW,
+        RefereeCommand.PREPARE_KICKOFF_BLUE,
+        RefereeCommand.PREPARE_PENALTY_YELLOW,
+        RefereeCommand.PREPARE_PENALTY_BLUE,
+        RefereeCommand.DIRECT_FREE_YELLOW,
+        RefereeCommand.DIRECT_FREE_BLUE,
+    }
+)
 
 # A commitment is only treated as "stalled" (eligible for deadline release)
 # if the ball has moved less than this since the commitment began. A
@@ -156,6 +170,8 @@ class Strategy:
         self._slots: dict[TacticId, _TacticSlot] = {}
         self._prev_partition: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._prev_referee_command = None
+        # Their two-stage restart and where its ball stood at NORMAL_START (see `_held_restart`).
+        self._their_restart: Optional[tuple[RefereeCommand, float, float]] = None
         self._pending_barrier_reset: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._referee_override = RefereeOverride(overrides=referee_overrides)
 
@@ -306,6 +322,26 @@ class Strategy:
                 return tid
         return None
 
+    def _held_restart(self, game: Game, command: RefereeCommand) -> Optional[RefereeCommand]:
+        """The opponent's kick-off/free kick/penalty whose positioning still applies at
+        NORMAL_START: the rulebook (5.4) only puts the ball in play once it has moved
+        `_BALL_IN_PLAY_M`, and until then the defending team stays where the restart put it.
+        Found in decoy_and_overload_vs_tiki_taka (2026-09-28): treated as live play, a
+        defender walked onto the unkicked free-kick ball and wedged the kicker for 10 s."""
+        ball = getattr(game, "ball", None)
+        if command in _TWO_STAGE_RESTARTS:
+            theirs = command.name.endswith("_YELLOW") != game.my_team_is_yellow
+            self._their_restart = (command, ball.p.x, ball.p.y) if theirs and ball is not None else None
+            return None
+        if command is not RefereeCommand.NORMAL_START or self._their_restart is None:
+            self._their_restart = None
+            return None
+        restart, x0, y0 = self._their_restart
+        if ball is None or math.hypot(ball.p.x - x0, ball.p.y - y0) >= _BALL_IN_PLAY_M:
+            self._their_restart = None
+            return None
+        return restart
+
     def tick(self, game: Game) -> dict[RobotId, RobotCommand]:
         self._tick_count += 1
         referee = getattr(game, "referee", None)
@@ -315,9 +351,10 @@ class Strategy:
             tier = classify_transition(self._prev_referee_command, current_command)
             if tier is ResetTier.BARRIER:
                 self._barrier_reset(game)
+            held_restart = self._held_restart(game, current_command)
             self._prev_referee_command = current_command
 
-            if is_override_command(current_command):
+            if held_restart is not None or is_override_command(current_command):
                 # Restart in progress (kickoff/placement/free-kick/penalty),
                 # or STOP/TIMEOUT_* (see `referee_override.py`'s module
                 # docstring for why both are in this set too, ahead of the
@@ -327,7 +364,9 @@ class Strategy:
                 # reset on the transition in; tactics simply don't tick while
                 # this is active, so there is nothing further to reconcile
                 # once the restart ends and normal picking resumes.
-                override_commands = self._referee_override.tick(game, self._ctx.motion_controller, current_command)
+                override_commands = self._referee_override.tick(
+                    game, self._ctx.motion_controller, held_restart or current_command
+                )
                 # Most override Steps still compute a command for every
                 # friendly robot including the goalkeeper (e.g. `StopStep`
                 # drives the keeper off the ball if it's inside the keep-out

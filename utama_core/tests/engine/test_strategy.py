@@ -790,3 +790,57 @@ def test_match_log_skips_barrier_reset_event_when_nothing_was_assigned():
 
     tactic_ids = [e.tactic_id for e in strategy.match_log.events() if isinstance(e, IntentionEvent)]
     assert "referee reset" not in tactic_ids
+
+
+# --- their two-stage restart after NORMAL_START ---
+
+
+class _RestartGame:
+    """A referee command, our colour, and a ball position — all the restart hold reads."""
+
+    def __init__(self, command: RefereeCommand, ball_x: float = 0.0):
+        from types import SimpleNamespace
+
+        self.referee = _FakeReferee(command)
+        self.my_team_is_yellow = True
+        self.ball = SimpleNamespace(p=SimpleNamespace(x=ball_x, y=0.0))
+
+
+def _held_restart_strategy():
+    tactic = RecordingTactic()
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+        referee_overrides={
+            RefereeCommand.DIRECT_FREE_BLUE: lambda game, mc: {1: "keep-out", 2: "keep-out"},
+            RefereeCommand.PREPARE_KICKOFF_BLUE: lambda game, mc: {1: "own-half", 2: "own-half"},
+            RefereeCommand.DIRECT_FREE_YELLOW: lambda game, mc: {1: "kicker", 2: "wait"},
+        },
+    )
+    return strategy, tactic
+
+
+@pytest.mark.parametrize(
+    "restart, held", [(RefereeCommand.DIRECT_FREE_BLUE, "keep-out"), (RefereeCommand.PREPARE_KICKOFF_BLUE, "own-half")]
+)
+def test_their_restart_positioning_holds_after_normal_start_until_the_ball_is_in_play(restart, held):
+    # decoy_and_overload_vs_tiki_taka / _vs_give_and_go_solo (2026-09-28): the
+    # defending team treated NORMAL_START as live play, walked onto the unkicked
+    # ball and wedged the kicker for the full 10 s restart timeout.
+    strategy, tactic = _held_restart_strategy()
+    strategy.tick(_RestartGame(restart))
+
+    assert strategy.tick(_RestartGame(RefereeCommand.NORMAL_START, ball_x=0.0)) == {1: held, 2: held}
+    assert strategy.tick(_RestartGame(RefereeCommand.NORMAL_START, ball_x=0.04)) == {1: held, 2: held}
+    assert tactic.mem_creations == 0
+
+    assert strategy.tick(_RestartGame(RefereeCommand.NORMAL_START, ball_x=0.06)) == {1: "cmd-1", 2: "cmd-2"}
+    assert strategy.tick(_RestartGame(RefereeCommand.NORMAL_START, ball_x=0.0)) == {1: "cmd-1", 2: "cmd-2"}
+
+
+def test_our_own_restart_hands_over_at_normal_start():
+    strategy, _ = _held_restart_strategy()
+    strategy.tick(_RestartGame(RefereeCommand.DIRECT_FREE_YELLOW))
+    assert strategy.tick(_RestartGame(RefereeCommand.NORMAL_START)) == {1: "cmd-1", 2: "cmd-2"}
