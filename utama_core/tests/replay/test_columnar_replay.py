@@ -13,6 +13,7 @@ import pytest
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
+from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.replay.columnar_reader import load_columnar_replay
@@ -219,3 +220,54 @@ def test_checkpoint_flush_leaves_a_valid_partial_replay(tmp_path):
     assert writer.path.exists(), "expected at least one periodic checkpoint to have been written"
     replay = load_columnar_replay(writer.path)
     assert replay.n_ticks >= 1
+
+
+def test_sparse_sidecar_stores_only_changes_and_rebuilds_every_tick(tmp_path):
+    """A live referee message changes every tick only in its clocks: the sidecar keeps the
+    ticks where anything else changes (or a clock jumps), and the reader advances the clocks."""
+    yellow = TeamInfo("Yellow")  # mutated in place below, as a referee may do
+    blue = TeamInfo("Blue")
+    dt = 1.0 / 60
+
+    def referee_at(i: int) -> RefereeData:
+        ts = i * dt
+        if i == 90:
+            yellow.score = 1
+        return RefereeData(
+            source_identifier="custom_referee",
+            time_sent=ts,
+            time_received=ts,
+            referee_command=RefereeCommand.STOP if i < 60 else RefereeCommand.NORMAL_START,
+            referee_command_timestamp=0.0 if i < 60 else 1.0,
+            stage=Stage.NORMAL_FIRST_HALF_PRE,
+            stage_time_left=300.0 - ts if i < 100 else 200.0 - (ts - 100 * dt),  # a jump at tick 100
+            blue_team=blue,
+            yellow_team=yellow,
+            status_message="Ball left the field" if 30 <= i < 40 else None,
+        )
+
+    writer = _make_writer(tmp_path)
+    for i in range(120):  # one frame at a time, as in a match: the in-place score change lands at tick 90
+        writer.write_frame(
+            GameFrame(
+                ts=i * dt,
+                my_team_is_yellow=True,
+                my_team_is_right=True,
+                friendly_robots={1: _robot(1, 0, 0, True)},
+                enemy_robots={},
+                ball=Ball(p=Vector3D(0, 0, 0), v=Vector3D(0, 0, 0), a=Vector3D(0, 0, 0)),
+                referee=referee_at(i),
+            )
+        )
+    writer.close()
+    replay = load_columnar_replay(writer.path)
+
+    assert sorted(replay.sparse_referee) == [0, 30, 40, 60, 90, 100]
+    for i in range(120):
+        got = replay.frame_at(i).referee
+        ts = i * dt
+        assert got.referee_command == (RefereeCommand.STOP if i < 60 else RefereeCommand.NORMAL_START)
+        assert got.status_message == ("Ball left the field" if 30 <= i < 40 else None)
+        assert got.yellow_team.score == (1 if i >= 90 else 0)
+        assert got.time_sent == pytest.approx(ts)
+        assert got.stage_time_left == pytest.approx(300.0 - ts if i < 100 else 200.0 - (ts - 100 * dt))

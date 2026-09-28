@@ -47,14 +47,20 @@ Design:
   column trivially (small int enums; two floats with NaN for "absent").
   `game_events`/`status_message`/`source_identifier`/`next_command`/team
   info don't fit a column at all without truncation (variable-length
-  lists, strings, nested objects) *and* have zero real read sites — those
-  go to a small sparse sidecar list, one pickled entry per tick where any
-  of them is actually set, not per tick overall.
+  lists, strings, nested objects) — those go to a small sparse sidecar
+  list: the full `RefereeData` at each tick where it differs from the last
+  stored one other than by its clocks running on (`columnar_reader.
+  advance_clocks`), which the reader carries forward. A live referee sets
+  `source_identifier` and team info on every message, so "any rare field
+  set" meant every tick: 230 MB per round-robin of identical messages.
 """
 
 from __future__ import annotations
 
+import copy
+import dataclasses
 import logging
+import math
 import pickle
 from dataclasses import dataclass, field
 from itertools import count
@@ -64,7 +70,9 @@ from typing import Optional
 import numpy as np
 
 from utama_core.config.settings import REPLAY_BASE_PATH
+from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game import GameFrame
+from utama_core.replay.columnar_reader import advance_clocks
 from utama_core.replay.entities import ReplayMetadata
 
 _NAN = float("nan")
@@ -122,7 +130,8 @@ class ColumnarReplayWriter:
 
         self._my_team_is_right: Optional[bool] = None
         self._ticks: list[_TickRecord] = []
-        self._sparse_referee: list[tuple[int, object]] = []
+        self._sparse_referee: list[tuple[int, RefereeData]] = []
+        self._last_stored_ts = 0.0
         self._last_checkpoint_ts: Optional[float] = None
 
     def _resolve_path(self, replay_configs: ColumnarReplayWriterConfig) -> Path:
@@ -164,8 +173,10 @@ class ColumnarReplayWriter:
             designated_position = (
                 referee.designated_position if referee.designated_position is not None else (_NAN, _NAN)
             )
-            if _has_rare_fields(referee):
-                self._sparse_referee.append((tick_index, referee))
+            if self._changed(referee, frame.ts):
+                # a copy: a referee may update its team info in place
+                self._sparse_referee.append((tick_index, copy.deepcopy(referee)))
+                self._last_stored_ts = frame.ts
         else:
             has_referee = False
             referee_command = -1
@@ -193,6 +204,13 @@ class ColumnarReplayWriter:
             elif frame.ts - self._last_checkpoint_ts >= self.replay_configs.checkpoint_every_s:
                 self._flush()
                 self._last_checkpoint_ts = frame.ts
+
+    def _changed(self, referee: RefereeData, ts: float) -> bool:
+        """Whether `referee` differs from the last stored message carried forward to `ts`."""
+        if not self._sparse_referee:
+            return True
+        expected = advance_clocks(self._sparse_referee[-1][1], ts - self._last_stored_ts)
+        return not _same_referee(referee, expected)
 
     def _build_arrays(self) -> dict:
         n = len(self._ticks)
@@ -292,11 +310,25 @@ class ColumnarReplayWriter:
         self._flush()
 
 
-def _has_rare_fields(referee) -> bool:
-    return bool(
-        referee.game_events
-        or referee.status_message is not None
-        or referee.source_identifier is not None
-        or referee.next_command is not None
-        or referee.current_action_time_remaining is not None
-    )
+_CLOCK_TOLERANCE_S = 1e-6
+
+
+def _team_fields(team) -> Optional[dict]:
+    return None if team is None else vars(team)
+
+
+def _same_referee(a: RefereeData, b: RefereeData) -> bool:
+    """Every field equal, clocks to within `_CLOCK_TOLERANCE_S`."""
+    for f in dataclasses.fields(RefereeData):
+        x, y = getattr(a, f.name), getattr(b, f.name)
+        if f.name in ("blue_team", "yellow_team"):
+            x, y = _team_fields(x), _team_fields(y)
+        if f.name in ("time_sent", "time_received", "stage_time_left"):
+            if not math.isclose(x, y, abs_tol=_CLOCK_TOLERANCE_S):
+                return False
+        elif f.name == "current_action_time_remaining" and x is not None and y is not None:
+            if abs(x - y) > 1:  # microseconds
+                return False
+        elif x != y:
+            return False
+    return True

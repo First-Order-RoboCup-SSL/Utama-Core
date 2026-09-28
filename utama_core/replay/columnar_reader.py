@@ -12,8 +12,11 @@ replay.
 
 from __future__ import annotations
 
+import bisect
+import dataclasses
 import pickle
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Iterator, Optional, Union
 
@@ -24,6 +27,20 @@ from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
+
+
+def advance_clocks(referee: RefereeData, dt: float) -> RefereeData:
+    """`referee` as it reads `dt` seconds later with nothing else changed: the fields a
+    referee message changes every tick. The sparse sidecar stores a message only when the
+    next one differs from this (see `columnar_writer`), and the reader rebuilds the rest."""
+    remaining = referee.current_action_time_remaining
+    return dataclasses.replace(
+        referee,
+        time_sent=referee.time_sent + dt,
+        time_received=referee.time_received + dt,
+        stage_time_left=referee.stage_time_left - dt,
+        current_action_time_remaining=None if remaining is None else remaining - round(dt * 1e6),
+    )
 
 
 @dataclass
@@ -50,7 +67,7 @@ class ColumnarReplay:
     referee_command: np.ndarray  # (n_ticks,) int8, -1 == no referee data
     stage: np.ndarray
     designated_position: np.ndarray  # (n_ticks, 2), NaN when absent
-    sparse_referee: dict[int, RefereeData]  # tick index -> full RefereeData, rare ticks only
+    sparse_referee: dict[int, RefereeData]  # tick index -> full RefereeData, where it changed
 
     @property
     def n_ticks(self) -> int:
@@ -95,8 +112,12 @@ class ColumnarReplay:
     def _referee_at(self, tick: int) -> Optional[RefereeData]:
         if not self.has_referee[tick]:
             return None
-        if tick in self.sparse_referee:
-            return self.sparse_referee[tick]
+        i = bisect.bisect_right(self._sparse_ticks, tick) - 1
+        if i >= 0:
+            stored = self._sparse_ticks[i]
+            if stored == tick:
+                return self.sparse_referee[tick]
+            return advance_clocks(self.sparse_referee[stored], float(self.ts[tick] - self.ts[stored]))
         designated = self.designated_position[tick]
         return RefereeData(
             source_identifier=None,
@@ -110,6 +131,10 @@ class ColumnarReplay:
             yellow_team=None,
             designated_position=None if np.isnan(designated[0]) else tuple(designated),
         )
+
+    @cached_property
+    def _sparse_ticks(self) -> list[int]:
+        return sorted(self.sparse_referee)
 
     def iter_frames(self) -> Iterator[GameFrame]:
         for tick in range(self.n_ticks):
