@@ -97,6 +97,8 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 - **Restart fuzzing** (`custom_referee/restart_fuzzer.py`) — injects legal restarts at
   seeded-random times to exercise auto-advance paths; same seed and interval reproduce the
   schedule. Details: `docs/custom_referee.md`.
+- **`tools/replay_trace.py REPLAY.npz T0 T1`** — text trace of a window: referee command and
+  why it changed, ball, nearest robot per side. The first look at a stall or a voided restart.
 - **`repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless
   match with tracing on, instead of re-running the whole match (`--help` for flags).
 
