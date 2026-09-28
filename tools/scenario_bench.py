@@ -16,7 +16,9 @@ Bank sources, in the order this tool can use them today:
     from a tagged, trustworthy tournament run (`.stats.json` with zero
     `stall_events`, see `utama_core.replay.scenario_harvester`'s module
     docstring for why this gate exists). NOT run by this tool — point it at
-    an already-completed `smoke_tournament.py` run directory.
+    an already-completed `smoke_tournament.py` run directory. `--open-play N`
+    adds up to N open-play starts of each kind per match (a pass about to be
+    made, a ball just lost).
 
 For each scenario, both `--candidate` and `--baseline` play the SAME
 scenario against the SAME `--opponent` (paired comparison, per item 14's
@@ -48,11 +50,13 @@ PATH` loads scenarios from a previously-saved bank instead of hand-authored/
 `--harvest-from` (the two are mutually exclusive as *sources*: a loaded bank
 is meant to be the frozen, already-screened set a prior save produced, not a
 starting point to silently merge fresh sources into — see item 14's
-"Immutable per bank version" note). Still not built: automatic lifecycle
-promotion (candidate -> validated -> active) or a ladder (slow half) — this
-tool can freeze *what* the bank contains, not yet *which scenarios in it are
-trustworthy enough to score*; that curation is still a manual step (e.g. run
-`--dynamic-screen`, decide by hand, then `--save-bank` only the survivors).
+"Immutable per bank version" note). With `--dynamic-screen`, `--save-bank`
+keeps only the informative and noisy scenarios. To grow a bank from a new
+round-robin, `--merge-into` the current bank: harvested scenarios that
+duplicate it are dropped before screening, and the new bank is the old one
+plus the survivors. `--workers N` screens/scores N scenarios at a time.
+Still not built: lifecycle promotion (candidate -> validated -> active) or a
+ladder (slow half).
 
 Run from the repository root, for example:
 
@@ -71,6 +75,11 @@ Run from the repository root, for example:
     pixi run python tools/scenario_bench.py --harvest-from replays/tournament_20260905_090000 \\
         --save-bank utama_core/replay/banks/bank_v1.json --bank-id v1 --list-scenarios
 
+    # Grow a bank from a new round-robin (harvest, drop duplicates, screen, save survivors):
+    pixi run python tools/scenario_bench.py --harvest-from replays/tournament_<id> --open-play 2 \\
+        --merge-into utama_core/replay/banks/bank_v5.json --save-bank utama_core/replay/banks/bank_v6.json \\
+        --dynamic-screen --workers 15
+
     # A/B a code change: record at commit A, compare at commit B.
     pixi run python tools/scenario_bench.py --load-bank bank_v1.json \\
         --candidate build_tiki_taka_kernel_strategy --opponent build_low_block_kernel_strategy
@@ -87,13 +96,15 @@ Run from the repository root, for example:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import math
 import statistics
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Iterable, Iterator, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -101,6 +112,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from utama_core.replay.bench_scenario import (
     BenchScenario,
+    drop_near_duplicates,
     jittered,
     load_bank,
     save_bank,
@@ -127,8 +139,19 @@ def _git_revision() -> str | None:
     return result.stdout.strip() or None
 
 
-def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], dict]:
+def _parallel_map(fn: Callable, items: Iterable, workers: int) -> Iterator:
+    """`map`, over `workers` processes when more than one (results stay in order)."""
+    if workers <= 1:
+        yield from map(fn, items)
+        return
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        yield from pool.map(fn, items)
+
+
+def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], list[BenchScenario], dict]:
+    """(scenarios to screen/score, the `--merge-into` bank's scenarios, harvest report)."""
     harvest_report: dict = {}
+    merged: list[BenchScenario] = []
 
     if args.load_bank is not None:
         # A persisted bank replaces the hand-authored + harvest sources
@@ -143,6 +166,7 @@ def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], dict]:
             harvested, harvest_report = harvest_run_dir(
                 args.harvest_from,
                 evaluator_version=_git_revision() or "unknown",
+                open_play_per_match=args.open_play,
             )
             scenarios.extend(harvested)
 
@@ -150,33 +174,48 @@ def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], dict]:
         wanted = set(args.families)
         scenarios = [s for s in scenarios if s.provenance.family.value in wanted]
 
+    if args.merge_into is not None:
+        _bank_id, merged = load_bank(args.merge_into)
+        before = len(scenarios)
+        scenarios = drop_near_duplicates(scenarios, keep=merged)
+        print(f"{before - len(scenarios)} of {before} scenarios duplicate {args.merge_into} or each other; dropped")
+
+    return scenarios, merged, harvest_report
+
+
+def _save(args: argparse.Namespace, scenarios: list[BenchScenario]) -> None:
     if args.save_bank is not None:
-        save_bank(scenarios, args.save_bank, bank_id=args.bank_id or args.save_bank.stem)
-        print(f"Saved {len(scenarios)} scenarios to {args.save_bank} (bank_id={args.bank_id or args.save_bank.stem})")
+        bank_id = args.bank_id or args.save_bank.stem
+        save_bank(scenarios, args.save_bank, bank_id=bank_id)
+        print(f"Saved {len(scenarios)} scenarios to {args.save_bank} (bank_id={bank_id})")
 
-    return scenarios, harvest_report
+
+def _screen_one(bench_scenario: BenchScenario, *, horizon_s: float, repeats: int) -> dict:
+    result = screen_scenario(
+        bench_scenario,
+        champion_config="build_default_kernel_strategy",
+        pool_configs=DEFAULT_SCREEN_POOL,
+        horizon_s=horizon_s,
+        repeats=repeats,
+    )
+    return {
+        "scenario_id": result.scenario_id,
+        "verdict": result.verdict.value,
+        "outcomes": list(result.outcomes),
+        "outcome_stdev": result.outcome_stdev,
+        "seed_stdev": result.seed_stdev,
+        "policy_stdev": result.policy_stdev,
+    }
 
 
-def _run_dynamic_screen(scenarios: list[BenchScenario], *, horizon_s: float, repeats: int) -> list[dict]:
+def _run_dynamic_screen(
+    scenarios: list[BenchScenario], *, horizon_s: float, repeats: int, workers: int = 1
+) -> list[dict]:
+    screen = functools.partial(_screen_one, horizon_s=horizon_s, repeats=repeats)
     results = []
-    for bench_scenario in scenarios:
-        result = screen_scenario(
-            bench_scenario,
-            champion_config="build_default_kernel_strategy",
-            pool_configs=DEFAULT_SCREEN_POOL,
-            horizon_s=horizon_s,
-            repeats=repeats,
-        )
-        results.append(
-            {
-                "scenario_id": result.scenario_id,
-                "verdict": result.verdict.value,
-                "outcomes": list(result.outcomes),
-                "outcome_stdev": result.outcome_stdev,
-                "seed_stdev": result.seed_stdev,
-                "policy_stdev": result.policy_stdev,
-            }
-        )
+    for index, result in enumerate(_parallel_map(screen, scenarios, workers), start=1):
+        print(f"[{index}/{len(scenarios)}] {result['scenario_id']}: {result['verdict']}", flush=True)
+        results.append(result)
     return results
 
 
@@ -209,6 +248,14 @@ def _load_against(path: Path, *, opponent: str, horizon_s: float, repeats: int) 
     return outcomes, source
 
 
+def _score_one(
+    bench_scenario: BenchScenario, *, candidate: str, opponent: str, horizon_s: float, repeats: int, baseline
+) -> tuple[dict, Optional[dict]]:
+    cand = _runs(bench_scenario, candidate, opponent, horizon_s, repeats)
+    base = _runs(bench_scenario, baseline, opponent, horizon_s, repeats) if baseline else None
+    return cand, base
+
+
 def _score(
     scenarios: list[BenchScenario],
     *,
@@ -218,16 +265,20 @@ def _score(
     repeats: int,
     baseline: Optional[str] = None,
     against: Optional[dict[str, list[int]]] = None,
+    workers: int = 1,
 ) -> list[dict]:
     """Candidate outcomes per scenario, paired with the baseline's on the same jittered
     starts: a `baseline` config run here, or `against` outcomes from an earlier run."""
     rows = []
     total = len(scenarios)
-    for index, bench_scenario in enumerate(scenarios, start=1):
+    play = functools.partial(
+        _score_one, candidate=candidate, opponent=opponent, horizon_s=horizon_s, repeats=repeats, baseline=baseline
+    )
+    for index, (bench_scenario, (cand, base)) in enumerate(
+        zip(scenarios, _parallel_map(play, scenarios, workers)), start=1
+    ):
         sid = bench_scenario.scenario_id
         print(f"[{index}/{total}] {sid} ({bench_scenario.provenance.family.value})", flush=True)
-        cand = _runs(bench_scenario, candidate, opponent, horizon_s, repeats)
-        base = _runs(bench_scenario, baseline, opponent, horizon_s, repeats) if baseline else None
         base_outcomes = base["outcomes"] if base else (against or {}).get(sid)
         delta = None
         if base_outcomes is not None:
@@ -409,6 +460,13 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="a completed smoke_tournament.py run dir to harvest restart scenarios from",
     )
+    parser.add_argument(
+        "--open-play",
+        type=int,
+        default=0,
+        help="with --harvest-from, also harvest up to this many open-play scenarios of each kind per match "
+        "(see scenario_harvester.find_open_play_events; default 0)",
+    )
     parser.add_argument("--families", nargs="+", default=None, help="restrict to these ScenarioFamily values")
     parser.add_argument(
         "--dynamic-screen", action="store_true", help="run the dynamic screen instead of paired scoring"
@@ -425,8 +483,17 @@ def parse_args() -> argparse.Namespace:
         "--save-bank",
         type=Path,
         default=None,
-        help="write the loaded scenario set (after --families filtering) to this path as a persisted bank JSON",
+        help="write the loaded scenario set (after --families filtering) to this path as a persisted bank JSON; "
+        "with --dynamic-screen, only the informative and noisy scenarios",
     )
+    parser.add_argument(
+        "--merge-into",
+        type=Path,
+        default=None,
+        help="an existing bank: drop harvested scenarios that duplicate it (bench_scenario.is_near_duplicate) "
+        "before screening, and --save-bank writes it plus the new survivors, as a new bank",
+    )
+    parser.add_argument("--workers", type=int, default=1, help="processes to screen/score scenarios on (default 1)")
     parser.add_argument(
         "--bank-id",
         default=None,
@@ -441,13 +508,17 @@ def parse_args() -> argparse.Namespace:
             parser.error(f"--{', --'.join(missing)} required unless --list-scenarios or --dynamic-screen")
         if args.baseline and args.against_results:
             parser.error("--baseline and --against-results are alternatives")
+    if args.merge_into is not None and (args.harvest_from is None or args.save_bank is None):
+        parser.error("--merge-into needs --harvest-from and --save-bank")
 
     return args
 
 
 def main() -> int:
     args = parse_args()
-    scenarios, harvest_report = _load_bank(args)
+    scenarios, merged, harvest_report = _load_bank(args)
+    if not args.dynamic_screen:
+        _save(args, merged + scenarios)
 
     if args.list_scenarios:
         for bs in scenarios:
@@ -468,7 +539,15 @@ def main() -> int:
     timestamp = generated_at.strftime("%Y%m%d_%H%M%S")
 
     if args.dynamic_screen:
-        screen_results = _run_dynamic_screen(scenarios, horizon_s=args.horizon, repeats=args.repeats)
+        screen_results = _run_dynamic_screen(
+            scenarios, horizon_s=args.horizon, repeats=args.repeats, workers=args.workers
+        )
+        kept = {
+            r["scenario_id"]
+            for r in screen_results
+            if r["verdict"] in (ScreenVerdict.INFORMATIVE.value, ScreenVerdict.NOISY.value)
+        }
+        _save(args, merged + [s for s in scenarios if s.scenario_id in kept])
         dead = sum(1 for r in screen_results if r["verdict"] == ScreenVerdict.DEAD.value)
         determined = sum(1 for r in screen_results if r["verdict"] == ScreenVerdict.DETERMINED.value)
         noisy = sum(1 for r in screen_results if r["verdict"] == ScreenVerdict.NOISY.value)
@@ -510,6 +589,7 @@ def main() -> int:
         repeats=args.repeats,
         baseline=args.baseline,
         against=against,
+        workers=args.workers,
     )
     aggregates = _aggregate_by_family(rows)
 

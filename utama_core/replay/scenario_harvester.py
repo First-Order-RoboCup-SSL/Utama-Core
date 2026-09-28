@@ -18,6 +18,13 @@ those matches was stuck at `PREPARE_KICKOFF_YELLOW` from t=0, so it either
 has a `RESTART_STALL` recorded or, for even older runs with no watchdog at
 all, no `.stats.json` to check — both fail closed here).
 
+Open play (`open_play_per_match`, trigger `EVENT`): `turnover_breakdown.analyse_match`
+already follows every pass and real ball loss of the yellow side (the candidate), so each
+becomes a start: `OPEN_PLAY_POSSESSION` `_PASS_LEAD_S` before a pass is released (the pass is
+still the candidate's to make), `OPEN_PLAY_COUNTER` at a real loss (the candidate must defend
+the counter). Only moments inside unbroken live play count, and at most N of each per match
+are kept, since a match has dozens and they are costly to screen.
+
 This module does NOT run a tournament itself — `harvest_run_dir` takes an
 already-completed run directory (e.g. `replays/tournament_.../`) and is a
 pure read; see `tools/scenario_bench.py` for the harvest → screen → score →
@@ -28,6 +35,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -40,7 +48,8 @@ from utama_core.replay.bench_scenario import (
     ScenarioTrigger,
     static_screen,
 )
-from utama_core.replay.scenario import scenario_from_replay
+from utama_core.replay.scenario import Scenario, scenario_from_replay
+from utama_core.replay.turnover_breakdown import _is_real, analyse_match
 
 logger = logging.getLogger(__name__)
 
@@ -203,14 +212,81 @@ def _sidecar_path_for(replay_path: Path) -> Path:
     return replay_path.with_name(f"{replay_path.stem}.intentions.jsonl")
 
 
+_PASS_LEAD_S = 1.0
+
+
+@dataclass(frozen=True)
+class OpenPlayEvent:
+    sim_time: float  # where the scenario starts
+    family: ScenarioFamily
+    perspective: str
+
+
+def _live_throughout(referee_rows: list[dict], t0: float, t1: float) -> bool:
+    """Live play from `t0` to `t1`: the last command at or before `t0` is live and none follows by `t1`."""
+    command = None
+    for row in referee_rows:
+        ts = row.get("sim_time")
+        if ts is None:
+            continue
+        if ts <= t0:
+            command = row.get("command")
+        elif ts <= t1:
+            return False
+    return command is not None and RefereeCommand[command] in _LIVE_PLAY_COMMANDS
+
+
+def open_play_events(analysis: dict, referee_rows: list[dict]) -> list[OpenPlayEvent]:
+    """Open-play starts from one `turnover_breakdown.analyse_match` result (see module docstring)."""
+    events = [
+        OpenPlayEvent(p["t"] - _PASS_LEAD_S, ScenarioFamily.OPEN_PLAY_POSSESSION, "candidate_in_possession")
+        for p in analysis["passes"]
+        if _live_throughout(referee_rows, p["t"] - _PASS_LEAD_S, p["t"])
+    ]
+    events += [
+        OpenPlayEvent(t["t"], ScenarioFamily.OPEN_PLAY_COUNTER, "candidate_defending")
+        for t in analysis["turnovers"]
+        if _is_real(t) and _live_throughout(referee_rows, t["t"], t["t"])
+    ]
+    return events
+
+
+def pick_events(events: list[OpenPlayEvent], per_family: int, *, seed: str) -> list[OpenPlayEvent]:
+    """At most `per_family` of each family, drawn reproducibly by `seed` (the match name), in time order."""
+    rng = random.Random(seed)
+    picked = []
+    for family in dict.fromkeys(e.family for e in events):
+        same = [e for e in events if e.family == family]
+        picked += rng.sample(same, min(per_family, len(same)))
+    return sorted(picked, key=lambda e: e.sim_time)
+
+
+def _harvested(replay_path: Path, t: float) -> Optional[Scenario]:
+    """The replay's field state at `t`, or None if it can't be read or fails the static screen."""
+    try:
+        scenario = scenario_from_replay(replay_path, t)
+    except ValueError:
+        logger.warning("Could not load frame at t=%.3f from %s", t, replay_path)
+        return None
+    screen = static_screen(scenario)
+    if not screen.ok:
+        logger.info(
+            "Dropping start at t=%.3f in %s: static screen failed (%s)", t, replay_path, "; ".join(screen.violations)
+        )
+        return None
+    return scenario
+
+
 def harvest_replay(
     replay_path: Path,
     *,
     source_run_id: str,
     evaluator_version: str,
     candidate_is_yellow: bool = True,
+    open_play_per_match: int = 0,
 ) -> list[BenchScenario]:
-    """Harvest every restart-transition `BenchScenario` from one replay.
+    """Harvest every restart-transition `BenchScenario` from one replay, plus up to
+    `open_play_per_match` open-play starts of each kind (see module docstring).
 
     Does NOT check `match_is_trustworthy` itself — callers (typically
     `harvest_run_dir`) are expected to have already gated on it, since
@@ -227,20 +303,8 @@ def harvest_replay(
         # kickoff formation): harvested from a whole run it swamps the bank.
         if index == 0 and _family_for(transition) == ScenarioFamily.KICKOFF:
             continue
-        try:
-            scenario = scenario_from_replay(replay_path, transition.sim_time)
-        except ValueError:
-            logger.warning("Could not load frame at t=%.3f from %s", transition.sim_time, replay_path)
-            continue
-
-        screen = static_screen(scenario)
-        if not screen.ok:
-            logger.info(
-                "Dropping restart transition at t=%.3f in %s: static screen failed (%s)",
-                transition.sim_time,
-                replay_path,
-                "; ".join(screen.violations),
-            )
+        scenario = _harvested(replay_path, transition.sim_time)
+        if scenario is None:
             continue
 
         base_family = _family_for(transition)
@@ -258,6 +322,25 @@ def harvest_replay(
         )
         scenarios.append(BenchScenario(scenario_id=scenario_id, scenario=scenario, provenance=provenance))
 
+    # analyse_match follows the yellow side only
+    if open_play_per_match > 0 and candidate_is_yellow and replay_path.suffix == ".npz":
+        events = open_play_events(analyse_match(str(replay_path)), _referee_rows(sidecar_path))
+        for event in pick_events(events, open_play_per_match, seed=replay_path.stem):
+            scenario = _harvested(replay_path, event.sim_time)
+            if scenario is None:
+                continue
+            provenance = ScenarioProvenance(
+                source_run_id=source_run_id,
+                evaluator_version=evaluator_version,
+                trigger=ScenarioTrigger.EVENT,
+                family=event.family,
+                anchor_tick=event.sim_time,
+                source_replay=replay_path,
+                perspective=event.perspective,
+            )
+            scenario_id = f"{replay_path.stem}_t{event.sim_time:.1f}_{event.family.value}"
+            scenarios.append(BenchScenario(scenario_id=scenario_id, scenario=scenario, provenance=provenance))
+
     return scenarios
 
 
@@ -272,6 +355,7 @@ def harvest_run_dir(
     *,
     evaluator_version: str,
     candidate_is_yellow: bool = True,
+    open_play_per_match: int = 0,
 ) -> tuple[list[BenchScenario], dict[str, int]]:
     """Harvest restart-triggered scenarios from every trustworthy match in
     `run_dir` (a completed `smoke_tournament.py` run directory).
@@ -302,6 +386,7 @@ def harvest_run_dir(
                 source_run_id=source_run_id,
                 evaluator_version=evaluator_version,
                 candidate_is_yellow=candidate_is_yellow,
+                open_play_per_match=open_play_per_match,
             )
         )
 

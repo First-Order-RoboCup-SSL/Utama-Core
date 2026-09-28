@@ -17,12 +17,16 @@ import pytest
 
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.bench_scenario import (
+    _DUPLICATE_BALL_M,
+    _DUPLICATE_ROBOT_M,
     _JITTER_POS_M,
     BenchScenario,
     ScenarioFamily,
     ScenarioLifecycle,
     ScenarioProvenance,
     ScenarioTrigger,
+    drop_near_duplicates,
+    is_near_duplicate,
     jittered,
     load_bank,
     save_bank,
@@ -225,3 +229,45 @@ def test_jittered_is_reproducible_small_and_keeps_the_robot_on_the_ball():
     ):
         assert (new.x, new.y) != (old.x, old.y)
         assert abs(new.x - old.x) <= _JITTER_POS_M and abs(new.y - old.y) <= _JITTER_POS_M
+
+
+def _at(scenario_id: str, *, ball_dx: float = 0.0, robot_dx: float = 0.0, **provenance_overrides) -> BenchScenario:
+    """`_sample_bench_scenario` with the ball and friendly robot 1 shifted along x."""
+    base = _sample_bench_scenario(scenario_id, **provenance_overrides)
+    s = base.scenario
+    friendly = (s.friendly_robots[0], dataclasses.replace(s.friendly_robots[1], x=s.friendly_robots[1].x + robot_dx))
+    return dataclasses.replace(
+        base, scenario=dataclasses.replace(s, ball_x=s.ball_x + ball_dx, friendly_robots=friendly)
+    )
+
+
+@pytest.mark.parametrize(
+    "ball_dx, robot_dx, duplicate",
+    [
+        (0.0, 0.0, True),
+        (_DUPLICATE_BALL_M - 1e-9, 0.0, True),
+        (_DUPLICATE_BALL_M + 1e-3, 0.0, False),
+        (0.0, _DUPLICATE_ROBOT_M - 1e-9, True),
+        (0.0, _DUPLICATE_ROBOT_M + 1e-3, False),
+    ],
+)
+def test_near_duplicate_boundaries(ball_dx, robot_dx, duplicate):
+    assert is_near_duplicate(_at("a"), _at("b", ball_dx=ball_dx, robot_dx=robot_dx)) is duplicate
+
+
+def test_same_positions_in_a_different_situation_are_not_duplicates():
+    assert not is_near_duplicate(_at("a"), _at("b", family=ScenarioFamily.DIRECT_FREE_DEFENDING))
+    assert not is_near_duplicate(_at("a"), _at("b", perspective="candidate_defending"))
+
+
+def test_drop_near_duplicates_keeps_the_existing_bank_and_first_of_new():
+    existing = [_at("old")]
+    new = [_at("copy_of_old", robot_dx=0.05), _at("fresh", ball_dx=1.0), _at("copy_of_fresh", ball_dx=1.05)]
+
+    assert [s.scenario_id for s in drop_near_duplicates(new, keep=existing)] == ["fresh"]
+
+
+def test_drop_near_duplicates_renames_a_colliding_id():
+    kept = drop_near_duplicates([_at("same_id", ball_dx=1.0)], keep=[_at("same_id")])
+
+    assert [s.scenario_id for s in kept] == ["same_id_tournament_20260904_221937"]

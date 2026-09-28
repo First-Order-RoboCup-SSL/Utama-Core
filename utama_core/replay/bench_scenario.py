@@ -71,7 +71,8 @@ class ScenarioFamily(Enum):
     DIRECT_FREE_DEFENDING = "direct_free_defending"
     PENALTY = "penalty"
     BALL_PLACEMENT = "ball_placement"
-    OPEN_PLAY_COUNTER = "open_play_counter"
+    OPEN_PLAY_COUNTER = "open_play_counter"  # just lost the ball; also harvested FORCE_START restarts
+    OPEN_PLAY_POSSESSION = "open_play_possession"  # our possession, a pass still to make
     OPEN_PLAY_LOOSE_BALL = "open_play_loose_ball"
     WEAKNESS = "weakness"  # harvested from a lost play; tagged separately
 
@@ -350,3 +351,50 @@ def load_bank(path: Path) -> tuple[str, list["BenchScenario"]]:
         )
     scenarios = [BenchScenario.from_dict(d) for d in payload["scenarios"]]
     return payload["bank_id"], scenarios
+
+
+# Two starts this close are the same situation twice (kickoff formations recur match after
+# match): keeping both adds count to a bank, not independent evidence, and inflates its t.
+_DUPLICATE_BALL_M = 0.10
+_DUPLICATE_ROBOT_M = 0.15
+
+
+def _positions(scenario: Scenario) -> dict[tuple[str, int], tuple[float, float]]:
+    return {("friendly", r.id): (r.x, r.y) for r in scenario.friendly_robots} | {
+        ("enemy", r.id): (r.x, r.y) for r in scenario.enemy_robots
+    }
+
+
+def is_near_duplicate(a: "BenchScenario", b: "BenchScenario") -> bool:
+    """Same family, perspective and referee command, ball within `_DUPLICATE_BALL_M` and
+    every robot (by team and id) within `_DUPLICATE_ROBOT_M`."""
+    sa, sb = a.scenario, b.scenario
+    if (a.provenance.family, a.provenance.perspective, sa.referee_command) != (
+        b.provenance.family,
+        b.provenance.perspective,
+        sb.referee_command,
+    ):
+        return False
+    if math.dist((sa.ball_x, sa.ball_y), (sb.ball_x, sb.ball_y)) > _DUPLICATE_BALL_M:
+        return False
+    pa, pb = _positions(sa), _positions(sb)
+    return pa.keys() == pb.keys() and all(math.dist(pa[k], pb[k]) <= _DUPLICATE_ROBOT_M for k in pa)
+
+
+def drop_near_duplicates(
+    scenarios: list["BenchScenario"], *, keep: list["BenchScenario"] = ()
+) -> list["BenchScenario"]:
+    """`scenarios` minus near-duplicates of `keep` (an existing bank) or of an earlier
+    scenario in the list. A survivor whose id is already taken gets its source run appended."""
+    kept = list(keep)
+    ids = {s.scenario_id for s in kept}
+    new: list[BenchScenario] = []
+    for s in scenarios:
+        if any(is_near_duplicate(s, k) for k in kept):
+            continue
+        if s.scenario_id in ids:
+            s = dataclasses.replace(s, scenario_id=f"{s.scenario_id}_{s.provenance.source_run_id}")
+        ids.add(s.scenario_id)
+        kept.append(s)
+        new.append(s)
+    return new

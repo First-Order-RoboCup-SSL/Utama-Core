@@ -15,15 +15,21 @@ import json
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.replay import scenario_harvester
+from utama_core.replay.bench_scenario import ScenarioFamily, ScenarioTrigger
 from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
 )
 from utama_core.replay.scenario_harvester import (
+    _PASS_LEAD_S,
+    OpenPlayEvent,
     find_restart_transitions,
     harvest_replay,
     harvest_run_dir,
     match_is_trustworthy,
+    open_play_events,
+    pick_events,
 )
 
 
@@ -271,3 +277,78 @@ def test_harvest_replay_skips_the_opening_kickoff(tmp_path):
     )
     scenarios = harvest_replay(replay_path, source_run_id="r", evaluator_version="abc")
     assert [s.provenance.anchor_tick for s in scenarios] == [3.0]
+
+
+# --- open play ----------------------------------------------------------------
+
+_LIVE_FROM_5 = [
+    {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},
+    {"event": "referee", "sim_time": 5.0, "command": "NORMAL_START"},
+    {"event": "referee", "sim_time": 30.0, "command": "STOP"},
+]
+
+
+def _analysis(passes=(), turnovers=()) -> dict:
+    return {"passes": [{"t": t} for t in passes], "turnovers": list(turnovers), "restarts": []}
+
+
+def _loss(t: float, kind: str = "tackled", regained_after_s=None) -> dict:
+    return {"t": t, "kind": kind, "regained_after_s": regained_after_s}
+
+
+def test_a_pass_gives_a_possession_start_before_the_release():
+    events = open_play_events(_analysis(passes=[12.0]), _LIVE_FROM_5)
+
+    assert events == [
+        OpenPlayEvent(12.0 - _PASS_LEAD_S, ScenarioFamily.OPEN_PLAY_POSSESSION, "candidate_in_possession")
+    ]
+
+
+def test_a_pass_whose_lead_in_is_not_all_live_play_is_skipped():
+    # the start would fall before NORMAL_START (5.0), or span the STOP at 30.0
+    assert open_play_events(_analysis(passes=[5.0 + _PASS_LEAD_S - 0.01, 30.5]), _LIVE_FROM_5) == []
+    assert len(open_play_events(_analysis(passes=[5.0 + _PASS_LEAD_S]), _LIVE_FROM_5)) == 1
+
+
+def test_only_real_live_losses_give_counter_starts():
+    losses = [
+        _loss(10.0),
+        _loss(11.0, regained_after_s=0.5),  # flicker: won straight back
+        _loss(12.0, kind="during_stoppage"),
+        _loss(31.0),  # after the STOP
+    ]
+    events = open_play_events(_analysis(turnovers=losses), _LIVE_FROM_5)
+
+    assert events == [OpenPlayEvent(10.0, ScenarioFamily.OPEN_PLAY_COUNTER, "candidate_defending")]
+
+
+def test_pick_events_caps_each_family_and_is_reproducible():
+    events = [
+        OpenPlayEvent(float(t), ScenarioFamily.OPEN_PLAY_POSSESSION, "candidate_in_possession") for t in range(10)
+    ]
+    events += [OpenPlayEvent(20.0, ScenarioFamily.OPEN_PLAY_COUNTER, "candidate_defending")]
+
+    picked = pick_events(events, 2, seed="match_a")
+
+    assert len(picked) == 3
+    assert sum(e.family == ScenarioFamily.OPEN_PLAY_POSSESSION for e in picked) == 2
+    assert picked == pick_events(events, 2, seed="match_a")
+    assert [e.sim_time for e in picked] == sorted(e.sim_time for e in picked)
+
+
+def test_harvest_replay_adds_open_play_scenarios_when_asked(tmp_path, monkeypatch):
+    replay = _write_replay(tmp_path, "match", [t / 10 for t in range(0, 200)])
+    _write_sidecar(replay, _LIVE_FROM_5)
+    monkeypatch.setattr(
+        scenario_harvester, "analyse_match", lambda path: _analysis(passes=[12.0], turnovers=[_loss(15.0)])
+    )
+
+    assert harvest_replay(replay, source_run_id="run", evaluator_version="x") == []
+    scenarios = harvest_replay(replay, source_run_id="run", evaluator_version="x", open_play_per_match=1)
+
+    assert [(s.provenance.family, s.provenance.trigger) for s in scenarios] == [
+        (ScenarioFamily.OPEN_PLAY_POSSESSION, ScenarioTrigger.EVENT),
+        (ScenarioFamily.OPEN_PLAY_COUNTER, ScenarioTrigger.EVENT),
+    ]
+    assert scenarios[0].scenario.sim_time == 12.0 - _PASS_LEAD_S
+    assert scenarios[0].scenario_id == f"match_t{12.0 - _PASS_LEAD_S:.1f}_open_play_possession"
