@@ -245,7 +245,9 @@ def _load_against(path: Path, *, opponent: str, horizon_s: float, repeats: int) 
     for key, want in (("opponent", opponent), ("horizon_s", horizon_s), ("repeats", repeats)):
         if payload.get(key) != want:
             raise SystemExit(f"--against-results {path}: {key} is {payload.get(key)!r}, this run uses {want!r}")
-    outcomes = {row["scenario_id"]: row["candidate_outcomes"] for row in payload["results"]}
+    outcomes = {
+        row["scenario_id"]: row["candidate_outcomes"] for row in payload["results"] if not row.get("candidate_errors")
+    }
     source = {"path": str(path), "git_revision": payload.get("git_revision"), "candidate": payload.get("candidate")}
     return outcomes, source
 
@@ -283,7 +285,8 @@ def _score(
         print(f"[{index}/{total}] {sid} ({bench_scenario.provenance.family.value})", flush=True)
         base_outcomes = base["outcomes"] if base else (against or {}).get(sid)
         delta = None
-        if base_outcomes is not None:
+        # a run that errored (e.g. the start could not be set up) is not an outcome
+        if base_outcomes is not None and not cand["errors"] and not (base and base["errors"]):
             delta = statistics.fmean(cand["outcomes"]) - statistics.fmean(base_outcomes)
         print(
             f"  candidate={cand['outcomes']} baseline={base_outcomes}"

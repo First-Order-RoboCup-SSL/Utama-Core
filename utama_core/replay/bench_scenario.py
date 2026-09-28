@@ -205,9 +205,9 @@ class StaticScreenResult:
     violations: tuple[str, ...] = field(default_factory=tuple)
 
 
-def _in_bounds(x: float, y: float) -> bool:
-    half_len = STANDARD_FIELD_DIMS.full_field_half_length + _OUT_OF_BOUNDS_MARGIN_M
-    half_width = STANDARD_FIELD_DIMS.full_field_half_width + _OUT_OF_BOUNDS_MARGIN_M
+def _in_bounds(x: float, y: float, margin: float = _OUT_OF_BOUNDS_MARGIN_M) -> bool:
+    half_len = STANDARD_FIELD_DIMS.full_field_half_length + margin
+    half_width = STANDARD_FIELD_DIMS.full_field_half_width + margin
     return -half_len <= x <= half_len and -half_width <= y <= half_width
 
 
@@ -244,7 +244,9 @@ def static_screen(scenario: Scenario) -> StaticScreenResult:
         violations.append("no enemy robots present")
 
     for side, robot in all_robots:
-        if not _in_bounds(robot.x, robot.y):
+        # no margin: the sim refuses to teleport a robot past the field lines, and a
+        # start that can't be set up would be scored as if nothing happened
+        if not _in_bounds(robot.x, robot.y, margin=0.0):
             violations.append(f"{side} robot {robot.id} out of bounds at ({robot.x:.2f}, {robot.y:.2f})")
         speed = _speed(robot.vx, robot.vy)
         if speed > _MAX_PLAUSIBLE_SPEED_MPS:

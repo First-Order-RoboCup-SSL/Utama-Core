@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.bench_scenario import (
     _DUPLICATE_BALL_M,
@@ -74,6 +75,27 @@ def test_static_screen_rejects_robot_out_of_bounds():
     result = static_screen(_valid_scenario(friendly_robots=(_rs(0, -4.0, 0.0), _rs(1, 50.0, 0.0))))
     assert not result.ok
     assert any("out of bounds" in v for v in result.violations)
+
+
+def test_static_screen_rejects_a_robot_the_sim_cannot_be_teleported_to():
+    # the sim refuses to place a robot past the field lines (full_field_bounds), so a
+    # start with one there fails to set up; just inside is fine
+    half = STANDARD_FIELD_DIMS.full_field_half_length
+    inside = static_screen(_valid_scenario(friendly_robots=(_rs(0, -(half - 1e-3), 0.0), _rs(1, -1.0, 0.5))))
+    outside = static_screen(_valid_scenario(friendly_robots=(_rs(0, -(half + 1e-3), 0.0), _rs(1, -1.0, 0.5))))
+    assert inside.ok
+    assert not outside.ok and any("out of bounds" in v for v in outside.violations)
+
+
+def test_a_jittered_start_keeps_every_robot_inside_the_field_lines():
+    half = STANDARD_FIELD_DIMS.full_field_half_length
+    base = dataclasses.replace(
+        _sample_bench_scenario(),
+        scenario=_valid_scenario(friendly_robots=(_rs(0, -(half - 1e-3), 0.0), _rs(1, -1.0, 0.5))),
+    )
+    for seed in range(1, 30):
+        sc = jittered(base, seed).scenario
+        assert all(abs(r.x) <= half for r in (*sc.friendly_robots, *sc.enemy_robots))
 
 
 def test_static_screen_rejects_overlapping_robots():

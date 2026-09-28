@@ -1,5 +1,6 @@
 import dataclasses
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -99,3 +100,39 @@ def test_a_harvest_drops_duplicate_starts_even_without_a_bank_to_merge_into(tmp_
 
     assert "same_again" not in [s.scenario_id for s in scenarios]
     assert "first" in [s.scenario_id for s in scenarios]
+
+
+def test_a_scenario_that_errored_on_either_side_is_left_out_not_scored_as_neutral(monkeypatch):
+    # a start that fails to set up comes back NEUTRAL with an error; counting it as a
+    # real NEUTRAL outcome would put a fake zero (or a fake difference) into the A/B
+    ok, broken = list(all_hand_authored_scenarios())[:2]
+
+    def fake_runs(bench_scenario, config, opponent, horizon_s, repeats):
+        failed = bench_scenario.scenario_id == broken.scenario_id and config == "base"
+        return {"outcomes": [0] * repeats, "fouls": 0, "stalls": 0, "errors": ["setup failed"] if failed else []}
+
+    monkeypatch.setattr(scenario_bench, "_runs", fake_runs)
+    rows = scenario_bench._score(
+        [ok, broken], candidate="cand", opponent="opp", horizon_s=1.0, repeats=1, baseline="base"
+    )
+
+    assert [r["delta"] for r in rows] == [0.0, None]
+
+
+def test_an_earlier_run_s_errored_scenarios_are_not_a_baseline(tmp_path):
+    path = tmp_path / "earlier.json"
+    path.write_text(
+        json.dumps(
+            {
+                "opponent": "opp",
+                "horizon_s": 20.0,
+                "repeats": 1,
+                "results": [
+                    {"scenario_id": "fine", "candidate_outcomes": [1], "candidate_errors": []},
+                    {"scenario_id": "broken", "candidate_outcomes": [0], "candidate_errors": ["setup failed"]},
+                ],
+            }
+        )
+    )
+    outcomes, _ = scenario_bench._load_against(path, opponent="opp", horizon_s=20.0, repeats=1)
+    assert outcomes == {"fine": [1]}
