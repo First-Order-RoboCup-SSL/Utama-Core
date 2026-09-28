@@ -211,6 +211,20 @@ def scan_find_subgoal_nb(
     return -1
 
 
+@njit(cache=True)
+def find_segment_nb(
+    ox0: np.ndarray, oy0: np.ndarray, ox1: np.ndarray, oy1: np.ndarray, x0: float, y0: float, x1: float, y1: float
+) -> int:
+    """Index of the first obstacle whose endpoints equal `(x0, y0)`-`(x1, y1)`
+    exactly, or -1. Deliberately NOT fastmath: that assumes no NaNs, and
+    this must keep `==`'s semantics (NaN matches nothing), as the
+    `np.array_equal` scan it replaced in `collides()` did."""
+    for i in range(ox0.shape[0]):
+        if ox0[i] == x0 and oy0[i] == y0 and ox1[i] == x1 and oy1[i] == y1:
+            return i
+    return -1
+
+
 def flatten_obstacles(obstacles) -> tuple:
     """Convert a `List[Tuple[np.ndarray, np.ndarray]]` obstacle list into
     four parallel float64 arrays `(ox0, oy0, ox1, oy1)` for the njit kernels

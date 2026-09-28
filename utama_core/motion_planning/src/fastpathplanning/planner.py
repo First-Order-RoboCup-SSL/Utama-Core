@@ -24,11 +24,21 @@ from utama_core.motion_planning.src.fastpathplanning.config import (
     fastpathplanningconfig as config,
 )
 from utama_core.motion_planning.src.fastpathplanning.numba_kernels import (
+    find_segment_nb,
     flatten_obstacles,
     scan_collides_nb,
     scan_find_subgoal_nb,
 )
 from utama_core.rsoccer_simulator.src.ssl.envs.standard_ssl import SSLStandardEnv
+
+
+def _same_segment(a, b) -> bool:
+    """`np.array_equal(a[0], b[0]) and np.array_equal(a[1], b[1])` for the
+    2-D point pairs obstacles are made of, without its per-call dispatch
+    overhead (about a million calls a match). Plain `==` per coordinate, so
+    NaN never matches and -0.0 matches 0.0, exactly as `array_equal` does."""
+    return a[0][0] == b[0][0] and a[0][1] == b[0][1] and a[1][0] == b[1][0] and a[1][1] == b[1][1]
+
 
 # Same set `DefenseAreaRule` (custom_referee/rules/defense_area_rule.py) uses to
 # decide when defense-area encroachment is actually a foul — entry is legal
@@ -504,7 +514,7 @@ class FastPathPlanner:
         clears the box is a dead end (None), not an on-edge fallback.
         """
 
-        # Failsafe to prevent infinite loops if completely trapped. Handing
+        # Failsafe (`multiple > 10` below) to prevent infinite loops if completely trapped. Handing
         # back `obstacle_pos` (the exact point ON the obstacle) unconditionally
         # used to be safe-ish in a crowded field -- if some *other* obstacle
         # was still in the way at every step, the search was genuinely
@@ -531,84 +541,80 @@ class FastPathPlanner:
         # 2026-09-01: 540s of continuous back-and-forth motion). `None` is
         # handled by `check_segment` the same as an out-of-field point --
         # "no valid subgoal on this side."
-        if multiple > 10:
-            return None if blocked_by_origin else obstacle_pos
-
+        # The recursion this replaced re-derived everything below from the
+        # same `robot_pos`/`target`/`subgoal_direction` at every step; only
+        # `multiple` (and which obstacle blocked last) changes, so this loops
+        # instead, computing the direction once. Same arithmetic, same order,
+        # so the same subgoal bit-for-bit (pinned against the recursive
+        # version in fastpathplanner_equivalence_test.py).
         direction = target - robot_pos
         direction_norm = math.hypot(direction[0], direction[1])
-        if direction_norm == 0.0:
-            # `robot_pos` and `target` have collapsed to the same point (this
-            # recursive call's segment endpoints, not the original plan's) —
-            # a previous recursion step's subgoal landed exactly on one of
-            # them. There is no well-defined perpendicular to rotate here;
-            # `rotate_vector` would preserve the zero magnitude and the
-            # normalize below would divide 0/0 into NaN, silently poisoning
-            # every subgoal computed from it for the rest of this recursion.
-            # Confirmed via direct reproduction: an idle robot sitting
-            # directly on a tactic's planned path degenerated a detour
-            # segment into exactly this case, and the resulting NaN subgoal
-            # left the robot with no valid route around the obstacle for the
-            # rest of the match. Same fallback as the recursion-depth
-            # failsafe above: give up and return the obstacle position
-            # itself rather than propagate NaN.
-            return obstacle_pos
-        perp_dir = rotate_vector(direction[0], direction[1], math.pi * (subgoal_direction + 0.5))
-        unitvec = np.array([perp_dir[0] / direction_norm, perp_dir[1] / direction_norm])
-        subgoal = obstacle_pos + subgoal_distance * unitvec * multiple
-
-        # Broad-phase bounding-box prune (same idea as collides()): a point can
-        # only be within `clearance` of a segment if it's within that
-        # distance of the segment's bounding box, so obstacles whose box misses
-        # this margin around subgoal can never trigger the clearance check below
-        # and are skipped without calling distance_point_to_segment at all. This
-        # loop is the largest single caller of distance_point_to_segment in a
-        # full match (cProfile), since it's retried on every recursive subgoal
-        # attempt against every obstacle.
-        sub_x, sub_y = subgoal[0], subgoal[1]
-
-        # Batched replacement for the bounding-box-pruned obstacle scan --
-        # see `numba_kernels.scan_find_subgoal_nb`'s docstring. Returns the
-        # same FIRST-hit-in-scan-order index the original Python loop would
-        # have returned (not the closest), since `_find_subgoal` recurses on
-        # the first collision found, not the nearest one.
-        if forbidden_rect is not None:
-            min_x, max_x, min_y, max_y = forbidden_rect
-            if min_x < sub_x < max_x and min_y < sub_y < max_y:
-                return self._find_subgoal(
-                    robot_pos,
-                    target,
-                    obstacle_pos,
-                    obstacles,
-                    subgoal_direction,
-                    multiple + 1,
-                    clearance,
-                    subgoal_distance,
-                    origin_obstacle=origin_obstacle,
-                    blocked_by_origin=True,
-                    forbidden_rect=forbidden_rect,
-                )
-
+        unitvec = None
+        if direction_norm != 0.0:
+            perp_dir = rotate_vector(direction[0], direction[1], math.pi * (subgoal_direction + 0.5))
+            unitvec = np.array([perp_dir[0] / direction_norm, perp_dir[1] / direction_norm])
         ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
-        hit_idx = scan_find_subgoal_nb(sub_x, sub_y, clearance, ox0, oy0, ox1, oy1)
-        if hit_idx >= 0:
-            o = obstacles[hit_idx]
-            is_origin = origin_obstacle is not None and (
-                np.array_equal(o[0], origin_obstacle[0]) and np.array_equal(o[1], origin_obstacle[1])
-            )
-            return self._find_subgoal(
-                robot_pos,
-                target,
-                obstacle_pos,
-                obstacles,
-                subgoal_direction,
-                multiple + 1,
-                clearance,
-                subgoal_distance,
-                origin_obstacle=origin_obstacle,
-                blocked_by_origin=is_origin,
-                forbidden_rect=forbidden_rect,
-            )
-        return subgoal
+        # Index of the obstacle that blocked the last step, or -1 when
+        # `blocked_by_origin` already holds the answer: whether it is the
+        # origin obstacle only matters if the step budget runs out, so it is
+        # decided then rather than on every blocked step.
+        last_hit_idx = -1
+
+        while True:
+            if multiple > 10:
+                if last_hit_idx >= 0:
+                    blocked_by_origin = origin_obstacle is not None and _same_segment(
+                        obstacles[last_hit_idx], origin_obstacle
+                    )
+                return None if blocked_by_origin else obstacle_pos
+
+            if unitvec is None:
+                # `robot_pos` and `target` have collapsed to the same point (this
+                # recursive call's segment endpoints, not the original plan's) —
+                # a previous recursion step's subgoal landed exactly on one of
+                # them. There is no well-defined perpendicular to rotate here;
+                # `rotate_vector` would preserve the zero magnitude and the
+                # normalize below would divide 0/0 into NaN, silently poisoning
+                # every subgoal computed from it for the rest of this recursion.
+                # Confirmed via direct reproduction: an idle robot sitting
+                # directly on a tactic's planned path degenerated a detour
+                # segment into exactly this case, and the resulting NaN subgoal
+                # left the robot with no valid route around the obstacle for the
+                # rest of the match. Same fallback as the recursion-depth
+                # failsafe above: give up and return the obstacle position
+                # itself rather than propagate NaN.
+                return obstacle_pos
+            subgoal = obstacle_pos + subgoal_distance * unitvec * multiple
+
+            # Broad-phase bounding-box prune (same idea as collides()): a point can
+            # only be within `clearance` of a segment if it's within that
+            # distance of the segment's bounding box, so obstacles whose box misses
+            # this margin around subgoal can never trigger the clearance check below
+            # and are skipped without calling distance_point_to_segment at all. This
+            # loop is the largest single caller of distance_point_to_segment in a
+            # full match (cProfile), since it's retried on every recursive subgoal
+            # attempt against every obstacle.
+            sub_x, sub_y = subgoal[0], subgoal[1]
+
+            # Batched replacement for the bounding-box-pruned obstacle scan --
+            # see `numba_kernels.scan_find_subgoal_nb`'s docstring. Returns the
+            # same FIRST-hit-in-scan-order index the original Python loop would
+            # have returned (not the closest), since `_find_subgoal` steps on
+            # from the first collision found, not the nearest one.
+            if forbidden_rect is not None:
+                min_x, max_x, min_y, max_y = forbidden_rect
+                if min_x < sub_x < max_x and min_y < sub_y < max_y:
+                    multiple += 1
+                    blocked_by_origin = True
+                    last_hit_idx = -1
+                    continue
+
+            hit_idx = scan_find_subgoal_nb(sub_x, sub_y, clearance, ox0, oy0, ox1, oy1)
+            if hit_idx >= 0:
+                multiple += 1
+                last_hit_idx = hit_idx
+                continue
+            return subgoal
 
     def collides(
         self,
@@ -669,14 +675,19 @@ class FastPathPlanner:
         # inside the hot per-obstacle loop) so the njit kernel can track
         # `sticky_dist_to_robot` internally without needing to compare numpy
         # arrays from native code.
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
         sticky_idx = -1
         if sticky_obstacle is not None:
-            for i, o in enumerate(obstacles):
-                if np.array_equal(o[0], sticky_obstacle[0]) and np.array_equal(o[1], sticky_obstacle[1]):
-                    sticky_idx = i
-                    break
-
-        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+            sticky_idx = find_segment_nb(
+                ox0,
+                oy0,
+                ox1,
+                oy1,
+                float(sticky_obstacle[0][0]),
+                float(sticky_obstacle[0][1]),
+                float(sticky_obstacle[1][0]),
+                float(sticky_obstacle[1][1]),
+            )
         seg_x0, seg_y0 = float(segment[0][0]), float(segment[0][1])
         seg_x1, seg_y1 = float(segment[1][0]), float(segment[1][1])
         closest_idx, min_dist_to_robot, sticky_dist_to_robot_raw = scan_collides_nb(
@@ -696,10 +707,7 @@ class FastPathPlanner:
             sticky_obstacle is not None
             and sticky_dist_to_robot is not None
             and closest_obstacle is not None
-            and not (
-                np.array_equal(closest_obstacle[0], sticky_obstacle[0])
-                and np.array_equal(closest_obstacle[1], sticky_obstacle[1])
-            )
+            and not _same_segment(closest_obstacle, sticky_obstacle)
             and sticky_dist_to_robot <= min_dist_to_robot + self.DETOUR_SWITCH_MARGIN
         ):
             closest_obstacle = sticky_obstacle
