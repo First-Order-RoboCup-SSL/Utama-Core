@@ -75,7 +75,7 @@ Run from the repository root, for example:
 
     # Freeze a bank from a harvest for reuse across sessions:
     pixi run python tools/scenario_bench.py --harvest-from replays/tournament_20260905_090000 \\
-        --save-bank utama_core/replay/banks/bank_v1.json --bank-id v1 --list-scenarios
+        --save-bank utama_core/replay/banks/bank_v5.json --bank-id bank_v5 --list-scenarios
 
     # Grow a bank from a new round-robin (harvest, drop duplicates, save):
     pixi run python tools/scenario_bench.py --harvest-from replays/tournament_<id> --open-play 2 \\
@@ -83,14 +83,14 @@ Run from the repository root, for example:
         --list-scenarios
 
     # A/B a code change: record at commit A, compare at commit B.
-    pixi run python tools/scenario_bench.py --load-bank bank_v1.json \\
+    pixi run python tools/scenario_bench.py --load-bank bank_v5.json \\
         --candidate build_tiki_taka_kernel_strategy --opponent build_low_block_kernel_strategy
-    pixi run python tools/scenario_bench.py --load-bank bank_v1.json \\
+    pixi run python tools/scenario_bench.py --load-bank bank_v5.json \\
         --candidate build_tiki_taka_kernel_strategy --opponent build_low_block_kernel_strategy \\
         --against-results scenario_bench_results/scenario_bench_<commit A>.json
 
     # Score against the frozen bank later, without re-harvesting:
-    pixi run python tools/scenario_bench.py --load-bank utama_core/replay/banks/bank_v1.json \\
+    pixi run python tools/scenario_bench.py --load-bank utama_core/replay/banks/bank_v5.json \\
         --candidate build_tiki_taka_kernel_strategy --baseline build_default_kernel_strategy \\
         --opponent build_low_block_kernel_strategy
 """
@@ -101,6 +101,7 @@ import argparse
 import functools
 import json
 import math
+import random
 import statistics
 import sys
 from concurrent.futures import ProcessPoolExecutor
@@ -238,17 +239,49 @@ def _score(
     baseline: Optional[str] = None,
     against: Optional[dict[str, list[int]]] = None,
     workers: int = 1,
+    stop_at_t: Optional[float] = None,
+    check_every: int = 100,
 ) -> list[dict]:
     """Candidate outcomes per scenario, paired with the baseline's on the same jittered
-    starts: a `baseline` config run here, or `against` outcomes from an earlier run."""
+    starts: a `baseline` config run here, or `against` outcomes from an earlier run.
+
+    With `stop_at_t`, scenarios are scored in a shuffled order (a bank is ordered by match
+    and family, so its first starts are not a fair sample), `check_every` at a time, and
+    scoring stops once |t| of the deltas so far reaches `stop_at_t`."""
     rows = []
     total = len(scenarios)
     play = functools.partial(
         _score_one, candidate=candidate, opponent=opponent, horizon_s=horizon_s, repeats=repeats, baseline=baseline
     )
-    for index, (bench_scenario, (cand, base)) in enumerate(
-        zip(scenarios, _parallel_map(play, scenarios, workers)), start=1
-    ):
+    if stop_at_t is not None:
+        scenarios = random.Random(0).sample(scenarios, len(scenarios))
+        batches = [scenarios[i : i + check_every] for i in range(0, len(scenarios), check_every)]
+    else:
+        batches = [scenarios]
+    for batch in batches:
+        _score_batch(rows, batch, _parallel_map(play, batch, workers), against, total)
+        if stop_at_t is not None and len(rows) < total:
+            t = _t([r["delta"] for r in rows if r["delta"] is not None])
+            if abs(t) >= stop_at_t:
+                print(f"Stopped after {len(rows)} of {total} scenarios: |t| = {abs(t):.2f} >= {stop_at_t}", flush=True)
+                break
+    return rows
+
+
+def _t(deltas: list[float]) -> float:
+    """mean / stderr of `deltas`; infinite when every delta is the same nonzero value."""
+    if len(deltas) < 2:
+        return 0.0
+    mean = statistics.fmean(deltas)
+    stderr = statistics.stdev(deltas) / math.sqrt(len(deltas))
+    if stderr == 0:
+        return 0.0 if mean == 0 else math.copysign(math.inf, mean)
+    return mean / stderr
+
+
+def _score_batch(rows: list[dict], batch: list[BenchScenario], results: Iterable, against, total: int) -> None:
+    for bench_scenario, (cand, base) in zip(batch, results):
+        index = len(rows) + 1
         sid = bench_scenario.scenario_id
         print(f"[{index}/{total}] {sid} ({bench_scenario.provenance.family.value})", flush=True)
         base_outcomes = base["outcomes"] if base else (against or {}).get(sid)
@@ -279,7 +312,6 @@ def _score(
                 "baseline_errors": base["errors"] if base else [],
             }
         )
-    return rows
 
 
 def _aggregate_by_family(rows: list[dict]) -> list[dict]:
@@ -349,7 +381,8 @@ def _markdown_report(payload: dict) -> str:
         f"Baseline: {baseline or 'none'}  ",
         f"Opponent: `{payload['opponent']}`  ",
         f"Horizon: {payload['horizon_s']}s, {payload.get('repeats', 1)} jittered starts per scenario  ",
-        f"Scenarios scored: {payload['n_scenarios']}",
+        f"Scenarios scored: {payload.get('n_scored', payload['n_scenarios'])} of {payload['n_scenarios']}"
+        + (f" (stopped once |t| >= {payload['stop_at_t']})" if payload.get("stop_at_t") else ""),
         "",
         "Delta is mean candidate outcome minus mean baseline outcome over the same jittered starts, "
         "on the ordinal scale (GOAL_AGAINST=-3 ... NEUTRAL=0 ... GOAL_FOR=+3), same opponent. "
@@ -427,6 +460,13 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=1,
         help="jittered starts per scenario (seed 0 = as authored; default 1: more scenarios beat more repeats)",
+    )
+    parser.add_argument(
+        "--stop-at-t",
+        type=float,
+        default=None,
+        help="score a shuffled sample 100 scenarios at a time and stop once |t| reaches this (4 is a safe choice: "
+        "t is looked at repeatedly, so 2 would give false alarms); for screening candidates, not for a baseline",
     )
     parser.add_argument("--opponent", help="opponent strategy config both candidate and baseline play against")
     parser.add_argument("--horizon", type=float, default=20.0, help="sim seconds ticked per scenario (default 20)")
@@ -523,6 +563,7 @@ def main() -> int:
         baseline=args.baseline,
         against=against,
         workers=args.workers,
+        stop_at_t=args.stop_at_t,
     )
     aggregates = _aggregate_by_family(rows)
 
@@ -537,6 +578,8 @@ def main() -> int:
         "horizon_s": args.horizon,
         "repeats": args.repeats,
         "n_scenarios": len(scenarios),
+        "n_scored": len(rows),
+        "stop_at_t": args.stop_at_t,
         "aggregates": aggregates,
         "results": rows,
         "harvest_report": harvest_report,

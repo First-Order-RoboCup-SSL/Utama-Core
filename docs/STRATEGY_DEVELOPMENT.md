@@ -158,6 +158,11 @@ the paired result: mean outcome delta per scenario, its standard error, and t = 
 |t| under about 2 is within chance. The sign says which side did better, and the per-family
 table says where. Treat it as a screen, then confirm a real improvement with matches.
 
+To screen many candidates, add `--stop-at-t 4` to the candidate run: it scores a shuffled sample 100
+starts at a time and stops once |t| reaches 4 (2 would give false alarms, since t is looked at
+repeatedly). Passes aimed 10° off stop after 100 of 846 starts, about 1.5 min. A candidate no
+different from the baseline never stops early and costs a full pass.
+
 A new bank from a new round-robin (keep its replays until this is done) takes a few minutes and
 no simulation:
 

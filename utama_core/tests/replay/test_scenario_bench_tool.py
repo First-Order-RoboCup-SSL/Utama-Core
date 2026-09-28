@@ -118,3 +118,39 @@ def test_an_earlier_run_s_errored_scenarios_are_not_a_baseline(tmp_path):
     )
     outcomes, _ = scenario_bench._load_against(path, opponent="opp", horizon_s=20.0, repeats=1)
     assert outcomes == {"fine": [1]}
+
+
+def _many(n):
+    base = list(all_hand_authored_scenarios())[0]
+    return [_moved(base, f"s{i:03d}", 0.2 * i) for i in range(n)]
+
+
+def _fake_runs_candidate_worse(bench_scenario, config, opponent, horizon_s, repeats):
+    # the candidate loses the ball on 3 starts in 4, the baseline never does
+    worse = config == "cand" and int(bench_scenario.scenario_id[1:]) % 4 != 0
+    return {"outcomes": [-1 if worse else 0] * repeats, "fouls": 0, "stalls": 0, "errors": []}
+
+
+def test_stop_at_t_ends_once_the_difference_is_clear(monkeypatch):
+    monkeypatch.setattr(scenario_bench, "_runs", _fake_runs_candidate_worse)
+    kwargs = dict(candidate="cand", opponent="opp", horizon_s=1.0, repeats=1, baseline="base")
+
+    full = scenario_bench._score(_many(60), **kwargs)
+    stopped = scenario_bench._score(_many(60), **kwargs, stop_at_t=4.0, check_every=10)
+
+    assert len(full) == 60
+    assert len(stopped) < 60 and len(stopped) % 10 == 0  # stops at a check, before the end
+    assert abs(scenario_bench._t([r["delta"] for r in stopped])) >= 4.0
+
+
+def test_stop_at_t_scores_a_shuffled_sample_not_the_bank_s_first_starts(monkeypatch):
+    # a bank is ordered by match and family: its first 20 starts are not a fair sample
+    monkeypatch.setattr(scenario_bench, "_runs", _fake_runs_candidate_worse)
+    kwargs = dict(candidate="cand", opponent="opp", horizon_s=1.0, repeats=1, baseline="base")
+
+    first = scenario_bench._score(_many(60), **kwargs, stop_at_t=4.0, check_every=10)
+    again = scenario_bench._score(_many(60), **kwargs, stop_at_t=4.0, check_every=10)
+
+    ids = [r["scenario_id"] for r in first]
+    assert ids == [r["scenario_id"] for r in again]  # reproducible
+    assert ids != [f"s{i:03d}" for i in range(len(ids))]
