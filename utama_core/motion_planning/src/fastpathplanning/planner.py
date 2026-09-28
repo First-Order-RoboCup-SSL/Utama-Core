@@ -18,7 +18,6 @@ from utama_core.global_utils.math_utils import (
     distance,
     distance_point_to_segment,
     find_intersection,
-    rotate_vector,
 )
 from utama_core.motion_planning.src.fastpathplanning.config import (
     fastpathplanningconfig as config,
@@ -38,6 +37,22 @@ def _same_segment(a, b) -> bool:
     overhead (about a million calls a match). Plain `==` per coordinate, so
     NaN never matches and -0.0 matches 0.0, exactly as `array_equal` does."""
     return a[0][0] == b[0][0] and a[0][1] == b[0][1] and a[1][0] == b[1][0] and a[1][1] == b[1][1]
+
+
+_PERP_ROTATIONS: dict = {}
+
+
+def _perp_rotation(subgoal_direction: int) -> Tuple[float, float]:
+    """`(np.cos(theta), np.sin(theta))` for `_find_subgoal`'s perpendicular,
+    theta = pi * (subgoal_direction + 0.5). Only two directions are ever
+    used, so this computes them once instead of four numpy trig calls per
+    `_find_subgoal` call -- the same numpy functions on the same theta, so
+    the same values `rotate_vector` would get."""
+    rot = _PERP_ROTATIONS.get(subgoal_direction)
+    if rot is None:
+        theta = math.pi * (subgoal_direction + 0.5)
+        rot = _PERP_ROTATIONS[subgoal_direction] = (np.cos(theta), np.sin(theta))
+    return rot
 
 
 # Same set `DefenseAreaRule` (custom_referee/rules/defense_area_rule.py) uses to
@@ -551,7 +566,12 @@ class FastPathPlanner:
         direction_norm = math.hypot(direction[0], direction[1])
         unitvec = None
         if direction_norm != 0.0:
-            perp_dir = rotate_vector(direction[0], direction[1], math.pi * (subgoal_direction + 0.5))
+            cos_t, sin_t = _perp_rotation(subgoal_direction)
+            # `rotate_vector(direction[0], direction[1], theta)`'s exact expression.
+            perp_dir = (
+                direction[0] * cos_t + direction[1] * sin_t,
+                -direction[0] * sin_t + direction[1] * cos_t,
+            )
             unitvec = np.array([perp_dir[0] / direction_norm, perp_dir[1] / direction_norm])
         ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
         # Index of the obstacle that blocked the last step, or -1 when
@@ -1028,13 +1048,18 @@ class FastPathPlanner:
         else:
             boundary_segments = set()
 
+        # Which obstacles may repel the target doesn't depend on where the
+        # target has been pushed to, so filter once rather than on each pass.
+        repelling = []
+        for o in obstacles:
+            o_key = (tuple(o[0]), tuple(o[1]))
+            if o_key not in boundary_segments and o_key not in exempt_obstacles:
+                repelling.append(o)
+
         safe_target = np.copy(target)
         for _ in range(5):
             collision_found = False
-            for o in obstacles:
-                o_key = (tuple(o[0]), tuple(o[1]))
-                if o_key in boundary_segments or o_key in exempt_obstacles:
-                    continue
+            for o in repelling:
                 if distance_point_to_segment(safe_target, o[0], o[1]) < clearance:
                     closest_pt = closest_point_on_segment(safe_target, o[0], o[1])
                     push_dir = safe_target - closest_pt

@@ -150,6 +150,42 @@ class _ReferencePlanner(FastPathPlanner):
         self._collision_cache[seg_key] = result
         return result
 
+    def sanitize_target(self, target, obstacles, robot_pos, field_bounds=None, exempt_obstacles=None, clearance=None):
+        if exempt_obstacles is None:
+            exempt_obstacles = set()
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        if field_bounds is not None:
+            tl = np.array(field_bounds.top_left)
+            br = np.array(field_bounds.bottom_right)
+            tr = np.array([br[0], tl[1]])
+            bl = np.array([tl[0], br[1]])
+            boundary_segments = {
+                (tuple(tl), tuple(tr)),
+                (tuple(tr), tuple(br)),
+                (tuple(br), tuple(bl)),
+                (tuple(bl), tuple(tl)),
+            }
+        else:
+            boundary_segments = set()
+        safe_target = np.copy(target)
+        for _ in range(5):
+            collision_found = False
+            for o in obstacles:
+                o_key = (tuple(o[0]), tuple(o[1]))
+                if o_key in boundary_segments or o_key in exempt_obstacles:
+                    continue
+                if distance_point_to_segment(safe_target, o[0], o[1]) < clearance:
+                    closest_pt = closest_point_on_segment(safe_target, o[0], o[1])
+                    push_dir = safe_target - closest_pt
+                    if math.hypot(push_dir[0], push_dir[1]) == 0:
+                        push_dir = robot_pos - closest_pt
+                    unit_push = push_dir / math.hypot(push_dir[0], push_dir[1])
+                    safe_target = closest_pt + unit_push * (clearance * 1.05)
+                    collision_found = True
+            if not collision_found:
+                break
+        return safe_target
+
 
 def _scene(rng, n_robots):
     """Robot ghost-wall segments plus the 8 static segments `_refresh_obstacle_cache` adds."""
@@ -257,3 +293,25 @@ def test_same_segment_matches_array_equal_on_edge_values():
         expected = np.array_equal(a[0], b[0]) and np.array_equal(a[1], b[1])
         assert _same_segment(a, b) == expected
         assert _same_segment(a, a) == (np.array_equal(a[0], a[0]) and np.array_equal(a[1], a[1]))
+
+
+@pytest.mark.parametrize("seed", range(4))
+def test_sanitize_target_matches_reference(seed):
+    """Targets placed near (often inside the clearance of) crowded obstacles, so
+    the push-out loop runs several passes, with and without exemptions."""
+    rng = np.random.default_rng(200 + seed)
+    new, ref = FastPathPlanner(env=None), _ReferencePlanner(env=None)
+    for _ in range(400):
+        obstacles = _scene(rng, n_robots=int(rng.integers(0, 12)))
+        anchor = obstacles[int(rng.integers(len(obstacles)))]
+        target = anchor[0] + rng.normal(0.0, 0.15, 2)
+        robot_pos = rng.uniform([-4.4, -2.9], [4.4, 2.9])
+        exempt = {(tuple(o[0]), tuple(o[1])) for o in obstacles if rng.random() < 0.2}
+        kwargs = dict(
+            field_bounds=_Bounds if rng.random() < 0.8 else None,
+            exempt_obstacles=exempt if rng.random() < 0.5 else None,
+            clearance=float(rng.uniform(0.2, 0.5)),
+        )
+        a = new.sanitize_target(target, obstacles, robot_pos, **kwargs)
+        b = ref.sanitize_target(target, obstacles, robot_pos, **kwargs)
+        assert _same(a, b)
