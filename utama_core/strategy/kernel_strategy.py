@@ -80,7 +80,7 @@ def _possession_split_picker(
     and a present-but-empty entry for a tactic committed and pinned
     elsewhere would collide with that pin.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -146,7 +146,7 @@ def _press_and_pass_split_picker(
     game-theoretic reason — a sensible default, not just a way to dodge the
     kernel's applicability check.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -224,8 +224,7 @@ def _fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float,
         prev_partition: Optional[dict[str, frozenset[RobotId]]],
         available_tactic_ids: frozenset[str],
     ) -> dict[str, frozenset[RobotId]]:
-        del game
-        ordered = sorted(free_robots)
+        ordered = _carrier_first(game, free_robots)
         if not ordered:
             return {}
 
@@ -320,7 +319,7 @@ def _three_way_picker(
     is currently inapplicable or pinned elsewhere, same defensive pattern as
     `_press_and_pass_split_picker`.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -548,6 +547,22 @@ def _ball_zone(game: Game) -> str:
     return "final"
 
 
+def _carrier_first(game: Game, free_robots: frozenset[RobotId]) -> list[RobotId]:
+    """`free_robots` in id order, except a robot holding the ball goes first.
+
+    `_allocate_ordered` hands the first `primary_n` robots to the ball-side slot;
+    by id alone the carrier could land in the off-ball slot instead, holding the
+    ball still (clear_press_plus_vs_zone_fluid, 2026-09-28: carrier 4 in "block"
+    while "overload" took robots 1 and 2 and waited on it, frozen for 38 s).
+    """
+
+    def holding(rid: RobotId) -> bool:
+        robot = game.friendly_robots.get(rid)
+        return robot is not None and robot.has_ball
+
+    return sorted(free_robots, key=lambda rid: (not holding(rid), rid))
+
+
 def _allocate_ordered(
     ordered: list[RobotId],
     primary: str,
@@ -608,7 +623,7 @@ def _tiki_taka_picker(
       its share folded into the other non-pinned attacker/defender slot, so
       every free robot always lands somewhere.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -659,7 +674,7 @@ def _counter_press_picker(
       (carrier/pivot/runner), so 4 robots attack through the weak side while
       1 keeps the screen shape as insurance on the counter.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -702,7 +717,7 @@ def _zone_flow_picker(
       lures the last line out of position (2 robots — that tactic is a
       two-role duet by design) while the other 3 hold the defensive shape.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -829,7 +844,7 @@ def _tiki_taka_plus_picker(
     the ball is lost (or all-shadow/all-press if only one of those slots is
     available), 3 attack + 2 cover in the own/mid thirds.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -1033,7 +1048,7 @@ def _score_aware_zone_flow_picker(
     two-role duet by design, see `_zone_flow_picker`) — only the
     own/mid-third give-and-go split size reacts to the scoreline.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -1151,7 +1166,7 @@ def _overload_press_picker(
       every picker in this file keeps this fallback chain for the same
       reason: every free robot must land somewhere).
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -1243,7 +1258,7 @@ def _high_line_zone_picker(
       `_zone_flow_picker` uses — the switch has already done its job of
       breaking the defense's shape open by this point.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -1343,7 +1358,7 @@ def _counter_flow_picker(
     tick" as memory and require a clear loss (not just "not clearly ahead")
     before giving it up — mirrors `_high_line_zone_picker`'s identical fix.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -1478,7 +1493,7 @@ def _clear_danger_picker(
     a single hop completes. `prev_partition` ("did we hold attack last tick") is
     the memory; require a clear possession loss to drop it.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -1575,7 +1590,7 @@ def _score_aware_counter_flow_picker(
     committing fewer/more pressers, only by out-scoring once it regains the
     ball, which the attack branch already covers.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -1707,7 +1722,7 @@ def _clear_press_plus_picker(
     the losing-possession press/block branches are unchanged from
     `_clear_danger_picker`.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -1851,7 +1866,7 @@ def _shadow_switch_picker(
     give it in a contested match. `prev_partition` ("did we hold switch last
     tick") is the memory; require a clear possession loss to drop it.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -1970,7 +1985,7 @@ def _overload_flow_picker(
     count).
     """
     global _possession_streak
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -2082,7 +2097,7 @@ def _press_trigger_flow_picker(
     docstring for the shared attack/press/block rationale this one inherits
     unmodified outside the own-third-press branch.
     """
-    ordered = sorted(free_robots)
+    ordered = _carrier_first(game, free_robots)
     if not ordered:
         return {}
 

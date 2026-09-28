@@ -22,6 +22,8 @@ don't belong in a `StrategyRunner`-driven table.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from utama_core.engine.abstract_strategy import AbstractStrategy
@@ -130,10 +132,14 @@ def test_goalkeeper_never_appears_in_the_partition(build_factory, make_runner):
 # --- picker-level unit tests (no rsim needed) ---
 
 
+# The pickers only read `friendly_robots` (to put a ball carrier first) here.
+_NOBODY_ON_BALL = SimpleNamespace(friendly_robots={})
+
+
 def test_fixed_ratio_picker_high_press_split():
     picker = _fixed_ratio_picker("attack", "defense", attack_fraction=0.8)
     partition = picker(
-        game=None,
+        game=_NOBODY_ON_BALL,
         free_robots=frozenset({1, 2, 3, 4, 5}),
         prev_partition=None,
         available_tactic_ids=frozenset({"attack", "defense"}),
@@ -149,7 +155,7 @@ def test_fixed_ratio_picker_low_block_split_respects_min_attack_floor():
     crash the tactic it wires (the exact regression this test guards)."""
     picker = _fixed_ratio_picker("attack", "defense", attack_fraction=0.2, min_attack=2)
     partition = picker(
-        game=None,
+        game=_NOBODY_ON_BALL,
         free_robots=frozenset({1, 2, 3, 4, 5}),
         prev_partition=None,
         available_tactic_ids=frozenset({"attack", "defense"}),
@@ -160,7 +166,7 @@ def test_fixed_ratio_picker_low_block_split_respects_min_attack_floor():
 
 def test_three_way_picker_splits_all_three_slots_when_all_applicable():
     partition = _three_way_picker(
-        game=None,
+        game=_NOBODY_ON_BALL,
         free_robots=frozenset({1, 2, 3, 4, 5}),
         prev_partition=None,
         available_tactic_ids=frozenset({"press", "mark", "attack"}),
@@ -173,7 +179,7 @@ def test_three_way_picker_splits_all_three_slots_when_all_applicable():
 
 def test_three_way_picker_falls_back_to_attack_when_press_and_mark_inapplicable():
     partition = _three_way_picker(
-        game=None,
+        game=_NOBODY_ON_BALL,
         free_robots=frozenset({1, 2, 3}),
         prev_partition=None,
         available_tactic_ids=frozenset({"attack"}),
