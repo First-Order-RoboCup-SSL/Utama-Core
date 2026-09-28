@@ -1,6 +1,10 @@
 // Tournament view: standings + per-match results, sortable/expandable.
 // Successor concern to hand-reading full_match_tournament.py log output —
 // reads replays/<run_id>/summary.json via the tournament view's Python side.
+// A smoke_tournament.py summary also carries a per-strategy table, stall
+// incidents, restart outcomes and fouls (docs/STRATEGY_DEVELOPMENT.md
+// "Reading a tournament run"); those are shown when present. Each result's
+// `replay` is the path of its replay file, or null (added server-side).
 // `full_match_tournament.py` writes `winner` as the literal string "draw" on
 // a tie (never null), and `standings` only carries wins/draws per config —
 // losses/GF/GA/win% are derived here from `results`, not shipped precomputed.
@@ -9,6 +13,7 @@
   let runs = [];
   let sortKey = { column: "wins", dir: -1 };
   let expandedMatch = {}; // "runIndex:matchIndex" -> bool
+  let expandedRun = {}; // run_id -> bool; only the newest run starts open
 
   function short(name) {
     return name.replace(/^build_/, "").replace(/_kernel_strategy$/, "");
@@ -21,6 +26,7 @@
   // Derive losses/games/GF/GA/win% per config from `results`, since
   // `standings` in summary.json only ever carries wins/draws.
   function standingsRows(run) {
+    if (run.strategies) return sortRows(strategyRows(run));
     const base = {};
     for (const name of run.config_names || []) {
       base[name] = { name, wins: 0, draws: 0, losses: 0, games: 0, gf: 0, ga: 0 };
@@ -50,9 +56,34 @@
       gd: s.gf - s.ga,
       winPct: s.games ? s.wins / s.games : 0,
     }));
+    return sortRows(rows);
+  }
+
+  function sortRows(rows) {
     const { column, dir } = sortKey;
-    rows.sort((x, y) => (x[column] - y[column]) * dir);
+    rows.sort((x, y) => ((x[column] ?? 0) - (y[column] ?? 0)) * dir);
     return rows;
+  }
+
+  // smoke_tournament.py's per-strategy table (summary.json `strategies`).
+  function strategyRows(run) {
+    return Object.entries(run.strategies).map(([name, s]) => ({
+      name,
+      wins: s.wins,
+      draws: s.draws,
+      losses: s.losses,
+      games: s.matches,
+      gf: s.goals_for,
+      ga: s.goals_against,
+      gd: s.goals_for - s.goals_against,
+      winPct: s.matches ? s.wins / s.matches : 0,
+      shots: s.shots,
+      passes: s.completed_passes,
+      entries: s.attacking_third_entries,
+      fouls: s.fouls,
+      realLosses: s.real_losses_as_a,
+      stalled: s.stalled,
+    }));
   }
 
   function renderStandings(run, runIndex) {
@@ -68,14 +99,23 @@
       ["gd", "GD"],
       ["winPct", "Win%"],
     ];
+    if (run.strategies) {
+      cols.push(
+        ["shots", "Shots"],
+        ["passes", "Passes"],
+        ["entries", "Entries"],
+        ["fouls", "Fouls"],
+        ["realLosses", "Losses as A"],
+        ["stalled", "Stalled"]
+      );
+    }
+    const cell = (r, col) => {
+      if (col === "gd") return `${r.gd > 0 ? "+" : ""}${r.gd}`;
+      if (col === "winPct") return pct(r.winPct);
+      return r[col] ?? "—";
+    };
     const trs = rows
-      .map(
-        (r) =>
-          `<tr><td>${short(r.name)}</td>` +
-          `<td class="num">${r.wins}</td><td class="num">${r.draws}</td><td class="num">${r.losses}</td>` +
-          `<td class="num">${r.games}</td><td class="num">${r.gf}</td><td class="num">${r.ga}</td>` +
-          `<td class="num">${r.gd > 0 ? "+" : ""}${r.gd}</td><td class="num">${pct(r.winPct)}</td></tr>`
-      )
+      .map((r) => `<tr><td>${short(r.name)}</td>` + cols.map(([col]) => `<td class="num">${cell(r, col)}</td>`).join("") + `</tr>`)
       .join("");
     const ths = cols
       .map(([col, label]) => `<th class="sortable" data-run="${runIndex}" data-col="${col}" style="cursor:pointer;">${label}${arrow(col)}</th>`)
@@ -87,13 +127,10 @@
       </table>`;
   }
 
-  // Replay filename convention, mirrored from full_match_tournament.py's
-  // `run_match_cell`: "{short_a}_vs_{short_b}_{side_tag}{kickoff_tag}.pkl",
-  // side_tag = R/L for a_is_right, kickoff_tag = K/k for a_kicks_off.
-  function replayPath(run, r) {
-    const sideTag = r.a_is_right ? "R" : "L";
-    const kickoffTag = r.a_kicks_off ? "K" : "k";
-    return `${run.run_id}/${short(r.config_a)}_vs_${short(r.config_b)}_${sideTag}${kickoffTag}.pkl`;
+  function replayButton(path, atTime, label) {
+    if (!path) return `<span class="muted" style="font-size:.72rem;">no replay file</span>`;
+    const at = atTime != null ? ` data-at="${atTime}"` : "";
+    return `<button class="btn-accent view-replay-btn" data-path="${path}"${at}>${label || "View replay"}</button>`;
   }
 
   function teamAvg(perRobot, prefix) {
@@ -118,9 +155,7 @@
         <div class="ref-row"><span class="muted">Shots</span><span>${shots.friendly ?? 0} - ${shots.enemy ?? 0}</span></div>
         <div class="ref-row"><span class="muted">Ball travel</span><span>${stats.ball_travel_m != null ? stats.ball_travel_m.toFixed(1) + " m" : "—"}</span></div>
         <div class="ref-row"><span class="muted">Avg motion</span><span>${friendlyMotion != null ? pct(friendlyMotion) : "—"} - ${enemyMotion != null ? pct(enemyMotion) : "—"}</span></div>
-        <div class="row">
-          <button class="btn-accent view-replay-btn" data-path="${replayPath(r.__run, r)}">View replay</button>
-        </div>
+        <div class="row">${replayButton(r.replay)}</div>
       </div>`;
   }
 
@@ -135,6 +170,8 @@
   ];
 
   function cellLabel(r, pairA) {
+    // smoke_tournament.py plays each pair once, config_a as yellow
+    if (r.a_is_right === undefined) return `${short(r.config_a)} (yellow) vs ${short(r.config_b)}`;
     // r.config_a may be either physical config depending on which side of
     // the 4-cell product ran; re-express relative to pairA (the group's
     // canonical/alphabetically-first config) so labels read consistently
@@ -184,7 +221,6 @@
           `${short(g.pairA)} vs ${short(g.pairB)}</td></tr>`;
         const matchRows = g.rows
           .map(({ r, resultIndex }) => {
-            r.__run = run; // attach for renderMatchDetail's replayPath lookup
             const key = runIndex + ":" + resultIndex;
             const isDraw = r.winner === "draw";
             const winnerLabel = isDraw ? "draw" : short(r.winner);
@@ -198,7 +234,7 @@
               `<tr class="match-row" data-key="${key}" style="cursor:pointer;">` +
               `<td>${cellLabel(r, g.pairA)}</td>` +
               `<td class="num">${r.score_a} - ${r.score_b}</td>` +
-              `<td>${winnerLabel}</td>` +
+              `<td>${winnerLabel}${((r.stats || {}).stall_events || []).length ? ' <span class="marker-kind marker-stall">stalled</span>' : ""}</td>` +
               `<td class="num">${possLabel}</td>` +
               `<td class="muted" style="text-align:center;">${expanded ? "▲" : "▼"}</td>` +
               `</tr>${detailRow}`
@@ -220,11 +256,74 @@
       </div>`;
   }
 
+  // Find the replay of the match named "<a>_vs_<b>" (how stall incidents name matches).
+  function replayOfMatch(run, stem) {
+    const r = (run.results || []).find((x) => x.replay && x.replay.split("/").pop().startsWith(stem + "."));
+    return r ? r.replay : null;
+  }
+
+  function renderDiagnostics(run) {
+    const parts = [];
+    const incidents = run.stall_incidents || [];
+    if (run.stall_incidents) {
+      const rows = incidents
+        .map(
+          (inc) =>
+            `<div class="ref-row"><span><span class="marker-kind marker-stall">stall</span>${inc.kind} at ${inc.sim_time.toFixed(1)}s ` +
+            `for ${inc.duration_s.toFixed(0)}s</span><span class="row">` +
+            inc.matches.map((m) => replayButton(replayOfMatch(run, m), inc.sim_time, m)).join("") +
+            `</span></div>`
+        )
+        .join("");
+      parts.push(
+        `<div class="ref-section-title">Stalls: ${run.stalled_match_count ?? incidents.length} matches, ${incidents.length} incidents</div>` +
+          (rows || '<div class="muted">none</div>')
+      );
+    }
+    const rs = run.restarts;
+    if (rs && rs.restarts) {
+      const kinds = Object.entries(rs.by_kind || {})
+        .map(([kind, k]) => {
+          const bad = Object.entries(k.outcomes || {})
+            .filter(([o]) => o !== "taken")
+            .map(([o, n]) => `${n} ${o.replace(/_/g, " ")}`)
+            .join(", ");
+          return `<div class="ref-row"><span class="muted">${kind.replace(/_/g, " ").toLowerCase()}</span>` +
+            `<span>${k.reached_normal_start}/${k.n} reached NORMAL_START${bad ? " (" + bad + ")" : ""}</span></div>`;
+        })
+        .join("");
+      parts.push(
+        `<div class="ref-section-title">Restarts: ${rs.reached_normal_start}/${rs.restarts} reached NORMAL_START (${pct(rs.reached_normal_start / rs.restarts)})</div>` +
+          kinds
+      );
+    }
+    if (run.fouls) {
+      const byRule = Object.entries(run.fouls)
+        .map(([rule, f]) => [rule, f.total])
+        .sort((a, b) => b[1] - a[1])
+        .map(([rule, n]) => `${n} ${rule.replace(/_/g, " ")}`)
+        .join(", ");
+      parts.push(`<div class="ref-section-title">Fouls</div><div>${byRule || "none"}</div>`);
+    }
+    return parts.length ? `<div class="stack" style="padding:4px 14px 8px; gap:4px; font-size:.78rem;">${parts.join("")}</div>` : "";
+  }
+
+  function renderRunHeader(run) {
+    const meta = run.run || {};
+    const commit = meta.git_commit ? ` &middot; <code>${meta.git_commit.slice(0, 8)}</code>${meta.git_dirty ? " (dirty)" : ""}` : "";
+    const argv = meta.argv && meta.argv.length ? ` &middot; <span class="muted">${meta.argv.join(" ")}</span>` : "";
+    const open = expandedRun[run.run_id];
+    return `<div class="panel-title run-header" data-run-id="${run.run_id}" style="cursor:pointer;">${open ? "▼" : "▶"} ${run.run_id} &middot; ` +
+      `${(run.config_names || []).length} configs &middot; ${(run.results || []).length} matches${commit}${argv}</div>`;
+  }
+
   function renderRun(run, index) {
+    if (!expandedRun[run.run_id]) return `<div class="panel" style="margin-bottom:8px;">${renderRunHeader(run)}</div>`;
     return `
       <div class="panel" style="margin-bottom:12px;">
-        <div class="panel-title">${run.run_id} &middot; ${(run.config_names || []).length} configs &middot; ${(run.results || []).length} matches</div>
+        ${renderRunHeader(run)}
         <div style="overflow-x:auto; padding:8px 14px 0;">${renderStandings(run, index)}</div>
+        ${renderDiagnostics(run)}
         <div class="ref-section-title" style="margin:8px 14px 0;">Matches</div>
         ${renderMatches(run, index)}
       </div>`;
@@ -250,6 +349,13 @@
         render();
       });
     }
+    for (const header of container.querySelectorAll(".run-header")) {
+      header.addEventListener("click", () => {
+        const id = header.dataset.runId;
+        expandedRun[id] = !expandedRun[id];
+        render();
+      });
+    }
     for (const row of container.querySelectorAll("tr.match-row")) {
       row.addEventListener("click", (e) => {
         if (e.target.closest(".view-replay-btn")) return;
@@ -262,7 +368,8 @@
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         const path = btn.dataset.path;
-        if (window.Dashboard && Dashboard.showReplay) Dashboard.showReplay(path);
+        const at = btn.dataset.at != null ? Number(btn.dataset.at) : undefined;
+        Dashboard.showReplay(path, at);
       });
     }
   }
@@ -272,6 +379,7 @@
       .then((r) => r.json())
       .then((data) => {
         runs = data;
+        if (runs.length && !Object.keys(expandedRun).length) expandedRun[runs[0].run_id] = true;
         render();
       })
       .catch((err) => console.error("tournament fetch error:", err));

@@ -50,8 +50,13 @@
 
   function mount() {
     fetch("/referee/config")
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((c) => {
+        if (!c) {
+          // dashboard_server.py alone serves Replay and Tournament; a live match attaches this view
+          document.getElementById("ref-profile-name").textContent = "No live match attached";
+          return;
+        }
         cfg = c;
         const canvas = document.getElementById("ref-field-canvas");
         fieldView = new FieldCanvas(canvas, c.geometry, {});

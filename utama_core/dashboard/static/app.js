@@ -37,9 +37,10 @@ const Dashboard = (() => {
   function registerReplayLoader(fn) {
     _showReplay = fn;
   }
-  function showReplay(path) {
+  // `atTime` (sim seconds, optional): open the replay just before that moment.
+  function showReplay(path, atTime) {
     showView("replay");
-    if (_showReplay) _showReplay(path);
+    if (_showReplay) _showReplay(path, atTime);
   }
 
   return { registerView, showView, init, registerReplayLoader, showReplay };

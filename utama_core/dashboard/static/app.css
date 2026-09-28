@@ -179,3 +179,15 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   background: var(--border);
 }
 .conn-dot.live { background: var(--accent); }
+
+/* Replay timeline markers: one tick per goal / foul / stall / ball loss. */
+.marker-strip { position: relative; height: 10px; margin: 0 7px; }
+.marker { position: absolute; top: 0; width: 3px; height: 10px; margin-left: -1px; border-radius: 1px; cursor: pointer; }
+.marker-goal { background: #e0c14f; }
+.marker-foul { background: #d08a4a; }
+.marker-stall { background: var(--halt); }
+.marker-loss { background: var(--muted); }
+.marker-kind { display: inline-block; min-width: 38px; font-size: .62rem; text-transform: uppercase; letter-spacing: .04em; }
+.marker-kind.marker-goal, .marker-kind.marker-foul, .marker-kind.marker-stall, .marker-kind.marker-loss {
+  position: static; width: auto; height: auto; margin: 0 6px 0 0; padding: 0 4px; color: #17191d;
+}

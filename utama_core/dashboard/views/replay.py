@@ -24,6 +24,11 @@ instead of at load time — cheap given the event counts involved, and it
 means a backward scrub is just a cursor reset + cheap replay rather than a
 second algorithm.
 
+`markers` are the moments worth jumping to, in time order: goals (a score
+change in the referee events), fouls and stalls (the sibling `.stats.json`),
+and the recorded team's real ball losses (`turnover_breakdown.analyse_match`,
+columnar replays only; it re-reads the replay, about a second).
+
 `ReplayMetadata` (see `replay/entities.py`) does not carry field geometry, so
 there is no ground truth for it in the replay file itself. `/replay/frames`
 always reports `STANDARD_FIELD_DIMS` — correct for tournament/normal-match
@@ -52,6 +57,7 @@ from utama_core.engine.match_log import (
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.replay.columnar_reader import load_columnar_replay
 from utama_core.replay.replay_player import _load_replay
+from utama_core.replay.turnover_breakdown import _is_real, analyse_match
 
 _DEFAULT_GEOMETRY = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
 
@@ -161,6 +167,7 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
         # interpret `key`/`value` here, it just forward-fills and hands them
         # to whichever overlay renderer knows that key.
         "trace_events": [{"sim_time": e.sim_time, "key": e.key, "value": e.value} for e in trace_events],
+        "markers": _markers(replay_path, referee_events, my_team_is_yellow),
         "has_tactic_data": len(intention_events) > 0,
         "has_referee_data": len(referee_events) > 0,
     }
@@ -186,3 +193,52 @@ def _load_match_log_events(replay_path: Path) -> tuple[list, list, list]:
     referee_events = sorted((e for e in events if isinstance(e, RefereeEvent)), key=lambda e: e.sim_time)
     trace_events = sorted((e for e in events if isinstance(e, TraceEvent)), key=lambda e: e.sim_time)
     return intention_events, referee_events, trace_events
+
+
+def _ball_losses(replay_path: Path) -> list[dict]:
+    """The recorded team's real ball losses (see `turnover_breakdown._is_real`)."""
+    if replay_path.suffix != ".npz":
+        return []
+    try:
+        return [t for t in analyse_match(str(replay_path))["turnovers"] if _is_real(t)]
+    except Exception:  # noqa: BLE001 - markers are optional, never break loading the replay
+        return []
+
+
+def _markers(replay_path: Path, referee_events: list, my_team_is_yellow: bool) -> list[dict]:
+    markers = []
+    yellow, blue = 0, 0
+    for e in referee_events:
+        if e.yellow_score > yellow or e.blue_score > blue:
+            scorer = "yellow" if e.yellow_score > yellow else "blue"
+            markers.append(
+                {"sim_time": e.sim_time, "kind": "goal", "label": f"Goal {scorer}, {e.yellow_score}-{e.blue_score}"}
+            )
+        yellow, blue = e.yellow_score, e.blue_score
+
+    stats_path = replay_path.with_suffix("").with_suffix(".stats.json")
+    try:
+        stats = json.loads(stats_path.read_text()) if stats_path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        stats = {}
+    colour = "yellow" if my_team_is_yellow else "blue"
+    other = "blue" if my_team_is_yellow else "yellow"
+    fouls: dict[tuple, list[dict]] = {}  # a crash is logged once per side at one instant
+    for foul in stats.get("fouls", []):
+        fouls.setdefault((foul["sim_time"], foul["rule"]), []).append(foul)
+    for (sim_time, rule), same in fouls.items():
+        side = {"friendly": colour, "enemy": other}
+        who = ", ".join(
+            f"{side.get(f.get('side'), f.get('side'))} {f.get('robot_id')} {f.get('tactic') or ''}".strip()
+            for f in same
+        )
+        markers.append({"sim_time": sim_time, "kind": "foul", "label": f"Foul: {rule.replace('_', ' ')} ({who})"})
+    for stall in stats.get("stall_events", []):
+        detail = f", {stall['diagnosis']}" if stall.get("diagnosis") else ""
+        label = f"Stall: {stall['kind']} for {stall['duration_s']:.0f}s{detail}"
+        markers.append({"sim_time": stall["sim_time"], "kind": "stall", "label": label})
+
+    for loss in _ball_losses(replay_path):
+        label = f"{colour.capitalize()} lost the ball: {loss['kind'].replace('_', ' ')} ({loss['tactic']})"
+        markers.append({"sim_time": loss["t"], "kind": "loss", "label": label})
+    return sorted(markers, key=lambda m: m["sim_time"])

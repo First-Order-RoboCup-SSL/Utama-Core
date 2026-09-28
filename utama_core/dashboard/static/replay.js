@@ -40,6 +40,8 @@
   let refereeState = null; // last-seen referee event, or null if none yet
   let traceValues = {}; // key -> last-seen value, e.g. "shadow_and_mark.marks" -> {marker_id: opponent_id}
   let overlaysEnabled = true;
+  let markers = []; // {sim_time, kind, label}: goals, fouls, stalls, ball losses, in time order
+  const MARKER_LEAD_S = 2; // jump a little before an event, to see it happen
 
   function frameTs(i) {
     return frames.length ? frames[i].ts : 0;
@@ -144,6 +146,46 @@
     c.innerHTML = html;
   }
 
+  function renderMarkers() {
+    const strip = document.getElementById("replay-markers");
+    const list = document.getElementById("replay-marker-list");
+    if (!strip || !list) return;
+    const t0 = frameTs(0);
+    const span = Math.max(1e-6, frameTs(frames.length - 1) - t0);
+    strip.innerHTML = markers
+      .map(
+        (m, i) =>
+          `<div class="marker marker-${m.kind}" data-marker-idx="${i}" title="${fmtTime(m.sim_time - t0)} ${m.label}"` +
+          ` style="left:${(100 * (m.sim_time - t0)) / span}%;"></div>`
+      )
+      .join("");
+    list.innerHTML = markers.length
+      ? markers
+          .map(
+            (m, i) =>
+              `<div class="ref-row" style="cursor:pointer;" data-marker-idx="${i}">` +
+              `<span class="muted" style="min-width:44px;">${fmtTime(m.sim_time - t0)}</span>` +
+              `<span><span class="marker-kind marker-${m.kind}">${m.kind}</span>${m.label}</span></div>`
+          )
+          .join("")
+      : '<div class="muted" style="font-size:.72rem;">no goals, fouls, stalls or ball losses recorded</div>';
+  }
+
+  function jumpToMarker(i) {
+    const m = markers[i];
+    if (m) jumpToEvent(m.sim_time - MARKER_LEAD_S);
+  }
+
+  function stepMarker(direction) {
+    // the next (or previous) event after the one the view is currently leading into
+    const now = frameTs(index) + MARKER_LEAD_S;
+    const i =
+      direction > 0
+        ? markers.findIndex((m) => m.sim_time > now + 1e-6)
+        : markers.map((m) => m.sim_time < now - 1e-6).lastIndexOf(true);
+    if (i >= 0) jumpToMarker(i);
+  }
+
   function jumpToEvent(sim_time) {
     // Nearest frame whose ts >= sim_time (falls back to the last frame if
     // the event is at/after the final recorded ts).
@@ -243,11 +285,23 @@
         const select = document.getElementById("replay-select");
         const current = select.value;
         select.innerHTML = '<option value="">Select a replay…</option>';
+        // one group per run directory, newest run first
+        const groups = {};
         for (const path of paths) {
-          const opt = document.createElement("option");
-          opt.value = path;
-          opt.textContent = path;
-          select.appendChild(opt);
+          const cut = path.lastIndexOf("/");
+          const run = cut >= 0 ? path.slice(0, cut) : "";
+          (groups[run] = groups[run] || []).push(path);
+        }
+        for (const run of Object.keys(groups).sort().reverse()) {
+          const group = document.createElement("optgroup");
+          group.label = run || "(top level)";
+          for (const path of groups[run]) {
+            const opt = document.createElement("option");
+            opt.value = path;
+            opt.textContent = path.slice(run.length ? run.length + 1 : 0);
+            group.appendChild(opt);
+          }
+          select.appendChild(group);
         }
         if (paths.includes(current)) select.value = current;
       });
@@ -270,9 +324,10 @@
     }
   }
 
-  function loadReplay(path) {
+  function loadReplay(path, atTime) {
     stopPlayback();
     frames = [];
+    markers = [];
     tacticEvents = [];
     refereeEvents = [];
     traceEvents = [];
@@ -291,6 +346,7 @@
         tacticEvents = data.tactic_events || [];
         refereeEvents = data.referee_events || [];
         traceEvents = data.trace_events || [];
+        markers = data.markers || [];
         lastIndex = 0;
         resetEventCursors();
         const canvas = document.getElementById("replay-field-canvas");
@@ -305,13 +361,15 @@
         const refBanner = document.getElementById("replay-no-referee");
         if (refBanner) refBanner.style.display = data.has_referee_data ? "none" : "";
         renderIntentionLog();
+        renderMarkers();
         setIndex(0);
+        if (atTime != null) jumpToEvent(atTime - MARKER_LEAD_S);
       })
       .catch((err) => console.error("replay fetch error:", err))
       .finally(() => setLoading(false));
   }
 
-  function loadReplayByPath(path) {
+  function loadReplayByPath(path, atTime) {
     // Entry point for other views (Tournament's "view replay" links) via
     // Dashboard.showReplay(path) — same load, but also syncs the dropdown.
     // The dropdown's options are only populated once loadList()'s fetch
@@ -322,7 +380,7 @@
       const select = document.getElementById("replay-select");
       if (select) select.value = path;
     });
-    loadReplay(path);
+    loadReplay(path, atTime);
   }
 
   function mount() {
@@ -353,6 +411,13 @@
       if (event) jumpToEvent(event.sim_time);
     });
 
+    for (const id of ["replay-markers", "replay-marker-list"]) {
+      document.getElementById(id).addEventListener("click", (e) => {
+        const el = e.target.closest("[data-marker-idx]");
+        if (el) jumpToMarker(Number(el.dataset.markerIdx));
+      });
+    }
+
     document.addEventListener("keydown", (e) => {
       if (!document.getElementById("view-replay").classList.contains("active")) return;
       if (e.target.tagName === "SELECT") return;
@@ -365,6 +430,10 @@
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         step(-1);
+      } else if (e.key === "]") {
+        stepMarker(1);
+      } else if (e.key === "[") {
+        stepMarker(-1);
       }
     });
   }
