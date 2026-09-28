@@ -949,8 +949,12 @@ class FastPathPlanner:
         """
         clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
         clamped = max_distance
+        # Points along the ray as plain-float pairs: `origin + unit_vec * d`
+        # per axis, the same operations numpy would do, without allocating.
+        ox, oy = float(origin[0]), float(origin[1])
+        ux, uy = float(unit_vec[0]), float(unit_vec[1])
         for o in obstacles:
-            end_point = origin + unit_vec * clamped
+            end_point = (ox + ux * clamped, oy + uy * clamped)
             if distance_point_to_segment(end_point, o[0], o[1]) >= clearance:
                 continue
             # Binary search along the ray for the furthest distance that still
@@ -959,7 +963,7 @@ class FastPathPlanner:
             lo, hi = 0.0, clamped
             for _ in range(12):
                 mid = (lo + hi) / 2.0
-                point = origin + unit_vec * mid
+                point = (ox + ux * mid, oy + uy * mid)
                 if distance_point_to_segment(point, o[0], o[1]) >= clearance:
                     lo = mid
                 else:

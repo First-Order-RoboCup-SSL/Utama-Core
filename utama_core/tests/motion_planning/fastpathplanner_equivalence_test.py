@@ -186,6 +186,24 @@ class _ReferencePlanner(FastPathPlanner):
                 break
         return safe_target
 
+    def _clamp_to_obstacle_clearance(self, origin, unit_vec, max_distance, obstacles, clearance=None):
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        clamped = max_distance
+        for o in obstacles:
+            end_point = origin + unit_vec * clamped
+            if distance_point_to_segment(end_point, o[0], o[1]) >= clearance:
+                continue
+            lo, hi = 0.0, clamped
+            for _ in range(12):
+                mid = (lo + hi) / 2.0
+                point = origin + unit_vec * mid
+                if distance_point_to_segment(point, o[0], o[1]) >= clearance:
+                    lo = mid
+                else:
+                    hi = mid
+            clamped = min(clamped, lo)
+        return clamped
+
 
 def _scene(rng, n_robots):
     """Robot ghost-wall segments plus the 8 static segments `_refresh_obstacle_cache` adds."""
@@ -315,3 +333,21 @@ def test_sanitize_target_matches_reference(seed):
         a = new.sanitize_target(target, obstacles, robot_pos, **kwargs)
         b = ref.sanitize_target(target, obstacles, robot_pos, **kwargs)
         assert _same(a, b)
+
+
+@pytest.mark.parametrize("seed", range(4))
+def test_clamp_to_obstacle_clearance_matches_reference(seed):
+    """Rays from robots next to obstacles, so the binary search usually runs."""
+    rng = np.random.default_rng(300 + seed)
+    new, ref = FastPathPlanner(env=None), _ReferencePlanner(env=None)
+    for _ in range(400):
+        obstacles = _scene(rng, n_robots=int(rng.integers(0, 12)))
+        anchor = obstacles[int(rng.integers(len(obstacles)))]
+        origin = anchor[0] + rng.normal(0.0, 0.3, 2)
+        heading = rng.uniform(-math.pi, math.pi)
+        unit_vec = np.array([math.cos(heading), math.sin(heading)])
+        args = (origin, unit_vec, float(rng.uniform(0.1, 1.0)), obstacles)
+        clearance = float(rng.uniform(0.2, 0.5))
+        a = new._clamp_to_obstacle_clearance(*args, clearance=clearance)
+        b = ref._clamp_to_obstacle_clearance(*args, clearance=clearance)
+        assert a == b and type(a) is type(b)

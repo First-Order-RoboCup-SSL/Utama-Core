@@ -366,19 +366,24 @@ def find_intersection(line1, line2):
     Returns:
         np.array of intersection point (x, y), or None if no intersection.
     """
-    A, B = np.asarray(line1[0]), np.asarray(line1[1])
-    C, D = np.asarray(line2[0]), np.asarray(line2[1])
+    # Plain floats rather than numpy scalars/arrays (the planner calls this
+    # ~140k times a match): the same IEEE double operations in the same
+    # order, so the same result, including `A + t * (B - A)` done per axis.
+    ax, ay = float(line1[0][0]), float(line1[0][1])
+    bx, by = float(line1[1][0]), float(line1[1][1])
+    cx, cy = float(line2[0][0]), float(line2[0][1])
+    dx, dy = float(line2[1][0]), float(line2[1][1])
 
-    denom = (B[0] - A[0]) * (D[1] - C[1]) - (B[1] - A[1]) * (D[0] - C[0])
+    denom = (bx - ax) * (dy - cy) - (by - ay) * (dx - cx)
 
     if abs(denom) < EPS:
         return None
 
-    t = ((C[0] - A[0]) * (D[1] - C[1]) - (C[1] - A[1]) * (D[0] - C[0])) / denom
-    u = ((C[0] - A[0]) * (B[1] - A[1]) - (C[1] - A[1]) * (B[0] - A[0])) / denom
+    t = ((cx - ax) * (dy - cy) - (cy - ay) * (dx - cx)) / denom
+    u = ((cx - ax) * (by - ay) - (cy - ay) * (bx - ax)) / denom
 
     if -EPS <= t <= 1 + EPS and -EPS <= u <= 1 + EPS:
-        return A + t * (B - A)
+        return np.array([ax + t * (bx - ax), ay + t * (by - ay)])
 
     return None
 
