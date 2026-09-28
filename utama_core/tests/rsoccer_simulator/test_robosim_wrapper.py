@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -61,5 +63,35 @@ def test_subprocess_error_is_raised_not_swallowed():
     try:
         with pytest.raises(RuntimeError, match="robosim subprocess error"):
             sim._request({"no_such_command": True})
+    finally:
+        sim.close()
+
+
+def _descendant_running(pid: int, name: str) -> int:
+    """`proc.pid` is the `pixi run` launcher, whose own argv names the script too:
+    the script is the deepest process under it with `name` in its argv."""
+    found, pending = None, [pid]
+    while pending:
+        p = pending.pop(0)
+        with open(f"/proc/{p}/cmdline", "rb") as f:
+            if name.encode() in f.read():
+                found = p
+        for task in os.listdir(f"/proc/{p}/task"):
+            with open(f"/proc/{p}/task/{task}/children") as f:
+                pending += [int(c) for c in f.read().split()]
+    assert found not in (None, pid), f"no process under {pid} runs {name}"
+    return found
+
+
+@pytest.mark.skipif(not os.path.isdir("/proc/self/fd"), reason="needs /proc")
+def test_subprocess_stdout_goes_to_devnull():
+    """rc-robosim's C++ layer prints diagnostics straight to fd 1. The binary
+    frames can't skip stray bytes the way the old JSON-line reader skipped stray
+    lines, so fd 1 in the subprocess must not be the pipe the parent reads."""
+    sim = _wrapper()
+    try:
+        sim.get_field_params()  # the subprocess is up and past its imports
+        script = _descendant_running(sim.proc.pid, "robosim_subprocess.py")
+        assert os.readlink(f"/proc/{script}/fd/1") == os.devnull
     finally:
         sim.close()

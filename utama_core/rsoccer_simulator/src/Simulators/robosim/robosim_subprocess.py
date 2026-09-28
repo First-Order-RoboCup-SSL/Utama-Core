@@ -11,9 +11,6 @@ import os
 import struct
 import sys
 
-import numpy as np
-import robosim
-
 # rc-robosim's native (C++) layer occasionally writes plain-text diagnostics
 # (e.g. "turnover 0.86 robot x: ... ball y: ...") straight to the process's
 # real stdout fd via printf/std::cout -- bypassing `sys.stdout` entirely, so
@@ -30,12 +27,15 @@ import robosim
 # `robosim` (the native extension) is even imported/constructs anything --
 # any native write to fd 1 lands in devnull, and our own protocol replies
 # go out `_PROTOCOL_OUT` on the untouched duplicate, so the pipe our parent
-# reads from only ever sees valid JSON.
+# reads from only ever sees protocol frames.
 _PROTOCOL_FD = os.dup(1)
 _PROTOCOL_OUT = os.fdopen(_PROTOCOL_FD, "wb")
 _devnull_fd = os.open(os.devnull, os.O_WRONLY)
 os.dup2(_devnull_fd, 1)
 os.close(_devnull_fd)
+
+import numpy as np  # noqa: E402
+import robosim  # noqa: E402
 
 
 def _emit_frame(kind: bytes, body: bytes) -> None:
