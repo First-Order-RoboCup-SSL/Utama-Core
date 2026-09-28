@@ -40,7 +40,6 @@ KICKER_PERSIST_TIMESTEPS = int(KICKER_PERSIST_TIME * CONTROL_FREQUENCY)  # in ti
 MAX_GAME_HISTORY = 20  # number of previous game states to keep in Game
 
 REPLAY_BASE_PATH = Path.cwd() / "replays"
-RENDER_BASE_PATH = Path.cwd() / "renders"
 
 FPS_PRINT_INTERVAL = 1.0  # seconds
 
