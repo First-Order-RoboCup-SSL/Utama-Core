@@ -671,15 +671,24 @@ class PreparePenaltyOursStep:
 
         behind_idx = 0
         behind_y_step = PENALTY_LINE_Y_STEP_RATIO * _field_half_width(game)
+        intended = {}
         for robot_id in robot_ids:
             if robot_id == kicker_id:
                 self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, penalty_mark, goal_oren)
             else:
                 # Place behind the line, spread in y
                 offset = (behind_idx - (len(robot_ids) - 1) / 2.0) * behind_y_step
-                pos = Vector2D(behind_line_x, offset)
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, pos, 0.0)
+                intended[robot_id] = Vector2D(behind_line_x, offset)
                 behind_idx += 1
+
+        # A teammate starting goal-side of the mark goes round the placed ball
+        # rather than knocking it off the mark on the way to its line.
+        _clear_to_legal_positions(
+            self.blackboard,
+            ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            exempt_robot_ids={kicker_id},
+            intended_targets=intended,
+        )
 
 
 # ---------------------------------------------------------------------------

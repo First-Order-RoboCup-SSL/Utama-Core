@@ -1089,6 +1089,41 @@ class TestPenaltyPositioning:
         t = min(1.0, max(0.0, (mark - start).dot(seg) / seg.dot(seg)))
         assert (start + seg * t - mark).mag() >= 0.5
 
+    def test_prepare_penalty_ours_goal_side_teammate_walks_round_the_ball(self, monkeypatch):
+        # Mirror of the defender case: a non-kicker of ours left goal-side of the
+        # mark drove straight through the placed ball to its line 1 m behind it,
+        # knocking the ball off the mark before the kick.
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = {}
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured[robot_id] = target_coords
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        mark = Vector2D(-2.25, 0.0)
+        robots = {0: _robot(0, 4.4, 0.0), 1: _robot(1, -1.0, 0.0), 2: _robot(2, -3.1, 0.05)}
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_PENALTY_YELLOW)
+        referee.yellow_team.goalkeeper = 0
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            ball=_ball(mark.x, mark.y),
+        )
+        node = referee_actions.PreparePenaltyOursStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+
+        node.update()
+        assert captured[1] == mark  # the kicker still goes straight to the mark
+        start, target = Vector2D(-3.1, 0.05), captured[2]
+        seg = target - start
+        t = min(1.0, max(0.0, (mark - start).dot(seg) / seg.dot(seg)))
+        assert (start + seg * t - mark).mag() >= 0.5
+
 
 class TestVariableFieldScaling:
     def test_prepare_kickoff_ours_scales_support_positions_with_field_bounds(self, monkeypatch):
