@@ -96,3 +96,21 @@ def test_fuzz_restarts_off_by_default(tmp_path, monkeypatch):
     summary = json.loads((run_dirs[0] / "summary.json").read_text())
     assert summary["fuzz_seed"] is None
     assert summary["fuzz_interval_s"] is None
+
+
+def test_pair_plays_exactly_that_one_pairing_in_the_given_order(tmp_path, monkeypatch):
+    """`--pair a b` replays one fixture (e.g. to diagnose a stall) with a as config_a,
+    not the sorted order a round-robin over those two configs would use."""
+    calls = []
+
+    def _fake_run_match(config_a_name, config_b_name, *_args, **_kwargs):
+        calls.append((config_a_name, config_b_name))
+        return _stub_result(config_a_name, config_b_name)
+
+    monkeypatch.setattr(tournament, "run_match", _fake_run_match)
+    monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
+    monkeypatch.setattr("sys.argv", ["tournament.py", "--sequential", "--no-save", "--pair", "tiki_taka", "low_block"])
+
+    tournament.main()
+
+    assert calls == [("build_tiki_taka_kernel_strategy", "build_low_block_kernel_strategy")]

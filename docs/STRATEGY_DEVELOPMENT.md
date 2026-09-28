@@ -83,8 +83,8 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
   strategies aren't meant to win; don't tune them to.
 - **`smoke_tournament.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
   `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
-  `--no-save`). For one match with full observability, call `tournament_lib.run_match` with
-  full factory names (`build_tiki_taka_kernel_strategy`).
+  `--no-save`, `--pair A B` for one fixture with A as config_a — reruns a stalled match from a
+  round-robin; see the determinism caveat below).
 - **Ball losses** (`replay/turnover_breakdown.py`) — runs after every saved tournament and
   writes `ball_losses.md`; see [Reading a tournament run](#reading-a-tournament-run).
   `python -m utama_core.replay.turnover_breakdown <run_dir>` re-runs it on an older run.

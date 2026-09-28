@@ -134,6 +134,7 @@ def main() -> None:
     # machine — os.cpu_count() ignores CPU affinity/cgroup limits, so a
     # `taskset`-restricted run would otherwise still size the pool for all
     # cores and oversubscribe.
+    # `--pair A B` plays just that one fixture, A as config_a.
     # `--both-sides` plays every pair twice, once with each config on each
     # side — see the module docstring for why this is real variance
     # reduction rather than a duplicate match.
@@ -237,30 +238,35 @@ def main() -> None:
         fuzz_interval_s = (float(args[idx + 1]), float(args[idx + 2]))
         args = args[:idx] + args[idx + 3 :]
 
-    if args:
-        requested = set(args)
-        config_names = [
-            name
-            for name in _CONFIG_NAMES
-            if name in requested or name.removeprefix("build_").removesuffix("_kernel_strategy") in requested
-        ]
-        unmatched = requested - {
-            n for name in config_names for n in (name, name.removeprefix("build_").removesuffix("_kernel_strategy"))
-        }
-        if unmatched:
-            raise SystemExit(f"Unknown config name(s): {sorted(unmatched)}. Available: {sorted(_CONFIG_NAMES)}")
-        if len(config_names) < 2:
-            raise SystemExit("Need at least 2 configs to play a round-robin.")
-    else:
-        config_names = _CONFIG_NAMES
+    # `--pair A B` plays exactly one fixture, A as config_a (yellow, right side,
+    # kickoff) -- e.g. to rerun one stalled match from a round-robin, which
+    # reproduces exactly since rsim is deterministic.
+    pair: Optional[tuple[str, str]] = None
+    if "--pair" in args:
+        idx = args.index("--pair")
+        pair = (args[idx + 1], args[idx + 2])
+        args = args[:idx] + args[idx + 3 :]
+        if args:
+            raise SystemExit(f"--pair takes no other config names: {args}")
 
-    base_pairs = list(itertools.combinations(sorted(config_names), 2))
-    # --both-sides plays (a, b) and (b, a) as distinct fixtures — see the
-    # module docstring for why this is a real second data point (side-
-    # dependent geometry) rather than a duplicate, unlike naively re-running
-    # the same pair (which is byte-identical: fixed initial formation, no
-    # varying RNG source).
-    pairs = [(a, b) for a, b in base_pairs] + ([(b, a) for a, b in base_pairs] if both_sides else [])
+    if pair is not None:
+        config_names = _resolve_config_names(list(pair))
+        pairs = [tuple(_resolve_config_names([name])[0] for name in pair)]
+    else:
+        if args:
+            config_names = _resolve_config_names(args)
+            if len(config_names) < 2:
+                raise SystemExit("Need at least 2 configs to play a round-robin.")
+        else:
+            config_names = _CONFIG_NAMES
+
+        base_pairs = list(itertools.combinations(sorted(config_names), 2))
+        # --both-sides plays (a, b) and (b, a) as distinct fixtures — see the
+        # module docstring for why this is a real second data point (side-
+        # dependent geometry) rather than a duplicate, unlike naively re-running
+        # the same pair (which is byte-identical: fixed initial formation, no
+        # varying RNG source).
+        pairs = [(a, b) for a, b in base_pairs] + ([(b, a) for a, b in base_pairs] if both_sides else [])
 
     run_id = datetime.now(timezone.utc).strftime("tournament_%Y%m%d_%H%M%S")
     run_dir: Optional[Path] = None
@@ -466,6 +472,23 @@ def main() -> None:
             f"--strict: {len(stalled_matches)} match(es) with stall events, "
             f"{len(backstop_matches)} match(es) flagged by the possession backstop"
         )
+
+
+def _resolve_config_names(requested_names: list[str]) -> list[str]:
+    """Factory names for `requested_names`, each given with or without the
+    `build_`/`_kernel_strategy` wrapping, in catalog order."""
+    requested = set(requested_names)
+    config_names = [
+        name
+        for name in _CONFIG_NAMES
+        if name in requested or name.removeprefix("build_").removesuffix("_kernel_strategy") in requested
+    ]
+    unmatched = requested - {
+        n for name in config_names for n in (name, name.removeprefix("build_").removesuffix("_kernel_strategy"))
+    }
+    if unmatched:
+        raise SystemExit(f"Unknown config name(s): {sorted(unmatched)}. Available: {sorted(_CONFIG_NAMES)}")
+    return config_names
 
 
 def _run_metadata() -> dict:
