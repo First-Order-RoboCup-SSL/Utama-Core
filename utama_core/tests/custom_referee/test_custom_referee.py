@@ -717,6 +717,41 @@ class TestKeepOutRule:
         frame = _frame(ball=_ball(0.0, 0.0), friendly_robots=friendly)
         assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
 
+    def test_defender_too_close_is_a_non_stopping_foul_on_the_defending_team(self):
+        # SSL rulebook §8.4.3 "Defender Too Close To Ball": a foul that resets the
+        # kicking team's timer, not a stop. Ours stopped play and re-awarded the
+        # free kick, and the sim shortcut turned that into a FORCE_START scramble.
+        rule = KeepOutRule(radius_meters=0.5, violation_persistence_frames=1)
+        friendly = {0: _robot(0, 0.2, 0.0, is_friendly=True)}  # we are yellow
+        v = rule.check(_frame(ball=_ball(0.0, 0.0), friendly_robots=friendly), GEO, RefereeCommand.DIRECT_FREE_BLUE)
+        assert v is not None
+        assert v.is_stopping is False
+        assert v.offending_teams == (True,)
+        assert v.counts_toward_foul_counter is True
+
+    def test_not_raised_again_within_two_seconds(self):
+        # §8.4.3: "Each foul has a grace period of 2 seconds per team until it is raised again."
+        rule = KeepOutRule(radius_meters=0.5, violation_persistence_frames=1)
+        friendly = {0: _robot(0, 0.2, 0.0, is_friendly=True)}
+
+        def check(ts):
+            frame = _frame(ball=_ball(0.0, 0.0), friendly_robots=friendly, ts=ts)
+            return rule.check(frame, GEO, RefereeCommand.DIRECT_FREE_BLUE)
+
+        assert check(10.0) is not None
+        assert check(11.99) is None
+        assert check(12.0) is not None
+
+    @pytest.mark.parametrize("command", [RefereeCommand.PREPARE_PENALTY_BLUE, RefereeCommand.STOP])
+    def test_no_automatic_sanction_during_a_penalty_or_stop(self, command):
+        # §8.4.3 names only the opponent's kick-off or free kick. During STOP there
+        # is "no automatic sanction"; penalty positioning is §8.3.4 "Disrespect
+        # Procedures", a human referee's call (and the defending keeper is exempt).
+        rule = KeepOutRule(radius_meters=0.5, violation_persistence_frames=1)
+        friendly = {0: _robot(0, 0.2, 0.0, is_friendly=True)}
+        frame = _frame(ball=_ball(0.0, 0.0), friendly_robots=friendly)
+        assert rule.check(frame, GEO, command) is None
+
 
 # ---------------------------------------------------------------------------
 # GameStateMachine
