@@ -116,3 +116,22 @@ def test_turn_on_spot_keeps_pivot_push_away_from_a_wedged_enemy():
     cmd = turn_on_spot(game=game, motion_controller=mc, robot_id=1, target_oren=-math.pi / 2)
 
     assert cmd.local_left_vel == pytest.approx(1.0 * PIVOT_RADIUS)
+
+
+def test_turn_on_spot_steers_away_from_a_wedged_teammate():
+    """A teammate's body blocks the pivot exactly as an enemy's does. Found in
+    high_line_zone_vs_low_block (2026-09-28): the overload decoy pivoting on the
+    ball with the switch carrier 0.219 m away in its push direction was commanded
+    ~1.4 rad/s for 8 s and never turned, freezing the match."""
+    friendly = {
+        1: _robot(1, 0.0, 0.0, True, orientation=0.0, has_ball=True),
+        2: _robot(2, 0.0, -0.15, True),  # within 2*ROBOT_RADIUS, directly along the pivot push
+    }
+    enemy = {0: _robot(0, 5.0, 5.0, False)}
+    game = _game(friendly, enemy, (ROBOT_RADIUS + BALL_RADIUS, 0.0))
+    mc = _motion_controller(angular_vel=1.0)  # pivot push is -y (into the teammate)
+
+    turn_on_spot(game=game, motion_controller=mc, robot_id=1, target_oren=math.pi / 2)
+
+    final_call_kwargs = mc.calculate.call_args_list[-1].kwargs
+    assert final_call_kwargs["target_pos"].y > 0.0  # steered away from the teammate at y=-0.15
