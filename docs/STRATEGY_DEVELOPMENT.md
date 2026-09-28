@@ -100,6 +100,10 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 - **`repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless
   match with tracing on, instead of re-running the whole match (`--help` for flags).
 
+**Frame convention trap:** rsim's own frame stores y negated relative to ours. Anything that
+writes into the sim (e.g. `teleport_robot`) must negate y *and* heading — `543741e` fixed a
+teleported robot facing the mirrored heading, which had silently corrupted scenario benches.
+
 **Determinism caveat:** rsim matches are *mostly* reproducible, but some (seen with
 `press_and_pass`) differ run to run on identical code; cause not yet known. Before attributing a
 result difference to a code change, re-run the baseline.
