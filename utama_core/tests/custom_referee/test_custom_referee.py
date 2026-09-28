@@ -295,14 +295,17 @@ class TestBallSpeedRule:
         assert rule.check(slow, GEO, RefereeCommand.NORMAL_START) is None
         assert rule.check(fast, GEO, RefereeCommand.NORMAL_START) is not None
 
-    def test_free_kick_assigned_to_non_kicking_team(self):
-        """Friendly (yellow) kicked → enemy (blue) gets the free kick."""
+    def test_non_stopping_foul_charged_to_the_kicking_team(self):
+        """SSL rulebook §8.4.2 lists Ball Speed as a non-stopping foul: friendly
+        (yellow) kicked too fast -> yellow is charged, play continues. Ours used
+        to stop play with a free kick to the other team."""
         rule = BallSpeedRule(max_speed_mps=6.5)
         friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is not None
-        assert violation.next_command == RefereeCommand.DIRECT_FREE_BLUE
+        assert violation.is_stopping is False
+        assert violation.offending_teams == (True,)
 
     def test_inactive_outside_active_play(self):
         rule = BallSpeedRule(max_speed_mps=6.5)
@@ -317,32 +320,13 @@ class TestBallSpeedRule:
         assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
 
     def test_enemy_kick_attributed_symmetrically(self):
-        """Enemy (blue) kicked too fast → friendly (yellow) gets the free kick."""
+        """Enemy (blue) kicked too fast → blue is charged."""
         rule = BallSpeedRule(max_speed_mps=6.5)
         enemy = {0: _robot(0, 0.0, 0.0, is_friendly=False, has_ball=True)}
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), enemy_robots=enemy, my_team_is_yellow=True)
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is not None
-        assert violation.next_command == RefereeCommand.DIRECT_FREE_YELLOW
-
-    def test_designated_position_is_projected_clear_of_the_defense_area(self):
-        """Regression, same class of bug as DefenseAreaRule/KeeperHeldBallRule/
-        ExcessiveDribblingRule/PushingRule (roadmap item 15/16): a fast kick
-        struck from right at a defense-area edge (e.g. a keeper's clearance)
-        must not hand back a `designated_position` inside that box."""
-        rule = BallSpeedRule(max_speed_mps=6.5)
-        friendly = {0: _robot(0, -3.6, 0.0, is_friendly=True, has_ball=True)}
-        frame = _frame(
-            ball=_ball(-3.6, 0.0, vx=7.0, vy=0.0),
-            friendly_robots=friendly,
-            my_team_is_yellow=True,
-            my_team_is_right=False,  # friendly (yellow) defends the left area
-        )
-        violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
-        assert violation is not None
-        assert violation.designated_position is not None
-        assert not GEO.is_in_left_defense_area(*violation.designated_position)
-        assert not GEO.is_in_right_defense_area(*violation.designated_position)
+        assert violation.offending_teams == (False,)
 
     def test_scrum_kick_tie_broken_by_distance_not_colour(self):
         """Both teams in contact at the kick: the closer robot's team is the
@@ -353,7 +337,7 @@ class TestBallSpeedRule:
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, enemy_robots=enemy)
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is not None
-        assert violation.next_command == RefereeCommand.DIRECT_FREE_YELLOW  # enemy kicked, friendly gets FK
+        assert violation.offending_teams == (False,)  # enemy (blue) kicked
 
 
 # ---------------------------------------------------------------------------
