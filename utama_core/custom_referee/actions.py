@@ -672,9 +672,18 @@ class PreparePenaltyOursStep:
         behind_idx = 0
         behind_y_step = PENALTY_LINE_Y_STEP_RATIO * _field_half_width(game)
         intended = {}
+        # The kicker waits just behind the ball, like DirectFreeOursStep's approach:
+        # sent to the mark itself it drove onto the placed ball and shoved it off
+        # the mark before NORMAL_START, and keep-out then voided the penalty.
+        kicker_spot = Vector2D(penalty_mark.x - sign * RefereeGeometry._KICKER_APPROACH_M, 0.0)
         for robot_id in robot_ids:
             if robot_id == kicker_id:
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, penalty_mark, goal_oren)
+                kicker = game.friendly_robots[robot_id]
+                target = kicker_spot
+                if game.ball is not None:
+                    ball_pos = Vector2D(game.ball.p.x, game.ball.p.y)
+                    target = _detour_around_circle(kicker.p, kicker_spot, ball_pos, ROBOT_RADIUS + BALL_RADIUS)
+                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, target, goal_oren)
             else:
                 # Place behind the line, spread in y
                 offset = (behind_idx - (len(robot_ids) - 1) / 2.0) * behind_y_step

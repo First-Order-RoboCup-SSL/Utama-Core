@@ -15,6 +15,8 @@ from types import SimpleNamespace
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
+from utama_core.config.referee_constants import KICKER_READY_DISTANCE
 from utama_core.data_processing.refiners.referee import RefereeRefiner
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -989,8 +991,42 @@ class TestPenaltyPositioning:
         node.update()
         kicker_target = next(target for robot_id, target in captured if robot_id == 0)
 
-        assert kicker_target.x == pytest.approx(-2.25)
+        assert kicker_target.x == pytest.approx(-2.25 + ROBOT_RADIUS + 0.03)
         assert kicker_target.x < 0.0
+
+    def test_prepare_penalty_ours_kicker_waits_behind_the_ball_not_on_it(self, monkeypatch):
+        # decoy_and_overload_vs_score_aware_zone_flow (2026-09-28): the kicker was
+        # sent to the mark itself, i.e. onto the placed ball, shoved it away at
+        # 1.5 m/s before NORMAL_START, and keep-out voided the penalty.
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = {}
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured[robot_id] = target_coords
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        mark = Vector2D(2.25, 0.0)  # yellow on the left attacks the right goal
+        robots = {0: _robot(0, -4.4, 0.0), 1: _robot(1, 1.0, 0.3)}
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_PENALTY_YELLOW)
+        referee.yellow_team.goalkeeper = 0
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=False,
+            ball=_ball(mark.x, mark.y),
+        )
+        node = referee_actions.PreparePenaltyOursStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+
+        node.update()
+        kicker_target = captured[1]
+        assert kicker_target.x < mark.x  # behind the ball, away from the goal
+        assert (kicker_target - mark).mag() >= ROBOT_RADIUS + BALL_RADIUS
+        assert (kicker_target - mark).mag() <= KICKER_READY_DISTANCE
 
     def test_prepare_penalty_theirs_support_robots_stay_on_our_half(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
@@ -1118,7 +1154,6 @@ class TestPenaltyPositioning:
         node.blackboard = _make_blackboard(game, _make_cmd_map(game))
 
         node.update()
-        assert captured[1] == mark  # the kicker still goes straight to the mark
         start, target = Vector2D(-3.1, 0.05), captured[2]
         seg = target - start
         t = min(1.0, max(0.0, (mark - start).dot(seg) / seg.dot(seg)))
@@ -1244,7 +1279,7 @@ class TestVariableFieldScaling:
         node.update()
         kicker_target = next(target for robot_id, target in captured if robot_id == 0)
 
-        assert kicker_target.x == pytest.approx(-3.0)
+        assert kicker_target.x == pytest.approx(-3.0 + ROBOT_RADIUS + 0.03)
         assert kicker_target.y == pytest.approx(0.0)
 
 
