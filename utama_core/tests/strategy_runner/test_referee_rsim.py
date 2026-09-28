@@ -528,6 +528,13 @@ class _HaltResumeClearsDefenseAreaManager(AbstractTestManager):
         if ref is None:
             return TestingStatus.IN_PROGRESS
 
+        if not self.halt_seen and ref.referee_command != RefereeCommand.HALT:
+            # Forced directly: a robot merely standing in the opponent's box is no
+            # longer a stopping foul (rulebook §8.4.2 needs a ball touch), so the
+            # old STOP -> second-foul -> HALT escalation no longer gets here.
+            self._referee.force_command(RefereeCommand.HALT, game.ts)
+            return TestingStatus.IN_PROGRESS
+
         if ref.referee_command == RefereeCommand.HALT:
             self.halt_seen = True
             return TestingStatus.IN_PROGRESS

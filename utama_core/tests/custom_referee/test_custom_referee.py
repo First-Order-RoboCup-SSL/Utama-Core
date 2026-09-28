@@ -583,13 +583,47 @@ class TestDoubleTouchRule:
 
 class TestDefenseAreaRule:
     def _frame_with_attacker_in_defense(self, my_team_is_right: bool = False) -> GameFrame:
-        # Enemy robot inside my (left) defense area.
-        enemy = {0: _robot(0, -4.3, 0.5, is_friendly=False)}
+        # Enemy robot inside my (left) defense area, touching the ball.
+        enemy = {0: _robot(0, -4.3, 0.5, is_friendly=False, has_ball=True)}
         return _frame(
-            ball=_ball(0, 0),
+            ball=_ball(-4.2, 0.5),
             enemy_robots=enemy,
             my_team_is_right=my_team_is_right,
         )
+
+    def test_attacker_touching_the_ball_in_the_box_is_a_non_stopping_foul(self):
+        # SSL rulebook §8.4.2 "Attacker Touched Ball In Opponent Defense Area" is
+        # non-stopping; ours stopped play and awarded a free kick.
+        v = DefenseAreaRule().check(self._frame_with_attacker_in_defense(), GEO, RefereeCommand.NORMAL_START)
+        assert v is not None
+        assert v.is_stopping is False
+        assert v.offending_teams == (False,)  # enemy is blue here
+
+    def test_attacker_in_the_box_without_touching_the_ball_is_no_foul(self):
+        enemy = {0: _robot(0, -4.3, 0.5, is_friendly=False)}
+        frame = _frame(ball=_ball(0, 0), enemy_robots=enemy, my_team_is_right=False)
+        assert DefenseAreaRule().check(frame, GEO, RefereeCommand.NORMAL_START) is None
+
+    def test_attacker_partially_inside_touching_the_ball_is_a_foul(self):
+        # "partially or fully inside": centre just outside the box edge (x = -3.5),
+        # body over it.
+        enemy = {0: _robot(0, -3.45, 0.5, is_friendly=False, has_ball=True)}
+        frame = _frame(ball=_ball(-3.35, 0.5), enemy_robots=enemy, my_team_is_right=False)
+        assert DefenseAreaRule().check(frame, GEO, RefereeCommand.NORMAL_START) is not None
+
+    def test_attacker_foul_not_raised_again_within_two_seconds(self):
+        # §8.4.2: "cannot be triggered again until the foul condition has stopped
+        # being violated or there has been 2 seconds since the foul was first triggered".
+        rule = DefenseAreaRule()
+        enemy = {0: _robot(0, -4.3, 0.5, is_friendly=False, has_ball=True)}
+
+        def check(ts):
+            frame = _frame(ball=_ball(-4.2, 0.5), enemy_robots=enemy, my_team_is_right=False, ts=ts)
+            return rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+
+        assert check(10.0) is not None
+        assert check(11.9) is None
+        assert check(12.0) is not None
 
     def test_fires_during_normal_start(self):
         rule = DefenseAreaRule()

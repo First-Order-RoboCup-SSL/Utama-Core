@@ -207,82 +207,15 @@ class TestMultipleDefendersSanctionFix:
         assert v.counts_toward_foul_counter is False
 
     def test_attacker_infringement_branch_unaffected(self):
-        # The OTHER branch of DefenseAreaRule (attacker in opponent's own
-        # defense area) must be untouched by this fix.
+        # The OTHER branch of DefenseAreaRule (attacker touching the ball in the
+        # opponent's defense area) is still raised -- as the non-stopping foul
+        # rulebook §8.4.2 makes it.
         rule = DefenseAreaRule()
-        enemy = {0: _robot(0, -4.3, 0.0, is_friendly=False)}
-        frame = _frame(ball=_ball(0, 0), enemy_robots=enemy, my_team_is_right=False, my_team_is_yellow=True)
+        enemy = {0: _robot(0, -4.3, 0.0, is_friendly=False, has_ball=True)}
+        frame = _frame(ball=_ball(-4.2, 0), enemy_robots=enemy, my_team_is_right=False, my_team_is_yellow=True)
         v = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert v is not None
-        assert v.next_command == RefereeCommand.DIRECT_FREE_YELLOW
-
-
-class TestAttackerInfringementDesignatedPosition:
-    """Regression for the fpp STOP/FORCE_START churn (roadmap item 15/16,
-    traced live 2026-09-04 on `clear_danger` vs `high_press`): an attacker-
-    infringement violation used to leave `designated_position` unset,
-    silently falling back to whatever restart position was last recorded --
-    which is routinely the ball's OWN current position (that's how the
-    attacker got flagged in the first place). `StrategyRunner`'s sim-mode
-    shortcut then teleports the ball straight back to that stale/illegal
-    spot and force-starts play the same tick, letting the same attacker
-    instantly re-trigger this exact rule -- 6 STOP/FORCE_START cycles in
-    under 2 seconds in the live trace. Fixed by having `DefenseAreaRule`
-    compute its own legal `designated_position`, mirroring the boundary
-    projection `OutOfBoundsRule` already did for its own case -- though
-    `OutOfBoundsRule`'s projection turned out to have the same class of gap
-    itself (see `TestOutOfBoundsDefenseAreaProjection` below), just against
-    the field boundary instead of a defense area.
-    """
-
-    def test_yellow_defense_infringement_projects_ball_outside_the_box(self):
-        # Right-side (yellow, since my_team_is_right=True + my_team_is_yellow)
-        # defense area starts at x=3.5 (half_length=4.5, depth=0.5 either
-        # side). Ball resting well inside it, exactly like the live trace.
-        rule = DefenseAreaRule()
-        enemy = {0: _robot(0, 3.6, -0.3, is_friendly=False)}
-        frame = _frame(
-            ball=_ball(3.74, -0.3), enemy_robots=enemy, my_team_is_right=True, my_team_is_yellow=True, ts=35.267
-        )
-        v = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
-        assert v is not None
-        assert v.next_command == RefereeCommand.DIRECT_FREE_YELLOW
-        assert v.designated_position is not None
-        px, py = v.designated_position
-        assert px == pytest.approx(
-            2.85
-        )  # 3.5 (box edge) - 0.25 (keep-out) - 0.28 (planner-clearance buffer) - 0.12 (kicker approach)
-        assert py == pytest.approx(-0.3)  # y unchanged -- only x needed clamping here
-
-    def test_designated_position_untouched_when_ball_already_outside_the_box(self):
-        # A ball already clear of the defense area needs no projection --
-        # its own position is a legal restart spot as-is.
-        rule = DefenseAreaRule()
-        enemy = {0: _robot(0, 3.6, -0.3, is_friendly=False)}
-        frame = _frame(
-            ball=_ball(2.0, -0.3), enemy_robots=enemy, my_team_is_right=True, my_team_is_yellow=True, ts=35.267
-        )
-        v = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
-        assert v is not None
-        assert v.designated_position == pytest.approx((2.0, -0.3))
-
-    def test_blue_defense_infringement_projects_ball_outside_the_box(self):
-        # Mirror of the yellow case: blue's own defense area on the LEFT
-        # when my_team_is_right=True (yellow defends the right goal).
-        rule = DefenseAreaRule()
-        friendly = {0: _robot(0, -3.6, 0.5, is_friendly=True)}
-        frame = _frame(
-            ball=_ball(-3.7, 0.5), friendly_robots=friendly, my_team_is_right=True, my_team_is_yellow=True, ts=10.0
-        )
-        v = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
-        assert v is not None
-        assert v.next_command == RefereeCommand.DIRECT_FREE_BLUE
-        assert v.designated_position is not None
-        px, py = v.designated_position
-        assert px == pytest.approx(
-            -2.85
-        )  # -3.5 (box edge) + 0.25 (keep-out) + 0.28 (planner-clearance buffer) + 0.12 (kicker approach)
-        assert py == pytest.approx(0.5)
+        assert v.is_stopping is False
 
 
 class TestOutOfBoundsDefenseAreaProjection:
