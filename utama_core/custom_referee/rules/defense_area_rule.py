@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+from utama_core.config.referee_constants import (
+    OPPONENT_DEFENSE_AREA_KEEP_DISTANCE,
+    PENALTY_MARK_HALF_FIELD_RATIO,
+)
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.entities.game.game_frame import GameFrame
@@ -36,6 +39,12 @@ def _split_by_color(game_frame: GameFrame):
         return game_frame.friendly_robots.values(), game_frame.enemy_robots.values()
     else:
         return game_frame.enemy_robots.values(), game_frame.friendly_robots.values()
+
+
+def _penalty_mark(geometry: RefereeGeometry, goal_is_right: bool) -> tuple[float, float]:
+    """The mark in front of the goal on that side, where the penalty's ball goes."""
+    goal_x = geometry.half_length if goal_is_right else -geometry.half_length
+    return (goal_x * PENALTY_MARK_HALF_FIELD_RATIO, 0.0)
 
 
 class DefenseAreaRule(BaseRule):
@@ -90,6 +99,7 @@ class DefenseAreaRule(BaseRule):
                 suggested_command=RefereeCommand.STOP,
                 next_command=RefereeCommand.PREPARE_PENALTY_BLUE,
                 status_message="Extra yellow defender touched ball inside own defense area",
+                designated_position=_penalty_mark(geometry, goal_is_right=yellow_is_right),
                 counts_toward_foul_counter=False,
             )
 
@@ -120,6 +130,7 @@ class DefenseAreaRule(BaseRule):
                 suggested_command=RefereeCommand.STOP,
                 next_command=RefereeCommand.PREPARE_PENALTY_YELLOW,
                 status_message="Extra blue defender touched ball inside own defense area",
+                designated_position=_penalty_mark(geometry, goal_is_right=not yellow_is_right),
                 counts_toward_foul_counter=False,
             )
 

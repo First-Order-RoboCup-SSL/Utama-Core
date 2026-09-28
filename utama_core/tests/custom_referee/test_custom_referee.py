@@ -635,6 +635,35 @@ class TestDefenseAreaRule:
         assert v.next_command == RefereeCommand.PREPARE_PENALTY_BLUE
         assert v.counts_toward_foul_counter is False
 
+    @pytest.mark.parametrize("we_defend_right", [False, True])
+    def test_penalty_places_the_ball_on_the_mark_in_front_of_the_fouling_goal(self, we_defend_right):
+        # clear_press_plus_vs_high_line_zone (2026-09-28): the penalty carried no
+        # designated_position, so the ball stayed where the foul happened, a blue
+        # robot touched it during PREPARE_PENALTY, and the keep-out free kick that
+        # followed was taken on a ball rolling into the net -- stalled 42 s.
+        rule = DefenseAreaRule(max_defenders=1)
+        own_goal_x = GEO.half_length if we_defend_right else -GEO.half_length
+        friendly = {
+            0: _robot(0, own_goal_x * 0.95, 0.0, is_friendly=True),
+            1: _robot(1, own_goal_x * 0.95, 0.5, is_friendly=True, has_ball=True),
+        }
+        frame = _frame(ball=_ball(own_goal_x * 0.95, 0.5), friendly_robots=friendly, my_team_is_right=we_defend_right)
+        v = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert v.next_command == RefereeCommand.PREPARE_PENALTY_BLUE
+        assert v.designated_position == pytest.approx((own_goal_x * 0.5, 0.0))
+
+    def test_penalty_restart_goes_through_ball_placement(self):
+        sm = _state_machine()
+        friendly = {
+            0: _robot(0, -4.3, 0.0, is_friendly=True),
+            1: _robot(1, -4.3, 0.5, is_friendly=True, has_ball=True),
+        }
+        frame = _frame(ball=_ball(-4.3, 0.5), friendly_robots=friendly)
+        v = DefenseAreaRule(max_defenders=1).check(frame, GEO, RefereeCommand.NORMAL_START)
+        data = sm.step(current_time=1.0, violation=v, game_frame=frame)
+        assert data.next_command == RefereeCommand.BALL_PLACEMENT_BLUE
+        assert data.designated_position == pytest.approx((-GEO.half_length * 0.5, 0.0))
+
 
 # ---------------------------------------------------------------------------
 # KeepOutRule
