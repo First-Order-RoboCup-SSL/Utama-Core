@@ -106,9 +106,14 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 writes into the sim (e.g. `teleport_robot`) must negate y *and* heading — `543741e` fixed a
 teleported robot facing the mirrored heading, which had silently corrupted scenario benches.
 
-**Determinism caveat:** rsim matches are *mostly* reproducible, but some (seen with
-`press_and_pass`) differ run to run on identical code; cause not yet known. Before attributing a
-result difference to a code change, re-run the baseline.
+**Determinism:** an rsim match should be reproducible: `--pair A B` should replay a round-robin match
+exactly (not yet checked across a full round-robin since `c27bfad7`).
+One cause of "differs run to run" was state that outlived a match: `has_ball`'s and shielding's
+hysteresis were module dicts keyed by robot id, shared by both teams and carried from match to
+match in a round-robin or bench worker process (`c27bfad7`). Module-level state in a tactic or
+skill must be keyed by team and cleared at match start (`StrategyRunner.__init__`). If a
+round-robin match and its `--pair` rerun still differ, suspect more of the same; compare the two
+replays' `ball_p` to find the first differing tick.
 
 ## Reading a tournament run
 
@@ -131,7 +136,35 @@ never passes or shoots loses the ball least. Rank strategies by results (goals, 
 the rest to explain why one wins or loses, and which shared primitive (reception, carrying, the
 planner, the referee) is failing every strategy at once.
 
+## A/B on the scenario bank
+
 For a targeted A/B of one change (a tactic, the planner) without an hour-long round-robin, use
-`tools/scenario_bench.py`: restart moments harvested from a run, played 20s from jittered
-starts, candidate vs baseline (another config, or `--against-results` from another commit),
-reported per family with a standard error.
+`tools/scenario_bench.py` on the committed bank (`utama_core/replay/banks/`, newest version):
+every start harvested from one round-robin (kickoffs, free kicks, penalties, and open play: a
+pass about to be made, a ball just lost), near-duplicates dropped, each played 20 s once, the
+candidate against a fixed opponent. rsim is deterministic, so the same code gives the same
+outcomes, and a baseline recorded once serves every later candidate.
+
+    # once, at the baseline commit
+    pixi run python tools/scenario_bench.py --load-bank utama_core/replay/banks/bank_vN.json \
+        --candidate press_and_pass --opponent low_block --workers 15 --output-dir bench_base
+    # per candidate commit
+    pixi run python tools/scenario_bench.py --load-bank utama_core/replay/banks/bank_vN.json \
+        --candidate press_and_pass --opponent low_block --workers 15 --output-dir bench_new \
+        --against-results bench_base/scenario_bench_<timestamp>.json
+
+(or `--baseline <config>` to compare two strategies at one commit). The last line printed is
+the paired result: mean outcome delta per scenario, its standard error, and t = mean / stderr.
+|t| under about 2 is within chance. The sign says which side did better, and the per-family
+table says where. Treat it as a screen, then confirm a real improvement with matches.
+
+A new bank from a new round-robin (keep its replays until this is done) takes a few minutes and
+no simulation:
+
+    pixi run python tools/scenario_bench.py --harvest-from replays/tournament_<id> --open-play 2 \
+        --save-bank utama_core/replay/banks/bank_vN+1.json --list-scenarios
+
+Starts where a robot is past the field lines are dropped (the sim can't place it there), and a
+scenario whose run errored on either side has no delta. There is no screen that plays starts
+forward to pick "informative" ones: the one tried varied the opponent, not the candidate, and
+threw away as many useful starts as it kept. A new bank needs a new baseline run.

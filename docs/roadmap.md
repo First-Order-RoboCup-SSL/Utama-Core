@@ -80,7 +80,19 @@ resolved, replace it with a one-line pointer under "Done".
      mostly dead. Replays of a round-robin are only needed until it is harvested. v4 at
      `4b40f3c2` (press_and_pass vs low_block, 3 repeats): self vs self 173/173 identical; passes
      aimed 10° off: mean -0.143, se 0.045, t = -3.19 (57 worse, 26 better), all from the free
-     kicks (v3: t = -2.23). **Bank v1**
+     kicks (v3: t = -2.23). **Bank v5 and no dynamic screen (2026-09-28):** the v1-v4 numbers above predate
+     `c27bfad7` (hysteresis state leaked between teams and matches). The dynamic screen was
+     removed: it varied the opponent with the candidate fixed, while an A/B varies the
+     candidate. Of the starts it dropped as determined, the candidate's strategy changed the
+     outcome in 24/40, and passes aimed 10° off moved them as much as the kept ones (dropped
+     t = -6.9 on 489, kept t = -3.9 on 339; press_and_pass vs low_block, 1 run each). It also
+     counted starts that failed to set up (robot past the field line) as neutral. v5 = every
+     start of `tournament_20260928_132051` with `--open-play 2`, near-duplicates and
+     out-of-field robots dropped: 846 starts, built in 3 min, one pass 11 min at 15 workers.
+     press_and_pass vs low_block, 1 run each: passes aimed 10° off, t = -7.56 over 845. With a 10 s
+     horizon instead of 20 s the pass takes 7-8 min but the same weakening is not seen (t = +0.76):
+     most of its effect comes after 10 s.
+     **Bank v1**
      (31 scenarios; rebuild with `--harvest-from` + `--dynamic-screen` + `--save-bank`): harvested
      from `tournament_20260924_124033` (692 restart scenarios from 222 stall-free matches), a
      stratified 72 screened (3 opponents x 3 jittered starts, 20s): 14 informative, 17 noisy

@@ -21,31 +21,16 @@ def _moved(bench_scenario, scenario_id: str, dx: float):
     )
 
 
-def test_growing_a_bank_screens_only_new_scenarios_and_keeps_the_informative_ones(tmp_path, monkeypatch):
+def test_growing_a_bank_adds_every_new_harvested_start_and_drops_duplicates(tmp_path, monkeypatch):
     existing = list(all_hand_authored_scenarios())
     old_bank, new_bank = tmp_path / "bank_old.json", tmp_path / "bank_new.json"
     save_bank(existing, old_bank, bank_id="old")
     harvested = [
         _moved(existing[0], "copy_of_existing", 0.01),
-        _moved(existing[0], "informative", 1.0),
-        _moved(existing[1], "dead", 1.0),
+        _moved(existing[0], "new_a", 1.0),
+        _moved(existing[1], "new_b", 1.0),
     ]
     monkeypatch.setattr(scenario_bench, "harvest_run_dir", lambda *a, **k: (harvested, {}))
-    screened = []
-
-    def fake_screen(bench_scenario, *, horizon_s, repeats):
-        screened.append(bench_scenario.scenario_id)
-        verdict = "dead" if bench_scenario.scenario_id == "dead" else "informative"
-        return {
-            "scenario_id": bench_scenario.scenario_id,
-            "verdict": verdict,
-            "outcomes": [],
-            "outcome_stdev": 0.0,
-            "seed_stdev": 0.0,
-            "policy_stdev": 0.0,
-        }
-
-    monkeypatch.setattr(scenario_bench, "_screen_one", fake_screen)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -57,19 +42,16 @@ def test_growing_a_bank_screens_only_new_scenarios_and_keeps_the_informative_one
             str(old_bank),
             "--save-bank",
             str(new_bank),
-            "--dynamic-screen",
-            "--output-dir",
-            str(tmp_path / "out"),
+            "--list-scenarios",
         ],
     )
 
     assert scenario_bench.main() == 0
 
     # the hand-authored scenarios the tool always loads, and the near-copy, duplicate the old bank
-    assert screened == ["informative", "dead"]
     bank_id, saved = load_bank(new_bank)
     assert bank_id == "bank_new"
-    assert [s.scenario_id for s in saved] == [s.scenario_id for s in existing] + ["informative"]
+    assert [s.scenario_id for s in saved] == [s.scenario_id for s in existing] + ["new_a", "new_b"]
 
 
 def test_overall_line_reports_t_and_a_no_difference_run():
