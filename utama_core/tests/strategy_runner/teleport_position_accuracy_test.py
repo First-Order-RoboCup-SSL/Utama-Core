@@ -1,5 +1,6 @@
 """Tests that the first game frame after reset_field reflects teleported positions."""
 
+import math
 import os
 from typing import Optional
 
@@ -28,6 +29,7 @@ _TELEPORT_CASES = [
 ]
 
 POSITION_TOLERANCE = 0.15  # metres — accounts for one frame of physics settling
+ORIENTATION_TOLERANCE = 0.1  # radians
 
 
 def _idle_strategy() -> AbstractStrategy:
@@ -45,6 +47,7 @@ class _TeleportAccuracyTestManager(AbstractTestManager):
         self.target_y = target_y
         self.target_theta = target_theta
         self.first_frame_position = None
+        self.first_frame_orientation = None
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
         # Park unused robots in-field (bottom-left corner, spaced apart so all are visible)
@@ -67,6 +70,7 @@ class _TeleportAccuracyTestManager(AbstractTestManager):
             robot = game.friendly_robots.get(self.robot_id)
             if robot is not None:
                 self.first_frame_position = (robot.p.x, robot.p.y)
+                self.first_frame_orientation = robot.orientation
         return TestingStatus.SUCCESS
 
 
@@ -100,6 +104,17 @@ def _run_teleport_accuracy_test(robot_id: int, x: float, y: float, theta: float)
     assert abs(actual_y - y) <= POSITION_TOLERANCE, (
         f"Robot {robot_id} first-frame y={actual_y:.3f} deviates from teleport target y={y:.3f} "
         f"by {abs(actual_y - y):.3f}m (tolerance={POSITION_TOLERANCE}m)"
+    )
+    # A teleported heading must read back unchanged: rsim stores y negated, and a
+    # heading passed through without the matching flip came back mirrored (-theta),
+    # so every bench scenario rebuilt from a replay started with its robots facing
+    # the wrong way.
+    heading_error = math.atan2(
+        math.sin(test_manager.first_frame_orientation - theta), math.cos(test_manager.first_frame_orientation - theta)
+    )
+    assert abs(heading_error) <= ORIENTATION_TOLERANCE, (
+        f"Robot {robot_id} first-frame orientation={test_manager.first_frame_orientation:.3f} deviates from "
+        f"teleport target theta={theta:.3f}"
     )
 
 

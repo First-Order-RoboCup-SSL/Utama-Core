@@ -188,7 +188,8 @@ class SSLBaseEnv:
             else:
                 theta = self.frame.robots_blue[robot_id].theta
         else:
-            theta = rad_to_deg(theta)
+            # rsim's frame stores y negated (see `y=-y` below), so a heading is mirrored too.
+            theta = -rad_to_deg(theta)
 
         robot = Robot(yellow=is_team_yellow, id=robot_id, x=x, y=-y, theta=theta)
         if is_team_yellow:
