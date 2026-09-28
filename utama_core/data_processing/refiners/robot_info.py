@@ -6,9 +6,16 @@ from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.data_processing.refiners.base_refiner import BaseRefiner
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.game.game_frame import GameFrame
+from utama_core.entities.game.robot import Robot
 
 # Distance threshold for vision-based has_ball inference: robot centre + small buffer.
 _BALL_CAPTURE_DIST = ROBOT_RADIUS + 0.04  # ~0.13 m
+
+
+def _with_has_ball(robot: Robot, has_ball: bool) -> Robot:
+    """`dataclasses.replace(robot, has_ball=has_ball)` without its per-call overhead
+    (this runs for every robot every frame)."""
+    return Robot(robot.id, robot.is_friendly, has_ball, robot.p, robot.v, robot.a, robot.orientation)
 
 
 class RobotInfoRefiner(BaseRefiner):
@@ -52,7 +59,7 @@ class RobotInfoRefiner(BaseRefiner):
         if self._trusted_ir_robots is not None:
             for robot_id, robot in friendly_robots.items():
                 if robot_id not in self._trusted_ir_robots:
-                    friendly_robots[robot_id] = replace(robot, has_ball=self._infer_has_ball(game_frame, robot))
+                    friendly_robots[robot_id] = _with_has_ball(robot, self._infer_has_ball(game_frame, robot))
 
         # Then overlay IR sensor readings for robots that sent a response.
         if robot_responses:
@@ -65,7 +72,7 @@ class RobotInfoRefiner(BaseRefiner):
                 robot = friendly_robots[rid]
                 if self._trusted_ir_robots is None or rid in self._trusted_ir_robots:
                     # Trusted (or trust-all mode): use raw IR reading
-                    friendly_robots[rid] = replace(robot, has_ball=robot_response.has_ball)
+                    friendly_robots[rid] = _with_has_ball(robot, robot_response.has_ball)
                 # Untrusted robots were already handled by the vision-proximity pass above
 
         # Enemy has_ball: provided team-tagged by the caller (StrategyRunner
@@ -76,7 +83,7 @@ class RobotInfoRefiner(BaseRefiner):
             for robot_response in enemy_robot_responses:
                 rid = robot_response.id
                 if rid in enemy_robots:
-                    enemy_robots[rid] = replace(enemy_robots[rid], has_ball=robot_response.has_ball)
+                    enemy_robots[rid] = _with_has_ball(enemy_robots[rid], robot_response.has_ball)
 
         if friendly_robots == game_frame.friendly_robots and enemy_robots == game_frame.enemy_robots:
             return game_frame

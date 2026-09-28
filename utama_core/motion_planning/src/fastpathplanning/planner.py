@@ -39,6 +39,15 @@ def _same_segment(a, b) -> bool:
     return a[0][0] == b[0][0] and a[0][1] == b[0][1] and a[1][0] == b[1][0] and a[1][1] == b[1][1]
 
 
+def _segment_key(segment) -> tuple:
+    """Hashable identity of a segment by value: `(x0, y0, x1, y1)`. Compares
+    exactly like the `(tuple(a), tuple(b))` pair it replaced (the same
+    elements, compared with ==), at a fraction of the cost of iterating two
+    numpy arrays into tuples, which this does ~a million times a match."""
+    a, b = segment
+    return (a[0], a[1], b[0], b[1])
+
+
 _PERP_ROTATIONS: dict = {}
 
 
@@ -172,6 +181,7 @@ class FastPathPlanner:
         self._obstacle_cache_ts: float | None = None
         self._obstacle_cache_moving: List[Tuple[bool, int, np.ndarray, np.ndarray]] = []
         self._obstacle_cache_static: List[Tuple[np.ndarray, np.ndarray]] = []
+        self._obstacle_cache_static_keys: set = set()
 
         # Per-robot memory of the last full replan's sanitized target and the
         # resulting detour trajectory (the geometric waypoint list
@@ -417,6 +427,7 @@ class FastPathPlanner:
 
         self._obstacle_cache_moving = moving
         self._obstacle_cache_static = static
+        self._obstacle_cache_static_keys = {_segment_key(o) for o in static}
         self._obstacle_cache_ts = game.ts
 
     def _get_obstacles(
@@ -684,8 +695,8 @@ class FastPathPlanner:
         # from a different clearance computed earlier in the same tick (a
         # different robot's call, or this robot's obstacle count changing
         # between calls within one recursion).
-        sticky_key = (tuple(sticky_obstacle[0]), tuple(sticky_obstacle[1])) if sticky_obstacle is not None else None
-        seg_key = (tuple(segment[0]), tuple(segment[1]), sticky_key, clearance)
+        sticky_key = _segment_key(sticky_obstacle) if sticky_obstacle is not None else None
+        seg_key = (_segment_key(segment), sticky_key, clearance)
         if seg_key in self._collision_cache:
             return self._collision_cache[seg_key]
 
@@ -1018,7 +1029,7 @@ class FastPathPlanner:
         Boundary walls are still used in path collision detection so the planner
         never routes *through* the wall — they just don't repel the target.
 
-        `exempt_obstacles` (identified by `(tuple(o[0]), tuple(o[1]))`, same
+        `exempt_obstacles` (identified by `_segment_key(o)`, same
         keying as `boundary_segments` below) gets the same treatment, for the
         same reason: a `go_to_ball` target sitting at/near the ball is
         legitimately close to a contesting opponent robot — that robot is a
@@ -1044,10 +1055,10 @@ class FastPathPlanner:
             tr = np.array([br[0], tl[1]])
             bl = np.array([tl[0], br[1]])
             boundary_segments = {
-                (tuple(tl), tuple(tr)),
-                (tuple(tr), tuple(br)),
-                (tuple(br), tuple(bl)),
-                (tuple(bl), tuple(tl)),
+                _segment_key((tl, tr)),
+                _segment_key((tr, br)),
+                _segment_key((br, bl)),
+                _segment_key((bl, tl)),
             }
         else:
             boundary_segments = set()
@@ -1056,7 +1067,7 @@ class FastPathPlanner:
         # target has been pushed to, so filter once rather than on each pass.
         repelling = []
         for o in obstacles:
-            o_key = (tuple(o[0]), tuple(o[1]))
+            o_key = _segment_key(o)
             if o_key not in boundary_segments and o_key not in exempt_obstacles:
                 repelling.append(o)
 
@@ -1118,12 +1129,12 @@ class FastPathPlanner:
             rc2 = (rmax_x, rmin_y)
             rc3 = (rmin_x, rmin_y)
             defense_rect_segments = {
-                (rc0, rc1),
-                (rc1, rc2),
-                (rc2, rc3),
-                (rc3, rc0),
+                _segment_key((rc0, rc1)),
+                _segment_key((rc1, rc2)),
+                _segment_key((rc2, rc3)),
+                _segment_key((rc3, rc0)),
             }
-            obstacles = [o for o in obstacles if (tuple(o[0]), tuple(o[1])) not in defense_rect_segments]
+            obstacles = [o for o in obstacles if _segment_key(o) not in defense_rect_segments]
 
         # 1b. A target that's genuinely outside the field (e.g. a free-kick
         # kicker's approach point for a ball that went out of bounds — the
@@ -1150,12 +1161,12 @@ class FastPathPlanner:
             tr = np.array([br[0], tl[1]])
             bl = np.array([tl[0], br[1]])
             boundary_segments = {
-                (tuple(tl), tuple(tr)),
-                (tuple(tr), tuple(br)),
-                (tuple(br), tuple(bl)),
-                (tuple(bl), tuple(tl)),
+                _segment_key((tl, tr)),
+                _segment_key((tr, br)),
+                _segment_key((br, bl)),
+                _segment_key((bl, tl)),
             }
-            obstacles = [o for o in obstacles if (tuple(o[0]), tuple(o[1])) not in boundary_segments]
+            obstacles = [o for o in obstacles if _segment_key(o) not in boundary_segments]
 
         # 2. A target inside the (enclosed) opponent defense area needs its own
         # check: `sanitize_target` below only reacts to a target close to an
@@ -1206,7 +1217,7 @@ class FastPathPlanner:
             if math.hypot(diff[0], diff[1]) < clearance:
                 for o in obstacles:
                     if distance_point_to_segment(ball_pos, o[0], o[1]) < clearance:
-                        ball_adjacent_obstacles.add((tuple(o[0]), tuple(o[1])))
+                        ball_adjacent_obstacles.add(_segment_key(o))
         safe_target = self.sanitize_target(
             raw_target,
             obstacles,
@@ -1230,12 +1241,9 @@ class FastPathPlanner:
         # the touchline/defense-area cases (a wall or keep-out rect the robot
         # is legally allowed to enter to retrieve a resting/placed ball)
         # without reopening that regression.
-        static_keys = {(tuple(o[0]), tuple(o[1])) for o in self._obstacle_cache_static}
-        routing_exempt = ball_adjacent_obstacles & static_keys
+        routing_exempt = ball_adjacent_obstacles & self._obstacle_cache_static_keys
         routing_obstacles = (
-            obstacles
-            if not routing_exempt
-            else [o for o in obstacles if (tuple(o[0]), tuple(o[1])) not in routing_exempt]
+            obstacles if not routing_exempt else [o for o in obstacles if _segment_key(o) not in routing_exempt]
         )
 
         # 4. Plan geometric path. Recompute-skip: if this robot was asked for

@@ -29,12 +29,14 @@ def get_structured_object_key(obj: Any, team: TeamType) -> Optional[ObjectKey]:
     return None
 
 
-# Helper to convert Vector to NumPy array
-def _vector_to_numpy(vector: Union[Vector2D, Vector3D]) -> np.ndarray:
+# Helper to convert a Vector to the stored form: a tuple of Python floats, the
+# values a float64 array of it would hold (and `np.array` of a list of them is
+# that array), without building an array per object per frame.
+def _vector_to_floats(vector: Union[Vector2D, Vector3D]) -> Tuple[float, ...]:
     if isinstance(vector, Vector2D):
-        return np.array([vector.x, vector.y], dtype=np.float64)
+        return (float(vector.x), float(vector.y))
     elif isinstance(vector, Vector3D):
-        return np.array([vector.x, vector.y, vector.z], dtype=np.float64)
+        return (float(vector.x), float(vector.y), float(vector.z))
     raise TypeError(f"Unsupported vector type for NumPy conversion: {type(vector)}")
 
 
@@ -44,8 +46,8 @@ class GameHistory:
         self.raw_games_history: deque[GameFrame] = deque(maxlen=max_history)
 
         # Generic historical data storage:
-        # ObjectKey -> AttributeType -> deque[(timestamp: float, value: np.ndarray)]
-        self.historical_data: Dict[ObjectKey, Dict[AttributeType, deque[Tuple[float, np.ndarray]]]] = {}
+        # ObjectKey -> AttributeType -> deque[(timestamp: float, value: tuple of floats)]
+        self.historical_data: Dict[ObjectKey, Dict[AttributeType, deque[Tuple[float, Tuple[float, ...]]]]] = {}
 
     def _ensure_attribute_deque_exists(self, object_key: ObjectKey, attribute_type: AttributeType):
         """Ensures a deque exists for the given object_key and attribute_type."""
@@ -61,14 +63,13 @@ class GameHistory:
         timestamp: float,
         value_vector_obj: Optional[Union[Vector2D, Vector3D]],
     ):
-        """Adds a single attribute value (after converting to NumPy) to the history."""
+        """Adds a single attribute value (as a tuple of floats) to the history."""
         if value_vector_obj is None:
             return  # Don't store None values, or decide on a specific handling
 
         self._ensure_attribute_deque_exists(object_key, attribute_type)
         try:
-            value_np = _vector_to_numpy(value_vector_obj)
-            self.historical_data[object_key][attribute_type].append((timestamp, value_np))
+            self.historical_data[object_key][attribute_type].append((timestamp, _vector_to_floats(value_vector_obj)))
         except TypeError as e:
             logger.error(f"Error converting vector for {object_key}, {attribute_type}: {e}")
 
@@ -106,6 +107,27 @@ class GameHistory:
                 if robot_key:
                     self._process_entity_for_history(robot_instance, robot_key, current_ts)
 
+    def get_historical_attribute_entries(
+        self,
+        object_key: ObjectKey,
+        attribute_type: AttributeType,
+        num_points: int,
+    ) -> List[Tuple[float, Tuple[float, ...]]]:
+        """The last num_points stored `(timestamp, value)` pairs for an object, oldest
+        first, values as tuples of floats; empty if there are none. What
+        `get_historical_attribute_series` stacks into arrays, for a caller that
+        reads a handful of values and would only pay for building the arrays."""
+        if num_points <= 0:
+            return []
+        object_attributes = self.historical_data.get(object_key)
+        if not object_attributes:
+            return []
+        history_deque = object_attributes.get(attribute_type)
+        if not history_deque:  # Handles both key not found or empty deque
+            return []
+        n = len(history_deque)
+        return list(islice(history_deque, max(0, n - num_points), n))
+
     def get_historical_attribute_series(
         self,
         object_key: ObjectKey,
@@ -117,36 +139,15 @@ class GameHistory:
         Returns data as NumPy arrays (timestamps, values), oldest to newest. Returns empty NumPy arrays if no data is
         available.
         """
-        if num_points <= 0:
+        entries = self.get_historical_attribute_entries(object_key, attribute_type, num_points)
+        if not entries:
             return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
 
-        object_attributes = self.historical_data.get(object_key)
-        if not object_attributes:
-            # logger.debug(f"No historical data for object_key {object_key}")
-            return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
-
-        history_deque = object_attributes.get(attribute_type)
-        if not history_deque:  # Handles both key not found or empty deque
-            # logger.debug(f"No historical {attribute_type.name} for {object_key}")
-            return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
-
-        # Efficiently get the last num_points using islice
-        start_index = max(0, len(history_deque) - num_points)
-        relevant_data_iter = islice(history_deque, start_index, len(history_deque))
-
-        timestamps_list: List[float] = []
-        vector_values_list: List[np.ndarray] = []
-
-        for ts, vec_np in relevant_data_iter:
-            timestamps_list.append(ts)
-            vector_values_list.append(vec_np)
-
-        if not timestamps_list:
-            return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+        timestamps_list: List[float] = [ts for ts, _ in entries]
+        vector_values_list: List[Tuple[float, ...]] = [vec for _, vec in entries]
 
         timestamps_np = np.array(timestamps_list, dtype=np.float64)
-        # vector_values_list contains a list of small np.ndarrays.
-        # np.array() will create a 2D array if all elements of the list are 1D arrays of the same size.
+        # vector_values_list holds equal-length tuples of floats, so this is a 2D float64 array.
         values_np = np.array(vector_values_list)
 
         return timestamps_np, values_np

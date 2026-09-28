@@ -29,6 +29,7 @@ from utama_core.motion_planning.src.fastpathplanning.numba_kernels import (
 from utama_core.motion_planning.src.fastpathplanning.planner import (
     FastPathPlanner,
     _same_segment,
+    _segment_key,
 )
 
 _RECT = (3.25, 4.75, -1.25, 1.25)
@@ -324,14 +325,28 @@ def test_sanitize_target_matches_reference(seed):
         anchor = obstacles[int(rng.integers(len(obstacles)))]
         target = anchor[0] + rng.normal(0.0, 0.15, 2)
         robot_pos = rng.uniform([-4.4, -2.9], [4.4, 2.9])
-        exempt = {(tuple(o[0]), tuple(o[1])) for o in obstacles if rng.random() < 0.2}
+        exempt_obstacles = [o for o in obstacles if rng.random() < 0.2] if rng.random() < 0.5 else None
         kwargs = dict(
             field_bounds=_Bounds if rng.random() < 0.8 else None,
-            exempt_obstacles=exempt if rng.random() < 0.5 else None,
             clearance=float(rng.uniform(0.2, 0.5)),
         )
-        a = new.sanitize_target(target, obstacles, robot_pos, **kwargs)
-        b = ref.sanitize_target(target, obstacles, robot_pos, **kwargs)
+        # Keyed the planner's way now; the reference keeps the old key form.
+        a = new.sanitize_target(
+            target,
+            obstacles,
+            robot_pos,
+            exempt_obstacles=None if exempt_obstacles is None else {_segment_key(o) for o in exempt_obstacles},
+            **kwargs,
+        )
+        b = ref.sanitize_target(
+            target,
+            obstacles,
+            robot_pos,
+            exempt_obstacles=(
+                None if exempt_obstacles is None else {(tuple(o[0]), tuple(o[1])) for o in exempt_obstacles}
+            ),
+            **kwargs,
+        )
         assert _same(a, b)
 
 

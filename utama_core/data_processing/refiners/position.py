@@ -305,11 +305,16 @@ class PositionRefiner(BaseRefiner):
         # new_orientation = angle_smoother.smooth(
         #     old_robot.orientation, robot_data.orientation
         # )
-        return replace(
-            old_robot,
-            id=robot_data.id,
-            p=Vector2D(new_x, new_y),
-            orientation=robot_data.orientation,
+        # Built directly rather than with `dataclasses.replace`: the same Robot, without
+        # replace's per-call overhead (every robot, every frame).
+        return Robot(
+            robot_data.id,
+            old_robot.is_friendly,
+            old_robot.has_ball,
+            Vector2D(new_x, new_y),
+            old_robot.v,
+            old_robot.a,
+            robot_data.orientation,
         )
 
     # Used at start of the game so assume robot does not have the ball
