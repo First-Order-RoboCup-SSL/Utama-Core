@@ -3,13 +3,18 @@ from typing import List, Optional, Tuple
 
 import numpy as np  # type: ignore
 
-from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+from utama_core.config.referee_constants import (
+    BALL_KEEP_OUT_DISTANCE,
+    OPPONENT_DEFENSE_AREA_KEEP_DISTANCE,
+)
 from utama_core.config.settings import CONTROL_FREQUENCY
+from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.math_utils import (
     closest_point_on_segment,
+    detour_around_circle,
     distance,
     distance_point_to_segment,
     find_intersection,
@@ -39,6 +44,29 @@ _ACTIVE_PLAY_COMMANDS = {
     RefereeCommand.NORMAL_START,
     RefereeCommand.FORCE_START,
 }
+
+# Restarts the named team takes; the other team keeps its distance from the ball.
+_TEAM_RESTART_COMMANDS = {
+    RefereeCommand.DIRECT_FREE_YELLOW,
+    RefereeCommand.DIRECT_FREE_BLUE,
+    RefereeCommand.PREPARE_KICKOFF_YELLOW,
+    RefereeCommand.PREPARE_KICKOFF_BLUE,
+    RefereeCommand.PREPARE_PENALTY_YELLOW,
+    RefereeCommand.PREPARE_PENALTY_BLUE,
+    RefereeCommand.BALL_PLACEMENT_YELLOW,
+    RefereeCommand.BALL_PLACEMENT_BLUE,
+}
+
+
+def _keeps_off_ball(game: Game) -> bool:
+    """True during STOP and the other team's restarts, when every robot of ours must
+    stay out of the ball's keep-out circle."""
+    command = getattr(game.referee, "referee_command", None) if game.referee is not None else None
+    if command == RefereeCommand.STOP:
+        return True
+    if command not in _TEAM_RESTART_COMMANDS:
+        return False
+    return command.name.endswith("_YELLOW") != game.my_team_is_yellow
 
 
 class FastPathPlanner:
@@ -1278,6 +1306,20 @@ class FastPathPlanner:
             new_target = self._project_outside_rect(
                 new_target, self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
             )
+
+        # 8. Same kind of safety net for the ball's keep-out circle while the
+        # other team restarts (or during STOP): the ball is not an obstacle
+        # above, so a straight run to the target -- or a sidestep round a
+        # teammate -- could cut through it. RR#6 low_block_vs_three_slot: the
+        # referee step's detour waypoints were all outside the circle, but a
+        # defender sidestepping teammates queued at them reached 0.38 m from
+        # the ball and KeepOutRule voided the penalty. A robot already inside is
+        # left to the referee step's own straight push-out: a detour waypoint
+        # swings it round the ball and can clip it.
+        ball = Vector2D(game.ball.p.x, game.ball.p.y) if game.ball is not None else None
+        if ball is not None and _keeps_off_ball(game) and (Vector2D(*our_pos) - ball).mag() >= BALL_KEEP_OUT_DISTANCE:
+            waypoint = detour_around_circle(Vector2D(*our_pos), Vector2D(*new_target), ball, BALL_KEEP_OUT_DISTANCE)
+            new_target = np.array([waypoint.x, waypoint.y])
 
         if self._should_draw:
             self._env.draw_line((our_pos, new_target), color="Blue")

@@ -297,6 +297,36 @@ def test_their_penalty_clears_our_robots_from_the_penalty_area(split_shape_runne
     assert dist_to_line < 0.5, f"robot 1 did not reach the behind-the-line formation: dist_x={dist_to_line:.3f}m"
 
 
+def test_their_penalty_defenders_never_enter_the_keep_out_circle(split_shape_runner):
+    """RR#6 low_block_vs_three_slot (2026-09-28, t=38.6): with the ball on the
+    opponent's mark, four of our robots stood goal-side of it and had to reach
+    the line 1 m behind. Robot 5 cut to 0.38 m from the ball and KeepOutRule
+    (0.5 m) voided the penalty. Start positions are the recorded ones."""
+    game = split_shape_runner.my.game
+    split_shape_runner.step_once()
+
+    mark = (2.25, 0.0)
+    split_shape_runner.sim_controller.teleport_ball(*mark)
+    recorded = {0: (4.39, 0.04), 2: (3.39, 0.81), 3: (3.04, 1.01), 4: (3.64, 1.71), 5: (2.81, 0.96)}
+    for robot_id, (x, y) in recorded.items():
+        split_shape_runner.sim_controller.teleport_robot(True, robot_id, x, y, math.pi)
+    split_shape_runner.sim_controller.teleport_robot(False, 1, 3.24, 1.63, 0.0)
+    split_shape_runner.sim_controller.teleport_robot(False, 2, 3.09, -1.49, 0.0)
+    split_shape_runner.step_once()
+
+    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_PENALTY_BLUE)
+
+    closest = {}
+    for _ in range(300):
+        split_shape_runner.step_once()
+        ball = game.ball.p
+        for robot_id, robot in game.friendly_robots.items():
+            d = math.hypot(robot.p.x - ball.x, robot.p.y - ball.y)
+            closest[robot_id] = min(closest.get(robot_id, math.inf), d)
+
+    assert min(closest.values()) >= 0.5, f"closest approach to the ball per robot: {closest}"
+
+
 def test_our_penalty_moves_kicker_to_the_penalty_mark(split_shape_runner):
     """During our own penalty, the (non-goalkeeper) kicker drives to the
     opponent's penalty mark — PreparePenaltyOursStep's actual target, not
