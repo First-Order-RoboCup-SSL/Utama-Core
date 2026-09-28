@@ -82,7 +82,7 @@ from tournament_lib import (  # noqa: F401 -- re-exported for callers importing 
 )
 from tournament_lib import run_match as _lib_run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
-from utama_core.replay import turnover_breakdown
+from utama_core.replay import restart_outcomes, turnover_breakdown
 
 # 60s of intended play, +5s for a real PREPARE_KICKOFF_YELLOW ceremony
 # (prepare_duration_seconds=3.0 in the "simulation" profile, plus the kicker's
@@ -395,8 +395,9 @@ def main() -> None:
             backstop_matches.append(r)
 
     stalled_match_ids = {id(r) for r, _ in stalled_matches}
+    incidents = stall_incidents([{"config_a": r.config_a, "config_b": r.config_b, "stats": r.stats} for r in results])
     if stalled_matches or backstop_matches:
-        print("\nSTALLS:")
+        print(f"\nSTALLS: {len(stalled_matches)} match(es), {len(incidents)} distinct incident(s)")
         for r, events in stalled_matches:
             for e in events:
                 tactic_str = f" tactics={e['tactic_ids']}" if e["tactic_ids"] else ""
@@ -440,6 +441,7 @@ def main() -> None:
         ],
         "standings": {name: {"wins": wins[name], "draws": draws[name]} for name in config_names},
         "stalled_match_count": len(stalled_matches),
+        "stall_incidents": incidents,
         "possession_backstop_match_count": len(backstop_matches),
     }
     real_losses_by_match: Optional[dict[str, dict[str, int]]] = None
@@ -447,6 +449,11 @@ def main() -> None:
         summary_path = run_dir / "summary.json"
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
+        # RESTARTS: what became of every restart -- taken, or voided/stopped/timed out.
+        summary["restarts"] = restart_outcomes.summarise(
+            [e for path in sorted(run_dir.glob("*.npz")) for e in restart_outcomes.analyse_match(path)]
+        )
+        _print_restarts(summary["restarts"])
         # BALL LOSSES: how the friendly side (config_a) gave the ball away, by kind, foul rule
         # and tactic — `MatchStats.turnovers` alone is mostly two robots on one ball flipping
         # "nearest robot". Replays the saved matches, so it runs after summary.json is on disk.
@@ -563,6 +570,41 @@ def strategy_table(
                 for kind, n in kinds.items():
                     row["real_loss_kinds_as_a"][kind] = row["real_loss_kinds_as_a"].get(kind, 0) + n
     return table
+
+
+def stall_incidents(results: list[dict]) -> list[dict]:
+    """Stall events over `summary.json`-shaped `results`, with deterministic duplicates
+    merged: the same kind, onset tick and duration tick in matches that share a strategy
+    is one freeze seen against two opponents that hadn't diverged yet (rsim is
+    deterministic), not two separate problems. In order of first appearance."""
+    incidents: list[dict] = []
+    by_key: dict[tuple, dict] = {}
+    for r in results:
+        tag = f"{_short_name(r['config_a'])}_vs_{_short_name(r['config_b'])}"
+        for e in (r.get("stats") or {}).get("stall_events") or []:
+            ticks = (e["kind"], round(e["sim_time"] * TICKS_PER_SECOND), round(e["duration_s"] * TICKS_PER_SECOND))
+            keys = [(name, *ticks) for name in (r["config_a"], r["config_b"])]
+            incident = next((by_key[k] for k in keys if k in by_key), None)
+            if incident is None:
+                incident = {"kind": e["kind"], "sim_time": e["sim_time"], "duration_s": e["duration_s"], "matches": []}
+                incidents.append(incident)
+            if tag not in incident["matches"]:
+                incident["matches"].append(tag)
+            for k in keys:
+                by_key.setdefault(k, incident)
+    return incidents
+
+
+def _print_restarts(restarts: dict) -> None:
+    if not restarts["restarts"]:
+        return
+    print(
+        f"\nRESTARTS: {restarts['restarts']}, {restarts['reached_normal_start'] / restarts['restarts']:.0%} "
+        "reached NORMAL_START"
+    )
+    for kind, row in restarts["by_kind"].items():
+        outcomes = ", ".join(f"{k} {n}" for k, n in row["outcomes"].items())
+        print(f"  {kind:<16} {row['n']:>4}  reached {row['reached_normal_start'] / row['n']:>4.0%}  {outcomes}")
 
 
 def foul_table(results: list[dict]) -> dict[str, dict]:
