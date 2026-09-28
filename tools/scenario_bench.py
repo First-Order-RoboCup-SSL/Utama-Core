@@ -338,6 +338,24 @@ def _aggregate_by_family(rows: list[dict]) -> list[dict]:
     return sorted(aggregates, key=lambda a: a["family"])
 
 
+def _overall(rows: list[dict]) -> Optional[str]:
+    """One line: mean delta over scenarios, its standard error, and t = mean / stderr.
+    |t| under about 2 is within chance; the sign says which side was better."""
+    deltas = [r["delta"] for r in rows if r["delta"] is not None]
+    if not deltas:
+        return None
+    mean = statistics.fmean(deltas)
+    if len(deltas) < 2:
+        return f"Overall mean delta {mean:+.3f} over 1 scenario"
+    stderr = statistics.stdev(deltas) / math.sqrt(len(deltas))
+    if stderr == 0:
+        return f"Overall mean delta {mean:+.3f}, the same on all {len(deltas)} scenarios"
+    return (
+        f"Overall mean delta {mean:+.3f} (stderr {stderr:.3f}, t {mean / stderr:+.2f}) over {len(deltas)} "
+        f"scenarios; |t| under ~2 is within chance"
+    )
+
+
 def _fmt(x: Optional[float], spec: str = "+.2f") -> str:
     return "-" if x is None else format(x, spec)
 
@@ -366,6 +384,7 @@ def _markdown_report(payload: dict) -> str:
         "Stalls are counted, not ranked. "
         "This is a proxy signal, not an acceptance gate — see roadmap item 14's Goodhart guard.",
         "",
+        *([f"**{_overall(payload['results'])}**", ""] if _overall(payload["results"]) else []),
         "## By family",
         "",
         "| Family | N | Mean delta | Stderr | Wins | Losses | Ties | Seed noise | Stalls |",
@@ -615,10 +634,8 @@ def main() -> int:
     md_path.write_text(_markdown_report(payload))
 
     print(f"\nWrote {json_path}\nWrote {md_path}")
-    deltas = [r["delta"] for r in rows if r["delta"] is not None]
-    if deltas:
-        stderr = statistics.stdev(deltas) / math.sqrt(len(deltas)) if len(deltas) > 1 else float("nan")
-        print(f"Overall mean delta: {statistics.fmean(deltas):+.2f} (stderr {stderr:.2f}) over {len(deltas)} scenarios")
+    if _overall(rows):
+        print(_overall(rows))
     return 0
 
 

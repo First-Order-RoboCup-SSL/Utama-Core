@@ -69,3 +69,10 @@ def test_growing_a_bank_screens_only_new_scenarios_and_keeps_the_informative_one
     bank_id, saved = load_bank(new_bank)
     assert bank_id == "bank_new"
     assert [s.scenario_id for s in saved] == [s.scenario_id for s in existing] + ["informative"]
+
+
+def test_overall_line_reports_t_and_a_no_difference_run():
+    rows = [{"delta": d} for d in (-0.5, -0.1, -0.3, 0.1)]
+    assert "t -1.55" in scenario_bench._overall(rows)
+    assert "the same on all 3 scenarios" in scenario_bench._overall([{"delta": 0.0}] * 3)
+    assert scenario_bench._overall([{"delta": None}]) is None
