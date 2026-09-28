@@ -17,6 +17,7 @@ from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.tests.custom_referee.helpers import frame as _frame
 
 GEO = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
 
@@ -36,25 +37,6 @@ def _robot(
         v=Vector2D(vx, vy),
         a=Vector2D(0, 0),
         orientation=0.0,
-    )
-
-
-def _frame(
-    ball: Ball,
-    friendly_robots: dict | None = None,
-    enemy_robots: dict | None = None,
-    my_team_is_yellow: bool = True,
-    my_team_is_right: bool = False,
-    ts: float = 10.0,
-) -> GameFrame:
-    return GameFrame(
-        ts=ts,
-        my_team_is_yellow=my_team_is_yellow,
-        my_team_is_right=my_team_is_right,
-        friendly_robots=friendly_robots or {},
-        enemy_robots=enemy_robots or {},
-        ball=ball,
-        referee=None,
     )
 
 

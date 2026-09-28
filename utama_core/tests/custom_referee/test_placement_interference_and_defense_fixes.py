@@ -16,48 +16,17 @@ from utama_core.custom_referee.rules.defense_area_stoppage_rule import (
     DefenseAreaStoppageRule,
 )
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
-from utama_core.entities.data.vector import Vector2D, Vector3D
+from utama_core.entities.data.vector import Vector3D
 from utama_core.entities.game.ball import Ball
-from utama_core.entities.game.game_frame import GameFrame
-from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.tests.custom_referee.helpers import frame as _frame
+from utama_core.tests.custom_referee.helpers import robot as _robot
 
 GEO = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
 
 
 def _ball(x: float, y: float) -> Ball:
     return Ball(p=Vector3D(x, y, 0.0), v=Vector3D(0, 0, 0), a=Vector3D(0, 0, 0))
-
-
-def _robot(robot_id: int, x: float, y: float, is_friendly: bool, has_ball: bool = False) -> Robot:
-    return Robot(
-        id=robot_id,
-        is_friendly=is_friendly,
-        has_ball=has_ball,
-        p=Vector2D(x, y),
-        v=Vector2D(0, 0),
-        a=Vector2D(0, 0),
-        orientation=0.0,
-    )
-
-
-def _frame(
-    ball: Ball,
-    friendly_robots: dict | None = None,
-    enemy_robots: dict | None = None,
-    my_team_is_yellow: bool = True,
-    my_team_is_right: bool = False,
-    ts: float = 10.0,
-) -> GameFrame:
-    return GameFrame(
-        ts=ts,
-        my_team_is_yellow=my_team_is_yellow,
-        my_team_is_right=my_team_is_right,
-        friendly_robots=friendly_robots or {},
-        enemy_robots=enemy_robots or {},
-        ball=ball,
-        referee=None,
-    )
 
 
 # ---------------------------------------------------------------------------

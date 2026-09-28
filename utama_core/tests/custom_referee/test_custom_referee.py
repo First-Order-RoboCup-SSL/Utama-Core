@@ -19,53 +19,18 @@ from utama_core.custom_referee.rules.keep_out_rule import KeepOutRule
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
 from utama_core.custom_referee.state_machine import GameStateMachine
 from utama_core.entities.data.referee import RefereeData
-from utama_core.entities.data.vector import Vector2D, Vector3D
-from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
-from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
+from utama_core.tests.custom_referee.helpers import ball as _ball
+from utama_core.tests.custom_referee.helpers import frame as _frame
+from utama_core.tests.custom_referee.helpers import robot as _robot
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 GEO = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
-
-
-def _ball(x: float, y: float, z: float = 0.0, vx: float = 0.0, vy: float = 0.0, vz: float = 0.0) -> Ball:
-    return Ball(p=Vector3D(x, y, z), v=Vector3D(vx, vy, vz), a=Vector3D(0, 0, 0))
-
-
-def _robot(robot_id: int, x: float, y: float, is_friendly: bool, has_ball: bool = False) -> Robot:
-    return Robot(
-        id=robot_id,
-        is_friendly=is_friendly,
-        has_ball=has_ball,
-        p=Vector2D(x, y),
-        v=Vector2D(0, 0),
-        a=Vector2D(0, 0),
-        orientation=0.0,
-    )
-
-
-def _frame(
-    ball: Ball,
-    friendly_robots: dict | None = None,
-    enemy_robots: dict | None = None,
-    my_team_is_yellow: bool = True,
-    my_team_is_right: bool = False,
-    ts: float = 10.0,
-) -> GameFrame:
-    return GameFrame(
-        ts=ts,
-        my_team_is_yellow=my_team_is_yellow,
-        my_team_is_right=my_team_is_right,
-        friendly_robots=friendly_robots or {},
-        enemy_robots=enemy_robots or {},
-        ball=ball,
-        referee=None,
-    )
 
 
 def _state_machine() -> GameStateMachine:

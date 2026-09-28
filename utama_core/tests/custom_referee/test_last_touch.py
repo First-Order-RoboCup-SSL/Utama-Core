@@ -10,26 +10,14 @@ the ball rolls dead.
 from __future__ import annotations
 
 from utama_core.custom_referee.rules.last_touch import infer_last_touch_team
-from utama_core.entities.data.vector import Vector2D, Vector3D
+from utama_core.entities.data.vector import Vector3D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
-from utama_core.entities.game.robot import Robot
+from utama_core.tests.custom_referee.helpers import robot as _robot
 
 
 def _ball(x: float, y: float) -> Ball:
     return Ball(p=Vector3D(x, y, 0), v=Vector3D(0, 0, 0), a=Vector3D(0, 0, 0))
-
-
-def _robot(robot_id: int, x: float, y: float, is_friendly: bool, has_ball: bool = False) -> Robot:
-    return Robot(
-        id=robot_id,
-        is_friendly=is_friendly,
-        has_ball=has_ball,
-        p=Vector2D(x, y),
-        v=Vector2D(0, 0),
-        a=Vector2D(0, 0),
-        orientation=0.0,
-    )
 
 
 def _frame(ball: Ball, friendly: dict | None = None, enemy: dict | None = None) -> GameFrame:
