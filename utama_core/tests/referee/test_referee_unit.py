@@ -1888,12 +1888,12 @@ class TestDirectFreeTheirsStep:
 
 
 class TestDetourAroundCircle:
-    """`_detour_around_circle`: robots crossing the ball's keep-out circle go round it."""
+    """`detour_around_circle`: robots crossing the ball's keep-out circle go round it."""
 
     def _detour(self, start, target):
-        from utama_core.custom_referee.actions import _detour_around_circle
+        from utama_core.global_utils.math_utils import detour_around_circle
 
-        return _detour_around_circle(Vector2D(*start), Vector2D(*target), Vector2D(0.0, 0.0), 0.8)
+        return detour_around_circle(Vector2D(*start), Vector2D(*target), Vector2D(0.0, 0.0), 0.8)
 
     def test_clear_line_keeps_the_target(self):
         assert self._detour((-1.0, 1.0), (1.0, 1.0)) == Vector2D(1.0, 1.0)
