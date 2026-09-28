@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from utama_core.config.field_params import FieldBounds, FieldDimensions
 from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.referee_constants import FREE_KICK_DEFENSE_AREA_DISTANCE
 
 
 @dataclass(frozen=True)
@@ -147,7 +148,11 @@ class RefereeGeometry:
         """
         left_inner_x = -self.half_length + 2.0 * self.half_defense_depth
         right_inner_x = self.half_length - 2.0 * self.half_defense_depth
-        clear_dist = keep_dist + self._PLANNER_CLEARANCE_BUFFER_M + self._KICKER_APPROACH_M
+        # The rulebook's 1 m (§5.3.3) is wider than the planner's own margin.
+        clear_dist = max(
+            FREE_KICK_DEFENSE_AREA_DISTANCE,
+            keep_dist + self._PLANNER_CLEARANCE_BUFFER_M + self._KICKER_APPROACH_M,
+        )
         if abs(y) <= self.half_defense_width + clear_dist:
             if x <= left_inner_x + clear_dist:
                 x = left_inner_x + clear_dist

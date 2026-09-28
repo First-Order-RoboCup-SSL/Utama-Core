@@ -254,10 +254,10 @@ class TestOutOfBoundsDefenseAreaProjection:
         assert not GEO.is_in_left_defense_area(*v.designated_position)
         assert not GEO.is_in_right_defense_area(*v.designated_position)
         # Left defense area's inner edge is at -3.5 (half_length - 2*depth);
-        # the legal projection sits keep_dist (0.25m) plus the planner-clearance
-        # buffer (0.28m) outside it -- see `legal_restart_position`'s docstring.
+        # the legal projection sits the rulebook's 1 m free-kick distance
+        # outside it -- see `legal_restart_position`.
         px, py = v.designated_position
-        assert px == pytest.approx(-2.85)
+        assert px == pytest.approx(-2.5)
         assert py == pytest.approx(0.576)
 
     def test_out_of_bounds_far_from_any_defense_area_is_unaffected(self):

@@ -4,6 +4,8 @@ BALL_KEEP_OUT_DISTANCE = 0.8
 BALL_PLACEMENT_DONE_DISTANCE = 0.15
 KICKER_READY_DISTANCE = 0.3
 OPPONENT_DEFENSE_AREA_KEEP_DISTANCE = 0.25
+# SSL rulebook §5.3.3: a free kick's ball is placed at least 1 m from either defense area.
+FREE_KICK_DEFENSE_AREA_DISTANCE = 1.0
 # Standoff beyond ROBOT_RADIUS for an outfield defender's own defense-area
 # edge target. A bare ROBOT_RADIUS margin (the robot's own footprint, zero
 # tracking slack) let go_to_point's controller carry the robot into the box

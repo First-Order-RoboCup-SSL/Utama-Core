@@ -273,3 +273,14 @@ def test_a_restart_near_the_box_leaves_room_for_the_kickers_approach(x: float, y
         + DirectFreeOursStep._APPROACH_OFFSET
     )
     assert clearance >= need - 1e-9
+
+
+@pytest.mark.parametrize("x,y", [(3.0, 0.0), (-2.9, 0.4), (4.0, 1.8), (-4.25, -1.54)])
+def test_a_free_kick_is_placed_a_metre_clear_of_the_defense_area(x: float, y: float) -> None:
+    """SSL rulebook §5.3.3: a free-kick position is valid only with "1 meter distance
+    to either defense area". The planner-driven 0.65 m left (3.0, 0.0) at 2.85, 0.65 m
+    from the box."""
+    px, py = GEO.legal_restart_position(x, y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+    inner_x = GEO.half_length - 2.0 * GEO.half_defense_depth
+    clearance = max(inner_x - abs(px), abs(py) - GEO.half_defense_width)
+    assert clearance >= 1.0 - 1e-9
