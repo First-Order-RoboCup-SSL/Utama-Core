@@ -55,6 +55,15 @@ _BALL_PLACEMENT_TIMEOUT_SECONDS = 10.0
 _FREE_KICK_TIMEOUT_SECONDS = 10.0
 
 
+# A PRE stage and the stage it becomes when play starts.
+_PRE_TO_ACTIVE = {
+    Stage.NORMAL_FIRST_HALF_PRE: Stage.NORMAL_FIRST_HALF,
+    Stage.NORMAL_SECOND_HALF_PRE: Stage.NORMAL_SECOND_HALF,
+    Stage.EXTRA_FIRST_HALF_PRE: Stage.EXTRA_FIRST_HALF,
+    Stage.EXTRA_SECOND_HALF_PRE: Stage.EXTRA_SECOND_HALF,
+}
+
+
 class GameStateMachine:
     """Owns score, command, and stage.  Produces ``RefereeData`` each tick."""
 
@@ -463,7 +472,16 @@ class GameStateMachine:
             self._last_transition_time = current_time
             logger.info("Auto-advanced STOP → FORCE_START after goal (force-start profile mode)")
 
+        self._start_half_if_play_started(current_time)
         return self._generate_referee_data(current_time)
+
+    def _start_half_if_play_started(self, timestamp: float) -> None:
+        """A PRE stage becomes its playing stage once play starts, however it started:
+        set by hand or by one of `step`'s auto-advances."""
+        if self.command in (RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START):
+            active = _PRE_TO_ACTIVE.get(self.stage)
+            if active is not None:
+                self.advance_stage(active, timestamp)
 
     def _all_robots_clear(self, game_frame: "GameFrame") -> bool:
         """Return True if every robot on both teams is ≥ _BALL_CLEAR_DIST from the ball."""
@@ -694,17 +712,7 @@ class GameStateMachine:
         ):
             self._prepare_entered_time = timestamp
 
-        # Advance PRE stages to their active counterpart when play begins.
-        _PRE_TO_ACTIVE = {
-            Stage.NORMAL_FIRST_HALF_PRE: Stage.NORMAL_FIRST_HALF,
-            Stage.NORMAL_SECOND_HALF_PRE: Stage.NORMAL_SECOND_HALF,
-            Stage.EXTRA_FIRST_HALF_PRE: Stage.EXTRA_FIRST_HALF,
-            Stage.EXTRA_SECOND_HALF_PRE: Stage.EXTRA_SECOND_HALF,
-        }
-        if command in (RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START):
-            active = _PRE_TO_ACTIVE.get(self.stage)
-            if active is not None:
-                self.advance_stage(active, timestamp)
+        self._start_half_if_play_started(timestamp)
 
         logger.info("Referee command manually set to: %s", command.name)
 
