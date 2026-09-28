@@ -34,12 +34,14 @@ Built in `_build_active_rules` (`custom_referee.py`), in this priority order; de
 
 | Rule | Active during | Notes |
 |---|---|---|
-| `GoalRule` | live play | Scoring team from `my_team_is_right`/`my_team_is_yellow`; 1s cooldown; `designated_position=(0,0)`. |
+| `GoalRule` | live play | Scoring team from `my_team_is_right`/`my_team_is_yellow`; 1s cooldown; `designated_position=(0,0)`. `CustomReferee.step` turns it into a goal kick (`invalid_goal`) when the scorer committed a non-stopping foul in the previous 2 s (§7). |
 | `OutOfBoundsRule` | live play | Free kick to the team that didn't touch last, placed 0.25m infield. Last touch: `rules/last_touch.py`'s colour-blind `infer_last_touch_team` (both teams' contact data; closest robot only when there is no prior attribution; unresolved rather than a default colour). |
-| `BallSpeedRule` | live play | Ground speed > 6.5 m/s, edge-detected; same last-touch attribution. |
+| `BallSpeedRule` | live play | Ground speed > 6.5 m/s, edge-detected; same last-touch attribution. Non-stopping (§8.4.2). |
 | `DoubleTouchRule` | `NORMAL_START` after a restart | Only the restart kicker (first toucher after arming) is barred; disarms when any other robot touches. Open-play release-and-reacquire dribbling is legal. Keeps `_prev_command` across `reset()` because `reset()` runs on the very transition it must observe. |
-| `DefenseAreaRule` | live play | > `max_defenders` (1) in own area, or an attacker in ours. |
-| `KeepOutRule` | `DIRECT_FREE_*`, `PREPARE_KICKOFF_*`, `PREPARE_PENALTY_*` | Non-kicking team within 0.5m for 30 consecutive frames. Excludes bare `STOP` so it can't overwrite `next_command` while robots clear. |
+| `DefenseAreaRule` | live play | An extra defender (> `max_defenders`) touching the ball in its own area: penalty. An attacker touching the ball while at least partly in ours: non-stopping, 2 s re-raise (§8.4.2). |
+| `KeepOutRule` | `DIRECT_FREE_*`, `PREPARE_KICKOFF_*` | Defending team within 0.5m for 30 consecutive frames: non-stopping, 2 s re-raise, restarts the free kick's 10 s clock (§8.4.3). Not during bare `STOP` or penalties. |
+| `PenaltyTimeLimitRule` | `NORMAL_START`/`FORCE_START` after `PREPARE_PENALTY_*` | Penalty still in play 10 s after its normal start: goal kick for the defenders (§5.3.5). |
+| `NoProgressRule` | live play | Ball hasn't moved 0.05 m in 10 s: `STOP` then `FORCE_START` where it lies (§8.1). Last in the list, so a real foul on the same tick wins. |
 | `PushingRule`, `KeeperHeldBallRule`, `ExcessiveDribblingRule`, `RobotStopSpeedRule`, `CrashingRule`, `DefenseAreaStoppageRule`, `BallPlacementInterferenceRule` | see each rule file | SSL §8.3/8.4 audit (`434ab29`). Rationale per rule: `custom_referee_design_decisions.md`. |
 
 ## State machine and auto-advance

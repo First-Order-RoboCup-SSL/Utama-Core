@@ -22,6 +22,32 @@ Decisions from the audit of `CustomReferee` against the SSL rulebook. Numbers ar
    (y = ±3.0m) behind the mark. Fully off-field placement is deferred until the simulator
    supports it. Penalties stay disabled in the built-in profiles.
 
+## Rulebook audit (2026-09-28, Division B)
+
+Checked against the [SSL rulebook](https://robocup-ssl.github.io/ssl-rules/sslrules.html).
+"Sim" rows are deliberate deviations kept for the simulator; the reason is given.
+
+| Rule | Rulebook | Ours before | Action |
+|---|---|---|---|
+| Defender Too Close To Ball (§8.4.3) | 0.5 m during an opponent kick-off or free kick; non-stopping; resets the kick timer; 2 s grace per team; no automatic sanction during STOP | Stopped play and re-awarded the restart, also during penalties | Fixed: non-stopping, 2 s re-raise, resets the free-kick clock, off during penalties |
+| Keeper during a penalty (§5.3.5) | Keeper on the goal line; others 1 m behind the ball; a positioning breach is a human call (§8.3.4), not Defender Too Close | `KeepOutRule` checked every defender, keeper included | Fixed by the row above: `KeepOutRule` no longer runs during penalties, so the keeper question is moot. Our non-kickers now walk round the ball to stand 1 m behind it |
+| Attacker Touched Ball In Opponent Defense Area (§8.4.2) | Touching the ball while partly or fully inside; non-stopping | Presence (centre inside) stopped play with a free kick | Fixed: needs a touch, counts partial overlap (`ROBOT_RADIUS`), non-stopping, 2 s re-raise |
+| Ball Speed (§8.4.2) | Over 6.5 m/s in 3D; non-stopping | Stopped play, free kick to the other team | Fixed: non-stopping. Gap: still measured on ground (x, y) speed, not 3D |
+| Goal validity (§7) | No goal if the scorer committed a non-stopping foul in the last 2 s, or the ball went above 0.15 m | Any ball in the goal scored | Fixed: foul in the last 2 s turns the goal into a goal kick. Gap: ball height is not checked |
+| No Progress In Game (§8.1) | 10 s without progress while both teams may play: stop, then force start | Missing | Fixed: `NoProgressRule`; STOP now continues to a queued FORCE_START once robots clear |
+| Penalty kick (§5.3.5) | Still in play after 10 s: stopped, no goal, goal kick for the defenders | The normal start turned into open play | Fixed: `PenaltyTimeLimitRule`. Not implemented: the keeper's 90° deflection and ball-moving-backwards endings |
+| Ball in play after a free kick (§5.4) | In play 10 s after the free kick command | `DIRECT_FREE_*` waited for the kicker forever | Fixed: `FORCE_START` after 10 s (clock restarted by a Defender Too Close foul) |
+| Ball in play after a kick-off (§5.4) | In play 10 s after the kick-off | `NORMAL_START` → `FORCE_START` after 10 s if the ball hasn't moved | Already correct |
+| Free-kick position (§5.3.3) | ≥ 0.2 m from all lines and ≥ 1 m from either defense area, else the closest valid spot | 0.65 m from a defense area (planner margin) | Fixed: 1 m. Sim: the spot is pushed out along x only (a square corner), not to the Euclidean closest point, and lines aren't re-clamped for in-field positions |
+| Throw-in, goal kick, corner kick (§6.1.1, §6.2.1–2) | Throw-in 0.2 m in from the touch line; goal kick 1 m / 0.2 m; corner kick 0.2 m / 0.2 m, in the corner | Ball placed where it crossed, 0.25 m infield, 0.5 m on both axes near a corner, then kept 1 m off the box | Sim: kept. 0.2 m from two lines at once let a drifting ball go straight back out (the corner-loop fix in `OutOfBoundsRule`) |
+| Aimless kick (§6.2.3, Div B) | Ball returns to the kick point | Not implemented | Gap: needs kick-point tracking; not done here |
+| Free kick stages (§5.3.3) | One free-kick command; the kick puts the ball in play | `DIRECT_FREE_*` preparation, then `NORMAL_START` once the kicker is ready | Sim: kept. The two stages give the auto-advance a readiness check with no human referee |
+| Ball placement (§5.2) | The team places the ball | With a simulator controller, `StrategyRunner` teleports the ball to `designated_position` and force-starts | Sim: kept, so matches don't wait on physical placement. Real mode still places |
+| Multiple Defenders (§8.4.1) | A non-keeper entirely inside its own area touching the ball: penalty | More than `max_defenders` (1) with centres inside, one touching | Sim: kept. The rule doesn't know which robot is the keeper |
+| Double Touch (§8.2) | Kicker may not touch again before another robot; free kick from the ball position | Same | Already correct |
+| Pushing, Keeper Held Ball, Excessive Dribbling, Robot Stop Speed, Crashing, Too Close To Opponent Defense Area, Ball Placement Interference | §8.3–8.4 | Audited in `434ab29` | Already correct; not re-checked beyond thresholds (10 s, 1 m, 1.5 m/s, 0.2 m, 0.5 m, 2 s grace) |
+| Boundary Crossing (§8.4.1) | Kicking the ball over the field boundary | Not implemented | Gap: rsim has no boundary wall to kick over |
+
 ## Open
 
 8. **`TeamInfo` should be a frozen dataclass.** It is mutable, and `RefereeRefiner` stores
