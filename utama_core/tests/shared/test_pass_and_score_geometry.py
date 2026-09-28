@@ -282,7 +282,9 @@ def test_ball_is_loose_true_when_ball_just_outside_own_box_and_enemy_at_boundary
     assert bool(ball_is_loose(game)) is True
 
 
-def _visual_game(robot_xy: tuple, robot_orientation: float, ball_xy: tuple, robot_id: int = 1) -> Game:
+def _visual_game(
+    robot_xy: tuple, robot_orientation: float, ball_xy: tuple, robot_id: int = 1, my_team_is_yellow: bool = True
+) -> Game:
     """A game with a single friendly robot at `robot_xy`/`robot_orientation`
     and the ball at `ball_xy` — for exercising `has_ball(visual=True)`'s
     dribbler-relative geometry directly, independent of the enemy-box tests
@@ -290,7 +292,7 @@ def _visual_game(robot_xy: tuple, robot_orientation: float, ball_xy: tuple, robo
     zv = Vector3D(0, 0, 0)
     frame = GameFrame(
         ts=0.0,
-        my_team_is_yellow=True,
+        my_team_is_yellow=my_team_is_yellow,
         my_team_is_right=True,
         friendly_robots={robot_id: _robot(robot_id, robot_xy[0], robot_xy[1], True, orientation=robot_orientation)},
         enemy_robots={},
@@ -453,6 +455,27 @@ def test_has_ball_visual_release_lateral_hysteresis():
     mid = (_ACQUIRE_LATERAL_MAX + _RELEASE_LATERAL_MAX) / 2
     assert _visual_at(mid) is True
     assert _visual_at(_RELEASE_LATERAL_MAX + 0.01) is False
+
+
+def test_has_ball_visual_hysteresis_is_per_team():
+    """Both teams run in one process with the same robot ids: yellow robot 1 holding the ball
+    must not widen blue robot 1's box."""
+    mid = (_ACQUIRE_LATERAL_MAX + _RELEASE_LATERAL_MAX) / 2
+    assert has_ball(_visual_game((0.0, 0.0), 0.0, (0.10, 0.0)), 1, visual=True) is True
+
+    assert has_ball(_visual_game((0.0, 0.0), 0.0, (0.10, mid), my_team_is_yellow=False), 1, visual=True) is False
+    assert has_ball(_visual_game((0.0, 0.0), 0.0, (0.10, mid)), 1, visual=True) is True
+
+
+def test_reset_possession_state_with_no_robot_forgets_every_robot():
+    """A new match starts with no robot holding (the runner calls this; a round-robin worker
+    process plays many matches)."""
+    mid = (_ACQUIRE_LATERAL_MAX + _RELEASE_LATERAL_MAX) / 2
+    assert has_ball(_visual_game((0.0, 0.0), 0.0, (0.10, 0.0)), 1, visual=True) is True
+
+    reset_possession_state()
+
+    assert has_ball(_visual_game((0.0, 0.0), 0.0, (0.10, mid)), 1, visual=True) is False
 
 
 def test_has_ball_visual_acquire_state_is_per_robot():

@@ -78,8 +78,10 @@ _RELEASE_FORWARD_MAX = 0.17
 _RELEASE_LATERAL_MAX = 0.065
 
 # Per-robot "did the last tick's visual has_ball read True" state, keyed by
-# robot_id only (matching `shielding.py`'s `_COMMITTED_ROBOTS` — friendly-only
-# callers, so no team key needed). This is a deliberate departure from this
+# (team, robot_id): both teams' strategies run in one process with the same
+# robot ids, and keyed by id alone one team's possession widened the other's
+# box. A new match clears it (`StrategyRunner` calls `reset_possession_state()`),
+# since a round-robin worker plays many matches. This is a deliberate departure from this
 # module's "no hidden state" rule, for the same reason `shielding.py` made
 # the same departure (see its `_COMMITTED_ROBOTS` docstring): a bare
 # stateless threshold cannot implement hysteresis, because the decision must
@@ -88,11 +90,12 @@ _RELEASE_LATERAL_MAX = 0.065
 # tick-to-tick (this fallback's whole reason for existing — see the
 # docstring's flicker paragraph). Never grows unboundedly: at most one entry
 # per robot ID actually in play.
-_POSSESSION_STATE: dict[int, bool] = {}
+_POSSESSION_STATE: dict[tuple[bool, int], bool] = {}
 
 
-def reset_possession_state(robot_id: int) -> None:
-    """Forget any held-ball hysteresis state for `robot_id`.
+def reset_possession_state(robot_id: Optional[int] = None) -> None:
+    """Forget any held-ball hysteresis state for `robot_id` (either team's), or for every
+    robot when None.
 
     Call this wherever a robot's ball possession is being reset for an
     unrelated reason (role reassignment, a fresh acquisition attempt after
@@ -100,7 +103,10 @@ def reset_possession_state(robot_id: int) -> None:
     widen the acquire box to the release box on the next tick. Safe to call
     even if no state is held (no-op). Mirrors `shielding.reset_shield_state`.
     """
-    _POSSESSION_STATE.pop(robot_id, None)
+    if robot_id is None:
+        _POSSESSION_STATE.clear()
+    for team_is_yellow in (True, False):
+        _POSSESSION_STATE.pop((team_is_yellow, robot_id), None)
 
 
 def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: float = _ACQUIRE_FORWARD_MAX) -> bool:
@@ -181,7 +187,8 @@ def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: 
     forward = dx * cos_o + dy * sin_o
     lateral = -dx * sin_o + dy * cos_o
 
-    already_had_it = _POSSESSION_STATE.get(robot_id, False)
+    key = (game.my_team_is_yellow, robot_id)
+    already_had_it = _POSSESSION_STATE.get(key, False)
     # A caller-supplied `capture_distance` only ever sets the *acquire*
     # forward reach (see docstring) — once already committed (hysteresis),
     # the release box is fixed, matching `shielding.py`'s pattern of not
@@ -190,7 +197,7 @@ def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: 
     lateral_max = _RELEASE_LATERAL_MAX if already_had_it else _ACQUIRE_LATERAL_MAX
 
     result = (_ACQUIRE_FORWARD_MIN <= forward <= forward_max) and (abs(lateral) <= lateral_max)
-    _POSSESSION_STATE[robot_id] = result
+    _POSSESSION_STATE[key] = result
     return result
 
 

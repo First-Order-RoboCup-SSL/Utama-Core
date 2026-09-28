@@ -62,6 +62,8 @@ from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNo
 from utama_core.run import GameGater
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
 from utama_core.run.vision_stream import GameFrameRenderer, RSimVisionStreamServer
+from utama_core.shared.pass_and_score_geometry import reset_possession_state
+from utama_core.skills.src.shielding import reset_shield_state
 from utama_core.team_controller.src.controllers import (
     AbstractSimController,
     GRSimController,
@@ -493,6 +495,9 @@ class StrategyRunner:
             self.referee.attach_match_log(self.match_log)
         self.stats_path = stats_path
         self.match_stats = MatchStatsAccumulator() if stats_path else None
+        # a worker process plays many matches: no robot starts one holding or committed
+        reset_possession_state()
+        reset_shield_state()
         self.referee_initial_command = referee_initial_command
 
         self._load_robot_controllers()
