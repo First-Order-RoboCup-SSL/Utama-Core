@@ -106,8 +106,8 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 writes into the sim (e.g. `teleport_robot`) must negate y *and* heading — `543741e` fixed a
 teleported robot facing the mirrored heading, which had silently corrupted scenario benches.
 
-**Determinism:** an rsim match should be reproducible: `--pair A B` should replay a round-robin match
-exactly (not yet checked across a full round-robin since `c27bfad7`).
+**Determinism:** an rsim match is reproducible: `--pair A B` replays a round-robin match exactly (13 of
+13 sampled from `tournament_20260928_221404` at `1de1e18d`, every replay array and sidecar).
 One cause of "differs run to run" was state that outlived a match: `has_ball`'s and shielding's
 hysteresis were module dicts keyed by robot id, shared by both teams and carried from match to
 match in a round-robin or bench worker process (`c27bfad7`). Module-level state in a tactic or
