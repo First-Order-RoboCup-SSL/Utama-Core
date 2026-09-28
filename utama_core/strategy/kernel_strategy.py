@@ -7,6 +7,7 @@ consumes these and drives them under `StrategyRunner`.
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 from utama_core.engine.context import TickContext
@@ -556,11 +557,37 @@ def _carrier_first(game: Game, free_robots: frozenset[RobotId]) -> list[RobotId]
     while "overload" took robots 1 and 2 and waited on it, frozen for 38 s).
     """
 
+    on_ball = _kicker_at_still_ball(game)
+
     def holding(rid: RobotId) -> bool:
         robot = game.friendly_robots.get(rid)
-        return robot is not None and robot.has_ball
+        return robot is not None and (robot.has_ball or rid == on_ball)
 
     return sorted(free_robots, key=lambda rid: (not holding(rid), rid))
+
+
+# A free kick's kicker waits this close without dribbler contact (DirectFreeOursStep's
+# kick-ready distance); a ball slower than this is one it can simply take.
+_KICK_REACH_M = 0.16
+_STILL_BALL_MPS = 0.1
+
+
+def _kicker_at_still_ball(game: Game) -> Optional[RobotId]:
+    """Our robot within kick reach of a still ball, if no enemy is nearer to it.
+
+    overload_press_vs_switch_of_play (2026-09-28): at NORMAL_START of our free kick
+    the kicker stood 0.11 m off the ball, went to "switch", and nobody kicked for 10 s.
+    """
+    ball = getattr(game, "ball", None)
+    if ball is None or math.hypot(ball.v.x, ball.v.y) >= _STILL_BALL_MPS or not game.friendly_robots:
+        return None
+
+    def dist(robot) -> float:
+        return math.hypot(robot.p.x - ball.p.x, robot.p.y - ball.p.y)
+
+    rid, robot = min(game.friendly_robots.items(), key=lambda item: dist(item[1]))
+    enemy_nearest = min((dist(e) for e in game.enemy_robots.values()), default=math.inf)
+    return rid if dist(robot) <= _KICK_REACH_M and dist(robot) < enemy_nearest else None
 
 
 def _allocate_ordered(

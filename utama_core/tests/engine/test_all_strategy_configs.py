@@ -221,7 +221,9 @@ def _stub_game(friendly_dist, enemy_dist, ball_x: float, my_team_is_right: bool 
         proximity_lookup=_StubProximityLookup(friendly_dist, enemy_dist),
         my_team_is_right=my_team_is_right,
         field=SimpleNamespace(half_length=4.5),
-        ball=SimpleNamespace(p=SimpleNamespace(to_2d=lambda: SimpleNamespace(x=ball_x))),
+        ball=SimpleNamespace(
+            p=SimpleNamespace(x=ball_x, y=0.0, to_2d=lambda: SimpleNamespace(x=ball_x)), v=SimpleNamespace(x=0.0, y=0.0)
+        ),
         friendly_robots={},
         enemy_robots={},
     )
