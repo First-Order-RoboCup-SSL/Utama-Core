@@ -38,26 +38,53 @@ privileges enabled; without them `CLAUDE.md` arrives as a 9-byte text file, fixa
 2. `pixi run precommit-install` downloads the precommit hook to ensure that your code is formatted correctly when you commit and push.
 3. `pixi run lint` runs the full suite of precommit checkers on all files (You need to run the precommit install task above first).
 4. `pixi run test` runs pytest over the `utama_core/tests/` folder
-5. `pixi run replay [-n <file_name>] [-p]` runs the replay file stored in the `./replays` folder.
-   - Use `-n/--replay-file` to specify a file name; if not provided, defaults to the latest replay in the folder.
+5. `pixi run replay [-n <file_name>] [-p]` plays a legacy pickle replay (`./replays/<file_name>.pkl`) in the rSoccer viewer.
+   - Use `-n/--replay-file` to give the file name without `.pkl`; if not provided, defaults to the newest `.pkl` directly in `./replays`.
    - Use `-p/--play-by-play` for step-by-step playback.
+   - Matches run today write columnar `.npz` replays into `./replays/<run>/`; open those in the dashboard (`pixi run python dashboard_server.py`) instead.
+6. `pixi run runs` lists the tournament runs in `./replays` with their start time, git commit, match and stall counts and arguments.
 
 ## Repository Guide
 
 ### Folder Structure
 
-1. `strategy`: higher level control from above roles to plays and tactics in decision-tree like abstraction
+Everything lives under `utama_core/`:
+
+1. `engine`: the tactic-kernel infrastructure: `Strategy`, `Tactic`, `TickContext`, `MatchLog`, referee-override plumbing
+1. `strategy`: the strategies (`kernel_strategy.py`'s `build_*_kernel_strategy` factories), see `docs/strategies.md`
+1. `tactics`: reusable `Tactic` implementations that strategies compose
 1. `skills`: lowest level of control for individual robots
+1. `shared`: geometry and helpers shared by tactics and skills
+1. `custom_referee`: the in-process referee (rules, state machine, restart positioning, profiles)
 1. `motion_planning`: control algorithms for movement and path planning
 1. `team_controller`: interfacing with vision (including processing) and robots
-1. `run`: The logic for main running loop
+1. `run`: the main running loop (`StrategyRunner`)
 1. `data_processing`: processors of vision, robot_info and referee raw data
-1. `global_utils`: store utility functions that can be shared across all folders
-1. `entities`: store classes for building field, robot, data entities etc.
-1. `rsoccer_simulator`: Lightweight rSoccer simulator for testing
-1. `replay`: replay system for storing played games in a .pkl file that can be reconstructed in rsoccer sim
-1. `tests`: include all unit tests here
-1. `config`: configs for the robots (defaults, settings, roles/tactics enums, etc.)
+1. `dashboard`: the browser dashboard
+1. `global_utils`: utility functions shared across all folders
+1. `entities`: classes for field, robot, data entities etc.
+1. `rsoccer_simulator`: lightweight rSoccer simulator for testing
+1. `replay`: replay writing/reading, clip rendering and replay analysis
+1. `tests`: all tests
+1. `config`: configs for the robots (defaults, settings, physical and referee constants, etc.)
+
+### Scripts
+
+The scripts in the repository root, run with `pixi run python <script>.py`:
+
+| Script | Purpose |
+| --- | --- |
+| `main.py` | Exhibition demo: one attacker plus keeper over grSim with the dashboard (`pixi run main`) |
+| `smoke_tournament.py` | Round-robin of every kernel strategy at smoke-test length; writes `replays/tournament_*/` |
+| `full_match_tournament.py` | Full-length round-robin among the competitive-tier strategies |
+| `arena_tournament.py` | Headless tournament / matchup runner |
+| `tournament_lib.py` | Shared match-running code for the tournament scripts (not run directly) |
+| `elo.py` / `plot_elo.py` | Elo ratings from tournament `summary.json` files, and their plots |
+| `debug_match.py` | One-off match runner for tactic debugging |
+| `repro_from_replay.py` | Reload a replay's field state at a timestamp into a fresh headless rsim match |
+| `dashboard_server.py` | Standalone dashboard for browsing replays and tournaments |
+| `demo_*.py` | Demos: custom referee, referee GUIs, dribbler test, Exhibition Road, split-shape match |
+| `start_test_env.sh` | Starts grSim, the GameController and AutoReferee together |
 
 ### Code Writing
 
@@ -124,7 +151,7 @@ git merge main
     </globalConfiguration>
 ```
 
-4. Get the latest [compiled game controller](https://github.com/RoboCup-SSL/ssl-game-controller/releases/) and rename it to `ssl_game_controller`. Save it in `/ssl-game-controller` directory.
+4. Get the latest [compiled game controller](https://github.com/RoboCup-SSL/ssl-game-controller/releases/) and rename it to `ssl-game-controller`. Save it in `/ssl-game-controller` directory.
 
 ### Starting the external test environment
 
