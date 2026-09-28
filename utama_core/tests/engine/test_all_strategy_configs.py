@@ -203,7 +203,8 @@ class _StubProximityLookup:
 
 def _stub_game(friendly_dist, enemy_dist, ball_x: float, my_team_is_right: bool = True):
     """Minimal fake `Game` exposing what `_tiki_taka_picker` and friends read:
-    proximity lookup, side sign, field half-length (standard 4.5 m), ball x.
+    proximity lookup, side sign, field half-length (standard 4.5 m), ball x, and
+    no robot holding the ball.
 
     With my_team_is_right (attacking -x), ball_x < -1.5 is the final third,
     -1.5..1.5 the middle, > 1.5 our own third (thirds = 2*4.5/3 = 3 m each).
@@ -215,6 +216,8 @@ def _stub_game(friendly_dist, enemy_dist, ball_x: float, my_team_is_right: bool 
         my_team_is_right=my_team_is_right,
         field=SimpleNamespace(half_length=4.5),
         ball=SimpleNamespace(p=SimpleNamespace(to_2d=lambda: SimpleNamespace(x=ball_x))),
+        friendly_robots={},
+        enemy_robots={},
     )
 
 

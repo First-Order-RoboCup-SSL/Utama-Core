@@ -509,6 +509,14 @@ def _friendly_closer_to_ball(game: Game) -> Optional[bool]:
     or no robots on one side) — callers should fall back to the conservative
     posture in that case.
     """
+    # A ball on our dribbler is ours however close an enemy presses — the
+    # distance read alone flipped a held ball to "theirs" whenever an enemy
+    # brushed within the margin, handing the carrier to the press slot and
+    # resetting its attack tactic (counter_flow_vs_high_line_zone, 2026-09-27).
+    if any(r.has_ball for r in game.friendly_robots.values()) and not any(
+        r.has_ball for r in game.enemy_robots.values()
+    ):
+        return True
     _friendly_closest, friendly_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.FRIENDLY)
     _enemy_closest, enemy_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
     if friendly_dist is None or enemy_dist is None:
