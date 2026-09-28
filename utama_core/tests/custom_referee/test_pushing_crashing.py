@@ -239,6 +239,27 @@ class TestCrashingRule:
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is None
 
+    def test_robots_resting_against_each_other_is_not_a_crash(self):
+        # tournament_20260928_122728 (2026-09-28): contact at matched (near-zero)
+        # speed read as "both at fault", firing every 2 s in any scrum -- 6694
+        # crashing fouls in 231 matches, and via the goal-validity rule 30 of 97
+        # goals disallowed. A crash needs > 1.5 m/s along the line between them
+        # (TIGERs AutoReferee BotCollisionDetector).
+        rule = CrashingRule(fault_speed_threshold_mps=1.5, both_fault_threshold_mps=0.3)
+        friendly = _robot(0, 0.0, 0.0, True, vx=0.1)
+        enemy = _robot(0, _CONTACT_X, 0.0, False, vx=-0.1)
+        assert rule.check(_frame(friendly, enemy), GEO, RefereeCommand.NORMAL_START) is None
+
+    def test_hard_head_on_by_the_much_faster_robot_is_its_foul(self):
+        # 1.8 m/s along the line is a crash; the robots' speeds differ by 0.6 m/s,
+        # so the faster one alone is at fault.
+        rule = CrashingRule(fault_speed_threshold_mps=1.5, both_fault_threshold_mps=0.3)
+        friendly = _robot(0, 0.0, 0.0, True, vx=1.2)
+        enemy = _robot(0, _CONTACT_X, 0.0, False, vx=-0.6)
+        violation = rule.check(_frame(friendly, enemy, my_team_is_yellow=True), GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.offending_teams == (True,)
+
     def test_not_active_play_no_violation(self):
         rule = CrashingRule()
         friendly = _robot(0, 0.0, 0.0, True, vx=2.0)

@@ -7,18 +7,13 @@ length of this projection is greater than 1.5 meters per second, the
 faster robot committed a foul. If the absolute robot speed difference is
 less than 0.3 meters per second, both conduct a foul."
 
-"Faster" here means whichever robot has the larger *closing* speed into
-the other (hit the other one harder), not absolute ground speed — worked
-examples:
-  - A stationary, B closing at 2 m/s: closing speeds (0, 2), difference
-    magnitude 2 m/s > 1.5 -> B (the closing one) fouls.
-  - A and B each closing at 1 m/s (head-on): closing speeds (1, 1),
-    difference magnitude ~0 < 0.3 -> both foul (SSL calls this out
-    explicitly — a genuine head-on collision at matched speed is nobody's
-    fault alone).
-  - A closing at 1.5 m/s, B retreating at -0.5 m/s: closing speeds
-    (1.5, -0.5), difference magnitude 2.0 -> A fouls (clearly the one
-    that closed the gap).
+A contact is a crash only when that projection exceeds 1.5 m/s; "faster"
+then compares the two robots' own speeds, and within 0.3 m/s both are at
+fault. Worked examples:
+  - A stationary, B at 2 m/s into it: projection 2 > 1.5, speeds differ by 2
+    -> B fouls.
+  - Head-on, each at 1 m/s: projection 2 > 1.5, speeds equal -> both foul.
+  - Two robots resting against each other: projection ~0 -> no crash.
 `RobotPairContact.projected_velocity_difference` is exactly this
 same-line projected difference by construction; the per-side
 `closing_speed_*_into_*` properties tell us *which* robot was faster so
@@ -113,21 +108,17 @@ class CrashingRule(BaseRule):
                 # tick once this one's been handled.
                 pass
 
-            friendly_closing = contact.closing_speed_friendly_into_enemy
-            enemy_closing = contact.closing_speed_enemy_into_friendly
-            closing_diff = friendly_closing - enemy_closing
-            magnitude = abs(closing_diff)
-
-            if magnitude < self._both_fault_threshold:
-                fault = "both"
-            elif magnitude > self._fault_speed_threshold:
-                fault = "friendly" if closing_diff > 0 else "enemy"
-            else:
-                # Between the two thresholds: a real collision, but neither
-                # "clearly one robot's fault alone" nor "clearly matched" —
-                # the rulebook only defines the two named bands, so no
-                # foul is raised in the gap between them.
+            # A crash is > threshold along the line between the robots; only then does
+            # the 0.3 m/s band decide between the faster robot and both (TIGERs
+            # AutoReferee's BotCollisionDetector reads the rule the same way).
+            if abs(contact.projected_velocity_difference) <= self._fault_speed_threshold:
                 fault = None
+            else:
+                speed_diff = contact.friendly.v.mag() - contact.enemy.v.mag()
+                if abs(speed_diff) < self._both_fault_threshold:
+                    fault = "both"
+                else:
+                    fault = "friendly" if speed_diff > 0 else "enemy"
 
             self._last_fired_ts[key] = now
 
