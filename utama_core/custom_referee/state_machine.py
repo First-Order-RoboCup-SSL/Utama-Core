@@ -8,6 +8,7 @@ import math
 from typing import Optional
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.referee_constants import PENALTY_MARK_HALF_FIELD_RATIO
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.profiles.profile_loader import AutoAdvanceConfig
 from utama_core.custom_referee.rules.base_rule import RuleViolation
@@ -482,7 +483,7 @@ class GameStateMachine:
             goal_sign = -1.0 if yellow_is_right else 1.0
         else:
             goal_sign = 1.0 if yellow_is_right else -1.0
-        penalty_mark_x = goal_sign * half_length * 0.5
+        penalty_mark_x = goal_sign * half_length * PENALTY_MARK_HALF_FIELD_RATIO
 
         closest = min(math.hypot(robot.p.x - penalty_mark_x, robot.p.y) for robot in attackers.values())
         return closest <= _KICKER_READY_DIST
