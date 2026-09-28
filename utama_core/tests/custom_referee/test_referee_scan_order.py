@@ -211,7 +211,9 @@ class TestScanOrderMechanism:
             RuleViolation(
                 rule_name="stub_stopping",
                 suggested_command=RefereeCommand.STOP,
-                next_command=RefereeCommand.FORCE_START,
+                # No queued restart, so STOP holds rather than auto-advancing
+                # on the same tick.
+                next_command=None,
                 status_message="stub stopping",
                 is_stopping=True,
             )

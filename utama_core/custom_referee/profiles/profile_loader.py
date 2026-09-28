@@ -116,6 +116,14 @@ class BallPlacementInterferenceConfig:
 
 
 @dataclass
+class NoProgressConfig:
+    """SSL rulebook §8.1 "No Progress In Game": 10 s in Division B."""
+
+    enabled: bool = True
+    max_seconds: float = 10.0
+
+
+@dataclass
 class RulesConfig:
     goal_detection: GoalDetectionConfig = field(default_factory=GoalDetectionConfig)
     out_of_bounds: OutOfBoundsConfig = field(default_factory=OutOfBoundsConfig)
@@ -132,6 +140,7 @@ class RulesConfig:
     ball_placement_interference: BallPlacementInterferenceConfig = field(
         default_factory=BallPlacementInterferenceConfig
     )
+    no_progress: NoProgressConfig = field(default_factory=NoProgressConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +256,7 @@ _ALL_RULE_NAMES = frozenset(
         "crashing",
         "defense_area_stoppage",
         "ball_placement_interference",
+        "no_progress",
     }
 )
 
@@ -350,6 +360,12 @@ def _parse_profile(data: dict) -> RefereeProfile:
         grace_seconds=bpi.get("grace_seconds", 2.0),
     )
 
+    np_d = rules_d.get("no_progress", {})
+    np_cfg = NoProgressConfig(
+        enabled=np_d.get("enabled", True),
+        max_seconds=np_d.get("max_seconds", 10.0),
+    )
+
     rules = RulesConfig(
         goal_detection=goal_cfg,
         out_of_bounds=oob_cfg,
@@ -364,6 +380,7 @@ def _parse_profile(data: dict) -> RefereeProfile:
         crashing=cr_cfg,
         defense_area_stoppage=das_cfg,
         ball_placement_interference=bpi_cfg,
+        no_progress=np_cfg,
     )
 
     game_d = data.get("game", {})

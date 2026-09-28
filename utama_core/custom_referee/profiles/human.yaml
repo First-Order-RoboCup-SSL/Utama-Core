@@ -47,6 +47,9 @@ rules:
     enabled: false
     stadium_radius_meters: 0.5
     grace_seconds: 2.0
+  no_progress:
+    enabled: false
+    max_seconds: 10.0
 game:
   half_duration_seconds: 300.0
   kickoff_team: "yellow"

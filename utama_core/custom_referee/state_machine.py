@@ -230,7 +230,8 @@ class GameStateMachine:
         if (
             self._auto_advance.stop_to_next_command
             and self.command == RefereeCommand.STOP
-            and self.next_command in self._NEEDS_STOP_FIRST
+            # FORCE_START: rulebook §8.1 No Progress In Game's continuation.
+            and (self.next_command in self._NEEDS_STOP_FIRST or self.next_command == RefereeCommand.FORCE_START)
             and game_frame is not None
             and (
                 self._all_robots_clear(game_frame)
@@ -259,6 +260,9 @@ class GameStateMachine:
                 self.next_command = RefereeCommand.NORMAL_START
                 self._prepare_entered_time = current_time
                 self._advance2_ready_since = math.inf
+            elif self.command == RefereeCommand.FORCE_START:
+                self.next_command = None
+                self.status_message = None
             self._last_transition_time = current_time
 
         # ----------------------------------------------------------------
