@@ -1,10 +1,14 @@
 """This script runs inside Python 3.10 (rc-robosim environment).
 
-It receives JSON commands via stdin and returns simulator state via stdout.
+It receives commands via stdin and returns simulator state via stdout, framed
+as described in `robosim_wrapper.py`'s module docstring: the per-tick step is
+raw float64 bytes both ways, everything else (reset, field params, get_state)
+a JSON line. Replies are always `<kind byte><uint32 length><payload>` frames.
 """
 
 import json
 import os
+import struct
 import sys
 
 import numpy as np
@@ -28,15 +32,26 @@ import robosim
 # go out `_PROTOCOL_OUT` on the untouched duplicate, so the pipe our parent
 # reads from only ever sees valid JSON.
 _PROTOCOL_FD = os.dup(1)
-_PROTOCOL_OUT = os.fdopen(_PROTOCOL_FD, "w", buffering=1)
+_PROTOCOL_OUT = os.fdopen(_PROTOCOL_FD, "wb")
 _devnull_fd = os.open(os.devnull, os.O_WRONLY)
 os.dup2(_devnull_fd, 1)
 os.close(_devnull_fd)
 
 
-def _emit(payload: dict) -> None:
-    _PROTOCOL_OUT.write(json.dumps(payload) + "\n")
+def _emit_frame(kind: bytes, body: bytes) -> None:
+    _PROTOCOL_OUT.write(kind + struct.pack("<I", len(body)) + body)
     _PROTOCOL_OUT.flush()
+
+
+def _emit(payload: dict) -> None:
+    _emit_frame(b"J", json.dumps(payload).encode())
+
+
+def _emit_state(state) -> None:
+    # `get_state()` returns a list of Python floats (C doubles), so packing
+    # them as little-endian float64 is exact -- the same values the JSON
+    # path's shortest-repr round trip carried, without the formatting cost.
+    _emit_frame(b"B", np.asarray(state, dtype="<f8").tobytes())
 
 
 # Example: simple wrapper class
@@ -102,13 +117,29 @@ def main():
 
     sim = SubprocessRSim(args.sim_type, args.n_blue, args.n_yellow, args.field_type, args.time_step_ms)
 
+    stdin = sys.stdin.buffer
     try:
-        for line in sys.stdin:
-            if not line.strip():
-                continue
+        while True:
+            kind = stdin.read(1)
+            if not kind:
+                break
             try:
-                cmd = json.loads(line)
+                if kind == b"S":
+                    rows, cols = struct.unpack("<II", stdin.read(8))
+                    body = stdin.read(rows * cols * 8)
+                    commands = np.frombuffer(body, dtype="<f8").reshape(rows, cols)
+                    sim.sim.step(commands)
+                    _emit_state(sim.sim.get_state())
+                    continue
+                if kind != b"J":
+                    # Framing is lost (nothing to resync on) -- say so and stop
+                    # rather than guess where the next frame starts.
+                    _emit({"error": f"unknown frame kind {kind!r}"})
+                    break
+                cmd = json.loads(stdin.readline())
                 if "commands" in cmd:
+                    # JSON form of the step command: the pre-binary protocol,
+                    # kept as the reference the binary path is tested against.
                     state = sim.step(cmd["commands"])
                     _emit({"state": state})
                 elif "reset" in cmd:
