@@ -76,3 +76,26 @@ def test_overall_line_reports_t_and_a_no_difference_run():
     assert "t -1.55" in scenario_bench._overall(rows)
     assert "the same on all 3 scenarios" in scenario_bench._overall([{"delta": 0.0}] * 3)
     assert scenario_bench._overall([{"delta": None}]) is None
+
+
+def test_a_harvest_drops_duplicate_starts_even_without_a_bank_to_merge_into(tmp_path, monkeypatch):
+    base = list(all_hand_authored_scenarios())[0]
+    harvested = [_moved(base, "first", 1.0), _moved(base, "same_again", 1.01)]
+    monkeypatch.setattr(scenario_bench, "harvest_run_dir", lambda *a, **k: (harvested, {}))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "scenario_bench.py",
+            "--harvest-from",
+            str(tmp_path),
+            "--families",
+            base.provenance.family.value,
+            "--list-scenarios",
+        ],
+    )
+
+    scenarios, merged, _ = scenario_bench._load_bank(scenario_bench.parse_args())
+
+    assert "same_again" not in [s.scenario_id for s in scenarios]
+    assert "first" in [s.scenario_id for s in scenarios]

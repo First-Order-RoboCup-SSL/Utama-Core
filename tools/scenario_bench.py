@@ -176,9 +176,11 @@ def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], list[Benc
 
     if args.merge_into is not None:
         _bank_id, merged = load_bank(args.merge_into)
+    if args.harvest_from is not None:
         before = len(scenarios)
         scenarios = drop_near_duplicates(scenarios, keep=merged)
-        print(f"{before - len(scenarios)} of {before} scenarios duplicate {args.merge_into} or each other; dropped")
+        against = f"{args.merge_into} or each other" if args.merge_into else "each other"
+        print(f"{before - len(scenarios)} of {before} scenarios duplicate {against}; dropped")
 
     return scenarios, merged, harvest_report
 
