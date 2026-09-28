@@ -70,8 +70,18 @@ resolved, replace it with a one-line pointer under "Done".
      flag; `--repeats K` jittered starts give the seed noise rsim's determinism hid (the
      screen's default pool was the champion itself, so every live scenario came out
      DETERMINED); `--against-results` compares against an earlier run's JSON, for A/B
-     across commits. **Bank v1** (31 scenarios; local only, `utama_core/replay/banks/` is gitignored, so
-     rebuild with `--harvest-from` + `--dynamic-screen` + `--save-bank`): harvested
+     across commits. Banks in `utama_core/replay/banks/` are committed (v3 onward; v1/v2 predate
+     the rulebook referee fixes and stay local). **Bank v4** (173 scenarios) = v3 (from
+     RR `tournament_20260928_132051`) + RR `tournament_20260928_125725`, each harvested,
+     screened (informative + noisy kept), then merged dropping near-duplicate starts (same
+     family, perspective and command; ball within 0.10 m, every robot within 0.15 m). v3 alone
+     held 25 such duplicates of 142, mostly kickoff formations; a second run adds ~50 new
+     scenarios, mostly free kicks, since kickoffs repeat and harvested open-play counters are
+     mostly dead. Replays of a round-robin are only needed until it is harvested. v4 at
+     `4b40f3c2` (press_and_pass vs low_block, 3 repeats): self vs self 173/173 identical; passes
+     aimed 10° off: mean -0.143, se 0.045, t = -3.19 (57 worse, 26 better), all from the free
+     kicks (v3: t = -2.23). **Bank v1**
+     (31 scenarios; rebuild with `--harvest-from` + `--dynamic-screen` + `--save-bank`): harvested
      from `tournament_20260924_124033` (692 restart scenarios from 222 stall-free matches), a
      stratified 72 screened (3 opponents x 3 jittered starts, 20s): 14 informative, 17 noisy
      (kept), 22 determined, 19 dead (dropped; 16 of the 20 FORCE_START restarts were dead).
