@@ -494,6 +494,14 @@ def ball_in_enemy_defense_area(game: Game) -> bool:
     return in_enemy_defense_area(game, game.ball.p.to_2d())
 
 
+def _beside_defense_area(game: Game, point: Vector2D, margin: float) -> bool:
+    """True when `point` is wider than the box by more than `margin`: already legal and
+    clear of the planner's ring, so the x clamp below must not pull it off its line
+    (a receive point at (-3.41, 2.7) was dragged to x = -2.95, high_line_zone_vs_low_block
+    2026-09-28)."""
+    return abs(point.y) > game.field.half_defense_area_width + margin
+
+
 def clamp_outside_own_defense_area(game: Game, point: Vector2D, margin: float = _DEFENSE_AREA_CLAMP_MARGIN) -> Vector2D:
     """Clamp a target point to just outside our own defense area's front edge.
 
@@ -505,6 +513,8 @@ def clamp_outside_own_defense_area(game: Game, point: Vector2D, margin: float = 
     `half_defense_area_width`, so a clamped x alone is already outside).
     """
     defense_area = game.field.my_defense_area
+    if _beside_defense_area(game, point, margin):
+        return point
     front_x = float(defense_area[1][0])
     sign = 1.0 if game.my_team_is_right else -1.0
     exit_x = front_x - sign * margin
@@ -547,6 +557,8 @@ def clamp_outside_enemy_defense_area(
     `sign`.
     """
     defense_area = game.field.enemy_defense_area
+    if _beside_defense_area(game, point, margin):
+        return point
     front_x = float(defense_area[1][0])
     sign = -1.0 if game.my_team_is_right else 1.0
     exit_x = front_x - sign * margin

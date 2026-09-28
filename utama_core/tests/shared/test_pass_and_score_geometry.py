@@ -20,6 +20,7 @@ from utama_core.motion_planning.src.fastpathplanning.config import (
 )
 from utama_core.shared.pass_and_score_geometry import (
     _ACQUIRE_LATERAL_MAX,
+    _DEFENSE_AREA_CLAMP_MARGIN,
     _GOAL_POST_SAFETY_MARGIN,
     _NO_SHOT_STRAFE_STEP,
     _PASS_ROLLING_MPS,
@@ -30,6 +31,7 @@ from utama_core.shared.pass_and_score_geometry import (
     ball_is_loose,
     ball_line_receive_point,
     clamp_outside_enemy_defense_area,
+    clamp_outside_own_defense_area,
     enemy_defense_area_hold_point,
     enemy_goal_line,
     has_ball,
@@ -734,3 +736,31 @@ def test_ball_line_receive_point_none_just_below_rolling_speed():
 def test_ball_line_receive_point_none_once_the_ball_has_passed_the_receiver():
     assert ball_line_receive_point(_rolling_game((1.5, 0.0), (1.5, 0.1), (0.0, 3.0)), 2) is None
     assert ball_line_receive_point(_rolling_game((1.5, 0.0), (2.0, 0.0), (3.0, 0.0)), 2) is None
+
+
+# Just outside the band either clamp keeps clear of: box half-width plus the clamp margin.
+_BESIDE_THE_BOX_Y = STANDARD_FIELD_DIMS.half_defense_area_width + _DEFENSE_AREA_CLAMP_MARGIN + 0.01
+
+
+def test_clamp_outside_enemy_defense_area_leaves_a_point_beside_the_box_alone():
+    # high_line_zone_vs_low_block (2026-09-28): a receive point at (-3.41, 2.7), 1.7 m
+    # beside the box, was pulled to x = -2.95 -- off the ball's path -- though the
+    # referee and the planner both allow it where it was.
+    point = Vector2D(_ENEMY_BOX_FRONT_X - 0.3, _BESIDE_THE_BOX_Y)
+    assert clamp_outside_enemy_defense_area(_game((0.0, 0.0)), point) == point
+
+
+def test_clamp_outside_own_defense_area_leaves_a_point_beside_the_box_alone():
+    point = Vector2D(_MY_BOX_FRONT_X + 0.3, -_BESIDE_THE_BOX_Y)
+    assert clamp_outside_own_defense_area(_game((0.0, 0.0)), point) == point
+
+
+def test_both_clamps_still_apply_just_inside_the_band():
+    inside = STANDARD_FIELD_DIMS.half_defense_area_width + _DEFENSE_AREA_CLAMP_MARGIN - 0.01
+    assert (
+        clamp_outside_enemy_defense_area(_game((0.0, 0.0)), Vector2D(_ENEMY_BOX_FRONT_X - 0.3, inside)).x
+        > _ENEMY_BOX_FRONT_X
+    )
+    assert (
+        clamp_outside_own_defense_area(_game((0.0, 0.0)), Vector2D(_MY_BOX_FRONT_X + 0.3, -inside)).x < _MY_BOX_FRONT_X
+    )
