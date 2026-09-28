@@ -167,7 +167,10 @@ def _robots_at(ids, is_friendly, p_row, v_row, a_row, orientation_row, has_ball_
 def load_columnar_replay(path: Union[str, Path]) -> ColumnarReplay:
     path = Path(path)
     with np.load(path, allow_pickle=False) as data:
-        arrays = {key: data[key] for key in data.files}
+        # state floats are stored as float32 (see columnar_writer); callers get float64
+        arrays = {
+            key: data[key].astype(np.float64) if data[key].dtype == np.float32 else data[key] for key in data.files
+        }
 
     sparse_referee: dict[int, RefereeData] = {}
     sidecar_path = path.with_suffix(".sparse_referee.pkl")

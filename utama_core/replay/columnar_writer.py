@@ -25,6 +25,10 @@ Design:
   robot that only appears later. A tick where a given id is absent gets
   NaN position/velocity/acceleration and `has_ball=False` for that id's
   column once everything is assembled.
+- Robot, ball and designated-position floats are stored as float32: under a
+  micrometre on a 12 m field, far below vision noise, and half the bytes
+  (they barely compress). Timestamps stay float64. The reader widens them
+  back to float64.
 - Flushing periodically (every `checkpoint_every_s` seconds of match time)
   means a mid-match crash still leaves a valid, loadable (if truncated)
   replay — mirroring the durability the old pickle-per-frame format got
@@ -265,29 +269,30 @@ class ColumnarReplayWriter:
             stage[tick_i] = t.stage
             designated_position[tick_i] = t.designated_position
 
+        f32 = np.float32  # see _FLOAT32_KEYS
         return {
             "my_team_is_yellow": np.array(self.metadata.my_team_is_yellow),
             "my_team_is_right": np.array(bool(self._my_team_is_right)),
             "friendly_ids": np.array(friendly_ids, dtype=np.int32),
             "enemy_ids": np.array(enemy_ids, dtype=np.int32),
             "ts": ts,
-            "friendly_p": friendly_p,
-            "friendly_v": friendly_v,
-            "friendly_a": friendly_a,
-            "friendly_orientation": friendly_orientation,
+            "friendly_p": friendly_p.astype(f32),
+            "friendly_v": friendly_v.astype(f32),
+            "friendly_a": friendly_a.astype(f32),
+            "friendly_orientation": friendly_orientation.astype(f32),
             "friendly_has_ball": friendly_has_ball,
-            "enemy_p": enemy_p,
-            "enemy_v": enemy_v,
-            "enemy_a": enemy_a,
-            "enemy_orientation": enemy_orientation,
+            "enemy_p": enemy_p.astype(f32),
+            "enemy_v": enemy_v.astype(f32),
+            "enemy_a": enemy_a.astype(f32),
+            "enemy_orientation": enemy_orientation.astype(f32),
             "enemy_has_ball": enemy_has_ball,
-            "ball_p": ball_p,
-            "ball_v": ball_v,
-            "ball_a": ball_a,
+            "ball_p": ball_p.astype(f32),
+            "ball_v": ball_v.astype(f32),
+            "ball_a": ball_a.astype(f32),
             "has_referee": has_referee,
             "referee_command": referee_command,
             "stage": stage,
-            "designated_position": designated_position,
+            "designated_position": designated_position.astype(f32),
         }
 
     def _flush(self) -> None:

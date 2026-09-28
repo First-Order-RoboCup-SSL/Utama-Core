@@ -87,12 +87,12 @@ def test_round_trip_preserves_robot_and_ball_state(tmp_path):
 
     assert got.ts == pytest.approx(0.1)
     assert set(got.friendly_robots) == {3, 5}
-    assert got.friendly_robots[3].p == frame.friendly_robots[3].p
+    assert (got.friendly_robots[3].p.x, got.friendly_robots[3].p.y) == pytest.approx((1.1, 1.1))  # stored float32
     assert got.friendly_robots[5].has_ball is True
     assert got.friendly_robots[3].has_ball is False
     assert set(got.enemy_robots) == {2}
-    assert got.ball.p == frame.ball.p
-    assert got.ball.v == frame.ball.v
+    assert tuple(got.ball.p) == pytest.approx(tuple(frame.ball.p))
+    assert tuple(got.ball.v) == pytest.approx(tuple(frame.ball.v))
     assert got.referee is None
 
 
@@ -271,3 +271,34 @@ def test_sparse_sidecar_stores_only_changes_and_rebuilds_every_tick(tmp_path):
         assert got.yellow_team.score == (1 if i >= 90 else 0)
         assert got.time_sent == pytest.approx(ts)
         assert got.stage_time_left == pytest.approx(300.0 - ts if i < 100 else 200.0 - (ts - 100 * dt))
+
+
+def test_state_arrays_are_stored_as_float32_and_read_back_as_float64(tmp_path):
+    """Half the bytes: float32 keeps positions to well under a micrometre on a 12 m field, far
+    below vision noise. Timestamps stay float64 (tiny, and frame lookups key on them)."""
+    import numpy as np
+
+    frame = GameFrame(
+        ts=12.3456789,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={1: _robot(1, 1.23456789, -2.5, True)},
+        enemy_robots={2: _robot(2, -3.0, 0.5, False)},
+        ball=Ball(p=Vector3D(1.0, 2.0, 0.1), v=Vector3D(0.5, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0)),
+        referee=_referee(RefereeCommand.STOP, designated_position=(1.5, -0.25)),
+    )
+    writer = _make_writer(tmp_path)
+    writer.write_frame(frame)
+    writer.close()
+
+    with np.load(writer.path) as stored:
+        for key in ("friendly_p", "friendly_v", "friendly_a", "friendly_orientation", "enemy_p", "ball_p", "ball_v"):
+            assert stored[key].dtype == np.float32, key
+        assert stored["ts"].dtype == np.float64
+    replay = load_columnar_replay(writer.path)
+    assert replay.friendly_p.dtype == np.float64
+    got = replay.frame_at(0)
+    assert got.ts == 12.3456789
+    assert isinstance(got.friendly_robots[1].p.x, float)  # np.float64 is a float; np.float32 is not
+    assert got.friendly_robots[1].p.x == pytest.approx(1.23456789, abs=1e-6)
+    assert got.referee.designated_position == pytest.approx((1.5, -0.25))
