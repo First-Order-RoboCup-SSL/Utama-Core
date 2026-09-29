@@ -281,7 +281,11 @@ def _pass_exec(
     # 10-20 degrees 7% (tournament_20260924_092119, turnover_breakdown receptions).
     receiver_pos = game.friendly_robots[receiver_id].p
     aim_point = receiver_pos if at_target(game, receiver_id, intercept_pos) else intercept_pos
-    passer_target_oren = game.friendly_robots[passer_id].p.angle_to(aim_point)
+    # Aim from the ball, not the passer's centre: the kick sends the ball along the heading
+    # from wherever it sits on the dribbler, often 2-4 cm off-centre. Aimed from the centre,
+    # that offset and the heading tolerance added on the same side in 27 of 29 missed short
+    # passes, which passed ~7 cm beside the receiver (tournament_20260928_221404).
+    passer_target_oren = game.ball.p.to_2d().angle_to(aim_point)
     passer_aimed = oriented_towards(game, passer_id, passer_target_oren)
     # visual=True: see run_setup_phase's comment — the strict sensor can
     # stay False while the robot is visually on the ball, which would

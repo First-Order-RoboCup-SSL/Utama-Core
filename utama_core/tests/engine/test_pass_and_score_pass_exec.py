@@ -140,6 +140,53 @@ def test_passer_aims_at_a_receiver_in_place_not_at_the_receive_point(runner):
     assert commands[1].angular_vel > 0.0  # turning left, toward the receiver at +y
 
 
+def _short_pass_with_ball_off_centre(runner, passer_orientation):
+    """Passer at the origin, ball 0.036 m to its left on the dribbler, receiver in place
+    0.71 m straight ahead and facing the ball: counter_flow_vs_low_block t=26.3
+    (tournament_20260928_221404), where the ball sat 0.036 m off-centre and the pass
+    passed 0.07 m beside the receiver's centre."""
+    game = runner.my.game
+    friendly = dict(game.current.friendly_robots)
+    enemy = dict(game.current.enemy_robots)
+    ball_xy = (0.09, 0.036)
+    receiver_p = Vector2D(0.71, 0.0)
+    friendly[1] = dataclasses.replace(friendly[1], has_ball=True, p=Vector2D(0.0, 0.0), orientation=passer_orientation)
+    friendly[2] = dataclasses.replace(
+        friendly[2], has_ball=False, p=receiver_p, orientation=receiver_p.angle_to(Vector2D(*ball_xy))
+    )
+    enemy_ids = list(enemy.keys())[:2]
+    enemy[enemy_ids[0]] = dataclasses.replace(enemy[enemy_ids[0]], p=Vector2D(1.0, 3.0))
+    enemy[enemy_ids[1]] = dataclasses.replace(enemy[enemy_ids[1]], p=Vector2D(1.0, -3.0))
+    _with_frame(game, friendly, enemy, ball_xy=ball_xy)
+    return runner.my.game
+
+
+def test_passer_aims_the_ball_not_its_own_centre_at_the_receiver(runner):
+    """The ball leaves from where it sits on the dribbler, along the passer's heading. A
+    passer whose centre points exactly at the receiver, with the ball 0.036 m to one side,
+    sends it 0.036 m beside the receiver plus whatever heading error the 0.05 rad
+    tolerance allows: short passes aimed from the passer's centre were missed with the
+    heading error and the ball's offset on the same side in 27 of 29 cases
+    (tournament_20260928_221404). Aim from the ball: 3.4 degrees off here, outside the
+    tolerance, so the passer turns right instead of kicking."""
+    game = _short_pass_with_ball_off_centre(runner, passer_orientation=0.0)
+
+    commands, _pass_complete, _lane_blocked = _pass_exec(game, _ctx(runner), passer_id=1, receiver_id=2)
+
+    assert not commands[1].kick
+    assert commands[1].angular_vel < 0.0  # turning right, putting the ball's line onto the receiver
+
+
+def test_passer_kicks_once_the_ball_line_meets_the_receiver(runner):
+    """The same pass with the passer turned so the ball's own line runs through the
+    receiver's centre: it kicks."""
+    game = _short_pass_with_ball_off_centre(runner, passer_orientation=math.atan2(-0.036, 0.71 - 0.09))
+
+    commands, _pass_complete, _lane_blocked = _pass_exec(game, _ctx(runner), passer_id=1, receiver_id=2)
+
+    assert commands[1].kick
+
+
 def test_receiver_steps_onto_a_rolling_pass_it_would_meet_off_centre(runner):
     """Once the pass is rolling, the receiver must meet it on the ball's actual path.
     Here it stands 0.07 m beside that path, inside `at_target`'s 0.08 m of the receive
