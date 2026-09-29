@@ -567,9 +567,13 @@ def _carrier_first(game: Game, free_robots: frozenset[RobotId]) -> list[RobotId]
 
 
 # A free kick's kicker waits this close without dribbler contact (DirectFreeOursStep's
-# kick-ready distance); a ball slower than this is one it can simply take.
+# kick-ready distance); a ball slower than this is one it can simply take. 0.3 m/s is the
+# dead-ball speed `ball_is_loose` and the keeper's retrieval already use: the kicker's own
+# approach nudges the ball at ~0.2 m/s, and at the old 0.1 that nudge dropped the kicker to
+# an off-ball slot (clear_press_plus_vs_shadow_switch, 2026-09-29: it walked away from its
+# unkicked free kick, which never moved the 5 cm to be in play; nobody touched it for 10 s).
 _KICK_REACH_M = 0.16
-_STILL_BALL_MPS = 0.1
+_STILL_BALL_MPS = 0.3
 
 
 def _kicker_at_still_ball(game: Game) -> Optional[RobotId]:

@@ -54,6 +54,18 @@ def test_a_free_kick_kicker_standing_at_the_ball_goes_first():
     assert _carrier_first(_free_kick_game(kicker_dist=0.12), frozenset(range(1, 6)))[0] == 5
 
 
+def test_a_kicker_that_nudged_its_own_free_kick_ball_still_goes_first():
+    # clear_press_plus_vs_shadow_switch (2026-09-29): the kicker's approach rolled
+    # the ball at 0.21 m/s, it lost the carrier spot to the lowest ids, walked off,
+    # and the unkicked ball (moved 4.5 cm, never in play) sat for 10 s. A ball under
+    # the 0.3 m/s dead-ball speed is still one the kicker can simply take.
+    from utama_core.strategy.kernel_strategy import _carrier_first
+
+    assert _carrier_first(_free_kick_game(kicker_dist=0.11, ball_speed=0.21), frozenset(range(1, 6)))[0] == 5
+    assert _carrier_first(_free_kick_game(kicker_dist=0.11, ball_speed=0.29), frozenset(range(1, 6)))[0] == 5
+    assert _carrier_first(_free_kick_game(kicker_dist=0.11, ball_speed=0.31), frozenset(range(1, 6)))[0] == 1
+
+
 def test_a_robot_short_of_kick_reach_or_beaten_to_the_ball_is_not_first():
     from utama_core.strategy.kernel_strategy import _carrier_first
 
