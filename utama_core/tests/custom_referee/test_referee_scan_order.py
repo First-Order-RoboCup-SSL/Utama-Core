@@ -234,3 +234,34 @@ class TestScanOrderMechanism:
         # break before reaching the stopping one, since it comes second).
         assert non_stopping.call_count == 1
         assert stopping.call_count == 1
+
+
+class TestLastViolationIsTheAppliedOne:
+    def test_a_violation_held_back_by_the_transition_cooldown_is_not_reported(self):
+        """clear_danger_vs_shadow_switch (round-robin at 5be4df48, 30.57 s): NORMAL_START
+        with the ball still out of the field. OutOfBoundsRule reported it every tick,
+        the state machine ignored it for its 0.3 s transition cooldown, and MatchStats
+        logged every one of those ticks as a foul -- 18 out_of_bounds fouls for one
+        exit, 68 of the run's 302. `last_violation` is what `StrategyRunner` records,
+        so it must be the violation the referee acted on, once."""
+        referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=1, n_robots_blue=1)
+        referee.seed_clock(0.0, initial_command=RefereeCommand.NORMAL_START)
+        referee._state._last_transition_time = 0.0  # a transition just happened, as at the NORMAL_START
+
+        friendly = _robot(0, -2.0, 0.0, True)
+        enemy = _robot(0, 2.0, 0.0, False)
+        out_ball = _ball(x=0.0, y=3.2)
+        reported = []
+        for tick in range(1, 30):
+            ts = tick / 60.0
+            result = referee.step(_frame(friendly, enemy, ball=out_ball, ts=ts), current_time=ts)
+            if referee.last_violation is not None:
+                reported.append((ts, referee.last_violation.rule_name, result.referee_command))
+            if result.referee_command != RefereeCommand.NORMAL_START:
+                break
+
+        assert len(reported) == 1, reported
+        ts, rule, command = reported[0]
+        assert rule == "out_of_bounds"
+        assert ts >= 0.3
+        assert command != RefereeCommand.NORMAL_START  # applied: play stopped on that tick

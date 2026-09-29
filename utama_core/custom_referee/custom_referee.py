@@ -210,12 +210,15 @@ class CustomReferee:
         self._last_logged_ref_data: Optional[RefereeData] = None
         # Last non-stopping foul per team (True = yellow), for §7's goal validity.
         self._non_stopping_foul_at: dict[bool, float] = {}
-        # The `RuleViolation` (if any) detected on the most recent `step()`
-        # call — independent of whether the state machine actually applied
-        # it (it may be suppressed by a transition cooldown). Exposed so
-        # callers like `StrategyRunner`'s stats accumulator can tally
-        # detected events (goals, etc.) without `RuleViolation` needing to
-        # round-trip through `RefereeData`, which doesn't carry it.
+        # The `RuleViolation` (if any) the state machine applied on the most
+        # recent `step()` call. Exposed so callers like `StrategyRunner`'s
+        # stats accumulator can tally events (goals, fouls) without
+        # `RuleViolation` needing to round-trip through `RefereeData`, which
+        # doesn't carry it. None for one the transition cooldown held back: a
+        # ball left out of the field is reported again every tick until it
+        # is applied, and each of those ticks used to be tallied as a foul (18
+        # out_of_bounds fouls for one exit, clear_danger_vs_shadow_switch at
+        # 5be4df48).
         self.last_violation: Optional[RuleViolation] = None
 
     @classmethod
@@ -278,7 +281,7 @@ class CustomReferee:
         violation = violation or non_stopping_violation
         if violation is not None and violation.rule_name == "goal":
             violation = self._disallowed_goal(violation, game_frame) or violation
-        self.last_violation = violation
+        self.last_violation = violation if violation is not None and self._state._can_transition(current_time) else None
 
         previous_command = self._state.command
         result = self._state.step(current_time, violation, game_frame)
