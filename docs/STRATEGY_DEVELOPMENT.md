@@ -115,6 +115,12 @@ skill must be keyed by team and cleared at match start (`StrategyRunner.__init__
 round-robin match and its `--pair` rerun still differ, suspect more of the same; compare the two
 replays' `ball_p` to find the first differing tick.
 
+**Fast and exact numerics:** the motion planner, refiners and Kalman filter use faster float code
+by default (about 19% less wall time per match under full load). `UTAMA_EXACT_MATH=1` restores the
+original numpy paths, byte-identical to before (`8c191eea`); the round-robin, bench pools and rsim
+all inherit it. The two modes agree to 1e-9 per call but matches diverge after the first differing
+tick, so a baseline recorded in one mode is only comparable with a candidate run in the same mode.
+
 ## Reading a tournament run
 
 Every saved `smoke_tournament.py` run prints these sections and writes the same data to
@@ -162,6 +168,11 @@ To screen many candidates, add `--stop-at-t 4` to the candidate run: it scores a
 starts at a time and stops once |t| reaches 4 (2 would give false alarms, since t is looked at
 repeatedly). Passes aimed 10° off stop after 100 of 846 starts, about 1.5 min. A candidate no
 different from the baseline never stops early and costs a full pass.
+
+How far to trust the bench: every strategy scored on 150 bank_v5 starts against counter_press
+ranks them with Spearman +0.66 against round-robin points, where two round-robins agree at +0.91
+(`tools/bench_vs_standings.py`). It gets the top and bottom right and shuffles the middle, so use
+it to screen a change against a baseline and confirm with matches, not to rank strategies.
 
 A new bank from a new round-robin (keep its replays until this is done) takes a few minutes and
 no simulation:
