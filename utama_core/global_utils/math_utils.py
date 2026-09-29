@@ -3,6 +3,7 @@ from typing import Tuple
 
 import numpy as np
 
+from utama_core.config.settings import EXACT_MATH
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import Field, FieldBounds
 
@@ -75,9 +76,19 @@ def rad_to_deg(radians: float):
     return degrees % 360
 
 
-def distance(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
+def _distance_numpy(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
     """Calculate the Euclidean distance between two points in 2D space using the Pythagorean theorem."""
     return np.hypot(point2[0] - point1[0], point2[1] - point1[1])
+
+
+def _distance_fast(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
+    """`_distance_numpy` with `math.hypot` on plain floats: a Python float, and
+    last-bit different from `np.hypot` in well under 1% of cases."""
+    return math.hypot(float(point2[0]) - float(point1[0]), float(point2[1]) - float(point1[1]))
+
+
+# See `EXACT_MATH` in settings.py.
+distance = _distance_numpy if EXACT_MATH else _distance_fast
 
 
 def angle_between_points(main_point: Vector2D, point1: Vector2D, point2: Vector2D):
@@ -246,7 +257,7 @@ def distance_point_to_segment(point, seg_start, seg_end) -> float:
     return math.hypot(px - closest_x, py - closest_y)
 
 
-def closest_point_on_segment(point, seg_start, seg_end):
+def _closest_point_on_segment_numpy(point, seg_start, seg_end):
     """Calculate the point on a segment closest to another point.
 
     Args:
@@ -276,6 +287,31 @@ def closest_point_on_segment(point, seg_start, seg_end):
         return seg_end
     else:
         return seg_start + t * seg_vec
+
+
+def _closest_point_on_segment_fast(point, seg_start, seg_end):
+    """`_closest_point_on_segment_numpy` on plain floats. Returns the same
+    objects in the same cases (`seg_start`/`seg_end` themselves at the ends);
+    the dot products are plain multiply-adds rather than `np.dot`, which can
+    round differently in the last bit."""
+    seg_start = np.asarray(seg_start)
+    seg_end = np.asarray(seg_end)
+    sx, sy = float(seg_start[0]), float(seg_start[1])
+    seg_dx = float(seg_end[0]) - sx
+    seg_dy = float(seg_end[1]) - sy
+    seg_len_sq = seg_dx * seg_dx + seg_dy * seg_dy
+    if seg_len_sq < EPS:
+        return seg_start
+    t = ((float(point[0]) - sx) * seg_dx + (float(point[1]) - sy) * seg_dy) / seg_len_sq
+    if t < 0:
+        return seg_start
+    elif t > 1:
+        return seg_end
+    return np.array([sx + t * seg_dx, sy + t * seg_dy])
+
+
+# See `EXACT_MATH` in settings.py.
+closest_point_on_segment = _closest_point_on_segment_numpy if EXACT_MATH else _closest_point_on_segment_fast
 
 
 def segments_intersect(

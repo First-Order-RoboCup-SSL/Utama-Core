@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 CONTROL_FREQUENCY = 60
@@ -48,3 +49,12 @@ BALL_MERGE_THRESHOLD = 0.05  # CameraCombiner: distance threshold to merge balls
 VISION_BOUNDS_BUFFER = 1.0  # CameraCombiner: buffer around field bounds to include in vision (m)
 
 OFF_PITCH_OFFSET = VISION_BOUNDS_BUFFER * 5  # distance outside field bounds to consider as off-pitch (m)
+
+### Numerics ###
+# Hot geometry in the motion planner and state refiners has a fast path (plain
+# floats, math.hypot, numba) that can differ from the original numpy arithmetic
+# in the last bits of a result, so a match can drift apart from one run with the
+# original code. UTAMA_EXACT_MATH=1 in the environment selects the original
+# arithmetic, reproducing earlier results bit for bit. Read once at import, so
+# set it before starting Python; worker and rsim processes inherit it.
+EXACT_MATH = os.environ.get("UTAMA_EXACT_MATH", "0") not in ("", "0")

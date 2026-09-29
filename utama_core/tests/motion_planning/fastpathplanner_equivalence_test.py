@@ -7,6 +7,10 @@ only, comments trimmed). Each test drives it and the live planner through the
 same randomized scenes -- robots with projected velocity segments, the field
 walls and the inflated enemy box, stateful sticky/side memory carried across
 ticks -- and requires exactly equal results.
+
+This is the exact-numerics contract (`EXACT_MATH`, settings.py), so every
+test here runs with the exact implementations selected whatever the
+environment says; fastpathplanner_fast_math_test.py covers the fast ones.
 """
 
 import math
@@ -16,8 +20,10 @@ import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.global_utils.math_utils import (
-    closest_point_on_segment,
-    distance,
+    _closest_point_on_segment_numpy as closest_point_on_segment,
+)
+from utama_core.global_utils.math_utils import _distance_numpy as distance
+from utama_core.global_utils.math_utils import (
     distance_point_to_segment,
     find_intersection,
     rotate_vector,
@@ -31,6 +37,13 @@ from utama_core.motion_planning.src.fastpathplanning.planner import (
     _same_segment,
     _segment_key,
 )
+from utama_core.tests.fixtures.exact_math import use_exact_math
+
+
+@pytest.fixture(autouse=True)
+def _exact_math(monkeypatch):
+    use_exact_math(monkeypatch)
+
 
 _RECT = (3.25, 4.75, -1.25, 1.25)
 

@@ -1,11 +1,35 @@
+import math
 from typing import Optional
 
 import numpy as np
 
+from utama_core.config.settings import EXACT_MATH
 from utama_core.entities.data.vector import Vector3D
 from utama_core.entities.data.vision import VisionRobotData
 from utama_core.entities.game import Ball, Robot
 from utama_core.global_utils.math_utils import deg_to_rad, normalise_heading
+
+
+def _weighted_circular_mean_numpy(weight: float, a: float, b: float) -> float:
+    """Circular mean of angles `a` and `b` weighted `weight` and `1 - weight`."""
+    weights = (weight, 1 - weight)
+    values = (a, b)
+    sines = np.dot(weights, np.sin(values))
+    cosines = np.dot(weights, np.cos(values))
+    return float(np.arctan2(sines, cosines))
+
+
+def _weighted_circular_mean_fast(weight: float, a: float, b: float) -> float:
+    """`_weighted_circular_mean_numpy` with `math` on plain floats (can differ
+    from numpy's vectorised trig and 2-element dot in the last bits)."""
+    other = 1 - weight
+    sines = weight * math.sin(a) + other * math.sin(b)
+    cosines = weight * math.cos(a) + other * math.cos(b)
+    return math.atan2(sines, cosines)
+
+
+# See `EXACT_MATH` in settings.py.
+_weighted_circular_mean = _weighted_circular_mean_numpy if EXACT_MATH else _weighted_circular_mean_fast
 
 
 class KalmanFilter:
@@ -192,12 +216,8 @@ class KalmanFilter:
             kalman_gain_th = pred_cov_th / (pred_cov_th + self.measurement_cov_th)
 
             # Taking a circular weighted average
-            weights_th = (kalman_gain_th, 1 - kalman_gain_th)
-            values_th = (measurement_th, self.state_th)
-            sines_th = np.dot(weights_th, np.sin(values_th))
-            cosines_th = np.dot(weights_th, np.cos(values_th))
             # s_n,n; already wrapped to (-pi, pi] as we're taking a circular average
-            self.state_th = float(np.arctan2(sines_th, cosines_th))
+            self.state_th = _weighted_circular_mean(kalman_gain_th, measurement_th, self.state_th)
 
             # P_n,n
             self.covariance_th = (1 - kalman_gain_th) * pred_cov_th

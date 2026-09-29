@@ -225,6 +225,219 @@ def find_segment_nb(
     return -1
 
 
+# --- Fast-mode kernels (`EXACT_MATH` off, see settings.py) ---------------------
+# Whole-call ports of `collides()`'s post-scan work, `_find_subgoal()`'s step
+# loop and `_clamp_to_obstacle_clearance()`, so each is one native call instead
+# of a Python loop around small numpy/float operations. Same formulas in the
+# same order, but compiled: results can differ from the Python/numpy versions in
+# the last bits, which is why exact mode keeps those. Not fastmath, so NaN
+# comparisons keep their Python meaning; error_model="numpy" so a division by
+# zero gives inf/NaN as numpy's does instead of raising.
+
+
+@njit(cache=True, error_model="numpy")
+def _closest_point_on_segment_xy_nb(px: float, py: float, sx: float, sy: float, ex: float, ey: float) -> tuple:
+    """`math_utils.closest_point_on_segment` on plain floats."""
+    seg_dx = ex - sx
+    seg_dy = ey - sy
+    seg_len_sq = seg_dx * seg_dx + seg_dy * seg_dy
+    if seg_len_sq < EPS:
+        return sx, sy
+    t = ((px - sx) * seg_dx + (py - sy) * seg_dy) / seg_len_sq
+    if t < 0:
+        return sx, sy
+    elif t > 1:
+        return ex, ey
+    return sx + t * seg_dx, sy + t * seg_dy
+
+
+@njit(cache=True, error_model="numpy")
+def collides_nb(
+    ax: float,
+    ay: float,
+    bx: float,
+    by: float,
+    clearance: float,
+    ox0: np.ndarray,
+    oy0: np.ndarray,
+    ox1: np.ndarray,
+    oy1: np.ndarray,
+    sticky_idx: int,
+    switch_margin: float,
+) -> tuple:
+    """`FastPathPlanner.collides` after its cache lookup: the scan, the sticky
+    obstacle's switch margin and the obstacle point (`find_intersection`, else
+    the closest-point fallback). Returns `(idx, from_sticky, px, py)`; `idx` is
+    -1 when nothing is within `clearance`."""
+    closest_idx, min_dist, sticky_dist = scan_collides_nb(ax, ay, bx, by, clearance, ox0, oy0, ox1, oy1, sticky_idx)
+    if closest_idx < 0:
+        return -1, False, 0.0, 0.0
+    idx = closest_idx
+    from_sticky = False
+    if (
+        sticky_idx >= 0
+        and sticky_dist >= 0.0
+        and not (
+            ox0[closest_idx] == ox0[sticky_idx]
+            and oy0[closest_idx] == oy0[sticky_idx]
+            and ox1[closest_idx] == ox1[sticky_idx]
+            and oy1[closest_idx] == oy1[sticky_idx]
+        )
+        and sticky_dist <= min_dist + switch_margin
+    ):
+        idx = sticky_idx
+        from_sticky = True
+
+    cx, cy, dx, dy = ox0[idx], oy0[idx], ox1[idx], oy1[idx]
+    # math_utils.find_intersection(segment, obstacle)
+    denom = (bx - ax) * (dy - cy) - (by - ay) * (dx - cx)
+    if abs(denom) >= EPS:
+        t = ((cx - ax) * (dy - cy) - (cy - ay) * (dx - cx)) / denom
+        u = ((cx - ax) * (by - ay) - (cy - ay) * (bx - ax)) / denom
+        if -EPS <= t <= 1 + EPS and -EPS <= u <= 1 + EPS:
+            return idx, from_sticky, ax + t * (bx - ax), ay + t * (by - ay)
+
+    # Fallback: the nearest of the obstacle's ends and the obstacle points
+    # closest to each end of the segment (first minimum, as list.index does).
+    pcx, pcy = _closest_point_on_segment_xy_nb(ax, ay, cx, cy, dx, dy)
+    pdx, pdy = _closest_point_on_segment_xy_nb(bx, by, cx, cy, dx, dy)
+    best_x, best_y = cx, cy
+    best = distance_point_to_segment_nb(cx, cy, ax, ay, bx, by)
+    d = distance_point_to_segment_nb(dx, dy, ax, ay, bx, by)
+    if d < best:
+        best, best_x, best_y = d, dx, dy
+    d = math.hypot(pcx - ax, pcy - ay)
+    if d < best:
+        best, best_x, best_y = d, pcx, pcy
+    d = math.hypot(pdx - bx, pdy - by)
+    if d < best:
+        best, best_x, best_y = d, pdx, pdy
+    return idx, from_sticky, best_x, best_y
+
+
+@njit(cache=True, error_model="numpy")
+def find_subgoal_nb(
+    opx: float,
+    opy: float,
+    ux: float,
+    uy: float,
+    subgoal_distance: float,
+    multiple: int,
+    clearance: float,
+    ox0: np.ndarray,
+    oy0: np.ndarray,
+    ox1: np.ndarray,
+    oy1: np.ndarray,
+    has_rect: bool,
+    rmin_x: float,
+    rmax_x: float,
+    rmin_y: float,
+    rmax_y: float,
+) -> tuple:
+    """`FastPathPlanner._find_subgoal`'s step loop from `multiple` on. Returns
+    `(found, x, y, last_hit_idx, rect_last)`: the first clear subgoal, or,
+    when the step budget runs out (`found` False), what blocked the last step
+    -- obstacle `last_hit_idx`, or the forbidden rectangle (`rect_last`)."""
+    last_hit = -1
+    rect_last = False
+    while multiple <= 10:
+        step = subgoal_distance * ux
+        sub_x = opx + step * multiple
+        step = subgoal_distance * uy
+        sub_y = opy + step * multiple
+        if has_rect and rmin_x < sub_x < rmax_x and rmin_y < sub_y < rmax_y:
+            multiple += 1
+            rect_last = True
+            last_hit = -1
+            continue
+        hit = scan_find_subgoal_nb(sub_x, sub_y, clearance, ox0, oy0, ox1, oy1)
+        if hit >= 0:
+            multiple += 1
+            rect_last = False
+            last_hit = hit
+            continue
+        return True, sub_x, sub_y, -1, False
+    return False, 0.0, 0.0, last_hit, rect_last
+
+
+@njit(cache=True, error_model="numpy")
+def clamp_to_obstacle_clearance_nb(
+    ox: float,
+    oy: float,
+    ux: float,
+    uy: float,
+    max_distance: float,
+    clearance: float,
+    ox0: np.ndarray,
+    oy0: np.ndarray,
+    ox1: np.ndarray,
+    oy1: np.ndarray,
+) -> float:
+    """`FastPathPlanner._clamp_to_obstacle_clearance` over the flattened obstacles."""
+    clamped = max_distance
+    for i in range(ox0.shape[0]):
+        if (
+            distance_point_to_segment_nb(ox + ux * clamped, oy + uy * clamped, ox0[i], oy0[i], ox1[i], oy1[i])
+            >= clearance
+        ):
+            continue
+        lo = 0.0
+        hi = clamped
+        for _ in range(12):
+            mid = (lo + hi) / 2.0
+            if distance_point_to_segment_nb(ox + ux * mid, oy + uy * mid, ox0[i], oy0[i], ox1[i], oy1[i]) >= clearance:
+                lo = mid
+            else:
+                hi = mid
+        clamped = min(clamped, lo)
+    return clamped
+
+
+@njit(cache=True, error_model="numpy")
+def sanitize_target_nb(
+    tx: float,
+    ty: float,
+    rx: float,
+    ry: float,
+    clearance: float,
+    ox0: np.ndarray,
+    oy0: np.ndarray,
+    ox1: np.ndarray,
+    oy1: np.ndarray,
+    exempt: np.ndarray,
+) -> tuple:
+    """`FastPathPlanner.sanitize_target`'s push-out passes, from target `(tx, ty)`
+    with the robot at `(rx, ry)`, over the obstacles whose `(x0, y0, x1, y1)` is
+    not a row of `exempt` (compared with ==, as the set lookup it replaces)."""
+    n = ox0.shape[0]
+    repelling = np.ones(n, dtype=np.bool_)
+    for i in range(n):
+        for j in range(exempt.shape[0]):
+            if ox0[i] == exempt[j, 0] and oy0[i] == exempt[j, 1] and ox1[i] == exempt[j, 2] and oy1[i] == exempt[j, 3]:
+                repelling[i] = False
+                break
+    push = clearance * 1.05
+    for _ in range(5):
+        collision_found = False
+        for i in range(n):
+            if not repelling[i]:
+                continue
+            if distance_point_to_segment_nb(tx, ty, ox0[i], oy0[i], ox1[i], oy1[i]) < clearance:
+                cx, cy = _closest_point_on_segment_xy_nb(tx, ty, ox0[i], oy0[i], ox1[i], oy1[i])
+                px = tx - cx
+                py = ty - cy
+                if math.hypot(px, py) == 0:
+                    px = rx - cx
+                    py = ry - cy
+                norm = math.hypot(px, py)
+                tx = cx + (px / norm) * push
+                ty = cy + (py / norm) * push
+                collision_found = True
+        if not collision_found:
+            break
+    return tx, ty
+
+
 def flatten_obstacles(obstacles) -> tuple:
     """Convert a `List[Tuple[np.ndarray, np.ndarray]]` obstacle list into
     four parallel float64 arrays `(ox0, oy0, ox1, oy1)` for the njit kernels

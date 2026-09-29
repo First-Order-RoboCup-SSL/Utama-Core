@@ -7,7 +7,7 @@ from utama_core.config.referee_constants import (
     BALL_KEEP_OUT_DISTANCE,
     OPPONENT_DEFENSE_AREA_KEEP_DISTANCE,
 )
-from utama_core.config.settings import CONTROL_FREQUENCY
+from utama_core.config.settings import CONTROL_FREQUENCY, EXACT_MATH
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
@@ -23,8 +23,12 @@ from utama_core.motion_planning.src.fastpathplanning.config import (
     fastpathplanningconfig as config,
 )
 from utama_core.motion_planning.src.fastpathplanning.numba_kernels import (
+    clamp_to_obstacle_clearance_nb,
+    collides_nb,
     find_segment_nb,
+    find_subgoal_nb,
     flatten_obstacles,
+    sanitize_target_nb,
     scan_collides_nb,
     scan_find_subgoal_nb,
 )
@@ -501,7 +505,7 @@ class FastPathPlanner:
         self._obstacle_arrays_cache.append((obstacles, arrays))
         return arrays
 
-    def _find_subgoal(
+    def _find_subgoal_exact(
         self,
         robot_pos: np.ndarray,
         target: np.ndarray,
@@ -647,7 +651,111 @@ class FastPathPlanner:
                 continue
             return subgoal
 
-    def collides(
+    def _find_subgoal_fast(
+        self,
+        robot_pos: np.ndarray,
+        target: np.ndarray,
+        obstacle_pos: np.ndarray,
+        obstacles: List,
+        subgoal_direction: int,
+        multiple: int,
+        clearance: float,
+        subgoal_distance: float,
+        origin_obstacle: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+        blocked_by_origin: bool = False,
+        forbidden_rect: Optional[Tuple[float, float, float, float]] = None,
+    ) -> Optional[np.ndarray]:
+        """`_find_subgoal_exact` with its step loop in one native call
+        (`numba_kernels.find_subgoal_nb`); see that method for the behaviour."""
+        if multiple > 10:
+            return None if blocked_by_origin else obstacle_pos
+        dx = float(target[0]) - float(robot_pos[0])
+        dy = float(target[1]) - float(robot_pos[1])
+        direction_norm = math.hypot(dx, dy)
+        if direction_norm == 0.0:
+            return obstacle_pos
+        cos_t, sin_t = _perp_rotation(subgoal_direction)
+        ux = (dx * cos_t + dy * sin_t) / direction_norm
+        uy = (-dx * sin_t + dy * cos_t) / direction_norm
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        has_rect = forbidden_rect is not None
+        rmin_x, rmax_x, rmin_y, rmax_y = forbidden_rect if has_rect else (0.0, 0.0, 0.0, 0.0)
+        found, sub_x, sub_y, last_hit_idx, rect_last = find_subgoal_nb(
+            float(obstacle_pos[0]),
+            float(obstacle_pos[1]),
+            ux,
+            uy,
+            subgoal_distance,
+            multiple,
+            clearance,
+            ox0,
+            oy0,
+            ox1,
+            oy1,
+            has_rect,
+            rmin_x,
+            rmax_x,
+            rmin_y,
+            rmax_y,
+        )
+        if found:
+            return np.array([sub_x, sub_y])
+        if rect_last:
+            blocked_by_origin = True
+        elif last_hit_idx >= 0:
+            blocked_by_origin = origin_obstacle is not None and _same_segment(obstacles[last_hit_idx], origin_obstacle)
+        return None if blocked_by_origin else obstacle_pos
+
+    def _collides_fast(
+        self,
+        segment: Tuple,
+        obstacles: List,
+        sticky_obstacle: Optional[Tuple] = None,
+        clearance: Optional[float] = None,
+    ):
+        """`_collides_exact` with everything after the cache lookup in one native
+        call (`numba_kernels.collides_nb`); see that method for the behaviour."""
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        sticky_key = _segment_key(sticky_obstacle) if sticky_obstacle is not None else None
+        seg_key = (_segment_key(segment), sticky_key, clearance)
+        cached = self._collision_cache.get(seg_key)
+        if cached is not None:
+            return cached
+
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        sticky_idx = -1
+        if sticky_obstacle is not None:
+            sticky_idx = find_segment_nb(
+                ox0,
+                oy0,
+                ox1,
+                oy1,
+                float(sticky_obstacle[0][0]),
+                float(sticky_obstacle[0][1]),
+                float(sticky_obstacle[1][0]),
+                float(sticky_obstacle[1][1]),
+            )
+        idx, from_sticky, px, py = collides_nb(
+            float(segment[0][0]),
+            float(segment[0][1]),
+            float(segment[1][0]),
+            float(segment[1][1]),
+            clearance,
+            ox0,
+            oy0,
+            ox1,
+            oy1,
+            sticky_idx,
+            self.DETOUR_SWITCH_MARGIN,
+        )
+        if idx < 0:
+            result = (None, None)
+        else:
+            result = (np.array([px, py]), sticky_obstacle if from_sticky else obstacles[idx])
+        self._collision_cache[seg_key] = result
+        return result
+
+    def _collides_exact(
         self,
         segment: Tuple,
         obstacles: List,
@@ -940,7 +1048,32 @@ class FastPathPlanner:
 
         return seg1 + seg2, len1 + len2
 
-    def _clamp_to_obstacle_clearance(
+    def _clamp_to_obstacle_clearance_fast(
+        self,
+        origin: np.ndarray,
+        unit_vec: np.ndarray,
+        max_distance: float,
+        obstacles: List,
+        clearance: Optional[float] = None,
+    ) -> float:
+        """`_clamp_to_obstacle_clearance_exact` in one native call
+        (`numba_kernels.clamp_to_obstacle_clearance_nb`)."""
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        return clamp_to_obstacle_clearance_nb(
+            float(origin[0]),
+            float(origin[1]),
+            float(unit_vec[0]),
+            float(unit_vec[1]),
+            float(max_distance),
+            clearance,
+            ox0,
+            oy0,
+            ox1,
+            oy1,
+        )
+
+    def _clamp_to_obstacle_clearance_exact(
         self,
         origin: np.ndarray,
         unit_vec: np.ndarray,
@@ -1012,7 +1145,38 @@ class FastPathPlanner:
             point = closest_point_on_segment(new_target, trajectory[1][0], trajectory[1][1])
             return (point + new_target) / 2.0
 
-    def sanitize_target(
+    def _sanitize_target_fast(
+        self,
+        target: np.ndarray,
+        obstacles: List,
+        robot_pos: np.ndarray,
+        field_bounds: FieldBounds | None = None,
+        exempt_obstacles: Optional[set] = None,
+        clearance: Optional[float] = None,
+    ) -> np.ndarray:
+        """`_sanitize_target_exact` with its push-out passes in one native call
+        (`numba_kernels.sanitize_target_nb`); see that method for the behaviour."""
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        exempt = [] if exempt_obstacles is None else list(exempt_obstacles)
+        if field_bounds is not None:
+            (x0, y0), (x1, y1) = field_bounds.top_left, field_bounds.bottom_right
+            exempt += [(x0, y0, x1, y0), (x1, y0, x1, y1), (x1, y1, x0, y1), (x0, y1, x0, y0)]
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        tx, ty = sanitize_target_nb(
+            float(target[0]),
+            float(target[1]),
+            float(robot_pos[0]),
+            float(robot_pos[1]),
+            clearance,
+            ox0,
+            oy0,
+            ox1,
+            oy1,
+            np.array(exempt, dtype=np.float64).reshape(-1, 4),
+        )
+        return np.array([tx, ty])
+
+    def _sanitize_target_exact(
         self,
         target: np.ndarray,
         obstacles: List,
@@ -1370,3 +1534,13 @@ class FastPathPlanner:
             self._env.draw_line((our_pos, new_target), color="Blue")
 
         return new_target
+
+    # Numerics: see `EXACT_MATH` in settings.py. The `_exact` versions are the
+    # original arithmetic, bit for bit; the `_fast` ones compute the same thing
+    # in compiled code and can differ from them in the last bits.
+    collides = _collides_exact if EXACT_MATH else _collides_fast
+    _find_subgoal = _find_subgoal_exact if EXACT_MATH else _find_subgoal_fast
+    _clamp_to_obstacle_clearance = (
+        _clamp_to_obstacle_clearance_exact if EXACT_MATH else _clamp_to_obstacle_clearance_fast
+    )
+    sanitize_target = _sanitize_target_exact if EXACT_MATH else _sanitize_target_fast
