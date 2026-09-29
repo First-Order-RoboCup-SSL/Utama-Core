@@ -164,6 +164,12 @@ the paired result: mean outcome delta per scenario, its standard error, and t = 
 |t| under about 2 is within chance. The sign says which side did better, and the per-family
 table says where. Treat it as a screen, then confirm a real improvement with matches.
 
+A bench worker keeps its rsim subprocess between starts (`enable_sim_reuse` in
+`robosim_wrapper.py`), asking it for a new native world each time instead of paying about 0.4 s wall
+and 0.5 s CPU to start one: outcomes and every sim state are bit-identical to a fresh process per
+start, in exact and fast numerics (checked on 106 starts in two shuffled orders). Only the sim is
+kept: a `StrategyRunner` is still built per start, which costs about 0.2 s.
+
 To screen many candidates, add `--stop-at-t 4` to the candidate run: it scores a shuffled sample 100
 starts at a time and stops once |t| reaches 4 (2 would give false alarms, since t is looked at
 repeatedly). Passes aimed 10° off stop after 100 of 846 starts, about 1.5 min. It also stops as

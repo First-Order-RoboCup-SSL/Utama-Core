@@ -123,6 +123,9 @@ from utama_core.replay.bench_scenario import (
 from utama_core.replay.hand_authored_scenarios import all_hand_authored_scenarios
 from utama_core.replay.scenario_harvester import harvest_run_dir
 from utama_core.replay.scenario_scorer import score_scenario
+from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
+    enable_sim_reuse,
+)
 
 SCHEMA_VERSION = 1
 
@@ -224,6 +227,7 @@ def _load_against(path: Path, *, opponent: str, horizon_s: float, repeats: int) 
 def _score_one(
     bench_scenario: BenchScenario, *, candidate: str, opponent: str, horizon_s: float, repeats: int, baseline
 ) -> tuple[dict, Optional[dict]]:
+    enable_sim_reuse()  # a worker plays many starts: keep its sim subprocess between them
     cand = _runs(bench_scenario, candidate, opponent, horizon_s, repeats)
     base = _runs(bench_scenario, baseline, opponent, horizon_s, repeats) if baseline else None
     return cand, base

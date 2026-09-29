@@ -9,6 +9,7 @@ exactly the same values (JSON's float repr round-trips exactly too, so the sim
 sees bit-identical inputs and the runner bit-identical states either way).
 """
 
+import atexit
 import json
 import logging
 import os
@@ -20,9 +21,53 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Sim reuse (opt-in, `enable_sim_reuse`): a process that plays many short scenarios keeps its
+# sim subprocesses, since starting one (`pixi run`, imports, world build) costs about as much
+# CPU as a second of play. Idle sims wait here by their constructor arguments; `acquire`
+# hands one out with a new native world, so nothing of the previous play is left in it.
+_reuse_sims = False
+_idle_sims: dict[tuple, list["RSimSubprocessWrapper"]] = {}
+
+
+def enable_sim_reuse() -> None:
+    """From now on, `close()` on a sim from `acquire` parks its subprocess for the next `acquire`
+    (closed for good at interpreter exit) instead of terminating it."""
+    global _reuse_sims
+    if not _reuse_sims:
+        _reuse_sims = True
+        atexit.register(_close_idle_sims)
+
+
+def _close_idle_sims() -> None:
+    for sims in _idle_sims.values():
+        while sims:
+            sims.pop()._terminate()
+
 
 class RSimSubprocessWrapper:
+    @classmethod
+    def acquire(cls, sim_type, n_blue, n_yellow, field_type, time_step_ms) -> "RSimSubprocessWrapper":
+        """A sim in the state a new one would be in: a parked subprocess given a new native world
+        when reuse is on and one fits, else a new subprocess."""
+        key = (sim_type, n_blue, n_yellow, field_type, time_step_ms)
+        idle = _idle_sims.get(key)
+        while idle:
+            sim = idle.pop()
+            try:
+                acked = sim._request({"new_world": True}).get("ack")
+            except Exception:  # a dead or desynchronised subprocess is not worth debugging: start afresh
+                acked = False
+            if not acked:
+                sim._terminate()
+                continue
+            sim._released = False
+            return sim
+        return cls(*key)
+
     def __init__(self, sim_type, n_blue, n_yellow, field_type, time_step_ms):
+        self._key = (sim_type, n_blue, n_yellow, field_type, time_step_ms)
+        self._released = False
+        self._broken = False  # a request failed part-way: the pipe may be out of step, so never reuse it
         script_path = (Path(__file__).parent / "robosim_subprocess.py").resolve()
         env = os.environ.copy()
         cmake_policy_flag = "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
@@ -95,17 +140,22 @@ class RSimSubprocessWrapper:
             return resp
         raise RuntimeError(f"robosim subprocess sent an unknown reply frame kind {kind!r}")
 
+    def _exchange(self, request: bytes):
+        try:
+            self.proc.stdin.write(request)
+            self.proc.stdin.flush()
+            return self._read_reply()
+        except BaseException:
+            self._broken = True
+            raise
+
     def _request(self, payload: dict) -> dict:
-        self.proc.stdin.write(b"J" + json.dumps(payload).encode() + b"\n")
-        self.proc.stdin.flush()
-        return self._read_reply()
+        return self._exchange(b"J" + json.dumps(payload).encode() + b"\n")
 
     def step(self, commands: np.ndarray) -> np.ndarray:
         commands = np.ascontiguousarray(commands, dtype="<f8")
         rows, cols = commands.shape
-        self.proc.stdin.write(b"S" + struct.pack("<II", rows, cols) + commands.tobytes())
-        self.proc.stdin.flush()
-        return self._read_reply()
+        return self._exchange(b"S" + struct.pack("<II", rows, cols) + commands.tobytes())
 
     def reset(self, ball_pos, blue_robots_pos, yellow_robots_pos):
         self._request(
@@ -125,6 +175,16 @@ class RSimSubprocessWrapper:
         return self._request({"get_state": True})["state"]
 
     def close(self):
+        """Done with this sim: parked for the next `acquire` when reuse is on, else terminated."""
+        if self._released:
+            return
+        if _reuse_sims and not self._broken and self.proc.poll() is None:
+            self._released = True
+            _idle_sims.setdefault(self._key, []).append(self)
+            return
+        self._terminate()
+
+    def _terminate(self):
         try:
             if self.proc and self.proc.poll() is None:
                 self.proc.terminate()

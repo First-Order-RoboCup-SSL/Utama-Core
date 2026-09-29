@@ -57,6 +57,13 @@ def _emit_state(state) -> None:
 # Example: simple wrapper class
 class SubprocessRSim:
     def __init__(self, sim_type, n_blue, n_yellow, field_type, time_step_ms):
+        self._args = (sim_type, n_blue, n_yellow, field_type, time_step_ms)
+        self.new_world()
+
+    def new_world(self):
+        """A brand-new native world, as at process start: nothing from the previous one survives."""
+        sim_type, n_blue, n_yellow, field_type, time_step_ms = self._args
+        self.sim = None  # destroy the old world before the new one is built
         self.n_blue = n_blue
         self.n_yellow = n_yellow
         blue_robots_pos = [[-0.2 * i, 0, 0] for i in range(1, self.n_blue + 1)]
@@ -145,6 +152,9 @@ def main():
                 elif "reset" in cmd:
                     r = cmd["reset"]
                     sim.reset(r["ball_pos"], r["blue_robots_pos"], r["yellow_robots_pos"])
+                    _emit({"ack": True})
+                elif "new_world" in cmd:
+                    sim.new_world()
                     _emit({"ack": True})
                 elif "get_field_params" in cmd:
                     fp = sim.get_field_params()

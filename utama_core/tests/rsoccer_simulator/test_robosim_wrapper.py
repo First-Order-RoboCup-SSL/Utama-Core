@@ -95,3 +95,74 @@ def test_subprocess_stdout_goes_to_devnull():
         assert os.readlink(f"/proc/{script}/fd/1") == os.devnull
     finally:
         sim.close()
+
+
+def _play(sim: RSimSubprocessWrapper, seed: int, ticks: int = 200) -> np.ndarray:
+    """A short play from a fixed placement: every robot driving hard, dribblers on, kicks fired."""
+    sim.reset(
+        np.array([0.3, 0.1, 0.0, 0.0]),
+        np.array([[-0.5 - 0.4 * i, 0.3 * (i % 3), 0.0] for i in range(N_PER_TEAM)]),
+        np.array([[0.5 + 0.4 * i, -0.3 * (i % 3), 3.1] for i in range(N_PER_TEAM)]),
+    )
+    rng = np.random.default_rng(seed)
+    states = []
+    for _ in range(ticks):
+        cmds = np.zeros((2 * N_PER_TEAM, 8))
+        cmds[:, 1:4] = rng.uniform(-2.0, 2.0, (2 * N_PER_TEAM, 3))
+        cmds[:, 5] = rng.uniform(0.0, 5.0, 2 * N_PER_TEAM) * (rng.random(2 * N_PER_TEAM) < 0.1)
+        cmds[:, 7] = rng.random(2 * N_PER_TEAM) < 0.5
+        states.append(sim.step(cmds))
+    return np.array(states)
+
+
+def test_reused_sim_plays_exactly_as_a_fresh_one(monkeypatch):
+    """With reuse on, closing a sim parks its subprocess and the next `acquire` hands it back with a
+    new native world: a play after a different, messy play (ball kicked away, robots fast and
+    turned, dribblers spinning) must be bit-identical to the same play in a fresh subprocess."""
+    from utama_core.rsoccer_simulator.src.Simulators.robosim import (
+        robosim_wrapper as rw,
+    )
+
+    monkeypatch.setattr(rw, "_reuse_sims", True)
+    monkeypatch.setattr(rw, "_idle_sims", {})
+    key = ("SSL", N_PER_TEAM, N_PER_TEAM, 2, 16)
+
+    fresh = RSimSubprocessWrapper(*key)
+    try:
+        expected = _play(fresh, seed=7)
+    finally:
+        fresh._terminate()
+
+    first = RSimSubprocessWrapper.acquire(*key)
+    pid = first.proc.pid
+    try:
+        _play(first, seed=1)
+        first.close()  # parked, not terminated
+        assert first.proc.poll() is None
+        second = RSimSubprocessWrapper.acquire(*key)
+        assert second.proc.pid == pid, "the parked subprocess was not reused"
+        assert np.array_equal(_play(second, seed=7), expected)
+        second.close()
+    finally:
+        rw._close_idle_sims()
+    assert first.proc.poll() is not None
+
+
+def test_sim_whose_request_failed_is_not_parked_for_reuse(monkeypatch):
+    """A request that failed part-way may have left the pipe out of step, so that sim is terminated."""
+    from utama_core.rsoccer_simulator.src.Simulators.robosim import (
+        robosim_wrapper as rw,
+    )
+
+    monkeypatch.setattr(rw, "_reuse_sims", True)
+    monkeypatch.setattr(rw, "_idle_sims", {})
+    sim = RSimSubprocessWrapper.acquire("SSL", N_PER_TEAM, N_PER_TEAM, 2, 16)
+    try:
+        with pytest.raises(RuntimeError):
+            sim._request({"no_such_command": True})
+        sim.close()
+        assert sim.proc.poll() is not None
+        assert not rw._idle_sims.get(("SSL", N_PER_TEAM, N_PER_TEAM, 2, 16))
+    finally:
+        rw._close_idle_sims()
+        sim._terminate()
