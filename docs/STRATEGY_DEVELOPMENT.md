@@ -166,8 +166,26 @@ table says where. Treat it as a screen, then confirm a real improvement with mat
 
 To screen many candidates, add `--stop-at-t 4` to the candidate run: it scores a shuffled sample 100
 starts at a time and stops once |t| reaches 4 (2 would give false alarms, since t is looked at
-repeatedly). Passes aimed 10° off stop after 100 of 846 starts, about 1.5 min. A candidate no
-different from the baseline never stops early and costs a full pass.
+repeatedly). Passes aimed 10° off stop after 100 of 846 starts, about 1.5 min. It also stops as
+futile once the mean delta is confidently under 0.15, that is once |mean| + 2.5 x stderr < 0.15
+(`FUTILE_BELOW`, `FUTILE_Z`). The printed summary and the JSON's `stopped` say which
+("detected" or "futile"; null when every start was scored). 0.15 is about the smallest mean delta a
+full bank_v5 pass detects at |t| >= 4 (per-start deltas have spread 1.02, and 4 x 1.02 / sqrt(846)
+= 0.14), and 2.5 is a one-sided 5% bound split over the 8 checks. Calibration on the recorded
+10°-off run (mean -0.27 over 845 starts), with 2000 simulated passes each:
+
+| Simulated candidate | Stopped futile | Detected | Mean starts scored |
+|---|---:|---:|---:|
+| 10° off, resampled | 0% | 100% | ~295 |
+| half that effect (-0.13) | 4.5%, none a full pass would have detected | 39% | ~730 |
+| null, deltas as spread as 10° off (38% of starts changed) | 89% | 0% | ~565 |
+| null, 20% of starts changed | ~100% | 0% | ~320 |
+| null, 10% of starts changed | 100% | 0% | ~185 |
+| identical code (all deltas 0) | 100% | 0% | 100 |
+
+On the recorded run in the bench's own order the futility bound never falls below 0.36. So a
+candidate no different from the baseline now costs a fifth to two thirds of a pass, less the
+fewer starts it changes. "Futile" means no difference of 0.15 or more, not no difference.
 
 How far to trust the bench: every strategy scored on 150 bank_v5 starts against counter_press
 ranks them with Spearman +0.66 against round-robin points, where two round-robins agree at +0.91

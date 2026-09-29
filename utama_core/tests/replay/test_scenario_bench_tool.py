@@ -1,6 +1,7 @@
 import dataclasses
 import importlib.util
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -94,7 +95,7 @@ def test_a_scenario_that_errored_on_either_side_is_left_out_not_scored_as_neutra
         return {"outcomes": [0] * repeats, "fouls": 0, "stalls": 0, "errors": ["setup failed"] if failed else []}
 
     monkeypatch.setattr(scenario_bench, "_runs", fake_runs)
-    rows = scenario_bench._score(
+    rows, _ = scenario_bench._score(
         [ok, broken], candidate="cand", opponent="opp", horizon_s=1.0, repeats=1, baseline="base"
     )
 
@@ -135,11 +136,12 @@ def test_stop_at_t_ends_once_the_difference_is_clear(monkeypatch):
     monkeypatch.setattr(scenario_bench, "_runs", _fake_runs_candidate_worse)
     kwargs = dict(candidate="cand", opponent="opp", horizon_s=1.0, repeats=1, baseline="base")
 
-    full = scenario_bench._score(_many(60), **kwargs)
-    stopped = scenario_bench._score(_many(60), **kwargs, stop_at_t=4.0, check_every=10)
+    full, full_reason = scenario_bench._score(_many(60), **kwargs)
+    stopped, reason = scenario_bench._score(_many(60), **kwargs, stop_at_t=4.0, check_every=10)
 
-    assert len(full) == 60
+    assert len(full) == 60 and full_reason is None
     assert len(stopped) < 60 and len(stopped) % 10 == 0  # stops at a check, before the end
+    assert reason == "detected"
     assert abs(scenario_bench._t([r["delta"] for r in stopped])) >= 4.0
 
 
@@ -148,9 +150,53 @@ def test_stop_at_t_scores_a_shuffled_sample_not_the_bank_s_first_starts(monkeypa
     monkeypatch.setattr(scenario_bench, "_runs", _fake_runs_candidate_worse)
     kwargs = dict(candidate="cand", opponent="opp", horizon_s=1.0, repeats=1, baseline="base")
 
-    first = scenario_bench._score(_many(60), **kwargs, stop_at_t=4.0, check_every=10)
-    again = scenario_bench._score(_many(60), **kwargs, stop_at_t=4.0, check_every=10)
+    first, _ = scenario_bench._score(_many(60), **kwargs, stop_at_t=4.0, check_every=10)
+    again, _ = scenario_bench._score(_many(60), **kwargs, stop_at_t=4.0, check_every=10)
 
     ids = [r["scenario_id"] for r in first]
     assert ids == [r["scenario_id"] for r in again]  # reproducible
     assert ids != [f"s{i:03d}" for i in range(len(ids))]
+
+
+def test_stop_at_t_stops_a_candidate_no_different_from_the_baseline_as_futile(monkeypatch):
+    # the same outcomes on both sides never reach |t| >= 4; without futility this costs
+    # the whole bank
+    monkeypatch.setattr(
+        scenario_bench,
+        "_runs",
+        lambda bench_scenario, config, opponent, horizon_s, repeats: {
+            "outcomes": [0] * repeats,
+            "fouls": 0,
+            "stalls": 0,
+            "errors": [],
+        },
+    )
+    kwargs = dict(candidate="cand", opponent="opp", horizon_s=1.0, repeats=1, baseline="base")
+
+    rows, reason = scenario_bench._score(_many(60), **kwargs, stop_at_t=4.0, check_every=10)
+
+    assert (len(rows), reason) == (10, "futile")
+
+
+def _spread(a: float, n: int = 200) -> list[float]:
+    # mean 0, deltas +a and -a: the only thing deciding futility is the stderr
+    return [a, -a] * (n // 2)
+
+
+def test_futile_needs_the_upper_bound_of_the_difference_under_futile_below():
+    # |mean| + FUTILE_Z * stderr == FUTILE_BELOW exactly at a = a_edge
+    n = 200
+    stderr_per_a = math.sqrt(n / (n - 1)) / math.sqrt(n)
+    a_edge = scenario_bench.FUTILE_BELOW / (scenario_bench.FUTILE_Z * stderr_per_a)
+
+    assert scenario_bench._stop_reason(_spread(a_edge * 0.99, n), stop_at_t=4.0) == "futile"
+    assert scenario_bench._stop_reason(_spread(a_edge * 1.01, n), stop_at_t=4.0) is None
+    # a real mean difference counts against futility, not just the noise
+    shifted = [d + 0.05 for d in _spread(a_edge * 0.99, n)]
+    assert scenario_bench._stop_reason(shifted, stop_at_t=4.0) is None
+
+
+def test_a_clear_difference_is_detected_not_futile():
+    deltas = [-1.0] * 30 + [0.0] * 70  # t far past 4
+    assert scenario_bench._stop_reason(deltas, stop_at_t=4.0) == "detected"
+    assert scenario_bench._stop_reason([0.0], stop_at_t=4.0) is None  # one delta decides nothing

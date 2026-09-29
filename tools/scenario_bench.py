@@ -241,13 +241,14 @@ def _score(
     workers: int = 1,
     stop_at_t: Optional[float] = None,
     check_every: int = 100,
-) -> list[dict]:
+) -> tuple[list[dict], Optional[str]]:
     """Candidate outcomes per scenario, paired with the baseline's on the same jittered
     starts: a `baseline` config run here, or `against` outcomes from an earlier run.
 
     With `stop_at_t`, scenarios are scored in a shuffled order (a bank is ordered by match
     and family, so its first starts are not a fair sample), `check_every` at a time, and
-    scoring stops once |t| of the deltas so far reaches `stop_at_t`."""
+    scoring stops at a check where `_stop_reason` gives one; that reason is returned with
+    the rows (None when every scenario was scored)."""
     rows = []
     total = len(scenarios)
     play = functools.partial(
@@ -261,11 +262,35 @@ def _score(
     for batch in batches:
         _score_batch(rows, batch, _parallel_map(play, batch, workers), against, total)
         if stop_at_t is not None and len(rows) < total:
-            t = _t([r["delta"] for r in rows if r["delta"] is not None])
-            if abs(t) >= stop_at_t:
-                print(f"Stopped after {len(rows)} of {total} scenarios: |t| = {abs(t):.2f} >= {stop_at_t}", flush=True)
-                break
-    return rows
+            deltas = [r["delta"] for r in rows if r["delta"] is not None]
+            stopped = _stop_reason(deltas, stop_at_t)
+            if stopped:
+                print(f"Stopped after {len(rows)} of {total} scenarios ({stopped}): {_overall(rows)}", flush=True)
+                return rows, stopped
+    return rows, None
+
+
+# Futility: stop once the mean delta is confidently below FUTILE_BELOW, i.e. its upper
+# bound |mean| + FUTILE_Z * stderr is. 0.15 is about the smallest mean delta a full
+# bank_v5 pass detects at |t| >= 4 (4 * 1.02 / sqrt(846) = 0.14, 1.02 the spread of
+# per-start deltas), so a candidate stopped as futile would not have been detected by
+# the full pass either. 2.5 is a one-sided 5% bound split over the 8 checks of a bank_v5
+# pass (0.05 / 8). Calibration: docs/STRATEGY_DEVELOPMENT.md, "--stop-at-t".
+FUTILE_BELOW = 0.15
+FUTILE_Z = 2.5
+
+
+def _stop_reason(deltas: list[float], stop_at_t: float) -> Optional[str]:
+    """Why to stop scoring: "detected" once |t| of `deltas` reaches `stop_at_t`, "futile"
+    once the difference is confidently smaller than FUTILE_BELOW, else None."""
+    if len(deltas) < 2:
+        return None
+    if abs(_t(deltas)) >= stop_at_t:
+        return "detected"
+    stderr = statistics.stdev(deltas) / math.sqrt(len(deltas))
+    if abs(statistics.fmean(deltas)) + FUTILE_Z * stderr < FUTILE_BELOW:
+        return "futile"
+    return None
 
 
 def _t(deltas: list[float]) -> float:
@@ -382,7 +407,7 @@ def _markdown_report(payload: dict) -> str:
         f"Opponent: `{payload['opponent']}`  ",
         f"Horizon: {payload['horizon_s']}s, {payload.get('repeats', 1)} jittered starts per scenario  ",
         f"Scenarios scored: {payload.get('n_scored', payload['n_scenarios'])} of {payload['n_scenarios']}"
-        + (f" (stopped once |t| >= {payload['stop_at_t']})" if payload.get("stop_at_t") else ""),
+        + (f" (stopped early: {payload['stopped']})" if payload.get("stopped") else ""),
         "",
         "Delta is mean candidate outcome minus mean baseline outcome over the same jittered starts, "
         "on the ordinal scale (GOAL_AGAINST=-3 ... NEUTRAL=0 ... GOAL_FOR=+3), same opponent. "
@@ -466,7 +491,8 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=None,
         help="score a shuffled sample 100 scenarios at a time and stop once |t| reaches this (4 is a safe choice: "
-        "t is looked at repeatedly, so 2 would give false alarms); for screening candidates, not for a baseline",
+        "t is looked at repeatedly, so 2 would give false alarms), or once the mean delta is confidently under "
+        f"{FUTILE_BELOW} (futile); for screening candidates, not for a baseline",
     )
     parser.add_argument("--opponent", help="opponent strategy config both candidate and baseline play against")
     parser.add_argument("--horizon", type=float, default=20.0, help="sim seconds ticked per scenario (default 20)")
@@ -554,7 +580,7 @@ def main() -> int:
         against, against_source = _load_against(
             args.against_results, opponent=args.opponent, horizon_s=args.horizon, repeats=args.repeats
         )
-    rows = _score(
+    rows, stopped = _score(
         scenarios,
         candidate=args.candidate,
         opponent=args.opponent,
@@ -580,6 +606,9 @@ def main() -> int:
         "n_scenarios": len(scenarios),
         "n_scored": len(rows),
         "stop_at_t": args.stop_at_t,
+        # why scoring ended early: "detected" (|t| reached stop_at_t) or "futile" (see
+        # FUTILE_BELOW); None when every scenario was scored
+        "stopped": stopped,
         "aggregates": aggregates,
         "results": rows,
         "harvest_report": harvest_report,
@@ -592,7 +621,7 @@ def main() -> int:
 
     print(f"\nWrote {json_path}\nWrote {md_path}")
     if _overall(rows):
-        print(_overall(rows))
+        print(_overall(rows) + (f" (stopped early: {stopped})" if stopped else ""))
     return 0
 
 
