@@ -9,10 +9,14 @@ less than 0.3 meters per second, both conduct a foul."
 
 A contact is a crash only when that projection exceeds 1.5 m/s; "faster"
 then compares the two robots' own speeds, and within 0.3 m/s both are at
-fault. Worked examples:
-  - A stationary, B at 2 m/s into it: projection 2 > 1.5, speeds differ by 2
-    -> B fouls.
-  - Head-on, each at 1 m/s: projection 2 > 1.5, speeds equal -> both foul.
+fault. As in TIGERs AutoReferee's `BotCollisionDetector` (the referee real
+matches use), each robot's velocity is first shortened by what it can brake in
+0.1 s (`_BRAKE_LOOKAHEAD_S` at `_BRAKE_DECELERATION`, 0.4 m/s), floored at 0.
+Worked examples:
+  - A stationary, B at 2 m/s into it: projection 1.6 > 1.5, speeds differ by
+    1.6 -> B fouls.
+  - Head-on, each at 1.2 m/s: projection 0.8 + 0.8 = 1.6 > 1.5, speeds equal
+    -> both foul. Each at 1 m/s (1.2 after braking) is no crash.
   - Two robots resting against each other: projection ~0 -> no crash.
 `RobotPairContact.projected_velocity_difference` is exactly this
 same-line projected difference by construction; the per-side
@@ -42,6 +46,11 @@ _ACTIVE_PLAY_COMMANDS = {
 
 _FAULT_SPEED_THRESHOLD = 1.5  # m/s — above this, the faster robot alone fouls
 _BOTH_FAULT_THRESHOLD = 0.3  # m/s — below this closing-speed difference, both foul
+# TIGERs' `botBrakeLookahead` (0.1 s) at our robots' MAX_ACCELERATION (4 m/s^2 in
+# every `RobotParams`). Without it, round-robin at 5be4df48 had 226 crashes where
+# TIGERs' rule over the same frames finds 8: mostly two robots each at about 1 m/s.
+_BRAKE_LOOKAHEAD_S = 0.1
+_BRAKE_DECELERATION = 4.0  # m/s^2
 
 # Per §8.4.2's preamble: "The same no stop foul cannot be triggered again
 # until the foul condition has stopped being violated or there has been 2
@@ -111,10 +120,14 @@ class CrashingRule(BaseRule):
             # A crash is > threshold along the line between the robots; only then does
             # the 0.3 m/s band decide between the faster robot and both (TIGERs
             # AutoReferee's BotCollisionDetector reads the rule the same way).
-            if abs(contact.projected_velocity_difference) <= self._fault_speed_threshold:
+            friendly_v = _braked_velocity(contact.friendly.v)
+            enemy_v = _braked_velocity(contact.enemy.v)
+            ux, uy = contact.direction_enemy_to_friendly
+            crash_speed = (enemy_v[0] - friendly_v[0]) * ux + (enemy_v[1] - friendly_v[1]) * uy
+            if abs(crash_speed) <= self._fault_speed_threshold:
                 fault = None
             else:
-                speed_diff = contact.friendly.v.mag() - contact.enemy.v.mag()
+                speed_diff = math.hypot(*friendly_v) - math.hypot(*enemy_v)
                 if abs(speed_diff) < self._both_fault_threshold:
                     fault = "both"
                 else:
@@ -160,3 +173,12 @@ class CrashingRule(BaseRule):
     def reset(self) -> None:
         self._prev_contact_pairs.clear()
         self._last_fired_ts.clear()
+
+
+def _braked_velocity(v) -> tuple[float, float]:
+    """`v` shortened by what the robot brakes in `_BRAKE_LOOKAHEAD_S`, never reversed."""
+    speed = math.hypot(v.x, v.y)
+    if speed == 0.0:
+        return (0.0, 0.0)
+    scale = max(speed - _BRAKE_DECELERATION * _BRAKE_LOOKAHEAD_S, 0.0) / speed
+    return (v.x * scale, v.y * scale)

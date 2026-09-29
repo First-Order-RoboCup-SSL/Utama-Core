@@ -218,9 +218,9 @@ class TestCrashingRule:
 
     def test_matched_speed_both_fault(self):
         rule = CrashingRule(fault_speed_threshold_mps=1.5, both_fault_threshold_mps=0.3)
-        # Head-on at matched closing speed -> both foul.
-        friendly = _robot(0, 0.0, 0.0, True, vx=1.0)
-        enemy = _robot(0, _CONTACT_X, 0.0, False, vx=-1.0)
+        # Head-on at matched closing speed -> both foul (0.8 + 0.8 m/s after braking).
+        friendly = _robot(0, 0.0, 0.0, True, vx=1.2)
+        enemy = _robot(0, _CONTACT_X, 0.0, False, vx=-1.2)
         frame = _frame(friendly, enemy)
 
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
@@ -251,12 +251,35 @@ class TestCrashingRule:
         assert rule.check(_frame(friendly, enemy), GEO, RefereeCommand.NORMAL_START) is None
 
     def test_hard_head_on_by_the_much_faster_robot_is_its_foul(self):
-        # 1.8 m/s along the line is a crash; the robots' speeds differ by 0.6 m/s,
-        # so the faster one alone is at fault.
+        # 1.8 m/s along the line after braking is a crash; the robots' speeds differ
+        # by 0.6 m/s, so the faster one alone is at fault.
         rule = CrashingRule(fault_speed_threshold_mps=1.5, both_fault_threshold_mps=0.3)
-        friendly = _robot(0, 0.0, 0.0, True, vx=1.2)
-        enemy = _robot(0, _CONTACT_X, 0.0, False, vx=-0.6)
+        friendly = _robot(0, 0.0, 0.0, True, vx=1.6)
+        enemy = _robot(0, _CONTACT_X, 0.0, False, vx=-1.0)
         violation = rule.check(_frame(friendly, enemy, my_team_is_yellow=True), GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.offending_teams == (True,)
+
+    def test_each_robot_is_credited_the_speed_it_brakes_in_a_tenth_of_a_second(self):
+        # Round-robin at 5be4df48: 226 crashes, 8 by TIGERs AutoReferee's rule over
+        # the same frames, which first shortens each robot's velocity by what it
+        # brakes in 0.1 s (0.4 m/s at our 4 m/s^2). Most were two robots each at
+        # about 1 m/s: 2 m/s raw, 1.2 m/s braked.
+        rule = CrashingRule(fault_speed_threshold_mps=1.5, both_fault_threshold_mps=0.3)
+        head_on = _frame(_robot(0, 0.0, 0.0, True, vx=1.0), _robot(0, _CONTACT_X, 0.0, False, vx=-1.0))
+        assert rule.check(head_on, GEO, RefereeCommand.NORMAL_START) is None
+        # Into a stationary robot the boundary is 1.9 m/s.
+        for speed, crash in ((1.85, False), (1.95, True)):
+            rule = CrashingRule(fault_speed_threshold_mps=1.5, both_fault_threshold_mps=0.3)
+            frame = _frame(_robot(0, 0.0, 0.0, True, vx=speed), _robot(0, _CONTACT_X, 0.0, False))
+            assert (rule.check(frame, GEO, RefereeCommand.NORMAL_START) is not None) is crash, speed
+
+    def test_a_slow_robot_is_braked_to_rest_not_reversed(self):
+        # 0.3 m/s toward the other robot brakes to 0, not to 0.1 m/s away from it:
+        # 1.95 into it stays 1.55 along the line, a crash by the faster robot.
+        rule = CrashingRule(fault_speed_threshold_mps=1.5, both_fault_threshold_mps=0.3)
+        frame = _frame(_robot(0, 0.0, 0.0, True, vx=1.95), _robot(0, _CONTACT_X, 0.0, False, vx=-0.3))
+        violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is not None
         assert violation.offending_teams == (True,)
 
