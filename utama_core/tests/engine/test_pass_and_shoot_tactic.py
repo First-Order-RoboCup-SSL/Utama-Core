@@ -13,9 +13,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from utama_core.entities.data.vector import Vector2D
-from utama_core.tactics._pass_and_score import PassAndScoreMem
+import pytest
+
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.engine.context import TickContext
+from utama_core.entities.data.vector import Vector2D, Vector3D
+from utama_core.entities.game import Field, Game, GameHistory
+from utama_core.entities.game.ball import Ball
+from utama_core.entities.game.game_frame import GameFrame
+from utama_core.entities.game.robot import Robot
+from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.tactics._pass_and_score import PassAndScoreMem, run_setup_phase
 from utama_core.tactics.pass_and_shoot import (
+    _PHASE_TIMEOUT_TICKS,
     PassAndShootMem,
     PassAndShootTactic,
     assign_passer_receiver,
@@ -101,3 +111,111 @@ def test_committed_is_true_once_past_setup_phase():
 
     mem.pass_and_score.phase = "score"
     assert tactic.is_committed(game=None, mem=mem) is True
+
+
+# ---------------------------------------------------------------------------
+# Setup-phase carry (tournament_20260929_163151: two low_block restarts held
+# 10s and ending in COMMITTED_FROZEN stalls)
+# ---------------------------------------------------------------------------
+
+_PASSER_SPOT = Vector2D(2.0, 1.9)
+_RECEIVER_SPOT = Vector2D(2.0, -1.9)
+
+
+class _RecordingMotionController(MotionController):
+    def __init__(self):
+        super().__init__(mode="rsim")
+        self.targets: dict = {}
+
+    def calculate(self, game, robot_id, target_pos, target_oren):
+        self.targets[robot_id] = target_pos
+        return Vector2D(0.0, 0.0), 0.0
+
+
+def _robot(rid: int, pos: Vector2D, friendly: bool = True, has_ball: bool = False) -> Robot:
+    return Robot(
+        id=rid,
+        is_friendly=friendly,
+        has_ball=has_ball,
+        p=pos,
+        v=Vector2D(0, 0),
+        a=Vector2D(0, 0),
+        orientation=0.0,
+    )
+
+
+def _setup_game(ball_gap: float, has_ball: bool) -> Game:
+    """Passer 1 at (-1, 0) facing +x, the ball `ball_gap` in front of its centre;
+    receiver 2 already on its spot. `has_ball` is the strict (contact) sensor."""
+    friendly = {
+        1: _robot(1, Vector2D(-1.0, 0.0), has_ball=has_ball),
+        2: _robot(2, _RECEIVER_SPOT),
+    }
+    enemy = {5: _robot(5, Vector2D(-3.0, 2.5), friendly=False)}
+    ball = Ball(Vector3D(-1.0 + ball_gap, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0))
+    frame = GameFrame(
+        ts=0.0, my_team_is_yellow=True, my_team_is_right=False, friendly_robots=friendly, enemy_robots=enemy, ball=ball
+    )
+    field = Field(
+        my_team_is_right=False, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+    )
+    return Game(past=GameHistory(max_history=20), current=frame, field=field)
+
+
+def _setup_mem(carry_origin=None) -> PassAndScoreMem:
+    mem = PassAndScoreMem(locked_assignment=(1, 2), passer_position=_PASSER_SPOT, receiver_position=_RECEIVER_SPOT)
+    mem.carry_origin = carry_origin
+    return mem
+
+
+def test_setup_carries_a_ball_on_the_dribbler_with_the_dribbler_on():
+    """The passer drove to its spot with the dribbler off and left its own ball behind."""
+    game = _setup_game(ball_gap=0.1, has_ball=True)
+    mc = _RecordingMotionController()
+    commands, _ = run_setup_phase(game, TickContext(motion_controller=mc), 1, 2, _setup_mem())
+    assert mc.targets[1] == _PASSER_SPOT
+    assert commands[1].dribble
+
+
+def test_setup_closes_the_gap_to_a_ball_only_in_the_visual_box():
+    """0.13 m ahead is inside the visual box (0.14 m) but off the dribbler: setting
+    off for the spot from there drove away from a ball it never touched."""
+    game = _setup_game(ball_gap=0.13, has_ball=False)
+    mc = _RecordingMotionController()
+    commands, complete = run_setup_phase(game, TickContext(motion_controller=mc), 1, 2, _setup_mem())
+    assert mc.targets[1] == game.ball.p.to_2d()
+    assert commands[1].dribble
+    assert not complete
+
+
+@pytest.mark.parametrize("carried, spent", [(0.75, False), (0.81, True)])
+def test_setup_carry_stops_at_the_shared_carry_limit(carried, spent):
+    """passer_position can be metres from the ball; carried there, it was an
+    excessive-dribbling foul. At CARRY_LIMIT_M (0.8 m) the passer holds and is set up."""
+    game = _setup_game(ball_gap=0.1, has_ball=True)
+    origin = Vector2D(game.ball.p.x - carried, 0.0)
+    mc = _RecordingMotionController()
+    commands, complete = run_setup_phase(game, TickContext(motion_controller=mc), 1, 2, _setup_mem(origin))
+    assert complete is spent
+    assert (1 not in mc.targets) is spent
+    assert commands[1].dribble
+
+
+def test_a_phase_timeout_keeps_the_carry_and_samples_new_positions():
+    """A held ball restarted its carry allowance on every timeout and fouled; and the
+    timeout's re-sample was seeded on the pair alone, so it re-picked the same spots."""
+    game = _setup_game(ball_gap=0.1, has_ball=True)
+    tactic = PassAndShootTactic()
+    origin = Vector2D(-0.5, 0.3)
+    first = PassAndScoreMem()
+    first.carry_origin = origin
+    mem = PassAndShootMem(pass_and_score=first, assigned_pair=(1, 2))
+    ctx = TickContext(motion_controller=_RecordingMotionController())
+    _, mem = tactic.tick(game, ctx, (1, 2), mem)
+    before = (mem.pass_and_score.passer_position, mem.pass_and_score.receiver_position)
+
+    mem.pass_and_score.phase_ticks = _PHASE_TIMEOUT_TICKS
+    _, mem = tactic.tick(game, ctx, (1, 2), mem)
+
+    assert mem.pass_and_score.carry_origin == origin
+    assert (mem.pass_and_score.passer_position, mem.pass_and_score.receiver_position) != before

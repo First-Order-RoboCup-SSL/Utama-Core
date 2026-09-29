@@ -137,8 +137,15 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
         else:
             passer_id, receiver_id = mem.assigned_pair
 
+        # A fresh attempt keeps `carry_origin`: the ball on the dribbler has
+        # carried as far as it has whatever attempt carried it, and dropping
+        # the origin let a held ball restart its 0.8m carry allowance on
+        # every phase timeout and foul (see run_setup_phase). It is at worst
+        # stale in the safe direction -- a carry that stops early.
         if mem.assigned_pair != (passer_id, receiver_id):
-            mem.pass_and_score = PassAndScoreMem()
+            mem.pass_and_score = PassAndScoreMem(
+                carry_origin=mem.pass_and_score.carry_origin, setup_attempt=mem.pass_and_score.setup_attempt
+            )
             mem.assigned_pair = (passer_id, receiver_id)
 
         if mem.pass_and_score.goal_scored:
@@ -171,7 +178,7 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
         # targets that just failed to converge.
         inner.phase_ticks += 1
         if inner.phase_ticks > _PHASE_TIMEOUT_TICKS:
-            inner = PassAndScoreMem()
+            inner = PassAndScoreMem(carry_origin=inner.carry_origin, setup_attempt=inner.setup_attempt + 1)
             mem.assigned_pair = None
 
         inner = _setup_positions(

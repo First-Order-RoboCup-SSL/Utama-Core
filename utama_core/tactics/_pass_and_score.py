@@ -26,6 +26,8 @@ from utama_core.shared.field_scaling import scale_point_from_standard_field
 from utama_core.shared.pass_and_score_geometry import (
     at_target,
     ball_line_receive_point,
+    carry_exhausted,
+    carry_origin,
     clamp_outside_enemy_defense_area,
     clamp_outside_own_defense_area,
     clamp_to_field,
@@ -104,6 +106,8 @@ class PassAndScoreMem:
     setup_ticks_without_ball: int = 0  # consecutive setup ticks the passer has read has_ball=False
     prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _score_goal below
     lane_blocked_ticks: int = 0  # consecutive ticks _pass_exec reported the lane blocked; feeds early phase timeout
+    carry_origin: Optional[Vector2D] = None  # see shared carry_origin; caps the setup carry
+    setup_attempt: int = 0  # phase timeouts so far; seeds the re-sample so a timeout picks new positions
 
 
 def _setup_positions(
@@ -131,7 +135,7 @@ def _setup_positions(
         # never converges on anything. Seeding on (passer_id, receiver_id)
         # makes repeated re-initialization re-derive the *same* candidate
         # position instead of a new random one each time.
-        rng = random.Random(hash(assignment))
+        rng = random.Random(hash(assignment) if mem.setup_attempt == 0 else hash((assignment, mem.setup_attempt)))
         passer_pos, receiver_pos = choose_setup_positions(game, base_passer, base_receiver, rng)
     else:
         passer_pos, receiver_pos = base_passer, base_receiver
@@ -142,7 +146,9 @@ def _setup_positions(
     return mem
 
 
-def _move_to(game: Game, ctx: TickContext, robot_id: int, target: Vector2D) -> tuple[RobotCommand, bool]:
+def _move_to(
+    game: Game, ctx: TickContext, robot_id: int, target: Vector2D, dribbling: bool = False
+) -> tuple[RobotCommand, bool]:
     robot = game.friendly_robots[robot_id]
     target_oren = robot.p.angle_to(game.ball.p.to_2d())
     arrived = at_target(game, robot_id, target)
@@ -152,6 +158,7 @@ def _move_to(game: Game, ctx: TickContext, robot_id: int, target: Vector2D) -> t
         robot_id=robot_id,
         target_coords=target,
         target_oren=target_oren,
+        dribbling=dribbling,
     )
     return command, arrived
 
@@ -192,13 +199,38 @@ def run_setup_phase(
     # scratch and discards all progress toward passer_position, so the
     # passer never made net progress. Only fall back to re-acquisition once
     # the ball has actually been away for several consecutive ticks.
-    if has_ball(game, passer_id, visual=True):
+    #
+    # The carry needs the dribbler on: without it the passer drove off its
+    # own ball, lost it after the grace, walked back, and repeated -- a
+    # restart held like this was never kicked (tournament_20260929_163151:
+    # low_block's free kicks ran out the referee's 10s, twice into a
+    # COMMITTED_FROZEN stall). And passer_position can be metres from the
+    # ball, so the carry stops at the shared excessive-dribbling limit: the
+    # passer brakes, holds the ball there and counts as set up. It brakes
+    # with the ball on the dribbler, so the limit counts the stopping
+    # distance (without it a 1.5m/s carry fouled at 1.0m anyway).
+    #
+    # Only a ball actually on the dribbler (the strict sensor) is carried.
+    # The visual box reaches a few cm past contact, and a passer that set
+    # off from there drove away from a ball it never touched, came back and
+    # repeated until the referee's 10s ran out (the same fixture, rerun with
+    # the dribbler on). From the visual box it closes that gap first, as
+    # `_pass_exec` does for its kick.
+    mem.carry_origin = carry_origin(game, passer_id, mem.carry_origin)
+    if carry_exhausted(game, mem.carry_origin, stops_after=True):
         mem.setup_ticks_without_ball = 0
-        passer_cmd, passer_arrived = _move_to(game, ctx, passer_id, mem.passer_position)
+        passer_cmd, passer_arrived = empty_command(dribbler_on=True), True
+    elif has_ball(game, passer_id):
+        mem.setup_ticks_without_ball = 0
+        passer_cmd, passer_arrived = _move_to(game, ctx, passer_id, mem.passer_position, dribbling=True)
+    elif has_ball(game, passer_id, visual=True):
+        mem.setup_ticks_without_ball = 0
+        passer_cmd, _ = _move_to(game, ctx, passer_id, game.ball.p.to_2d(), dribbling=True)
+        passer_arrived = False
     else:
         mem.setup_ticks_without_ball += 1
         if mem.setup_ticks_without_ball <= _SETUP_BALL_LOSS_GRACE_TICKS:
-            passer_cmd, _ = _move_to(game, ctx, passer_id, mem.passer_position)
+            passer_cmd, _ = _move_to(game, ctx, passer_id, mem.passer_position, dribbling=True)
         else:
             passer_cmd = _hold_or_acquire_ball(game, ctx, passer_id)
         passer_arrived = False
