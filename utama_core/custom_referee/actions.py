@@ -537,9 +537,14 @@ class BallPlacementOursStep:
                     self.blackboard.cmd_map[robot_id] = move(
                         game, motion_controller, robot_id, target_for_move, oren, dribbling=True
                     )
+        # Teammates keep off the ball's path to the spot too, as the other team's do: one
+        # parked on the spot blocks the placement itself, and in the sim the teleport, which
+        # waits for the spot to be free, so it timed out after 10 s and play resumed with the
+        # ball still out (7 of 441 placements, round-robin at 5be4df48).
         return _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            designated_keep_dist=BALL_KEEP_OUT_DISTANCE,
             exempt_robot_ids={placer_id},
         )
 

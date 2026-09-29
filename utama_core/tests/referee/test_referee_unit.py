@@ -469,7 +469,8 @@ class TestBallPlacementOursStep:
         captured_placer_ids = []
 
         def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
-            captured_placer_ids.append(robot_id)
+            if dribbling:  # the placer's move; teammates clearing the ball's path don't dribble
+                captured_placer_ids.append(robot_id)
             return ("move", robot_id)
 
         monkeypatch.setattr(referee_actions, "move", fake_move)
@@ -525,7 +526,8 @@ class TestBallPlacementOursStep:
         captured_placer_ids = []
 
         def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
-            captured_placer_ids.append(robot_id)
+            if dribbling:  # the placer's move; teammates clearing the ball's path don't dribble
+                captured_placer_ids.append(robot_id)
             return ("move", robot_id)
 
         monkeypatch.setattr(referee_actions, "move", fake_move)
@@ -564,6 +566,54 @@ class TestBallPlacementOursStep:
         # Tick 2: robot 3 is now far closer (clears the reassign margin).
         _run({1: _robot(1, 2.0, 0.0), 3: _robot(3, 0.5, 0.0)})
         assert captured_placer_ids[-1] == 3
+
+    def test_teammate_parked_on_the_spot_is_cleared_off_the_ball_path(self, monkeypatch):
+        """clear_danger_vs_shadow_switch (round-robin at 5be4df48, 18.55 s): during
+        BALL_PLACEMENT_BLUE a blue robot other than the placer stood 0.12 m from the
+        spot for all 10 s. The sim teleport waits for the spot to be clear, so the
+        placement timed out and play resumed with the ball still out of the field
+        (7 of 441 placements in that run). Teammates now keep off the ball's path to
+        the spot, as the other team already must."""
+        from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = {}
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured[robot_id] = target_coords
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        spot = (-2.5, -0.74)
+        referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_YELLOW)
+        referee.designated_position = spot
+        robots = {0: _robot(0, -4.3, -0.9), 4: _robot(4, spot[0] + 0.12, spot[1])}
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=False,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(-4.78, -0.99),
+            referee=referee,
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=False,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+        node = referee_actions.BallPlacementOursStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+        node.update()
+
+        assert 4 in captured, "the robot on the spot was left standing there"
+        target = captured[4]
+        assert math.hypot(target.x - spot[0], target.y - spot[1]) >= BALL_KEEP_OUT_DISTANCE - 1e-6
 
     def test_robot_with_ball_moves_to_designated_position(self, monkeypatch):
         import math
@@ -784,7 +834,9 @@ class TestBallPlacementOursStep:
         assert placer_move[1] == Vector2D(
             game.ball.p.x - referee_actions.BallPlacementOursStep._APPROACH_OFFSET, game.ball.p.y
         )
-        assert support_move[1] == Vector2D(0.8, 0.0)
+        # Off the ball's path to the spot (0,0)-(1.5,0) by the keep-out distance, not
+        # pushed along it to (0.8, 0) where the placer carries the ball through.
+        assert support_move[1] == Vector2D(0.8, 0.8)
         assert support_move[2] is False
 
 
