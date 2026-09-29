@@ -1912,3 +1912,38 @@ class TestDetourAroundCircle:
         for k in range(11):
             p = start + (w - start) * (k / 10)
             assert p.mag() >= 0.8 - 1e-9
+
+
+class TestBallPlacementTheirsStep:
+    @pytest.mark.parametrize("start_y", [0.0, 0.05, -0.2])
+    def test_robot_between_ball_and_spot_is_sent_clear_of_both(self, monkeypatch, start_y):
+        """Ball and placement spot closer together than twice the keep-out radius: a
+        robot between them is inside both circles. Pushed out of one circle and then
+        the other, its target landed back inside the first -- about where it already
+        stood, so it stayed there for the whole placement."""
+        import dataclasses
+
+        from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
+        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.global_utils.math_utils import distance_point_to_segment
+
+        captured = {}
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured[robot_id] = target_coords
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        ball, spot = (0.0, 0.0), (1.5, 0.0)
+        referee = dataclasses.replace(
+            _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_BLUE), designated_position=spot
+        )
+        game = _make_game(friendly_robots={3: _robot(3, 0.72, start_y)}, referee=referee, ball=_ball(*ball))
+        node = referee_actions.BallPlacementTheirsStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+
+        node.update()
+
+        target = captured[3]
+        assert distance_point_to_segment((target.x, target.y), ball, spot) >= BALL_KEEP_OUT_DISTANCE - 1e-9

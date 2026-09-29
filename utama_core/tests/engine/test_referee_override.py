@@ -87,6 +87,11 @@ def _set_referee_command(runner, command: RefereeCommand, designated_position=No
     object.__setattr__(runner.my.current_game_frame, "referee", referee_data)
 
 
+# Centre-to-centre distance that keeps a teleported robot off the ball
+# (ROBOT_RADIUS + BALL_RADIUS is about 0.11 m) and inside the keep-out zone.
+_CLEAR_OF_BALL = 0.2
+
+
 def test_their_ball_placement_clears_our_robots_from_keep_out_zone(split_shape_runner):
     """During the opponent's ball placement, a robot starting inside the
     keep-out zone around the ball moves outside it — a plain tactic tick has
@@ -95,7 +100,7 @@ def test_their_ball_placement_clears_our_robots_from_keep_out_zone(split_shape_r
     split_shape_runner.step_once()
 
     ball_x, ball_y = game.ball.p.x, game.ball.p.y
-    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + 0.1, ball_y, 0.0)
+    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
     split_shape_runner.step_once()  # let the teleport land in game state
 
     designated = (1.5, 0.0)
@@ -118,7 +123,9 @@ def test_their_kickoff_clears_our_robots_outside_center_circle(split_shape_runne
     game = split_shape_runner.my.game
     split_shape_runner.step_once()
 
-    split_shape_runner.sim_controller.teleport_robot(True, 1, 0.05, 0.0, 0.0)
+    # Inside the keep-out radius but clear of the ball: a robot teleported onto
+    # the ball knocks it off the spot, and where it stops then decides the test.
+    split_shape_runner.sim_controller.teleport_robot(True, 1, _CLEAR_OF_BALL, 0.0, 0.0)
     split_shape_runner.step_once()
 
     _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_KICKOFF_BLUE)
@@ -127,6 +134,7 @@ def test_their_kickoff_clears_our_robots_outside_center_circle(split_shape_runne
         split_shape_runner.step_once()
 
     ball = game.ball.p
+    assert math.hypot(ball.x, ball.y) < 0.05, "ball left the centre spot"
     for robot_id, robot in game.friendly_robots.items():
         dist_to_ball = math.hypot(robot.p.x - ball.x, robot.p.y - ball.y)
         assert dist_to_ball >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} inside centre keep-out zone"
@@ -194,7 +202,7 @@ def test_stop_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_run
     split_shape_runner.step_once()
 
     ball_x, ball_y = game.ball.p.x, game.ball.p.y
-    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + 0.1, ball_y, 0.0)
+    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
     split_shape_runner.step_once()
 
     _set_referee_command(split_shape_runner, RefereeCommand.STOP)
@@ -218,7 +226,7 @@ def test_timeout_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_
     split_shape_runner.step_once()
 
     ball_x, ball_y = game.ball.p.x, game.ball.p.y
-    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + 0.1, ball_y, 0.0)
+    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
     split_shape_runner.step_once()
 
     _set_referee_command(split_shape_runner, RefereeCommand.TIMEOUT_YELLOW)

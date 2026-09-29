@@ -25,7 +25,10 @@ from utama_core.config.referee_constants import (
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.global_utils.math_utils import detour_around_circle
+from utama_core.global_utils.math_utils import (
+    detour_around_circle,
+    distance_point_to_segment,
+)
 from utama_core.shared.tolerance import Sticky
 from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
 
@@ -102,6 +105,43 @@ def _project_outside_circle(
         return Vector2D(center.x + ux * keep_dist, center.y + uy * keep_dist)
     scale = keep_dist / dist
     return Vector2D(center.x + offset.x * scale, center.y + offset.y * scale)
+
+
+def _project_outside_segment(
+    point: Vector2D,
+    start: Vector2D,
+    end: Vector2D,
+    keep_dist: float,
+    fallback_direction: tuple[float, float],
+) -> Vector2D:
+    """Project a point out of the stadium of radius keep_dist around segment start-end.
+
+    Unlike projecting out of a circle at each end in turn, this can't push a point
+    between two overlapping circles back into the first one."""
+    seg = end - start
+    seg_len = seg.mag()
+    if seg_len == 0.0:
+        return _project_outside_circle(point, start, keep_dist, fallback_direction)
+    ux, uy = seg.x / seg_len, seg.y / seg_len
+    along = (point.x - start.x) * ux + (point.y - start.y) * uy
+    side = (point.x - start.x) * -uy + (point.y - start.y) * ux
+    if abs(side) >= keep_dist and 0.0 <= along <= seg_len:
+        return point
+    # Sideways off the segment, on the point's side (the fallback's if it is on the line).
+    sign = (
+        math.copysign(1.0, side)
+        if side != 0.0
+        else (1.0 if -uy * fallback_direction[0] + ux * fallback_direction[1] >= 0.0 else -1.0)
+    )
+    if 1e-9 < along < seg_len - 1e-9:
+        foot = Vector2D(start.x + along * ux, start.y + along * uy)
+        return Vector2D(foot.x - sign * uy * keep_dist, foot.y + sign * ux * keep_dist)
+    # Beyond an end: out of that end's circle, unless that lands back in the stadium.
+    tip = start if along <= 0.0 else end
+    projected = _project_outside_circle(point, tip, keep_dist, fallback_direction)
+    if distance_point_to_segment((projected.x, projected.y), (start.x, start.y), (end.x, end.y)) >= keep_dist - 1e-9:
+        return projected
+    return Vector2D(tip.x - sign * uy * keep_dist, tip.y + sign * ux * keep_dist)
 
 
 def _clamp_to_field(point: Vector2D, game) -> Vector2D:
@@ -232,6 +272,10 @@ def _clear_to_legal_positions(
     if designated_keep_dist is not None and ref is not None and ref.designated_position is not None:
         designated_center = Vector2D(ref.designated_position[0], ref.designated_position[1])
 
+    # The ball's path to the designated spot starts at the ball (or, with no
+    # ball seen, collapses to the spot itself).
+    placement_start = ball_center if ball_center is not None else designated_center
+
     # When a robot is exactly coincident with an obstruction center (dist == 0),
     # push it toward own half — robots should be on their side in all restart states.
     own_half_sign = 1.0 if game.my_team_is_right else -1.0
@@ -249,7 +293,11 @@ def _clear_to_legal_positions(
         # current position immediately — don't head toward a distant formation
         # target that requires traversing the exclusion zone first.
         currently_encroaching = (ball_center is not None and (ball_center - robot_pos).mag() < ball_keep_dist) or (
-            designated_center is not None and (designated_center - robot_pos).mag() < designated_keep_dist
+            designated_center is not None
+            and _project_outside_segment(
+                robot_pos, placement_start, designated_center, designated_keep_dist, (1.0, 0.0)
+            )
+            != robot_pos
         )
         intended = intended_targets.get(robot_id) if intended_targets is not None else None
 
@@ -263,7 +311,12 @@ def _clear_to_legal_positions(
         if ball_center is not None:
             target = _project_outside_circle(target, ball_center, ball_keep_dist, ball_fallback)
         if designated_center is not None:
-            target = _project_outside_circle(target, designated_center, designated_keep_dist, designated_fallback)
+            # The ball travels from where it is to the designated spot, so keep clear
+            # of that whole line (the placement-interference rule's shape), not of
+            # each end separately.
+            target = _project_outside_segment(
+                target, placement_start, designated_center, designated_keep_dist, designated_fallback
+            )
         if clear_opp_defense_area:
             target = _project_outside_opp_defense_area(game, target, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
 
