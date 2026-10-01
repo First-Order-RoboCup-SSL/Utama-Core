@@ -158,3 +158,30 @@ class TestSubgoalOutsideEnemyDefenseArea:
             tuple(np.round(p, 2)) for seg in trajectory for p in seg if min_x < p[0] < max_x and min_y < p[1] < max_y
         ]
         assert inside == []
+
+
+class TestDetourAroundAMovingRobot:
+    """A moving robot is an obstacle from where it is to where it will be shortly
+    (its ghost segment). Detouring round whichever end is nearer the target picks
+    the end ahead of it against a crossing robot, so two robots crossing paths both
+    cut in front of each other and meet at about 1 m/s each (motion_planning_benchmark
+    `crossing`: clearance -0.001 m). Against a moving robot, pass behind it."""
+
+    @staticmethod
+    def _plan(static: bool) -> np.ndarray:
+        planner = _planner()
+        fb = STANDARD_FIELD_DIMS.full_field_bounds
+        robot_pos, target = np.array([-1.0, 0.0]), np.array([1.0, 0.0])
+        crossing = (np.array([0.0, -0.4]), np.array([0.0, 0.2]))  # heading +y, about to cross our path
+        if static:
+            planner._obstacle_cache_static_keys = {(0.0, -0.4, 0.0, 0.2)}
+        trajectory, _ = planner.check_segment(
+            (robot_pos, target), obstacles=[crossing], recursion_length=0, target=target, field_bounds=fb, robot_id=1
+        )
+        return trajectory[0][1]
+
+    def test_passes_behind_a_crossing_robot(self):
+        assert self._plan(static=False)[1] < 0.0
+
+    def test_a_static_obstacle_still_takes_the_side_nearer_the_target(self):
+        assert self._plan(static=True)[1] > 0.0

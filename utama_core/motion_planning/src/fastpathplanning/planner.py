@@ -163,6 +163,9 @@ class FastPathPlanner:
         # key with no prior bias).
         self._last_detour_side: dict[tuple[int, int, tuple[float, float]], int] = {}
         self._DETOUR_MEMORY_PRECISION = 2  # decimal places — collapses float jitter, keeps distinct corners distinct
+        self._MOVING_GHOST_MIN_M = (
+            0.05  # a ghost segment shorter than this is a robot standing still; also the min side difference
+        )
 
         # Per-(robot_id, recursion_length) memory of the actual obstacle
         # segment `collides()` picked last tick — see that method's
@@ -1004,6 +1007,29 @@ class FastPathPlanner:
         if left_valid and right_valid:
             dist_left = distance(subgoal_left, target)
             dist_right = distance(subgoal_right, target)
+            # A moving robot's obstacle is its ghost segment, from where it is to
+            # where it will be in PROJECTEDFRAMES. Against a crossing robot the
+            # side nearer the target is usually the one ahead of the ghost's head,
+            # and two robots crossing paths each cut in front of the other and
+            # met at ~1 m/s each (motion_planning_benchmark `crossing`, clearance
+            # -0.001 m). Pass behind it instead: prefer the subgoal further back
+            # along its direction of travel. Static obstacles keep the nearer side.
+            ghost = obstacle_segment[1] - obstacle_segment[0]
+            ghost_len = math.hypot(ghost[0], ghost[1])
+            if (
+                ghost_len > self._MOVING_GHOST_MIN_M
+                and _segment_key(obstacle_segment) not in self._obstacle_cache_static_keys
+            ):
+                along_left = (
+                    (subgoal_left[0] - obstacle_segment[0][0]) * ghost[0]
+                    + (subgoal_left[1] - obstacle_segment[0][1]) * ghost[1]
+                ) / ghost_len
+                along_right = (
+                    (subgoal_right[0] - obstacle_segment[0][0]) * ghost[0]
+                    + (subgoal_right[1] - obstacle_segment[0][1]) * ghost[1]
+                ) / ghost_len
+                if abs(along_left - along_right) > self._MOVING_GHOST_MIN_M:
+                    dist_left, dist_right = (0.0, 1.0) if along_left < along_right else (1.0, 0.0)
             if prev_side == 1 and dist_left <= dist_right + self.DETOUR_SWITCH_MARGIN:
                 best_subgoal, chosen_side = subgoal_left, 1
             elif prev_side == 0 and dist_right <= dist_left + self.DETOUR_SWITCH_MARGIN:
