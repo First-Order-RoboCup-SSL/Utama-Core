@@ -90,7 +90,7 @@ def test_a_scenario_that_errored_on_either_side_is_left_out_not_scored_as_neutra
     # real NEUTRAL outcome would put a fake zero (or a fake difference) into the A/B
     ok, broken = list(all_hand_authored_scenarios())[:2]
 
-    def fake_runs(bench_scenario, config, opponent, horizon_s, repeats):
+    def fake_runs(bench_scenario, config, opponent, horizon_s, repeats, *_reuse):
         failed = bench_scenario.scenario_id == broken.scenario_id and config == "base"
         return {"outcomes": [0] * repeats, "fouls": 0, "stalls": 0, "errors": ["setup failed"] if failed else []}
 
@@ -126,7 +126,7 @@ def _many(n):
     return [_moved(base, f"s{i:03d}", 0.2 * i) for i in range(n)]
 
 
-def _fake_runs_candidate_worse(bench_scenario, config, opponent, horizon_s, repeats):
+def _fake_runs_candidate_worse(bench_scenario, config, opponent, horizon_s, repeats, *_reuse):
     # the candidate loses the ball on 3 starts in 4, the baseline never does
     worse = config == "cand" and int(bench_scenario.scenario_id[1:]) % 4 != 0
     return {"outcomes": [-1 if worse else 0] * repeats, "fouls": 0, "stalls": 0, "errors": []}
@@ -164,7 +164,7 @@ def test_stop_at_t_stops_a_candidate_no_different_from_the_baseline_as_futile(mo
     monkeypatch.setattr(
         scenario_bench,
         "_runs",
-        lambda bench_scenario, config, opponent, horizon_s, repeats: {
+        lambda bench_scenario, config, opponent, horizon_s, repeats, *_reuse: {
             "outcomes": [0] * repeats,
             "fouls": 0,
             "stalls": 0,

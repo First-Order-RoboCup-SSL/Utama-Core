@@ -57,6 +57,15 @@ the outcome, and threw away as many starts where the candidate did). To grow a
 bank from a new round-robin, `--merge-into` the current bank: harvested
 scenarios that duplicate it are dropped, and the new bank is the old one plus
 the rest. `--workers N` scores N scenarios at a time.
+
+`--reuse` takes a start's outcome from `replays/match_cache/` instead of playing it
+when nothing that start runs has changed since it was stored
+(`utama_core.replay.fingerprint.bench_key`: the jittered start, both configs' code, the
+shared code and environment, the horizon). A baseline config whose code is unchanged
+then costs nothing, and only the candidate plays. `--spot-check F` (default 0.05) also
+replays that fraction of the reusable starts and compares them with their records; a
+difference means the fingerprint missed a dependency, is printed loudly, evicts the
+records this run used, and makes the run exit non-zero.
 Still not built: lifecycle promotion (candidate -> validated -> active) or a
 ladder (slow half).
 
@@ -113,6 +122,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from utama_core.replay import match_cache
 from utama_core.replay.bench_scenario import (
     BenchScenario,
     drop_near_duplicates,
@@ -120,9 +130,10 @@ from utama_core.replay.bench_scenario import (
     load_bank,
     save_bank,
 )
+from utama_core.replay.fingerprint import CodeGraph, bench_key
 from utama_core.replay.hand_authored_scenarios import all_hand_authored_scenarios
 from utama_core.replay.scenario_harvester import harvest_run_dir
-from utama_core.replay.scenario_scorer import score_scenario
+from utama_core.replay.scenario_scorer import _resolve_config_name, score_scenario
 from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
     enable_sim_reuse,
 )
@@ -193,19 +204,36 @@ def _save(args: argparse.Namespace, scenarios: list[BenchScenario]) -> None:
         print(f"Saved {len(scenarios)} scenarios to {args.save_bank} (bank_id={bank_id})")
 
 
-def _runs(bench_scenario: BenchScenario, config: str, opponent: str, horizon_s: float, repeats: int) -> dict:
-    """`config` vs `opponent` from `repeats` jittered starts (seed 0 = as authored)."""
-    results = [
-        score_scenario(
-            jittered(bench_scenario, seed), candidate_config=config, opponent_config=opponent, horizon_s=horizon_s
-        )
-        for seed in range(repeats)
-    ]
+def _start_result(bench_scenario: BenchScenario, config: str, opponent: str, horizon_s: float) -> dict:
+    r = score_scenario(bench_scenario, candidate_config=config, opponent_config=opponent, horizon_s=horizon_s)
+    return {"outcome": int(r.outcome), "foul": bool(r.foul), "stalled": bool(r.stalled), "error": r.error}
+
+
+def _runs(
+    bench_scenario: BenchScenario,
+    config: str,
+    opponent: str,
+    horizon_s: float,
+    repeats: int,
+    plan: Optional[dict] = None,
+    fresh: Optional[dict] = None,
+) -> dict:
+    """`config` vs `opponent` from `repeats` jittered starts (seed 0 = as authored). With
+    `--reuse`, `plan` maps `(config, seed)` to `(key, stored record or None)`: a start with
+    a record is not played, and every start played goes into `fresh` under its key."""
+    results = []
+    for seed in range(repeats):
+        key, record = (plan or {}).get((config, seed), (None, None))
+        if record is None:
+            record = {"result": _start_result(jittered(bench_scenario, seed), config, opponent, horizon_s)}
+            if key is not None and fresh is not None:
+                fresh[key] = record
+        results.append(record["result"])
     return {
-        "outcomes": [int(r.outcome) for r in results],
-        "fouls": sum(r.foul for r in results),
-        "stalls": sum(r.stalled for r in results),
-        "errors": [r.error for r in results if r.error],
+        "outcomes": [r["outcome"] for r in results],
+        "fouls": sum(r["foul"] for r in results),
+        "stalls": sum(r["stalled"] for r in results),
+        "errors": [r["error"] for r in results if r["error"]],
     }
 
 
@@ -225,12 +253,94 @@ def _load_against(path: Path, *, opponent: str, horizon_s: float, repeats: int) 
 
 
 def _score_one(
-    bench_scenario: BenchScenario, *, candidate: str, opponent: str, horizon_s: float, repeats: int, baseline
-) -> tuple[dict, Optional[dict]]:
+    item: tuple[BenchScenario, Optional[dict]],
+    *,
+    candidate: str,
+    opponent: str,
+    horizon_s: float,
+    repeats: int,
+    baseline,
+) -> tuple[dict, Optional[dict], dict]:
+    bench_scenario, plan = item
     enable_sim_reuse()  # a worker plays many starts: keep its sim subprocess between them
-    cand = _runs(bench_scenario, candidate, opponent, horizon_s, repeats)
-    base = _runs(bench_scenario, baseline, opponent, horizon_s, repeats) if baseline else None
-    return cand, base
+    fresh: dict = {}
+    cand = _runs(bench_scenario, candidate, opponent, horizon_s, repeats, plan, fresh)
+    base = _runs(bench_scenario, baseline, opponent, horizon_s, repeats, plan, fresh) if baseline else None
+    return cand, base, fresh
+
+
+class _Reuse:
+    """`--reuse`'s bookkeeping for one bench run: every start's key, the records it may
+    reuse, the ones it replays to check, and what it played."""
+
+    def __init__(self, scenarios, configs, opponent: str, horizon_s: float, repeats: int, spot_check: float):
+        self.args = (scenarios, configs, opponent, horizon_s, repeats)
+        self.cache = match_cache.MatchCache()
+        self.keys = self._keys()
+        self.stored = {k: rec for k in self.keys.values() if (rec := self.cache.get(k)) is not None}
+        self.spot_checked = match_cache.spot_check_sample(self.stored, spot_check)
+        self.used: set[str] = set()  # reused records, for eviction after a mismatch
+        self.fresh: dict[str, dict] = {}
+
+    def _keys(self) -> dict[tuple[str, str, int], str]:
+        scenarios, configs, opponent, horizon_s, repeats = self.args
+        graph = CodeGraph()
+        return {
+            (bs.scenario_id, config, seed): bench_key(
+                graph,
+                jittered(bs, seed).to_dict(),
+                _resolve_config_name(config),
+                _resolve_config_name(opponent),
+                horizon_s=horizon_s,
+            )
+            for bs in scenarios
+            for config in configs
+            for seed in range(repeats)
+        }
+
+    def plan(self, bench_scenario: BenchScenario) -> dict:
+        out = {}
+        for (sid, config, seed), key in self.keys.items():
+            if sid != bench_scenario.scenario_id:
+                continue
+            record = None if key in self.spot_checked else self.stored.get(key)
+            out[(config, seed)] = (key, record)
+            if record is not None:
+                self.used.add(key)
+        return out
+
+    def finish(self) -> dict:
+        """Compare the spot-checks, store what was played, and report counts."""
+        mismatches = [
+            k for k in self.spot_checked if k in self.fresh and match_cache.differences(self.stored[k], self.fresh[k])
+        ]
+        if mismatches:
+            for k in mismatches + sorted(self.used):
+                self.cache.evict(k)
+            print(
+                f"\n*** --reuse SPOT-CHECK MISMATCH: {len(mismatches)} replayed start(s) differ from their stored "
+                f"records. The fingerprint missed something they depend on; those records and the {len(self.used)} "
+                "this run reused are evicted, and its result can't be trusted: rerun without --reuse. ***",
+                flush=True,
+            )
+        elif self._keys() != self.keys:
+            print("\n--reuse: the code changed while this run played; storing nothing", flush=True)
+        else:
+            for k, record in self.fresh.items():
+                if not record["result"]["error"] and k not in self.spot_checked:
+                    self.cache.put(k, record)
+        checked = len([k for k in self.spot_checked if k in self.fresh])
+        print(
+            f"--reuse: {len(self.used)} start(s) reused, {len(self.fresh)} played, spot-check "
+            f"{checked - len(mismatches)}/{checked} identical",
+            flush=True,
+        )
+        return {
+            "reused": len(self.used),
+            "played": len(self.fresh),
+            "spot_checked": checked,
+            "mismatches": len(mismatches),
+        }
 
 
 def _score(
@@ -245,6 +355,7 @@ def _score(
     workers: int = 1,
     stop_at_t: Optional[float] = None,
     check_every: int = 100,
+    reuse: Optional[_Reuse] = None,
 ) -> tuple[list[dict], Optional[str]]:
     """Candidate outcomes per scenario, paired with the baseline's on the same jittered
     starts: a `baseline` config run here, or `against` outcomes from an earlier run.
@@ -264,7 +375,13 @@ def _score(
     else:
         batches = [scenarios]
     for batch in batches:
-        _score_batch(rows, batch, _parallel_map(play, batch, workers), against, total)
+        items = [(bs, reuse.plan(bs) if reuse else None) for bs in batch]
+        results = []
+        for cand, base, fresh in _parallel_map(play, items, workers):
+            results.append((cand, base))
+            if reuse:
+                reuse.fresh.update(fresh)
+        _score_batch(rows, batch, results, against, total)
         if stop_at_t is not None and len(rows) < total:
             deltas = [r["delta"] for r in rows if r["delta"] is not None]
             stopped = _stop_reason(deltas, stop_at_t)
@@ -537,6 +654,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--workers", type=int, default=1, help="processes to score scenarios on (default 1)")
     parser.add_argument(
+        "--reuse",
+        action="store_true",
+        help="take each start's outcome from replays/match_cache/ when the code it runs is unchanged (see above)",
+    )
+    parser.add_argument(
+        "--spot-check",
+        type=float,
+        default=0.05,
+        help="with --reuse, the fraction of reusable starts to replay and compare (default 0.05, at least one)",
+    )
+    parser.add_argument(
         "--bank-id",
         default=None,
         help="bank_id to record when using --save-bank (default: the output filename's stem)",
@@ -584,6 +712,10 @@ def main() -> int:
         against, against_source = _load_against(
             args.against_results, opponent=args.opponent, horizon_s=args.horizon, repeats=args.repeats
         )
+    configs = [args.candidate] + ([args.baseline] if args.baseline else [])
+    reuse = (
+        _Reuse(scenarios, configs, args.opponent, args.horizon, args.repeats, args.spot_check) if args.reuse else None
+    )
     rows, stopped = _score(
         scenarios,
         candidate=args.candidate,
@@ -594,7 +726,9 @@ def main() -> int:
         against=against,
         workers=args.workers,
         stop_at_t=args.stop_at_t,
+        reuse=reuse,
     )
+    reuse_report = reuse.finish() if reuse else None
     aggregates = _aggregate_by_family(rows)
 
     payload = {
@@ -613,6 +747,7 @@ def main() -> int:
         # why scoring ended early: "detected" (|t| reached stop_at_t) or "futile" (see
         # FUTILE_BELOW); None when every scenario was scored
         "stopped": stopped,
+        "reuse": reuse_report,
         "aggregates": aggregates,
         "results": rows,
         "harvest_report": harvest_report,
@@ -626,7 +761,7 @@ def main() -> int:
     print(f"\nWrote {json_path}\nWrote {md_path}")
     if _overall(rows):
         print(_overall(rows) + (f" (stopped early: {stopped})" if stopped else ""))
-    return 0
+    return 1 if reuse_report and reuse_report["mismatches"] else 0
 
 
 if __name__ == "__main__":

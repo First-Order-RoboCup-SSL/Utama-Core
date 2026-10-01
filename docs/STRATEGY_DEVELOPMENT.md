@@ -95,8 +95,19 @@ through the kernel invariants), give its partitioner pure-function tests in
    idea, so the A/B tests that idea: `tools/scenario_bench.py --load-bank <newest bank>
    --candidate <name> --baseline <nearest> --opponent <opp> --stop-at-t 4` (see below).
    Use an opponent outside the pair.
-4. **Matches** to confirm: a strict round-robin with it in (`smoke_tournament.py --strict`),
-   0 stalls. Record the result in `docs/strategies.md`.
+4. **Matches** to confirm: a strict round-robin with it in (`smoke_tournament.py --strict
+   --reuse`), 0 stalls. Record the result in `docs/strategies.md`.
+
+**`--reuse`** (round-robin and bench) takes a match's or start's result from
+`replays/match_cache/` when nothing it runs has changed since it was stored, so after a change
+to one strategy only its matches play: 21 of a 22-config round-robin's 231. What counts as
+"runs" is `utama_core/replay/fingerprint.py`'s: the factory and the `kernel_strategy.py`
+helpers it uses, every module those import, and the shared code and environment (planner,
+referee, runner, simulator build, packages, CPU). Changing shared code reruns everything,
+correctly. Each run replays 5% of what it would reuse (`--spot-check`) and compares; a
+difference evicts the records, says the fingerprint missed a dependency, and fails the run.
+Use `--reuse` on every run: the bench's baseline side then costs
+nothing while its code is unchanged.
 
 **What counts as better.** Results: goals and W-D-L in matches, and the bench's outcome delta.
 Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
