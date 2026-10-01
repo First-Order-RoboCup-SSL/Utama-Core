@@ -35,6 +35,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.shared.pass_and_score_geometry import carry_exhausted, carry_origin
 from utama_core.shared.tolerance import Sticky
 from utama_core.tactics._pass_and_score import (
     PassAndScoreMem,
@@ -201,8 +202,17 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
             # `run_setup_phase` (re-entered once "setup" is reached again)
             # already reject a blocked lane via `score_pass_setup`, so this
             # re-sampling is where a genuinely open pairing gets picked.
+            #
+            # Re-sampling only helps a passer that can still carry the ball to a
+            # new spot. One holding it at the carry limit passes into the blocked
+            # lane instead: re-sampled, it held on while every new lane was blocked
+            # too, and the ball sat still until the frozen-ball watchdog fired
+            # (low_block_vs_overload_press, tournament_20260929_171005, 16.3 s).
             inner.lane_blocked_ticks = inner.lane_blocked_ticks + 1 if lane_blocked else 0
-            if inner.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS:
+            inner.carry_origin = carry_origin(game, passer_id, inner.carry_origin)
+            if inner.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS and not carry_exhausted(
+                game, inner.carry_origin
+            ):
                 inner.phase_ticks = max(inner.phase_ticks, _PHASE_TIMEOUT_TICKS + 1)
             if pass_complete:
                 inner.phase = "score"

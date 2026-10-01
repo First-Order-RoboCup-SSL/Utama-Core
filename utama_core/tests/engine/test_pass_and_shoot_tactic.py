@@ -25,6 +25,7 @@ from utama_core.entities.game.robot import Robot
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.tactics._pass_and_score import PassAndScoreMem, run_setup_phase
 from utama_core.tactics.pass_and_shoot import (
+    _LANE_BLOCKED_ABANDON_TICKS,
     _PHASE_TIMEOUT_TICKS,
     PassAndShootMem,
     PassAndShootTactic,
@@ -144,14 +145,14 @@ def _robot(rid: int, pos: Vector2D, friendly: bool = True, has_ball: bool = Fals
     )
 
 
-def _setup_game(ball_gap: float, has_ball: bool) -> Game:
+def _setup_game(ball_gap: float, has_ball: bool, enemy_pos: Vector2D = Vector2D(-3.0, 2.5)) -> Game:
     """Passer 1 at (-1, 0) facing +x, the ball `ball_gap` in front of its centre;
     receiver 2 already on its spot. `has_ball` is the strict (contact) sensor."""
     friendly = {
         1: _robot(1, Vector2D(-1.0, 0.0), has_ball=has_ball),
         2: _robot(2, _RECEIVER_SPOT),
     }
-    enemy = {5: _robot(5, Vector2D(-3.0, 2.5), friendly=False)}
+    enemy = {5: _robot(5, enemy_pos, friendly=False)}
     ball = Ball(Vector3D(-1.0 + ball_gap, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0))
     frame = GameFrame(
         ts=0.0, my_team_is_yellow=True, my_team_is_right=False, friendly_robots=friendly, enemy_robots=enemy, ball=ball
@@ -219,3 +220,24 @@ def test_a_phase_timeout_keeps_the_carry_and_samples_new_positions():
 
     assert mem.pass_and_score.carry_origin == origin
     assert (mem.pass_and_score.passer_position, mem.pass_and_score.receiver_position) != before
+
+
+@pytest.mark.parametrize("carried, abandons", [(0.5, True), (0.81, False)])
+def test_a_passer_whose_carry_is_spent_passes_into_a_blocked_lane(carried, abandons):
+    """A blocked lane abandons the pass to re-sample setup spots, which only helps a
+    passer that can still carry the ball to one. low_block_vs_overload_press
+    (tournament_20260929_171005, 16.3 s): the passer held the ball at the carry
+    limit, an enemy circling it kept every lane blocked, and abandon -> re-sample
+    -> blocked again left the ball still for 10 s, a COMMITTED_FROZEN stall."""
+    game = _setup_game(ball_gap=0.1, has_ball=True, enemy_pos=Vector2D(0.5, 0.0))
+    origin = Vector2D(game.ball.p.x - carried, 0.0)
+    inner = _setup_mem(origin)
+    inner.phase = "pass_then_score"
+    inner.lane_blocked_ticks = _LANE_BLOCKED_ABANDON_TICKS - 1
+    mem = PassAndShootMem(pass_and_score=inner, assigned_pair=(1, 2))
+    ctx = TickContext(motion_controller=_RecordingMotionController())
+
+    _, mem = PassAndShootTactic().tick(game, ctx, (1, 2), mem)
+
+    assert mem.pass_and_score.lane_blocked_ticks == _LANE_BLOCKED_ABANDON_TICKS
+    assert (mem.pass_and_score.phase_ticks > _PHASE_TIMEOUT_TICKS) is abandons
