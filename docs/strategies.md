@@ -43,7 +43,7 @@ only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
 | `tiki_taka_plus` | competitive | `tiki_taka`, handing off to `DecoyOverloadTactic`'s duet in the final third. |
 | `counter_flow` | competitive | Give-and-go attack, press on the ball, `BlockShapeTactic` screen; 3/2 with possession hysteresis. |
 | `zone_fluid` | competitive | Man-shape defense; give-and-go through the middle, decoy/overload in the final third. |
-| `counter_press` | competitive | Full press on loss, low block otherwise, 4-up switch-of-play on winning the ball. Scores in no match (see bugs). |
+| `counter_press` | competitive | Full press on loss, low block otherwise, 4-up switch-of-play on winning the ball. |
 | `score_aware_zone_flow` | competitive | `zone_fluid` plus a late-half scoreline shift (protect a lead / chase). Untested at full length. |
 | `score_aware_counter_flow` | competitive | `counter_flow` plus the same late-half scoreline shift. Winless at full length (0-12-4). |
 | `clear_danger` | unclassified | `counter_flow` postures plus an own-third `ClearBallTactic` danger-clearance valve. |
@@ -56,28 +56,39 @@ only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
 
 ## Latest results
 
-All results below predate later planner/tactic fixes and the current stall re-measurement
-(`docs/roadmap.md` item 1). Treat them as rough ordering, not current truth.
+**Smoke round-robin, full catalog** (2026-10-01, `e83a7466`, 22 configs, 231 matches, 65s,
+`--strict`, 0 stalls, `replays/tournament_20261001_094103/summary.json`). Points are 3 a win,
+1 a draw. 65s matches are mostly draws (152 of 231 here), so the middle of the table is close
+to noise; two round-robins of near-identical code rank strategies with Spearman +0.91
+(`docs/STRATEGY_DEVELOPMENT.md`, A/B on the scenario bank).
 
-**Smoke round-robin, full catalog** (2026-08-21, 14 configs, 91 matches, 60s,
-`replays/tournament_20260821_171924/summary.json`):
+| Strategy | W-D-L | GF-GA | Points per match |
+|---|---|---|---|
+| `split_shape` | 8-13-0 | 11-1 | 1.76 |
+| `clear_danger` | 6-15-0 | 7-0 | 1.57 |
+| `overload_press` | 7-11-3 | 9-3 | 1.52 |
+| `counter_flow` | 5-16-0 | 6-0 | 1.48 |
+| `score_aware_counter_flow` | 5-15-1 | 5-1 | 1.43 |
+| `press_and_pass` | 5-14-2 | 5-2 | 1.38 |
+| `high_press` | 3-18-0 | 3-0 | 1.29 |
+| `low_block` | 4-15-2 | 4-2 | 1.29 |
+| `give_and_go_solo` | 5-12-4 | 6-7 | 1.29 |
+| `clear_press_plus` | 3-17-1 | 3-1 | 1.24 |
+| `counter_press` | 4-14-3 | 5-4 | 1.24 |
+| `press_trigger_flow` | 4-14-3 | 5-4 | 1.24 |
+| `high_line_zone` | 4-13-4 | 4-4 | 1.19 |
+| `tiki_taka_plus` | 3-15-3 | 3-3 | 1.14 |
+| `tiki_taka` | 2-17-2 | 2-2 | 1.10 |
+| `decoy_and_overload` | 3-13-5 | 3-6 | 1.05 |
+| `three_slot` | 1-17-3 | 1-3 | 0.95 |
+| `switch_of_play` | 3-9-9 | 3-9 | 0.86 |
+| `overload_flow` | 1-13-7 | 2-9 | 0.76 |
+| `zone_fluid` | 1-12-8 | 2-10 | 0.71 |
+| `shadow_switch` | 2-8-11 | 4-13 | 0.67 |
+| `score_aware_zone_flow` | 0-13-8 | 0-9 | 0.62 |
 
-| Strategy | W-D-L | GF-GA |
-|---|---|---|
-| `press_and_pass` | 6-5-2 | 7-2 |
-| `counter_flow` | 5-8-0 | 8-3 |
-| `split_shape` | 5-8-0 | 6-0 |
-| `high_press` | 5-6-2 | 10-3 |
-| `overload_press` | 4-9-0 | 7-1 |
-| `give_and_go_solo` | 3-8-2 | 5-3 |
-| `three_slot` | 2-8-3 | 3-4 |
-| `decoy_and_overload` | 2-7-4 | 2-5 |
-| `high_line_zone` | 2-7-4 | 2-5 |
-| `zone_fluid` | 2-6-5 | 3-8 |
-| `switch_of_play` | 1-10-2 | 1-2 |
-| `tiki_taka` | 1-8-4 | 5-9 |
-| `low_block` | 0-10-3 | 0-6 |
-| `counter_press` | 0-6-7 | 0-8 |
+The full-match tables below predate the planner, referee and tactic fixes since 2026-09-02.
+Treat them as rough ordering, not current truth.
 
 **Full match, competitive tier** (2026-09-01, 5 configs x 4 side/kickoff cells, 40 matches,
 600s, `replays/tournament_20260901_193644/summary.json`):
@@ -113,16 +124,9 @@ bugs" refer to them — read them with `git log -p -- docs/strategies.md`. Still
   (`skills/src/go_to_ball.py:130`): `(approach_oren + pi) % (2pi) - pi` is an identity on an
   already-normalized angle, so every approach faces the ball head-on. A correct flip was
   reverted because it broke `test_out_of_bounds_restart_spot_is_capturable_by_go_to_ball`.
-- **`counter_press` scores in no match.** Five `SwitchOfPlayTactic` relay/finish bugs were
-  fixed (2026-08-21); the remainder is a design tension — the runner needs ~3.8 rad of turning
-  but the shooting window is shorter than the turn. Not a small patch.
 - **`default` commands only 2 of 5 robots** (robots 3-5 idle) and draws 0-0 with
   `low_block`; see `docs/investigation_default_vs_lowblock_stalemate.md`. Both are baselines, so
   not worth fixing for its own sake.
-- **`low_block`'s `PassAndShootTactic` stays in "setup" all match**: `run_setup_phase` only
-  moves the passer once it holds the ball, and 2 attackers can't win sustained possession
-  against a heavier opponent. Needs a design pass (setup without possession, or help winning
-  the ball).
 
 ## Updating this file
 

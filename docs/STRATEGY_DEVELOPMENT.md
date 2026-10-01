@@ -64,6 +64,47 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 - **A tactic can trip referee rules unrelated to its logic** (e.g. a relay walking an attacker
   into its own defense area). On a foul stall, check which robot and which rule first.
 
+## Writing and evaluating a strategy
+
+A strategy is a combination of existing tactics plus a partitioner that decides how many robots
+each gets. Most new strategies need no new tactic; if one does, propose the tactic first
+(see `AGENTS.md`, minimalism).
+
+**Writing one.** Add `build_<name>_kernel_strategy(outfield_robot_ids)` to
+`strategy/kernel_strategy.py`, returning a `Strategy(tactics={...}, partitioner=...)`. Every
+`build_*_kernel_strategy` is discovered by name (`tournament_lib`), so it joins round-robins and
+the bench as `<name>` with no registry to edit. Reuse the shared partitioner pieces rather than
+re-deriving them:
+- `_friendly_closer_to_ball(game)` — the possession edge. True/False is a clear edge; None is a
+  near-tie or unreadable state, where a sticky picker keeps its previous split.
+- `_carrier_first(game, free)` / `_clearer_first(game, ordered)` — robot order for a slot that
+  must take the ball: the carrier (or the kicker at a still ball) first, else the nearest.
+- `_fixed_ratio_picker`, `_possession_split_picker` — the two common split shapes.
+
+Then add it to `_CONFIGS` in `tests/engine/test_all_strategy_configs.py` (builds it and runs it
+through the kernel invariants), give its partitioner pure-function tests in
+`tests/strategy/test_<name>.py` (a `Game` built by hand, no rsim), and add a catalog row to
+`docs/strategies.md` with status `experimental`.
+
+**Evaluating one,** cheapest first; stop as soon as a step fails:
+1. **Tests:** its own, `test_all_strategy_configs.py`, then the full suite `--headless`.
+2. **One saved match** against a few opponents: `smoke_tournament.py --pair <name> <opp>`.
+   Saved, so stalls are recorded (`--no-save` cannot see them). A stall is a bug to fix
+   before anything else.
+3. **Bench A/B** against its nearest existing strategy, the one it differs from in a single
+   idea, so the A/B tests that idea: `tools/scenario_bench.py --load-bank <newest bank>
+   --candidate <name> --baseline <nearest> --opponent <opp> --stop-at-t 4` (see below).
+   Use an opponent outside the pair.
+4. **Matches** to confirm: a strict round-robin with it in (`smoke_tournament.py --strict`),
+   0 stalls. Record the result in `docs/strategies.md`.
+
+**What counts as better.** Results: goals and W-D-L in matches, and the bench's outcome delta.
+Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
+it is a target. Don't tune a threshold until the bench moves: a change needs a reason in game
+terms, and a bench gain that matches don't confirm means distrust the bench, not that the
+strategy got better. The bench agrees with round-robin standings at Spearman +0.66 (two
+round-robins agree at +0.91), so it screens changes; it doesn't rank strategies.
+
 ## Observability — use these before adding a debug print
 
 - **`MatchLog`** (`engine/match_log.py`) — one JSONL per match. `Strategy` records an
@@ -192,6 +233,11 @@ full bank_v5 pass detects at |t| >= 4 (per-start deltas have spread 1.02, and 4 
 On the recorded run in the bench's own order the futility bound never falls below 0.36. So a
 candidate no different from the baseline now costs a fifth to two thirds of a pass, less the
 fewer starts it changes. "Futile" means no difference of 0.15 or more, not no difference.
+
+The current bank is `bank_v7` (from `tournament_20261001_094103`, the first stall-free
+round-robin): press_and_pass vs low_block against itself is identical on all 860 scored starts,
+and passes aimed 10° off are detected after 400 (mean -0.247, t -4.98). The calibration figures
+above were measured on bank_v5.
 
 How far to trust the bench: every strategy scored on 150 bank_v5 starts against counter_press
 ranks them with Spearman +0.66 against round-robin points, where two round-robins agree at +0.91
