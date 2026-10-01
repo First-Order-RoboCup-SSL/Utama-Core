@@ -490,6 +490,45 @@ def test_clear_press_plus_ignores_a_prior_clear_robot_missing_from_the_free_pool
     assert len(partition["block"]) == 1
 
 
+def _clear_game(positions: dict[int, tuple[float, float]], carrier: int | None = None, ball=(3.0, 0.0)):
+    """Danger-zone game stub with robots at `positions` and the ball at `ball`."""
+    game = _stub_game(friendly_dist=2.0, enemy_dist=0.3, ball_x=ball[0])
+    game.ball.p.y = ball[1]
+    game.friendly_robots = {
+        rid: SimpleNamespace(p=SimpleNamespace(x=x, y=y), has_ball=(rid == carrier))
+        for rid, (x, y) in positions.items()
+    }
+    return game
+
+
+# Robot 1 is the lowest id but the farthest from the ball at (3, 0); robot 4 is nearest.
+_SPREAD = {1: (-2.0, 1.0), 2: (0.0, -1.0), 3: (1.0, 1.0), 4: (2.7, 0.2), 5: (-1.0, 0.0)}
+
+
+def test_clear_danger_valve_goes_to_the_robot_nearest_the_ball():
+    partition = _clear_danger_picker(_clear_game(_SPREAD), _FIVE, None, _CLEAR_ALL)
+    assert partition["clear"] == frozenset({4})
+
+
+def test_clear_press_plus_valve_goes_to_the_robot_nearest_the_ball():
+    partition = _clear_press_plus_picker(_clear_game(_SPREAD), _FIVE, None, _CLEAR_ALL | {"overload"})
+    assert partition["clear"] == frozenset({4})
+
+
+def test_clear_valve_keeps_the_carrier_even_when_another_robot_is_nearer():
+    # Robot 2 holds the ball (so it is first from `_carrier_first`); robot 4 happens to
+    # be nearer the ball's reported position. The carrier keeps the clearance.
+    game = _clear_game(_SPREAD, carrier=2)
+    assert _clear_danger_picker(game, _FIVE, None, _CLEAR_ALL)["clear"] == frozenset({2})
+    assert _clear_press_plus_picker(game, _FIVE, None, _CLEAR_ALL | {"overload"})["clear"] == frozenset({2})
+
+
+def test_clear_valve_breaks_a_distance_tie_by_lowest_id():
+    tied = {1: (2.0, 1.0), 2: (2.0, -1.0), 3: (-2.0, 0.0), 4: (-2.0, 1.0), 5: (-2.0, -1.0)}
+    partition = _clear_danger_picker(_clear_game(tied), _FIVE, None, _CLEAR_ALL)
+    assert partition["clear"] == frozenset({1})
+
+
 # --- sticky possession edge: a near-tie must keep the previous posture ---
 
 _COUNTER_FLOW_ALL = frozenset({"attack", "press", "block"})

@@ -604,6 +604,29 @@ def _kicker_at_still_ball(game: Game) -> Optional[RobotId]:
     return rid if dist(robot) <= _KICK_REACH_M and dist(robot) < enemy_nearest else None
 
 
+def _clearer_first(game: Game, ordered: list[RobotId]) -> list[RobotId]:
+    """`ordered` (from `_carrier_first`) with the robot that should clear first.
+
+    The valve gives its one-robot slot to `ordered[0]`. By id alone that was the
+    lowest id wherever nobody held the ball, however far from it; the clearer
+    should be the robot nearest the ball. A carrier (already first in `ordered`)
+    keeps the job: it is the robot with the ball.
+    """
+    ball = getattr(game, "ball", None)
+    if len(ordered) < 2 or ball is None:
+        return ordered
+    first = game.friendly_robots.get(ordered[0])
+    if first is not None and (first.has_ball or ordered[0] == _kicker_at_still_ball(game)):
+        return ordered
+
+    def dist(rid: RobotId) -> float:
+        robot = game.friendly_robots.get(rid)
+        return math.inf if robot is None else math.hypot(robot.p.x - ball.p.x, robot.p.y - ball.p.y)
+
+    nearest = min(ordered, key=lambda rid: (dist(rid), rid))
+    return [nearest] + [rid for rid in ordered if rid != nearest]
+
+
 def _allocate_ordered(
     ordered: list[RobotId],
     primary: str,
@@ -1545,13 +1568,14 @@ def _clear_danger_picker(
     attack_ok = "attack" in available_tactic_ids
 
     if clear_ok:
-        # The valve takes exactly 1 robot (the tactic picks its own clearer as
-        # ball-nearest within its set); everything else holds the screen. A
-        # pinned/inapplicable block slot folds its share into the valve slot —
-        # every free robot must land somewhere.
+        # The valve takes exactly 1 robot (the carrier, else the one nearest the
+        # ball); everything else holds the screen. A pinned/inapplicable block
+        # slot folds its share into the valve slot — every free robot must land
+        # somewhere.
         if len(ordered) == 1 or not block_ok:
             return {"clear": frozenset(ordered)}
-        return {"clear": frozenset(ordered[:1]), "block": frozenset(ordered[1:])}
+        clearer_order = _clearer_first(game, ordered)
+        return {"clear": frozenset(clearer_order[:1]), "block": frozenset(clearer_order[1:])}
 
     currently_attacking = bool(prev_partition.get("attack"))
     friendly_edge = _friendly_closer_to_ball(game)
@@ -1760,7 +1784,8 @@ def _clear_press_plus_picker(
     if clear_ok:
         if len(ordered) == 1 or not block_ok:
             return {"clear": frozenset(ordered)}
-        return {"clear": frozenset(ordered[:1]), "block": frozenset(ordered[1:])}
+        clearer_order = _clearer_first(game, ordered)
+        return {"clear": frozenset(clearer_order[:1]), "block": frozenset(clearer_order[1:])}
 
     currently_attacking = bool(prev_partition.get("attack")) or bool(prev_partition.get("overload"))
     friendly_edge = _friendly_closer_to_ball(game)
