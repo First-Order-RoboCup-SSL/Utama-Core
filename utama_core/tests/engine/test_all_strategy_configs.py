@@ -32,6 +32,7 @@ from utama_core.entities.data.object import TeamType
 from utama_core.strategy.kernel_strategy import (
     _clear_danger_picker,
     _clear_press_plus_picker,
+    _counter_flow_picker,
     _counter_press_picker,
     _fixed_ratio_picker,
     _three_way_picker,
@@ -487,3 +488,35 @@ def test_clear_press_plus_holds_block_while_a_clearer_is_still_pinned():
         (_CLEAR_ALL | {"overload"}) - {"clear"},  # pinned "clear" is never available
     )
     assert partition == {"block": free}
+
+
+# --- sticky possession edge: a near-tie must keep the previous posture ---
+
+_COUNTER_FLOW_ALL = frozenset({"attack", "press", "block"})
+
+
+def test_counter_flow_keeps_attack_through_a_near_tie_for_the_ball():
+    """Friendly 3 cm behind the nearest enemy is inside `_CLOSER_TO_BALL_MARGIN`:
+    undecided, so a side that held attack last tick keeps it (the documented
+    hysteresis). `_friendly_closer_to_ball` used to return False here, which
+    dropped attack on noise-level gaps."""
+    prev = {"attack": frozenset({1, 2, 3}), "block": frozenset({4, 5})}
+    partition = _counter_flow_picker(
+        _stub_game(friendly_dist=0.33, enemy_dist=0.30, ball_x=0.0), _FIVE, prev, _COUNTER_FLOW_ALL
+    )
+    assert len(partition["attack"]) == 3
+
+
+def test_counter_flow_without_prior_attack_stays_conservative_on_a_near_tie():
+    partition = _counter_flow_picker(
+        _stub_game(friendly_dist=0.33, enemy_dist=0.30, ball_x=0.0), _FIVE, {}, _COUNTER_FLOW_ALL
+    )
+    assert "attack" not in partition
+
+
+def test_counter_flow_drops_attack_on_a_clear_loss():
+    prev = {"attack": frozenset({1, 2, 3}), "block": frozenset({4, 5})}
+    partition = _counter_flow_picker(
+        _stub_game(friendly_dist=0.5, enemy_dist=0.30, ball_x=0.0), _FIVE, prev, _COUNTER_FLOW_ALL
+    )
+    assert "attack" not in partition

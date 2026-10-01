@@ -499,15 +499,20 @@ _CLOSER_TO_BALL_MARGIN = 0.05  # metres
 
 
 def _friendly_closer_to_ball(game: Game) -> Optional[bool]:
-    """True if a friendly robot is closer to the ball than every enemy, by
-    more than `_CLOSER_TO_BALL_MARGIN` — a plain "who's closer" comparison is
-    not treated as decided until one side clears that margin, so noise-level
-    ties are decided the same way every caller already reads an unreadable
-    result: `is not True` means "not clearly ours," the conservative default.
+    """True if a friendly robot is closer to the ball than every enemy by more
+    than `_CLOSER_TO_BALL_MARGIN`; False if an enemy is closer by more than
+    that margin; None when the gap is inside the margin (undecided).
 
-    None when the proximity lookup cannot read the ball's side (ball missing
-    or no robots on one side) — callers should fall back to the conservative
-    posture in that case.
+    Inside the margin is a genuine near-tie, so the pickers that keep
+    hysteresis (`prev_partition`: "did we hold attack last tick") read None as
+    "keep what you had", while those without it read `is not True` as "not
+    clearly ours", the conservative default. Returning False for a near-tie
+    (as this once did) made the sticky pickers drop the ball on a noise-level
+    gap, which is exactly what their hysteresis exists to prevent.
+
+    None too when the proximity lookup cannot read the ball's side (ball
+    missing or no robots on one side) — callers should fall back to the
+    conservative posture in that case.
     """
     # A ball on our dribbler is ours however close an enemy presses — the
     # distance read alone flipped a held ball to "theirs" whenever an enemy
@@ -521,10 +526,15 @@ def _friendly_closer_to_ball(game: Game) -> Optional[bool]:
     _enemy_closest, enemy_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
     if friendly_dist is None or enemy_dist is None:
         return None
-    # Explicit `bool()`: the proximity lookup returns numpy floats, and a raw
-    # comparison yields np.bool_ — whose `is True` is False, which a caller
-    # checking `edge is True` would read as "unknown/losing" forever.
-    return bool(friendly_dist < enemy_dist - _CLOSER_TO_BALL_MARGIN)
+    # Return literal True/False, never the comparison itself: the proximity
+    # lookup returns numpy floats, so a raw comparison is np.bool_, whose
+    # `is True` is False — a caller checking `edge is True` would read it as
+    # "unknown/losing" forever.
+    if friendly_dist < enemy_dist - _CLOSER_TO_BALL_MARGIN:
+        return True
+    if friendly_dist > enemy_dist + _CLOSER_TO_BALL_MARGIN:
+        return False
+    return None
 
 
 def _ball_zone(game: Game) -> str:
