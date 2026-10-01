@@ -36,6 +36,7 @@ from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.pass_and_shoot import PassAndShootTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
+from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
 # (tactic_factory, robot_ids, exp_friendly, exp_enemy) — robot_ids and
 # exp_friendly/exp_enemy are chosen per-Tactic to respect each one's real
@@ -96,31 +97,41 @@ def test_is_committed_returns_a_bool_before_any_tick(tactic_cls, robot_ids, exp_
     assert isinstance(tactic.is_committed(game=None, mem=mem), bool)
 
 
-@pytest.mark.parametrize("tactic_cls, robot_ids, exp_friendly, exp_enemy", _TACTIC_CASES)
-def test_produces_a_command_for_every_assigned_robot(tactic_cls, robot_ids, exp_friendly, exp_enemy, runner_factory):
-    runner = runner_factory(exp_friendly, exp_enemy)
+def _game_where_applicable(runner, tactic):
+    """The runner's game, or, if the kickoff formation doesn't satisfy
+    `tactic.applicable` (pressing and clearing both need an enemy near the ball), the
+    same robots with the ball deep in our third and an enemy beside it. A tactic is
+    only ever ticked when applicable."""
     game = runner.my.game
-    tactic = tactic_cls()
-    if not tactic.applicable(game):
-        pytest.skip(f"{tactic_cls.__name__} reported inapplicable() for this fixture's default game state")
-    mem = tactic.initial_mem()
-    commands, _mem = tactic.tick(game, _ctx(runner), robot_ids, mem)
-    assert set(commands.keys()) == set(robot_ids)
+    if tactic.applicable(game):
+        return game
+    our_goal_x = game.field.half_length if game.my_team_is_right else -game.field.half_length
+    ball_x = our_goal_x * 0.6
+    enemy_robots = dict(game.enemy_robots)
+    enemy_robots[0] = make_robot(0, is_friendly=False, x=ball_x + 0.3, y=0.3)
+    game = build_game(
+        dict(game.friendly_robots),
+        enemy_robots,
+        make_ball(ball_x, 0.0),
+        my_team_is_right=game.my_team_is_right,
+        my_team_is_yellow=game.my_team_is_yellow,
+        ts=game.ts,
+    )
+    assert tactic.applicable(game), f"{type(tactic).__name__} still inapplicable after placing the ball"
+    return game
 
 
 @pytest.mark.parametrize("tactic_cls, robot_ids, exp_friendly, exp_enemy", _TACTIC_CASES)
-def test_ticking_twice_does_not_raise(tactic_cls, robot_ids, exp_friendly, exp_enemy, runner_factory):
-    """A weak but genuinely useful smoke test: most cross-tick state bugs
-    (mem misuse, role-assignment flip-flopping into an inconsistent state)
-    only surface on the second call, not the first."""
+def test_commands_every_assigned_robot_on_two_ticks(tactic_cls, robot_ids, exp_friendly, exp_enemy, runner_factory):
+    """Most cross-tick state bugs (mem misuse, role-assignment flip-flopping into an
+    inconsistent state) only surface on the second call, not the first."""
     runner = runner_factory(exp_friendly, exp_enemy)
-    game = runner.my.game
     tactic = tactic_cls()
-    if not tactic.applicable(game):
-        pytest.skip(f"{tactic_cls.__name__} reported inapplicable() for this fixture's default game state")
+    game = _game_where_applicable(runner, tactic)
     mem = tactic.initial_mem()
-    _commands, mem = tactic.tick(game, _ctx(runner), robot_ids, mem)
-    _commands, _mem = tactic.tick(game, _ctx(runner), robot_ids, mem)
+    for _ in range(2):
+        commands, mem = tactic.tick(game, _ctx(runner), robot_ids, mem)
+        assert set(commands.keys()) == set(robot_ids)
 
 
 # --- Tactic-specific behavior that doesn't generalize across the table ---

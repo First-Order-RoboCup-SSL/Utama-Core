@@ -15,7 +15,8 @@ import pytest
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.game import Game
-from utama_core.replay.scenario import apply_scenario, scenario_from_replay
+from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.replay.scenario import RobotState, Scenario, apply_scenario
 from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
@@ -24,47 +25,6 @@ from utama_core.tests.common.abstract_test_manager import (
 )
 
 os.environ["SDL_VIDEO_WINDOW_POS"] = "100,100"
-
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-# Real tournament replay used to pin `scenario_from_replay`/`apply_scenario`
-# against actual match data. `replays/` is gitignored (not shipped with the
-# repo), so these tests are skipped rather than failing when it isn't
-# present locally — same approach as `test_stuck_detector.py`'s real-replay
-# tests.
-_REPLAY_PATH = _REPO_ROOT / "replays/tournament_20260903_122808/high_line_zone_vs_overload_flow.npz"
-
-_HALF_LENGTH = STANDARD_FIELD_DIMS.full_field_half_length
-_HALF_WIDTH = STANDARD_FIELD_DIMS.full_field_half_width
-# A little slack past the exact field lines: replayed positions can sit a
-# few cm outside due to physics/vision noise even under normal play, so
-# "sane" here means "plausibly on the pitch", not "strictly in bounds".
-_ON_FIELD_MARGIN_M = 0.5
-
-
-def _on_field(x: float, y: float) -> bool:
-    return abs(x) <= _HALF_LENGTH + _ON_FIELD_MARGIN_M and abs(y) <= _HALF_WIDTH + _ON_FIELD_MARGIN_M
-
-
-@pytest.mark.skipif(not _REPLAY_PATH.exists(), reason="real tournament replay not present locally")
-def test_scenario_from_replay_real_replay_has_sane_state():
-    """`scenario_from_replay` on a real match at t=32s returns robots for
-    both teams and a ball, all with positions plausibly on the field —
-    this is the exact scenario `docs/STRATEGY_DEVELOPMENT.md`'s
-    `repro_from_replay.py` bullet reproduces from."""
-    scenario = scenario_from_replay(_REPLAY_PATH, t_seconds=32.0)
-
-    assert scenario.friendly_robots, "expected at least one friendly robot in the scenario"
-    assert scenario.enemy_robots, "expected at least one enemy robot in the scenario"
-
-    assert _on_field(
-        scenario.ball_x, scenario.ball_y
-    ), f"ball position ({scenario.ball_x}, {scenario.ball_y}) is not plausibly on the field"
-    for robot in (*scenario.friendly_robots, *scenario.enemy_robots):
-        assert _on_field(robot.x, robot.y), f"robot {robot.id} position ({robot.x}, {robot.y}) is not on the field"
-
-    # The nearest frame should be close to the requested timestamp - the
-    # replay has frames throughout, so this shouldn't need to search far.
-    assert abs(scenario.frame_ts - 32.0) < 1.0
 
 
 def _idle_strategy() -> AbstractStrategy:
@@ -141,15 +101,29 @@ def _build_runner_and_scenario(scenario):
     return runner
 
 
-@pytest.mark.skipif(not _REPLAY_PATH.exists(), reason="real tournament replay not present locally")
+def _robots(*positions) -> tuple[RobotState, ...]:
+    return tuple(RobotState(id=i, x=x, y=y, orientation=0.0, vx=0.0, vy=0.0) for i, (x, y) in enumerate(positions))
+
+
+# A mid-play position with both teams spread over the field and the ball away from
+# every robot. Built by hand so the test doesn't need a replay from `replays/`, which
+# isn't in the repo.
+_SCENARIO = Scenario(
+    sim_time=15.0,
+    ball_x=0.8,
+    ball_y=-0.6,
+    ball_vx=0.0,
+    ball_vy=0.0,
+    friendly_robots=_robots((3.5, 0.0), (1.5, 1.2), (2.0, -1.5)),
+    enemy_robots=_robots((-3.5, 0.0), (-1.0, 1.8), (-1.6, -0.9)),
+    referee_command=RefereeCommand.NORMAL_START,
+    source_replay=Path("hand-built"),
+)
+
+
 def test_apply_scenario_positions_match_within_tolerance():
-    """`apply_scenario(..., verify=True)` on a headless rsim runner places
-    every robot and the ball within `apply_scenario`'s own position
-    tolerance - it raises `AssertionError` itself if not, so this test is
-    really checking that construction succeeds without raising."""
-    scenario = scenario_from_replay(_REPLAY_PATH, t_seconds=15.0)  # NORMAL_START here - see module note above
-    runner = _build_runner_and_scenario(scenario)
-    manager = _ApplyScenarioTestManager(scenario)
+    runner = _build_runner_and_scenario(_SCENARIO)
+    manager = _ApplyScenarioTestManager(_SCENARIO)
     manager._runner = runner  # noqa: SLF001 - test-only wiring, see eval_status
 
     # run_test() closes the runner itself (rsim env, sim_controller, ...)
@@ -160,7 +134,7 @@ def test_apply_scenario_positions_match_within_tolerance():
     assert passed, "test episode did not complete"
     assert manager.applied
 
-    _assert_close_to_scenario(manager.post_apply_positions, scenario, tol=0.15)
+    _assert_close_to_scenario(manager.post_apply_positions, _SCENARIO, tol=0.15)
 
 
 def _make_position_refiner():

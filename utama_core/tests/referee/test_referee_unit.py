@@ -1341,20 +1341,6 @@ class TestVariableFieldScaling:
 
 
 class TestPrepareKickoffTheirsStep:
-    def test_returns_running(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
-
-        monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
-
-        robots = {0: _robot(0, 0.0, 0.0)}
-        referee = _make_referee_data(command=RefereeCommand.PREPARE_KICKOFF_BLUE)
-        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_yellow=True, my_team_is_right=True)
-        cmd_map = _make_cmd_map(game)
-        node = referee_actions.PrepareKickoffTheirsStep()
-        node.blackboard = _make_blackboard(game, cmd_map)
-
-        node.update()
-
     def test_all_robots_placed_on_own_half_right(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
 
@@ -1476,20 +1462,6 @@ class TestPrepareKickoffTheirsStep:
 
 
 class TestDirectFreeOursStep:
-    def test_returns_running(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
-
-        monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
-
-        robots = {0: _robot(0, 0.0, 0.0)}
-        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW)
-        game = _make_game(friendly_robots=robots, referee=referee)
-        cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeOursStep()
-        node.blackboard = _make_blackboard(game, cmd_map)
-
-        node.update()
-
     def test_kicker_is_closest_robot_to_ball(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
 
@@ -1834,20 +1806,6 @@ class TestDirectFreeOursStep:
 
 
 class TestDirectFreeTheirsStep:
-    def test_returns_running(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
-
-        monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
-
-        robots = {0: _robot(0, 2.0, 0.0)}
-        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
-        game = _make_game(friendly_robots=robots, referee=referee)
-        cmd_map = _make_cmd_map(game)
-        node = referee_actions.DirectFreeTheirsStep()
-        node.blackboard = _make_blackboard(game, cmd_map)
-
-        node.update()
-
     def test_robot_outside_keep_out_stays_put(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
 

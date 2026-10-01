@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import pickle
 from pathlib import Path
@@ -14,15 +15,6 @@ from utama_core.replay.entities import ReplayMetadata
 from utama_core.replay.stuck_detector import find_stuck_windows
 
 _TICK_HZ = 60
-
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-# Real tournament replays used by a couple of tests below to pin behaviour
-# against actual match data (see `docs/STRATEGY_DEVELOPMENT.md`'s
-# Observability section) rather than a synthetic fixture alone.
-# `replays/` is gitignored (not shipped with the repo), so these are
-# skipped rather than failing when the directory isn't present locally.
-_RESTART_STALL_REPLAY = _REPO_ROOT / "replays/tournament_20260903_122808/high_line_zone_vs_overload_flow.npz"
-_HIGH_TRAVEL_REPLAY = _REPO_ROOT / "replays/tournament_20260903_112025/clear_press_plus_vs_give_and_go_solo.pkl"
 
 
 def _robot(rid: int, x: float, y: float, *, has_ball: bool = False) -> Robot:
@@ -188,29 +180,35 @@ def test_possessor_motionless_bypass_fires_on_long_hold(tmp_path):
     assert all(w.kind == "oscillation" for w in windows)
 
 
-@pytest.mark.skipif(not _RESTART_STALL_REPLAY.exists(), reason="real tournament replay not present locally")
-def test_real_replay_restart_stall_window():
-    """`high_line_zone_vs_overload_flow` (2026-09-03) stalls in a referee
-    restart from ~32s to the end of the match at 65s — the case
-    `kind="restart_stall"` was added to catch (see module docstring)."""
-    windows = find_stuck_windows(_RESTART_STALL_REPLAY)
-    restart_windows = [w for w in windows if w.kind == "restart_stall"]
-    assert restart_windows, f"expected a restart_stall window, got {windows}"
-    assert any(30.0 <= w.t_start <= 35.0 for w in restart_windows), (
-        f"expected a restart_stall window starting between 30s and 35s, got " f"{[w.t_start for w in restart_windows]}"
+def _still_scene(ts: float, i: int) -> GameFrame:
+    return GameFrame(
+        ts=ts,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={0: _robot(0, -1.0, 0.0)},
+        enemy_robots={},
+        ball=Ball(p=Vector3D(1.0, 1.0, 0.0), v=Vector3D(0, 0, 0), a=Vector3D(0, 0, 0)),
     )
 
 
-@pytest.mark.skipif(not _HIGH_TRAVEL_REPLAY.exists(), reason="real tournament replay not present locally")
-def test_real_replay_high_ball_travel_no_oscillation_windows():
-    """`clear_press_plus_vs_give_and_go_solo` (49.88m of ball travel per its
-    `.stats.json`, no `stall_events` recorded by the in-match watchdog) is
-    ordinary, non-stuck play — a calibration sweep across every replay
-    under `replays/` (2026-09-03, see stuck_detector.py's `_main`/
-    `_scan_replays`) used this and similar high-ball-travel matches to
-    retune `_possessor_is_motionless`'s bypass after it was over-flagging
-    ordinary short ball-control moments on nearly every match; this pins
-    that it stays at zero oscillation windows."""
-    windows = find_stuck_windows(_HIGH_TRAVEL_REPLAY)
-    oscillation_windows = [w for w in windows if w.kind == "oscillation"]
-    assert oscillation_windows == [], f"expected no oscillation windows, got {oscillation_windows}"
+def _write_referee_sidecar(replay_path, events):
+    sidecar = replay_path.with_suffix("").with_suffix(".intentions.jsonl")
+    sidecar.write_text("".join(json.dumps({"event": "referee", "sim_time": t, "command": c}) + "\n" for t, c in events))
+
+
+@pytest.mark.parametrize("held_s,flagged", [(14.0, False), (16.0, True)])
+def test_a_restart_held_past_restart_stall_s_is_a_restart_stall(tmp_path, held_s, flagged):
+    """A kickoff that never advances, with the ball and every robot still, is flagged
+    once it has been held for `restart_stall_s` (15 s by default) and not before. The
+    oscillation signal can't see it: nothing moves."""
+    path = tmp_path / "match.pkl"
+    _write_replay(path, _still_scene, n_ticks=int((2.0 + held_s + 1.0) * _TICK_HZ))
+    _write_referee_sidecar(
+        path, [(0.0, "NORMAL_START"), (2.0, "PREPARE_KICKOFF_YELLOW"), (2.0 + held_s, "NORMAL_START")]
+    )
+
+    windows = [w for w in find_stuck_windows(path) if w.kind == "restart_stall"]
+
+    assert bool(windows) is flagged, windows
+    if flagged:
+        assert windows[0].t_start == pytest.approx(2.0, abs=0.05)
