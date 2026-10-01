@@ -26,6 +26,14 @@ persisted instead, so the touch recorded during the kicker's contact
 ticks cannot be corrupted by unrelated robots standing near the dead
 ball after it has left the field.
 
+A robot merely *near* the ball is not a toucher: the proximity fallback
+(no contact flag on either side) also requires the ball's velocity to have
+changed since the previous frame, as TIGERs' AutoReferee requires a bot to sit
+on the ball's own line of travel (``BotLastTouchedBallCalculator``) rather than
+just beside it. Without it a robot standing within 0.15 m of a ball it never
+touched took the attribution, and the out-of-bounds free kick went to the wrong
+team. Contact flags stay authoritative and are never second-guessed.
+
 Requires the caller's frame to carry contact data for both teams —
 ``RobotInfoRefiner`` fills enemy ``has_ball`` from the sim's contact
 physics (see ``data_processing/refiners/robot_info.py``).
@@ -42,8 +50,21 @@ from utama_core.entities.game.game_frame import GameFrame
 # side's contact flag is set.
 _PROXIMITY_TOUCH_DIST = 0.15  # metres
 
+# A nearby robot counts as having touched the ball only if the ball's velocity
+# moved by more than this since the previous frame. A ball rolling freely loses
+# about 0.011 m/s per frame to friction (the 75th percentile of frames with a
+# robot near the ball and no contact flag, over saved rsim matches), so this sits
+# above that floor and well below the change a push or kick makes. On saved
+# matches, 2 of the 14 ball exits attributed by proximity had no change above it
+# at the supposed touch (1 at 0.02, 3 at 0.1 or 0.2).
+_TOUCH_BALL_VELOCITY_CHANGE = 0.05  # m/s
 
-def infer_last_touch_team(game_frame: GameFrame, previous: Optional[bool] = None) -> Optional[bool]:
+
+def infer_last_touch_team(
+    game_frame: GameFrame,
+    previous: Optional[bool] = None,
+    previous_ball_v: Optional[tuple[float, float]] = None,
+) -> Optional[bool]:
     """Return which team last touched the ball.
 
     Args:
@@ -52,6 +73,10 @@ def infer_last_touch_team(game_frame: GameFrame, previous: Optional[bool] = None
             False = enemy, None = unknown). Persisted when the frame
             contains no new evidence, so attribution is stable while the
             ball is dead.
+        previous_ball_v: The ball's (vx, vy) in the previous frame, or None
+            if unknown. The proximity fallback only credits a nearby robot
+            when the ball's velocity changed from this; with it unknown a
+            nearby robot is no evidence of a touch.
 
     Returns:
         True if friendly last touched, False if enemy, None if unknown
@@ -80,8 +105,9 @@ def infer_last_touch_team(game_frame: GameFrame, previous: Optional[bool] = None
             closest_enemy.p.x - bx, closest_enemy.p.y - by
         )
 
-    # No contact flags: a robot within touch distance is a confirmed
-    # toucher — closest of either team wins.
+    # No contact flags: a robot within touch distance that the ball's
+    # velocity change backs up is a confirmed toucher — closest of either
+    # team wins.
     closest = math.inf
     closest_team: Optional[bool] = None
     for robot in game_frame.friendly_robots.values():
@@ -93,8 +119,9 @@ def infer_last_touch_team(game_frame: GameFrame, previous: Optional[bool] = None
         if d < closest:
             closest, closest_team = d, False
 
-    if closest <= _PROXIMITY_TOUCH_DIST:
-        return closest_team
+    if closest <= _PROXIMITY_TOUCH_DIST and previous_ball_v is not None:
+        if math.hypot(ball.v.x - previous_ball_v[0], ball.v.y - previous_ball_v[1]) > _TOUCH_BALL_VELOCITY_CHANGE:
+            return closest_team
 
     # No new evidence: persist the prior attribution. If there never was
     # one, infer from the closest robot at any distance (GameController

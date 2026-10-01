@@ -35,6 +35,8 @@ class BallSpeedRule(BaseRule):
         # True = friendly last touched, False = enemy, None = unknown.
         # Maintained colour-blind by `infer_last_touch_team` (see last_touch.py).
         self._last_touch_was_friendly: Optional[bool] = None
+        # The ball's velocity on the previous active-play frame (see `infer_last_touch_team`).
+        self._prev_ball_v: Optional[tuple[float, float]] = None
 
     def check(
         self,
@@ -45,13 +47,17 @@ class BallSpeedRule(BaseRule):
     ) -> Optional[RuleViolation]:
         if current_command not in _ACTIVE_PLAY_COMMANDS:
             self._was_over_limit = False
+            self._prev_ball_v = None  # the ball may be moved or placed while play is stopped
             return None
 
         ball = game_frame.ball
         if ball is None:
             return None
 
-        self._last_touch_was_friendly = infer_last_touch_team(game_frame, self._last_touch_was_friendly)
+        self._last_touch_was_friendly = infer_last_touch_team(
+            game_frame, self._last_touch_was_friendly, self._prev_ball_v
+        )
+        self._prev_ball_v = (ball.v.x, ball.v.y)
 
         speed = math.hypot(ball.v.x, ball.v.y)
         is_over_limit = speed > self._max_speed

@@ -31,6 +31,8 @@ class OutOfBoundsRule(BaseRule):
         # Last team to have the ball: True = friendly, False = enemy, None = unknown.
         # Maintained colour-blind by `infer_last_touch_team` (see last_touch.py).
         self._last_touch_was_friendly: Optional[bool] = None
+        # The ball's velocity on the previous active-play frame (see `infer_last_touch_team`).
+        self._prev_ball_v: Optional[tuple[float, float]] = None
 
     def check(
         self,
@@ -40,6 +42,7 @@ class OutOfBoundsRule(BaseRule):
         designated_position: Optional[tuple[float, float]] = None,
     ) -> Optional[RuleViolation]:
         if current_command not in _ACTIVE_PLAY_COMMANDS:
+            self._prev_ball_v = None  # the ball may be moved or placed while play is stopped
             return None
 
         ball = game_frame.ball
@@ -49,7 +52,10 @@ class OutOfBoundsRule(BaseRule):
         bx, by = ball.p.x, ball.p.y
 
         # Update last-touch tracking regardless of out-of-bounds state.
-        self._last_touch_was_friendly = infer_last_touch_team(game_frame, self._last_touch_was_friendly)
+        self._last_touch_was_friendly = infer_last_touch_team(
+            game_frame, self._last_touch_was_friendly, self._prev_ball_v
+        )
+        self._prev_ball_v = (ball.v.x, ball.v.y)
 
         # Only fire when ball is outside field AND not in a goal.
         if geometry.is_in_field(bx, by) or geometry.is_in_left_goal(bx, by) or geometry.is_in_right_goal(bx, by):
@@ -71,6 +77,7 @@ class OutOfBoundsRule(BaseRule):
 
     def reset(self) -> None:
         self._last_touch_was_friendly = None
+        self._prev_ball_v = None
 
     # ------------------------------------------------------------------
     # Helpers

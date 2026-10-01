@@ -9,10 +9,14 @@ the ball rolls dead.
 
 from __future__ import annotations
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.last_touch import infer_last_touch_team
+from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
 from utama_core.entities.data.vector import Vector3D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.tests.custom_referee.helpers import robot as _robot
 
 
@@ -114,3 +118,94 @@ class TestColourBlindInference:
             referee=None,
         )
         assert infer_last_touch_team(frame, previous=False) is False
+
+
+def _moving_ball(x: float, y: float, vx: float, vy: float) -> Ball:
+    return Ball(p=Vector3D(x, y, 0), v=Vector3D(vx, vy, 0), a=Vector3D(0, 0, 0))
+
+
+class TestProximityNeedsABallVelocityChange:
+    """A robot near the ball with no contact flag is a toucher only if the ball's
+    velocity changed. A robot standing beside a rolling ball is not."""
+
+    def test_nearby_robot_beside_a_freely_rolling_ball_is_not_a_toucher(self):
+        frame = _frame(
+            _moving_ball(0, 0, 1.0, 0.0),
+            friendly={0: _robot(0, 2.0, 2.0, True)},
+            enemy={0: _robot(0, 0.1, 0.0, False)},
+        )
+        assert infer_last_touch_team(frame, previous=True, previous_ball_v=(1.0, 0.0)) is True
+
+    def test_nearby_robot_is_the_toucher_when_the_ball_velocity_changed(self):
+        frame = _frame(
+            _moving_ball(0, 0, 1.0, 0.0),
+            friendly={0: _robot(0, 2.0, 2.0, True)},
+            enemy={0: _robot(0, 0.1, 0.0, False)},
+        )
+        assert infer_last_touch_team(frame, previous=True, previous_ball_v=(0.0, 0.0)) is False
+
+    def test_velocity_change_threshold_boundary(self):
+        enemy = {0: _robot(0, 0.1, 0.0, False)}
+        far_friendly = {0: _robot(0, 2.0, 2.0, True)}
+        just_under = _frame(_moving_ball(0, 0, 0.049, 0.0), friendly=far_friendly, enemy=enemy)
+        just_over = _frame(_moving_ball(0, 0, 0.051, 0.0), friendly=far_friendly, enemy=enemy)
+        assert infer_last_touch_team(just_under, previous=True, previous_ball_v=(0.0, 0.0)) is True
+        assert infer_last_touch_team(just_over, previous=True, previous_ball_v=(0.0, 0.0)) is False
+
+    def test_unknown_previous_velocity_means_proximity_is_no_evidence(self):
+        frame = _frame(
+            _moving_ball(0, 0, 1.0, 0.0),
+            friendly={0: _robot(0, 2.0, 2.0, True)},
+            enemy={0: _robot(0, 0.1, 0.0, False)},
+        )
+        assert infer_last_touch_team(frame, previous=True, previous_ball_v=None) is True
+
+    def test_contact_flag_stays_authoritative_without_a_velocity_change(self):
+        frame = _frame(
+            _moving_ball(0, 0, 1.0, 0.0),
+            friendly={0: _robot(0, 0.1, 0.0, True, has_ball=True)},
+            enemy={0: _robot(0, 0.5, 0.0, False)},
+        )
+        assert infer_last_touch_team(frame, previous=False, previous_ball_v=(1.0, 0.0)) is True
+
+    def test_never_attributed_ball_still_falls_back_to_the_closest_robot(self):
+        frame = _frame(
+            _moving_ball(0, 0, 1.0, 0.0),
+            friendly={0: _robot(0, 2.0, 2.0, True)},
+            enemy={0: _robot(0, 0.1, 0.0, False)},
+        )
+        assert infer_last_touch_team(frame, previous=None, previous_ball_v=(1.0, 0.0)) is False
+
+    def test_out_of_bounds_free_kick_is_not_blamed_on_a_bystander(self):
+        """Friendly kicks the ball (contact flag), it rolls out past an enemy robot
+        that never touches it. The enemy ends within 0.15 m of the ball at the exit
+        tick; the free kick must still go to the enemy, as the friendly side touched
+        last."""
+        geo = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
+        rule = OutOfBoundsRule()
+        kicker = {0: _robot(0, 0.0, 1.9, True, has_ball=True)}
+        rule.check(
+            _frame(_moving_ball(0.0, 2.0, 0.0, 2.0), friendly=kicker, enemy={}),
+            geo,
+            RefereeCommand.NORMAL_START,
+        )
+        rule.check(
+            _frame(
+                _moving_ball(0.0, 2.9, 0.0, 2.0),
+                friendly={0: _robot(0, 0.0, 1.9, True)},
+                enemy={0: _robot(0, 0.5, 2.9, False)},
+            ),
+            geo,
+            RefereeCommand.NORMAL_START,
+        )
+        violation = rule.check(
+            _frame(
+                _moving_ball(0.0, 3.5, 0.0, 2.0),
+                friendly={0: _robot(0, 0.0, 1.9, True)},
+                enemy={0: _robot(0, 0.05, 3.4, False)},  # 0.11 m from the ball, never touched it
+            ),
+            geo,
+            RefereeCommand.NORMAL_START,
+        )
+        assert violation is not None
+        assert violation.next_command == RefereeCommand.DIRECT_FREE_BLUE
