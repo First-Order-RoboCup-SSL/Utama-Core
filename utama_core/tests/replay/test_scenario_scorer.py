@@ -95,3 +95,20 @@ def test_raw_turnovers_without_a_real_loss_do_not_score_turnover():
     after = dataclasses.replace(before, turnovers=4, attacking_third_entries=1)
     assert _classify_outcome(before, after, False, False, real_losses=0) == ScenarioOutcome.ENTRY_RETAINED
     assert _classify_outcome(before, after, False, False, real_losses=1) == ScenarioOutcome.TURNOVER
+
+
+def test_bench_plays_with_the_round_robins_motion_planner(monkeypatch):
+    """Banks are harvested from round-robins, which run `tournament_lib.run_match`'s
+    control scheme (fpp). The scorer played every start with trajsample instead, so a
+    bench A/B measured play under another planner, and a planner change made in fpp
+    left every outcome unchanged."""
+    import inspect
+
+    import tournament_lib
+    from utama_core.replay import scenario_scorer
+
+    seen = {}
+    monkeypatch.setattr(scenario_scorer, "StrategyRunner", lambda **kwargs: seen.update(kwargs))
+    scenario_scorer._build_runner("press_and_pass", "low_block", stats_path="unused")
+
+    assert seen["control_scheme"] == inspect.signature(tournament_lib.run_match).parameters["control_scheme"].default

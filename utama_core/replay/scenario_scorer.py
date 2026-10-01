@@ -107,7 +107,9 @@ def _build_runner(candidate_config: str, opponent_config: str, *, stats_path: st
         referee=referee,
         enable_vision_stream=False,
         referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
-        control_scheme="trajsample",
+        # The round-robins the banks are harvested from run fpp (tournament_lib.run_match);
+        # a start played with another planner measures something those matches never did.
+        control_scheme="fpp",
         stats_path=stats_path,
     )
 
