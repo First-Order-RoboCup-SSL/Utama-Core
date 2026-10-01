@@ -1428,7 +1428,9 @@ class StrategyRunner:
         """Run a test with the given test manager and episode timeout.
         Args:
             test_manager (AbstractTestManager): The test manager to run the test.
-            episode_timeout (float): The timeout for each episode in seconds.
+            episode_timeout (float): The timeout for each episode in seconds: game time in
+                rsim, which isn't throttled to real time, so a test gets the same simulated
+                time however loaded the machine is; wall-clock time otherwise.
             rsim_headless (bool): Whether to run RSim in headless mode. Defaults to False.
         """
         signal.signal(signal.SIGINT, self._handle_sigint)
@@ -1452,14 +1454,14 @@ class StrategyRunner:
                     time.sleep(0.1)
 
                 self._reset_game()
-                episode_start_time = time.time()
+                episode_start_time = self._episode_clock()
 
                 if self.profiler:
                     self.profiler.enable()
 
                 while not self._stop_event.is_set():
 
-                    if (time.time() - episode_start_time) > episode_timeout:
+                    if (self._episode_clock() - episode_start_time) > episode_timeout:
                         passed = False
                         self.logger.warning(
                             "Episode %d timed out after %f secs",
@@ -1497,6 +1499,12 @@ class StrategyRunner:
 
         finally:
             self.close()
+
+    def _episode_clock(self) -> float:
+        """`run_test`'s timeout clock: the game's timestamp in rsim, wall time otherwise."""
+        if self.mode == Mode.RSIM:
+            return self.my.current_game_frame.ts
+        return time.time()
 
     def run(self):
         """Run the main loop, stepping the game until interrupted.

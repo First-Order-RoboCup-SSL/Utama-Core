@@ -122,15 +122,16 @@ class MultiRobotTestManager(AbstractTestManager):
     reason=(
         "Flaky/pre-existing: robots 4 and 5 (the outer 'wing' pair at "
         "(-3.5, +/-0.75)) consistently stall around 0.53-0.54m from their "
-        "target — inside 45s but outside endpoint_tolerance=0.3 — while the "
+        "target — inside 15s but outside endpoint_tolerance=0.3 — while the "
         "other 4 robots converge to within a few mm. Traced directly: this is "
         "a genuine FastPathPlanning convergence/local-minimum behavior for "
         "this specific 6v6 mirrored geometry, reproduced identically via plain "
         "move() commands independent of strategy class (kernel vs BT) — not a "
         "kernel-port regression. Investigated during the AbstractStrategy port "
-        "(2026-08-15); planner-level fix is out of this pass's scope."
+        "(2026-08-15); planner-level fix is out of this pass's scope. "
+        "Strict, so a planner fix that makes it pass shows up."
     ),
-    strict=False,
+    strict=True,
 )
 def test_mirror_swap(
     headless: bool,
@@ -191,7 +192,9 @@ def test_mirror_swap(
     test_manager = MultiRobotTestManager(scenario=scenario)
     test_passed = runner.run_test(
         test_manager=test_manager,
-        episode_timeout=45.0,
+        # The stall sets in well before this: after 15 s and after 60 s of game time the
+        # same 8 of 12 have arrived. A longer wait only made this test a fifth of the suite.
+        episode_timeout=15.0,
         rsim_headless=headless,
     )
 
