@@ -252,8 +252,13 @@ def _pass_exec(
     ctx: TickContext,
     passer_id: int,
     receiver_id: int,
+    kick_now: bool = False,
 ) -> tuple[dict[int, RobotCommand], bool, bool]:
     """Synchronized aiming, intercept positioning, and kick.
+
+    `kick_now`: aim at the receiver as it stands and kick once aimed, without
+    waiting for it to reach the receive point (a passer that can't carry the
+    ball anywhere better and can't wait for a lane to open).
 
     Returns (commands, pass_complete, lane_blocked) — `lane_blocked` is True
     when an enemy sits on the ball-to-receive-point line this tick; the
@@ -312,7 +317,7 @@ def _pass_exec(
     # within 10 degrees of the incoming ball caught 95% of passes that reached them,
     # 10-20 degrees 7% (tournament_20260924_092119, turnover_breakdown receptions).
     receiver_pos = game.friendly_robots[receiver_id].p
-    aim_point = receiver_pos if at_target(game, receiver_id, intercept_pos) else intercept_pos
+    aim_point = receiver_pos if kick_now or at_target(game, receiver_id, intercept_pos) else intercept_pos
     # Aim from the ball, not the passer's centre: the kick sends the ball along the heading
     # from wherever it sits on the dribbler, often 2-4 cm off-centre. Aimed from the centre,
     # that offset and the heading tolerance added on the same side in 27 of 29 missed short
@@ -416,7 +421,7 @@ def _pass_exec(
     # just means "don't kick yet, try again next tick", which is harmless;
     # it's the false-positive from the looser check that silently wastes the
     # whole window.
-    ready_to_kick = passer_has_ball and passer_aimed and receiver_ready and has_ball(game, passer_id)
+    ready_to_kick = passer_has_ball and passer_aimed and (receiver_ready or kick_now) and has_ball(game, passer_id)
     if ready_to_kick:
         commands[passer_id] = kick()
 

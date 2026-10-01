@@ -191,7 +191,18 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
             if complete:
                 inner.phase = "pass_then_score"
         elif inner.phase == "pass_then_score":
-            commands, pass_complete, lane_blocked = _pass_exec(game, ctx, passer_id, receiver_id)
+            # A passer holding the ball at the carry limit can't carry it to a
+            # better spot, so re-sampling setup spots (below) can't help it, and
+            # waiting for the receiver can outlast the referee's 10 s without
+            # progress. Once the lane has stayed blocked it kicks at the receiver
+            # as it stands. Re-sampled, every new lane was blocked too
+            # (low_block_vs_overload_press, tournament_20260929_171005, 16.3 s);
+            # kept waiting, the receiver never reached its receive point
+            # (low_block_vs_switch_of_play, tournament_20261001_091050, 38.1 s).
+            inner.carry_origin = carry_origin(game, passer_id, inner.carry_origin)
+            carry_spent = carry_exhausted(game, inner.carry_origin)
+            kick_now = carry_spent and inner.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS
+            commands, pass_complete, lane_blocked = _pass_exec(game, ctx, passer_id, receiver_id, kick_now=kick_now)
             # An enemy settling onto the direct passer-receiver line makes
             # this a bad pass to keep aiming (easily intercepted) — force
             # the existing phase timeout early (after a short sustained
@@ -202,17 +213,8 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
             # `run_setup_phase` (re-entered once "setup" is reached again)
             # already reject a blocked lane via `score_pass_setup`, so this
             # re-sampling is where a genuinely open pairing gets picked.
-            #
-            # Re-sampling only helps a passer that can still carry the ball to a
-            # new spot. One holding it at the carry limit passes into the blocked
-            # lane instead: re-sampled, it held on while every new lane was blocked
-            # too, and the ball sat still until the frozen-ball watchdog fired
-            # (low_block_vs_overload_press, tournament_20260929_171005, 16.3 s).
             inner.lane_blocked_ticks = inner.lane_blocked_ticks + 1 if lane_blocked else 0
-            inner.carry_origin = carry_origin(game, passer_id, inner.carry_origin)
-            if inner.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS and not carry_exhausted(
-                game, inner.carry_origin
-            ):
+            if inner.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS and not carry_spent:
                 inner.phase_ticks = max(inner.phase_ticks, _PHASE_TIMEOUT_TICKS + 1)
             if pass_complete:
                 inner.phase = "score"
