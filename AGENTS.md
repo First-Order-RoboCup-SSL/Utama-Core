@@ -55,13 +55,17 @@ declarations) — check there before reintroducing one of them.
 - `pixi run test` runs the default suite; `pixi run lint` runs the full pre-commit stack
   (black, ruff, isort) — run both before considering a change done.
 - `--level quick|full` (defined in the root `conftest.py`, not `utama_core/tests/
-  conftest.py`) scales certain test parametrizations. CI runs `--level quick` on PRs,
-  `--level full` on push to a branch, both with `--ignore-glob "**/*grsim*"` (grsim tests
-  need an external grsim process CI can't provide).
-- rsim has known, pre-existing dribble-physics/timing flakiness unrelated to strategy
-  logic — see the `xfail(strict=False, ...)` markers already in the suite for the accepted
-  pattern when a test is genuinely rsim-flaky, not a real bug. Don't chase rsim-only
-  dribble test failures as if they were kernel bugs; verify on grsim if genuinely unsure.
+  conftest.py`) scales the `robot_id`/`my_team_is_right` parametrizations; no test takes
+  those parameters today, so both levels run the same tests. CI runs `--level quick` on
+  PRs, `--level full` on push to a branch, both with `--ignore-glob "**/*grsim*"` (grsim
+  tests need an external grsim process CI can't provide).
+- The root `conftest.py` turns off `StrategyRunner`'s browser vision stream for every test.
+  In rsim, `run_test`'s `episode_timeout` is game time (rsim runs several times faster than
+  real time), so a test's budget doesn't depend on machine load.
+- A known defect is a `strict=True` xfail on exactly the cases that hit it (see
+  `bang_bang_edge_cases_test.py`'s `_seeds_with_known_defect`), so a fix shows as XPASS and
+  a regression elsewhere fails. Don't chase rsim-only dribble test failures as if they were
+  kernel bugs; verify on grsim if genuinely unsure.
 - Before trusting any test result (yours or another agent's), prefer independently
   re-running it and reading real output over trusting a self-report — this codebase has
   been touched by both humans and agents, and a claimed "all tests pass" is only as

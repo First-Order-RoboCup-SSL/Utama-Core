@@ -94,40 +94,20 @@ def make_runner():
 
 
 @pytest.mark.parametrize("build_factory", _CONFIGS)
-def test_builds_a_kernel_strategy(build_factory, make_runner):
-    runner = make_runner(build_factory)
-    assert isinstance(runner.my.strategy._kernel_strategy, Strategy)
-
-
-@pytest.mark.parametrize("build_factory", _CONFIGS)
-def test_steps_without_error_for_many_ticks(build_factory, make_runner):
+def test_partitions_every_outfield_robot_and_never_the_keeper_for_30_ticks(build_factory, make_runner):
     """30 ticks, not 5-10: enough for PressAndContainTactic's applicable()
     to plausibly flip in configs that use it, exercising the exact hazard
     `_press_and_pass_split_picker`/`_three_way_picker` exist to avoid (a
     Partitioner proposing robots for a currently-inapplicable tactic)."""
     runner = make_runner(build_factory)
-    for _ in range(30):
-        runner.step_once()
-
-
-@pytest.mark.parametrize("build_factory", _CONFIGS)
-def test_partition_covers_all_outfield_robots_every_tick(build_factory, make_runner):
-    runner = make_runner(build_factory)
-    runner.step_once()
-    partition = runner.my.strategy._kernel_strategy.active_partition
-    all_assigned = frozenset().union(*partition.values()) if partition else frozenset()
-    assert all_assigned == frozenset(_OUTFIELD_IDS)
-
-
-@pytest.mark.parametrize("build_factory", _CONFIGS)
-def test_goalkeeper_never_appears_in_the_partition(build_factory, make_runner):
-    runner = make_runner(build_factory)
     strategy = runner.my.strategy
+    assert isinstance(strategy._kernel_strategy, Strategy)
     assert strategy._goalkeeper_id == 0
-    runner.step_once()
-    partition = strategy._kernel_strategy.active_partition
-    for robots in partition.values():
-        assert 0 not in robots
+    for tick in range(30):
+        runner.step_once()
+        partition = strategy._kernel_strategy.active_partition
+        all_assigned = frozenset().union(*partition.values()) if partition else frozenset()
+        assert all_assigned == frozenset(_OUTFIELD_IDS), f"tick {tick}: {partition}"
 
 
 # --- picker-level unit tests (no rsim needed) ---
