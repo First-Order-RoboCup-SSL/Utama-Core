@@ -102,7 +102,7 @@ through the kernel invariants), give its partitioner pure-function tests in
 Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
 it is a target. Don't tune a threshold until the bench moves: a change needs a reason in game
 terms, and a bench gain that matches don't confirm means distrust the bench, not that the
-strategy got better. The bench agrees with round-robin standings at Spearman +0.66 (two
+strategy got better. The bench agreed with round-robin standings at Spearman +0.66 under trajsample (two
 round-robins agree at +0.91), so it screens changes; it doesn't rank strategies.
 
 ## Observability — use these before adding a debug print
