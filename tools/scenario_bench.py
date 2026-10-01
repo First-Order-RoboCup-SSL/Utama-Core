@@ -376,12 +376,15 @@ def _score(
         batches = [scenarios]
     for batch in batches:
         items = [(bs, reuse.plan(bs) if reuse else None) for bs in batch]
-        results = []
-        for cand, base, fresh in _parallel_map(play, items, workers):
-            results.append((cand, base))
-            if reuse:
-                reuse.fresh.update(fresh)
-        _score_batch(rows, batch, results, against, total)
+
+        def results(items=items):
+            # a generator, so `_score_batch` prints each start as it comes back
+            for cand, base, fresh in _parallel_map(play, items, workers):
+                if reuse:
+                    reuse.fresh.update(fresh)
+                yield cand, base
+
+        _score_batch(rows, batch, results(), against, total)
         if stop_at_t is not None and len(rows) < total:
             deltas = [r["delta"] for r in rows if r["delta"] is not None]
             stopped = _stop_reason(deltas, stop_at_t)

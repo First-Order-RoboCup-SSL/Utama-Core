@@ -82,3 +82,18 @@ def test_a_spot_check_mismatch_evicts_the_records_the_run_used(rig):
 
     assert report["mismatches"] == 1
     assert list(rig.cache.root.rglob("*.json")) == []
+
+
+def test_each_start_is_reported_as_it_comes_back_not_after_the_batch(rig, monkeypatch):
+    events = []
+    monkeypatch.setattr(scenario_bench, "print", lambda *a, **k: events.append("print"), raising=False)
+
+    def fake_start_result(bench_scenario, config, opponent, horizon_s):
+        events.append("play")
+        return {"outcome": 1, "foul": False, "stalled": False, "error": None}
+
+    monkeypatch.setattr(scenario_bench, "_start_result", fake_start_result)
+    scenario_bench._score(_SCENARIOS, candidate="cand", opponent="opp", horizon_s=20.0, repeats=1, baseline="base")
+
+    # candidate and baseline play each start, then it is reported, before the next start plays
+    assert events[:3] == ["play", "play", "print"]
