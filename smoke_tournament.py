@@ -61,6 +61,7 @@ doubles match count.
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import json
 import os
@@ -82,7 +83,8 @@ from tournament_lib import (  # noqa: F401 -- re-exported for callers importing 
 )
 from tournament_lib import run_match as _lib_run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
-from utama_core.replay import restart_outcomes, turnover_breakdown
+from utama_core.replay import match_cache, restart_outcomes, turnover_breakdown
+from utama_core.replay.fingerprint import CodeGraph, match_key
 
 # 60s of intended play, +5s for a real PREPARE_KICKOFF_YELLOW ceremony
 # (prepare_duration_seconds=3.0 in the "simulation" profile, plus the kicker's
@@ -170,6 +172,14 @@ def main() -> None:
     # catalog/seed/control-scheme reproduces the same way every run. Implies
     # `--strict`. In pool mode, in-flight matches still finish (their cost is
     # already sunk) but no further matches are submitted.
+    # `--reuse` takes a match's result from `replays/match_cache/` instead of
+    # playing it when nothing that match runs has changed since it was stored
+    # (`utama_core.replay.fingerprint.match_key`; rsim is deterministic, so the
+    # stored result is what the match would play). After a change to one
+    # strategy only its matches play. `--spot-check F` (default 0.05) also
+    # replays that fraction of the reusable matches, at least one, and compares
+    # them with their stored records: a difference means the fingerprint missed
+    # a dependency, is printed loudly, evicts those records, and fails `--strict`.
     args = sys.argv[1:]
     sequential = "--sequential" in args
     args = [a for a in args if a != "--sequential"]
@@ -184,6 +194,17 @@ def main() -> None:
         args = args[:idx] + args[idx + 2 :]
     no_save = "--no-save" in args
     args = [a for a in args if a != "--no-save"]
+    reuse = "--reuse" in args
+    args = [a for a in args if a != "--reuse"]
+    spot_check = 0.05
+    if "--spot-check" in args:
+        idx = args.index("--spot-check")
+        spot_check = float(args[idx + 1])
+        args = args[:idx] + args[idx + 2 :]
+    if reuse and no_save:
+        # A stored record is a recorded match's (the match log and stats recorder
+        # live), and the post-run analyses it carries are read from saved replays.
+        raise SystemExit("--reuse stores and reads recorded matches; drop --no-save")
     # `--strict` exits non-zero when any match in this run recorded a stall
     # event (see the STALLS section below) — for CI/pre-merge gating, so a
     # stall regression fails the run instead of only showing up if someone
@@ -274,7 +295,40 @@ def main() -> None:
         run_dir = REPLAY_BASE_PATH / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Round-robin: {len(config_names)} configs, {len(pairs)} matches" + (" (both sides)" if both_sides else ""))
+    all_pairs = pairs
+
+    def _keys() -> dict[tuple[str, str], str]:
+        graph = CodeGraph()
+        return {
+            (a, b): match_key(
+                graph,
+                a,
+                b,
+                duration_seconds=MATCH_DURATION_SECONDS,
+                control_scheme=control_scheme,
+                fuzz_seed=fuzz_seed,
+                fuzz_interval_s=fuzz_interval_s,
+            )
+            for a, b in all_pairs
+        }
+
+    cache = match_cache.MatchCache()
+    keys: dict[tuple[str, str], str] = _keys() if reuse else {}
+    stored = {p: rec for p in pairs if reuse and (rec := cache.get(keys[p])) is not None}
+    spot_checked = {
+        p for p in stored if keys[p] in match_cache.spot_check_sample([keys[q] for q in stored], spot_check)
+    }
+    reused = {p: rec for p, rec in stored.items() if p not in spot_checked}
+    pairs = [p for p in pairs if p not in reused]
+
+    print(
+        f"Round-robin: {len(config_names)} configs, {len(all_pairs)} matches" + (" (both sides)" if both_sides else "")
+    )
+    if reuse:
+        print(
+            f"--reuse: {len(reused)} stored result(s) reused, {len(spot_checked)} replayed as a spot-check, "
+            f"{len(pairs) - len(spot_checked)} to play"
+        )
     print(f"{N_OUTFIELD + 1}v{N_OUTFIELD + 1}, {MATCH_DURATION_SECONDS:.0f}s sim time per match, headless rsim")
     if no_save:
         print("--no-save: not recording replay/intention-log/stats for this run")
@@ -282,7 +336,7 @@ def main() -> None:
         print(f"Recording to replays/{run_id}/ (per-match replay, intention log, stats)")
     if not sequential:
         default_workers = max(1, (os.cpu_count() or 1) - 1)
-        n_workers = min(len(pairs), max_workers_override or default_workers)
+        n_workers = max(1, min(len(pairs), max_workers_override or default_workers))
         print(f"Running {n_workers} matches concurrently (--sequential to disable)\n")
     else:
         print("Running sequentially\n")
@@ -324,6 +378,9 @@ def main() -> None:
             line = _stats_line(result)
             if line:
                 print(line, flush=True)
+
+    for (a, b), rec in reused.items():
+        _record(MatchResult(**rec["result"]))
 
     if sequential:
         for config_a_name, config_b_name in pairs:
@@ -436,6 +493,7 @@ def main() -> None:
                 "winner": r.winner,
                 "stats": r.stats,
                 "possession_backstop": id(r) in backstop_match_ids,
+                "reused": (r.config_a, r.config_b) in reused,
             }
             for r in results
         ],
@@ -443,21 +501,36 @@ def main() -> None:
         "stalled_match_count": len(stalled_matches),
         "stall_incidents": incidents,
         "possession_backstop_match_count": len(backstop_matches),
+        "reuse": (
+            {"reused": len(reused), "spot_checked": len(spot_checked), "played": len(pairs) - len(spot_checked)}
+            if reuse
+            else None
+        ),
     }
     real_losses_by_match: Optional[dict[str, dict[str, int]]] = None
+    mismatches: list[tuple[str, str]] = []
     if run_dir is not None:
         summary_path = run_dir / "summary.json"
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
         # RESTARTS: what became of every restart -- taken, or voided/stopped/timed out.
+        restarts_by_match = {
+            path.name[: -len(".npz")]: restart_outcomes.analyse_match(path) for path in sorted(run_dir.glob("*.npz"))
+        }
+        restarts_by_match.update({_tag(p): rec["restarts"] for p, rec in reused.items()})
         summary["restarts"] = restart_outcomes.summarise(
-            [e for path in sorted(run_dir.glob("*.npz")) for e in restart_outcomes.analyse_match(path)]
+            [e for m in sorted(restarts_by_match) for e in restarts_by_match[m]]
         )
         _print_restarts(summary["restarts"])
         # BALL LOSSES: how the friendly side (config_a) gave the ball away, by kind, foul rule
         # and tactic — `MatchStats.turnovers` alone is mostly two robots on one ball flipping
         # "nearest robot". Replays the saved matches, so it runs after summary.json is on disk.
         losses = turnover_breakdown.analyse_run(run_dir, workers=max_workers_override or os.cpu_count() or 8)
+        losses = sorted(losses + [rec["losses"] for rec in reused.values()], key=lambda r: r["match"])
+        if reuse:
+            mismatches = _store_played(
+                cache, keys, _keys(), results, reused, spot_checked, stored, restarts_by_match, losses
+            )
         if losses:  # no replays saved (e.g. every match crashed): nothing to break down
             summary["ball_losses"] = turnover_breakdown.breakdown(losses)
             (run_dir / "ball_losses.md").write_text(turnover_breakdown.report(run_id, losses, summary))
@@ -474,11 +547,73 @@ def main() -> None:
             json.dump(summary, f, indent=2)
         print(f"\nFull results + stats: replays/{run_id}/summary.json")
 
+    if strict and reuse and mismatches:
+        raise SystemExit(f"--strict: {len(mismatches)} spot-checked match(es) differ from their stored records")
     if strict and (stalled_matches or backstop_matches):
         raise SystemExit(
             f"--strict: {len(stalled_matches)} match(es) with stall events, "
             f"{len(backstop_matches)} match(es) flagged by the possession backstop"
         )
+
+
+def _tag(pair: tuple[str, str]) -> str:
+    """A match's file stem in a run directory (`tournament_lib.run_match`'s `match_tag`)."""
+    return f"{_short_name(pair[0])}_vs_{_short_name(pair[1])}"
+
+
+def _store_played(
+    cache: match_cache.MatchCache,
+    keys: dict[tuple[str, str], str],
+    keys_now: dict[tuple[str, str], str],
+    results: list[MatchResult],
+    reused: dict,
+    spot_checked: set,
+    stored: dict,
+    restarts_by_match: dict[str, list[dict]],
+    losses: list[dict],
+) -> list[tuple[str, str]]:
+    """Store every match this run played, and compare each spot-checked one with its stored
+    record. Returns the spot-checked pairs that differ; their records are evicted, not
+    replaced, since their key no longer names one result, and so is every record this run
+    reused. Stores nothing if any key changed while the run played (code edited mid-run)."""
+    if keys_now != keys:
+        print("\n--reuse: the code changed while this run played; storing nothing", flush=True)
+        return []
+    losses_by_match = {r["match"]: r for r in losses}
+    mismatches: list[tuple[str, str]] = []
+    for r in results:
+        pair = (r.config_a, r.config_b)
+        if pair in reused or _tag(pair) not in losses_by_match:  # reused, or crashed without a replay
+            continue
+        record = {
+            "result": dataclasses.asdict(r),
+            "restarts": restarts_by_match.get(_tag(pair), []),
+            "losses": losses_by_match[_tag(pair)],
+        }
+        if pair in spot_checked:
+            parts = match_cache.differences(stored[pair], record)
+            if parts:
+                mismatches.append(pair)
+                cache.evict(keys[pair])
+                print(
+                    f"\n*** --reuse SPOT-CHECK MISMATCH: {_tag(pair)} differs from its stored record in {parts}. "
+                    "The fingerprint missed something this match depends on; its record is evicted. ***",
+                    flush=True,
+                )
+            continue
+        cache.put(keys[pair], record)
+    if spot_checked:
+        print(f"\n--reuse: spot-check {len(spot_checked) - len(mismatches)}/{len(spot_checked)} identical", flush=True)
+    if mismatches:
+        # The records this run reused were trusted on the same fingerprints that just failed.
+        for pair in reused:
+            cache.evict(keys[pair])
+        print(
+            f"*** --reuse: this run's {len(reused)} reused result(s) are evicted too and its standings can't be "
+            "trusted; rerun without --reuse. ***",
+            flush=True,
+        )
+    return mismatches
 
 
 def _resolve_config_names(requested_names: list[str]) -> list[str]:
