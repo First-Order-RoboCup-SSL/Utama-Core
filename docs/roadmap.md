@@ -33,25 +33,13 @@ resolved, replace it with a one-line pointer under "Done".
 
 ## Open
 
-1. **Current stall count (2026-09-23, `fpp`, `cb6460a`): 8/231 matches** in the full strict
-   65s smoke round-robin (`replays/tournament_20260923_211717/`), plus 2 flagged by the
-   possession backstop (`overload_flow`/`score_aware_zone_flow` vs `split_shape`: 100%
-   possession, 0.57m ball travel); 41/231 decisive. Families:
-   - 4 `COMMITTED_FROZEN`, all in the `overload` slot (`DecoyOverloadTactic`, 3 of them
-     `high_line_zone`, onset t=56s). Under `trajsample` this family was traced to a receiver
-     boxed in by two enemies (`70cb5c6`); that it also shows under `fpp` suggests the tactic,
-     not only the planner. Unverified.
-   - 4 `RESTART_STALL` at `DIRECT_FREE_*` (`give_and_go_solo`/`high_line_zone`,
-     `high_line_zone`/`split_shape`, `split_shape`/`switch_of_play`, `three_slot`/`zone_fluid`).
-     Two causes fixed 2026-09-24: FPP detour subgoals inside the enemy box (`e168f45`) and the
-     placement teleport landing on a robot (`dd00ae1`).
-   - **Re-measured 2026-09-24 (`tournament_20260924_092119`, `09751b0`): 12/231.** 7
-     `RESTART_STALL` at `DIRECT_FREE_BLUE`, all one geometry: ball placed in our corner after
-     our keeper pushed it out, blue's kicker starting 0.19m from one of our robots parked at
-     the inflated box corner — inside FPP's 0.27m clearance, so no detour resolves (stalls with
-     or without `e168f45`). 5 `COMMITTED_FROZEN`, 4 in the `overload` slot. Not yet fixed.
-   `trajsample` not re-measured. Confirm any stall fix against the full round-robin —
-   small-subset re-runs have repeatedly overstated fixes.
+1. **Current stall count (2026-10-01, `fpp`, `e83a7466`): 0/231 matches** in the full strict
+   65s round-robin (`replays/tournament_20261001_094103/`), none flagged by the possession
+   backstop; 93% of restarts reach NORMAL_START. `utama_core/replay/banks/bank_v7.json` is
+   harvested from it. Earlier stall families (overload-slot COMMITTED_FROZEN, DIRECT_FREE
+   restart stalls, low_block's PassAndShoot holding the ball) are fixed; see `git log`.
+   Confirm any stall fix against the full round-robin: small-subset re-runs have repeatedly
+   overstated fixes.
 
 2. **Outer-loop strategy evaluation.** Goal: agents iterate strategies against evals without
    humans watching replays. Win rate/Elo is the objective but too sparse and too expensive to
