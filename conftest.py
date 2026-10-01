@@ -72,3 +72,17 @@ def pytest_generate_tests(metafunc):
 @pytest.fixture
 def headless(pytestconfig):
     return pytestconfig.getoption("--headless")
+
+
+@pytest.fixture(autouse=True)
+def _no_vision_stream(monkeypatch):
+    """Every StrategyRunner starts a browser vision stream by default: a frame rendered
+    each step and about 0.4 s to shut its HTTP server down. No test watches it, and it was
+    a third of the suite's time."""
+    from utama_core.run.strategy_runner import StrategyRunner
+
+    def _skip(self, http_port):  # noqa: ARG001
+        self.vision_stream = None
+        self._vision_stream_renderer = None
+
+    monkeypatch.setattr(StrategyRunner, "_start_vision_stream", _skip)
