@@ -454,40 +454,40 @@ def test_clear_danger_valve_overrides_standing_attack():
     assert len(partition["clear"]) == 1
 
 
-def test_clear_danger_holds_block_while_a_clearer_is_still_pinned():
-    """Regression for a real 2026-09-02 full-length-tournament freeze
-    (`clear_press_plus_vs_shadow_switch_LK.pkl`, t=205.8s): robot 1 pinned to
-    "clear" from a prior tick (not in `free_robots` this tick — still out
-    fetching the ball) must not let the remaining free robots fall through to
-    "attack", even when the possession-edge read on its own would say we're
-    winning — `GiveAndGoTactic`'s carrier and the still-pinned clearer would
-    otherwise independently converge on the identical ball and stall at
-    `FastPathPlanner.OBSTACLE_CLEARANCE` apart forever, since neither tactic
-    has any awareness of the other. Everyone else must hold the screen
-    instead until the clearer finishes or releases."""
-    free = frozenset({2, 3, 4, 5})  # robot 1 pinned to "clear", not free
+# `ClearBallTactic` never commits (`is_committed()` is always False, by design: a
+# clearance takes about a second and the clearer is simply re-picked each tick), so
+# a "clear" robot is back in `free_robots` on the next tick. The pickers used to
+# keep a "clearer still pinned" branch that held everyone on the block screen when
+# last tick's "clear" robots were all absent from `free_robots`; no state the
+# scheduler can produce for this tactic reaches it, and a robot that merely left the
+# free pool (e.g. one off the field) would have set it off. These tests pin that the
+# picker now decides from the possession edge alone.
+
+
+def test_clear_danger_ignores_a_prior_clear_robot_missing_from_the_free_pool():
+    free = frozenset({2, 3, 4, 5})  # robot 1 held "clear" last tick, is not free now
     prev = {"clear": frozenset({1})}
     partition = _clear_danger_picker(
-        _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=0.0),  # we're closer: would be "attack" otherwise
+        _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=0.0),  # we're closer: attack
         free,
         prev,
-        _CLEAR_ALL - {"clear"},  # what Strategy passes: a pinned slot is never available
+        _CLEAR_ALL - {"clear"},
     )
-    assert partition == {"block": free}
+    assert len(partition["attack"]) == 3
+    assert len(partition["block"]) == 1
 
 
-def test_clear_press_plus_holds_block_while_a_clearer_is_still_pinned():
-    """Same regression as `test_clear_danger_holds_block_while_a_clearer_is_still_pinned`,
-    for `_clear_press_plus_picker` — the config the original freeze was traced in."""
+def test_clear_press_plus_ignores_a_prior_clear_robot_missing_from_the_free_pool():
     free = frozenset({2, 3, 4, 5})
     prev = {"clear": frozenset({1})}
     partition = _clear_press_plus_picker(
         _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=0.0),
         free,
         prev,
-        (_CLEAR_ALL | {"overload"}) - {"clear"},  # pinned "clear" is never available
+        (_CLEAR_ALL | {"overload"}) - {"clear"},
     )
-    assert partition == {"block": free}
+    assert len(partition["attack"]) == 3
+    assert len(partition["block"]) == 1
 
 
 # --- sticky possession edge: a near-tie must keep the previous posture ---
