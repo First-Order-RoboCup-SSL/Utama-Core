@@ -235,11 +235,12 @@ candidate no different from the baseline now costs a fifth to two thirds of a pa
 fewer starts it changes. "Futile" means no difference of 0.15 or more, not no difference.
 
 The current bank is `bank_v7` (from `tournament_20261001_094103`, the first stall-free
-round-robin): press_and_pass vs low_block against itself is identical on all 860 scored starts,
-and passes aimed 10° off are detected after 400 (mean -0.247, t -4.98). The calibration figures
-above were measured on bank_v5.
+round-robin). Played with fpp, press_and_pass vs low_block against itself is identical on all 860
+scored starts, and passes aimed 10° off are detected after 500 (mean -0.280, t -4.94). The bench
+played every start with trajsample until `fb784192`; results recorded before it are not
+comparable. The calibration figures above were measured on bank_v5, under trajsample.
 
-How far to trust the bench: every strategy scored on 150 bank_v5 starts against counter_press
+How far to trust the bench (measured under trajsample, before `fb784192`; not yet re-measured): every strategy scored on 150 bank_v5 starts against counter_press
 ranks them with Spearman +0.66 against round-robin points, where two round-robins agree at +0.91
 (`tools/bench_vs_standings.py`). It gets the top and bottom right and shuffles the middle, so use
 it to screen a change against a baseline and confirm with matches, not to rank strategies.
