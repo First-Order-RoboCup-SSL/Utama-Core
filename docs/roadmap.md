@@ -51,7 +51,7 @@ resolved, replace it with a one-line pointer under "Done".
      the strict seeded stall gate.
    - *Outer loop, fast half (scenario bench, numbers vs a committed baseline, non-blocking):*
      seeded start state + 15-30s horizon, scored as paired differentials by calibrated proxy
-     metrics. **Built (v1):** `bench_scenario.py`, 4 hand-authored anchors,
+     metrics. **Built (v1):** `start.py`, 4 hand-authored anchors,
      `scenario_harvester.py` (restart transitions, trust gate `stall_events == []`),
      `dynamic_screen.py`, `scenario_scorer.py`, `tools/scenario_bench.py`. 2026-09-24: TURNOVER
      counts real losses only (raw turnovers are mostly nearest-robot flicker), stalls are a

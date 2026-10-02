@@ -41,7 +41,7 @@ from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.scenario import apply_scenario
 from utama_core.replay.turnover_breakdown import ENEMY_RESTARTS, FLICKER_S, LIVE
 from utama_core.run import StrategyRunner
-from utama_core.scenario_bench.bench_scenario import BenchScenario
+from utama_core.scenario_bench.start import BenchScenario
 from utama_core.strategy import kernel_strategy
 
 TICKS_PER_SECOND = 60  # matches round_robin.py/rsim's default step rate
@@ -187,7 +187,7 @@ def score_scenario(
     `MatchStats` diff.
 
     `bench_scenario.lead_in_s` (nonzero for event-triggered scenarios, see
-    `bench_scenario.py`'s docstring on the mem-loss lead-in) is ticked
+    `start.py`'s docstring on the mem-loss lead-in) is ticked
     BEFORE the scored window starts, so both policies get a runway to
     reconstruct roles — the `MatchStats` "before" snapshot is taken after
     the lead-in, not at the raw teleport.

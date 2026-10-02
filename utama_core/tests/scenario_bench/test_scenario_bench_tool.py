@@ -5,10 +5,10 @@ import math
 import sys
 from pathlib import Path
 
-from utama_core.scenario_bench.bench_scenario import load_bank, save_bank
 from utama_core.scenario_bench.hand_authored_scenarios import (
     all_hand_authored_scenarios,
 )
+from utama_core.scenario_bench.start import load_bank, save_bank
 
 _TOOL = Path(__file__).resolve().parents[3] / "tools" / "scenario_bench.py"
 _spec = importlib.util.spec_from_file_location("scenario_bench", _TOOL)

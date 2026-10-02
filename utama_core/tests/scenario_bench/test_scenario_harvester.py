@@ -20,7 +20,6 @@ from utama_core.replay.columnar_writer import (
     ColumnarReplayWriterConfig,
 )
 from utama_core.scenario_bench import scenario_harvester
-from utama_core.scenario_bench.bench_scenario import ScenarioFamily, ScenarioTrigger
 from utama_core.scenario_bench.scenario_harvester import (
     _PASS_LEAD_S,
     OpenPlayEvent,
@@ -31,6 +30,7 @@ from utama_core.scenario_bench.scenario_harvester import (
     open_play_events,
     pick_events,
 )
+from utama_core.scenario_bench.start import ScenarioFamily, ScenarioTrigger
 
 
 def _robot(id_: int, x: float, y: float, *, friendly: bool) -> Robot:

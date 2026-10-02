@@ -45,7 +45,7 @@ KERNEL_STRATEGY = "utama_core.strategy.kernel_strategy"
 ROUND_ROBIN_ENTRY = "tournament_lib"
 BENCH_ENTRY = "utama_core.scenario_bench.scenario_scorer"
 # `scenario_bench._runs` plays a start through these two; the bench CLI itself only reports.
-BENCH_ENTRIES = (BENCH_ENTRY, "utama_core.scenario_bench.bench_scenario")
+BENCH_ENTRIES = (BENCH_ENTRY, "utama_core.scenario_bench.start")
 
 # Code that runs but is not imported: `robosim_wrapper.py` starts it as a script in the
 # `robosim` pixi environment.

@@ -1,4 +1,4 @@
-"""Tests for `utama_core.scenario_bench.bench_scenario` (bench scenario schema,
+"""Tests for `utama_core.scenario_bench.start` (bench scenario schema,
 provenance, lifecycle, and the static validity screen).
 
 See that module's docstring for the design constraints these tests pin:
@@ -18,7 +18,7 @@ import pytest
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.scenario import RobotState, Scenario
-from utama_core.scenario_bench.bench_scenario import (
+from utama_core.scenario_bench.start import (
     _DUPLICATE_BALL_M,
     _DUPLICATE_ROBOT_M,
     _JITTER_POS_M,

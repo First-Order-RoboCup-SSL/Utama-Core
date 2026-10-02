@@ -9,13 +9,13 @@ false positive to special-case around.
 
 from __future__ import annotations
 
-from utama_core.scenario_bench.bench_scenario import (
+from utama_core.scenario_bench.hand_authored_scenarios import (
+    all_hand_authored_scenarios,
+)
+from utama_core.scenario_bench.start import (
     ScenarioLifecycle,
     ScenarioTrigger,
     static_screen,
-)
-from utama_core.scenario_bench.hand_authored_scenarios import (
-    all_hand_authored_scenarios,
 )
 from utama_core.tests.replay.test_scenario import (
     _ApplyScenarioTestManager,

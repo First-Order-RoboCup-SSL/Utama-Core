@@ -4,7 +4,7 @@ These are the ~20 (4 to start) fixed anchors from roadmap item 14's bank v1
 shape: scenarios that never move, don't depend on any match or replay, and
 act as a stable reference when the harvested part of the bank turns over
 between versions. Every scenario here has `ScenarioTrigger.HAND_AUTHORED`
-and `anchor_tick=None` (see `bench_scenario.ScenarioProvenance`).
+and `anchor_tick=None` (see `start.ScenarioProvenance`).
 
 Coordinates follow the same plain pitch-frame metres as `scenario.py`
 (friendly is always the +x/right side, matching `tournament.run_match`'s
@@ -24,7 +24,7 @@ from pathlib import Path
 
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.scenario import RobotState, Scenario
-from utama_core.scenario_bench.bench_scenario import (
+from utama_core.scenario_bench.start import (
     BenchScenario,
     ScenarioFamily,
     ScenarioProvenance,

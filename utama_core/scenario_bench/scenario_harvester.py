@@ -43,7 +43,7 @@ from typing import Optional
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.scenario import Scenario, scenario_from_replay
 from utama_core.replay.turnover_breakdown import analyse_match, is_real
-from utama_core.scenario_bench.bench_scenario import (
+from utama_core.scenario_bench.start import (
     BenchScenario,
     ScenarioFamily,
     ScenarioProvenance,

@@ -27,7 +27,7 @@ matters, not either absolute score). The report is the per-scenario and
 per-family paired outcome delta, never an absolute score.
 
 rsim is deterministic, so a scenario can also be played from `--repeats` starts
-(`bench_scenario.jittered`: robots away from the ball nudged a few cm; seed 0
+(`start.jittered`: robots away from the ball nudged a few cm; seed 0
 is the scenario as authored), and both sides get the same starts. The default
 is 1: more scenarios detect a change better than more repeats of each (every
 start from one round-robin, once each, finds passes aimed 10 degrees off at
@@ -45,7 +45,7 @@ Scenario outcomes count real ball losses and flag stalls; see
 
 `--save-bank PATH` persists the currently-loaded scenario set (hand-authored
 + optional `--harvest-from`, after `--families` filtering) to a single JSON
-file via `bench_scenario.save_bank` — a few KB even for hundreds of
+file via `start.save_bank` — a few KB even for hundreds of
 scenarios, since a scenario is field state only, no trajectories. `--load-bank
 PATH` loads scenarios from a previously-saved bank instead of hand-authored/
 `--harvest-from` (the two are mutually exclusive as *sources*: a loaded bank
@@ -127,13 +127,6 @@ from utama_core.replay.fingerprint import CodeGraph, bench_key
 from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
     enable_sim_reuse,
 )
-from utama_core.scenario_bench.bench_scenario import (
-    BenchScenario,
-    drop_near_duplicates,
-    jittered,
-    load_bank,
-    save_bank,
-)
 from utama_core.scenario_bench.hand_authored_scenarios import (
     all_hand_authored_scenarios,
 )
@@ -141,6 +134,13 @@ from utama_core.scenario_bench.scenario_harvester import harvest_run_dir
 from utama_core.scenario_bench.scenario_scorer import (
     _resolve_config_name,
     score_scenario,
+)
+from utama_core.scenario_bench.start import (
+    BenchScenario,
+    drop_near_duplicates,
+    jittered,
+    load_bank,
+    save_bank,
 )
 
 SCHEMA_VERSION = 1
@@ -174,7 +174,7 @@ def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], list[Benc
         # A persisted bank replaces the hand-authored + harvest sources
         # entirely rather than merging with them — it's meant to be the
         # frozen set a prior `--save-bank` produced (see
-        # `bench_scenario.save_bank`'s "immutable per bank version" note),
+        # `start.save_bank`'s "immutable per bank version" note),
         # not a starting point to silently mix fresh sources into.
         _bank_id, scenarios = load_bank(args.load_bank)
     else:
@@ -644,7 +644,7 @@ def parse_args() -> argparse.Namespace:
         "--load-bank",
         type=Path,
         default=None,
-        help="load scenarios from a persisted bank JSON (see bench_scenario.save_bank) "
+        help="load scenarios from a persisted bank JSON (see start.save_bank) "
         "instead of hand-authored/--harvest-from",
     )
     parser.add_argument(
@@ -657,7 +657,7 @@ def parse_args() -> argparse.Namespace:
         "--merge-into",
         type=Path,
         default=None,
-        help="an existing bank: drop harvested scenarios that duplicate it (bench_scenario.is_near_duplicate), "
+        help="an existing bank: drop harvested scenarios that duplicate it (start.is_near_duplicate), "
         "and --save-bank writes it plus the new ones, as a new bank",
     )
     parser.add_argument("--workers", type=int, default=1, help="processes to score scenarios on (default 1)")

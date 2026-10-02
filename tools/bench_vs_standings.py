@@ -32,8 +32,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from utama_core.scenario_bench.bench_scenario import BenchScenario, load_bank
 from utama_core.scenario_bench.scenario_scorer import score_scenario
+from utama_core.scenario_bench.start import BenchScenario, load_bank
 
 
 def standings(summary: dict) -> dict[str, dict[str, float]]:

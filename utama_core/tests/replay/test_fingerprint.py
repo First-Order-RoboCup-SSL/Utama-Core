@@ -293,7 +293,7 @@ def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
 # it doesn't need to), then add it.
 #   environment: settings.py reads UTAMA_EXACT_MATH -> ENV_PREFIXES; robosim_wrapper copies
 #     the environment into the sim subprocess -> ENV_PREFIXES covers the numerics ones.
-#   opens files: profile_loader reads profiles/*.yaml -> data_files. bench_scenario reads a
+#   opens files: profile_loader reads profiles/*.yaml -> data_files. start reads a
 #     bank, whose start is itself in the bench key. The rest write a match's outputs (match
 #     log, stats, replays) or read old ones for harvesting, never during play.
 #   subprocess: robosim_wrapper starts robosim_subprocess.py in the robosim pixi env ->
@@ -328,7 +328,7 @@ AUDIT = {
         "utama_core.replay.replay_writer",
         "utama_core.replay.scenario",
         "utama_core.replay.turnover_breakdown",
-        "utama_core.scenario_bench.bench_scenario",
+        "utama_core.scenario_bench.start",
     ],
     "subprocess": ["utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper"],
 }
