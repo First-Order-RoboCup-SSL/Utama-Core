@@ -59,7 +59,7 @@ only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
 **Smoke round-robin, full catalog** (2026-10-01, `e83a7466`, 22 configs, 231 matches, 65s,
 `--strict`, 0 stalls, `replays/tournament_20261001_094103/summary.json`). Points are 3 a win,
 1 a draw. 65s matches are mostly draws (152 of 231 here), so the middle of the table is close
-to noise; two round-robins of near-identical code rank strategies with Spearman +0.91
+to noise; two round-robins of near-identical code rank strategies with Spearman +0.97
 (`docs/STRATEGY_DEVELOPMENT.md`, A/B on the scenario bank).
 
 | Strategy | W-D-L | GF-GA | Points per match |

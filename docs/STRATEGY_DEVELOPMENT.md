@@ -117,8 +117,8 @@ nothing while its code is unchanged.
 Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
 it is a target. Don't tune a threshold until the bench moves: a change needs a reason in game
 terms, and a bench gain that matches don't confirm means distrust the bench, not that the
-strategy got better. The bench agreed with round-robin standings at Spearman +0.66 under trajsample (two
-round-robins agree at +0.91), so it screens changes; it doesn't rank strategies.
+strategy got better. The bench agreed with round-robin standings at Spearman +0.51 (two round-robins agree at +0.97),
+so it screens changes; it doesn't rank strategies.
 
 ## Observability — use these before adding a debug print
 
@@ -255,10 +255,15 @@ scored starts, and passes aimed 10° off are detected after 500 (mean -0.280, t 
 played every start with trajsample until `fb784192`; results recorded before it are not
 comparable. The calibration figures above were measured on bank_v5, under trajsample.
 
-How far to trust the bench (measured under trajsample, before `fb784192`; not yet re-measured): every strategy scored on 150 bank_v5 starts against counter_press
-ranks them with Spearman +0.66 against round-robin points, where two round-robins agree at +0.91
-(`tools/bench_vs_standings.py`). It gets the top and bottom right and shuffles the middle, so use
-it to screen a change against a baseline and confirm with matches, not to rank strategies.
+How far to trust the bench (measured 2026-10-02, fpp, `tools/bench_vs_standings.py`): every one of
+the 22 strategies scored on the same 150 bank_v7 starts against counter_press ranks them with
+Spearman +0.51 against the points of `tournament_20261001_094103` (bootstrap 95% interval +0.14 to
++0.77) and +0.43 against goal difference, where that run and the earlier `tournament_20261001_091050`
+agree at +0.97 (points) and +0.99 (goal difference). Dropping counter_press, which is the opponent
+and so plays itself, gives +0.56. This is weaker than the +0.66 measured on bank_v5 under
+trajsample, which was not re-measured against these standings; the interval is wide at 22
+strategies, so the two figures are not clearly different. Use the bench to screen a change against
+a baseline and confirm with matches, not to rank strategies.
 
 A new bank from a new round-robin (keep its replays until this is done) takes a few minutes and
 no simulation:
