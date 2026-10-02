@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+# A PR's push and pull_request events run the same tests: let the later one cancel the earlier.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest

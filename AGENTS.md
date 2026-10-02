@@ -30,11 +30,13 @@ One term per thing; reuse these instead of coining new ones.
 - **Round-robin / tournament run** — every strategy config plays every other once
   (`round_robin.py`); writes `replays/tournament_<id>/summary.json`. The ground truth for
   "which strategy is better", and slow.
-- **Standings** — points per match (3 a win, 1 a draw) and goal difference, from a round-robin.
+- **Standings** — a round-robin's ranking. `round_robin.py` prints wins and draws;
+  `bench_vs_standings.py` uses points per match (3 a win, 1 a draw) and goal difference.
 - **Start** — one starting situation (kickoff, free kick, penalty, or an open-play moment)
-  that the scenario bench replays for 20 s.
-- **Bank** — a versioned list of starts harvested from one round-robin's replays
-  (`utama_core/scenario_bench/banks/bank_vN.json`).
+  that the scenario bench replays for 20 s. In code: `BenchScenario` (`scenario_bench/start.py`),
+  and "scenario" in flags and enums.
+- **Bank** — a versioned list of starts (`utama_core/scenario_bench/banks/bank_vN.json`),
+  harvested from one round-robin's replays plus a few hand-authored anchors.
 - **Scenario bench** — `tools/scenario_bench.py`: a fast paired A/B screen of a candidate
   against a baseline on a bank. A screen, not a ranking: confirm with a round-robin.
 - **Bench validators** — `tools/bench_vs_standings.py` and `tools/metric_correlation.py` check
