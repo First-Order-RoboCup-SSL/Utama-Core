@@ -15,7 +15,7 @@ with an 80% defense split).
 
 This tactic is that valve. It reads game state nothing else composes:
 *danger* = ball deep in our own defensive third AND an enemy contesting the
-ball. `kernel_strategy._ball_zone()`'s thirds vocabulary exists but only picks
+ball. `strategy.pickers._ball_zone()`'s thirds vocabulary exists but only picks
 between attack patterns; `PressAndContainTactic` reads enemy proximity to the
 ball but never ball depth; nothing combines both. When danger fires, the
 assigned robot nearest the ball wins it and kicks long toward open space —

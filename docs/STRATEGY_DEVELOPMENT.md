@@ -5,8 +5,9 @@ Context for work under `utama_core/engine/`, `utama_core/tactics/`, `utama_core/
 root `AGENTS.md`. Design rationale and rejected alternatives: `docs/tactic_model_design_decisions.md`
 — read it before proposing a change to the kernel's shape.
 
-`engine/` is the scheduler/protocol infra; `strategy/kernel_strategy.py` holds the
-`build_*_kernel_strategy` factories, where day-to-day strategy edits land. (`engine/` was
+`engine/` is the scheduler/protocol infra; `strategy/` holds the `build_*_kernel_strategy`
+factories (one module per strategy, `kernel_strategy.py` re-exporting them), where day-to-day
+strategy edits land. (`engine/` was
 renamed from `kernel/` so it can't be confused with "kernel strategy", the model's own term.)
 
 ## The tactic-kernel model
@@ -70,16 +71,18 @@ A strategy is a combination of existing tactics plus a partitioner that decides 
 each gets. Most new strategies need no new tactic; if one does, propose the tactic first
 (see `AGENTS.md`, minimalism).
 
-**Writing one.** Add `build_<name>_kernel_strategy(outfield_robot_ids)` to
-`strategy/kernel_strategy.py`, returning a `Strategy(tactics={...}, partitioner=...)`. Every
-`build_*_kernel_strategy` is discovered by name (`tournament_lib`), so it joins round-robins and
-the bench as `<name>` with no registry to edit. Reuse the shared partitioner pieces rather than
-re-deriving them:
+**Writing one.** Add `strategy/<name>.py` with `build_<name>_kernel_strategy(outfield_robot_ids)`,
+returning a `Strategy(tactics={...}, partitioner=...)`, and the pickers only it uses; then import
+the factory in `strategy/kernel_strategy.py`. Every `build_*_kernel_strategy` that module
+re-exports is discovered by name (`tournament_lib`), so it joins round-robins and the bench as
+`<name>` (a test fails if a factory is defined but not re-exported). Reuse the shared partitioner
+pieces in `strategy/pickers.py` rather than re-deriving them:
 - `_friendly_closer_to_ball(game)` — the possession edge. True/False is a clear edge; None is a
   near-tie or unreadable state, where a sticky picker keeps its previous split.
 - `_carrier_first(game, free)` / `_clearer_first(game, ordered)` — robot order for a slot that
   must take the ball: the carrier (or the kicker at a still ball) first, else the nearest.
-- `_fixed_ratio_picker`, `_possession_split_picker` — the two common split shapes.
+- `_fixed_ratio_picker` (in `pickers.py`), `_possession_split_picker` (in `split_shape.py`) — the
+  two common split shapes.
 
 Then add it to `_CONFIGS` in `tests/engine/test_all_strategy_configs.py` (builds it and runs it
 through the kernel invariants), give its partitioner pure-function tests in
@@ -101,10 +104,11 @@ through the kernel invariants), give its partitioner pure-function tests in
 **`--reuse`** (round-robin and bench) takes a match's or start's result from
 `replays/match_cache/` when nothing it runs has changed since it was stored, so after a change
 to one strategy only its matches play: 21 of a 22-config round-robin's 231. What counts as
-"runs" is `utama_core/replay/fingerprint.py`'s: the factory and the `kernel_strategy.py`
-helpers it uses, every module those import, and the shared code and environment (planner,
-referee, runner, simulator build, packages, CPU). Changing shared code reruns everything,
-correctly. Each run replays 5% of what it would reuse (`--spot-check`) and compares; a
+"runs" is `utama_core/replay/fingerprint.py`'s: the factory's own module, every module that
+imports (`strategy/pickers.py` and the tactics among them, whole files), and the shared code and
+environment (planner, referee, runner, simulator build, packages, CPU). Editing `pickers.py`
+reruns every config that imports it, which is most of them; changing shared code reruns
+everything, correctly. Each run replays 5% of what it would reuse (`--spot-check`) and compares; a
 difference evicts the records, says the fingerprint missed a dependency, and fails the run.
 Use `--reuse` on every run: the bench's baseline side then costs
 nothing while its code is unchanged.

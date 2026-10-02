@@ -1,5 +1,5 @@
 """round_robin.py (formerly smoke_tournament.py, before that tournament.py) — Round-robin every
-`kernel_strategy.py` config against every other, at smoke-test speed
+`build_*_kernel_strategy` config against every other, at smoke-test speed
 (`MATCH_DURATION_SECONDS` below — short matches, not full-length; see
 `full_match_tournament.py` for the full-length/competitive-tier counterpart).
 

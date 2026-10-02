@@ -9,7 +9,7 @@ near-identical boilerplate around a real `StrategyRunner`/rsim fixture. A
 single parametrized suite over `_TACTIC_CASES` below gives the same coverage
 without the duplication, and — concretely — would have caught
 `PassAndShootTactic`'s `robot_ids[1]` crash (see `build_low_block_kernel_strategy`
-in `kernel_strategy.py`) automatically instead of requiring a bespoke test
+in `strategy/low_block.py`) automatically instead of requiring a bespoke test
 to notice a Tactic has an undeclared minimum robot count.
 
 Behavior specific to one Tactic (e.g. `LeadAndSupportTactic`'s leader

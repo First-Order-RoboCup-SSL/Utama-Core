@@ -1,6 +1,6 @@
 # Strategy catalog
 
-Every `build_*_kernel_strategy` factory in `utama_core/strategy/kernel_strategy.py`, its
+Every `build_*_kernel_strategy` factory in `utama_core/strategy/` (one module each, re-exported by `kernel_strategy.py`), its
 status, and the latest results. Short config names drop `build_`/`_kernel_strategy`.
 
 Run:

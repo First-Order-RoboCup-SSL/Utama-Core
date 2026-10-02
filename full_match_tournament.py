@@ -69,7 +69,7 @@ trace to remove the tick-1 coin flip (the edge now agrees between mirrored
 sides through the whole approach phase). This alone does *not* fully
 eliminate the underlying tie — first ball touch is still a near-zero-distance
 moment either way, so the same sub-millimetre rsim noise can still flip
-`_friendly_closer_to_ball` right at contact. `kernel_strategy.py`'s
+`_friendly_closer_to_ball` right at contact. `strategy/pickers.py`'s
 `_CLOSER_TO_BALL_MARGIN = 0.05` (added the same session) is the second half
 of the fix — a real hysteresis margin on `_friendly_closer_to_ball` itself,
 not just the kickoff-ceremony timing — and together both are a real, verified

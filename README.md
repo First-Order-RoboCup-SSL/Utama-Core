@@ -51,7 +51,7 @@ privileges enabled; without them `CLAUDE.md` arrives as a 9-byte text file, fixa
 Everything lives under `utama_core/`:
 
 1. `engine`: the tactic-kernel infrastructure: `Strategy`, `Tactic`, `TickContext`, `MatchLog`, referee-override plumbing
-1. `strategy`: the strategies (`kernel_strategy.py`'s `build_*_kernel_strategy` factories), see `docs/strategies.md`
+1. `strategy`: the strategies (one module per `build_*_kernel_strategy` factory, re-exported by `kernel_strategy.py`), see `docs/strategies.md`
 1. `tactics`: reusable `Tactic` implementations that strategies compose
 1. `skills`: lowest level of control for individual robots
 1. `shared`: geometry and helpers shared by tactics and skills

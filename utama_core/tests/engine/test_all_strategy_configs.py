@@ -1,5 +1,5 @@
 """Comprehensive, table-driven tests over every `build_*_kernel_strategy` factory
-in `kernel_strategy.py`.
+re-exported by `utama_core/strategy/kernel_strategy.py`.
 
 Replaces the earlier one-file-per-config pattern (`test_split_shape_kernel_strategy.py`,
 `test_press_and_pass_kernel_strategy.py`, `test_high_press_kernel_strategy.py`,
